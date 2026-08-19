@@ -189,6 +189,63 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   pairing across devices, native-client UX, long-term GitHub custom-ref behavior —
   migrated to automation as we can.
 
+### 12.7.7 AI-tool integration testing (the HS1 Codex pain, designed out)
+
+Adding an AI tool to HS1 (Codex, when it started Claude-only) was a heavy **manual**
+effort. The root cause: HS1 conflated two very different questions into one manual
+test — **"does *our host* handle the protocol correctly?"** (automatable) and **"does
+the *real tool* actually speak that protocol?"** (real-tool drift). Splitting them is
+the whole strategy: ~95% becomes deterministic automation; the ~5% drift check is a
+small, explicit layer. Build: **HS2-64**.
+
+**1 — Testability is a plugin-interface rule.** Every side-effecting interaction a
+plugin performs goes through an **injected adapter** (`ProcessSpawner`, config-file
+writer, `PermissionTransport`, `McpConfigWriter`, `Clock`). No plugin touches a real
+process, file, or global directly. This is the non-negotiable that makes everything
+below deterministic — see [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.10.
+
+**2 — `hs-fake-agent`: a scriptable test double.** A workspace test binary that speaks
+the *same protocols a real tool does*, but scripted and deterministic. It can be told
+to: connect over **MCP** and call `hotsheet_*` tools in sequence; **request a
+permission** through a plugin's transport and await the decision; run in a **PTY** and
+emit scripted bytes — OSC 7/8/9/133, **spinner glyphs**, output, chosen exit code;
+emit **busy/idle** signals. So "does the Codex plugin's drive/permission/busy wiring
+work?" is tested by pointing Hot Sheet at `hs-fake-agent` configured per the Codex
+plugin's declared protocol — **no real tool, no LLM, no keys.**
+
+**3 — Per-aspect automated E2E** (against the fake agent):
+- **MCP usage** — a fake MCP client hits the per-project shim: assert the tool list +
+  schemas, each call's store effect, error handling; each plugin's `mcp` capability
+  writes a valid config entry in that tool's format.
+- **Permission checks** — drive a request through the bridge: FIFO enqueue
+  (concurrent requests preserved), WS push, answer routed to the *originating*
+  connection, allow-once/always → persisted rules; each `permissions` capability's
+  install-then-remove leaves foreign hook entries intact (merge-safety).
+- **Terminal integration** — the terminal manager against the fake agent: scrollback,
+  multi-viewer attach, sizing arbitration, OSC parsing, **survival across a broker
+  restart**; the `command` capability is a pure resolve-the-launch-line test.
+- **Busy-state monitoring** — a **transition-matrix** test: feed scripted hook signals
+  *and* byte-stream spinner glyphs; walk busy→sustained→idle, stale-clear, the
+  spinner-liveness gate, dropped-Stop-hook recovery.
+
+**4 — A conformance suite over every plugin, as a hard CI gate.** One suite
+parameterized over the plugin registry, run against a temp fixture project — identity,
+instructions, skills, command (injected spawner), drive, permissions (merge-safety),
+MCP config. **A new tool inherits the entire suite by existing**, and can't merge
+until it passes conformance *and* the fake-agent E2E. This is the forcing function
+that makes adding a tool boring instead of painful.
+
+**5 — The drift layer (thin + explicit), for real-tool protocol changes:**
+- **Recorded contracts** — capture each real tool's actual protocol messages once as
+  fixtures (cassette-style) and replay them in fast CI; if a tool's real format
+  diverges from its recording, a test fails and names exactly what changed.
+- **Opt-in live smoke** — a tiny per-tool suite that runs the *real* binary
+  (creds-gated, nightly / pre-release) for the end-to-end sanity a recording can't
+  give.
+
+**Payoff:** adding a tool = write the plugin module + record its real protocol once;
+everything else is inherited and automated.
+
 ## 12.8 Cross-references
 - Core / server / CLI split: [04-core-server-cli.md](04-core-server-cli.md)
 - Storage + merge driver (the property-test target): [02-ticket-storage.md](02-ticket-storage.md) §2.7
@@ -196,3 +253,4 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 - Git-native claim (integration-test target): [08-distributed-and-remote.md](08-distributed-and-remote.md) §8.5
 - Terminal-sizing arbiter (a transition-matrix target): [06-clients.md](06-clients.md) §6.7
 - Migrator conformance test: [07-migration.md](07-migration.md) §7.2.1
+- AI-tool plugin interface + its testability rule: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.10

@@ -86,3 +86,31 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
   core bets.
 <!-- hotsheet:end specifics=requirements-documentation -->
 <!-- hotsheet:end section=requirements-documentation -->
+
+## Commit / push hygiene
+
+Keep the repo in a **known-good state**, and especially so **before pushing**. The
+working rhythm (once there is code to lint/test):
+
+**During work — repeatable per round (multiple local commits, no push):**
+1. Do a chunk of work (e.g. a ticket).
+2. **Lint and fix** — `cargo fmt` + `cargo clippy -D warnings` for Rust; the
+   client/migrator linters for their trees.
+3. Run the **light/fast tests and fix** — e.g. `cargo nextest run` for the affected
+   crates.
+
+**Before pushing:**
+1. **Final lint pass** (fix everything).
+2. **Full test suite** (fix everything) — the whole `nextest` run + web E2E + the
+   conformance/fake-agent suites + the migrator conformance test (per
+   [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md) §12.7).
+3. **Push** (only when the maintainer has asked / agreed to push).
+
+You may do several work rounds with multiple commits before pushing; once you push,
+**local must be green**. CI may still surface issues from heavier CI-only tests or
+from merging multiple changes together — that's expected — but the local environment
+should be verified good before a push. **Exception:** when deliberately testing CI
+itself, a red-ish push may be intentional — but then don't push to `main`.
+
+(While the repo is still design-only, "lint/test" is a no-op for docs changes;
+this rhythm applies once implementation code exists.)

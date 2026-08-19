@@ -205,7 +205,33 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
 - **Commands Log** transcript of triggers/permissions/shell runs — keep; plugins
   emit, the host owns the log shape.
 
-## 5.10 Cross-references
+## 5.10 Testability — injected adapters + the fake agent
+
+> **Load-bearing rule** (maintainer, 2026-08-19): adding a tool to HS1 was a manual
+> testing slog. HS2 designs that out — the plugin interface is built to be tested
+> against a **fake agent**, not a real LLM.
+
+- **Every side-effecting interaction a plugin performs goes through an injected
+  adapter** — `ProcessSpawner`, config-file writer, `PermissionTransport`,
+  `McpConfigWriter`, `Clock`. **No plugin touches a real process, file, or global
+  directly.** (HS1 half-learned this — docs/132 §132.7's "run() with an injected
+  spawner reports the content it *would* send"; here it's non-negotiable.) This is
+  what makes drive / permissions / MCP-config / command all deterministically
+  testable, and it's a hard rule the conformance suite enforces.
+- **Tested against `hs-fake-agent`** — a scriptable test double that speaks the same
+  protocols a real tool does (MCP calls, permission requests, PTY bytes/OSC/spinner,
+  busy signals), so the host side is exercised end-to-end with no real tool.
+- **A conformance suite parameterized over the whole registry is a hard CI gate** —
+  a new tool inherits it by existing and can't merge until it passes conformance +
+  the fake-agent E2E.
+- **Real-tool drift** is caught by a thin, explicit layer: recorded protocol
+  contracts (replayed in fast CI) + an opt-in, creds-gated live smoke per tool.
+
+Full testing design: [12-code-organization-and-testing.md](12-code-organization-and-testing.md)
+§12.7.7. Build: **HS2-64**.
+
+## 5.11 Cross-references
 - Storage concurrency the claim primitive protects: [02-ticket-storage.md](02-ticket-storage.md) §2.7
 - The core that hosts the plugin registry: [04-core-server-cli.md](04-core-server-cli.md)
 - Clients that render permission prompts / busy state: [06-clients.md](06-clients.md)
+- AI-tool integration testing (fake agent, conformance gate, drift layer): [12-code-organization-and-testing.md](12-code-organization-and-testing.md) §12.7.7
