@@ -107,7 +107,7 @@ and don't imply reading order — read by group.
 | Doc | Topic | Status |
 |---|---|---|
 | [12-code-organization-and-testing.md](12-code-organization-and-testing.md) | Cargo workspace/crate map, conventions, test strategy | Decided |
-| [07-migration.md](07-migration.md) | PGLite → git-repo migration (standalone bundled tool) | Proposed |
+| [07-migration.md](07-migration.md) | PGLite → git-repo migration (standalone bundled tool) | Partial (exporter + importer built; UI flow + real-cluster run pending) |
 
 > **Core decisions confirmed by the maintainer 2026-08-19:** Rust core · git-file
 > storage · ULID + **all-caps** slug · SQLite+FTS5 · **automatic conflict
@@ -133,7 +133,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 
 | Capability | Where | Status |
 |---|---|---|
-| Git-repo file-per-ticket storage | 02 | Confirmed |
+| Git-repo file-per-ticket storage | 02, 17 | Confirmed; **parser + FsStore built** (`hotsheet-model::format`, `hotsheet-ticketing::store`) |
 | Multiple ticket stores per project (mixed permissions/locality) | 02 | Confirmed |
 | Every store is a git repo (local-only = no remote) | 02 §2.1 | Confirmed |
 | Store identity/naming (id + name + per-store prefix); positional membership | 02 §2.2.1 | Confirmed (design) |
@@ -151,7 +151,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Shared **Rust** core engine (server + CLI only; clients don't embed) | 04, 09 | Confirmed |
 | Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Confirmed (design) |
 | Independent server (HTTP + WS + MCP) | 04 | Design |
-| Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Design |
+| Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/import; merge-driver + more pending) |
 | Plugin-only AI-tool integration | 05 | Confirmed (design) |
 | Terminal/PTY hosting for AI tools | 05 §5.4 | Design |
 | Multi-viewer PTY sizing (server-arbitrated, focus-follows, leased; remote-safe) | 06 §6.7 | Design |
@@ -160,7 +160,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Native SwiftUI macOS (2nd) → iOS (3rd) | 06 | Confirmed |
 | Android client (4th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |
 | Code organization (Cargo workspace/crates) + test strategy | 12 | Decided |
-| PGLite → git migration (UI-prompted) | 07 | Design |
+| PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; UI flow deferred) |
 | Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |
 | Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Confirmed (design); spike HS2-63 |
 | Mobile ↔ server configuration/pairing (mTLS + QR) | 08 §8.3 | Design |

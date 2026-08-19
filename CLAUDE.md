@@ -26,10 +26,15 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
 ### This project's test setup
 
-> **Design phase — no implementation code yet.** The stack below is the *agreed
-> plan* (see [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md) §12.7,
-> the authority); wire it up with the first code (HS2-16), then refine this block to
-> match what actually exists.
+> **Early implementation.** The stack below is the *agreed plan* (see
+> [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md) §12.7,
+> the authority). What exists today: `cargo nextest run` (model + ticketing + CLI
+> unit/integration tests) and the migrator's `vitest` suite (`cd migrator && npx
+> vitest run`), including the cross-language conformance test (Rust `hotsheet import`
+> ingests the Node exporter's JSON). Property/fuzz/snapshot, server/web E2E, and
+> per-language coverage gates are not wired yet. Commands that work now:
+> `cargo build` · `cargo nextest run` · `cargo fmt --all --check` · `cargo clippy
+> --all-targets --all-features -- -D warnings` · `npx vitest run` (in `migrator/`).
 
 - **Rust unit + integration** (`crates/*/src/**` inline `#[cfg(test)]` and
   `crates/*/tests/**`): run with **`cargo-nextest`**. Pure logic uses injected-fake
@@ -78,12 +83,15 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
 - **Requirements summary** (the AI-read synthesis with status markers): the
   "Requirements summary" table in [`docs/README.md`](docs/README.md). Keep it in
   sync in the same change as a design/code change.
-- **Codebase map:** not created yet — there is no implementation code (this is a
-  design-only phase). Create `docs/CODEBASE-MAP.md` and record its path here once
-  the first code lands (tracked by the scaffold ticket).
-- Currently the project is **design only**: `docs/` holds the design for the
-  Hot Sheet 2 rewrite. See [`docs/README.md`](docs/README.md) for the index and the
-  core bets.
+- **Codebase map:** [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) — the AI-read
+  orientation doc (directory tree, entry points, formats, build/test, where-to-look).
+  Keep it in sync in the same change that adds a file/dir, command, schema field, or
+  setting.
+- The project is now in **early implementation**: the Rust core model + ticket file
+  format, a filesystem store, the `hotsheet` CLI (init/new/ls/show/import), and the
+  Node HS1 exporter exist; server/index/sync/clients/plugins remain design-only. See
+  [`docs/README.md`](docs/README.md) for the index + core bets and
+  [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) for what's built.
 <!-- hotsheet:end specifics=requirements-documentation -->
 <!-- hotsheet:end section=requirements-documentation -->
 

@@ -1,9 +1,18 @@
 # 07. Migration — PGLite → Git Repos
 
-> **Status: Proposed.** A **standalone, bundled, one-time, per-project** migrator —
-> not a first-class core feature (maintainer, 2026-08-19). It may be **entirely
-> Node** if that's easiest, and can be **one CLI or several**. UI-prompted per
-> project. Build: **HS2-14**.
+> **Status: Partially built (shape B).** A **standalone, bundled, one-time,
+> per-project** migrator — not a first-class core feature (maintainer, 2026-08-19).
+> UI-prompted per project. Build: **HS2-14**.
+>
+> **Built so far:** the Node exporter (`migrator/src/export.mjs`, PGLite →
+> `hotsheet-export.json`) and the Rust importer (`hotsheet import`, reusing the core
+> writer for zero drift), with a cross-language conformance test (§7.2.1). We chose
+> **shape (B)** over the shape-(A) default because the Rust importer doubles as the
+> CLI's file writer and eliminates format drift. **Not yet:** attachments (copied +
+> written), the UI-prompted flow (§7.3), and validation against a real HS1 cluster —
+> the installed PGLite (0.3.16) aborts opening HS1's PG17 datadir (build/version
+> mismatch), so real-data runs need HS1's exact PGLite version. Exporter logic is
+> verified against a synthetic HS1 DB in the meantime.
 
 ## 7.1 The problem
 
