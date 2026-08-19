@@ -66,6 +66,8 @@ CREATE TABLE tickets (
 
 CREATE TABLE tags       (store_id TEXT, ticket_id TEXT, tag TEXT);           -- denormalized for fast tag facets
 CREATE TABLE blocked_by (store_id TEXT, ticket_id TEXT, blocks_on_id TEXT);  -- flat dependency edges (blocks_on_id is a ULID, resolved to its live instance)
+CREATE TABLE assignees  (store_id TEXT, ticket_id TEXT, person TEXT);        -- denormalized assignees (git email) for "assigned to me" + query-builder facets
+CREATE TABLE reviews    (store_id TEXT, ticket_id TEXT, person TEXT, kind TEXT); -- review_requests (kind: work|feedback|review|fyi) — §10.2
 
 CREATE VIRTUAL TABLE tickets_fts USING fts5(
   title, details, notes,
@@ -112,8 +114,10 @@ query(filter, sort, text?, paging) -> TicketRow[]
 ```
 - **filter:** status set, priority set, category, tags (any/all), up_next,
   claimed/unclaimed, blocked/unblocked, **store (by `store_id`)**,
-  **open/closed and `close_reason`** (§2.6a — e.g. "closed as not_planned"), date
-  ranges.
+  **`close_reason`** (§2.6a — e.g. "closed as not_planned"), **assignee /
+  review-requested (by person, incl. "me")** (§10.2), date ranges. These are the
+  same dimensions the **custom-view query builder** exposes (HS2-29) — so views can
+  filter on the new fields (store / close_reason / assignment).
 - **sort:** priority-then-recency (the worklist order), created, updated, title;
   ULID gives a free chronological default.
 - **text:** an FTS5 `MATCH` over title/details/notes, joined with the structured

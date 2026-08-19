@@ -45,11 +45,15 @@ Tags: normalization, autocomplete, batch dialog, chips, view-associated auto-tag
 worklist) (docs/4 §4.18) — **keep; it's a critical v1 feature** (maintainer). An
 AI-facing concept carried over — see docs/05 §5.9.
 
-## 4. Notes, Reader Mode & Feedback — **core-keep** (reader mode nice-to-have)
+## 4. Notes, Reader Mode & Feedback — **core-keep, with improvements** (DECIDED, HS2-26, 2026-08-19)
 Inline-editable notes (docs/3); **FEEDBACK NEEDED / IMMEDIATE** prefixes + feedback
-dialog w/ draft (docs/21) — core to the AI loop, and now generalizes to human
-assignment ([10](10-assignment-and-collaboration.md)); reader-mode overlay +
-note-nav (docs/49, 59, 65) — *keep-with-changes / lower priority*.
+dialog w/ draft (docs/21) — core to the AI loop, and generalizes to human assignment
+([10](10-assignment-and-collaboration.md)). **Improvements (maintainer):** four note
+**kinds** (regular / feedback_needed / feedback_draft / status — docs/02 §2.6); **one
+reader mode** whose rendering is driven by note kind, not launch point (feedback
+kinds → editor style; regular/status/details → reader style); and an **"Edit" button
+→ larger editing surface**, with the reader button reachable *while* editing to jump
+straight into it. Design in docs/06 §6.8; build HS2-65.
 
 ## 5. Attachments — **core-keep** (build: HS2-4)
 File picker + drag-drop (docs/5); reveal in file manager; copy across paste/project
@@ -62,11 +66,14 @@ Up Next star + status auto-reset (docs/3); `worklist.md` + `open-tickets.md`
 auto-generated from the index (docs/6). *Change:* generated from SQLite index
 (docs/03 §3.6), not the DB.
 
-## 7. Views & Layouts — **core-keep** (refine custom-view UX)
+## 7. Views & Layouts — **core-keep + expand the query builder** (DECIDED, HS2-29, 2026-08-19)
 List w/ pagination, column/kanban drag, custom views + query builder (docs/4 §4.14),
 sidebar built-in views + counts, sort, detail-panel orientation, draft row, FLIP
-animations (docs/4). *Decide:* keep the query-builder complexity; per-machine custom
-views (docs/107) → the shared/local model (docs/02 §2.11).
+animations (docs/4). **DECIDED (maintainer): keep the query builder AND expand it to
+the new HS2 fields** — `close_reason`, **ticket repo / store**, and **user
+assignment** (assignees / review-requests). The index + query surface already carry
+these dimensions (docs/03 §3.3/§3.5). Per-machine custom views (docs/107) → the
+shared/local model (docs/02 §2.11).
 
 ## 8. Search & Filter — **core-keep** (build: HS2-5)
 FTS over title/details/number/tags/notes, multi-word union, exact-id lookup,

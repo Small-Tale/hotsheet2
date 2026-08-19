@@ -213,7 +213,37 @@ unexpectedly, and a dropped remote left a stale size. Moving to **server-arbitra
 leased, focus-follows** claims fixes all three: intent (focus) drives size,
 disconnects self-heal, and one arbiter means local and remote behave identically.
 
-## 6.8 Cross-references
+## 6.8 Notes, reader mode & editing
+
+> **Design** (maintainer, 2026-08-19, HS2-26). Keep HS1's reader mode + feedback
+> concepts, but unify and enlarge them. Build: **HS2-65**.
+
+**Four note kinds, one rendering rule.** A note's `kind` ([02](02-ticket-storage.md)
+§2.6 — `regular` / `feedback_needed` / `feedback_draft` / `status`) determines how
+it's shown, **not how the view was opened** (HS1's inconsistency: the same note
+rendered as an editable feedback form when opened via "Provide feedback" but
+read-only when opened via the reader icon). In HS2 there is **one reader mode**, and:
+
+- **`feedback_needed` and `feedback_draft` notes always render in the feedback-editor
+  style** (you can answer the ask / continue your draft) — wherever they appear.
+- **`regular` and `status` notes, and the ticket `details`, render in the reader
+  (read-only) style.**
+
+**Reader mode is a focus surface with an edit toggle.** Opening reader mode shows the
+ticket's details + notes on one large scrollable surface (per the rule above).
+
+- An **"Edit" button in reader mode** turns it into a **larger editing surface** for
+  details/notes — because editing in the cramped detail panel sometimes isn't enough
+  room.
+- While editing details/notes **in the detail panel**, the **reader button stays
+  available**; clicking it **launches directly into the larger reader/editing mode**,
+  carrying the in-progress edit — so you can escalate from the tight inline editor to
+  the roomy one without losing your place.
+
+Net: one consistent reader mode, kind-driven rendering, and a smooth path from the
+constrained detail-panel editor to a spacious full-surface editor.
+
+## 6.9 Cross-references
 - Server-side PTY manager that hosts the arbiter: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.4
 - The server clients talk to + its auto-start lifecycle: [04-core-server-cli.md](04-core-server-cli.md) §4.3.1
 - Remote/mTLS + mobile pairing: [08-distributed-and-remote.md](08-distributed-and-remote.md)

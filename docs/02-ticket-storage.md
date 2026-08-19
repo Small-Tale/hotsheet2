@@ -213,9 +213,8 @@ terminal gutter paints `var(--bg)` before the theme is applied.
 <!-- note: 01J9ZK4A0R… -->
 2026-08-19T15:20:44Z — Reproduced on macOS; root cause is the pre-theme paint.
 
-<!-- note: 01J9ZK5B1S… -->
-2026-08-19T15:31:02Z — **FEEDBACK NEEDED:** should the fix also cover the
-dashboard dedicated view?
+<!-- note: 01J9ZK5B1S… kind: feedback_needed -->
+2026-08-19T15:31:02Z — should the fix also cover the dashboard dedicated view?
 ```
 
 - **Frontmatter = structured fields** (validated by a schema; `schema:` versions
@@ -227,6 +226,18 @@ dashboard dedicated view?
   two distinct, uniquely-identified blocks that union cleanly and sort by id
   (= chronologically). The comment keeps the id machine-readable without cluttering
   the rendered Markdown.
+- **A note has a `kind`** (default `regular`), carried in the same comment
+  (`kind: …`), one of **four** (HS2-26, maintainer 2026-08-19):
+  - `regular` — an ordinary note. **Shared** (committed).
+  - `feedback_needed` — a request for a human decision (HS1's `FEEDBACK NEEDED:`
+    prefix, promoted to a first-class kind). **Shared** (committed).
+  - `feedback_draft` — a user's half-written response to a `feedback_needed` ask.
+    **Local / per-user** — it lives in the gitignored local overlay (§2.11 Tier B),
+    *not* the committed ticket file; on submit it becomes a `regular` shared note.
+  - `status` — a system-generated event note (e.g. "claim expired — reclaimed",
+    "QUARANTINED"). **Shared** (committed), informational for the team.
+  The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
+  get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** are files under `attachments/<id>/`, referenced by relative path.
   They merge trivially — a new attachment is a new file, so two branches adding
   attachments to the same ticket never conflict.
