@@ -68,14 +68,17 @@ rebuild from disk. Detail: [02](02-ticket-storage.md) §2.11; build: HS2-21.
 reconstructs from disk" principle — local data only in a disposable DB would be lost
 on reindex.
 
-## 9.1d Human assignment: **separate from machine claim/lease** — **Proposed** (design; maintainer, 2026-08-19)
+## 9.1d Human assignment: **separate from machine claim/lease** — **Decided** (maintainer, 2026-08-19)
 
-**Decision (proposed).** Human assignment (`assignees` + `review_requests` with a
+**Decision.** Human assignment (`assignees` + `review_requests` with a
 `work`/`feedback`/`review`/`fyi` kind) is a **distinct, durable, shared** concept
-from the ephemeral machine `claim/lease`. Identity = git email + an optional roster;
-attention delivered in-app + live push + on-sync. Detail:
+from the ephemeral machine `claim/lease`. Identity = **git email** + a **committed
+`people.json`** roster; **one "People…" control** in the UI; review requests are
+**soft** (attention only — `blocked_by` handles hard ordering); attention delivered
+in-app + live push + on-sync. Detail:
 [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md); build:
-HS2-20. Several sub-questions remain open (§10.5).
+HS2-20. Two small follow-ups remain (§10.5: off-server notification transport;
+GitHub-collaborators as a roster seed).
 
 **Why.** Teams need to direct specific people to do work or give feedback; that is
 not what claim/lease (worker coordination) models, and conflating them is the trap.
@@ -185,9 +188,10 @@ remote-first on iOS). Android later, same API. No `uniffi`/JNI bindings.
 
 Detail: [06](06-clients.md).
 
-**Sub-decision (client UI framework).** For the Tauri web UI, recommend a small
-mainstream reactive framework (Solid/Svelte) over hand-rolling a runtime — HS1's
-bespoke `kerfjs`/JSX runtime was a maintenance tax. Client-local, revisitable.
+**Sub-decision (client UI framework) — Solid** (maintainer, 2026-08-19). The Tauri
+web UI uses **Solid** (a small, fast, fine-grained-reactive framework — closest in
+spirit to HS1's signals approach without the hand-rolled `kerfjs`/JSX runtime tax).
+Client-local and revisitable, but Solid is the pick.
 
 ---
 
@@ -257,18 +261,25 @@ non-destructive. Detail: [07](07-migration.md).
 | S1 | Notes storage | **Inline**, each note a timestamp-ordered UUID — [02](02-ticket-storage.md) §2.6 |
 | C1 | Client sequencing | **Tauri+web → SwiftUI macOS → SwiftUI iOS → Android** — §9.5 |
 | — | Attachments | Supported (first-class) — [02](02-ticket-storage.md) §2.5 |
+| — | Server topology | **One server per machine** (all local projects) — [04](04-core-server-cli.md) §4.3 |
+| — | MCP delivery | **Per-project MCP shim** (not server-direct) — [05](05-ai-tool-plugins.md) §5.8 |
+| — | Close-reason ↔ status | **Open/closed axis**, `close_reason` as descriptor — [02](02-ticket-storage.md) §2.6a |
+| — | Ticket-file sharding | **Id-prefix (2-char)** — [02](02-ticket-storage.md) §2.3 |
+| — | Multi-viewer PTY sizing | **Focus-follows** default — [06](06-clients.md) §6.7 |
+| — | Human assignment | git email + **committed `people.json`**; **one "People…" control**; review = **soft** — [10](10-assignment-and-collaboration.md) §10.5 |
+| — | Orchestration | **Live-mount only** — no auto-clone (users clone by hand → a normal local project) — [08](08-distributed-and-remote.md) O1 |
+| — | Multi-machine coordination | **Git-native decentralized self-claim** (ref/tag CAS), no central coordinator — [08](08-distributed-and-remote.md) §8.5 |
+| — | Client UI framework | **Solid** — §9.5 |
+| — | Deferred past v1 | cross-server views (O2), iOS push (O5), remote terminals over wss (O6), iOS local stores (O4) |
 
-**Still open (to resolve as implementation reaches each area — tracked in HS2-15):**
+**Still open:**
 
-| # | Decision | Recommendation | Doc |
+| # | Decision | Note | Doc |
 |---|---|---|---|
-| A1 | Human assignment: identity mapping, review-request UX, off-server notification, roster source | Proposal in doc 10; confirm §10.5 | [10](10-assignment-and-collaboration.md) §10.5 |
 | F1 | Which HS1 features to port / change / drop | Per-area decision tickets from the survey | doc 11 / HS2-22 |
-| D1 | Orchestration: live-mount vs clone-and-serve (both?) | Both; live-mount primary | [08](08-distributed-and-remote.md) O1 |
-| D2 | Cross-server aggregate views in v1? | Defer | [08](08-distributed-and-remote.md) O2 |
-| M1 | iOS local stores vs remote-only | Remote-first, keep option | [08](08-distributed-and-remote.md) O4 |
-| O5 | iOS push notifications | Defer; design event bus for a later relay | [08](08-distributed-and-remote.md) O5 |
-| O6 | Remote terminals over wss | Defer past remote data | [08](08-distributed-and-remote.md) O6 |
+| — | git-claim marker: custom ref vs reserved tag (per-remote support) | De-risking spike | [08](08-distributed-and-remote.md) §8.5 / HS2-63 |
+| — | Assignment: off-server notification transport; GitHub-collaborators as roster seed | Smaller follow-ups | [10](10-assignment-and-collaboration.md) §10.5 |
 
-The pivotal language decision (L1) is now **settled: Rust.** Implementation can
-proceed.
+The pivotal language decision (L1) is **settled: Rust.** With this round, the
+architecture-level decisions are all made; remaining open items are the per-feature
+inventory (doc 11) and small implementation-time details.

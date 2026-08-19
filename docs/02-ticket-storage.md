@@ -135,9 +135,14 @@ one **live** ticket (see the move tombstones in §2.13).
   "schemaVersion": 1,
   "ticketPrefix": "HS",       // display prefix; the dash is added automatically
   "idStrategy": "ulid",
-  "shard": "id-prefix-2"      // how tickets/ is subdivided
+  "shard": "id-prefix-2"      // 2-char id-prefix sharding (confirmed 2026-08-19)
 }
 ```
+
+**Sharding is id-prefix (2-char)** — decided (maintainer, 2026-08-19) — so a store
+scales to tens of thousands of tickets with bounded, evenly-filled directories (a
+ULID's trailing random bits distribute uniformly across the 256 shard buckets),
+without a flat `tickets/` directory growing unwieldy.
 
 ## 2.4 Ticket IDs — ULID, no central sequence
 
@@ -275,12 +280,16 @@ is *orthogonal metadata on a closed ticket*, not a replacement for the status:
 - The **done path** — `completed` / `verified` — carries `close_reason: completed`
   (implied/defaulted; `verified` adds the human-checked bit on top).
 - A **not-done close** (`not_planned` / `duplicate` / `obsolete`) closes the ticket
-  **without marking it completed** — it should read as "closed, but not done," never
-  as finished work. The exact status-enum shape for that outcome (a dedicated
-  `closed` status vs. an open/closed axis with `close_reason` as the sole
-  descriptor, GitHub-style) is folded into the **status-model decision, HS2-24** —
-  this feature is the strongest argument for revisiting it. Until then the field
-  design above is stable; only its status coupling is open.
+  **without marking it completed** — it reads as "closed, but not done," never as
+  finished work.
+
+**Status model — decided (maintainer, 2026-08-19): an explicit open/closed axis.**
+The primary axis is **open vs. closed**, and `close_reason` is the sole descriptor
+of *why* a closed ticket is closed (completed / not_planned / duplicate / obsolete).
+`verified` stays as an extra human-checked flag on a completed close. This is the
+GitHub model, and it's cleaner than adding a separate `closed` status. The exact
+open/closed status enum lands with the broader status-set decision (HS2-24), but the
+shape is settled.
 
 **Freeform vs. structured.** `close_reason` is the *structured* tag (filterable,
 reportable). A **note** still carries any freeform explanation ("closing — we chose

@@ -175,10 +175,12 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 
 AI tools reach tickets two ways, both over the one core:
 - **MCP** — the `hotsheet_*` tool surface (create/update/get/query/claim/etc.).
-  Open question carried into implementation: whether the server exposes MCP
-  directly, or a small per-project MCP shim is spawned into the tool's config (HS1
-  spawns `channel.ts`). The plugin's `mcp` capability writes whichever entry the
-  tool's config format needs.
+  **Decided (maintainer, 2026-08-19): a small per-project MCP shim** spawned into
+  each tool's config (as HS1 does with `channel.ts`), *not* the server exposing MCP
+  directly. This keeps the per-project namespacing (`hotsheet-channel-<slug>`) and
+  the channel model tools already expect, and lets a tool reach the right project by
+  its own config. The plugin's `mcp` capability writes whichever entry the tool's
+  config format needs; the shim proxies to the core/server.
 - **CLI** — `hotsheet` commands ([04-core-server-cli.md](04-core-server-cli.md) §4.4),
   for tools that shell out.
 

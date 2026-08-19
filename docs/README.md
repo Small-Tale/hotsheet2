@@ -78,9 +78,15 @@ drives AI coding tools) and rebuilds the *foundation*.
 > notes with timestamp-ordered UUIDs · attachments · **server always a separate
 > process (local included), client auto-starts it and it outlives the client;
 > clients never embed the core** · client order Tauri+web → SwiftUI macOS → iOS →
-> Android · plugin-only AI tools. Still in design: **human
-> assignment / in-the-loop** (doc 10) and a **full HS1 feature survey** (doc 11).
-> See [09-technology-decisions.md](09-technology-decisions.md) §9.11.
+> Android · plugin-only AI tools.
+>
+> **Round-2 confirmations (2026-08-19, §9.11):** one server per machine · per-project
+> MCP shim · close-reason open/closed axis · id-prefix sharding · PTY sizing
+> focus-follows · assignment = git email + committed `people.json` + one control +
+> soft review · orchestration **live-mount only** (no auto-clone) · multi-machine =
+> **git-native self-claim** (ref/tag CAS, no coordinator) · UI = **Solid** · deferred
+> past v1: cross-server views, iOS push, remote terminals, iOS local stores. Remaining
+> open: the HS1 feature inventory (doc 11) + small implementation-time details.
 
 ## Requirements summary (synthesized status view)
 
@@ -116,8 +122,9 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Native SwiftUI macOS (2nd) → iOS (3rd) | 06 | Confirmed |
 | Android client (4th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |
 | PGLite → git migration (UI-prompted) | 07 | Design |
-| Multi-server orchestration through one UI | 08 | Open |
-| Mobile ↔ server configuration/pairing | 08 | Open |
+| Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |
+| Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Confirmed (design); spike HS2-63 |
+| Mobile ↔ server configuration/pairing (mTLS + QR) | 08 §8.3 | Design |
 
 ## Conventions
 

@@ -41,11 +41,12 @@ review_requests:                                   # people whose input is wante
   a **kind**: `feedback` (weigh in), `review` (approve/verify), or `fyi` (awareness).
   Each request carries its own ULID `by`, so requests **merge by set-union** exactly
   like notes — two people adding a reviewer never conflict.
-- **Person identity = the git identity (email)** by default, optionally mapped to a
-  friendly name via a **project roster** (`roster` in project config, or a
-  `people.json` in the store) — so `dana@example.com` renders as "Dana". Using the
-  git identity means assignment is meaningful across clones and needs no separate
-  accounts system (a chartered non-goal — [00](00-vision-and-principles.md) §0.3).
+- **Person identity = the git identity (email)** (decided, 2026-08-19), mapped to a
+  friendly name via a **committed `people.json` in the store** — so `dana@example.com`
+  renders as "Dana", and because the roster is committed it **syncs to the whole
+  team** automatically. Using the git identity means assignment is meaningful across
+  clones and needs no separate accounts system (a chartered non-goal —
+  [00](00-vision-and-principles.md) §0.3).
 
 Assignment maps naturally onto HS1's existing `FEEDBACK NEEDED:` note convention
 (the worklist already uses it) — `review_requests[kind=feedback]` is the
@@ -87,21 +88,22 @@ Two refinements for the distributed/team case:
   (which protects against two *simultaneous editors*) still applies regardless of
   who's assigned.
 
-## 10.5 Open questions (for HS2-20)
+## 10.5 Decisions & remaining questions (HS2-20)
 
-- **Identity mapping.** Git email as the key + a roster for display — confirm, and
-  decide where the roster lives (project config vs. a committed `people.json` in the
-  store so it syncs).
-- **"Assign to" vs. "request review" UX.** One control with a kind, or two? Lean:
-  one "People…" control that sets assignees + adds review requests with a kind.
+**Resolved (maintainer, 2026-08-19):**
+- **Identity + roster.** Git email is the key; the display roster is a **committed
+  `people.json` in the store**, so it syncs to the team (§10.2).
+- **UX.** **One "People…" control** sets assignees *and* adds review requests (each
+  with a work/feedback/review/fyi kind) — not two separate controls.
+- **Review vs. `blocked_by`.** Review requests stay **soft** (attention only); use
+  `blocked_by` for hard ordering. A review never hard-blocks a ticket.
+
+**Still open (smaller):**
 - **Notification transport off-server.** In-app + on-sync desktop notifications are
-  clear; the iOS-push path depends on the deferred push infrastructure
-  ([08](08-distributed-and-remote.md) O5).
-- **Team roster source of truth.** For a GitHub-backed store, could we derive people
-  from repo collaborators? Optional enhancement; git identity works without it.
-- **Interaction with `blocked_by`.** A `review` request that must complete before a
-  ticket proceeds — is that a `blocked_by` edge, or a softer gate? Lean: keep review
-  requests soft (attention), use `blocked_by` for hard ordering.
+  clear; the iOS-push path is deferred ([08](08-distributed-and-remote.md) O5).
+- **Team roster source of truth.** For a GitHub-backed store, optionally derive
+  people from repo collaborators to seed `people.json`. Enhancement; git identity
+  works without it.
 
 ## 10.6 Cross-references
 - The `assignees` / `review_requests` fields + shared/local tiering: [02](02-ticket-storage.md) §2.5, §2.11
