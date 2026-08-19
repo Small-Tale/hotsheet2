@@ -114,43 +114,66 @@ Two regimes, kept distinct:
 
 ### 8.5.1 The mechanism — a claim marker + atomic-push compare-and-swap
 
-- **One claim marker per ticket** under a reserved namespace — a git ref/tag named
-  `hs-claim/<ulid>`. To claim, a worker **pushes to create that marker**. The remote
-  serializes pushes, so the **first push wins and the second is rejected** (the ref
-  already exists / not a fast-forward). That rejection *is* a distributed
+> **Validated (HS2-63 spike, 2026-08-19)** — see §8.5.3 for the proof and the
+> remote-support finding.
+
+- **One claim marker per ticket** under a **reserved ref namespace** —
+  `refs/hotsheet/claims/<ulid>`. To claim, a worker **pushes to create that ref**.
+  The remote serializes pushes, so the **first push wins and the second is rejected**
+  (the ref exists / not a fast-forward). That rejection *is* a distributed
   **compare-and-swap**: the git remote is the arbiter, and no Hot Sheet coordinator
   process exists.
-- **Metadata in the marker's payload, not its name.** The annotated-tag message / a
-  tiny object carries `{ worker, expires_at }`. The name stays stable and CAS-able;
-  encoding worker/timestamp in the *name* (an early sketch) would break that.
+- **Metadata in the marker's payload, not its name.** The ref points at a tiny
+  object (an orphan commit / annotated-tag object) whose message carries
+  `{ worker, expires_at }`. The name stays stable and CAS-able; encoding
+  worker/timestamp in the *name* (an early sketch) would break that.
 - **Renew** = fast-forward the marker with `--force-with-lease` (itself a CAS: it
   only succeeds if the marker is still what you last saw, so two workers can't both
   renew/steal).
 - **Reclaim a dead worker** = once `expires_at` has passed, steal via
-  `--force-with-lease` after the expiry check.
-- **Cleanup** = the reserved namespace is enumerable, so a periodic sweep deletes
-  expired `hs-claim/*` markers. They live outside `main`'s history and the working
-  tree, so they never clutter the repo or the merge story.
+  `--force-with-lease=<ref>:<seen-oid>` after the expiry check — so of two
+  simultaneous stealers, **exactly one wins** (the other's lease is stale).
+- **Enumerate** = `git ls-remote origin 'refs/hotsheet/claims/*'` lists live claims
+  without fetching objects.
+- **Cleanup** = a periodic sweep deletes expired markers. Custom refs live **outside
+  `main`'s history, the working tree, AND normal git surfaces** (`git tag`/`branch`
+  and GitHub's UI don't show `refs/hotsheet/*`), so they never clutter anything.
 
 This makes multi-machine claiming **fully decentralized** — any worker on any box
 self-claims against the shared remote — which is why **no central coordinator is
 needed** (§8.2 O3).
 
-### 8.5.2 Properties & the one thing to validate
+### 8.5.2 Properties
 
 - **Online by nature.** Claiming requires reaching the remote (a push round-trip).
-  Fine for multi-machine; the single-server local case never pays this cost.
+  Fine for multi-machine; the single-server local case never pays this cost. (Claim
+  refs aren't fetched by the default refspec, so the protocol explicitly
+  `ls-remote`s / fetches the `refs/hotsheet/claims/*` namespace.)
 - **True mutual exclusion.** Unlike a file-based claim (both workers could commit
   locally and only discover the clash on sync), push-CAS rejects the second claimant
   *at claim time* — so two paid AI workers never both start the same ticket.
 - **Same trust boundary as editing.** Anyone with push access can claim; that's the
   same access that edits tickets.
-- **⚠ Validate per remote (HS2-63 spike).** Some remotes — notably GitHub —
-  restrict pushing arbitrary `refs/*` namespaces. The **fallback is tags** (a
-  reserved prefix like `hs-claim/<ulid>`), which are universally supported, still
-  atomic-on-create, still prefix-namespaced, and bulk-deletable. The mechanism is
-  solid; whether the marker is a custom ref or a reserved tag is what the spike
-  settles.
+
+### 8.5.3 Spike results (HS2-63, 2026-08-19)
+
+Empirically validated, so this is no longer a bet:
+
+- **Mechanism (generic remote, bare-repo proof):** custom-ref CAS ✅ (2nd claimant
+  rejected "fetch first"), tag CAS ✅ ("already exists"), `--force-with-lease` renew
+  ✅, **two-stealer race → exactly one wins** ✅ (the stale stealer rejected "stale
+  info"), enumerate + sweep ✅.
+- **GitHub support (live test against a real repo):** GitHub **accepts custom ref
+  namespaces** — `refs/hotsheet/claims/*` pushed, listed, and deleted cleanly. This
+  contradicts the older "GitHub only allows heads/tags" lore; current behavior
+  accepts them. Tags also work.
+- **Decision: custom ref (`refs/hotsheet/claims/<ulid>`) is the primary marker**
+  (invisible to normal git + the GitHub UI, bulk-prunable), with **reserved-prefix
+  tags as a documented fallback** for any remote that rejects custom refs. The
+  CAS/lease semantics are identical either way — a git server-side guarantee.
+- **Not stress-tested:** a truly concurrent push race *against GitHub specifically*
+  (vs. the local proof) — it's a git protocol guarantee, but worth a load test if we
+  ever see contention anomalies.
 
 ## 8.6 Cross-references
 - Client tabs/registry: [06-clients.md](06-clients.md)

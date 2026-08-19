@@ -166,10 +166,11 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
   the **index** (fast), and the claim is persisted to the **ticket file**
   frontmatter (source of truth) — so a claim survives an index rebuild.
 - **Multiple independent machines over a shared git remote (no single server):**
-  coordination goes through **git itself** — a per-ticket claim marker (`hs-claim/
-  <ulid>`) claimed by an **atomic-push compare-and-swap**, with lease expiry + a
-  sweep for cleanup. Fully decentralized, no coordinator. Design + the one remote
-  caveat to spike: [08-distributed-and-remote.md](08-distributed-and-remote.md) §8.5.
+  coordination goes through **git itself** — a per-ticket claim marker
+  (`refs/hotsheet/claims/<ulid>`) claimed by an **atomic-push compare-and-swap**,
+  with lease expiry + a sweep for cleanup. Fully decentralized, no coordinator.
+  **Validated** (custom refs work on GitHub; tags are the fallback) —
+  [08-distributed-and-remote.md](08-distributed-and-remote.md) §8.5.
 
 ## 5.8 MCP & CLI access for tools
 
