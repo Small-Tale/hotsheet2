@@ -28,6 +28,10 @@ requirements summary, and the technology-decision log
 The implementation roadmap and open decisions are tracked as tickets in the
 project's own Hot Sheet.
 
+## License
+
+[MIT](LICENSE) © Small Tale Inc.
+
 ---
 
-Hot Sheet 2 is developed by **Small Tale Inc.** Copyright © Small Tale Inc.
+Hot Sheet 2 is developed by **Small Tale Inc.** Copyright © 2026 Small Tale Inc.

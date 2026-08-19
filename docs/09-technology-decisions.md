@@ -279,6 +279,10 @@ non-destructive. Detail: [07](07-migration.md).
 | F1 | Which HS1 features to port / change / drop | Per-area decision tickets from the survey | doc 11 / HS2-22 |
 | — | git-claim marker: custom ref vs reserved tag (per-remote support) | De-risking spike | [08](08-distributed-and-remote.md) §8.5 / HS2-63 |
 | — | Assignment: off-server notification transport; GitHub-collaborators as roster seed | Smaller follow-ups | [10](10-assignment-and-collaboration.md) §10.5 |
+| — | Release / distribution strategy (npm likely wrong; GitHub Releases too rough) | Deferred; decide with real artifacts | HS2-72 |
+
+**Decided housekeeping:** License = **MIT**, © Small Tale Inc. (see `LICENSE`);
+project attribution = **Small Tale Inc.** (see `CLAUDE.md` → Project attribution).
 
 The pivotal language decision (L1) is **settled: Rust.** With this round, the
 architecture-level decisions are all made; remaining open items are the per-feature
