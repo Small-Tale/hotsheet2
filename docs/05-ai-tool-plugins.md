@@ -103,6 +103,13 @@ similar connections."
 
 ## 5.5 Drive / trigger (send a command to a target connection)
 
+> **Direction confirmed (maintainer, 2026-08-19, HS2-41):** there is **no single
+> transport all tools share** — but there is **one interface with optional
+> capabilities that each tool conforms to as applicable** (absence = not supported,
+> §5.3). Different tools implement different subsets. **Designing this interface is
+> an early priority** — investigate it sooner rather than later, since it's the seam
+> every tool and the whole test harness hang off (design ticket: HS2-67).
+
 A **drive transport** is how the app steers a running tool. HS1 has four; HS2
 models them as implementations of one `Drive` trait so a fifth is additive:
 
@@ -122,6 +129,16 @@ models them as implementations of one `Drive` trait so a fifth is additive:
 *which* connection when several exist (e.g. a git-worktree worker's channel vs the
 main one). `run` may be sync (spawn) or async (POST to a running session) — both
 allowed by the trait.
+
+**Optional drive sub-capabilities** (a tool implements only what it supports —
+absence = not supported): `interrupt`, `reset`, `prestart` (a daemon warm-up),
+`isBusy`, and a long-lived **backing service** (Codex's app-server; Claude's channel
+arguably). The host calls `drive.interrupt?()` etc. as no-ops for tools that don't
+have them, so a new tool declares its subset and nothing branches on the tool id.
+The v1 tools exercise two shapes: **Claude** (persistent channel) and **Codex**
+(spawn / app-server) — enough to prove the interface isn't Claude-shaped. Getting
+this trait boundary right early (HS2-67) is what lets a third tool be nearly
+declarative.
 
 ## 5.6 Connection registry & busy tracking (list connections; track busy-ness)
 

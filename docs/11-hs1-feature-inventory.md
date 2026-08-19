@@ -143,7 +143,13 @@ be able to ask, *relatively unsupervised*, for support for another tool (OpenCod
 Cursor / Antigravity / …) and have it **work fully without constant manual testing** —
 inherited via the fake-agent E2E + conformance gate + recorded contracts.
 
-## 19. Drive Transports (MCP-hooks / ACP / Codex) — **reconsider** (minimal set)
+## 19. Drive Transports (MCP-hooks / ACP / Codex) — **one interface, optional capabilities** (DECIDED, HS2-41, 2026-08-19)
+**DECIDED (maintainer):** no single universal transport — instead **one drive
+interface with optional capabilities each tool conforms to as applicable** (absence =
+not supported). v1 covers Claude (persistent channel) + Codex (spawn / app-server);
+ACP and others plug in as capabilities later. **Design this interface early**
+(HS2-67) — it's the seam every tool + the test harness depend on. docs/05 §5.5.
+(Below is the original per-transport survey.)
 MCP+hooks (docs/115), ACP (docs/114), Codex app-server/daemon/model-B (docs/121,
 129). *Decide:* which transports v1 supports (Claude channel is a given; pick 1–2
 more). docs/05 §5.5 models them as one trait.
