@@ -25,18 +25,36 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
 ### This project's test setup
-<!-- hotsheet:needs-setup -->
 
-> ⚙️ **Setup needed — fill this in once.**
-> The test specifics for this project haven't been recorded yet. The next time you (an AI assistant) are about to write tests, run tests, or set up CI:
-> 1. **Detect** what you can from the project's config (`package.json`, `pyproject.toml`, `Cargo.toml`, `go.mod`, `Makefile`, CI files).
-> 2. **Ask the user to confirm and fill gaps** — especially tools they *plan* to use but haven't installed yet: the unit and E2E/integration test runner(s); where tests live (paths/globs); the commands to run unit tests, E2E tests, and a merged coverage report; and any shared test helpers to always use.
-> 3. **Replace everything between the two `hotsheet:specifics` markers** (including the `hotsheet:needs-setup` line above) with the filled-in specifics, e.g.:
->    - **Unit tests** (`<glob>`): `<runner>`. `<helpers>`.
->    - **E2E tests** (`<glob>`): `<framework>`. `<how they run>`.
->    - **Commands**: unit `<cmd>` · E2E `<cmd>` · coverage `<cmd>`.
->
-> Once the `hotsheet:needs-setup` line is gone, this prompt won't appear again.
+> **Design phase — no implementation code yet.** The stack below is the *agreed
+> plan* (see [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md) §12.7,
+> the authority); wire it up with the first code (HS2-16), then refine this block to
+> match what actually exists.
+
+- **Rust unit + integration** (`crates/*/src/**` inline `#[cfg(test)]` and
+  `crates/*/tests/**`): run with **`cargo-nextest`**. Pure logic uses injected-fake
+  adapters (in-memory fs, temp git repo, in-memory SQLite); integration uses a real
+  temp store + real SQLite. **Always use the shared fixtures:** `TempStore` builder
+  and the `TestServer` harness.
+- **Property / fuzz / snapshot:** `proptest` for the semantic **merge driver**,
+  `cargo-fuzz` for the file-format parser, `insta` for 3-way-merge snapshots. The
+  **git-native claim** has deterministic bare-repo integration tests (concurrent
+  workers); the GitHub-live variant is opt-in (creds-gated).
+- **Server E2E:** boot the real server on an ephemeral port against a temp store,
+  drive over HTTP/WS. **Web E2E** (`clients/web`): **Playwright** against a real
+  running server. SwiftUI: XCUITest (later).
+- **Migrator** (`migrator/`, Node): **`vitest`**, plus the cross-language
+  **conformance test** — real `hotsheet-model` must parse + round-trip what the
+  migrator wrote.
+- **Stateful modules** (claim/lease, index reconcile, terminal-sizing arbiter, sync
+  engine) get **transition-matrix + adversarial-sequence** tests; pin every stateful
+  bug as a regression test.
+- **Coverage:** per-language gates + an aggregate summary (NOT one merged lcov):
+  `cargo llvm-cov` (Rust) · Playwright/istanbul (web) · `vitest` coverage (migrator).
+- **Commands** (once code exists): unit `cargo nextest run` · web E2E
+  `pnpm -C clients/web test:e2e` · migrator `pnpm -C migrator test` · coverage
+  `cargo llvm-cov` (+ per-surface). Fast tier vs. full/live tier (GitHub-remote +
+  creds-gated) in CI (GitHub Actions).
 <!-- hotsheet:end specifics=testing-philosophy -->
 <!-- hotsheet:end section=testing-philosophy -->
 

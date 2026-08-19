@@ -70,6 +70,7 @@ drives AI coding tools) and rebuilds the *foundation*.
 | [09-technology-decisions.md](09-technology-decisions.md) | Consolidated ADR-style decision log | Decided |
 | [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim) | Open (proposal) |
 | `11-hs1-feature-inventory.md` | Full HS1 feature survey → per-area build/skip decisions | In progress (HS2-22) |
+| [12-code-organization-and-testing.md](12-code-organization-and-testing.md) | Cargo workspace/crate map, async/git/topology, test strategy | Decided |
 
 > **Core decisions confirmed by the maintainer 2026-08-19:** Rust core · git-file
 > storage · ULID + **all-caps** slug · SQLite+FTS5 · **automatic conflict
@@ -121,6 +122,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Tauri + web client (1st) | 06 | Confirmed |
 | Native SwiftUI macOS (2nd) → iOS (3rd) | 06 | Confirmed |
 | Android client (4th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |
+| Code organization (Cargo workspace/crates) + test strategy | 12 | Decided |
 | PGLite → git migration (UI-prompted) | 07 | Design |
 | Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |
 | Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Confirmed (design); spike HS2-63 |
