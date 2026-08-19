@@ -249,6 +249,46 @@ non-destructive. Detail: [07](07-migration.md).
 
 ---
 
+## 9.12 Async model: **sync core, async at the edges** — **Decided** (maintainer, 2026-08-19)
+
+**Decision.** The domain crates (`hotsheet-model`, `hotsheet-ticketing`) are
+**synchronous**; the server wraps them in one thin **async facade** that centralizes
+`spawn_blocking`. SQLite runs in **WAL mode with a read pool + a single serialized
+writer** (matching the one-index-writer rule, §9.1/[03](03-indexing-and-query.md) §3.8).
+Async lives only at inherent edges: the axum server, the watcher bridge, terminal
+streams, and git-remote via `tokio::process`.
+
+**Why.** rusqlite and local `gix` are synchronous; making the core async would only
+hide `spawn_blocking` inside it while taxing pure logic with async coloring, for no
+real concurrency win. Detail: [12](12-code-organization-and-testing.md) §12.3.
+
+## 9.13 Git access: **gix local, git CLI network** — **Decided** (maintainer, 2026-08-19)
+
+**Decision.** Two backends behind a `GitLocal`/`GitRemote` split: **`gix`** (pure
+Rust) for local ops (commit-on-write, `diff old..new HEAD`, history); **shell out to
+the `git` binary** for network + the claim compare-and-swap (fetch/push/`--force-with-lease`/`ls-remote`).
+Per-op fallback to the CLI for any local op thin in gix.
+
+**Why.** The git CLI uses the user's real config/credential-helper/SSH automatically
+(essential for GitHub push — exactly what the HS2-63 spike proved), while gix avoids
+subprocess overhead on hot local paths without a native C dependency. Detail:
+[12](12-code-organization-and-testing.md) §12.4.
+
+## 9.14 Terminal process topology: **separable crate, split deferred** — **Decided** (maintainer, 2026-08-19)
+
+**Decision.** Terminals are their own crate (`hotsheet-terminals`) so a full process
+split is cheap later, but v1 starts with **one ticket+terminal server + the detached
+PTY broker**: PTYs survive a server restart; a restart only briefly drops terminal
+WebSockets. A fully separate durable terminal *server* is revisited when survivability
+needs are concrete.
+
+**Why.** The detached broker already delivers PTY survival; a separate terminal
+*process* adds a third thing to launch/secure/discover before it's clearly needed.
+The crate boundary keeps that split a later, cheap change. Detail:
+[12](12-code-organization-and-testing.md) §12.5.
+
+---
+
 ## 9.11 Decision status
 
 **Resolved by the maintainer (2026-08-19):**
@@ -270,6 +310,10 @@ non-destructive. Detail: [07](07-migration.md).
 | — | Orchestration | **Live-mount only** — no auto-clone (users clone by hand → a normal local project) — [08](08-distributed-and-remote.md) O1 |
 | — | Multi-machine coordination | **Git-native decentralized self-claim** (ref/tag CAS), no central coordinator — [08](08-distributed-and-remote.md) §8.5 |
 | — | Client UI framework | **Solid** — §9.5 |
+| — | Async model | **Sync core + async facade**; WAL read-pool + single writer — §9.12 |
+| — | Git access | **gix local, git CLI network** — §9.13 |
+| — | Terminal topology | **Separable crate, one server + broker; split deferred** — §9.14 |
+| — | Plugin crates | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-extsync`) — [12](12-code-organization-and-testing.md) §12.2.1 |
 | — | Deferred past v1 | cross-server views (O2), iOS push (O5), remote terminals over wss (O6), iOS local stores (O4) |
 
 **Still open:**

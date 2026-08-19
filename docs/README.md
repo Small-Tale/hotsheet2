@@ -56,25 +56,57 @@ drives AI coding tools) and rebuilds the *foundation*.
 
 ## Document index
 
+Grouped by theme. File numbers are **stable ids** (referenced by tickets + cross-links)
+and don't imply reading order — read by group.
+
+**A · Product & principles**
 | Doc | Topic | Status |
 |---|---|---|
 | [00-vision-and-principles.md](00-vision-and-principles.md) | Product north star, scope, non-goals, principles | Decided |
+| `11-hs1-feature-inventory.md` | HS1 feature survey → per-area build/skip decisions (reference) | Done (HS2-22) |
+
+**B · Architecture & decisions**
+| Doc | Topic | Status |
+|---|---|---|
 | [01-architecture.md](01-architecture.md) | Component map: core / server / CLI / clients / plugins | Decided |
-| [02-ticket-storage.md](02-ticket-storage.md) | Git-repo ticket format, multi-store projects, IDs, auto-merge | Confirmed |
-| [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex | Confirmed |
-| [04-core-server-cli.md](04-core-server-cli.md) | Shared core, server, CLI, MCP, merge driver | Decided |
-| [05-ai-tool-plugins.md](05-ai-tool-plugins.md) | Plugin interface, terminals, drive, permissions, busy | Decided |
-| [06-clients.md](06-clients.md) | Tauri+web → SwiftUI macOS → iOS → Android | Decided |
-| [07-migration.md](07-migration.md) | PGLite → git-repo migration path | Proposed |
-| [08-distributed-and-remote.md](08-distributed-and-remote.md) | Multi-server orchestration, mobile connections | Open |
-| [09-technology-decisions.md](09-technology-decisions.md) | Consolidated ADR-style decision log | Decided |
-| [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim) | Open (proposal) |
-| `11-hs1-feature-inventory.md` | Full HS1 feature survey → per-area build/skip decisions | In progress (HS2-22) |
-| [12-code-organization-and-testing.md](12-code-organization-and-testing.md) | Cargo workspace/crate map, async/git/topology, test strategy | Decided |
-| [13-drive-transport-interface.md](13-drive-transport-interface.md) | AI-tool drive/transport interface (capability-based) | Design |
-| [14-metrics-interface.md](14-metrics-interface.md) | Unified usage/cost metrics interface + JSONL/rollup storage | Design |
-| [15-activity-narration-interface.md](15-activity-narration-interface.md) | Cross-tool activity/narration interface (for the Announcer) | Design |
+| [09-technology-decisions.md](09-technology-decisions.md) | Consolidated ADR-style decision log (the "what + why") | Decided |
+
+**C · Data & storage**
+| Doc | Topic | Status |
+|---|---|---|
+| [02-ticket-storage.md](02-ticket-storage.md) | Git-repo ticket format, multi-store projects, IDs, auto-merge, copy/move | Confirmed |
+| [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex, query surface | Confirmed |
+
+**D · Services & clients**
+| Doc | Topic | Status |
+|---|---|---|
+| [04-core-server-cli.md](04-core-server-cli.md) | Shared core, server (+lifecycle), CLI, MCP, merge driver | Decided |
+| [06-clients.md](06-clients.md) | Tauri+web → SwiftUI macOS → iOS → Android; terminal sizing; notes/reader | Decided |
+
+**E · AI-tool integration**
+| Doc | Topic | Status |
+|---|---|---|
+| [05-ai-tool-plugins.md](05-ai-tool-plugins.md) | Plugin interface overview (capabilities), terminals, permissions, testability | Decided |
+| [13-drive-transport-interface.md](13-drive-transport-interface.md) | Drive/transport capability (capability-based, all tools) | Design |
+| [14-metrics-interface.md](14-metrics-interface.md) | Usage/cost metrics capability + JSONL/rollup storage | Design |
+| [15-activity-narration-interface.md](15-activity-narration-interface.md) | Activity/narration capability (for the Announcer) | Design |
+
+**F · Collaboration & distribution**
+| Doc | Topic | Status |
+|---|---|---|
+| [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim) | Design |
+| [08-distributed-and-remote.md](08-distributed-and-remote.md) | Multi-server orchestration, mobile, git-native claim/lease | Design |
+
+**G · Integrations**
+| Doc | Topic | Status |
+|---|---|---|
 | [16-external-sync-interface.md](16-external-sync-interface.md) | External-sync plugin interface (GitHub/GitLab/Jira) | Design |
+
+**H · Engineering**
+| Doc | Topic | Status |
+|---|---|---|
+| [12-code-organization-and-testing.md](12-code-organization-and-testing.md) | Cargo workspace/crate map, conventions, test strategy | Decided |
+| [07-migration.md](07-migration.md) | PGLite → git-repo migration (standalone bundled tool) | Proposed |
 
 > **Core decisions confirmed by the maintainer 2026-08-19:** Rust core · git-file
 > storage · ULID + **all-caps** slug · SQLite+FTS5 · **automatic conflict

@@ -78,50 +78,34 @@ hotsheet2/
     reveals real common machinery — don't pre-abstract.
 - **`hotsheet-terminals`** is nearly standalone (project cwd/config, not the ticket
   index) — which is what keeps the future **process split** (a separate durable
-  terminal server) cheap. See §12.4.
+  terminal server) cheap. See §12.5.
+
+> **§12.3–§12.5 are implementation-choice *decisions*.** They shape the crate APIs and
+> boundaries, so they're summarized here, but the **decision + rationale of record
+> lives in the ADR log** ([09-technology-decisions.md](09-technology-decisions.md)) —
+> the intuitive home for "what we chose and why."
 
 ## 12.3 Async model — sync core, async at the edges
 
-**Decision:** the domain crates are **synchronous**; async lives only where it's
-inherent.
-
-- **`model` + `ticketing` are plain synchronous code** — easy to read and test
-  (no `#[tokio::test]`, no runtime), and matching the reality that **rusqlite and
-  local `gix` are synchronous**. Making them async would only hide `spawn_blocking`
-  inside them while taxing pure logic with async "coloring" — no real concurrency
-  win, since the disk/SQLite work blocks either way.
-- **The server wraps ticketing in one thin async facade** that centralizes
-  `spawn_blocking`, so route handlers read cleanly (`ticketing.get_ticket(id).await`)
-  while the blocking-boundary boilerplate lives in exactly one place.
-- **SQLite concurrency maps onto our "one index writer" rule** ([03](03-indexing-and-query.md)
-  §3.8): **WAL mode + a pool of read connections + a single serialized writer.** Both
-  dispatched through the facade's `spawn_blocking`.
-- **Async only at the inherent edges:** the axum HTTP/WS server, the
-  `notify`→channel watcher bridge, terminal byte streams, and **git-remote via
-  `tokio::process`** (subprocess) so a slow push never ties up a blocking-pool thread.
+`model`/`ticketing` are **synchronous**; the server wraps them in one async facade
+that centralizes `spawn_blocking`; SQLite = WAL + read-pool + single writer; async
+only at inherent edges (server, watcher bridge, terminal streams, git-remote via
+`tokio::process`). So the domain crates carry **no `async fn` in their public APIs** —
+a fact you rely on when laying out `hotsheet-ticketing`. Decision + rationale:
+[09](09-technology-decisions.md) §9.12.
 
 ## 12.4 Git access — gix local, git CLI network
 
-**Decision:** two backends behind one `GitLocal` / `GitRemote` adapter split.
-
-- **Local ops (`gix`, pure Rust):** commit-on-write, `diff old..new HEAD` for the
-  incremental-reindex fast path ([03](03-indexing-and-query.md) §3.4), history. No
-  subprocess overhead on hot paths, no native C dependency.
-- **Network ops (shell out to the `git` binary):** fetch, push, the claim
-  compare-and-swap (`--force-with-lease`), `ls-remote`. The CLI uses the user's real
-  git config / credential helper / SSH agent automatically — exactly what the HS2-63
-  spike proved for the claim CAS ([08](08-distributed-and-remote.md) §8.5). gix's
-  network/push side is less mature, so this is also the pragmatic choice.
-- **Per-op fallback to the `git` CLI** for any local op that is thin in gix.
+A `GitLocal`/`GitRemote` **adapter split**: `gix` (pure Rust) for local
+commit/diff/history; shell out to `git` for fetch/push/claim-CAS (uses the user's real
+config/credentials/SSH). Both adapters are **injected**, so tests fake them. Decision +
+rationale: [09](09-technology-decisions.md) §9.13.
 
 ## 12.5 Terminal process topology — separable crate, split deferred
 
-**Decision:** terminals are their **own crate** now (so a full process split is cheap
-later), but we **start with one ticket+terminal server + the detached PTY broker**
-([05](05-ai-tool-plugins.md) §5.4). PTYs live in the broker and **survive a server
-restart**; a restart only briefly drops terminal WebSockets (clients reconnect). A
-fully separate, independently-restartable **terminal server** is revisited when
-survivability needs are concrete — the crate boundary makes it a later, cheap change.
+`hotsheet-terminals` is its **own crate**; v1 runs one ticket+terminal server + the
+detached PTY broker; a fully separate terminal *process* is a later, cheap change the
+crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md) §9.14.
 
 ## 12.6 Conventions
 
