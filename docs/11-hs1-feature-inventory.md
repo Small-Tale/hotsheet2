@@ -170,11 +170,12 @@ poison dead-letter (docs/90). **Drop (retired HS-9686):** worker pool, dynamic
 scaling, coordinator-dispatch, batching, worker git-state (docs/91, 92, 98–102).
 Reconcile with human assignment (docs/10).
 
-## 23. Git Worktrees, Git Status & Code Review — **keep-with-changes**
-Keep: git-status chip/popover (docs/48); follower `.hotsheet` redirect (docs/89).
+## 23. Git Worktrees, Git Status & Code Review — **keep status+follower; drop the rest** (DECIDED, HS2-45, 2026-08-19)
+**Keep:** git-status chip/popover (docs/48); follower `.hotsheet` redirect (docs/89).
 **Drop (retired):** worktree create/list + per-worktree agents, node_modules
-provisioning, integration helpers (docs/89, 105, 106). *Decide:* Glassbox review-note
-inducement + proof artifacts (docs/110, 111, 122) — port or drop?
+provisioning, integration helpers (docs/89, 105, 106). **DECIDED (maintainer): drop
+the Glassbox review-note inducement + proof artifacts (docs/110, 111, 122) FOR NOW —
+revisit later (backlog HS2-68).**
 
 ## 24. Telemetry / OTLP / Cost — **keep-with-changes** (defer → HS2-17)
 OTLP receiver, cost widget, per-ticket attribution, tracing, retention, foreign-OTLP
