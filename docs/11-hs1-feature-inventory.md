@@ -261,10 +261,12 @@ render targets, project-scoped state guard (docs/1, 60, 61, 62, 126). *Change:* 
 clients are native/SPA over a data API; recommend a small reactive framework, not a
 hand-rolled runtime (docs/06 §6.3).
 
-## 36. Print, Export & Sharing — **keep-with-changes**
-Print (dashboard/all/selected/individual, multiple formats), ticket cross-reference
-modal, Web-Share prompt + footer link (docs/4, 55, 17). *Decide:* print keep; the
-share-prompt/virality feature — reconsider.
+## 36. Print, Export & Sharing — **keep print + pasteboard; drop sharing** (DECIDED, HS2-58, 2026-08-19)
+**Keep (important):** print (dashboard/all/selected/individual, multiple formats),
+the ticket cross-reference modal (docs/4, 55), and **pasteboard/clipboard export**
+(copy ticket content as text/markdown). **DROP (maintainer):** the Web-Share prompt +
+footer share link / virality feature (docs/17) **and all sponsorship / donation /
+self-promo messaging + prompting.**
 
 ---
 
