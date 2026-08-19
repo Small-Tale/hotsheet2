@@ -107,10 +107,13 @@ bell, find widget, quit-confirm, global checkout, multi-client, **PTY broker
 survival** (docs/22, 23, 34, 35, 37, 51, 54, 109, 136). Signature feature — port the
 broker + busy inference.
 
-## 14. Terminal Dashboard & Grids — **keep-with-changes** (assess value/effort)
+## 14. Terminal Dashboard & Grids — **core-keep (critical, v1)** (DECIDED, HS2-36, 2026-08-19)
 Global terminal dashboard, drawer grid, magnify/dedicated/jump, column slider,
-visibility groupings (docs/25, 36, 38, 39, 56). *Decide:* high effort — is the
-multi-terminal tile view v1 or later (→ HS2-17 long-tail)?
+visibility groupings (docs/25, 36, 38, 39, 56). **DECIDED (maintainer): keep — these
+are critical, heavily-used features, not deferred.** Each tile is a terminal viewport,
+so they compose with the multi-viewer PTY-sizing arbiter (docs/06 §6.7) — a
+magnified/dedicated tile is just a focused viewport. Build with the terminal work
+(HS2-10).
 
 ## 15. Shell Integration (OSC) — **keep-with-changes**
 OSC 7 cwd chip, OSC 8 links, OSC 9 toasts + native notifications, OSC 133 prompt
