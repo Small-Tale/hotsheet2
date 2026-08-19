@@ -230,11 +230,16 @@ clients** (routing an alert to the right device/client, cross-device attention).
 human-assignment attention (docs/10 §10.3); the off-server/iOS-push transport is the
 deferred piece (docs/08 O5).
 
-## 31. Plugins & External Sync — **reconsider** (assess demand)
-ESM plugin format + manifest, bidirectional sync engine, GitHub Issues plugin,
-plugin UI hooks, scheduled sync, conflict UI (docs/18, 19, 88). *Decide:* with git
-storage + GitHub-backed stores, is a separate GitHub-Issues sync plugin still
-wanted, or does git-native sharing cover it?
+## 31. Plugins & External Sync — **formalize a dedicated external-sync interface** (DECIDED, HS2-53, 2026-08-19)
+**DECIDED (maintainer):** drop HS1's *broad general* plugin system (docs/18 — generic
+plugins that happen to do ticket sync) in favor of a **purpose-built external-sync
+plugin interface** — a first-class concept specifically for syncing HS2 git-tickets
+with external ticketing systems. **GitHub Issues is especially important** (a lot of
+user-facing tickets arrive through it). Note this is **separate from git-native store
+sharing** (HS2 stores can live on GitHub as *repos*; this is syncing with GitHub's
+*Issues* tracker). Formalize the interface (field/status/priority mapping,
+bidirectional pull/push, incremental cursor, comments↔notes, conflict handling,
+scheduled sync) — design HS2-71.
 
 ## 32. Secure Storage, Keychain & API Keys — **core-keep**
 OS-keychain secure storage w/ fallback, global API-key registry, transparent setting
