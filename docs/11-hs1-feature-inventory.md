@@ -115,10 +115,11 @@ so they compose with the multi-viewer PTY-sizing arbiter (docs/06 §6.7) — a
 magnified/dedicated tile is just a focused viewport. Build with the terminal work
 (HS2-10).
 
-## 15. Shell Integration (OSC) — **keep-with-changes**
-OSC 7 cwd chip, OSC 8 links, OSC 9 toasts + native notifications, OSC 133 prompt
-markers/jump/copy-output/hover/ask-Claude (docs/26–33). *Decide:* OSC 7/8/9 keep;
-OSC 133 suite is experimental — pick which parts.
+## 15. Shell Integration (OSC) — **keep 7/8/9; drop OSC 133 for now** (DECIDED, HS2-37, 2026-08-19)
+**Keep:** OSC 7 (cwd chip), OSC 8 (clickable hyperlinks), OSC 9 (notifications —
+in-app toasts + native OS notifications when backgrounded). **Drop for now (v1):** the
+entire **OSC 133** suite — prompt markers / jump / copy-last-output / hover-to-rerun /
+ask-Claude (docs/26–33). Maintainer decision. Revisit OSC 133 later if wanted.
 
 ## 16. Claude Channel & Permission Overlay — **keep-with-changes** (build: HS2-9/11)
 Play button + auto mode + backoff, auto-prioritize, permission overlay w/ edit-diff,
