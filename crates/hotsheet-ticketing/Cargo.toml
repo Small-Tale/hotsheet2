@@ -1,0 +1,14 @@
+[package]
+name = "hotsheet-ticketing"
+description = "Hot Sheet 2 ticketing engine: git store + index + watch + query + coord."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hotsheet-model.workspace = true
+ulid.workspace = true
+thiserror.workspace = true

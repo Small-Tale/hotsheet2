@@ -1,0 +1,59 @@
+//! Hot Sheet 2 ticketing engine — git store + index + watch + query + coordination.
+//!
+//! This is the only domain crate the CLI links (besides `hotsheet-model`); it must
+//! **not** depend on the plugin crates or `hotsheet-terminals`
+//! (`docs/12-code-organization-and-testing.md` §12.2.1). Its public API is
+//! **synchronous** (docs/09 §9.12), and it reaches the outside world only through
+//! the injected [`ports`].
+
+use hotsheet_model::Ulid;
+
+pub mod ports;
+pub use ports::{Clock, Rng};
+
+/// Mint a new ticket ULID from an injected clock + rng.
+///
+/// The core never reads the wall clock or a global rng directly — both come through
+/// ports so tests are deterministic (`docs/12` §12.1). IDs are ULIDs: no central
+/// sequence, mintable offline, k-sortable (`docs/02` §2.4).
+pub fn mint_ulid(clock: &dyn Clock, rng: &mut dyn Rng) -> Ulid {
+    Ulid::from_parts(clock.now_ms(), rng.next_u128())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct FakeClock(u64);
+    impl Clock for FakeClock {
+        fn now_ms(&self) -> u64 {
+            self.0
+        }
+    }
+
+    struct FakeRng(u128);
+    impl Rng for FakeRng {
+        fn next_u128(&mut self) -> u128 {
+            self.0
+        }
+    }
+
+    #[test]
+    fn mint_ulid_uses_injected_clock_and_rng() {
+        let clock = FakeClock(1_469_922_850_259);
+        let mut rng = FakeRng(0x0102_0304_0506_0708_090a_0b0c_0d0e_0f10);
+
+        let a = mint_ulid(&clock, &mut rng);
+        let b = mint_ulid(&clock, &mut rng);
+
+        assert_eq!(
+            a, b,
+            "same clock+rng → same ULID under fakes (deterministic)"
+        );
+        assert_eq!(
+            a.timestamp_ms(),
+            1_469_922_850_259,
+            "timestamp portion reflects the injected clock"
+        );
+    }
+}
