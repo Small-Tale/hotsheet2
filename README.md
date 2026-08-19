@@ -1,7 +1,8 @@
 # Hot Sheet 2
 
-A from-scratch rewrite of [Hot Sheet](https://github.com/brianwestphal/hotsheet) —
-a fast, local, ticket-driven worklist that drives AI coding tools.
+**A [Small Tale Inc.](https://github.com/Small-Tale) project.** A fast, local,
+ticket-driven worklist that drives AI coding tools — a from-scratch rewrite of the
+original [Hot Sheet](https://github.com/brianwestphal/hotsheet).
 
 > **Status: design phase.** There is no implementation code yet. This repository
 > currently holds the **design** for Hot Sheet 2.
@@ -26,3 +27,7 @@ requirements summary, and the technology-decision log
 
 The implementation roadmap and open decisions are tracked as tickets in the
 project's own Hot Sheet.
+
+---
+
+Hot Sheet 2 is developed by **Small Tale Inc.** Copyright © Small Tale Inc.

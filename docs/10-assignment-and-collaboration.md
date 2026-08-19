@@ -30,7 +30,7 @@ Two frontmatter fields, both **Tier A shared** ([02](02-ticket-storage.md) §2.1
 so every teammate sees them and they sync + merge automatically:
 
 ```yaml
-assignees: [dana@example.com, brian@example.com]   # people expected to do the work
+assignees: [dana@example.com, alex@example.com]    # people expected to do the work
 review_requests:                                   # people whose input is wanted
   - { who: dana@example.com, kind: feedback, by: 01J9ZK…req-ulid, at: 2026-08-19T… }
   - { who: sam@example.com,  kind: review,   by: 01J9ZK…req-ulid, at: 2026-08-19T… }

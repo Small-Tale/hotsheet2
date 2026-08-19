@@ -1,9 +1,9 @@
 # Hot Sheet 2 — Design Docs
 
-This directory holds the design for **Hot Sheet 2**, a from-scratch rewrite of
-[Hot Sheet](../../hotsheet) (`~/Documents/hotsheet`). It is **design only** —
-no implementation exists yet. These documents are the source of truth for what
-we are going to build and why.
+This directory holds the design for **Hot Sheet 2** — a **Small Tale Inc.** project,
+and a from-scratch rewrite of the original Hot Sheet (`~/Documents/hotsheet`). It is
+**design only** — no implementation exists yet. These documents are the source of
+truth for what we are going to build and why.
 
 > Status legend used throughout: **Decided** (recommendation made, ready to
 > build) · **Proposed** (recommendation made, wants maintainer confirmation) ·

@@ -114,3 +114,22 @@ itself, a red-ish push may be intentional — but then don't push to `main`.
 
 (While the repo is still design-only, "lint/test" is a no-op for docs changes;
 this rhythm applies once implementation code exists.)
+
+## Project attribution
+
+Hot Sheet 2 is developed by **Small Tale Inc.** and lives under the **`Small-Tale`**
+GitHub org (`Small-Tale/hotsheet2`) — **not** under an individual (e.g. not "Brian
+Westphal"). Whenever the project is named, authored, or copyrighted, use **Small Tale
+Inc.**:
+
+- Package manifests (`package.json` `author`/`publisher`, `Cargo.toml`
+  `authors`/`publish`, Xcode/Gradle org identifiers) → **Small Tale Inc.**
+- `LICENSE` copyright holder → **Small Tale Inc.** (year(s) as applicable).
+- User-facing "about"/credits strings, docs bylines, and app bundle identifiers →
+  **Small Tale Inc.** (bundle id under a `com.smalltale.*` / similar namespace).
+- Individual developers still appear as normal git commit authors; that's separate
+  from how the *project* is attributed.
+
+References to the *original* Hot Sheet (the predecessor at
+`github.com/brianwestphal/hotsheet`) are historical/factual and may remain as
+predecessor links; they do not attribute Hot Sheet 2.

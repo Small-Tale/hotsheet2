@@ -3,7 +3,7 @@
 # Pushes ONE test custom-ref + ONE test tag pointing at the existing HEAD commit
 # (no new objects), observes accept/reject, then DELETES both. Idempotent cleanup.
 set -u
-cd /Users/westphal/Documents/hot-sheet2
+cd "$(git rev-parse --show-toplevel)" || { echo "run inside the repo"; exit 1; }
 OID=$(git rev-parse HEAD)
 CUSTOM=refs/hotsheet/claims/spike-probe
 TAG=refs/tags/hs-claim-spike-probe

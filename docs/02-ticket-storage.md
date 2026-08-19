@@ -188,7 +188,7 @@ up_next: true
 tags: [dashboard, ui]
 blocked_by: [01J9ZK…another-ulid]
 # human assignment (shared; see 10-assignment-and-collaboration.md)
-assignees: [brian@example.com]
+assignees: [alex@example.com]
 review_requests: []          # e.g. [{ who: dana@example.com, kind: feedback }]
 created_at: 2026-08-19T14:03:11Z
 updated_at: 2026-08-19T15:20:44Z
