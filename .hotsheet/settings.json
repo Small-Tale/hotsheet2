@@ -1,0 +1,12 @@
+{
+  "appName": "Hot Sheet 2",
+  "ticketPrefix": "HS2",
+  "terminals": [
+    {
+      "id": "claude",
+      "name": "AI",
+      "command": "{{aiCommand}}",
+      "lazy": true
+    }
+  ]
+}

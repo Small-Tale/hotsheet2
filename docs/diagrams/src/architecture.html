@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ink: #1f2937;
+    --muted: #6b7280;
+    --border: #e5e7eb;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --accent-border: #c7d2fe;
+    --chip: #f1f5f9;
+    --chip-border: #e2e8f0;
+    --green: #0f766e;
+    --green-soft: #ecfdf5;
+    --green-border: #a7f3d0;
+    --amber-soft: #fffbeb;
+    --amber-border: #fcd34d;
+    --amber-ink: #92400e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { width: 1120px; padding: 34px 40px 38px; }
+  .title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .subtitle { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* Core card */
+  .core {
+    margin-top: 20px;
+    background: var(--accent-soft);
+    border: 1.5px solid var(--accent-border);
+    border-radius: 14px;
+    padding: 16px 20px 18px;
+  }
+  .core-head { display: flex; align-items: baseline; gap: 10px; }
+  .core-name { font-size: 17px; font-weight: 700; color: var(--accent); }
+  .core-tag { font-size: 12.5px; color: var(--muted); }
+  .chips { margin-top: 13px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+  .chip { background: var(--card); border: 1px solid var(--chip-border); border-radius: 9px; padding: 8px 11px; }
+  .chip b { font-size: 13px; font-weight: 650; }
+  .chip span { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .band {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    color: var(--muted); font-size: 12.5px; font-weight: 600; margin: 11px 0;
+  }
+  .band .arrow { color: var(--accent); font-size: 15px; }
+  .pill { display:inline-block; background: var(--chip); border:1px solid var(--chip-border);
+          border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .surface { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px 14px; }
+  .surface .name { font-size: 14.5px; font-weight: 680; }
+  .surface .kind { font-size: 11px; color: var(--accent); font-weight: 650; margin-top: 1px; }
+  .surface .desc { font-size: 11.5px; color: var(--muted); margin-top: 7px; line-height: 1.5; }
+
+  /* independence callout */
+  .callout {
+    margin: 12px 0; background: var(--amber-soft); border: 1px solid var(--amber-border);
+    border-radius: 11px; padding: 10px 14px; font-size: 12.5px; color: var(--amber-ink); line-height: 1.5;
+  }
+  .callout b { font-weight: 700; }
+
+  .cons { background: var(--green-soft); border: 1px solid var(--green-border); border-radius: 12px; padding: 13px 15px; }
+  .cons .name { font-size: 13.5px; font-weight: 680; color: var(--green); }
+  .cons .desc { font-size: 11.5px; color: #3f6b64; margin-top: 6px; line-height: 1.5; }
+
+  .foot { margin-top: 15px; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">Hot Sheet 2 — Architecture</div>
+    <div class="subtitle">One core library. The server is an independent, always-on service; every client is a pure API consumer. Git is the source of truth; the SQLite index is a rebuildable cache.</div>
+
+    <!-- CORE -->
+    <div class="core">
+      <div class="core-head">
+        <span class="core-name mono">hotsheet-core</span>
+        <span class="core-tag">Rust crate — all domain logic, written &amp; tested once, I/O via injected adapters</span>
+      </div>
+      <div class="chips">
+        <div class="chip"><b class="mono">model</b><span>tickets, notes, stores, projects</span></div>
+        <div class="chip"><b class="mono">store</b><span>git-backed ticket files</span></div>
+        <div class="chip"><b class="mono">index</b><span>SQLite + FTS5</span></div>
+        <div class="chip"><b class="mono">watch</b><span>fs notify → reindex</span></div>
+        <div class="chip"><b class="mono">query</b><span>filter · sort · search</span></div>
+        <div class="chip"><b class="mono">plugins</b><span>AI-tool host + terminals</span></div>
+        <div class="chip"><b class="mono">coord</b><span>claim / lease</span></div>
+        <div class="chip"><b class="mono">merge-driver</b><span>automatic conflict resolution</span></div>
+      </div>
+    </div>
+
+    <div class="band"><span class="arrow">▲</span> used in-process by the two Rust binaries <span class="arrow">▲</span></div>
+
+    <!-- SERVER + CLI use the core -->
+    <div class="row2">
+      <div class="surface">
+        <div class="name mono">hotsheet-server</div>
+        <div class="kind">axum + tokio · the always-on service</div>
+        <div class="desc">Hosts the fs watcher, the index, the terminals/PTYs, and the AI-tool plugin host. Exposes HTTP REST · WebSocket · MCP. One instance per machine, serving every local project. Runs independently of any client.</div>
+      </div>
+      <div class="surface">
+        <div class="name mono">hotsheet-cli</div>
+        <div class="kind">clap · direct-to-disk</div>
+        <div class="desc">Ticket ops straight against the files (works with no server running) + init / serve / reindex / migrate / doctor. A running server's watcher picks up its edits.</div>
+      </div>
+    </div>
+
+    <div class="band"><span class="arrow">▼</span> the server exposes &nbsp;<span class="pill mono">HTTP</span>&nbsp; <span class="pill mono">WebSocket</span>&nbsp; <span class="pill mono">MCP</span>&nbsp; — localhost + secret by default, mTLS when exposed</div>
+
+    <div class="callout"><b>The server is independent in every case — local included.</b> A client that finds no server running <b>auto-starts one (detached)</b> and connects to it; the server <b>keeps running after the client closes</b>. No client embeds the core.</div>
+
+    <!-- CONSUMERS: pure API clients -->
+    <div class="row3">
+      <div class="cons">
+        <div class="name">Tauri desktop</div>
+        <div class="desc">Web UI over HTTP/WS. Auto-starts &amp; supervises the local server; talks mTLS to a remote server for remote projects.</div>
+      </div>
+      <div class="cons">
+        <div class="name">SwiftUI — macOS / iOS</div>
+        <div class="desc">Native UI over HTTP/WS. macOS auto-starts the local server; iOS is remote-first (connects to a Mac's server). Android later, same API.</div>
+      </div>
+      <div class="cons">
+        <div class="name">AI tools — Claude, Codex, …</div>
+        <div class="desc">Reach tickets over MCP (the hotsheet_* tools) or the CLI. Plugin-only — no first-class tool.</div>
+      </div>
+    </div>
+
+    <div class="foot">Server lifecycle (auto-start, supervision, survives client exit) and trust tiers are detailed in <span class="mono">04-core-server-cli.md</span> §4.3 and <span class="mono">01-architecture.md</span> §1.4.</div>
+  </div>
+</body>
+</html>

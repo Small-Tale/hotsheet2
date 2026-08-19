@@ -1,0 +1,53 @@
+# --- Hot Sheet local data ---
+# Ignore everything in .hotsheet/ (pglite db, snapshots, backups, telemetry,
+# logs, the lock, channel ports, and the secret.json sidecar) EXCEPT the
+# shareable project config. Mirrors Hot Sheet's own gitignore convention.
+/.hotsheet/*
+!/.hotsheet/settings.json
+
+# --- Claude Code / AI-tool local + harness files ---
+/.claude/settings.local.json
+.cc-writes/
+/.agents/**/settings.local.json
+
+# --- MCP config: carries machine-specific absolute paths ---
+/.mcp.json
+
+# --- Secrets / certificates (never commit) ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+secret.json
+
+# --- Rust build output (future core/server/CLI) ---
+/target/
+**/target/
+
+# --- Node (bundled migrator + any tooling) ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+
+# --- Common build/test/coverage output ---
+/dist/
+/coverage/
+/test-results/
+/playwright-report/
+.nyc_output/
+
+# --- Diagram scratch (committed SVGs stay; local PNG previews don't) ---
+docs/diagrams/**/*.png
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
