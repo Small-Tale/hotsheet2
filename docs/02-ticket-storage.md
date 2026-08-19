@@ -279,17 +279,16 @@ is *orthogonal metadata on a closed ticket*, not a replacement for the status:
 
 - The **done path** — `completed` / `verified` — carries `close_reason: completed`
   (implied/defaulted; `verified` adds the human-checked bit on top).
-- A **not-done close** (`not_planned` / `duplicate` / `obsolete`) closes the ticket
-  **without marking it completed** — it reads as "closed, but not done," never as
-  finished work.
-
-**Status model — decided (maintainer, 2026-08-19): an explicit open/closed axis.**
-The primary axis is **open vs. closed**, and `close_reason` is the sole descriptor
-of *why* a closed ticket is closed (completed / not_planned / duplicate / obsolete).
-`verified` stays as an extra human-checked flag on a completed close. This is the
-GitHub model, and it's cleaner than adding a separate `closed` status. The exact
-open/closed status enum lands with the broader status-set decision (HS2-24), but the
-shape is settled.
+**`close_reason` is a separate OPTIONAL field, orthogonal to `status` — the statuses
+are unchanged (maintainer, 2026-08-19, HS2-24).** We do **not** collapse the status
+set into an open/closed axis and do **not** add a `closed` status. HS1's status set
+stays as-is (`not_started` / `started` / `completed` / `verified` / `backlog` /
+`archive` / `deleted`, plus our `moved` tombstone). When a ticket is closed out
+(typically moved to `completed`), you may **optionally** set `close_reason` to record
+*why* — `completed` vs `duplicate` (+ `duplicate_of`) vs `not_planned` vs `obsolete`
+— purely for tracking and filtering. It annotates the closure; it does not change or
+replace the status. `verified` remains the human-checked flag on top of a completed
+ticket. A ticket with no `close_reason` set is simply untracked in that dimension.
 
 **Freeform vs. structured.** `close_reason` is the *structured* tag (filterable,
 reportable). A **note** still carries any freeform explanation ("closing — we chose

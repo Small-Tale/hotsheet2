@@ -263,7 +263,7 @@ non-destructive. Detail: [07](07-migration.md).
 | — | Attachments | Supported (first-class) — [02](02-ticket-storage.md) §2.5 |
 | — | Server topology | **One server per machine** (all local projects) — [04](04-core-server-cli.md) §4.3 |
 | — | MCP delivery | **Per-project MCP shim** (not server-direct) — [05](05-ai-tool-plugins.md) §5.8 |
-| — | Close-reason ↔ status | **Open/closed axis**, `close_reason` as descriptor — [02](02-ticket-storage.md) §2.6a |
+| — | Statuses + close-reason | **Keep HS1's status set unchanged**; `close_reason` is a *separate optional* field (completed/not_planned/duplicate/obsolete), orthogonal to status — [02](02-ticket-storage.md) §2.6a |
 | — | Ticket-file sharding | **Id-prefix (2-char)** — [02](02-ticket-storage.md) §2.3 |
 | — | Multi-viewer PTY sizing | **Focus-follows** default — [06](06-clients.md) §6.7 |
 | — | Human assignment | git email + **committed `people.json`**; **one "People…" control**; review = **soft** — [10](10-assignment-and-collaboration.md) §10.5 |

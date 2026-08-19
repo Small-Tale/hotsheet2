@@ -33,17 +33,17 @@ up_next/tags/notes/attachments/timestamps (docs/3); soft-delete + restore; dupli
 ## 2. Statuses, Priorities & Categories — **core-keep** (consider trimming statuses)
 7 statuses + transition side effects (docs/3); 5 priorities (docs/3); customizable
 categories w/ color/badge/shortcut + presets (docs/3); custom prefix (docs/3);
-auto-cleanup verified→archive / trash→delete (docs/3). **NEW for HS2 — close
-reasons** (`completed`/`not_planned`/`duplicate`+`duplicate_of`/`obsolete`), a
-collaborative addition so closers communicate *why* (docs/02 §2.6a, HS2-61).
-*Decide (HS2-24):* keep all 7 statuses or trim (backlog/archive overlap); how the
-open/closed axis + close_reason reshapes the status enum; auto-cleanup on git.
+auto-cleanup verified→archive / trash→delete (docs/3). **DECIDED (HS2-24,
+2026-08-19): keep HS1's status set unchanged** (no trim, no open/closed collapse,
+no new `closed` status) + add a **separate optional `close_reason`** field
+(`completed`/`not_planned`/`duplicate`+`duplicate_of`/`obsolete`) for tracking why a
+ticket was closed (docs/02 §2.6a, HS2-61).
 
-## 3. Tags & Auto-Context — **keep-with-changes**
+## 3. Tags & Auto-Context — **core-keep (both)** (DECIDED, HS2-25, 2026-08-19)
 Tags: normalization, autocomplete, batch dialog, chips, view-associated auto-tag
 (docs/3, 4) — keep. **Auto-context** (per-category/tag AI guidance injected into the
-worklist) (docs/4 §4.18) — *reconsider*: valuable but adds surface; decide if it's
-v1.
+worklist) (docs/4 §4.18) — **keep; it's a critical v1 feature** (maintainer). An
+AI-facing concept carried over — see docs/05 §5.9.
 
 ## 4. Notes, Reader Mode & Feedback — **core-keep** (reader mode nice-to-have)
 Inline-editable notes (docs/3); **FEEDBACK NEEDED / IMMEDIATE** prefixes + feedback

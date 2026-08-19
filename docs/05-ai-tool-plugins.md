@@ -194,6 +194,12 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
 
 - **Worklist-as-file** (`worklist.md`) — keep. The file-based contract lets *any*
   tool participate without the API.
+- **Auto-context** (HS1 docs/4 §4.18) — **keep; critical (HS2-25).** Per-category and
+  per-tag guidance the user configures is **injected into the generated worklist**
+  so the AI tool gets the right context automatically for each ticket. It rides the
+  worklist-as-file contract (the guidance is composed into `worklist.md` during
+  generation — [03](03-indexing-and-query.md) §3.6), so it works for every tool with
+  no per-tool code.
 - **Skills/instructions generation** for editor tools (Cursor/Copilot/Windsurf) —
   keep; it's the whole Tier-B story and already tool-agnostic in HS1.
 - **Self-claim worker loop + worktrees** (the `/hotsheet-worker` skill) — keep the
