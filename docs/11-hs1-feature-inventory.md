@@ -134,10 +134,14 @@ port these; DROP the retired worker target-picker** (docs/103's Main/Worker/All
 UI — it existed only for the removed worker pool). The drive-level `target` (docs/05
 §5.5, picks which live connection a trigger hits) is unrelated and stays.
 
-## 18. AI-Tool Multi-Tool Support & Plugin Registry — **core-keep as the model** (build: HS2-9)
+## 18. AI-Tool Multi-Tool Support & Plugin Registry — **core-keep as the model** (DECIDED, HS2-40, 2026-08-19)
 The multi-tool epic + capability table + **plugin interface** + availability/opt-in +
-adapter config generation (docs/113, 117, 132, 133, 118, 119, 120). *This is the
-starting point for docs/05* — port the interface; decide which tools ship in v1.
+adapter config generation (docs/113, 117, 132, 133, 118, 119, 120) — the starting
+point for docs/05. **DECIDED (maintainer): v1 ships Claude + Codex** (both critical).
+**Acceptance test for the whole testability design (HS2-64):** the maintainer should
+be able to ask, *relatively unsupervised*, for support for another tool (OpenCode /
+Cursor / Antigravity / …) and have it **work fully without constant manual testing** —
+inherited via the fake-agent E2E + conformance gate + recorded contracts.
 
 ## 19. Drive Transports (MCP-hooks / ACP / Codex) — **reconsider** (minimal set)
 MCP+hooks (docs/115), ACP (docs/114), Codex app-server/daemon/model-B (docs/121,
