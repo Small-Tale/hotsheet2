@@ -127,10 +127,12 @@ per-project allow-rules, commands log, busy/idle (docs/12, 14, 47, 64). *Change:
 becomes **one plugin's transport** among many; the permission overlay is the generic
 host bridge (docs/05 §5.7).
 
-## 17. Custom Commands & Command Buttons — **keep-with-changes**
+## 17. Custom Commands & Command Buttons — **keep-with-changes** (DECIDED, HS2-39, 2026-08-19)
 Named command buttons (Claude/shell), command groups, spinner+stop, long-press,
-last-run, target picker, local customization (docs/15, 16, 57, 83, 84, 103, 108).
-Port; drop the retired worker target half.
+last-run, local customization (docs/15, 16, 57, 83, 84, 108). **DECIDED (maintainer):
+port these; DROP the retired worker target-picker** (docs/103's Main/Worker/All
+UI — it existed only for the removed worker pool). The drive-level `target` (docs/05
+§5.5, picks which live connection a trigger hits) is unrelated and stays.
 
 ## 18. AI-Tool Multi-Tool Support & Plugin Registry — **core-keep as the model** (build: HS2-9)
 The multi-tool epic + capability table + **plugin interface** + availability/opt-in +
