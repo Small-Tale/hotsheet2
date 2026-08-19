@@ -177,14 +177,23 @@ provisioning, integration helpers (docs/89, 105, 106). **DECIDED (maintainer): d
 the Glassbox review-note inducement + proof artifacts (docs/110, 111, 122) FOR NOW —
 revisit later (backlog HS2-68).**
 
-## 24. Telemetry / OTLP / Cost — **keep-with-changes** (defer → HS2-17)
-OTLP receiver, cost widget, per-ticket attribution, tracing, retention, foreign-OTLP
-filter (docs/67, 68, 85, 74, 127). *Decide:* on-by-default? Claude-only today; verify
-value vs. complexity. Likely post-v1.
+## 24. Telemetry / OTLP / Cost — **usage/cost only, unified interface** (DECIDED, HS2-46, 2026-08-19)
+**DECIDED (maintainer):** keep **only usage / cost metrics** (drop the
+debugging-oriented tracing / span trees / waterfalls). Define a **unified metrics
+interface** based on what HS1 actually showed in the UI, that **all AI plugins
+conform to** (a `metrics` plugin capability, docs/05 §5.3). **Storage:** keep rotating
+**JSONL** for raw events + write **rollup files periodically in parallel**; **no DB** —
+live-read the rollups + any JSONL newer than the last rollup on demand (avoids HS1's
+telemetry PGLite cluster + WAL pain, docs/127). **Team sharing:** periodically share
+metrics across a team **via git** (rollup files sync in a store). **Design this
+sooner rather than later** → HS2-69.
 
-## 25. Analytics & Stats Dashboards — **keep-with-changes** (defer → HS2-17)
-Per-project stats (throughput/CFD/cycle-time), Claude-usage analytics, cross-project
-stats, inline SVG charts (docs/4 §4.15, 70, 71). Nice; post-floor.
+## 25. Analytics & Stats Dashboards — **keep** (DECIDED, HS2-47, 2026-08-19)
+**DECIDED (maintainer): keep** the dashboards. Ticket-flow stats
+(throughput/CFD/cycle-time/category breakdown) come from the **index**; the
+**usage/cost** analytics (cost, model donut) are driven by the **unified metrics
+interface** (HS2-46/HS2-69) — usage/cost only, no debugging telemetry. Cross-project
+stats + inline SVG charts (docs/4 §4.15, 70, 71) retained.
 
 ## 26. Announcer (AI Narration + TTS) — **reconsider** (defer → HS2-17)
 Digest PIP, live mode, mid-task narration, cross-project reel, multi-provider TTS,

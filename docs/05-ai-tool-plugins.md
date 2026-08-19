@@ -63,6 +63,10 @@ HS1 discovered is unavoidable because the registry is reachable from client code
 - `permissions`: install/remove the tool's permission bridge, merge-safe.
 - `mcp`: write the `hotsheet-*` MCP server into the tool's config, in that tool's
   format (JSON / TOML / ACP session field).
+- `metrics`: report **usage / cost metrics** from the tool's telemetry, mapped to a
+  **unified metrics interface** all plugins conform to (HS2-46/HS2-69). Only
+  usage/cost is kept — the HS1 debugging telemetry (span trees / tracing / waterfalls)
+  is dropped. A tool without telemetry simply omits this capability.
 
 **Absence is the signal.** A missing capability means "not supported" — there is
 no `supportsDrive: false` boolean to drift from reality. Gemini has no drive;
