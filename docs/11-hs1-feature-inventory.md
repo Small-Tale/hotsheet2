@@ -195,10 +195,14 @@ sooner rather than later** → HS2-69.
 interface** (HS2-46/HS2-69) — usage/cost only, no debugging telemetry. Cross-project
 stats + inline SVG charts (docs/4 §4.15, 70, 71) retained.
 
-## 26. Announcer (AI Narration + TTS) — **reconsider** (defer → HS2-17)
+## 26. Announcer (AI Narration + TTS) — **keep + generalize across tools** (DECIDED, HS2-48, 2026-08-19)
 Digest PIP, live mode, mid-task narration, cross-project reel, multi-provider TTS,
-diff visuals (docs/78, 80, 81, 82). Beta, key-consuming — decide if it's part of the
-product identity or an optional add-on.
+diff visuals (docs/78, 80, 81, 82). **DECIDED (maintainer): keep — a great feature —
+but improve + generalize it to work across AI tools** (HS1's Announcer is Claude-only,
+riding Claude's OTLP stream). Needs a **common cross-tool narration/activity
+interface** — a `activity` plugin capability emitting tool-agnostic progress/summary
+events the Announcer + timeline consume (docs/05 §5.3). Design that interface: HS2-70.
+The Announcer *build* is post-floor (long-tail HS2-17).
 
 ## 27. Backups, Snapshots & Repair — **mostly drop** (git replaces it)
 Tiered backups, preview/safety restore, snapshot protection, repair panel,
@@ -218,10 +222,13 @@ Tauri wrapper, auto-update, install-to-PATH, server supervision, menus (docs/10,
 **survives app close** (no Node sidecar tied to the app, no embedded core —
 docs/09 §9.1e). Dropped: app-icon variants (docs/13, removed).
 
-## 30. Notifications — **keep-with-changes**
+## 30. Notifications — **core-keep, keep improving** (DECIDED, HS2-52, 2026-08-19)
 In-app toasts, native OS notifications when backgrounded, attention notifications,
-bell indicators (docs/27, 30, 4 §4.17, 23, 24). Port; feeds human-assignment
-attention (docs/10 §10.3).
+bell indicators (docs/27, 30, 4 §4.17, 23, 24). **DECIDED (maintainer): keep, and
+keep improving usefulness over time — especially as we support remotes + multiple
+clients** (routing an alert to the right device/client, cross-device attention). Feeds
+human-assignment attention (docs/10 §10.3); the off-server/iOS-push transport is the
+deferred piece (docs/08 O5).
 
 ## 31. Plugins & External Sync — **reconsider** (assess demand)
 ESM plugin format + manifest, bidirectional sync engine, GitHub Issues plugin,

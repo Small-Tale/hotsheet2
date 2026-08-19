@@ -67,6 +67,15 @@ HS1 discovered is unavoidable because the registry is reachable from client code
   **unified metrics interface** all plugins conform to (HS2-46/HS2-69). Only
   usage/cost is kept — the HS1 debugging telemetry (span trees / tracing / waterfalls)
   is dropped. A tool without telemetry simply omits this capability.
+- `activity`: emit **tool-agnostic progress / summary events** ("started ticket X",
+  "edited file Y", "finished") that the **Announcer** (narration + TTS) and a timeline
+  consume — a common cross-tool interface so narration isn't Claude-only (HS2-48).
+  Design: HS2-70. A tool that exposes no activity stream omits it.
+
+> **Cross-cutting theme:** `drive`, `metrics`, and `activity` are all *seams that
+> generalize one concern across every tool*. Designing these capability interfaces
+> well (and early, HS2-67/HS2-69/HS2-70) is what keeps adding a tool cheap — the
+> §5.10 testability rule + conformance suite hold each to its contract.
 
 **Absence is the signal.** A missing capability means "not supported" — there is
 no `supportsDrive: false` boolean to drift from reality. Gemini has no drive;
