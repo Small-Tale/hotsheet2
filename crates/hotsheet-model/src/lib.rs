@@ -9,10 +9,12 @@
 //! `docs/17-ticket-file-format.md`.
 
 pub mod enums;
+pub mod format;
 pub mod ids;
 pub mod ticket;
 
 pub use enums::{CloseReason, NoteKind, Priority, ReviewKind, Status};
+pub use format::{ParseError, parse_file, to_file_string};
 pub use ids::{Ulid, derive_slug};
 pub use ticket::{ExternalLink, Note, ReviewRequest, Ticket};
 

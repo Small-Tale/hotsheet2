@@ -1,5 +1,12 @@
 //! The `Ticket` aggregate + its sub-records. The full field schema (types, tiers,
 //! required/optional) is `docs/17-ticket-file-format.md`.
+//!
+//! The `Serialize`/`Deserialize` derives here cover the **YAML frontmatter only**:
+//! `details` is the Markdown body and `notes` is the `## Notes` section, so both are
+//! `#[serde(skip)]` and handled by [`crate::format`]. Unknown frontmatter keys are
+//! retained in [`Ticket::extra`] (forward-compat, docs/17 §17.4).
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -8,17 +15,15 @@ use crate::ids::Ulid;
 
 /// An RFC3339 timestamp.
 ///
-/// Kept as a `String` for now; a typed timestamp lands with the Markdown+YAML
-/// parser (tracked under HS2-3) so we don't bake a time-crate choice into the
-/// scaffold.
+/// Kept as a `String` for now; a typed timestamp lands with the parser refinement
+/// (tracked on HS2-3) so we don't bake a time-crate choice into the scaffold.
 pub type Timestamp = String;
 
 /// A single note entry. `FeedbackDraft` notes are stored locally (per-user overlay),
 /// not in the committed file (`docs/02` §2.6 / `docs/17` §17.3).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Note {
     pub id: Ulid,
-    #[serde(default)]
     pub kind: NoteKind,
     pub at: Timestamp,
     pub text: String,
@@ -44,15 +49,14 @@ pub struct ExternalLink {
     pub remote_hash: String,
 }
 
-/// A ticket. Shared fields serialize to the file's YAML frontmatter; `notes` render
-/// under the `## Notes` section. Optional/empty fields are omitted for clean diffs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// A ticket. Shared frontmatter fields serialize to YAML; `details` renders as the
+/// Markdown body and `notes` under `## Notes`. Optional/empty fields are omitted for
+/// clean diffs. Construct via [`Ticket::new`] and fill the rest.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Ticket {
     pub id: Ulid,
     pub slug: String,
     pub title: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub details: String,
     pub category: String,
     #[serde(default)]
     pub priority: Priority,
@@ -113,9 +117,43 @@ pub struct Ticket {
 
     pub schema: u32,
 
-    /// Rendered from the `## Notes` section, not literal frontmatter.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// The Markdown body — **not** frontmatter.
+    #[serde(skip)]
+    pub details: String,
+
+    /// The `## Notes` section — **not** frontmatter.
+    #[serde(skip)]
     pub notes: Vec<Note>,
+
+    /// Frontmatter keys the current schema doesn't recognize, preserved verbatim for
+    /// forward-compat (docs/17 §17.4). Populated + re-emitted by [`crate::format`];
+    /// empty for a canonical current-schema file.
+    #[serde(skip)]
+    pub extra: BTreeMap<String, serde_yaml::Value>,
+}
+
+impl Ticket {
+    /// A new ticket with the required fields set and everything else defaulted
+    /// (including `schema = SCHEMA_VERSION`). Callers fill optional fields after.
+    pub fn new(
+        id: Ulid,
+        slug: impl Into<String>,
+        title: impl Into<String>,
+        category: impl Into<String>,
+        created_at: impl Into<String>,
+        updated_at: impl Into<String>,
+    ) -> Self {
+        Self {
+            id,
+            slug: slug.into(),
+            title: title.into(),
+            category: category.into(),
+            created_at: created_at.into(),
+            updated_at: updated_at.into(),
+            schema: crate::SCHEMA_VERSION,
+            ..Self::default()
+        }
+    }
 }
 
 fn is_false(b: &bool) -> bool {
@@ -124,84 +162,4 @@ fn is_false(b: &bool) -> bool {
 
 fn is_zero(n: &u32) -> bool {
     *n == 0
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{SCHEMA_VERSION, ids::derive_slug};
-
-    fn sample_id() -> Ulid {
-        Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap()
-    }
-
-    #[test]
-    fn ticket_round_trips_via_json() {
-        let id = sample_id();
-        let t = Ticket {
-            id,
-            slug: derive_slug(&id, "HS"),
-            title: "Fix the dashboard flicker".into(),
-            details: "The gutter paints var(--bg) before the theme applies.".into(),
-            category: "bug".into(),
-            priority: Priority::High,
-            status: Status::Started,
-            up_next: true,
-            tags: vec!["dashboard".into(), "ui".into()],
-            blocked_by: vec![],
-            blocked_reason: None,
-            created_at: "2026-08-19T14:03:11Z".into(),
-            updated_at: "2026-08-19T15:20:44Z".into(),
-            completed_at: None,
-            verified_at: None,
-            closed_at: None,
-            close_reason: None,
-            duplicate_of: None,
-            claimed_by: Some("worker-1".into()),
-            claim_lease_expires_at: Some("2026-08-19T15:50:44Z".into()),
-            worker_label: Some("worktree-2".into()),
-            claim_count: 1,
-            assignees: vec!["alex@example.com".into()],
-            review_requests: vec![ReviewRequest {
-                who: "dana@example.com".into(),
-                kind: ReviewKind::Feedback,
-                by: id,
-                at: "2026-08-19T15:31:02Z".into(),
-            }],
-            external: vec![],
-            moved_to_store: None,
-            legacy_number: Some("HS-1234".into()),
-            copied_from: None,
-            schema: SCHEMA_VERSION,
-            notes: vec![Note {
-                id,
-                kind: NoteKind::FeedbackNeeded,
-                at: "2026-08-19T15:31:02Z".into(),
-                text: "should the fix also cover the dedicated view?".into(),
-            }],
-        };
-        let json = serde_json::to_string(&t).unwrap();
-        let back: Ticket = serde_json::from_str(&json).unwrap();
-        assert_eq!(t, back);
-    }
-
-    #[test]
-    fn minimal_ticket_uses_defaults_and_omits_empties() {
-        let json = r#"{
-            "id":"01ARZ3NDEKTSV4RRFFQ69G5FAV","slug":"HS-XXXXXX","title":"t",
-            "category":"issue","created_at":"t0","updated_at":"t1","schema":1
-        }"#;
-        let t: Ticket = serde_json::from_str(json).unwrap();
-        assert_eq!(t.priority, Priority::Default);
-        assert_eq!(t.status, Status::NotStarted);
-        assert!(!t.up_next);
-        assert!(t.tags.is_empty() && t.notes.is_empty() && t.assignees.is_empty());
-        assert_eq!(t.claim_count, 0);
-
-        // Empty/optional fields are omitted from the serialized form.
-        let out = serde_json::to_string(&t).unwrap();
-        assert!(!out.contains("up_next"));
-        assert!(!out.contains("tags"));
-        assert!(!out.contains("claimed_by"));
-    }
 }
