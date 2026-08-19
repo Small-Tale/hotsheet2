@@ -71,6 +71,10 @@ drives AI coding tools) and rebuilds the *foundation*.
 | [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim) | Open (proposal) |
 | `11-hs1-feature-inventory.md` | Full HS1 feature survey → per-area build/skip decisions | In progress (HS2-22) |
 | [12-code-organization-and-testing.md](12-code-organization-and-testing.md) | Cargo workspace/crate map, async/git/topology, test strategy | Decided |
+| [13-drive-transport-interface.md](13-drive-transport-interface.md) | AI-tool drive/transport interface (capability-based) | Design |
+| [14-metrics-interface.md](14-metrics-interface.md) | Unified usage/cost metrics interface + JSONL/rollup storage | Design |
+| [15-activity-narration-interface.md](15-activity-narration-interface.md) | Cross-tool activity/narration interface (for the Announcer) | Design |
+| [16-external-sync-interface.md](16-external-sync-interface.md) | External-sync plugin interface (GitHub/GitLab/Jira) | Design |
 
 > **Core decisions confirmed by the maintainer 2026-08-19:** Rust core · git-file
 > storage · ULID + **all-caps** slug · SQLite+FTS5 · **automatic conflict

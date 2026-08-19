@@ -1,0 +1,110 @@
+# 15. Cross-Tool Activity / Narration Interface
+
+> **Status: Design (HS2-70).** A **tool-agnostic activity event stream** — the common
+> interface the **Announcer** (narration + TTS) and a **timeline** consume, so
+> narration isn't Claude-only like HS1's (which rode Claude's OTLP stream). Part of
+> the "generalize a concern across every tool via a capability" theme (with `drive`
+> [13](13-drive-transport-interface.md) and `metrics`
+> [14](14-metrics-interface.md)). This is the event spec + mapping + build plan. The
+> Announcer *build* is a later feature (post-floor); this is the interface it needs.
+
+## 15.1 The idea
+
+Every AI tool "does things" while working — starts a ticket, edits a file, runs a
+command, makes a decision, finishes. HS1 got these as narratable events only from
+Claude. HS2 defines **one `activity` plugin capability** ([05](05-ai-tool-plugins.md)
+§5.3): each tool maps its native signals into a common **activity event**, and any
+consumer (Announcer, a live timeline, a "what happened" digest) reads that one stream.
+
+## 15.2 The activity event
+
+```jsonc
+{
+  "id": "01J9ZK…",              // ULID (ordering + de-dup)
+  "ts": "2026-08-19T14:03:11Z",
+  "tool": "codex",
+  "project": "01J9Z…",
+  "ticket": "01J9ZK…",          // ULID when attributable, else null
+  "kind": "edit",               // see the small vocabulary below
+  "summary": "Edited resolveCommand.ts — added the {{aiCommand}} token",
+  "detail": { "path": "src/…", "…": "…" },   // kind-specific, optional
+  "importance": "normal"        // low | normal | high  (narration emphasis)
+}
+```
+
+A **small, closed `kind` vocabulary** (not free-form, so consumers can style/emphasize
+consistently):
+`turn_start` · `plan` · `edit` · `command` · `tool_call` · `decision` · `blocked` ·
+`permission` · `note` · `ticket_status` · `turn_end`.
+
+- **`summary`** is the one-line, human/narration-ready string (the tool or the host
+  composes it). `detail` carries structured extras a timeline can expand.
+- **`importance`** lets the Announcer pick what to speak (high always; normal in the
+  full timeline; low is trace-ish) — the narration "emphasis" HS1 had, generalized.
+- **`ticket` attribution** reuses the active-ticket tag (same mechanism as metrics,
+  [14](14-metrics-interface.md) §14.2).
+
+## 15.3 How each tool maps into it (the per-tool part)
+
+The `activity` capability turns native signals → events; the host owns the stream:
+
+- **Claude** — channel/hook events + the turn transcript: `PreToolUse` → `tool_call`/
+  `command`/`edit`, `UserPromptSubmit` → `turn_start`, `Stop` → `turn_end`,
+  `FEEDBACK NEEDED` → `note`/`blocked`.
+- **Codex** — the app-server **turn transcript** (docs/121 already emits
+  start/item/end) maps directly: items → `edit`/`command`/`decision`, end → `turn_end`.
+- **ACP** (OpenCode/Goose) — `session/update` payloads carry tool-use + text → the
+  same kinds; `stopReason` → `turn_end`.
+- A tool that exposes **nothing** narratable omits the capability (absence = the
+  signal). It can still show coarse **busy/idle** from the drive's `TurnEvent`
+  ([13](13-drive-transport-interface.md) §13.4) — see §15.5.
+
+## 15.4 Live vs. digest (two consumer modes over one stream)
+
+- **Live** — the Announcer/timeline subscribes to the event stream as it arrives
+  (mid-task narration, the live PIP). Rides the same WebSocket bus as everything else.
+- **Digest** — an after-the-fact summary of a window (a completed ticket, "since I
+  last looked") is **computed from the stored events**, not a second pipeline. So live
+  and digest are the same data, different read.
+- **Storage:** activity events are **derived/ephemeral-ish** — persist a bounded
+  recent window (a rolling file, like metrics raw JSONL [14](14-metrics-interface.md)
+  §14.3) so a digest can look back; old events age out. The *durable* record of "what
+  happened" is the ticket's **notes + git history**, not this stream.
+
+## 15.5 How it composes with the other seams
+
+- **Drive ([13](13-drive-transport-interface.md)):** `TurnEvent` (Busy/Idle/Done) is
+  the *coarse* signal; `activity` is the *rich* one. A tool with a drive but no
+  activity capability still narrates at the coarse level ("Codex is working / finished
+  ticket X"). Activity enriches when available.
+- **Metrics ([14](14-metrics-interface.md)):** a `turn_end` activity pairs naturally
+  with a usage event; the Announcer can say "finished — 24k tokens, $0.04."
+- **Connection registry ([05](05-ai-tool-plugins.md) §5.6):** events are tagged by
+  connection, so a multi-connection / worker setup narrates per source.
+
+## 15.6 Consumers (built later)
+- **Announcer** — PIP, live mode, multi-provider TTS, code-diff visuals (post-floor,
+  HS2-17) — subscribes live + requests digests.
+- **Timeline** — a per-ticket / per-session "what happened" view, reads the stored
+  window. (A natural, cheaper first consumer than full TTS.)
+
+## 15.7 Open questions
+- **Who writes `summary`** — the tool (richer, per-tool) or a host summarizer over
+  raw signals (uniform, less per-tool code)? Lean: host composes a default from the
+  structured event; a tool may override for quality.
+- **Importance heuristic** — default mapping from `kind` → `importance`, overridable.
+- **Privacy for shared timelines** — if activity is ever team-shared, decide what
+  leaves the device (summaries, not file contents/prompts).
+- **Volume/rate** — cap events/sec per turn so a chatty tool can't flood the stream.
+
+## 15.8 Build plan (follow-ups)
+- HS2-70 (this) = the spec.
+- Follow-up to file: the `activity` plugin capability + the Claude & Codex mappers +
+  the event stream/store + a **timeline** consumer (the cheap first consumer). The
+  full **Announcer** stays the post-floor feature (HS2-17) that consumes it.
+
+## 15.9 Cross-references
+- The `activity` plugin capability: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.3
+- Coarse busy/done it enriches: [13-drive-transport-interface.md](13-drive-transport-interface.md) §13.4
+- Pairs with usage events: [14-metrics-interface.md](14-metrics-interface.md)
+- Announcer decision: docs/11 area 26 (HS2-48)
