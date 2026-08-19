@@ -1,0 +1,21 @@
+{
+  "name": "hotsheet-migrator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Disposable, one-time HS1 (PGLite) -> hotsheet-export.json exporter (docs/07).",
+  "license": "MIT",
+  "author": "Small Tale Inc.",
+  "bin": { "hotsheet-export": "src/export.mjs" },
+  "scripts": {
+    "export": "node src/export.mjs",
+    "introspect": "node src/introspect.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
+  }
+}
