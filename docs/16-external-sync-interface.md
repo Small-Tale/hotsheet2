@@ -40,6 +40,11 @@ external:
 
 ## 16.3 The interface (one trait, provider implementations)
 
+> **Crate: `hotsheet-extsync`** (maintainer, 2026-08-19) — its own plugin-type crate,
+> depending on `ticketing` + HTTP clients, **not** `terminals`. Separate from the
+> AI-tool plugin crate (`hotsheet-aitools`); see [12](12-code-organization-and-testing.md)
+> §12.2.1.
+
 A provider is **declarative identity + a behavioral sync driver** (mirrors the
 AI-tool plugin split, [05](05-ai-tool-plugins.md) §5.3). Sketch:
 
