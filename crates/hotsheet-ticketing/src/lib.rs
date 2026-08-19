@@ -9,7 +9,9 @@
 use hotsheet_model::Ulid;
 
 pub mod ports;
+pub mod store;
 pub use ports::{Clock, Rng};
+pub use store::{FsStore, StoreError, StoreMetadata};
 
 /// Mint a new ticket ULID from an injected clock + rng.
 ///

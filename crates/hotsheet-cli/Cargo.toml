@@ -1,6 +1,6 @@
 [package]
-name = "hotsheet-ticketing"
-description = "Hot Sheet 2 ticketing engine: git store + index + watch + query + coord."
+name = "hotsheet-cli"
+description = "Hot Sheet 2 command-line interface: init/new/ls/show/import."
 edition.workspace = true
 version.workspace = true
 license.workspace = true
@@ -8,12 +8,19 @@ authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "hotsheet"
+path = "src/main.rs"
+
 [dependencies]
 hotsheet-model.workspace = true
+hotsheet-ticketing.workspace = true
+clap.workspace = true
+anyhow.workspace = true
 ulid.workspace = true
-thiserror.workspace = true
-serde = { workspace = true }
+serde.workspace = true
 serde_json.workspace = true
+time.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
