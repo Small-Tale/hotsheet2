@@ -185,8 +185,10 @@ live_claude() {
   else write_mcp_json "$proj" --path "$proj"; fi
   step "LIVE: Claude in $proj ($([ -n "$url" ] && echo server-backed || echo serverless))"
   "$HOTSHEET" -C "$proj" new --title "Create GREETING.txt containing hello" --category task >/dev/null
-  ( cd "$proj" && claude -p "$GREET_PROMPT" \
-      --dangerously-skip-permissions --mcp-config "$proj/.mcp.json" ) || fail "claude session errored"
+  # --strict-mcp-config: load ONLY our (absolute-path) MCP server — never the user's
+  # global/project MCP servers (which may include an HS1 hotsheet-channel).
+  ( cd "$proj" && claude -p "$GREET_PROMPT" --dangerously-skip-permissions \
+      --strict-mcp-config --mcp-config "$proj/.mcp.json" ) || fail "claude session errored"
   [ -f "$proj/GREETING.txt" ] || fail "Claude did not create GREETING.txt"
   pass "Claude created GREETING.txt"; assert_no_hs1 "$proj"
   "$HOTSHEET" -C "$proj" ls | sed 's/^/    /'
