@@ -3,7 +3,7 @@
 //! testability rule). The real implementations live in [`crate::system`]; tests inject
 //! fakes.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// How to launch one process. Content-agnostic — the drive fills it in from the turn's
 /// prompt (`docs/13` §13.2).
@@ -32,4 +32,51 @@ pub trait SpawnedProcess {
 /// the [`SpawnSpec`] and scripts the child's lifecycle.
 pub trait ProcessSpawner {
     fn spawn(&self, spec: &SpawnSpec) -> std::io::Result<Box<dyn SpawnedProcess>>;
+}
+
+// ---- codex app-server (persistent daemon) ----------------------------------------
+
+/// A connection to a running **codex app-server** daemon (JSON-RPC over its control
+/// socket; `codex 0.148 app-server daemon`). Injected so the [`AppServerDrive`] is
+/// testable without a live daemon. `open_thread` maps to `thread/start` (new) or
+/// `thread/resume`; `start_turn` maps to `turn/start`.
+///
+/// [`AppServerDrive`]: crate::AppServerDrive
+pub trait AppServerClient {
+    /// Start a new thread (`resume = None`) or resume an existing one; returns the
+    /// thread id.
+    fn open_thread(&self, resume: Option<&str>, cwd: &Path) -> Result<String, AppServerError>;
+    /// Send one turn (`turn/start`) with the prompt; returns a handle to observe it.
+    fn start_turn(
+        &self,
+        thread_id: &str,
+        content: &str,
+    ) -> Result<Box<dyn AppServerTurn>, AppServerError>;
+}
+
+/// A turn running on the app-server — observed via its `turn/started` → `turn/completed`
+/// notifications.
+pub trait AppServerTurn {
+    /// Whether the turn is still in flight (no `turn/completed` yet).
+    fn is_running(&mut self) -> bool;
+    /// Block until `turn/completed`; return the outcome.
+    fn wait(&mut self) -> AppServerOutcome;
+    /// `turn/interrupt` the running turn.
+    fn interrupt(&mut self);
+}
+
+/// How an app-server turn finished.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AppServerOutcome {
+    Completed,
+    Failed(String),
+}
+
+/// An app-server connection/protocol failure.
+#[derive(Debug, thiserror::Error)]
+pub enum AppServerError {
+    #[error("codex app-server unavailable: {0}")]
+    Unavailable(String),
+    #[error("codex app-server protocol error: {0}")]
+    Protocol(String),
 }

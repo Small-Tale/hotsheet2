@@ -13,6 +13,29 @@
 > `interrupt`), not yet the async `TurnEvent` stream — that lands with the
 > persistent-channel (Claude) drive (HS2-9), which genuinely needs it. The permission
 > sink + connection registry are later additions to `DriveCtx`.
+>
+> **Codex app-server drive built (HS2-110):** `AppServerDrive` — a play is a
+> `turn/start` on a new/**resumed** thread against the running `codex app-server daemon`,
+> **not a fresh process** (`Target` selects the thread; `turn/interrupt` backs interrupt).
+> It's transport logic over an injected `AppServerClient` port (fake-tested); the live
+> daemon connection (`codex app-server proxy` speaking `thread/*` + `turn/*` JSON-RPC) is
+> a follow-up. Codex's `[drive]` is now `app-server`, not `spawn`.
+
+## 13.0 Current tool capabilities (verified 2026-08-21)
+
+Drivability is the integration priority (a tool that can't be driven against a
+persistent/continuous session is lower priority). Ground-truthed from the **installed
+CLIs** + official docs, not HS1's notes:
+
+| Tool | Persistent driving? | Mechanism | Transport | Priority |
+|---|---|---|---|---|
+| **Codex** 0.148 | **Yes (daemon)** | `app-server daemon` (JSON-RPC/control socket; `thread/start\|resume` + `turn/start\|interrupt`; `remote-control`+pairing); `exec-server`; `exec resume <id> "<prompt>"` no-daemon | `AppServer` | 1 |
+| **Claude** 2.1.238 | **Yes (channel)** | MCP-channel injection into a running session; `-p --input-format stream-json`; `--resume`/`--continue` | `ClaudeChannel` | 2 |
+| **OpenCode** 1.17.18 | **Yes (ACP/HTTP)** | `opencode acp` (ACP server); `opencode serve` + `attach`; session mgmt | `Acp` | 3 |
+| **Antigravity (agy)** 1.1.7 | **No daemon** | `agy --conversation <id> --print "…"` (spawn-per-turn, resumed thread). `agy-mcp` community bridges wrap this for *delegation*; Antigravity only **consumes** MCP (`.agents/mcp_config.json`), it is not exposed as a driveable server | `Spawn`+resume | 4 |
+
+MCP-config setup targets differ per tool: Claude `.mcp.json`, Codex `.codex/config.toml`,
+Antigravity `.agents/mcp_config.json` (Gemini `mcpServers`), OpenCode its own config.
 
 ## 13.1 The problem the interface must absorb
 

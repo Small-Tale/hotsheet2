@@ -1,0 +1,84 @@
+//! The **app-server** (persistent daemon) drive shape (`docs/13` §13.1, the Codex
+//! "app-server" column). A play is a `turn/start` on a **new or resumed thread** against
+//! the already-running `codex app-server daemon` — **not** a fresh process per turn
+//! (this is what HS1 used, docs/121, and what agy/spawn deliberately isn't).
+//!
+//! The drive is transport logic over an injected [`AppServerClient`] (in the
+//! [`DriveCtx`]), so it's testable against a fake daemon. The real client — connecting to
+//! the daemon over `codex app-server proxy` / the control socket and speaking the
+//! `thread/*` + `turn/*` JSON-RPC — is a follow-up (HS2-110).
+
+use crate::drive::{
+    DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle,
+};
+use crate::ports::{AppServerError, AppServerOutcome, AppServerTurn};
+
+/// Drives Codex via its persistent app-server daemon.
+pub struct AppServerDrive;
+
+impl Drive for AppServerDrive {
+    fn info(&self) -> DriveInfo {
+        DriveInfo {
+            transport: Transport::AppServer,
+        }
+    }
+
+    fn supports_interrupt(&self) -> bool {
+        true // `turn/interrupt`
+    }
+
+    fn run(
+        &self,
+        target: &Target,
+        content: &str,
+        ctx: &DriveCtx,
+    ) -> Result<Box<dyn TurnHandle>, DriveError> {
+        let client = ctx
+            .app_server
+            .ok_or_else(|| DriveError::NotConnected("codex app-server not connected".into()))?;
+        // `Target` selects which thread to resume; None starts a fresh thread.
+        let thread = client
+            .open_thread(target.0.as_deref(), &ctx.cwd)
+            .map_err(as_drive_err)?;
+        let turn = client.start_turn(&thread, content).map_err(as_drive_err)?;
+        Ok(Box::new(AppServerTurnHandle { turn, done: None }))
+    }
+}
+
+fn as_drive_err(e: AppServerError) -> DriveError {
+    DriveError::AppServer(e.to_string())
+}
+
+/// Observes one app-server turn: busy = the turn is in flight; done = its outcome.
+struct AppServerTurnHandle {
+    turn: Box<dyn AppServerTurn>,
+    done: Option<DoneReason>,
+}
+
+impl TurnHandle for AppServerTurnHandle {
+    fn is_busy(&mut self) -> bool {
+        self.done.is_none() && self.turn.is_running()
+    }
+
+    fn wait(&mut self) -> DoneReason {
+        if let Some(d) = self.done {
+            return d;
+        }
+        let reason = match self.turn.wait() {
+            AppServerOutcome::Completed => DoneReason::Completed,
+            AppServerOutcome::Failed(_) => DoneReason::Failed(1),
+        };
+        self.done = Some(reason);
+        reason
+    }
+
+    fn interrupt(&mut self) -> bool {
+        if self.done.is_none() {
+            self.turn.interrupt();
+            self.done = Some(DoneReason::Interrupted);
+            true
+        } else {
+            false
+        }
+    }
+}

@@ -43,11 +43,11 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert_eq!(p.manifest.mcp.target, ".codex/config.toml");
     assert!(p.instructions_body().contains("Hot Sheet"));
 
-    // Codex declares a spawn drive (docs/13); Claude does not yet (channel drive TBD).
+    // Codex declares the persistent app-server drive (docs/13); Claude has none yet.
     let drive = p.manifest.drive.as_ref().expect("codex declares a drive");
-    assert_eq!(drive.transport, "spawn");
+    assert_eq!(drive.transport, "app-server");
     assert_eq!(drive.program, "codex");
-    assert_eq!(drive.args, vec!["exec".to_string()]);
+    assert_eq!(drive.args, vec!["app-server".to_string()]);
     assert!(drive.interrupt);
     assert!(find_in("claude", &[]).unwrap().manifest.drive.is_none());
 }

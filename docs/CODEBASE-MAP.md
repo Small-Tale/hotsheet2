@@ -56,6 +56,7 @@ hot-sheet2/
     hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
       src/drive.rs           #   Drive trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue
+      src/appserver.rs       #   AppServerDrive (Codex persistent daemon: turn on a resumed thread) + AppServerClient port
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
       src/ports.rs           #   ProcessSpawner/SpawnedProcess (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)

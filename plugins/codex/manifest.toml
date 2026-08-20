@@ -30,9 +30,11 @@ command = "hotsheet-mcp"
 args = ["--path", "{store}"]
 
 [drive]
-# How the host drives Codex (docs/13): spawn-per-run via `codex exec <prompt>`.
-transport = "spawn"
+# How the host drives Codex (docs/13): the PERSISTENT app-server daemon — a play is a
+# `turn/start` on a new/resumed thread, NOT a fresh process (codex 0.148 `app-server
+# daemon`). The `codex exec resume <id> <prompt>` spawn path is a documented fallback.
+transport = "app-server"
 program = "codex"
-args = ["exec"]
+args = ["app-server"]
 content = "arg"
 interrupt = true

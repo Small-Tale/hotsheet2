@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use crate::ports::ProcessSpawner;
+use crate::ports::{AppServerClient, ProcessSpawner};
 
 /// The transport a tool speaks — a **declarative data tag** (identity, not behavior),
 /// so a client and the server agree without a mirror (`docs/13` §13.3). It routes `run`
@@ -41,7 +41,10 @@ pub struct Target(pub Option<String>);
 /// added here as those land (`docs/13` §13.3).
 pub struct DriveCtx<'a> {
     pub cwd: PathBuf,
+    /// Spawn drives launch through this. (Always provide one; app-server drives ignore it.)
     pub spawner: &'a dyn ProcessSpawner,
+    /// Present for the app-server (persistent daemon) drive; other transports ignore it.
+    pub app_server: Option<&'a dyn AppServerClient>,
 }
 
 /// Why a turn finished.
@@ -77,6 +80,9 @@ pub enum DriveError {
     /// A channel/ACP drive with no live session to hit (`docs/13` §13.8).
     #[error("{0}")]
     NotConnected(String),
+    /// The app-server (persistent daemon) transport failed.
+    #[error("app-server: {0}")]
+    AppServer(String),
 }
 
 /// Steer a running (or one-shot) AI tool. `run` is the only required method.

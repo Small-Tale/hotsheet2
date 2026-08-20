@@ -9,6 +9,7 @@
 //! persistent-channel (Claude) drive, permission bridge, connection registry, and the
 //! async `TurnEvent` stream land next.
 
+pub mod appserver;
 pub mod drive;
 pub mod host;
 pub mod ports;
@@ -16,11 +17,15 @@ pub mod registry;
 pub mod spawn;
 pub mod system;
 
+pub use appserver::AppServerDrive;
 pub use drive::{
     DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle,
 };
 pub use host::{TriggerError, Triggered, drive_for, trigger};
-pub use ports::{ProcessSpawner, SpawnSpec, SpawnedProcess};
+pub use ports::{
+    AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner, SpawnSpec,
+    SpawnedProcess,
+};
 pub use registry::{Connection, ConnectionRegistry, Role};
 pub use spawn::{ContentMode, SpawnConfig, SpawnDrive};
 pub use system::SystemSpawner;

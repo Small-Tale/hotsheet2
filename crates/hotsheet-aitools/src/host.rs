@@ -7,6 +7,7 @@
 
 use hotsheet_plugins::Plugin;
 
+use crate::appserver::AppServerDrive;
 use crate::drive::{Drive, DriveCtx, DriveError, Target, TurnHandle};
 use crate::registry::{Connection, ConnectionRegistry, Role};
 use crate::spawn::{ContentMode, SpawnConfig, SpawnDrive};
@@ -16,6 +17,10 @@ use crate::spawn::{ContentMode, SpawnConfig, SpawnDrive};
 pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
     let spec = plugin.manifest.drive.as_ref()?;
     match spec.transport.as_str() {
+        // Persistent daemon — a turn on a resumed thread (Codex). The drive uses the
+        // injected `AppServerClient`; `program`/`args` aren't its launch line.
+        "app-server" => Some(Box::new(AppServerDrive)),
+        // Spawn-per-run (agy, `codex exec` fallback): a fresh process per turn.
         "spawn" => Some(Box::new(SpawnDrive::new(SpawnConfig {
             program: spec.program.clone(),
             args: spec.args.clone(),
@@ -25,7 +30,7 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
             },
             interrupt: spec.interrupt,
         }))),
-        // claude-channel / app-server / acp land with their drives (HS2-9, …).
+        // claude-channel / acp land with their drives (HS2-9, …).
         _ => None,
     }
 }
