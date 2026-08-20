@@ -29,6 +29,7 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
                 _ => ContentMode::Arg,
             },
             interrupt: spec.interrupt,
+            resume_flag: spec.resume_flag.clone(),
         }))),
         // claude-channel / acp land with their drives (HS2-9, …).
         _ => None,

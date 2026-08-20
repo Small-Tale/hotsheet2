@@ -25,6 +25,7 @@ use serde::Deserialize;
 /// time. Adding a first-party tool = adding a directory here.
 static CLAUDE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/claude");
 static CODEX: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/codex");
+static ANTIGRAVITY: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/antigravity");
 
 /// A failure loading a plugin.
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +92,10 @@ pub struct DriveSpec {
     pub content: String,
     #[serde(default)]
     pub interrupt: bool,
+    /// Spawn transport only: a flag (e.g. `--conversation`) to resume an existing
+    /// session when a session id is supplied, instead of starting a fresh one.
+    #[serde(default)]
+    pub resume_flag: Option<String>,
 }
 
 fn default_content_mode() -> String {
@@ -301,7 +306,7 @@ pub fn is_safe_rel_path(p: &str) -> bool {
 /// Every bundled first-party plugin, loaded through the same path a third-party
 /// plugin uses. Panics only on a build-time-embedded malformed plugin (a bug).
 pub fn builtin_plugins() -> Vec<Plugin> {
-    [&CLAUDE, &CODEX]
+    [&CLAUDE, &CODEX, &ANTIGRAVITY]
         .into_iter()
         .map(|d| Plugin::from_dir(d).expect("bundled first-party plugin must load"))
         .collect()

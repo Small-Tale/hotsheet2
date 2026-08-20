@@ -53,6 +53,19 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
 }
 
 #[test]
+fn antigravity_is_a_spawn_resume_plugin() {
+    let p = find_in("antigravity", &[]).expect("antigravity plugin");
+    assert_eq!(p.manifest.product_name, "Antigravity");
+    assert!(p.manifest.detection.binaries.iter().any(|b| b == "agy"));
+    assert!(p.skill().is_none(), "no skills concept");
+    assert_eq!(p.manifest.mcp.target, ".agents/mcp_config.json");
+    let drive = p.manifest.drive.as_ref().expect("agy declares a drive");
+    assert_eq!(drive.transport, "spawn");
+    assert_eq!(drive.program, "agy");
+    assert_eq!(drive.resume_flag.as_deref(), Some("--conversation"));
+}
+
+#[test]
 fn mcp_args_substitute_the_store_path() {
     let p = find_in("claude", &[]).unwrap();
     assert_eq!(

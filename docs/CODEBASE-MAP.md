@@ -66,8 +66,9 @@ hot-sheet2/
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
       src/tests.rs           #   built-in + on-disk loading, first-party-wins-collision
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)
-    claude/                  #   manifest.toml + instructions.md (CLAUDE.md section) + SKILL.md (worklist skill)
-    codex/                   #   manifest.toml + instructions.md (AGENTS.md section); no skill, codex-toml MCP
+    claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + SKILL.md; claude-json MCP; NO drive yet
+    codex/                   #   AGENTS.md instructions; no skill; codex-toml MCP; [drive] app-server (persistent)
+    antigravity/             #   AGENTS.md instructions; no skill; .agents/mcp_config.json; [drive] spawn + --conversation resume
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
     src/introspect.mjs       #   schema-dump helper

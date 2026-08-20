@@ -15,12 +15,16 @@ use crate::ports::{SpawnSpec, SpawnedProcess};
 #[derive(Debug, Clone)]
 pub struct SpawnConfig {
     pub program: String,
-    /// Fixed args before the content (e.g. `["exec"]` for `codex exec`).
+    /// Fixed args before the content (e.g. `["--print"]` for `agy --print`).
     pub args: Vec<String>,
     /// How the prompt content reaches the tool.
     pub content: ContentMode,
     /// Whether the tool can be interrupted mid-turn.
     pub interrupt: bool,
+    /// If set, and the `Target` carries a session id, inject `<flag> <id>` to **resume
+    /// the same conversation** rather than start a fresh one (agy `--conversation`). The
+    /// best a spawn tool can do for continuity without a daemon (`docs/13` §13.0).
+    pub resume_flag: Option<String>,
 }
 
 /// Where the prompt goes in the spawned command.
@@ -42,19 +46,39 @@ impl SpawnDrive {
         Self { cfg }
     }
 
-    /// A `codex exec <prompt>` drive.
+    /// A `codex exec <prompt>` drive (the spawn *fallback*; Codex's real drive is the
+    /// app-server — see `AppServerDrive`).
     pub fn codex() -> Self {
         Self::new(SpawnConfig {
             program: "codex".into(),
             args: vec!["exec".into()],
             content: ContentMode::Arg,
             interrupt: true,
+            resume_flag: None,
         })
     }
 
-    /// The exact command this drive would run for `content` (also what §13.7 asserts).
-    pub fn spec(&self, content: &str, cwd: &Path) -> SpawnSpec {
+    /// An `agy --print <prompt>` drive with `--conversation <id>` resume — the best a
+    /// no-daemon tool can do (`docs/13` §13.0).
+    pub fn agy() -> Self {
+        Self::new(SpawnConfig {
+            program: "agy".into(),
+            args: vec!["--print".into()],
+            content: ContentMode::Arg,
+            interrupt: true,
+            resume_flag: Some("--conversation".into()),
+        })
+    }
+
+    /// The exact command this drive would run for `content`, resuming `resume` if the
+    /// config declares a resume flag (§13.7 asserts this).
+    pub fn spec(&self, content: &str, cwd: &Path, resume: Option<&str>) -> SpawnSpec {
         let mut args = self.cfg.args.clone();
+        // Resume an existing conversation when both a flag and a session id are present.
+        if let (Some(flag), Some(id)) = (&self.cfg.resume_flag, resume) {
+            args.push(flag.clone());
+            args.push(id.to_string());
+        }
         let stdin = match self.cfg.content {
             ContentMode::Arg => {
                 args.push(content.to_string());
@@ -85,11 +109,11 @@ impl Drive for SpawnDrive {
 
     fn run(
         &self,
-        _target: &Target,
+        target: &Target,
         content: &str,
         ctx: &DriveCtx,
     ) -> Result<Box<dyn TurnHandle>, DriveError> {
-        let spec = self.spec(content, &ctx.cwd);
+        let spec = self.spec(content, &ctx.cwd, target.0.as_deref());
         let proc = ctx
             .spawner
             .spawn(&spec)

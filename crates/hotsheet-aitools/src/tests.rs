@@ -189,10 +189,11 @@ fn content_via_stdin_and_absent_interrupt_cap() {
         args: vec!["-p".into()],
         content: ContentMode::Stdin,
         interrupt: false,
+        resume_flag: None,
     });
     // absence is the signal
     assert!(!drive.supports_interrupt());
-    let spec = drive.spec("hello", std::path::Path::new("/w"));
+    let spec = drive.spec("hello", std::path::Path::new("/w"), None);
     assert_eq!(spec.args, vec!["-p"], "content did NOT go into args");
     assert_eq!(spec.stdin.as_deref(), Some("hello"));
 
@@ -203,6 +204,22 @@ fn content_via_stdin_and_absent_interrupt_cap() {
         .unwrap();
     assert!(!turn.interrupt());
     assert_eq!(turn.wait(), DoneReason::Completed);
+}
+
+#[test]
+fn agy_drive_resumes_a_conversation() {
+    let drive = SpawnDrive::agy();
+    assert_eq!(drive.info().transport, Transport::Spawn);
+    // Fresh conversation → no --conversation.
+    let fresh = drive.spec("do it", std::path::Path::new("/w"), None);
+    assert_eq!(fresh.program, "agy");
+    assert_eq!(fresh.args, vec!["--print", "do it"]);
+    // Resume → inject `--conversation <id>` before the prompt (continuous thread).
+    let resumed = drive.spec("keep going", std::path::Path::new("/w"), Some("conv-7"));
+    assert_eq!(
+        resumed.args,
+        vec!["--print", "--conversation", "conv-7", "keep going"]
+    );
 }
 
 // ---- plugins -> drive -> registry glue (host) ------------------------------------

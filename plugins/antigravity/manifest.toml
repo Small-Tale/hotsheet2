@@ -1,0 +1,37 @@
+# First-party Hot Sheet plugin for Google Antigravity (the `agy` CLI, Gemini-based).
+# Loaded through the same loader as any plugin. Antigravity is the WEAKEST-driving tool
+# (docs/13 §13.0): no persistent daemon — spawn-per-turn with conversation resume.
+
+id = "antigravity"
+display_name = "Antigravity"
+product_name = "Antigravity"
+tier = "cli-agent"
+
+[detection]
+binaries = ["agy"]
+
+[instructions]
+# Antigravity reads AGENTS.md (shared cross-tool convention). Verify against agy's docs.
+target = "AGENTS.md"
+section = "instructions.md"
+
+# No [skills] — Antigravity has no skills concept (like Codex).
+
+[mcp]
+# Antigravity CONSUMES MCP via a standard `mcpServers` object (official docs); the
+# workspace config lives at .agents/mcp_config.json — same JSON shape as .mcp.json.
+target = ".agents/mcp_config.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+
+[drive]
+# agy has no daemon (docs/13 §13.0): spawn per turn, but resume the conversation so a
+# trigger continues the same thread — agy --conversation <id> --print "<prompt>".
+transport = "spawn"
+program = "agy"
+args = ["--print"]
+content = "arg"
+interrupt = true
+resume_flag = "--conversation"
