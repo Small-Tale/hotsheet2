@@ -9,9 +9,10 @@ schema in [17-ticket-file-format.md](17-ticket-file-format.md).
 > filesystem store, the shared engine `ops`, the SQLite/FTS **index** + the server's
 > **filesystem watcher** (live reindex), the `hotsheet` CLI + `hotsheet-migrate`,
 > the Node HS1 exporter, the **`hotsheet-server`** (index-backed HTTP REST + WS,
-> loopback auth), and the **`hotsheet-mcp`** shim. Still design-only: server
-> lifecycle/auto-start (HS2-59), file-backed index + `reindex` CLI, git-aware
-> fast-path reindex, mTLS, terminals, and clients.
+> loopback auth; **file-backed index restored + reconciled on launch**), and the
+> **`hotsheet-mcp`** shim. Still design-only: server lifecycle/auto-start (HS2-59),
+> the `hotsheet reindex` CLI + no-server index maintenance, git-aware fast-path
+> reindex, mTLS, terminals, and clients.
 
 ## Directory tree
 
@@ -46,7 +47,7 @@ hot-sheet2/
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools -> HttpBackend
       src/main.rs            #   stdio JSON-RPC loop; --server + --secret
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
-      src/lib.rs             #   Index: schema/upsert/delete/rebuild_from_store/query + hash_bytes
+      src/lib.rs             #   Index: open_reconciled/reconcile/rebuild/upsert/delete/query + hash_bytes
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
     src/introspect.mjs       #   schema-dump helper

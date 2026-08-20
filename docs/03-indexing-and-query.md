@@ -5,10 +5,12 @@
 > `hash_bytes`). The server builds an in-memory index on start, serves `GET /tickets`
 > from it (structured filter + FTS prefix search), and runs a **`notify` filesystem
 > watcher** (`spawn_watcher`, debounced) that reindexes changed files by content-hash
-> and broadcasts change events — so a CLI/git edit shows up live. **Not yet:** the
-> file-backed index at `~/.hotsheet/index/`, the `hotsheet reindex` command, the
-> git-diff fast path (§3.4), the `blocked_by`/`assignees`/`reviews` facet tables, and
-> keyset paging. SQLite + FTS5 is the recommendation; alternatives in §3.7.
+> and broadcasts change events — so a CLI/git edit shows up live. The index is
+> **file-backed** at `~/.hotsheet/index/<hash>.sqlite` and **restored + reconciled on
+> launch** (`Index::open_reconciled`: keep valid rows, re-read only the changed delta,
+> rebuild if corrupt). **Not yet:** the `hotsheet reindex` command + no-server index
+> maintenance, the git-diff fast path (§3.4), the `blocked_by`/`assignees`/`reviews`
+> facet tables, and keyset paging. SQLite + FTS5 is the recommendation; §3.7.
 
 ## 3.1 Why an index at all
 
