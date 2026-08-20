@@ -4,10 +4,9 @@
 
 mod import;
 
-use std::path::PathBuf;
-use std::process::Command;
-
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
@@ -96,6 +95,18 @@ enum Cmd {
         /// Prefix used if the store must be created first.
         #[arg(long, default_value = "HS")]
         prefix: String,
+    },
+    /// Migrate a Hot Sheet 1 project into this store in one step (runs the bundled
+    /// Node exporter against a COPY of its database, then imports).
+    Migrate {
+        /// Path to the old project's `.hotsheet` directory.
+        hotsheet_dir: PathBuf,
+        /// Prefix used if the store must be created first.
+        #[arg(long, default_value = "HS")]
+        prefix: String,
+        /// Path to the migrator's `export.mjs` (auto-detected, or $HOTSHEET_MIGRATOR).
+        #[arg(long)]
+        migrator: Option<PathBuf>,
     },
     /// Check store health (metadata, parse errors, duplicate slugs, orphans).
     Doctor,
@@ -189,6 +200,11 @@ fn main() -> Result<()> {
             duplicate_of,
         } => cmd_close(&cli.path, &id, &reason, duplicate_of),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
+        Cmd::Migrate {
+            hotsheet_dir,
+            prefix,
+            migrator,
+        } => cmd_migrate(&cli.path, &hotsheet_dir, &prefix, migrator),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::ClaimNext {
             worker,
@@ -584,6 +600,74 @@ fn cmd_import(path: &PathBuf, file: &PathBuf, prefix: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+fn cmd_migrate(
+    path: &PathBuf,
+    hotsheet_dir: &Path,
+    prefix: &str,
+    migrator: Option<PathBuf>,
+) -> Result<()> {
+    let export_mjs = resolve_migrator(migrator)?;
+
+    // A private temp dir for the export JSON + any staged attachment files. The
+    // exporter itself only ever opens a COPY of the source database (read-only).
+    let staging = std::env::temp_dir().join(format!("hotsheet-migrate-{}", std::process::id()));
+    std::fs::create_dir_all(&staging)?;
+    let export_json = staging.join("hotsheet-export.json");
+
+    println!("Exporting {} …", hotsheet_dir.display());
+    let status = Command::new("node")
+        .arg(&export_mjs)
+        .arg(hotsheet_dir)
+        .arg("--out")
+        .arg(&export_json)
+        .status()
+        .with_context(|| {
+            format!(
+                "running the migrator ({}) — is Node installed?",
+                export_mjs.display()
+            )
+        })?;
+    if !status.success() {
+        bail!("migrator export failed ({status})");
+    }
+
+    let result = cmd_import(path, &export_json, prefix);
+    let _ = std::fs::remove_dir_all(&staging);
+    result
+}
+
+/// Find the Node exporter: an explicit path, `$HOTSHEET_MIGRATOR`, or a few
+/// locations relative to the CWD / executable.
+fn resolve_migrator(explicit: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(p) = explicit {
+        if p.is_file() {
+            return Ok(p);
+        }
+        bail!("migrator not found at {}", p.display());
+    }
+    if let Ok(env) = std::env::var("HOTSHEET_MIGRATOR") {
+        let p = PathBuf::from(env);
+        if p.is_file() {
+            return Ok(p);
+        }
+    }
+    let mut candidates = vec![PathBuf::from("migrator/src/export.mjs")];
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("../../migrator/src/export.mjs"));
+            candidates.push(dir.join("../../../migrator/src/export.mjs"));
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|c| c.is_file())
+        .with_context(|| {
+            "could not find the migrator (migrator/src/export.mjs); \
+             pass --migrator <path> or set HOTSHEET_MIGRATOR"
+                .to_string()
+        })
 }
 
 // ---- helpers ---------------------------------------------------------------------

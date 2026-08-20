@@ -143,6 +143,21 @@ fn commands_on_a_non_store_report_it() {
 }
 
 #[test]
+fn migrate_reports_a_missing_migrator() {
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .args([
+            "migrate",
+            "/tmp/nonexistent-hotsheet",
+            "--migrator",
+            "/tmp/nope/export.mjs",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("migrator not found"));
+}
+
+#[test]
 fn ls_filters_and_sort() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

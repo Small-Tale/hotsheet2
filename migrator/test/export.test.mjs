@@ -146,6 +146,40 @@ describe('conformance: Rust hotsheet import parses the export', () => {
   });
 });
 
+// The one-command `hotsheet migrate` flow: the Rust CLI spawns this exporter against
+// a copy of a datadir, then imports — the whole "open a copy of a HS1 database" goal.
+describe('one-command migrate via the CLI', () => {
+  const bin = join(REPO_ROOT, 'target', 'debug', 'hotsheet');
+  const run = existsSync(bin) ? it : it.skip;
+
+  run(
+    '`hotsheet migrate` exports + imports in one step',
+    async () => {
+      const hs = await makeDatadir(
+        PGlite,
+        OLD_TICKETS_DDL,
+        `insert into tickets (ticket_number, title, status)
+         values ('HS-1', 'one-step migrate', 'started');`,
+      );
+      const work = mkdtempSync(join(tmpdir(), 'hs2-migrate-'));
+      const store = join(work, 'store');
+      const exporter = join(REPO_ROOT, 'migrator', 'src', 'export.mjs');
+      try {
+        const out = execFileSync(bin, ['-C', store, 'migrate', hs, '--migrator', exporter], {
+          encoding: 'utf8',
+        });
+        expect(out).toContain('Imported 1 ticket');
+        const listed = execFileSync(bin, ['-C', store, 'ls'], { encoding: 'utf8' });
+        expect(listed).toContain('one-step migrate');
+      } finally {
+        rmSync(hs, { recursive: true, force: true });
+        rmSync(work, { recursive: true, force: true });
+      }
+    },
+    60000,
+  );
+});
+
 // Cross-version support: the migrator must open every datadir across the 5 latest
 // production releases + the current beta. Those use PGLite 0.3.x (v0.17.x) and 0.4.x
 // (v0.18.0+) — both Postgres 17. The bundled 0.4.x engine reads *both* (a newer

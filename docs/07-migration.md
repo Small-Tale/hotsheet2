@@ -142,8 +142,11 @@ may not have open at once):
    `.hotsheet/db/` **in place** (renamed to `.hotsheet/db.hs1-backup/`) so nothing
    is destroyed — the user deletes it when satisfied.
 
-The same migrator is runnable **by hand** from a terminal for anyone who prefers it
-(`hotsheet-migrate <path-to-old-project>`), independent of the UI prompt.
+The same migration is runnable **by hand** in one command, independent of the UI
+prompt: **`hotsheet -C <new-store> migrate <old-project>/.hotsheet`** spawns the Node
+exporter against a copy of the old database and imports the result. (Under the hood
+that is the two-step `node migrator/src/export.mjs …` + `hotsheet import …`, which
+remain available separately.)
 
 ## 7.4 What is and isn't migrated
 
