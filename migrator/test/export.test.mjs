@@ -119,7 +119,7 @@ describe('exportFromDb', () => {
 // Cross-language conformance (docs/07 §7.2.1, docs/12 §12.7): the real Rust importer
 // must ingest what the exporter produced. Skips when the CLI hasn't been built.
 describe('conformance: Rust hotsheet import parses the export', () => {
-  const bin = join(REPO_ROOT, 'target', 'debug', 'hotsheet');
+  const bin = join(REPO_ROOT, 'target', 'debug', 'hotsheet-cli');
   const run = existsSync(bin) ? it : it.skip;
 
   run('imports the exported JSON without drift', async () => {
@@ -151,7 +151,7 @@ describe('conformance: Rust hotsheet import parses the export', () => {
 // ticket CLI (`hotsheet`) then operates on the store.
 describe('one-command migrate via hotsheet-migrate', () => {
   const migrateBin = join(REPO_ROOT, 'target', 'debug', 'hotsheet-migrate');
-  const hotsheetBin = join(REPO_ROOT, 'target', 'debug', 'hotsheet');
+  const hotsheetBin = join(REPO_ROOT, 'target', 'debug', 'hotsheet-cli');
   const run = existsSync(migrateBin) && existsSync(hotsheetBin) ? it : it.skip;
 
   run(

@@ -12,7 +12,7 @@ them to know what to do next and to record what you did. Everything below works
 **Do the work, and record progress on the ticket as you go:**
 - `hotsheet-cli edit <slug> --status started` when you begin.
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
-- Or `hotsheet_update` (it takes a `note`) / `hotsheet_close` (same effect through MCP).
+- Or `hotsheet_update` (it takes a `note`) / `hotsheet_close` through MCP.
 
 **Create tickets for new work you discover** (bugs, follow-ups, gaps) rather than
 leaving them in comments:

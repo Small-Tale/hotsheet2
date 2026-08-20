@@ -212,7 +212,11 @@ async fn update_can_append_a_note() {
 
     let created = body_json(
         app.clone()
-            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Fix flicker"}"#)))
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(r#"{"title":"Fix flicker"}"#),
+            ))
             .await
             .unwrap(),
     )

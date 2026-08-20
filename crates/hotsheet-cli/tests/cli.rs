@@ -7,7 +7,7 @@ use predicates::prelude::*;
 use std::path::Path;
 
 fn hs(dir: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("hotsheet").unwrap();
+    let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
     cmd.arg("-C").arg(dir);
     cmd
 }

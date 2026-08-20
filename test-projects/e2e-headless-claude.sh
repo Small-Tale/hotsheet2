@@ -23,7 +23,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BIN="$ROOT/target/debug"
-HOTSHEET="$BIN/hotsheet"
+HOTSHEET="$BIN/hotsheet-cli"
 MCP="$BIN/hotsheet-mcp"
 SERVER="$BIN/hotsheet-server"
 
@@ -48,15 +48,13 @@ for ln in sys.stdin:
 ' "$1"
 }
 
-# prepare <proj>: init + `setup claude` + assert artifacts + seed a ticket; echo slug.
+# prepare <proj> <tool>: init + `setup <tool>` + seed a ticket; echo the slug.
+# (Artifact shapes are asserted by the setup unit tests; here we exercise the flow.)
 prepare() {
-  local proj="$1"
+  local proj="$1" tool="$2"
   rm -rf "$proj"; mkdir -p "$proj"
   "$HOTSHEET" -C "$proj" init >/dev/null
-  "$HOTSHEET" -C "$proj" setup claude >/dev/null
-  grep -q "BEGIN hotsheet:claude" "$proj/CLAUDE.md" 2>/dev/null || fail "CLAUDE.md block missing"
-  [ -f "$proj/.claude/skills/hotsheet/SKILL.md" ] || fail "skill missing"
-  grep -q '"hotsheet-mcp"' "$proj/.mcp.json" 2>/dev/null || fail ".mcp.json not registered"
+  "$HOTSHEET" -C "$proj" setup "$tool" >/dev/null
   "$HOTSHEET" -C "$proj" new --title "Write a greeting" --category task >/dev/null
   "$HOTSHEET" -C "$proj" ls | awk 'NR==1{print $1}'
 }
@@ -104,11 +102,34 @@ live_claude() {
   fi
 }
 
+# live_codex <proj>: optional real headless Codex run (billable, opt-in). Codex reads
+# its MCP servers from $CODEX_HOME/config.toml — we point it at the project's .codex
+# (written by setup) and copy in the user's auth so it can run non-interactively.
+live_codex() {
+  local proj="$1"
+  if [ "${HS2_LIVE_CODEX:-0}" = "1" ] && command -v codex >/dev/null 2>&1; then
+    step "LIVE: real headless Codex session in $proj"
+    mkdir -p "$proj/.codex"
+    [ -f "$HOME/.codex/auth.json" ] && cp "$HOME/.codex/auth.json" "$proj/.codex/auth.json"
+    "$HOTSHEET" -C "$proj" new --title "Create GREETING.txt containing hello" --category task >/dev/null
+    ( cd "$proj" && PATH="$BIN:$PATH" CODEX_HOME="$proj/.codex" codex exec \
+        "Read AGENTS.md for this project. Work the Hot Sheet ticket about GREETING.txt: create a file named GREETING.txt containing the word hello, then mark that ticket completed." \
+        --dangerously-bypass-approvals-and-sandbox ) \
+      || fail "codex session errored"
+    [ -f "$proj/GREETING.txt" ] || fail "Codex did not create GREETING.txt"
+    pass "Codex created GREETING.txt"
+    printf '  ticket state after the session:\n'
+    "$HOTSHEET" -C "$proj" ls | sed 's/^/    /'
+  else
+    printf '  \033[33mskip\033[0m real Codex (set HS2_LIVE_CODEX=1 with codex on PATH)\n'
+  fi
+}
+
 # --- build ------------------------------------------------------------------------
 step "build binaries"
 cargo build -q --manifest-path "$ROOT/Cargo.toml" \
-  --bin hotsheet --bin hotsheet-mcp --bin hotsheet-server
-pass "hotsheet, hotsheet-mcp, hotsheet-server"
+  --bin hotsheet-cli --bin hotsheet-mcp --bin hotsheet-server
+pass "hotsheet-cli, hotsheet-mcp, hotsheet-server"
 
 WORK="${HS2_E2E_WORKDIR:-$(mktemp -d)}"
 mkdir -p "$WORK"
@@ -116,16 +137,16 @@ SERVER_PID=""
 trap '[ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
 # ===== Mode A: serverless =========================================================
-step "MODE A — serverless (no server)"
+step "MODE A — Claude, serverless (no server)"
 A="$WORK/serverless"
-SLUG_A="$(prepare "$A")"; pass "setup + seeded $SLUG_A"
+SLUG_A="$(prepare "$A" claude)"; pass "setup claude + seeded $SLUG_A"
 drive_and_assert "$A" "$SLUG_A" --path "$A"
 live_claude "$A"
 
 # ===== Mode B: server-backed ======================================================
-step "MODE B — server-backed (real hotsheet-server)"
+step "MODE B — Claude, server-backed (real hotsheet-server)"
 B="$WORK/server-backed"
-SLUG_B="$(prepare "$B")"; pass "setup + seeded $SLUG_B"
+SLUG_B="$(prepare "$B" claude)"; pass "setup claude + seeded $SLUG_B"
 SECRET="test-secret-$$"
 "$SERVER" -C "$B" --bind 127.0.0.1:0 --secret "$SECRET" --index "$B/.index.sqlite" \
   >"$WORK/server.log" 2>&1 &
@@ -141,5 +162,14 @@ pass "hotsheet-server up on $URL (pid $SERVER_PID)"
 drive_and_assert "$B" "$SLUG_B" --server "$URL" --secret "$SECRET"
 live_claude "$B"
 
-echo; printf '\033[1;32mE2E headless-Claude smoke passed.\033[0m\n'
+# ===== Mode C: Codex (second first-party tool, serverless) ========================
+# Proves the plugin interface isn't Claude-shaped: Codex sets up AGENTS.md + a TOML
+# MCP config (no skills), and drives the same shim.
+step "MODE C — Codex, serverless (no server)"
+C="$WORK/codex"
+SLUG_C="$(prepare "$C" codex)"; pass "setup codex + seeded $SLUG_C"
+drive_and_assert "$C" "$SLUG_C" --path "$C"
+live_codex "$C"
+
+echo; printf '\033[1;32mE2E headless-tool smoke passed.\033[0m\n'
 printf 'work dir: %s\n' "$WORK"

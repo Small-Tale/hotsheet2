@@ -1,4 +1,4 @@
-//! `hotsheet setup <tool>` — prepare a project directory for an AI tool, **headless**
+//! `hotsheet-cli setup <tool>` — prepare a project directory for an AI tool, **headless**
 //! (no server, no client; `docs/05-ai-tool-plugins.md` §5.1a). Writes the plugin's
 //! one-shot artifacts from the core plugin loader (`hotsheet-plugins`, HS2-97):
 //!   1. the managed instruction section (a delimited block, refreshed in place),
@@ -33,7 +33,9 @@ pub fn run_setup(
             vec![find(id).with_context(|| format!("unknown tool '{id}' (no such plugin)"))?]
         }
         (None, true) => builtin_plugins().into_iter().filter(is_detected).collect(),
-        (None, false) => bail!("specify a tool (e.g. `hotsheet setup claude`) or pass --detect"),
+        (None, false) => {
+            bail!("specify a tool (e.g. `hotsheet-cli setup claude`) or pass --detect")
+        }
     };
     if plugins.is_empty() {
         bail!("no supported AI tools detected on this machine");
@@ -42,18 +44,18 @@ pub fn run_setup(
     // Absolute store path so the MCP `--path` works from anywhere the tool launches.
     let store_abs = store_path.canonicalize().with_context(|| {
         format!(
-            "store path does not exist: {} (run `hotsheet init` first)",
+            "store path does not exist: {} (run `hotsheet-cli init` first)",
             store_path.display()
         )
     })?;
 
     let mut reports = Vec::new();
     for p in plugins {
-        let wrote = vec![
-            write_instructions(project_dir, &p)?,
-            write_skill(project_dir, &p)?,
-            write_mcp(project_dir, &store_abs, &p)?,
-        ];
+        let mut wrote = vec![write_instructions(project_dir, &p)?];
+        if let Some(skill) = write_skill(project_dir, &p)? {
+            wrote.push(skill); // absent for tools with no skills concept (e.g. Codex)
+        }
+        wrote.push(write_mcp(project_dir, &store_abs, &p)?);
         reports.push(SetupReport {
             tool: p.manifest.product_name.clone(),
             wrote,
@@ -109,20 +111,42 @@ fn replace_or_append_block(existing: &str, begin: &str, end: &str, block: &str) 
     }
 }
 
-/// Write the worklist skill (a fully managed file — overwritten).
-fn write_skill(project: &Path, p: &Plugin) -> Result<String> {
-    let rel = &p.manifest.skills.target;
-    write_file(&project.join(rel), p.skill_body())?;
-    Ok(rel.clone())
+/// Write the worklist skill (a fully managed file), or nothing if the tool has no
+/// skills concept (Codex). Returns the written path when present.
+fn write_skill(project: &Path, p: &Plugin) -> Result<Option<String>> {
+    match p.skill() {
+        Some((target, body)) => {
+            write_file(&project.join(target), body)?;
+            Ok(Some(target.to_string()))
+        }
+        None => Ok(None),
+    }
 }
 
-/// Register the `hotsheet-mcp` server in the tool's MCP config, merge-safe (other
-/// servers + other top-level keys are preserved).
+/// Register the `hotsheet-mcp` server in the tool's MCP config, merge-safe. The
+/// writer is chosen by the manifest's `format` (a host helper keyed on the format,
+/// not the tool id — docs/05 §5.3), so a new tool with a known format needs no code.
 fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String> {
     let rel = &p.manifest.mcp.target;
     let target = project.join(rel);
+    let name = &p.manifest.mcp.server_name;
+    let command = &p.manifest.mcp.command;
+    let args = p.mcp_args(&store_abs.to_string_lossy());
 
-    let mut root: serde_json::Value = std::fs::read_to_string(&target)
+    match p.manifest.mcp.format.as_str() {
+        "claude-json" => write_mcp_json(&target, name, command, &args)?,
+        "codex-toml" => write_mcp_toml(&target, name, command, &args)?,
+        other => bail!(
+            "unknown MCP config format '{other}' for plugin '{}'",
+            p.id()
+        ),
+    }
+    Ok(rel.clone())
+}
+
+/// Claude-style `.mcp.json`: `{ "mcpServers": { "<name>": { command, args } } }`.
+fn write_mcp_json(target: &Path, name: &str, command: &str, args: &[String]) -> Result<()> {
+    let mut root: serde_json::Value = std::fs::read_to_string(target)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
         .filter(serde_json::Value::is_object)
@@ -137,15 +161,43 @@ fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String> {
         *servers = serde_json::json!({});
     }
     servers.as_object_mut().unwrap().insert(
-        p.manifest.mcp.server_name.clone(),
-        serde_json::json!({
-            "command": p.manifest.mcp.command,
-            "args": p.mcp_args(&store_abs.to_string_lossy()),
-        }),
+        name.to_string(),
+        serde_json::json!({ "command": command, "args": args }),
     );
+    write_file(target, &(serde_json::to_string_pretty(&root)? + "\n"))
+}
 
-    write_file(&target, &(serde_json::to_string_pretty(&root)? + "\n"))?;
-    Ok(rel.clone())
+/// Codex-style TOML: `[mcp_servers.<name>]` with `command` + `args`, in the file
+/// Codex reads at `$CODEX_HOME/config.toml`.
+fn write_mcp_toml(target: &Path, name: &str, command: &str, args: &[String]) -> Result<()> {
+    let mut root: toml::Table = std::fs::read_to_string(target)
+        .ok()
+        .and_then(|s| toml::from_str(&s).ok())
+        .unwrap_or_default();
+
+    let servers = root
+        .entry("mcp_servers".to_string())
+        .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+    if !servers.is_table() {
+        *servers = toml::Value::Table(toml::Table::new());
+    }
+
+    let mut entry = toml::Table::new();
+    entry.insert("command".into(), toml::Value::String(command.to_string()));
+    entry.insert(
+        "args".into(),
+        toml::Value::Array(
+            args.iter()
+                .map(|a| toml::Value::String(a.clone()))
+                .collect(),
+        ),
+    );
+    servers
+        .as_table_mut()
+        .unwrap()
+        .insert(name.to_string(), toml::Value::Table(entry));
+
+    write_file(target, &toml::to_string_pretty(&root)?)
 }
 
 fn write_file(path: &Path, contents: &str) -> Result<()> {
@@ -184,7 +236,7 @@ mod tests {
         let claude_md = read(d.path(), "CLAUDE.md");
         assert!(claude_md.contains("<!-- BEGIN hotsheet:claude -->"));
         assert!(claude_md.contains("<!-- END hotsheet:claude -->"));
-        assert!(claude_md.contains("hotsheet ls --up-next"));
+        assert!(claude_md.contains("hotsheet-cli ls --up-next"));
 
         // skill
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
@@ -203,6 +255,62 @@ mod tests {
         assert_eq!(args[0], "--path");
         let store_abs = d.path().canonicalize().unwrap();
         assert_eq!(args[1], store_abs.to_string_lossy());
+    }
+
+    #[test]
+    fn setup_codex_uses_agents_md_and_toml_and_no_skill() {
+        let d = project();
+        let reports = run_setup(d.path(), d.path(), Some("codex"), false).unwrap();
+        assert_eq!(reports[0].tool, "Codex CLI");
+
+        // AGENTS.md, not CLAUDE.md; managed block present.
+        let agents = read(d.path(), "AGENTS.md");
+        assert!(agents.contains("<!-- BEGIN hotsheet:codex -->"));
+        assert!(agents.contains("hotsheet-cli ls --up-next"));
+
+        // No skill file written (Codex has no skills concept).
+        assert!(!d.path().join(".claude").exists());
+        assert!(reports[0].wrote.iter().all(|w| !w.contains("SKILL")));
+
+        // MCP config is TOML at .codex/config.toml with [mcp_servers.hotsheet].
+        let cfg: toml::Table = toml::from_str(&read(d.path(), ".codex/config.toml")).unwrap();
+        let hs = cfg["mcp_servers"]["hotsheet"].as_table().unwrap();
+        assert_eq!(hs["command"].as_str().unwrap(), "hotsheet-mcp");
+        let args: Vec<&str> = hs["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap())
+            .collect();
+        assert_eq!(args[0], "--path");
+        assert_eq!(args[1], d.path().canonicalize().unwrap().to_string_lossy());
+    }
+
+    #[test]
+    fn setup_codex_toml_is_idempotent_and_preserves_other_servers() {
+        let d = project();
+        // A pre-existing Codex config with an unrelated server + a top-level key.
+        std::fs::create_dir_all(d.path().join(".codex")).unwrap();
+        std::fs::write(
+            d.path().join(".codex/config.toml"),
+            "model = \"o3\"\n\n[mcp_servers.other]\ncommand = \"x\"\n",
+        )
+        .unwrap();
+
+        run_setup(d.path(), d.path(), Some("codex"), false).unwrap();
+        run_setup(d.path(), d.path(), Some("codex"), false).unwrap(); // twice
+
+        let cfg: toml::Table = toml::from_str(&read(d.path(), ".codex/config.toml")).unwrap();
+        assert_eq!(cfg["model"].as_str().unwrap(), "o3", "top-level key kept");
+        assert_eq!(
+            cfg["mcp_servers"]["other"]["command"].as_str().unwrap(),
+            "x",
+            "other server kept"
+        );
+        assert_eq!(
+            cfg["mcp_servers"]["hotsheet"]["command"].as_str().unwrap(),
+            "hotsheet-mcp"
+        );
     }
 
     #[test]

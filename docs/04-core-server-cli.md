@@ -140,6 +140,12 @@ A thin binary that wraps the same core for **direct-to-disk** operations, usable
 with **or without** a running server. AI tools can use the CLI *or* the MCP; humans
 use it in a terminal.
 
+> **Binary name (dev):** the compiled binary is currently **`hotsheet-cli`**, not
+> `hotsheet`, to avoid colliding on `PATH` with a separately installed Hot Sheet 1
+> `hotsheet` launcher on developer machines. The examples below use the conceptual
+> `hotsheet` name; substitute `hotsheet-cli` when running against this repo's build.
+> (A final shipped name is a release-time decision.)
+
 Two families of commands:
 
 **Ticket ops (direct to disk; server not required):**

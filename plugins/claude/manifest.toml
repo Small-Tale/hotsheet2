@@ -14,7 +14,7 @@ binaries = ["claude"]
 
 [instructions]
 # The tool's managed instruction file, and the plugin file holding the Hot Sheet
-# section to merge into it (delimited + refreshed in place by `hotsheet setup`).
+# section to merge into it (delimited + refreshed in place by `hotsheet-cli setup`).
 target = "CLAUDE.md"
 section = "instructions.md"
 

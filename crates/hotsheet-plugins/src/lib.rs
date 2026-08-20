@@ -20,6 +20,7 @@ use serde::Deserialize;
 /// The bundled first-party plugins, embedded from the repo's `plugins/` tree at build
 /// time. Adding a first-party tool = adding a directory here.
 static CLAUDE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/claude");
+static CODEX: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/codex");
 
 /// A failure loading a plugin.
 #[derive(Debug, thiserror::Error)]
@@ -45,7 +46,10 @@ pub struct Manifest {
     #[serde(default)]
     pub detection: Detection,
     pub instructions: Instructions,
-    pub skills: Skills,
+    /// Optional: some tools (e.g. Codex) have no "skills" concept. Absence = the tool
+    /// gets no skill artifact (docs/05 §5.3, "absence is the signal").
+    #[serde(default)]
+    pub skills: Option<Skills>,
     pub mcp: Mcp,
 }
 
@@ -73,7 +77,9 @@ pub struct Skills {
 }
 
 /// How the `hotsheet-mcp` server is registered in the tool's MCP config. `{store}` in
-/// `args` is substituted with the project's store path at setup time.
+/// `args` is substituted with the project's store path at setup time. `format` selects
+/// the host's config writer (`claude-json` | `codex-toml`) — keyed on the format, not
+/// the tool id (docs/05 §5.3).
 #[derive(Debug, Clone, Deserialize)]
 pub struct Mcp {
     pub target: String,
@@ -115,7 +121,9 @@ impl Plugin {
         let plugin = Plugin { manifest, files };
         // Fail loudly if the manifest points at files that aren't there.
         plugin.require(&plugin.manifest.instructions.section)?;
-        plugin.require(&plugin.manifest.skills.source)?;
+        if let Some(skills) = &plugin.manifest.skills {
+            plugin.require(&skills.source)?;
+        }
         Ok(plugin)
     }
 
@@ -145,9 +153,10 @@ impl Plugin {
         self.file(&self.manifest.instructions.section).unwrap_or("")
     }
 
-    /// The worklist skill body written into the project.
-    pub fn skill_body(&self) -> &str {
-        self.file(&self.manifest.skills.source).unwrap_or("")
+    /// The worklist skill (target + body), or `None` if this tool has no skills.
+    pub fn skill(&self) -> Option<(&str, &str)> {
+        let skills = self.manifest.skills.as_ref()?;
+        Some((&skills.target, self.file(&skills.source).unwrap_or("")))
     }
 
     /// The MCP `args` with `{store}` substituted for the given store path.
@@ -164,7 +173,7 @@ impl Plugin {
 /// Every bundled first-party plugin, loaded through the same path a third-party
 /// plugin will use. Panics only on a build-time-embedded malformed plugin (a bug).
 pub fn builtin_plugins() -> Vec<Plugin> {
-    [&CLAUDE]
+    [&CLAUDE, &CODEX]
         .into_iter()
         .map(|d| Plugin::from_dir(d).expect("bundled first-party plugin must load"))
         .collect()
@@ -195,18 +204,33 @@ mod tests {
         // instruction section
         let instr = p.instructions_body();
         assert!(instr.contains("Hot Sheet"), "instruction section present");
-        assert!(instr.contains("hotsheet ls --up-next"));
+        assert!(instr.contains("hotsheet-cli ls --up-next"));
 
         // worklist skill with valid frontmatter
-        let skill = p.skill_body();
-        assert!(skill.starts_with("---"), "skill has frontmatter");
-        assert!(skill.contains("name: hotsheet"));
+        let (skill_target, skill_body) = p.skill().expect("claude has a skill");
+        assert!(skill_body.starts_with("---"), "skill has frontmatter");
+        assert!(skill_body.contains("name: hotsheet"));
+        assert_eq!(skill_target, ".claude/skills/hotsheet/SKILL.md");
 
         // targets the manifest declares
         assert_eq!(p.manifest.instructions.target, "CLAUDE.md");
-        assert_eq!(p.manifest.skills.target, ".claude/skills/hotsheet/SKILL.md");
         assert_eq!(p.manifest.mcp.target, ".mcp.json");
+        assert_eq!(p.manifest.mcp.format, "claude-json");
         assert_eq!(p.manifest.mcp.server_name, "hotsheet");
+    }
+
+    #[test]
+    fn codex_is_a_second_first_party_plugin_with_no_skills() {
+        let p = find("codex").expect("codex plugin present");
+        assert_eq!(p.manifest.product_name, "Codex CLI");
+        assert!(p.manifest.detection.binaries.iter().any(|b| b == "codex"));
+
+        // The shape that proves the interface isn't Claude-shaped:
+        assert!(p.skill().is_none(), "codex has no skills concept");
+        assert_eq!(p.manifest.instructions.target, "AGENTS.md");
+        assert_eq!(p.manifest.mcp.format, "codex-toml");
+        assert_eq!(p.manifest.mcp.target, ".codex/config.toml");
+        assert!(p.instructions_body().contains("Hot Sheet"));
     }
 
     #[test]

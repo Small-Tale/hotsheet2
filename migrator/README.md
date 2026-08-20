@@ -12,7 +12,7 @@ It opens a **copy** of the datadir — the source cluster is never modified.
 cd migrator && npm install
 node src/export.mjs <path-to-a-project/.hotsheet> --out hotsheet-export.json
 # then, from the repo root:
-target/debug/hotsheet -C ./my-store import hotsheet-export.json
+target/debug/hotsheet-cli -C ./my-store import hotsheet-export.json
 ```
 
 ## Supported Hot Sheet versions
