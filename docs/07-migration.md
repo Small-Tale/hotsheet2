@@ -13,18 +13,23 @@
 > with notes, `legacy_number`, and close outcomes intact.
 >
 > **Version coverage:** targets the **5 most recent production releases + the current
-> beta** (v0.17.2 … v0.20.0 + v0.21.0-beta), which span **two PG majors** — v0.17.x =
-> PGLite 0.3.x = **PG16**, v0.18.0+ = 0.4.x = **PG17**. The exporter **bundles only the
-> latest engine** (`@electric-sql/pglite`, PG17) and tries it first; a datadir of a
-> different major (PG16, or a future PG18) falls back to `pglite-migrate` fetching a
-> matching engine on demand — one bundled engine, arbitrary-major support. Verified
-> with real on-disk PG16 *and* PG17 clusters. See [`migrator/README.md`](../migrator/README.md).
+> beta** (v0.17.2 … v0.20.0 + v0.21.0-beta). These use PGLite **0.3.x** (v0.17.x) and
+> **0.4.x** (v0.18.0+) — all Postgres 17. The exporter bundles **one** engine, the
+> PGLite line Hot Sheet ships (`@electric-sql/pglite` 0.4.x), and tries it first: a
+> newer PGLite reads older datadirs, so 0.4.x opens **every** supported HS datadir
+> (0.3.x *and* 0.4.x). Only a datadir written by a PGLite *newer than the bundle* —
+> e.g. **PGLite 0.5.x = PG18** (a future Hot Sheet) — can't be opened; those fall back
+> to `pglite-migrate`, which fetches a matching engine on demand. (Bundling the
+> absolute-latest 0.5.x would be wrong — it can't read 0.3.x/0.4.x datadirs.) Verified
+> with real on-disk 0.3.x *and* 0.4.x clusters, and the 0.5.x/PG18 fetch validated
+> end-to-end. See [`migrator/README.md`](../migrator/README.md).
 >
-> **Real-cluster lessons baked into the exporter** (from the HS1 source): pick the
-> engine by PG major; the join column is **`blocks_on_ticket_id`**; a cluster
-> predating PGLite 0.4.0 keeps its tables in **`template1`**, not `postgres` (the
-> opener probes both); and the column set is read **tolerantly** so schema drift
-> across releases degrades instead of erroring.
+> **Real-cluster lessons baked into the exporter** (from the HS1 source): the newest
+> PGLite reads older datadirs (bundle the line HS ships, not the absolute latest); the
+> join column is **`blocks_on_ticket_id`**; a cluster written by PGLite < 0.4.0 keeps
+> its tables in **`template1`**, not `postgres` (the opener probes both); and the
+> column set is read **tolerantly** so schema drift across releases degrades instead
+> of erroring.
 >
 > **Attachments** migrate: the exporter reads the `attachments` table (promoted
 > only — `draft_id IS NULL`), stages the files next to the export JSON, and rewrites
@@ -32,10 +37,9 @@
 > (basename-sanitized). Source files resolve by basename under
 > `<.hotsheet>/attachments/` so a moved project still works.
 >
-> **Not yet:** the UI-prompted flow (§7.3); and the `pglite-migrate` **network fetch**
-> for non-bundled majors (PG16 today, a future PG18 tomorrow) — the cross-major *read*
-> is offline-tested with a local engine, but the on-demand engine acquisition itself
-> isn't (HS2-82).
+> **Not yet:** the UI-prompted per-project flow (§7.3). (The `pglite-migrate` fetch for
+> a newer-than-bundle datadir is validated against a real PG18 cluster; it just isn't
+> in the offline CI suite because it downloads an engine — HS2-82.)
 
 ## 7.1 The problem
 

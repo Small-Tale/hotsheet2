@@ -3,17 +3,20 @@
 //
 // Disposable and read-only: it opens a COPY of the datadir so the source cluster is
 // never touched. Supports every HS1 datadir across the last 5 production releases +
-// the current beta, which span TWO Postgres majors:
+// the current beta:
 //
-//   Hot Sheet v0.17.x  -> PGLite 0.3.x = PG16   (tables live in `template1`)
-//   Hot Sheet v0.18.0+ -> PGLite 0.4.x = PG17   (tables live in `postgres`)
-//   (v0.21.0-beta is still 0.4.x / PG17)
+//   Hot Sheet v0.17.x  -> PGLite 0.3.x   (tables live in `template1`)
+//   Hot Sheet v0.18.0+ -> PGLite 0.4.x   (tables live in `postgres`)
+//   (all of the above are Postgres 17; v0.21.0-beta is still 0.4.x)
 //
-// Engine strategy: bundle only the LATEST PGLite (`@electric-sql/pglite`) and try it
-// first. A datadir from a different Postgres major can't be opened by it (a WASM
-// abort), so those fall back to `pglite-migrate`, which fetches a pinned,
-// hash-verified engine matching the datadir on demand. This keeps the bundle to one
-// engine while supporting arbitrarily old (or new) majors.
+// Engine strategy — bundle ONE engine (the PGLite line Hot Sheet ships,
+// `@electric-sql/pglite` 0.4.x) and try it first. A newer PGLite reads older
+// datadirs, so 0.4.x opens every supported HS datadir (both 0.3.x and 0.4.x). Only a
+// datadir written by a PGLite *newer* than the bundle — e.g. PGLite 0.5.x (PG18), a
+// future Hot Sheet — can't be opened; those fall back to `pglite-migrate`, which
+// fetches a pinned, hash-verified matching engine on demand. (The 0.5.x engine, by
+// contrast, cannot read 0.3.x/0.4.x datadirs, which is why we bundle 0.4.x, not the
+// absolute latest.)
 //
 // Usage: node src/export.mjs <path-to-.hotsheet> [--out hotsheet-export.json]
 
@@ -232,21 +235,23 @@ function resolveAttachmentSource(fs, path, hotsheetDir, storedPath) {
 
 /**
  * Open the datadir at whichever database holds the `tickets` table. Try the bundled
- * (latest) PGLite engine first; if the datadir is a different Postgres major (a WASM
- * abort), fall back to pglite-migrate, which fetches a matching engine on demand.
+ * engine first (it reads its own + older datadirs). If the datadir was written by a
+ * newer PGLite than the bundle, the bundled engine can't initialize (a WASM abort),
+ * so fall back to pglite-migrate, which fetches a matching engine on demand.
  */
 async function openCluster(work) {
   const bundled = await tryBundled(work);
   if (bundled.db) return bundled;
-  if (bundled.majorMismatch) return openViaPgliteMigrate(work);
+  if (bundled.tooNew) return openViaPgliteMigrate(work);
   throw new Error('no `tickets` table found in this cluster (looked in postgres + template1)');
 }
 
 /**
  * Probe `postgres` then `template1` with the bundled engine. PGLite 0.4.0 moved the
- * default working database from `template1` to `postgres`, so a PG16-era cluster
- * keeps its tables in `template1` where a plain open never looks. Returns
- * `{majorMismatch:true}` if the engine can't open the datadir (wrong major).
+ * default working database from `template1` to `postgres`, so an older (0.3.x)
+ * cluster keeps its tables in `template1` where a plain open never looks. Returns
+ * `{tooNew:true}` if the datadir was written by a PGLite newer than the bundle (the
+ * engine can't even initialize).
  */
 async function tryBundled(work) {
   const { PGlite } = await import('@electric-sql/pglite');
@@ -256,9 +261,9 @@ async function tryBundled(work) {
       if (await hasTicketsTable(db)) return { db, database };
     } catch (err) {
       await db.close().catch(() => {});
-      // A WASM "Aborted()" means the on-disk major ≠ the bundled engine's major;
-      // a second database would abort identically, so stop and hand off.
-      if (isEngineMajorMismatch(err)) return { majorMismatch: true };
+      // A WASM "Aborted()"/"failed to initialize" means the datadir is from a newer
+      // PGLite; a second database would fail identically, so stop and hand off.
+      if (isEngineTooNew(err)) return { tooNew: true };
       throw err;
     }
     await db.close().catch(() => {});
@@ -267,11 +272,10 @@ async function tryBundled(work) {
 }
 
 /**
- * Fallback for a datadir whose Postgres major differs from the bundled engine: let
- * pglite-migrate fetch a pinned, hash-verified engine matching the datadir on demand
- * (opt-in; downloads ~9 MB, cached). This is what supports older/newer majors without
- * bundling extra engines. Best-effort — the network-fetch acquisition itself isn't
- * covered by the offline test suite (HS2-82).
+ * Fallback for a datadir written by a PGLite newer than the bundle (e.g. PGLite
+ * 0.5.x / PG18): let pglite-migrate fetch a pinned, hash-verified engine matching the
+ * datadir on demand (opt-in; downloads ~9 MB, cached). Validated end-to-end against a
+ * real PG18 datadir; the network fetch isn't exercised by the offline suite (HS2-82).
  */
 async function openViaPgliteMigrate(work) {
   const { openDataDir } = await import('pglite-migrate');
@@ -295,7 +299,7 @@ async function openViaPgliteMigrate(work) {
   );
 }
 
-function isEngineMajorMismatch(err) {
+function isEngineTooNew(err) {
   return /abort|initialize|wasm|EngineMismatch/i.test(String(err && err.message));
 }
 

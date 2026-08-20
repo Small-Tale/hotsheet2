@@ -19,7 +19,7 @@
     "pglite-migrate": "^2.1.0"
   },
   "devDependencies": {
-    "pglite-pg16": "npm:@electric-sql/pglite@^0.3.16",
+    "pglite-old": "npm:@electric-sql/pglite@^0.3.16",
     "vitest": "^3.0.0"
   }
 }

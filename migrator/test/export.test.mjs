@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
-import { PGlite as PGlite16 } from 'pglite-pg16';
-import { openDataDir } from 'pglite-migrate';
+import { PGlite as PGliteOld } from 'pglite-old';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -147,10 +146,11 @@ describe('conformance: Rust hotsheet import parses the export', () => {
   });
 });
 
-// Multi-major support: the migrator must open every datadir across the 5 latest
-// production releases + the current beta, which span PG16 (v0.17.x, PGLite 0.3.x)
-// and PG17 (v0.18.0+, PGLite 0.4.x). We create a REAL on-disk cluster with each
-// engine and export it through the version-selecting opener.
+// Cross-version support: the migrator must open every datadir across the 5 latest
+// production releases + the current beta. Those use PGLite 0.3.x (v0.17.x) and 0.4.x
+// (v0.18.0+) — both Postgres 17. The bundled 0.4.x engine reads *both* (a newer
+// PGLite reads older datadirs), so we create a REAL on-disk cluster with the old
+// engine and with the bundled engine and export each through the normal path.
 
 // The pre-v0.18 tickets schema: no claim columns, no ticket_blocked_by table.
 const OLD_TICKETS_DDL = `
@@ -174,17 +174,14 @@ async function makeDatadir(EngineClass, ddl, seed) {
   return hs;
 }
 
-describe('multi-major export', () => {
-  // The bundled engine is PG17, so a PG16 datadir goes through the pglite-migrate
-  // fallback, which at runtime FETCHES a PG16 engine. Offline, we prove the same
-  // cross-major READ path with a locally-installed PG16 engine (the devDependency),
-  // exactly as pglite-migrate would after acquiring it. The network fetch itself is
-  // pglite-migrate's own tested concern (HS2-82).
+describe('cross-version export', () => {
   it(
-    'reads a real PG16 (v0.17.x) datadir cross-major — older schema, tables in template1',
+    'bundled engine reads an OLD (0.3.x / v0.17.x) datadir — older schema, tables in template1',
     async () => {
+      // Written by the old PGLite (0.3.x, which defaults its working DB to template1
+      // and predates ticket_blocked_by). The bundled 0.4.x engine opens it directly.
       const hs = await makeDatadir(
-        PGlite16,
+        PGliteOld,
         OLD_TICKETS_DDL,
         `insert into tickets (ticket_number, title, status, notes)
          values ('HS-1', 'old one', 'completed',
@@ -192,20 +189,13 @@ describe('multi-major export', () => {
                 ('HS-2', 'old two', 'not_started', '');`,
       );
       try {
-        const cluster = await openDataDir(join(hs, 'db'), 'pglite-pg16', {
-          pgliteOptions: { database: 'template1' },
-        });
-        try {
-          const out = await exportFromDb(cluster, { ticketPrefix: 'HS' });
-          expect(out.tickets).toHaveLength(2);
-          const t1 = out.tickets.find((t) => t.ticket_number === 'HS-1');
-          expect(t1.status).toBe('completed');
-          expect(t1.notes[0].text).toBe('hi');
-          // No ticket_blocked_by table in this era → degrades to empty, no throw.
-          expect(t1.blocked_by).toEqual([]);
-        } finally {
-          await cluster.close();
-        }
+        const out = await exportDatadir(hs, null);
+        expect(out.tickets).toHaveLength(2);
+        const t1 = out.tickets.find((t) => t.ticket_number === 'HS-1');
+        expect(t1.status).toBe('completed');
+        expect(t1.notes[0].text).toBe('hi');
+        // No ticket_blocked_by table in this era → degrades to empty, no throw.
+        expect(t1.blocked_by).toEqual([]);
       } finally {
         rmSync(hs, { recursive: true, force: true });
       }
@@ -214,7 +204,7 @@ describe('multi-major export', () => {
   );
 
   it(
-    'reads a PG17 (v0.18.0+) datadir end-to-end via the bundled engine',
+    'reads a CURRENT (0.4.x / v0.18.0+) datadir end-to-end — tables in postgres, with edges',
     async () => {
       const hs = await makeDatadir(
         PGlite,
