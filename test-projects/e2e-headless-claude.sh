@@ -83,15 +83,22 @@ drive_and_assert() {
 }
 
 # live_claude <proj>: optional real headless Claude run (billable, opt-in).
+# The generated project references the `hotsheet`/`hotsheet-mcp` binaries by bare name,
+# so we put the built binaries on PATH for the session; -p is non-interactive, so we
+# skip permission prompts and load the project's MCP config explicitly.
 live_claude() {
   local proj="$1"
   if [ "${HS2_LIVE_CLAUDE:-0}" = "1" ] && command -v claude >/dev/null 2>&1; then
     step "LIVE: real headless Claude session in $proj"
     "$HOTSHEET" -C "$proj" new --title "Create GREETING.txt containing hello" --category task >/dev/null
-    ( cd "$proj" && claude -p "Use the Hot Sheet skill. Work the Up Next ticket about GREETING.txt: create the file with the word hello, then mark that ticket completed." ) \
+    ( cd "$proj" && PATH="$BIN:$PATH" claude -p \
+        "Use the Hot Sheet skill for this project. Work the Up Next ticket about GREETING.txt: create a file named GREETING.txt containing the word hello, then mark that ticket completed." \
+        --dangerously-skip-permissions --mcp-config "$proj/.mcp.json" ) \
       || fail "claude session errored"
     [ -f "$proj/GREETING.txt" ] || fail "Claude did not create GREETING.txt"
     pass "Claude created GREETING.txt"
+    printf '  ticket state after the session:\n'
+    "$HOTSHEET" -C "$proj" ls | sed 's/^/    /'
   else
     printf '  \033[33mskip\033[0m real Claude (set HS2_LIVE_CLAUDE=1 with claude on PATH)\n'
   fi
