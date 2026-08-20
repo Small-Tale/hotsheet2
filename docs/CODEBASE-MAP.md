@@ -28,8 +28,9 @@ hot-sheet2/
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
     hotsheet-cli/            # `hotsheet` binary
-      src/main.rs            #   clap: init/new/ls/show/import
+      src/main.rs            #   clap: init/new/ls/show/edit/close/import
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
+      tests/cli.rs           #   E2E: drives the built binary (assert_cmd)
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
     src/introspect.mjs       #   schema-dump helper
@@ -41,7 +42,8 @@ hot-sheet2/
 ## Entry points
 
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet`. Global `-C/--path`
-  selects the store dir. Subcommands: `init`, `new`, `ls`, `show`, `import`.
+  selects the store dir. Subcommands: `init`, `new`, `ls`, `show`, `edit`, `close`,
+  `import`.
 - **Migrator:** `migrator/src/export.mjs` → `node src/export.mjs <.hotsheet> [--out …]`.
 - **Library:** `hotsheet_model::{parse_file, to_file_string, Ticket}` is the format
   SSOT; `hotsheet_ticketing::FsStore` is the on-disk store.

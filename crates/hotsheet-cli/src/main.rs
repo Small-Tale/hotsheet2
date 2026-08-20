@@ -9,7 +9,9 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
-use hotsheet_model::{Priority, Status, Ticket, Ulid, derive_slug, to_file_string};
+use hotsheet_model::{
+    CloseReason, Priority, Status, Ticket, Timestamp, Ulid, derive_slug, to_file_string,
+};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
@@ -49,6 +51,40 @@ enum Cmd {
     Ls,
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
+    /// Edit a ticket's fields (by slug or ULID).
+    Edit {
+        id: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        details: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long)]
+        priority: Option<String>,
+        /// One of not_started|started|completed|verified|backlog|archive|deleted|moved.
+        #[arg(long)]
+        status: Option<String>,
+        /// Replace the tag list (repeatable): `--tag a --tag b`.
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+        /// Mark Up Next.
+        #[arg(long, conflicts_with = "no_up_next")]
+        up_next: bool,
+        /// Clear Up Next.
+        #[arg(long)]
+        no_up_next: bool,
+    },
+    /// Record why a ticket was closed (close outcome; orthogonal to status).
+    Close {
+        id: String,
+        /// completed | not_planned | duplicate | obsolete.
+        #[arg(long)]
+        reason: String,
+        /// The duplicate target (slug or ULID); required when reason=duplicate.
+        #[arg(long)]
+        duplicate_of: Option<String>,
+    },
     /// Import an HS1 `hotsheet-export.json` into the store (creates it if needed).
     Import {
         file: PathBuf,
@@ -70,6 +106,24 @@ fn main() -> Result<()> {
         } => cmd_new(&cli.path, title, category, &priority, details),
         Cmd::Ls => cmd_ls(&cli.path),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
+        Cmd::Edit {
+            id,
+            title,
+            details,
+            category,
+            priority,
+            status,
+            tags,
+            up_next,
+            no_up_next,
+        } => cmd_edit(
+            &cli.path, &id, title, details, category, priority, status, tags, up_next, no_up_next,
+        ),
+        Cmd::Close {
+            id,
+            reason,
+            duplicate_of,
+        } => cmd_close(&cli.path, &id, &reason, duplicate_of),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
     }
 }
@@ -136,6 +190,115 @@ fn cmd_show(path: &PathBuf, needle: &str) -> Result<()> {
     let ticket = resolve(&store, needle)?;
     print!("{}", to_file_string(&ticket));
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_edit(
+    path: &PathBuf,
+    id: &str,
+    title: Option<String>,
+    details: Option<String>,
+    category: Option<String>,
+    priority: Option<String>,
+    status: Option<String>,
+    tags: Vec<String>,
+    up_next: bool,
+    no_up_next: bool,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let mut ticket = resolve(&store, id)?;
+
+    if let Some(v) = title {
+        ticket.title = v;
+    }
+    if let Some(v) = details {
+        ticket.details = v;
+    }
+    if let Some(v) = category {
+        ticket.category = v;
+    }
+    if let Some(v) = priority {
+        ticket.priority = parse_priority(&v)?;
+    }
+    if let Some(v) = status {
+        apply_status(&mut ticket, parse_status_str(&v)?);
+    }
+    if !tags.is_empty() {
+        ticket.tags = tags;
+    }
+    if up_next {
+        ticket.up_next = true;
+    } else if no_up_next {
+        ticket.up_next = false;
+    }
+
+    ticket.updated_at = Timestamp::from(now_rfc3339());
+    store.write_ticket(&ticket)?;
+    println!("Updated {}", ticket.slug);
+    Ok(())
+}
+
+fn cmd_close(path: &PathBuf, id: &str, reason: &str, duplicate_of: Option<String>) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let mut ticket = resolve(&store, id)?;
+    let reason_enum = parse_close_reason(reason)?;
+
+    let dup = match duplicate_of {
+        Some(d) => Some(resolve(&store, &d)?.id),
+        None => None,
+    };
+    if reason_enum == CloseReason::Duplicate && dup.is_none() {
+        bail!("--duplicate-of <id> is required when --reason duplicate");
+    }
+
+    ticket.close_reason = Some(reason_enum);
+    ticket.closed_at = Some(Timestamp::from(now_rfc3339()));
+    ticket.duplicate_of = dup;
+    ticket.updated_at = Timestamp::from(now_rfc3339());
+    store.write_ticket(&ticket)?;
+    println!("Closed {} ({reason})", ticket.slug);
+    Ok(())
+}
+
+/// Set a ticket's status, stamping completed_at / verified_at on the terminal ones.
+fn apply_status(ticket: &mut Ticket, status: Status) {
+    ticket.status = status;
+    match status {
+        Status::Completed if ticket.completed_at.is_none() => {
+            ticket.completed_at = Some(Timestamp::from(now_rfc3339()));
+        }
+        Status::Verified if ticket.verified_at.is_none() => {
+            ticket.verified_at = Some(Timestamp::from(now_rfc3339()));
+        }
+        _ => {}
+    }
+}
+
+fn parse_status_str(s: &str) -> Result<Status> {
+    Ok(match s {
+        "not_started" => Status::NotStarted,
+        "started" => Status::Started,
+        "completed" => Status::Completed,
+        "verified" => Status::Verified,
+        "backlog" => Status::Backlog,
+        "archive" => Status::Archive,
+        "deleted" => Status::Deleted,
+        "moved" => Status::Moved,
+        other => bail!(
+            "invalid status '{other}' \
+             (not_started|started|completed|verified|backlog|archive|deleted|moved)"
+        ),
+    })
+}
+
+fn parse_close_reason(s: &str) -> Result<CloseReason> {
+    Ok(match s {
+        "completed" => CloseReason::Completed,
+        "not_planned" => CloseReason::NotPlanned,
+        "duplicate" => CloseReason::Duplicate,
+        "obsolete" => CloseReason::Obsolete,
+        other => bail!("invalid close reason '{other}' (completed|not_planned|duplicate|obsolete)"),
+    })
 }
 
 fn cmd_import(path: &PathBuf, file: &PathBuf, prefix: &str) -> Result<()> {
