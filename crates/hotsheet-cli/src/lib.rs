@@ -12,6 +12,9 @@
 //! should carry (`docs/07-migration.md` §7.2).
 
 pub mod import;
+pub mod setup;
+
+pub use setup::{SetupReport, run_setup};
 
 use std::path::{Path, PathBuf};
 use std::process::Command;

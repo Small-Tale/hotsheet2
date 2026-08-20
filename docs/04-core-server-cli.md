@@ -171,16 +171,21 @@ hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-t
 
 **AI-tool setup + plugins (core-owned, headless — [05](05-ai-tool-plugins.md) §5.1a, §5.11):**
 ```
-hotsheet setup claude          # write CLAUDE.md/skills/MCP config/permission bridge for a tool
-hotsheet setup --detect        # set up every AI tool detected on this machine
-hotsheet plugin list           # installed + detected AI-tool plugins
-hotsheet plugin install <path|url>   # add an external plugin (trust-gated)
-hotsheet plugin verify <id>    # run the conformance suite against a plugin
-hotsheet plugin remove <id>
+hotsheet setup claude          # write CLAUDE.md/skills/MCP config for a tool   [built: HS2-98]
+hotsheet setup --detect        # set up every AI tool detected on this machine   [built: HS2-98]
+hotsheet plugin list           # installed + detected AI-tool plugins            [HS2-92]
+hotsheet plugin install <path|url>   # add an external plugin (trust-gated)      [HS2-93]
+hotsheet plugin verify <id>    # run the conformance suite against a plugin      [HS2-93]
+hotsheet plugin remove <id>                                                    # [HS2-92]
 ```
 These run **with no server and no client** — the loader + setup writers live in the
 core (§4.1), so a purely terminal workflow prepares a project for its AI tools on
 its own. When a client is in play it asks the *server* to run the same code.
+`setup <tool>` is **built (HS2-98)**: it writes a merge-safe managed block into the
+tool's instruction file (e.g. `CLAUDE.md`), the worklist skill, and an `.mcp.json`
+entry registering the serverless `hotsheet-mcp --path <store>`; re-running refreshes
+the managed pieces in place. The permission-bridge install + the `hotsheet plugin`
+management commands are still to come.
 
 **Project settings (core-owned; shared + local scopes — §4.9):**
 ```

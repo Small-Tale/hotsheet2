@@ -35,9 +35,10 @@ hot-sheet2/
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow + From<&Ticket> (shared by server + MCP)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet`: init/new/ls/show/edit/close/import/doctor/claim-next/release/renew
+      src/main.rs            #   `hotsheet`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
+      src/setup.rs           #   `hotsheet setup <tool>`: write a plugin's instructions/skill/MCP config (merge-safe)
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
@@ -66,8 +67,8 @@ hot-sheet2/
 
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet` (live ticket ops).
   Global `-C/--path` selects the store dir. Subcommands: `init`, `new`, `ls`
-  (filters/sort/text), `show`, `edit`, `close`, `import`, `doctor`, `claim-next`,
-  `release`, `renew`.
+  (filters/sort/text), `show`, `edit`, `close`, `setup` (AI-tool setup, headless),
+  `import`, `doctor`, `claim-next`, `release`, `renew`.
 - **Migrator CLI:** `src/bin/hotsheet-migrate.rs` → **separate** binary
   `hotsheet-migrate` (rarely-used, one-time, needs Node). `hotsheet-migrate
   <old/.hotsheet> -C <store>` spawns the Node exporter against a *copy* of the old

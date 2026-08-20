@@ -82,6 +82,18 @@ enum Cmd {
         #[arg(long)]
         duplicate_of: Option<String>,
     },
+    /// Set up an AI tool to work with this project, headless (writes its instruction
+    /// section, worklist skill, and MCP config). No server or client required.
+    Setup {
+        /// The tool to set up (e.g. `claude`). Omit together with --detect.
+        tool: Option<String>,
+        /// Set up every AI tool detected on this machine.
+        #[arg(long)]
+        detect: bool,
+        /// Project directory to write the tool config into (defaults to the store path).
+        #[arg(long)]
+        project: Option<PathBuf>,
+    },
     /// Import an HS1 `hotsheet-export.json` into the store (creates it if needed).
     Import {
         file: PathBuf,
@@ -180,6 +192,11 @@ fn main() -> Result<()> {
             reason,
             duplicate_of,
         } => cmd_close(&cli.path, &id, &reason, duplicate_of),
+        Cmd::Setup {
+            tool,
+            detect,
+            project,
+        } => cmd_setup(&cli.path, tool, detect, project),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::ClaimNext {
@@ -445,6 +462,23 @@ fn parse_close_reason(s: &str) -> Result<CloseReason> {
         "obsolete" => CloseReason::Obsolete,
         other => bail!("invalid close reason '{other}' (completed|not_planned|duplicate|obsolete)"),
     })
+}
+
+fn cmd_setup(
+    store: &Path,
+    tool: Option<String>,
+    detect: bool,
+    project: Option<PathBuf>,
+) -> Result<()> {
+    let project_dir = project.unwrap_or_else(|| store.to_path_buf());
+    let reports = hotsheet_cli::run_setup(store, &project_dir, tool.as_deref(), detect)?;
+    for r in &reports {
+        println!("Set up {} in {}:", r.tool, project_dir.display());
+        for w in &r.wrote {
+            println!("  wrote {w}");
+        }
+    }
+    Ok(())
 }
 
 fn cmd_import(path: &Path, file: &Path, prefix: &str) -> Result<()> {

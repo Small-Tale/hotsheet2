@@ -13,7 +13,7 @@ Work the project's Hot Sheet ticket queue in priority order.
 3. **Mark it started**, implement it, then **mark it done**:
    - `hotsheet edit <slug> --status started`
    - …do the work…
-   - `hotsheet edit <slug> --status completed --note "<what you did>"`
+   - `hotsheet edit <slug> --status completed`
    - (Or `hotsheet_update` / `hotsheet_close` via MCP — identical.)
 4. **File follow-ups** for anything you discover but don't finish (gaps, bugs,
    TODOs): `hotsheet new --title "…" --category <bug|task|feature>` (or
@@ -23,5 +23,5 @@ Work the project's Hot Sheet ticket queue in priority order.
 Notes:
 - The CLI (`hotsheet …`) and the `hotsheet_*` MCP tools run the same engine — use
   whichever is convenient. Both work with no server running.
-- If a ticket is unclear or blocked, record that on the ticket (a note) and move on
-  rather than guessing.
+- If a ticket is unclear or blocked, file a follow-up ticket describing the blocker
+  (`hotsheet new` / `hotsheet_create`) and move on rather than guessing.
