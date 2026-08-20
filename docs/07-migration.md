@@ -143,10 +143,12 @@ may not have open at once):
    is destroyed — the user deletes it when satisfied.
 
 The same migration is runnable **by hand** in one command, independent of the UI
-prompt: **`hotsheet -C <new-store> migrate <old-project>/.hotsheet`** spawns the Node
-exporter against a copy of the old database and imports the result. (Under the hood
-that is the two-step `node migrator/src/export.mjs …` + `hotsheet import …`, which
-remain available separately.)
+prompt: **`hotsheet-migrate <old-project>/.hotsheet -C <new-store>`** spawns the Node
+exporter against a copy of the old database and imports the result. It is a
+**separate binary** from the live `hotsheet` CLI on purpose — migration is rarely
+used, one-time, and needs Node + the bundled exporter, which the always-on ticket
+commands should not carry. (Under the hood it is the two-step `node
+migrator/src/export.mjs …` + `hotsheet import …`, which remain available separately.)
 
 ## 7.4 What is and isn't migrated
 

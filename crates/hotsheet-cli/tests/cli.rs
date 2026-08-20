@@ -143,18 +143,14 @@ fn commands_on_a_non_store_report_it() {
 }
 
 #[test]
-fn migrate_reports_a_missing_migrator() {
+fn migrate_is_not_a_subcommand_of_the_main_cli() {
+    // Migration lives in the separate `hotsheet-migrate` binary, not here.
     let dir = tempfile::tempdir().unwrap();
     hs(dir.path())
-        .args([
-            "migrate",
-            "/tmp/nonexistent-hotsheet",
-            "--migrator",
-            "/tmp/nope/export.mjs",
-        ])
+        .args(["migrate", "whatever"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("migrator not found"));
+        .stderr(predicate::str::contains("unrecognized subcommand"));
 }
 
 #[test]

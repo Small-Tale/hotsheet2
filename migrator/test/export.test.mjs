@@ -146,14 +146,16 @@ describe('conformance: Rust hotsheet import parses the export', () => {
   });
 });
 
-// The one-command `hotsheet migrate` flow: the Rust CLI spawns this exporter against
-// a copy of a datadir, then imports — the whole "open a copy of a HS1 database" goal.
-describe('one-command migrate via the CLI', () => {
-  const bin = join(REPO_ROOT, 'target', 'debug', 'hotsheet');
-  const run = existsSync(bin) ? it : it.skip;
+// The standalone `hotsheet-migrate` tool spawns this exporter against a copy of a
+// datadir, then imports — the whole "open a copy of a HS1 database" goal. The live
+// ticket CLI (`hotsheet`) then operates on the store.
+describe('one-command migrate via hotsheet-migrate', () => {
+  const migrateBin = join(REPO_ROOT, 'target', 'debug', 'hotsheet-migrate');
+  const hotsheetBin = join(REPO_ROOT, 'target', 'debug', 'hotsheet');
+  const run = existsSync(migrateBin) && existsSync(hotsheetBin) ? it : it.skip;
 
   run(
-    '`hotsheet migrate` exports + imports in one step',
+    '`hotsheet-migrate` exports + imports in one step',
     async () => {
       const hs = await makeDatadir(
         PGlite,
@@ -165,11 +167,12 @@ describe('one-command migrate via the CLI', () => {
       const store = join(work, 'store');
       const exporter = join(REPO_ROOT, 'migrator', 'src', 'export.mjs');
       try {
-        const out = execFileSync(bin, ['-C', store, 'migrate', hs, '--migrator', exporter], {
+        const out = execFileSync(migrateBin, [hs, '-C', store, '--migrator', exporter], {
           encoding: 'utf8',
         });
         expect(out).toContain('Imported 1 ticket');
-        const listed = execFileSync(bin, ['-C', store, 'ls'], { encoding: 'utf8' });
+        // The live CLI then lists what landed.
+        const listed = execFileSync(hotsheetBin, ['-C', store, 'ls'], { encoding: 'utf8' });
         expect(listed).toContain('one-step migrate');
       } finally {
         rmSync(hs, { recursive: true, force: true });

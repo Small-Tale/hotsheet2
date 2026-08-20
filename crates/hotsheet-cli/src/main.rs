@@ -2,22 +2,18 @@
 //! `hotsheet-ticketing`: it reads and writes ticket files directly on disk
 //! (`docs/04-core-server-cli.md` §4.4) and imports HS1 exports (`docs/07`).
 
-mod import;
-
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
+use hotsheet_cli::{git_init, run_import};
 use hotsheet_model::{
     CloseReason, Priority, Status, Ticket, Timestamp, Ulid, derive_slug, to_file_string,
 };
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use time::format_description::well_known::Rfc3339;
 use time::{Duration, OffsetDateTime};
-
-use crate::import::{ExportFile, SUPPORTED_EXPORT_VERSION, import};
 
 #[derive(Parser)]
 #[command(name = "hotsheet", version, about = "Hot Sheet 2 CLI")]
@@ -95,18 +91,6 @@ enum Cmd {
         /// Prefix used if the store must be created first.
         #[arg(long, default_value = "HS")]
         prefix: String,
-    },
-    /// Migrate a Hot Sheet 1 project into this store in one step (runs the bundled
-    /// Node exporter against a COPY of its database, then imports).
-    Migrate {
-        /// Path to the old project's `.hotsheet` directory.
-        hotsheet_dir: PathBuf,
-        /// Prefix used if the store must be created first.
-        #[arg(long, default_value = "HS")]
-        prefix: String,
-        /// Path to the migrator's `export.mjs` (auto-detected, or $HOTSHEET_MIGRATOR).
-        #[arg(long)]
-        migrator: Option<PathBuf>,
     },
     /// Check store health (metadata, parse errors, duplicate slugs, orphans).
     Doctor,
@@ -200,11 +184,6 @@ fn main() -> Result<()> {
             duplicate_of,
         } => cmd_close(&cli.path, &id, &reason, duplicate_of),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
-        Cmd::Migrate {
-            hotsheet_dir,
-            prefix,
-            migrator,
-        } => cmd_migrate(&cli.path, &hotsheet_dir, &prefix, migrator),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::ClaimNext {
             worker,
@@ -558,116 +537,13 @@ fn parse_close_reason(s: &str) -> Result<CloseReason> {
     })
 }
 
-fn cmd_import(path: &PathBuf, file: &PathBuf, prefix: &str) -> Result<()> {
-    let text = std::fs::read_to_string(file)
-        .with_context(|| format!("reading export {}", file.display()))?;
-    let export: ExportFile =
-        serde_json::from_str(&text).with_context(|| format!("parsing {}", file.display()))?;
-
-    if export.export_version != SUPPORTED_EXPORT_VERSION {
-        eprintln!(
-            "warning: export version {} differs from supported {SUPPORTED_EXPORT_VERSION}; \
-             importing on a best-effort basis",
-            export.export_version
-        );
-    }
-    if let Some(name) = &export.project.name {
-        println!("Importing project '{name}'…");
-    }
-
-    // Create the store on first import if it isn't one yet, preferring the export's
-    // own ticket prefix over the flag default.
-    let store = match FsStore::open(path) {
-        Ok(store) => store,
-        Err(_) => {
-            let init_prefix = export.project.ticket_prefix.as_deref().unwrap_or(prefix);
-            let store = FsStore::init(path, &StoreMetadata::new(init_prefix))?;
-            git_init(path);
-            store
-        }
-    };
-
-    let base_dir = file.parent().unwrap_or_else(|| std::path::Path::new("."));
-    let summary = import(&store, &export, base_dir)?;
+fn cmd_import(path: &Path, file: &Path, prefix: &str) -> Result<()> {
+    let summary = run_import(path, file, prefix)?;
     println!(
         "Imported {} ticket(s) ({} attachment file(s)), skipped {} already present.",
         summary.written, summary.attachments, summary.skipped
     );
-    if summary.written > 0 {
-        git_commit_all(
-            path,
-            &format!("Import {} tickets from Hot Sheet 1", summary.written),
-        );
-    }
     Ok(())
-}
-
-fn cmd_migrate(
-    path: &PathBuf,
-    hotsheet_dir: &Path,
-    prefix: &str,
-    migrator: Option<PathBuf>,
-) -> Result<()> {
-    let export_mjs = resolve_migrator(migrator)?;
-
-    // A private temp dir for the export JSON + any staged attachment files. The
-    // exporter itself only ever opens a COPY of the source database (read-only).
-    let staging = std::env::temp_dir().join(format!("hotsheet-migrate-{}", std::process::id()));
-    std::fs::create_dir_all(&staging)?;
-    let export_json = staging.join("hotsheet-export.json");
-
-    println!("Exporting {} …", hotsheet_dir.display());
-    let status = Command::new("node")
-        .arg(&export_mjs)
-        .arg(hotsheet_dir)
-        .arg("--out")
-        .arg(&export_json)
-        .status()
-        .with_context(|| {
-            format!(
-                "running the migrator ({}) — is Node installed?",
-                export_mjs.display()
-            )
-        })?;
-    if !status.success() {
-        bail!("migrator export failed ({status})");
-    }
-
-    let result = cmd_import(path, &export_json, prefix);
-    let _ = std::fs::remove_dir_all(&staging);
-    result
-}
-
-/// Find the Node exporter: an explicit path, `$HOTSHEET_MIGRATOR`, or a few
-/// locations relative to the CWD / executable.
-fn resolve_migrator(explicit: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(p) = explicit {
-        if p.is_file() {
-            return Ok(p);
-        }
-        bail!("migrator not found at {}", p.display());
-    }
-    if let Ok(env) = std::env::var("HOTSHEET_MIGRATOR") {
-        let p = PathBuf::from(env);
-        if p.is_file() {
-            return Ok(p);
-        }
-    }
-    let mut candidates = vec![PathBuf::from("migrator/src/export.mjs")];
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("../../migrator/src/export.mjs"));
-            candidates.push(dir.join("../../../migrator/src/export.mjs"));
-        }
-    }
-    candidates
-        .into_iter()
-        .find(|c| c.is_file())
-        .with_context(|| {
-            "could not find the migrator (migrator/src/export.mjs); \
-             pass --migrator <path> or set HOTSHEET_MIGRATOR"
-                .to_string()
-        })
 }
 
 // ---- helpers ---------------------------------------------------------------------
@@ -772,28 +648,6 @@ fn sort_tickets(tickets: &mut [Ticket], key: &str) -> Result<()> {
         other => bail!("invalid sort '{other}' (id|created|updated|priority|status|title)"),
     }
     Ok(())
-}
-
-/// Best-effort `git init` of a new store (warns, never fails the command).
-fn git_init(path: &PathBuf) {
-    if path.join(".git").exists() {
-        return;
-    }
-    run_git(path, &["init", "--quiet"]);
-}
-
-/// Best-effort `git add -A && git commit` (warns on failure; files are already written).
-fn git_commit_all(path: &PathBuf, message: &str) {
-    run_git(path, &["add", "-A"]);
-    run_git(path, &["commit", "--quiet", "-m", message]);
-}
-
-fn run_git(path: &PathBuf, args: &[&str]) {
-    match Command::new("git").current_dir(path).args(args).status() {
-        Ok(status) if status.success() => {}
-        Ok(status) => eprintln!("warning: git {} exited with {status}", args.join(" ")),
-        Err(err) => eprintln!("warning: could not run git {}: {err}", args.join(" ")),
-    }
 }
 
 #[cfg(test)]
