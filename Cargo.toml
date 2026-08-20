@@ -7,6 +7,7 @@ members = [
     "crates/hotsheet-server",
     "crates/hotsheet-mcp",
     "crates/hotsheet-index",
+    "crates/hotsheet-plugins",
 ]
 
 [workspace.package]
@@ -38,8 +39,11 @@ ureq = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 notify = "6"
+toml = "0.8"
+include_dir = "0.7"
 
 # internal
 hotsheet-model = { path = "crates/hotsheet-model" }
 hotsheet-ticketing = { path = "crates/hotsheet-ticketing" }
 hotsheet-index = { path = "crates/hotsheet-index" }
+hotsheet-plugins = { path = "crates/hotsheet-plugins" }

@@ -50,6 +50,10 @@ hot-sheet2/
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index: open_reconciled/reconcile/rebuild/upsert/delete/query + hash_bytes
+    hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)
+      src/lib.rs             #   Manifest/Plugin + builtin_plugins()/find(id) (loads bundled first-party plugins)
+  plugins/                   # first-party plugin dirs, bundled into the binary (docs/05 §5.11)
+    claude/                  #   manifest.toml + instructions.md (CLAUDE.md section) + SKILL.md (worklist skill)
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
     src/introspect.mjs       #   schema-dump helper
@@ -108,4 +112,6 @@ hot-sheet2/
 | Store layout / sharding | `hotsheet-ticketing/src/store.rs`, [02](02-ticket-storage.md) §2.3 |
 | HS1 → git migration | `migrator/` + `hotsheet-cli/src/import.rs`, [07](07-migration.md) |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
+| AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
+| Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |
 | Requirements status | [README.md](README.md) |

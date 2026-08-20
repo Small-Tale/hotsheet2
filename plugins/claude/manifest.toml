@@ -1,0 +1,33 @@
+# First-party Hot Sheet plugin for Claude Code. This is a normal plugin manifest —
+# the same shape a third-party plugin uses (docs/05 §5.11); Claude is not special-
+# cased in the core, it is loaded through the plugin loader like any other tool.
+
+id = "claude"
+display_name = "Claude"
+product_name = "Claude Code"
+# `cli-agent` = Hot Sheet can drive it; `editor` = context files only (docs/05 §5.3).
+tier = "cli-agent"
+
+[detection]
+# How the host decides this tool is present on the machine (docs/05 §5.3).
+binaries = ["claude"]
+
+[instructions]
+# The tool's managed instruction file, and the plugin file holding the Hot Sheet
+# section to merge into it (delimited + refreshed in place by `hotsheet setup`).
+target = "CLAUDE.md"
+section = "instructions.md"
+
+[skills]
+# Where the worklist skill is written in the project, and its source in this plugin.
+target = ".claude/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+
+[mcp]
+# The tool's MCP config file + how the hotsheet server is registered in it. `{store}`
+# is substituted with the project's store path at setup time (serverless `--path`).
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
