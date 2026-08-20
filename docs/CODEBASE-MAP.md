@@ -59,6 +59,9 @@ hot-sheet2/
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
     src/introspect.mjs       #   schema-dump helper
     test/export.test.mjs     #   vitest: synthetic HS1 DB + cross-language conformance
+  plugins/                   # first-party AI-tool plugins (bundled) — see above
+  test-projects/             # full-binary E2E harnesses (not in-process unit tests)
+    e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # design docs 00–17 (+ this map)
   .github/workflows/ci.yml   # fmt --check · clippy -D warnings · nextest
 ```

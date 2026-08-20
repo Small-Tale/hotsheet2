@@ -166,7 +166,8 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Confirmed (design) |
 | Independent server (HTTP + WS) | 04 §4.3 | Partial (`hotsheet-server`: REST + /ws/sync + loopback auth; index/watcher/lifecycle/mTLS pending) |
 | MCP `hotsheet_*` tools (per-project shim) | 05 §5.8 | Partial (`hotsheet-mcp` shim: **serverless direct-to-disk (`--path`) or server-proxy (`--server`)**; config-writing pending) |
-| Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/import; merge-driver + more pending) |
+| Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/edit/close/**setup**/import; merge-driver + more pending) |
+| **Headless AI-tool loop** (setup → skills/CLI/MCP, with/without server) | 04 §4.4, 05 §5.1a/§5.8/§5.11 | Partial (`setup claude` + serverless/server MCP built; E2E harness `test-projects/e2e-headless-claude.sh` passes both modes; live-Claude tier opt-in — HS2-95) |
 | Plugin-only AI-tool integration | 05 | Confirmed (design) |
 | **Core-owned AI-tool setup/instructions/skills/MCP (headless; CLI + server, not app)** | 05 §5.1a, 04 §4.1 | Confirmed (design); build HS2-91 |
 | **External loadable plugins (manifest-only → subprocess/WASM; trust gate + verify)** | 05 §5.11 | Confirmed (design); build HS2-92/HS2-93 |
