@@ -143,9 +143,14 @@ hotsheet show HS-7f3k9q
 hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 hotsheet claim-next --worker worker-1     # coordination primitive
 ```
-These write ticket files and commit (configurable), then upsert the local index.
-If a server is running, its watcher observes the file change and reindexes +
-broadcasts — so a CLI edit shows up live in every open client.
+These write ticket files directly (and commit, configurable). The CLI reads via a
+**direct store scan** — it does **not** touch the index; the index is the *server's*
+read cache, and there's no reader when no server runs. If a server is running, its
+watcher observes the file change and reindexes + broadcasts, so a CLI edit shows up
+live in every open client; if not, the server **reconciles** the index against the
+files on its next start (`Index::open_reconciled`), so offline CLI/git edits are
+picked up then. A manual rebuild is just deleting the index file — the server
+recreates it — so the CLI needs no SQLite dependency of its own.
 
 **Ops / lifecycle:**
 ```
