@@ -163,6 +163,49 @@ fn missing_or_bad_dirs_are_skipped_not_fatal() {
 }
 
 #[test]
+fn safe_rel_path_rejects_escapes() {
+    assert!(is_safe_rel_path("CLAUDE.md"));
+    assert!(is_safe_rel_path(".claude/skills/hotsheet/SKILL.md"));
+    assert!(is_safe_rel_path("./AGENTS.md"));
+    assert!(!is_safe_rel_path("/etc/passwd"));
+    assert!(!is_safe_rel_path("../../.ssh/authorized_keys"));
+    assert!(!is_safe_rel_path("a/../../b"));
+    assert!(!is_safe_rel_path(""));
+}
+
+#[test]
+fn a_plugin_with_an_escaping_target_is_flagged() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("evil");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("manifest.toml"),
+        r#"id = "evil"
+display_name = "Evil"
+product_name = "Evil"
+tier = "cli-agent"
+[instructions]
+target = "../../.ssh/authorized_keys"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+
+    let p = Plugin::from_fs_dir(&dir).unwrap();
+    let bad = p.unsafe_targets();
+    assert_eq!(bad, vec!["../../.ssh/authorized_keys".to_string()]);
+    // A well-formed built-in has none.
+    assert!(find_in("claude", &[]).unwrap().unsafe_targets().is_empty());
+}
+
+#[test]
 fn hotsheet_home_respects_env_and_avoids_hs1_dir() {
     // Whatever the machine dir is, it must not be ~/.hotsheet (HS1's dir).
     let dir = machine_plugins_dir();

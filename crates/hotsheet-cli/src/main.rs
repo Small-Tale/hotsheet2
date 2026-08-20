@@ -161,8 +161,17 @@ enum Cmd {
 enum PluginCmd {
     /// List built-in + installed plugins, with provenance and whether each is detected.
     List,
+    /// Show what a plugin declares it will write + launch (the trust disclosure).
+    Info { id: String },
     /// Install an external plugin from a directory into the machine plugin dir.
-    Install { dir: PathBuf },
+    Install {
+        dir: PathBuf,
+        /// Skip the confirmation prompt (non-interactive install).
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Verify a plugin structurally (loads, known MCP format, safe write targets).
+    Verify { id: String },
     /// Remove an installed external plugin by id.
     Remove { id: String },
 }
@@ -594,12 +603,57 @@ fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
                 );
             }
         }
-        PluginCmd::Install { dir } => {
+        PluginCmd::Info { id } => {
+            let p =
+                hotsheet_plugins::find(&id).with_context(|| format!("unknown plugin '{id}'"))?;
+            println!("{}", hotsheet_cli::plugin::describe(&p));
+            let issues = hotsheet_cli::plugin::verify(&p);
+            if issues.is_empty() {
+                println!("  verify:     ok");
+            } else {
+                for i in &issues {
+                    println!("  verify:     ! {i}");
+                }
+            }
+        }
+        PluginCmd::Verify { id } => {
+            let p =
+                hotsheet_plugins::find(&id).with_context(|| format!("unknown plugin '{id}'"))?;
+            let issues = hotsheet_cli::plugin::verify(&p);
+            if issues.is_empty() {
+                println!("Plugin '{id}' passed verification.");
+            } else {
+                for i in &issues {
+                    eprintln!("  ! {i}");
+                }
+                bail!(
+                    "plugin '{id}' failed verification ({} issue(s))",
+                    issues.len()
+                );
+            }
+        }
+        PluginCmd::Install { dir, yes } => {
+            // Trust gate: disclose what the plugin writes + launches before installing.
+            let p = hotsheet_plugins::Plugin::from_fs_dir(&dir)
+                .with_context(|| format!("not a valid plugin directory: {}", dir.display()))?;
+            println!("About to install this plugin:");
+            println!("{}", hotsheet_cli::plugin::describe(&p));
+            let issues = hotsheet_cli::plugin::verify(&p);
+            if !issues.is_empty() {
+                for i in &issues {
+                    eprintln!("  ! {i}");
+                }
+                bail!("refusing to install: plugin failed verification");
+            }
+            if !yes && !confirm("Install this plugin? [y/N] ")? {
+                println!("Aborted.");
+                return Ok(());
+            }
             let dest = machine_plugins_dir();
             let id = hotsheet_cli::plugin::install(&dir, &dest)?;
             println!("Installed plugin '{id}' into {}", dest.join(&id).display());
             eprintln!(
-                "note: external plugins are not yet sandboxed or verified (trust gate: HS2-93)"
+                "note: an installed plugin's code is not yet sandboxed (behavioral boundary: HS2-93)"
             );
         }
         PluginCmd::Remove { id } => {
@@ -670,6 +724,21 @@ fn render_value(v: &serde_json::Value) -> String {
         serde_json::Value::String(s) => s.clone(),
         other => other.to_string(),
     }
+}
+
+/// Prompt and read a yes/no from stdin (default no; EOF / non-interactive → no).
+fn confirm(prompt: &str) -> Result<bool> {
+    use std::io::{BufRead, Write};
+    print!("{prompt}");
+    std::io::stdout().flush().ok();
+    let mut line = String::new();
+    if std::io::stdin().lock().read_line(&mut line)? == 0 {
+        return Ok(false); // EOF (piped/non-interactive)
+    }
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 /// Whether `name` is an executable file on `PATH` (mirrors the setup detector).

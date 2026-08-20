@@ -232,6 +232,42 @@ impl Plugin {
             .map(|a| a.replace("{store}", store_path))
             .collect()
     }
+
+    /// Every project-relative path this plugin would write during setup.
+    pub fn target_paths(&self) -> Vec<&str> {
+        let mut v = vec![
+            self.manifest.instructions.target.as_str(),
+            self.manifest.mcp.target.as_str(),
+        ];
+        if let Some(s) = &self.manifest.skills {
+            v.push(s.target.as_str());
+        }
+        v
+    }
+
+    /// Declared write targets that would **escape the project** (absolute or `..`).
+    /// A plugin with any of these is unsafe to set up — the setup writer refuses it.
+    pub fn unsafe_targets(&self) -> Vec<String> {
+        self.target_paths()
+            .into_iter()
+            .filter(|t| !is_safe_rel_path(t))
+            .map(String::from)
+            .collect()
+    }
+}
+
+/// The MCP config formats the setup writer understands.
+pub const KNOWN_MCP_FORMATS: &[&str] = &["claude-json", "codex-toml"];
+
+/// Whether `p` is a project-relative path that stays inside the project — no absolute
+/// path, no `..`, no drive prefix. This is the guardrail against a plugin declaring a
+/// write target like `/etc/x` or `../../.ssh/authorized_keys`.
+pub fn is_safe_rel_path(p: &str) -> bool {
+    use std::path::Component;
+    !p.is_empty()
+        && Path::new(p)
+            .components()
+            .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
 }
 
 // ---- registry --------------------------------------------------------------------

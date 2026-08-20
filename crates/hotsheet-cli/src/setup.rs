@@ -54,6 +54,15 @@ pub fn run_setup(
 
     let mut reports = Vec::new();
     for p in plugins {
+        // Security: refuse a plugin whose write targets would escape the project.
+        let bad = p.unsafe_targets();
+        if !bad.is_empty() {
+            bail!(
+                "plugin '{}' declares unsafe target path(s): {} (targets must be project-relative)",
+                p.id(),
+                bad.join(", ")
+            );
+        }
         let mut wrote = vec![write_instructions(project_dir, &p)?];
         if let Some(skill) = write_skill(project_dir, &p)? {
             wrote.push(skill); // absent for tools with no skills concept (e.g. Codex)

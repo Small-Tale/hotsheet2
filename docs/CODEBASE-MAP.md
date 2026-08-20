@@ -40,7 +40,7 @@ hot-sheet2/
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
       src/setup.rs           #   `hotsheet-cli setup <tool>`: write a plugin's instructions/skill/MCP config (merge-safe)
-      src/plugin.rs          #   `hotsheet-cli plugin install|remove` external plugins (copy into the machine dir)
+      src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)

@@ -402,6 +402,16 @@ and its launch command *executes*. So:
 CLI surface: `hotsheet plugin list | info <id> | install <path|url> | verify <id> |
 remove <id>`, and `hotsheet setup <tool|--detect>` (§5.1a).
 
+> **Trust gate built (HS2-93, partial).** `hotsheet-cli plugin verify` checks a plugin
+> structurally — the MCP `format` is known, and every declared **write target stays
+> inside the project** (no `..`/absolute escape, enforced in the setup writer too, so a
+> plugin can't be tricked into writing outside the project). `plugin info` / `install`
+> **disclose what a plugin writes + launches** (plus provenance: first-party vs
+> unsigned third-party) and `install` requires confirmation (`--yes` to skip). **Still
+> to build:** the behavioral **subprocess/WASM sandbox** (no code-bearing plugins exist
+> yet — all current plugins are manifest-only data) and the **`hs-fake-agent`
+> conformance** half of `verify` (HS2-64).
+
 ## 5.12 Cross-references
 - Storage concurrency the claim primitive protects: [02-ticket-storage.md](02-ticket-storage.md) §2.7
 - The core that hosts the plugin registry + settings model: [04-core-server-cli.md](04-core-server-cli.md) §4.1, §4.9
