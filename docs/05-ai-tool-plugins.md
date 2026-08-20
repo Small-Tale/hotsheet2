@@ -256,12 +256,21 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 
 ## 5.8 MCP & CLI access for tools
 
-> **Status: MCP shim built (v1, HS2-7/43).** `crates/hotsheet-mcp` → the
-> `hotsheet-mcp` binary: a stdio JSON-RPC 2.0 server exposing `hotsheet_query` /
-> `get` / `create` / `update` / `close`, proxying a running `hotsheet-server` over
-> HTTP. An AI tool spawns it per project (`--server <url> --secret <s>`). The
-> plugin-config writing half (the `mcp` capability that drops the entry into each
-> tool's config) is still to come.
+> **Status: MCP shim built (v1, HS2-7/43); serverless mode added (HS2-96).**
+> `crates/hotsheet-mcp` → the `hotsheet-mcp` binary: a stdio JSON-RPC 2.0 server
+> exposing `hotsheet_query` / `get` / `create` / `update` / `close`. It runs in
+> **two modes over one `Backend` trait**, so the tool surface is identical either
+> way — this is what lets a headless agent work **with or without a server**:
+> - **`--path <store>` → serverless**, straight to disk over `hotsheet_ticketing::ops`
+>   (no server, no index — reads are a file scan, symmetric with the CLI; `docs/04`
+>   §4.4). The headless default. A running server's watcher still picks up its writes.
+> - **`--server <url> --secret <s>` → proxy** a running `hotsheet-server` over HTTP,
+>   for index-backed reads + instant broadcast.
+>
+> The full-ticket + list-row wire DTOs are defined once in `hotsheet_ticketing::wire`
+> (the wire SSOT, §4.2) and shared by the server and both shim backends, so the JSON
+> an agent sees never drifts between modes. The plugin-config writing half (the `mcp`
+> capability that drops the entry into each tool's config) is HS2-98.
 
 
 AI tools reach tickets two ways, both over the one core:

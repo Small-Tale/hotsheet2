@@ -33,6 +33,7 @@ hot-sheet2/
       src/ops.rs             #   query/create/update/close/claim — the one op impl (CLI+server+MCP)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
+      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow + From<&Ticket> (shared by server + MCP)
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet`: init/new/ls/show/edit/close/import/doctor/claim-next/release/renew
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
@@ -44,8 +45,9 @@ hot-sheet2/
       src/main.rs            #   bind (loopback only) + serve; prints port + secret
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
-      src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools -> HttpBackend
-      src/main.rs            #   stdio JSON-RPC loop; --server + --secret
+      src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend:
+                             #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
+      src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index: open_reconciled/reconcile/rebuild/upsert/delete/query + hash_bytes
   migrator/                  # disposable Node HS1 exporter (docs/07)
@@ -70,8 +72,9 @@ hot-sheet2/
 - **Server:** `hotsheet-server -C <store> [--bind 127.0.0.1:8787] [--secret …]` — HTTP
   REST (`/health`, `/tickets`…) + `/ws/sync`, `X-Hotsheet-Secret` auth (Tier 0,
   loopback only). Over `ops`; in-memory scan (index is HS2-5).
-- **MCP shim:** `hotsheet-mcp --server <url> --secret <s>` — stdio JSON-RPC exposing
-  the `hotsheet_*` tools, proxying the server. An AI tool spawns it per project.
+- **MCP shim:** `hotsheet-mcp --path <store>` (serverless, direct-to-disk — the
+  headless default) **or** `--server <url> --secret <s>` (proxy a running server).
+  Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project.
 - **Migrator:** `migrator/src/export.mjs` → `node src/export.mjs <.hotsheet> [--out …]`.
 - **Library:** `hotsheet_model::{parse_file, to_file_string, Ticket}` is the format
   SSOT; `hotsheet_ticketing::FsStore` is the on-disk store.

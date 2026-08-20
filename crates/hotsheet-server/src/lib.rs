@@ -16,12 +16,12 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
-use hotsheet_model::{
-    CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, parse_file, to_file_string,
-};
+use hotsheet_model::{CloseReason, Ticket, Timestamp, Ulid, parse_file, to_file_string};
 use hotsheet_ticketing::{
     FsStore, NewTicket, OpError, SortKey, StoreError, TicketPatch, TicketQuery, ops,
 };
+// Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
+pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::sync::broadcast;
@@ -312,86 +312,9 @@ struct WsParams {
     secret: Option<String>,
 }
 
-/// The JSON shape of a ticket on the wire — the full ticket, including the Markdown
-/// body and notes (unlike the frontmatter-only serde on `Ticket`).
-#[derive(Debug, Serialize)]
-pub struct ApiTicket {
-    pub id: String,
-    pub slug: String,
-    pub title: String,
-    pub details: String,
-    pub category: String,
-    pub priority: Priority,
-    pub status: Status,
-    pub up_next: bool,
-    pub tags: Vec<String>,
-    pub blocked_by: Vec<String>,
-    pub blocked_reason: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-    pub completed_at: Option<String>,
-    pub verified_at: Option<String>,
-    pub closed_at: Option<String>,
-    pub close_reason: Option<CloseReason>,
-    pub duplicate_of: Option<String>,
-    pub claimed_by: Option<String>,
-    pub worker_label: Option<String>,
-    pub claim_count: u32,
-    pub assignees: Vec<String>,
-    pub legacy_number: Option<String>,
-    pub schema: u32,
-    pub notes: Vec<ApiNote>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ApiNote {
-    pub id: String,
-    pub kind: NoteKind,
-    pub at: String,
-    pub text: String,
-}
-
-impl From<&Ticket> for ApiTicket {
-    fn from(t: &Ticket) -> Self {
-        let ts = |o: &Option<Timestamp>| o.as_ref().map(|x| x.as_str().to_string());
-        ApiTicket {
-            id: t.id.to_string(),
-            slug: t.slug.clone(),
-            title: t.title.clone(),
-            details: t.details.clone(),
-            category: t.category.clone(),
-            priority: t.priority,
-            status: t.status,
-            up_next: t.up_next,
-            tags: t.tags.clone(),
-            blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
-            blocked_reason: t.blocked_reason.clone(),
-            created_at: t.created_at.as_str().to_string(),
-            updated_at: t.updated_at.as_str().to_string(),
-            completed_at: ts(&t.completed_at),
-            verified_at: ts(&t.verified_at),
-            closed_at: ts(&t.closed_at),
-            close_reason: t.close_reason,
-            duplicate_of: t.duplicate_of.map(|u| u.to_string()),
-            claimed_by: t.claimed_by.clone(),
-            worker_label: t.worker_label.clone(),
-            claim_count: t.claim_count,
-            assignees: t.assignees.clone(),
-            legacy_number: t.legacy_number.clone(),
-            schema: t.schema,
-            notes: t
-                .notes
-                .iter()
-                .map(|n| ApiNote {
-                    id: n.id.to_string(),
-                    kind: n.kind,
-                    at: n.at.as_str().to_string(),
-                    text: n.text.clone(),
-                })
-                .collect(),
-        }
-    }
-}
+// The full-ticket + note wire DTOs (`ApiTicket`/`ApiNote`) and their `From<&Ticket>`
+// mapping live in `hotsheet_ticketing::wire` and are re-exported at the top of this
+// module — one definition, shared with the MCP shim (wire SSOT, `docs/04` §4.2).
 
 // ---- helpers ---------------------------------------------------------------------
 

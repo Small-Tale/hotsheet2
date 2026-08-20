@@ -11,9 +11,11 @@ use hotsheet_model::Ulid;
 pub mod ops;
 pub mod ports;
 pub mod store;
+pub mod wire;
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use ports::{Clock, Rng};
 pub use store::{FsStore, StoreError, StoreMetadata};
+pub use wire::{ApiNote, ApiTicket, TicketRow};
 
 /// Mint a new ticket ULID from an injected clock + rng.
 ///

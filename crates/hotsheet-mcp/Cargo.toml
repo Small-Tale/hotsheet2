@@ -13,7 +13,14 @@ name = "hotsheet-mcp"
 path = "src/main.rs"
 
 [dependencies]
+serde = { workspace = true }
 serde_json.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 ureq.workspace = true
+hotsheet-model.workspace = true
+hotsheet-ticketing.workspace = true
+time.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

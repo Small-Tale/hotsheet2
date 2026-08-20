@@ -612,7 +612,12 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "hotsheet-model",
+ "hotsheet-ticketing",
+ "serde",
  "serde_json",
+ "tempfile",
+ "time",
  "ureq",
 ]
 

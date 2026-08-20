@@ -64,32 +64,11 @@ pub enum IndexError {
     },
 }
 
-/// A row returned from a query — enough to draw a list without touching disk. Notes
-/// aren't stored for return (search hits them via FTS; the file is authoritative).
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct TicketRow {
-    pub id: String,
-    pub slug: String,
-    pub title: String,
-    pub details: String,
-    pub category: Option<String>,
-    pub priority: Option<String>,
-    pub status: Option<String>,
-    pub up_next: bool,
-    pub tags: Vec<String>,
-    pub blocked_by: Vec<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-    pub completed_at: Option<String>,
-    pub verified_at: Option<String>,
-    pub closed_at: Option<String>,
-    pub close_reason: Option<String>,
-    pub duplicate_of: Option<String>,
-    pub claimed_by: Option<String>,
-    pub worker_label: Option<String>,
-    pub claim_count: u32,
-    pub legacy_number: Option<String>,
-}
+/// A query result row. Defined once in `hotsheet_ticketing::wire` (the wire SSOT,
+/// `docs/04` §4.2) and re-exported here: the index builds it from its SQL columns,
+/// and a serverless scan builds the same struct via `TicketRow::from(&Ticket)`, so a
+/// list is identical whichever path produced it.
+pub use hotsheet_ticketing::TicketRow;
 
 /// The index over one store.
 pub struct Index {
