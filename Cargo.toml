@@ -8,6 +8,7 @@ members = [
     "crates/hotsheet-mcp",
     "crates/hotsheet-index",
     "crates/hotsheet-plugins",
+    "crates/hotsheet-aitools",
 ]
 
 [workspace.package]
@@ -47,3 +48,4 @@ hotsheet-model = { path = "crates/hotsheet-model" }
 hotsheet-ticketing = { path = "crates/hotsheet-ticketing" }
 hotsheet-index = { path = "crates/hotsheet-index" }
 hotsheet-plugins = { path = "crates/hotsheet-plugins" }
+hotsheet-aitools = { path = "crates/hotsheet-aitools" }

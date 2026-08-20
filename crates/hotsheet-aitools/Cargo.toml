@@ -1,0 +1,12 @@
+[package]
+name = "hotsheet-aitools"
+description = "Hot Sheet 2 AI-tool host: the drive/transport interface (behavioral half of the plugin system)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror.workspace = true

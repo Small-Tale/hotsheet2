@@ -1,11 +1,18 @@
 # 13. AI-Tool Drive / Transport Interface
 
-> **Status: Design (HS2-67).** The seam **every AI tool and the whole test harness
-> (HS2-64) hang off**, so it's designed early. **One interface with optional
-> capabilities each tool conforms to as applicable** — no single universal transport
-> (maintainer, 2026-08-19). Validated against three genuinely different shapes so it
-> isn't Claude-shaped (the docs/132 lesson). This is the trait spec + a conformance
-> checklist.
+> **Status: Design (HS2-67); first slice built (HS2-106).** The seam **every AI tool
+> and the whole test harness (HS2-64) hang off**, so it's designed early. **One
+> interface with optional capabilities each tool conforms to as applicable** — no
+> single universal transport (maintainer, 2026-08-19). This is the trait spec + a
+> conformance checklist. **Built (`crates/hotsheet-aitools`):** the `Drive` trait +
+> `Transport` tag + `Target` + `DriveCtx` + `TurnHandle` (`is_busy`/`wait`/`interrupt`)
+> + `DoneReason`, the injected `ProcessSpawner`/`SpawnedProcess` ports + the real
+> `SystemSpawner`, and the **spawn-per-run `SpawnDrive`** (Codex `exec` shape),
+> conformance-tested against a fake spawner (§13.7, minus the fake-agent parts).
+> **First-slice simplification:** `TurnHandle` is synchronous (`is_busy` + `wait` +
+> `interrupt`), not yet the async `TurnEvent` stream — that lands with the
+> persistent-channel (Claude) drive (HS2-9), which genuinely needs it. The permission
+> sink + connection registry are later additions to `DriveCtx`.
 
 ## 13.1 The problem the interface must absorb
 

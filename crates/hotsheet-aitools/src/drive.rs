@@ -1,0 +1,101 @@
+//! The **drive** interface — how the host tells a running AI tool to do something and
+//! observes it (`docs/13`). One interface with optional capabilities each tool conforms
+//! to as applicable; the caller **never branches on the tool id** (`docs/05` §5.1).
+//!
+//! `run` is the only required method. Optional capabilities are probed by presence
+//! (`drive.supports_interrupt()`, a `TurnHandle` that acts), never a bool flag that can
+//! drift from reality.
+
+use std::path::PathBuf;
+
+use crate::ports::ProcessSpawner;
+
+/// The transport a tool speaks — a **declarative data tag** (identity, not behavior),
+/// so a client and the server agree without a mirror (`docs/13` §13.3). It routes `run`
+/// to the right drive; it does not carry behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Transport {
+    /// A long-lived session driven by injecting a `<channel>` event (Claude).
+    ClaudeChannel,
+    /// A one-shot process per turn (Codex `exec`, Antigravity `--print`).
+    Spawn,
+    /// A long-lived backing daemon driven over JSON-RPC (Codex app-server).
+    AppServer,
+    /// The Agent Client Protocol (OpenCode, Goose).
+    Acp,
+}
+
+/// A drive's declarative identity.
+#[derive(Debug, Clone)]
+pub struct DriveInfo {
+    pub transport: Transport,
+}
+
+/// Which live connection a `run` targets when several exist (the main channel vs. a
+/// git-worktree worker's). `None` selects the default/only one.
+#[derive(Debug, Clone, Default)]
+pub struct Target(pub Option<String>);
+
+/// Host-provided context a drive needs for one `run`. v1 carries the working directory
+/// and the injected process spawner; the permission sink and connection registry are
+/// added here as those land (`docs/13` §13.3).
+pub struct DriveCtx<'a> {
+    pub cwd: PathBuf,
+    pub spawner: &'a dyn ProcessSpawner,
+}
+
+/// Why a turn finished.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoneReason {
+    Completed,
+    Failed(i32),
+    Interrupted,
+}
+
+/// A handle to observe one running turn, **uniform across transports** (`docs/13`
+/// §13.4). v1 exposes busy + a terminal wait + interrupt; the streaming `TurnEvent`
+/// view (Output/PermissionAsked/…) lands with the async persistent-channel drive.
+pub trait TurnHandle {
+    /// Whether the turn is still working (derived from the transport's native signal).
+    fn is_busy(&mut self) -> bool;
+    /// Block until the turn finishes; returns why.
+    fn wait(&mut self) -> DoneReason;
+    /// Interrupt this turn if the drive supports it; returns whether it acted.
+    fn interrupt(&mut self) -> bool {
+        false
+    }
+}
+
+/// A failed `run`.
+#[derive(Debug, thiserror::Error)]
+pub enum DriveError {
+    #[error("spawning '{program}': {source}")]
+    Spawn {
+        program: String,
+        source: std::io::Error,
+    },
+    /// A channel/ACP drive with no live session to hit (`docs/13` §13.8).
+    #[error("{0}")]
+    NotConnected(String),
+}
+
+/// Steer a running (or one-shot) AI tool. `run` is the only required method.
+pub trait Drive {
+    /// Declarative identity (the transport tag).
+    fn info(&self) -> DriveInfo;
+
+    /// Send one prompt/turn to `target`, returning a handle the host observes. May
+    /// start a process (spawn shapes) or POST to a running session (channel shapes).
+    fn run(
+        &self,
+        target: &Target,
+        content: &str,
+        ctx: &DriveCtx,
+    ) -> Result<Box<dyn TurnHandle>, DriveError>;
+
+    /// Whether a running turn can be interrupted (via its `TurnHandle`). Absence is the
+    /// signal — a tool that can't declares `false` and nothing calls it.
+    fn supports_interrupt(&self) -> bool {
+        false
+    }
+}

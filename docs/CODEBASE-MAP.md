@@ -53,6 +53,11 @@ hot-sheet2/
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index: open_reconciled/reconcile/rebuild/upsert/delete/query + hash_bytes
+    hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
+      src/drive.rs           #   Drive trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
+      src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
+      src/ports.rs           #   ProcessSpawner/SpawnedProcess (injected) + SpawnSpec
+      src/system.rs          #   SystemSpawner (real std::process adapter)
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)
       src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
