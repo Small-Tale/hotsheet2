@@ -33,6 +33,7 @@ hot-sheet2/
       src/ops.rs             #   query/create/update/close/claim — the one op impl (CLI+server+MCP)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
+      src/settings.rs        #   Settings: shared (committed) / local (gitignored) scopes; effective = local over shared
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow + From<&Ticket> (shared by server + MCP)
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew
@@ -74,7 +75,7 @@ hot-sheet2/
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet-cli` (live ticket ops).
   Global `-C/--path` selects the store dir. Subcommands: `init`, `new`, `ls`
   (filters/sort/text), `show`, `edit`, `close`, `setup` (AI-tool setup, headless),
-  `plugin` (list/install/remove external plugins),
+  `plugin` (list/install/remove external plugins), `settings` (get/set/list, shared|local),
   `import`, `doctor`, `claim-next`, `release`, `renew`.
 - **Migrator CLI:** `src/bin/hotsheet-migrate.rs` → **separate** binary
   `hotsheet-migrate` (rarely-used, one-time, needs Node). `hotsheet-migrate
@@ -97,6 +98,8 @@ hot-sheet2/
   body (`details`) + optional `## Notes`. Schema: [17](17-ticket-file-format.md).
 - **Store metadata:** `hotsheet-store.json` (camelCase: `schemaVersion`,
   `ticketPrefix`, `idStrategy`, `shard`). See `store.rs::StoreMetadata`.
+- **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`
+  (local, gitignored) — flat key→JSON maps. See `settings.rs::Settings`.
 - **Export interchange:** `hotsheet-export.json` (`exportVersion`, `project`,
   `tickets[]`) — [07](07-migration.md) §7.2.1; produced by the migrator, consumed by
   `hotsheet-cli import` (`import.rs::ExportFile`).

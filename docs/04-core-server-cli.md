@@ -238,6 +238,12 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 
 ## 4.7 Project settings (shared / local / client) — core-owned
 
+> **Built (HS2-94):** `hotsheet_ticketing::settings::Settings` — a flat `key -> JSON`
+> map per scope beside the store: **shared** `hotsheet-settings.json` (committed) and
+> **local** `hotsheet-settings.local.json` (auto-added to `.gitignore`). The effective
+> value is local-over-shared. Driven headless by `hotsheet-cli settings get|set|list
+> [--scope shared|local]`. Client/device-only settings still never enter core.
+>
 > **Decided (maintainer, 2026-08-20):** project settings are **core-owned and
 > CLI-manageable**, not app-only. The client owns *only* device-specific settings.
 > Build: **HS2-94**.

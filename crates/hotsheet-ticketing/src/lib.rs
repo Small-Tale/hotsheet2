@@ -10,10 +10,12 @@ use hotsheet_model::Ulid;
 
 pub mod ops;
 pub mod ports;
+pub mod settings;
 pub mod store;
 pub mod wire;
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use ports::{Clock, Rng};
+pub use settings::{Scope, Settings, SettingsError};
 pub use store::{FsStore, StoreError, StoreMetadata};
 pub use wire::{ApiNote, ApiTicket, TicketRow};
 

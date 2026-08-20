@@ -364,3 +364,53 @@ fn edit_can_append_a_note() {
         .stdout(predicate::str::contains("## Notes"))
         .stdout(predicate::str::contains("began investigating"));
 }
+
+#[test]
+fn settings_shared_and_local_scopes() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+
+    hs(p)
+        .args(["settings", "set", "categories", r#"["bug","task"]"#])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("shared (committed)"));
+    hs(p)
+        .args([
+            "settings",
+            "set",
+            "index_path",
+            "/tmp/idx",
+            "--scope",
+            "local",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("local (gitignored)"));
+
+    // effective get + list
+    hs(p)
+        .args(["settings", "get", "categories"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(r#"["bug","task"]"#));
+    hs(p)
+        .args(["settings", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("categories ="))
+        .stdout(predicate::str::contains("index_path = /tmp/idx"));
+
+    // local file is gitignored; shared file is committed (present, not ignored)
+    let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
+    assert!(gi.lines().any(|l| l == "hotsheet-settings.local.json"));
+    assert!(p.join("hotsheet-settings.json").is_file());
+
+    // an unknown key errors
+    hs(p)
+        .args(["settings", "get", "nope"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no setting 'nope'"));
+}

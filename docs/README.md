@@ -171,7 +171,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Plugin-only AI-tool integration | 05 | Confirmed (design) |
 | **Core-owned AI-tool setup/instructions/skills/MCP (headless; CLI + server, not app)** | 05 §5.1a, 04 §4.1 | Confirmed (design); build HS2-91 |
 | **External loadable plugins (manifest-only → subprocess/WASM; trust gate + verify)** | 05 §5.11 | Partial (HS2-92: on-disk loader + `hotsheet-cli plugin` + `setup <third-party>` built; subprocess/WASM + trust gate = HS2-93) |
-| **Project settings, core-owned (shared/local scopes, CLI-manageable; client owns device-only)** | 04 §4.7 | Confirmed (design); build HS2-94 |
+| **Project settings, core-owned (shared/local scopes, CLI-manageable; client owns device-only)** | 04 §4.7 | Built (HS2-94): `Settings` shared/local + `hotsheet-cli settings get/set/list`; local auto-gitignored |
 | Terminal/PTY hosting for AI tools | 05 §5.4 | Design |
 | Multi-viewer PTY sizing (server-arbitrated, focus-follows, leased; remote-safe) | 06 §6.7 | Design |
 | Connection registry / trigger / permissions / busy | 05 | Design |

@@ -113,6 +113,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: PluginCmd,
     },
+    /// Read/write core-owned project settings (shared = committed, local = gitignored).
+    Settings {
+        #[command(subcommand)]
+        cmd: SettingsCmd,
+    },
     /// Import an HS1 `hotsheet-export.json` into the store (creates it if needed).
     Import {
         file: PathBuf,
@@ -160,6 +165,30 @@ enum PluginCmd {
     Install { dir: PathBuf },
     /// Remove an installed external plugin by id.
     Remove { id: String },
+}
+
+#[derive(Subcommand)]
+enum SettingsCmd {
+    /// Read a setting (effective = local over shared, unless --scope is given).
+    Get {
+        key: String,
+        /// shared | local (default: the effective value).
+        #[arg(long)]
+        scope: Option<String>,
+    },
+    /// Write a setting. Value is parsed as JSON if possible, else stored as a string.
+    Set {
+        key: String,
+        value: String,
+        /// shared | local (default: shared).
+        #[arg(long)]
+        scope: Option<String>,
+    },
+    /// List settings (effective, unless --scope is given).
+    List {
+        #[arg(long)]
+        scope: Option<String>,
+    },
 }
 
 /// Filters + sort for `ls` (an in-memory scan; the SQLite/FTS index arrives with HS2-5).
@@ -240,6 +269,7 @@ fn main() -> Result<()> {
             project,
         } => cmd_setup(&cli.path, tool, detect, project),
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
+        Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::ClaimNext {
@@ -581,6 +611,65 @@ fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn cmd_settings(store: &Path, cmd: SettingsCmd) -> Result<()> {
+    use hotsheet_ticketing::{Scope, Settings};
+    let parse_scope = |s: &Option<String>| -> Result<Option<Scope>> {
+        match s.as_deref() {
+            None => Ok(None),
+            Some("shared") => Ok(Some(Scope::Shared)),
+            Some("local") => Ok(Some(Scope::Local)),
+            Some(other) => bail!("invalid scope '{other}' (shared|local)"),
+        }
+    };
+    let settings = Settings::new(store);
+    match cmd {
+        SettingsCmd::Get { key, scope } => {
+            let value = match parse_scope(&scope)? {
+                Some(s) => settings.get(&key, s)?,
+                None => settings.get_effective(&key)?,
+            };
+            match value {
+                Some(v) => println!("{}", render_value(&v)),
+                None => bail!("no setting '{key}'"),
+            }
+        }
+        SettingsCmd::Set { key, value, scope } => {
+            let scope = parse_scope(&scope)?.unwrap_or(Scope::Shared);
+            // Parse as JSON (numbers/bools/arrays/objects), else store the raw string.
+            let parsed = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
+            settings.set(&key, parsed, scope)?;
+            let where_ = if scope == Scope::Shared {
+                "shared (committed)"
+            } else {
+                "local (gitignored)"
+            };
+            println!("Set {key} in {where_}");
+        }
+        SettingsCmd::List { scope } => {
+            let map = match parse_scope(&scope)? {
+                Some(s) => settings.map(s)?,
+                None => settings.effective()?,
+            };
+            if map.is_empty() {
+                println!("(no settings)");
+            }
+            for (k, v) in &map {
+                println!("{k} = {}", render_value(v));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Render a JSON setting value for the terminal: a bare string prints unquoted;
+/// everything else prints as compact JSON.
+fn render_value(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
 }
 
 /// Whether `name` is an executable file on `PATH` (mirrors the setup detector).
