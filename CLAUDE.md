@@ -31,8 +31,11 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 > the authority). What exists today: `cargo nextest run` (model + ticketing + CLI
 > unit/integration tests) and the migrator's `vitest` suite (`cd migrator && npx
 > vitest run`), including the cross-language conformance test (Rust `hotsheet import`
-> ingests the Node exporter's JSON). Property/fuzz/snapshot, server/web E2E, and
-> per-language coverage gates are not wired yet. Commands that work now:
+> ingests the Node exporter's JSON). **Property tests** cover the parser (`proptest`:
+> round-trip + byte-idempotent + never-panics), and a **cargo-fuzz** target exists
+> (`crates/hotsheet-model/fuzz`, nightly: `cargo +nightly fuzz run parse_file`).
+> Snapshot tests, server/web E2E, and per-language coverage gates are not wired yet.
+> Commands that work now:
 > `cargo build` · `cargo nextest run` · `cargo fmt --all --check` · `cargo clippy
 > --all-targets --all-features -- -D warnings` · `npx vitest run` (in `migrator/`).
 

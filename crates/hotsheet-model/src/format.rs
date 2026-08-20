@@ -84,10 +84,13 @@ pub fn to_file_string(t: &Ticket) -> String {
         out.push('\n');
     }
 
+    // Skip local-only feedback drafts and content-less notes: an empty-text note
+    // can't be distinguished from its own timestamp on re-parse, so it isn't a
+    // shape the shared file represents (proptest regression).
     let notes: Vec<&Note> = t
         .notes
         .iter()
-        .filter(|n| n.kind != NoteKind::FeedbackDraft)
+        .filter(|n| n.kind != NoteKind::FeedbackDraft && !n.text.trim().is_empty())
         .collect();
     if !notes.is_empty() {
         out.push('\n');
@@ -419,6 +422,23 @@ mod tests {
         let text = to_file_string(&t);
         assert!(!text.contains("half-written reply"));
         assert!(!text.contains("feedback_draft"));
+    }
+
+    #[test]
+    fn empty_text_notes_are_omitted() {
+        // A note whose text is empty/whitespace carries nothing and would not
+        // round-trip (its timestamp would re-parse as the text), so it is not
+        // written — regression for the proptest counterexample.
+        let mut t = sample();
+        t.notes = vec![Note {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FBA"),
+            kind: NoteKind::Regular,
+            at: "2026-08-19T15:20:44Z".into(),
+            text: "   ".into(),
+        }];
+        let text = to_file_string(&t);
+        assert!(!text.contains("## Notes"));
+        assert!(parse_file(&text).unwrap().notes.is_empty());
     }
 
     #[test]

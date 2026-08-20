@@ -1,0 +1,28 @@
+# cargo-fuzz target for the ticket file parser. Its own workspace (standard
+# cargo-fuzz layout) so the main workspace's stable `cargo build`/`nextest` never
+# tries to build it — it needs nightly + libFuzzer.
+#
+# Run:  cargo +nightly fuzz run parse_file
+# (install once: cargo install cargo-fuzz)
+
+[package]
+name = "hotsheet-model-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+hotsheet-model = { path = ".." }
+
+[[bin]]
+name = "parse_file"
+path = "fuzz_targets/parse_file.rs"
+test = false
+doc = false
+bench = false
+
+[workspace]

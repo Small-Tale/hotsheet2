@@ -24,6 +24,7 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 time = { version = "0.3", features = ["formatting", "parsing"] }
 tempfile = "3"
+proptest = "1"
 
 # internal
 hotsheet-model = { path = "crates/hotsheet-model" }
