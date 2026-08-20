@@ -39,6 +39,7 @@ hot-sheet2/
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
       src/setup.rs           #   `hotsheet-cli setup <tool>`: write a plugin's instructions/skill/MCP config (merge-safe)
+      src/plugin.rs          #   `hotsheet-cli plugin install|remove` external plugins (copy into the machine dir)
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
@@ -52,7 +53,9 @@ hot-sheet2/
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index: open_reconciled/reconcile/rebuild/upsert/delete/query + hash_bytes
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)
-      src/lib.rs             #   Manifest/Plugin + builtin_plugins()/find(id) (loads bundled first-party plugins)
+      src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
+                             #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
+      src/tests.rs           #   built-in + on-disk loading, first-party-wins-collision
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)
     claude/                  #   manifest.toml + instructions.md (CLAUDE.md section) + SKILL.md (worklist skill)
     codex/                   #   manifest.toml + instructions.md (AGENTS.md section); no skill, codex-toml MCP
@@ -71,6 +74,7 @@ hot-sheet2/
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet-cli` (live ticket ops).
   Global `-C/--path` selects the store dir. Subcommands: `init`, `new`, `ls`
   (filters/sort/text), `show`, `edit`, `close`, `setup` (AI-tool setup, headless),
+  `plugin` (list/install/remove external plugins),
   `import`, `doctor`, `claim-next`, `release`, `renew`.
 - **Migrator CLI:** `src/bin/hotsheet-migrate.rs` → **separate** binary
   `hotsheet-migrate` (rarely-used, one-time, needs Node). `hotsheet-migrate

@@ -337,10 +337,16 @@ Full testing design: [12-code-organization-and-testing.md](12-code-organization-
 
 ## 5.11 Plugin loading & extensibility (external plugins)
 
-> **Decided (maintainer, 2026-08-20):** plugins are **external and loadable** — a
-> third party can add a new AI tool without recompiling the core — layered so the
-> common case has no ABI at all. Build: **HS2-92** (loader + manifest),
-> **HS2-93** (behavioral boundaries + trust gate).
+> **Decided (maintainer, 2026-08-20); manifest-only loading built (HS2-92).** Plugins
+> are **external and loadable** — a third party can add a new AI tool without
+> recompiling the core — layered so the common case has no ABI at all. `hotsheet-plugins`
+> now loads a plugin from a **bundled** first-party dir (`include_dir`) **or a real
+> on-disk dir** through one code path (`Plugin::from_fs_dir` / `all_plugins(search_dirs)`);
+> the machine search dir is `${HOTSHEET_HOME:-~/.hotsheet2}/plugins/<id>/` (kept **off**
+> HS1's `~/.hotsheet`). `hotsheet-cli plugin list|install|remove` manages them, and
+> `hotsheet-cli setup <third-party-id>` works with no recompile. A first-party id wins a
+> collision (a third party can't shadow a built-in). Still to build: the behavioral
+> subprocess/WASM boundary + the trust gate (**HS2-93**).
 
 Rust has no stable ABI, so "loadable plugin" cannot mean "load a `.dylib`." The
 **declarative/behavioral split (§5.3) is the escape hatch**: most of a plugin is

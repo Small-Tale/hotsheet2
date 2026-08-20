@@ -11,7 +11,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use hotsheet_plugins::{Plugin, builtin_plugins, find};
+use hotsheet_plugins::{Plugin, all_plugins, default_dirs, find};
 
 /// What one tool's setup wrote (project-relative paths), for reporting.
 #[derive(Debug)]
@@ -32,7 +32,10 @@ pub fn run_setup(
         (Some(id), _) => {
             vec![find(id).with_context(|| format!("unknown tool '{id}' (no such plugin)"))?]
         }
-        (None, true) => builtin_plugins().into_iter().filter(is_detected).collect(),
+        (None, true) => all_plugins(&default_dirs())
+            .into_iter()
+            .filter(is_detected)
+            .collect(),
         (None, false) => {
             bail!("specify a tool (e.g. `hotsheet-cli setup claude`) or pass --detect")
         }

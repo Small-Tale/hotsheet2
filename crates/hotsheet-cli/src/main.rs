@@ -108,6 +108,11 @@ enum Cmd {
         #[arg(long)]
         project: Option<PathBuf>,
     },
+    /// Manage AI-tool plugins (list built-in + installed; install/remove external ones).
+    Plugin {
+        #[command(subcommand)]
+        cmd: PluginCmd,
+    },
     /// Import an HS1 `hotsheet-export.json` into the store (creates it if needed).
     Import {
         file: PathBuf,
@@ -145,6 +150,16 @@ enum Cmd {
         #[arg(long, default_value_t = 30)]
         lease_minutes: i64,
     },
+}
+
+#[derive(Subcommand)]
+enum PluginCmd {
+    /// List built-in + installed plugins, with provenance and whether each is detected.
+    List,
+    /// Install an external plugin from a directory into the machine plugin dir.
+    Install { dir: PathBuf },
+    /// Remove an installed external plugin by id.
+    Remove { id: String },
 }
 
 /// Filters + sort for `ls` (an in-memory scan; the SQLite/FTS index arrives with HS2-5).
@@ -224,6 +239,7 @@ fn main() -> Result<()> {
             detect,
             project,
         } => cmd_setup(&cli.path, tool, detect, project),
+        Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::ClaimNext {
@@ -522,6 +538,56 @@ fn cmd_setup(
         }
     }
     Ok(())
+}
+
+fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
+    use hotsheet_plugins::{PluginSource, all_plugins, default_dirs, machine_plugins_dir};
+    match cmd {
+        PluginCmd::List => {
+            for p in all_plugins(&default_dirs()) {
+                let src = match &p.source {
+                    PluginSource::BuiltIn => "built-in".to_string(),
+                    PluginSource::Disk(path) => path.display().to_string(),
+                };
+                let detected = p
+                    .manifest
+                    .detection
+                    .binaries
+                    .iter()
+                    .any(|b| binary_on_path(b));
+                println!(
+                    "{:<10} {:<16} {:<9} {}",
+                    p.id(),
+                    p.manifest.product_name,
+                    if detected { "detected" } else { "-" },
+                    src
+                );
+            }
+        }
+        PluginCmd::Install { dir } => {
+            let dest = machine_plugins_dir();
+            let id = hotsheet_cli::plugin::install(&dir, &dest)?;
+            println!("Installed plugin '{id}' into {}", dest.join(&id).display());
+            eprintln!(
+                "note: external plugins are not yet sandboxed or verified (trust gate: HS2-93)"
+            );
+        }
+        PluginCmd::Remove { id } => {
+            if hotsheet_cli::plugin::remove(&id, &machine_plugins_dir())? {
+                println!("Removed plugin '{id}'");
+            } else {
+                println!("No installed plugin '{id}'");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether `name` is an executable file on `PATH` (mirrors the setup detector).
+fn binary_on_path(name: &str) -> bool {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).any(|dir| dir.join(name).is_file()))
+        .unwrap_or(false)
 }
 
 fn cmd_import(path: &Path, file: &Path, prefix: &str) -> Result<()> {

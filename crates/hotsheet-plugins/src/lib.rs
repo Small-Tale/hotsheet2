@@ -2,17 +2,21 @@
 //! (`docs/05-ai-tool-plugins.md` §5.11). Both binaries (server + CLI) drive it, so
 //! setup can run headless (`docs/05` §5.1a).
 //!
-//! This is the **minimal** loader (HS2-97): it loads the bundled **first-party**
-//! plugins and exposes their one-shot setup artifacts (instruction section, worklist
-//! skill, MCP-config template) for a setup writer (HS2-98) to install. The external
-//! search-path / third-party / subprocess+WASM / trust machinery is HS2-92/HS2-93.
+//! Plugins are **external + loadable** (HS2-92). A plugin is a directory with a
+//! `manifest.toml` + template files; the same `Plugin` loads from a **bundled**
+//! first-party directory (embedded via `include_dir`) or a **real on-disk** directory
+//! in the search path — one code path, so a third-party plugin is not special. The
+//! behavioral subprocess/WASM boundary + the trust gate are HS2-93.
 //!
-//! Built-ins are **not special-cased**: Claude is a normal plugin directory
-//! (`plugins/claude/`) bundled into the binary via `include_dir` and loaded through
-//! the exact code path a third-party plugin will use — the anti-drift discipline of
-//! `docs/05` §5.11.
+//! Search path (later entries add to earlier, first-party ids win a collision):
+//!   1. bundled built-ins (Claude, Codex) — first-party.
+//!   2. `${HOTSHEET_HOME:-~/.hotsheet2}/plugins/<id>/` — machine.
+//!
+//! (Project-scoped dirs land with the multi-store project model.)
 
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use include_dir::{Dir, include_dir};
 use serde::Deserialize;
@@ -33,6 +37,20 @@ pub enum PluginError {
     Toml(#[from] toml::de::Error),
     #[error("plugin '{id}' references missing file '{file}'")]
     MissingFile { id: String, file: String },
+    #[error("reading plugin dir {path}: {source}")]
+    Io {
+        path: String,
+        source: std::io::Error,
+    },
+}
+
+/// Where a plugin was loaded from — its provenance (a trust input for HS2-93).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PluginSource {
+    /// A bundled first-party plugin.
+    BuiltIn,
+    /// An on-disk plugin directory.
+    Disk(PathBuf),
 }
 
 /// A plugin's declarative manifest (`manifest.toml`). The behavioral capabilities
@@ -89,25 +107,42 @@ pub struct Mcp {
     pub args: Vec<String>,
 }
 
-/// A loaded plugin: its manifest plus the (flat) set of files bundled with it, so a
-/// setup writer can pull the instruction section + skill body by name.
+/// A loaded plugin: its manifest, the (flat) set of files bundled with it, and where
+/// it came from.
 #[derive(Debug, Clone)]
 pub struct Plugin {
     pub manifest: Manifest,
+    pub source: PluginSource,
     files: BTreeMap<String, String>,
 }
 
 impl Plugin {
-    /// Load a plugin from a directory (embedded here; a real on-disk dir in HS2-92).
-    /// Reads `manifest.toml` and captures the directory's top-level text files.
+    /// Build from a manifest string + the plugin's files, validating referenced paths.
+    fn assemble(
+        manifest_raw: &str,
+        files: BTreeMap<String, String>,
+        source: PluginSource,
+    ) -> Result<Self, PluginError> {
+        let manifest: Manifest = toml::from_str(manifest_raw)?;
+        let plugin = Plugin {
+            manifest,
+            source,
+            files,
+        };
+        plugin.require(&plugin.manifest.instructions.section)?;
+        if let Some(skills) = &plugin.manifest.skills {
+            plugin.require(&skills.source)?;
+        }
+        Ok(plugin)
+    }
+
+    /// Load a bundled plugin from an embedded directory.
     fn from_dir(dir: &Dir) -> Result<Self, PluginError> {
         let raw = dir
             .get_file("manifest.toml")
             .ok_or_else(|| PluginError::MissingManifest(dir.path().display().to_string()))?
             .contents_utf8()
             .ok_or(PluginError::NotUtf8)?;
-        let manifest: Manifest = toml::from_str(raw)?;
-
         let mut files = BTreeMap::new();
         for f in dir.files() {
             if let (Some(name), Some(text)) = (
@@ -117,14 +152,38 @@ impl Plugin {
                 files.insert(name.to_string(), text.to_string());
             }
         }
+        Self::assemble(raw, files, PluginSource::BuiltIn)
+    }
 
-        let plugin = Plugin { manifest, files };
-        // Fail loudly if the manifest points at files that aren't there.
-        plugin.require(&plugin.manifest.instructions.section)?;
-        if let Some(skills) = &plugin.manifest.skills {
-            plugin.require(&skills.source)?;
+    /// Load a plugin from a real on-disk directory (a third-party plugin).
+    pub fn from_fs_dir(dir: &Path) -> Result<Self, PluginError> {
+        let io = |source| PluginError::Io {
+            path: dir.display().to_string(),
+            source,
+        };
+        let manifest_path = dir.join("manifest.toml");
+        if !manifest_path.is_file() {
+            return Err(PluginError::MissingManifest(dir.display().to_string()));
         }
-        Ok(plugin)
+        let mut files = BTreeMap::new();
+        for entry in fs::read_dir(dir).map_err(io)? {
+            let entry = entry.map_err(io)?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue; // top-level files only, like the embedded loader
+            }
+            if let (Some(name), Ok(text)) = (
+                path.file_name().and_then(|n| n.to_str()),
+                fs::read_to_string(&path),
+            ) {
+                files.insert(name.to_string(), text);
+            }
+        }
+        let raw = files
+            .get("manifest.toml")
+            .cloned()
+            .ok_or(PluginError::NotUtf8)?;
+        Self::assemble(&raw, files, PluginSource::Disk(dir.to_path_buf()))
     }
 
     fn require(&self, file: &str) -> Result<(), PluginError> {
@@ -141,6 +200,11 @@ impl Plugin {
     /// The plugin's id (e.g. `"claude"`).
     pub fn id(&self) -> &str {
         &self.manifest.id
+    }
+
+    /// Whether this plugin is a bundled first-party one.
+    pub fn is_builtin(&self) -> bool {
+        self.source == PluginSource::BuiltIn
     }
 
     /// A bundled file's contents by name.
@@ -170,8 +234,10 @@ impl Plugin {
     }
 }
 
+// ---- registry --------------------------------------------------------------------
+
 /// Every bundled first-party plugin, loaded through the same path a third-party
-/// plugin will use. Panics only on a build-time-embedded malformed plugin (a bug).
+/// plugin uses. Panics only on a build-time-embedded malformed plugin (a bug).
 pub fn builtin_plugins() -> Vec<Plugin> {
     [&CLAUDE, &CODEX]
         .into_iter()
@@ -179,79 +245,75 @@ pub fn builtin_plugins() -> Vec<Plugin> {
         .collect()
 }
 
-/// Find a plugin by id (built-ins only, for now).
+/// The full registry: built-ins first, then every plugin dir found under each search
+/// dir. A first-party id wins a collision (a third party can't silently shadow it);
+/// an unreadable/malformed on-disk plugin is skipped, not fatal.
+pub fn all_plugins(search_dirs: &[PathBuf]) -> Vec<Plugin> {
+    let mut plugins = builtin_plugins();
+    let mut seen: std::collections::HashSet<String> =
+        plugins.iter().map(|p| p.id().to_string()).collect();
+    for dir in search_dirs {
+        for p in load_dir(dir) {
+            if seen.insert(p.id().to_string()) {
+                plugins.push(p);
+            }
+        }
+    }
+    plugins
+}
+
+/// Load every plugin (a subdir containing `manifest.toml`) directly under `dir`.
+/// Missing dir → empty; a bad plugin dir is skipped.
+pub fn load_dir(dir: &Path) -> Vec<Plugin> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.join("manifest.toml").is_file() {
+            if let Ok(p) = Plugin::from_fs_dir(&path) {
+                out.push(p);
+            }
+        }
+    }
+    out.sort_by(|a, b| a.id().cmp(b.id()));
+    out
+}
+
+/// Find a plugin by id across built-ins + the given search dirs.
+pub fn find_in(id: &str, search_dirs: &[PathBuf]) -> Option<Plugin> {
+    all_plugins(search_dirs).into_iter().find(|p| p.id() == id)
+}
+
+/// Find a plugin by id across built-ins + the default machine search path.
 pub fn find(id: &str) -> Option<Plugin> {
-    builtin_plugins().into_iter().find(|p| p.id() == id)
+    find_in(id, &default_dirs())
+}
+
+/// The machine-local plugin search dirs (currently just `<home>/plugins`). Deliberately
+/// under a **HS2-specific** home, not `~/.hotsheet` (which a separately installed Hot
+/// Sheet 1 owns — see the `hotsheet_home` note).
+pub fn default_dirs() -> Vec<PathBuf> {
+    vec![machine_plugins_dir()]
+}
+
+/// `<hotsheet_home>/plugins`.
+pub fn machine_plugins_dir() -> PathBuf {
+    hotsheet_home().join("plugins")
+}
+
+/// HS2's machine-local state home: `$HOTSHEET_HOME`, else `~/.hotsheet2`. Kept off
+/// `~/.hotsheet` on purpose so HS2 never writes into HS1's data dir.
+pub fn hotsheet_home() -> PathBuf {
+    if let Some(h) = std::env::var_os("HOTSHEET_HOME") {
+        return PathBuf::from(h);
+    }
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join(".hotsheet2")
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn claude_is_a_loadable_first_party_plugin() {
-        let p = find("claude").expect("claude plugin present");
-        assert_eq!(p.manifest.display_name, "Claude");
-        assert_eq!(p.manifest.product_name, "Claude Code");
-        assert_eq!(p.manifest.tier, "cli-agent");
-        assert!(p.manifest.detection.binaries.iter().any(|b| b == "claude"));
-    }
-
-    #[test]
-    fn claude_exposes_nonempty_setup_artifacts() {
-        let p = find("claude").unwrap();
-
-        // instruction section
-        let instr = p.instructions_body();
-        assert!(instr.contains("Hot Sheet"), "instruction section present");
-        assert!(instr.contains("hotsheet-cli ls --up-next"));
-
-        // worklist skill with valid frontmatter
-        let (skill_target, skill_body) = p.skill().expect("claude has a skill");
-        assert!(skill_body.starts_with("---"), "skill has frontmatter");
-        assert!(skill_body.contains("name: hotsheet"));
-        assert_eq!(skill_target, ".claude/skills/hotsheet/SKILL.md");
-
-        // targets the manifest declares
-        assert_eq!(p.manifest.instructions.target, "CLAUDE.md");
-        assert_eq!(p.manifest.mcp.target, ".mcp.json");
-        assert_eq!(p.manifest.mcp.format, "claude-json");
-        assert_eq!(p.manifest.mcp.server_name, "hotsheet");
-    }
-
-    #[test]
-    fn codex_is_a_second_first_party_plugin_with_no_skills() {
-        let p = find("codex").expect("codex plugin present");
-        assert_eq!(p.manifest.product_name, "Codex CLI");
-        assert!(p.manifest.detection.binaries.iter().any(|b| b == "codex"));
-
-        // The shape that proves the interface isn't Claude-shaped:
-        assert!(p.skill().is_none(), "codex has no skills concept");
-        assert_eq!(p.manifest.instructions.target, "AGENTS.md");
-        assert_eq!(p.manifest.mcp.format, "codex-toml");
-        assert_eq!(p.manifest.mcp.target, ".codex/config.toml");
-        assert!(p.instructions_body().contains("Hot Sheet"));
-    }
-
-    #[test]
-    fn mcp_args_substitute_the_store_path() {
-        let p = find("claude").unwrap();
-        assert_eq!(
-            p.mcp_args("/work/proj"),
-            vec!["--path".to_string(), "/work/proj".to_string()]
-        );
-        assert_eq!(p.manifest.mcp.command, "hotsheet-mcp");
-    }
-
-    #[test]
-    fn builtins_all_load() {
-        let all = builtin_plugins();
-        assert!(!all.is_empty());
-        assert!(all.iter().all(|p| !p.id().is_empty()));
-    }
-
-    #[test]
-    fn unknown_plugin_is_none() {
-        assert!(find("nope").is_none());
-    }
-}
+mod tests;
