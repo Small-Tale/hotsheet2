@@ -6,10 +6,12 @@ field, or a setting. Requirements status lives in [README.md](README.md); the fi
 schema in [17-ticket-file-format.md](17-ticket-file-format.md).
 
 > **Status:** early implementation. Built: the Rust core model + file format, a
-> filesystem store, the shared engine `ops`, the `hotsheet` CLI + `hotsheet-migrate`,
-> the Node HS1 exporter, the **`hotsheet-server`** (HTTP REST + WS, loopback auth),
-> and the **`hotsheet-mcp`** shim. Still design-only: the SQLite index (HS2-5), the
-> watcher (HS2-6), server lifecycle/auto-start (HS2-59), mTLS, terminals, and clients.
+> filesystem store, the shared engine `ops`, the SQLite/FTS **index** + the server's
+> **filesystem watcher** (live reindex), the `hotsheet` CLI + `hotsheet-migrate`,
+> the Node HS1 exporter, the **`hotsheet-server`** (index-backed HTTP REST + WS,
+> loopback auth), and the **`hotsheet-mcp`** shim. Still design-only: server
+> lifecycle/auto-start (HS2-59), file-backed index + `reindex` CLI, git-aware
+> fast-path reindex, mTLS, terminals, and clients.
 
 ## Directory tree
 
@@ -43,6 +45,8 @@ hot-sheet2/
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools -> HttpBackend
       src/main.rs            #   stdio JSON-RPC loop; --server + --secret
+    hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
+      src/lib.rs             #   Index: schema/upsert/delete/rebuild_from_store/query + hash_bytes
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
     src/introspect.mjs       #   schema-dump helper

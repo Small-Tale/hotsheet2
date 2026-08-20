@@ -146,8 +146,8 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | **Shared vs. local ticket data (on-disk gitignored overlay)** | 02 §2.11 | Confirmed (design) |
 | **Human assignment + in-the-loop/review** | 10 | Open (proposal) |
 | **Close reasons** (completed / not planned / duplicate-of / obsolete) | 02 §2.6a | Confirmed (field); status coupling → HS2-24 |
-| SQLite + FTS5 index, rebuildable from disk | 03 | Confirmed |
-| Filesystem watch → incremental reindex | 03 §3.4 | Design |
+| SQLite + FTS5 index, rebuildable from disk | 03 | Partial (`hotsheet-index`: schema/query/FTS/rebuild built; file-backed store + facet tables + paging pending) |
+| Filesystem watch → incremental reindex | 03 §3.4 | Partial (server `spawn_watcher`: content-hash reindex + WS events built; git-diff fast path pending) |
 | Shared **Rust** core engine (server + CLI only; clients don't embed) | 04, 09 | Confirmed |
 | Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Confirmed (design) |
 | Independent server (HTTP + WS) | 04 §4.3 | Partial (`hotsheet-server`: REST + /ws/sync + loopback auth; index/watcher/lifecycle/mTLS pending) |

@@ -1,7 +1,14 @@
 # 03. Indexing & Query
 
-> **Status: Proposed.** SQLite + FTS5 is the recommendation; alternatives are
-> evaluated in §3.7.
+> **Status: v1 built (HS2-5 + HS2-6).** `crates/hotsheet-index` — a disposable
+> SQLite + FTS5 cache (`Index`: schema/upsert/delete/`rebuild_from_store`/query +
+> `hash_bytes`). The server builds an in-memory index on start, serves `GET /tickets`
+> from it (structured filter + FTS prefix search), and runs a **`notify` filesystem
+> watcher** (`spawn_watcher`, debounced) that reindexes changed files by content-hash
+> and broadcasts change events — so a CLI/git edit shows up live. **Not yet:** the
+> file-backed index at `~/.hotsheet/index/`, the `hotsheet reindex` command, the
+> git-diff fast path (§3.4), the `blocked_by`/`assignees`/`reviews` facet tables, and
+> keyset paging. SQLite + FTS5 is the recommendation; alternatives in §3.7.
 
 ## 3.1 Why an index at all
 

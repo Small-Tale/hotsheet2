@@ -68,10 +68,11 @@ git + a rebuildable index ([02-ticket-storage.md](02-ticket-storage.md) §2.9).
 > (`/health`, `/tickets` list/create, `/tickets/{id}` get/patch,
 > `/tickets/{id}/close`) + `/ws/sync` live push, over the shared engine
 > `ops`, with **Tier 0** auth (`X-Hotsheet-Secret`, loopback only — off-loopback
-> binds are refused until mTLS). It scans the store in-memory (the SQLite index is
-> HS2-5) and does **not** yet own the watcher (HS2-6), terminals (HS2-10), the
-> detached lifecycle/auto-start (HS2-59), or the long-poll fallback. MCP is a
-> separate shim, not served here (§5.8).
+> binds are refused until mTLS). It serves reads from the **SQLite/FTS index** (HS2-5)
+> and owns the **filesystem watcher** (HS2-6) that reindexes changed files + emits
+> change events, so a CLI/git edit shows up live. It does **not** yet own terminals
+> (HS2-10), the detached lifecycle/auto-start (HS2-59), or the long-poll fallback.
+> MCP is a separate shim, not served here (§5.8).
 
 A thin binary that wraps the core and is the **always-on service** every GUI talks
 to — **local use included**. It runs completely independently of any client (a
