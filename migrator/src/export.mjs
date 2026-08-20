@@ -31,10 +31,10 @@ export async function exportFromDb(db, project = {}) {
   // versions, so read it best-effort and warn (rather than abort) if it's absent.
   const blockedBy = new Map(); // ticket_number -> [blocked-by numbers]
   try {
-    const { rows } = await db.query(`select ticket_id, blocked_by_id from ticket_blocked_by`);
+    const { rows } = await db.query(`select ticket_id, blocks_on_ticket_id from ticket_blocked_by`);
     for (const e of rows) {
       const from = numberById.get(e.ticket_id);
-      const to = numberById.get(e.blocked_by_id);
+      const to = numberById.get(e.blocks_on_ticket_id);
       if (from && to) {
         if (!blockedBy.has(from)) blockedBy.set(from, []);
         blockedBy.get(from).push(to);
@@ -136,7 +136,10 @@ async function main(argv) {
   // Open a COPY of the datadir so the live cluster is never modified.
   const work = mkdtempSync(join(tmpdir(), 'hs1-export-'));
   cpSync(join(hotsheetDir, 'db'), work, { recursive: true });
-  const db = new PGlite(work);
+  const { db, database } = await openWithTickets(PGlite, work);
+  if (database !== 'postgres') {
+    console.log(`(reading from the '${database}' database — cluster predates PGLite 0.4.0)`);
+  }
   try {
     const exportObj = await exportFromDb(db, project);
     writeFileSync(outPath, `${JSON.stringify(exportObj, null, 2)}\n`);
@@ -145,6 +148,53 @@ async function main(argv) {
     await db.close();
     rmSync(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * Open the cluster at the database that actually holds the `tickets` table. PGLite
+ * 0.4.0 moved the default working database from `template1` to `postgres`, so a
+ * cluster written by an older PGLite keeps its tables in `template1` where a plain
+ * open never looks. Probe both.
+ *
+ * The bundled PGLite engine is PG17 (0.4.x). A datadir written by a *different* PG
+ * major (PG16 ≈ PGLite 0.3.x, PG18 ≈ 0.5.x) physically cannot be opened by this
+ * engine — that cross-major case is bridged by `pglite-migrate` (see the
+ * cross-major follow-up ticket); here we detect it and fail with a clear message
+ * rather than an opaque WASM abort.
+ */
+async function openWithTickets(PGlite, work) {
+  let engineError = null;
+  for (const database of ['postgres', 'template1']) {
+    const db = new PGlite(work, { database });
+    try {
+      const { rows } = await db.query(
+        `select 1 from information_schema.tables
+         where table_schema = 'public' and table_name = 'tickets' limit 1`,
+      );
+      if (rows.length) return { db, database };
+    } catch (err) {
+      // A WASM "Aborted()" here means the on-disk PG major ≠ this engine's major.
+      if (/abort|initialize|wasm/i.test(String(err && err.message))) engineError = err;
+    }
+    await db.close().catch(() => {});
+  }
+
+  if (engineError) {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    let major = 'unknown';
+    try {
+      major = readFileSync(join(work, 'PG_VERSION'), 'utf8').trim();
+    } catch {
+      /* ignore */
+    }
+    throw new Error(
+      `this datadir is PostgreSQL major ${major}, which the bundled PGLite engine ` +
+        `(PG17 / 0.4.x) cannot open. Migrate it across majors first with pglite-migrate, ` +
+        `then re-run the export. (original: ${engineError.message})`,
+    );
+  }
+  throw new Error('no `tickets` table found in this cluster (looked in postgres + template1)');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

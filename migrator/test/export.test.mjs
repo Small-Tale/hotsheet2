@@ -32,7 +32,8 @@ async function makeHs1Db() {
       verified_at timestamptz,
       deleted_at timestamptz
     );
-    create table ticket_blocked_by (ticket_id int, blocked_by_id int);
+    -- Real HS1 column names (src/db/connection.ts): ticket_id + blocks_on_ticket_id.
+    create table ticket_blocked_by (ticket_id int, blocks_on_ticket_id int);
 
     insert into tickets
       (ticket_number, title, details, category, priority, status, up_next, tags, notes,
@@ -50,7 +51,7 @@ async function makeHs1Db() {
             '2026-08-04T00:00:00Z', '2026-08-04T00:00:00Z');
 
     -- HS2-2 is blocked by HS2-1 (ids 1 and 2 from the serial).
-    insert into ticket_blocked_by (ticket_id, blocked_by_id) values (2, 1);
+    insert into ticket_blocked_by (ticket_id, blocks_on_ticket_id) values (2, 1);
   `);
   return db;
 }
