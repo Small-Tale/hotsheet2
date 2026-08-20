@@ -12,7 +12,7 @@ const SECRET: &str = "test-secret";
 fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    (dir, AppState::new(store, SECRET.into()))
+    (dir, AppState::new(store, SECRET.into()).unwrap())
 }
 
 fn authed(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
@@ -139,6 +139,46 @@ async fn create_get_update_close_and_query() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn watcher_reindexes_an_external_write() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store.clone(), SECRET.into()).unwrap();
+    let _watch = hotsheet_server::spawn_watcher(state.clone()).unwrap();
+    let app = app(state);
+
+    // Write a ticket to disk WITHOUT going through the server (a CLI/git-style edit).
+    ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-08-19T00:00:00Z"),
+        NewTicket {
+            title: "external ticket".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // The watcher should reindex it; poll the HTTP query until it appears.
+    for _ in 0..40 {
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/tickets?text=external", None))
+            .await
+            .unwrap();
+        if body_json(resp).await.as_array().unwrap().len() == 1 {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("watcher did not reindex the external write within 4s");
 }
 
 #[tokio::test]

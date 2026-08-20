@@ -1,8 +1,12 @@
 //! Hot Sheet 2 server: a thin HTTP + WebSocket layer over the shared engine
 //! (`hotsheet-ticketing::ops`), the single authority every GUI talks to
-//! (`docs/04-core-server-cli.md` §4.3). v1 is loopback + shared-secret (Tier 0);
-//! it scans the store in-memory (the SQLite/FTS index is HS2-5) and holds no watcher
-//! or terminals yet (those need HS2-6 / HS2-10).
+//! (`docs/04-core-server-cli.md` §4.3). v1 is loopback + shared-secret (Tier 0).
+//! Reads go through the SQLite/FTS index (HS2-5); a filesystem watcher (HS2-6) keeps
+//! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
+//! (HS2-10) and the detached lifecycle (HS2-59) are separate.
+
+use std::path::Path as FsPath;
+use std::sync::{Arc, Mutex};
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, Request, State};
@@ -11,7 +15,10 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use hotsheet_model::{CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid};
+use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
+use hotsheet_model::{
+    CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, parse_file, to_file_string,
+};
 use hotsheet_ticketing::{
     FsStore, NewTicket, OpError, SortKey, StoreError, TicketPatch, TicketQuery, ops,
 };
@@ -25,22 +32,37 @@ pub struct AppState {
     store: FsStore,
     secret: String,
     events: broadcast::Sender<ChangeEvent>,
+    index: Arc<Mutex<Index>>,
 }
 
 impl AppState {
-    /// New state over a store, guarded by `secret`.
-    pub fn new(store: FsStore, secret: String) -> Self {
+    /// New state over a store, guarded by `secret`. Builds the in-memory index from
+    /// the store (the index is disposable; rebuilt on each start).
+    pub fn new(store: FsStore, secret: String) -> anyhow::Result<Self> {
+        let index = Index::open_in_memory(store.root().display().to_string())?;
+        index.rebuild_from_store(&store)?;
         let (events, _) = broadcast::channel(256);
-        Self {
+        Ok(Self {
             store,
             secret,
             events,
-        }
+            index: Arc::new(Mutex::new(index)),
+        })
     }
 
-    fn emit(&self, kind: &str, t: &Ticket) {
-        // Errors mean no subscribers; that's fine.
-        let _ = self.events.send(ChangeEvent {
+    fn emit(&self, event: ChangeEvent) {
+        let _ = self.events.send(event); // Err just means no subscribers
+    }
+
+    /// Reindex a ticket the server just wrote, then broadcast. The index now carries
+    /// the file's hash, so the watcher will see "no change" and not re-emit.
+    fn changed(&self, kind: &str, t: &Ticket) {
+        let text = to_file_string(t);
+        let path = self.store.ticket_path(&t.id).display().to_string();
+        if let Ok(index) = self.index.lock() {
+            let _ = index.upsert(t, &path, &hash_bytes(text.as_bytes()));
+        }
+        self.emit(ChangeEvent {
             kind: kind.to_string(),
             id: t.id.to_string(),
             slug: t.slug.clone(),
@@ -108,10 +130,14 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
 async fn list_tickets(
     State(state): State<AppState>,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<ApiTicket>>, ApiError> {
+) -> Result<Json<Vec<TicketRow>>, ApiError> {
     let query = params.into_query()?;
-    let tickets = ops::query(&state.store, &query)?;
-    Ok(Json(tickets.iter().map(ApiTicket::from).collect()))
+    let rows = state
+        .index
+        .lock()
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
+        .query(&query)?;
+    Ok(Json(rows))
 }
 
 async fn get_ticket(
@@ -136,7 +162,7 @@ async fn create_ticket(
         up_next: req.up_next.unwrap_or(false),
     };
     let ticket = ops::create(&state.store, Ulid::new(), &prefix, now(), new)?;
-    state.emit("created", &ticket);
+    state.changed("created", &ticket);
     Ok((StatusCode::CREATED, Json((&ticket).into())))
 }
 
@@ -156,7 +182,7 @@ async fn update_ticket(
         up_next: req.up_next,
     };
     let updated = ops::update(&state.store, &ticket.id, now(), patch)?;
-    state.emit("updated", &updated);
+    state.changed("updated", &updated);
     Ok(Json((&updated).into()))
 }
 
@@ -176,7 +202,7 @@ async fn close_ticket(
         None => None,
     };
     let closed = ops::close(&state.store, &ticket.id, now(), reason, dup)?;
-    state.emit("closed", &closed);
+    state.changed("closed", &closed);
     Ok(Json((&closed).into()))
 }
 
@@ -421,6 +447,12 @@ impl From<StoreError> for ApiError {
     }
 }
 
+impl From<IndexError> for ApiError {
+    fn from(e: IndexError) -> Self {
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    }
+}
+
 impl From<OpError> for ApiError {
     fn from(e: OpError) -> Self {
         match e {
@@ -433,4 +465,109 @@ impl From<OpError> for ApiError {
             }
         }
     }
+}
+
+// ---- filesystem watcher (HS2-6) --------------------------------------------------
+
+/// Keeps the watcher alive; dropping it stops watching.
+pub struct WatchHandle {
+    _watcher: notify::RecommendedWatcher,
+}
+
+/// Watch the store's `tickets/` dir and keep the index + WS bus in sync with changes
+/// made outside the server (CLI, `git pull`, another writer). A change whose content
+/// hash already matches the index (e.g. the server's own write) is a no-op, so
+/// server-driven writes don't double-emit (`docs/03` §3.4).
+pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
+    use notify::{RecursiveMode, Watcher};
+
+    let tickets_dir = state.store.root().join("tickets");
+    std::fs::create_dir_all(&tickets_dir)?;
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut watcher = notify::recommended_watcher(move |res| {
+        let _ = tx.send(res);
+    })?;
+    watcher.watch(&tickets_dir, RecursiveMode::Recursive)?;
+
+    std::thread::spawn(move || watch_loop(rx, state));
+    Ok(WatchHandle { _watcher: watcher })
+}
+
+fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, state: AppState) {
+    use std::time::Duration;
+
+    while let Ok(first) = rx.recv() {
+        let mut paths = event_paths(first);
+        // Debounce a burst (editor save, git checkout touching many files).
+        while let Ok(next) = rx.recv_timeout(Duration::from_millis(150)) {
+            paths.extend(event_paths(next));
+        }
+        paths.sort();
+        paths.dedup();
+        for path in paths {
+            handle_path_change(&state, &path);
+        }
+    }
+}
+
+fn event_paths(res: notify::Result<notify::Event>) -> Vec<std::path::PathBuf> {
+    let Ok(event) = res else {
+        return Vec::new();
+    };
+    event
+        .paths
+        .into_iter()
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
+        .collect()
+}
+
+fn handle_path_change(state: &AppState, path: &FsPath) {
+    // The filename stem is the ticket ULID.
+    let Some(id) = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| Ulid::from_string(s).ok())
+    else {
+        return;
+    };
+
+    if !path.exists() {
+        if let Ok(index) = state.index.lock() {
+            let _ = index.delete(&id);
+        }
+        state.emit(ChangeEvent {
+            kind: "deleted".into(),
+            id: id.to_string(),
+            slug: String::new(),
+        });
+        return;
+    }
+
+    let Ok(bytes) = std::fs::read(path) else {
+        return;
+    };
+    let hash = hash_bytes(&bytes);
+
+    // Unchanged since we last indexed it (incl. the server's own write) → skip.
+    let already = state
+        .index
+        .lock()
+        .ok()
+        .and_then(|index| index.content_hash(&id).ok().flatten());
+    if already.as_deref() == Some(hash.as_str()) {
+        return;
+    }
+
+    let Ok(ticket) = parse_file(&String::from_utf8_lossy(&bytes)) else {
+        return;
+    };
+    if let Ok(index) = state.index.lock() {
+        let _ = index.upsert(&ticket, &path.display().to_string(), &hash);
+    }
+    state.emit(ChangeEvent {
+        kind: "changed".into(),
+        id: ticket.id.to_string(),
+        slug: ticket.slug.clone(),
+    });
 }

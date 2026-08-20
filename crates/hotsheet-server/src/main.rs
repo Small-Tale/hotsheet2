@@ -48,7 +48,10 @@ async fn main() -> Result<()> {
     }
 
     let secret = cli.secret.unwrap_or_else(|| Ulid::new().to_string());
-    let state = AppState::new(store, secret.clone());
+    let state = AppState::new(store, secret.clone())?;
+
+    // Keep the store's index fresh + broadcast external edits. Held for the run.
+    let _watch = hotsheet_server::spawn_watcher(state.clone())?;
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;

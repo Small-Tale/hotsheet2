@@ -66,7 +66,7 @@ pub enum IndexError {
 
 /// A row returned from a query — enough to draw a list without touching disk. Notes
 /// aren't stored for return (search hits them via FTS; the file is authoritative).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TicketRow {
     pub id: String,
     pub slug: String,

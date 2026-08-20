@@ -37,6 +37,7 @@ http-body-util = "0.1"
 ureq = "2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
+notify = "6"
 
 # internal
 hotsheet-model = { path = "crates/hotsheet-model" }
