@@ -204,3 +204,42 @@ async fn close_duplicate_without_target_is_a_400() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn update_can_append_a_note() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    let created = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"Fix flicker"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+
+    // PATCH with a status change AND a note in the same call.
+    let updated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(r#"{"status":"started","note":"kicked it off"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(updated["status"], "started");
+    assert_eq!(updated["notes"][0]["text"], "kicked it off");
+
+    // The note persisted (a fresh GET sees it).
+    let got = body_json(
+        app.oneshot(authed("GET", &format!("/tickets/{id}"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(got["notes"][0]["text"], "kicked it off");
+}

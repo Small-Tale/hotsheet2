@@ -9,10 +9,10 @@ them to know what to do next and to record what you did. Everything below works
 - `hotsheet show <slug>` — read one ticket in full (e.g. `hotsheet show HS-7F3K9Q`).
 - Or the MCP tools: `hotsheet_query` (with `up_next: true`) and `hotsheet_get`.
 
-**Do the work, and update the ticket's status as you go:**
+**Do the work, and record progress on the ticket as you go:**
 - `hotsheet edit <slug> --status started` when you begin.
-- `hotsheet edit <slug> --status completed` when done.
-- Or `hotsheet_update` / `hotsheet_close` (same effect through MCP).
+- `hotsheet edit <slug> --status completed --note "what you did"` when done.
+- Or `hotsheet_update` (it takes a `note`) / `hotsheet_close` (same effect through MCP).
 
 **Create tickets for new work you discover** (bugs, follow-ups, gaps) rather than
 leaving them in comments:

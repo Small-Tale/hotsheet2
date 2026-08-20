@@ -16,7 +16,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
-use hotsheet_model::{CloseReason, Ticket, Timestamp, Ulid, parse_file, to_file_string};
+use hotsheet_model::{CloseReason, NoteKind, Ticket, Timestamp, Ulid, parse_file, to_file_string};
 use hotsheet_ticketing::{
     FsStore, NewTicket, OpError, SortKey, StoreError, TicketPatch, TicketQuery, ops,
 };
@@ -188,8 +188,20 @@ async fn update_ticket(
         up_next: req.up_next,
     };
     let updated = ops::update(&state.store, &ticket.id, now(), patch)?;
-    state.changed("updated", &updated);
-    Ok(Json((&updated).into()))
+    // An optional note append rides the same update call (parity with the CLI + MCP).
+    let latest = match req.note.filter(|t| !t.is_empty()) {
+        Some(text) => ops::add_note(
+            &state.store,
+            &ticket.id,
+            Ulid::new(),
+            now(),
+            NoteKind::Regular,
+            text,
+        )?,
+        None => updated,
+    };
+    state.changed("updated", &latest);
+    Ok(Json((&latest).into()))
 }
 
 async fn close_ticket(
@@ -299,6 +311,8 @@ struct UpdateReq {
     status: Option<String>,
     tags: Option<Vec<String>>,
     up_next: Option<bool>,
+    /// Optional note to append alongside the field update.
+    note: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

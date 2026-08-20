@@ -10,11 +10,11 @@ Work the project's Hot Sheet ticket queue in priority order.
    tickets. (Equivalently, the `hotsheet_query` MCP tool with `up_next: true`.)
 2. **Pick the top ticket** and read it in full: `hotsheet show <slug>` (or
    `hotsheet_get`). Understand what "done" means before you start.
-3. **Mark it started**, implement it, then **mark it done**:
+3. **Mark it started**, implement it, then **mark it done** with a note:
    - `hotsheet edit <slug> --status started`
    - …do the work…
-   - `hotsheet edit <slug> --status completed`
-   - (Or `hotsheet_update` / `hotsheet_close` via MCP — identical.)
+   - `hotsheet edit <slug> --status completed --note "what you did"`
+   - (Or `hotsheet_update` — it takes a `note` — / `hotsheet_close` via MCP.)
 4. **File follow-ups** for anything you discover but don't finish (gaps, bugs,
    TODOs): `hotsheet new --title "…" --category <bug|task|feature>` (or
    `hotsheet_create`). Don't leave loose ends only in code comments.

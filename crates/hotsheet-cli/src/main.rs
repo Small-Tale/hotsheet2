@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use hotsheet_cli::{git_init, run_import};
-use hotsheet_model::{CloseReason, Priority, Status, Ticket, Timestamp, Ulid, to_file_string};
+use hotsheet_model::{
+    CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, to_file_string,
+};
 use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, TicketPatch, TicketQuery, ops};
 use time::{Duration, OffsetDateTime};
 
@@ -32,14 +34,23 @@ enum Cmd {
     },
     /// Create a new ticket.
     New {
-        #[arg(long)]
-        title: String,
+        /// Ticket title (positional). Alternatively pass --title.
+        title: Option<String>,
+        /// Ticket title (alias for the positional form).
+        #[arg(long = "title")]
+        title_flag: Option<String>,
         #[arg(long, default_value = "issue")]
         category: String,
         #[arg(long, default_value = "default")]
         priority: String,
         #[arg(long)]
         details: Option<String>,
+        /// Mark the new ticket Up Next.
+        #[arg(long)]
+        up_next: bool,
+        /// Add a tag (repeatable): `--tag a --tag b`.
+        #[arg(long = "tag")]
+        tags: Vec<String>,
     },
     /// List / query tickets with optional filters and sort.
     Ls {
@@ -71,6 +82,9 @@ enum Cmd {
         /// Clear Up Next.
         #[arg(long)]
         no_up_next: bool,
+        /// Append a note to the ticket.
+        #[arg(long)]
+        note: Option<String>,
     },
     /// Record why a ticket was closed (close outcome; orthogonal to status).
     Close {
@@ -168,10 +182,21 @@ fn main() -> Result<()> {
         Cmd::Init { prefix } => cmd_init(&cli.path, &prefix),
         Cmd::New {
             title,
+            title_flag,
             category,
             priority,
             details,
-        } => cmd_new(&cli.path, title, category, &priority, details),
+            up_next,
+            tags,
+        } => cmd_new(
+            &cli.path,
+            title.or(title_flag),
+            category,
+            &priority,
+            details,
+            up_next,
+            tags,
+        ),
         Cmd::Ls { filters } => cmd_ls(&cli.path, &filters),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
         Cmd::Edit {
@@ -184,8 +209,10 @@ fn main() -> Result<()> {
             tags,
             up_next,
             no_up_next,
+            note,
         } => cmd_edit(
             &cli.path, &id, title, details, category, priority, status, tags, up_next, no_up_next,
+            note,
         ),
         Cmd::Close {
             id,
@@ -221,13 +248,17 @@ fn cmd_init(path: &PathBuf, prefix: &str) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_new(
     path: &PathBuf,
-    title: String,
+    title: Option<String>,
     category: String,
     priority: &str,
     details: Option<String>,
+    up_next: bool,
+    tags: Vec<String>,
 ) -> Result<()> {
+    let title = title.context("a title is required (positional or --title)")?;
     let store = FsStore::open(path)?;
     let prefix = store.metadata()?.ticket_prefix;
     let ticket = ops::create(
@@ -240,7 +271,8 @@ fn cmd_new(
             category,
             priority: parse_priority(priority)?,
             details: details.unwrap_or_default(),
-            ..Default::default()
+            tags,
+            up_next,
         },
     )?;
     println!(
@@ -400,6 +432,7 @@ fn cmd_edit(
     tags: Vec<String>,
     up_next: bool,
     no_up_next: bool,
+    note: Option<String>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
@@ -420,6 +453,16 @@ fn cmd_edit(
         up_next,
     };
     let updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
+    if let Some(text) = note.filter(|t| !t.is_empty()) {
+        ops::add_note(
+            &store,
+            &ticket.id,
+            Ulid::new(),
+            now_ts(),
+            NoteKind::Regular,
+            text,
+        )?;
+    }
     println!("Updated {}", updated.slug);
     Ok(())
 }

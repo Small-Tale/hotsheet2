@@ -9,7 +9,9 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::str::FromStr;
 
-use hotsheet_model::{CloseReason, Priority, Status, Ticket, Timestamp, Ulid, derive_slug};
+use hotsheet_model::{
+    CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, derive_slug,
+};
 
 use crate::store::{FsStore, StoreError};
 
@@ -248,6 +250,28 @@ pub fn update(
     Ok(t)
 }
 
+/// Append a note to a ticket. The caller mints the note id (a timestamp-ordered
+/// ULID, `docs/02` §2.6) and passes the wall clock as `now`.
+pub fn add_note(
+    store: &FsStore,
+    id: &Ulid,
+    note_id: Ulid,
+    now: Timestamp,
+    kind: NoteKind,
+    text: String,
+) -> Result<Ticket, StoreError> {
+    let mut t = store.read_ticket(id)?;
+    t.notes.push(Note {
+        id: note_id,
+        kind,
+        at: now.clone(),
+        text,
+    });
+    t.updated_at = now;
+    store.write_ticket(&t)?;
+    Ok(t)
+}
+
 /// Record a close outcome (orthogonal to status; `docs/02` §2.6a).
 pub fn close(
     store: &FsStore,
@@ -456,6 +480,49 @@ mod tests {
         .unwrap();
         assert_eq!(c.close_reason, Some(CloseReason::Completed));
         assert!(c.closed_at.is_some());
+    }
+
+    #[test]
+    fn add_note_appends_and_bumps_updated_at() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+
+        let n1 = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        let t = add_note(
+            &store,
+            &id,
+            n1,
+            ts("2026-08-19T01:00:00Z"),
+            NoteKind::Regular,
+            "did the thing".into(),
+        )
+        .unwrap();
+        assert_eq!(t.notes.len(), 1);
+        assert_eq!(t.notes[0].text, "did the thing");
+        assert_eq!(t.updated_at.as_str(), "2026-08-19T01:00:00Z");
+
+        // A second note appends (order preserved), persisted to disk.
+        let n2 = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap();
+        add_note(
+            &store,
+            &id,
+            n2,
+            ts("t2"),
+            NoteKind::Regular,
+            "and again".into(),
+        )
+        .unwrap();
+        let reread = store.read_ticket(&id).unwrap();
+        assert_eq!(reread.notes.len(), 2);
+        assert_eq!(reread.notes[1].text, "and again");
     }
 
     #[test]

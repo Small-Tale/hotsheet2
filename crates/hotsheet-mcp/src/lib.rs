@@ -110,12 +110,13 @@ fn tools_list() -> Value {
         },
         {
             "name": "hotsheet_update",
-            "description": "Update a ticket's fields (title/details/category/priority/status/tags/up_next).",
+            "description": "Update a ticket's fields (title/details/category/priority/status/tags/up_next) and/or append a note.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "title": str_prop(""), "details": str_prop(""), "category": str_prop(""),
                 "priority": str_prop(""), "status": str_prop(""),
-                "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" }
+                "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
+                "note": str_prop("append a progress note")
             }, "required": ["id"] }
         },
         {
@@ -231,7 +232,7 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 
 mod core_backend {
     use super::{Backend, BackendError};
-    use hotsheet_model::{Ticket, Timestamp, Ulid};
+    use hotsheet_model::{NoteKind, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
         ApiTicket, FsStore, NewTicket, OpError, SortKey, StoreError, TicketPatch, TicketQuery,
         TicketRow, ops,
@@ -353,7 +354,19 @@ mod core_backend {
                     };
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
-                    Ok(to_value(&ApiTicket::from(&updated)))
+                    let latest = match str_field(body, "note").filter(|s| !s.is_empty()) {
+                        Some(text) => ops::add_note(
+                            &self.store,
+                            &t.id,
+                            (self.mint)(),
+                            (self.now)(),
+                            NoteKind::Regular,
+                            text,
+                        )
+                        .map_err(store_err)?,
+                        None => updated,
+                    };
+                    Ok(to_value(&ApiTicket::from(&latest)))
                 }
                 _ => Err(bad_request(format!("unsupported {method} {path}"))),
             }
@@ -746,14 +759,15 @@ mod tests {
         assert_eq!(arr[0]["slug"], slug);
         assert_eq!(arr[0]["priority"], "high");
 
-        // update → started
+        // update → started, with a progress note appended in the same call
         let updated = call(
             &backend,
             "hotsheet_update",
-            json!({ "id": id, "status": "started", "tags": ["ui", "urgent"] }),
+            json!({ "id": id, "status": "started", "tags": ["ui", "urgent"], "note": "picked this up" }),
         );
         assert_eq!(updated["status"], "started");
         assert_eq!(updated["tags"], json!(["ui", "urgent"]));
+        assert_eq!(updated["notes"][0]["text"], "picked this up");
 
         // close → records the outcome, orthogonal to status (docs/02 §2.6a): the
         // close_reason is set but status stays `started`, so it's still "open".

@@ -281,3 +281,86 @@ fn claim_next_release_and_renew() {
         .success()
         .stdout(predicate::str::contains("claimed_by").not());
 }
+
+#[test]
+fn new_accepts_positional_title_up_next_and_tags() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+
+    // Positional title (no --title) + --up-next + repeated --tag.
+    let out = hs(p)
+        .args([
+            "new",
+            "Fix dashboard flicker",
+            "--category",
+            "bug",
+            "--priority",
+            "high",
+            "--up-next",
+            "--tag",
+            "ui",
+            "--tag",
+            "urgent",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let slug = stdout.split_whitespace().nth(1).unwrap().to_string();
+
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("title: Fix dashboard flicker"))
+        .stdout(predicate::str::contains("priority: high"))
+        .stdout(predicate::str::contains("up_next: true"))
+        .stdout(predicate::str::contains("ui"))
+        .stdout(predicate::str::contains("urgent"));
+
+    // It shows up under the Up Next filter.
+    hs(p)
+        .args(["ls", "--up-next"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Fix dashboard flicker"));
+}
+
+#[test]
+fn new_without_a_title_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    hs(p)
+        .args(["new", "--category", "bug"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("a title is required"));
+}
+
+#[test]
+fn edit_can_append_a_note() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Fix flicker");
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--status",
+            "started",
+            "--note",
+            "began investigating",
+        ])
+        .assert()
+        .success();
+
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("## Notes"))
+        .stdout(predicate::str::contains("began investigating"));
+}
