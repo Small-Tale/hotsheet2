@@ -356,10 +356,17 @@ Rust has no stable ABI, so "loadable plugin" cannot mean "load a `.dylib`." The
     config writer, `PermissionTransport`, `McpConfigWriter`, `Clock`) as
     capability-scoped imports; ambient fs/net is denied.
 
-**Built-ins ship as first-party plugins through the same loader.** Claude and Codex
-are not special-cased in core; they are plugins loaded from a bundled search-path
-entry. This is the §5.10 anti-drift discipline applied to the loader itself — the
-external interface can't rot because our own tools ride it.
+**Built-ins are first-party plugins, in this repo, through the same loader — from
+day one** (maintainer, 2026-08-20). Claude and Codex are not special-cased and are
+not compiled-in-then-extracted later: the initial set ships as first-party plugin
+directories **in the HS2 repo**, bundled into the binaries as the built-in
+search-path entry, and loaded by the exact same loader a third party's plugin uses.
+This is the §5.10 anti-drift discipline applied to the loader itself — our own tools
+ride the external interface, so it can't rot. **Third-party plugins are a
+post-release capability:** once HS2 ships, developers add their own plugins
+(machine `~/.hotsheet/plugins/` or project `.hotsheet/plugins/`) with no fork and no
+recompile. So there is exactly one loader and one plugin shape; "first-party" is a
+provenance/trust label (§ trust gate), not a separate code path.
 
 **The loader lives in core** (`plugins`, [04](04-core-server-cli.md) §4.1) and reads
 a search path: **bundled built-ins → `~/.hotsheet/plugins/` (machine) → project
