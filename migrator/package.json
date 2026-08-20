@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",
-    "pglite-migrate": "^2.1.0"
+    "pglite-migrate": "^2.1.0",
+    "pglite-pg16": "npm:@electric-sql/pglite@^0.3.16"
   },
   "devDependencies": {
     "vitest": "^3.0.0"

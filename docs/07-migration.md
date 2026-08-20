@@ -12,14 +12,22 @@
 > real HS1 cluster (this project's own snapshot): **81 tickets** exported + imported
 > with notes, `legacy_number`, and close outcomes intact.
 >
-> **Real-cluster lessons baked into the exporter** (from the HS1 source): the engine
-> must match the datadir's PG major — PGLite **0.4.x = PG17**, 0.3.x = PG16 (a
-> mismatch is an opaque WASM abort, now caught with a clear message); the join table
-> column is **`blocks_on_ticket_id`**; and a cluster predating PGLite 0.4.0 keeps its
-> tables in **`template1`**, not `postgres`, so the opener probes both.
+> **Version coverage:** targets the **5 most recent production releases + the current
+> beta** (v0.17.2 … v0.20.0 + v0.21.0-beta), which span **two PG majors** — v0.17.x =
+> PGLite 0.3.x = **PG16**, v0.18.0+ = 0.4.x = **PG17**. A PG17 engine can't open a
+> PG16 datadir, so the exporter **bundles one engine per major** (`pglite-pg16` +
+> `@electric-sql/pglite`) and selects by the datadir's `PG_VERSION`. Verified with
+> real on-disk PG16 *and* PG17 clusters. See [`migrator/README.md`](../migrator/README.md).
+>
+> **Real-cluster lessons baked into the exporter** (from the HS1 source): pick the
+> engine by PG major; the join column is **`blocks_on_ticket_id`**; a cluster
+> predating PGLite 0.4.0 keeps its tables in **`template1`**, not `postgres` (the
+> opener probes both); and the column set is read **tolerantly** so schema drift
+> across releases degrades instead of erroring.
 >
 > **Not yet:** attachments (copied + written, HS2-78); the UI-prompted flow (§7.3);
-> and cross-**major** datadirs (PG16/PG18) — bridged by `pglite-migrate` (HS2-82).
+> and an *unbundled* future major (e.g. PG18) — falls back to `pglite-migrate`'s
+> fetch-missing-engine, wired but not offline-tested (HS2-82).
 
 ## 7.1 The problem
 

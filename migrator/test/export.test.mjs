@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
+import { PGlite as PGlite16 } from 'pglite-pg16';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { exportFromDb } from '../src/export.mjs';
+import { exportFromDb, exportDatadir } from '../src/export.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..');
@@ -142,5 +143,99 @@ describe('conformance: Rust hotsheet import parses the export', () => {
     } finally {
       rmSync(work, { recursive: true, force: true });
     }
+  });
+});
+
+// Multi-major support: the migrator must open every datadir across the 5 latest
+// production releases + the current beta, which span PG16 (v0.17.x, PGLite 0.3.x)
+// and PG17 (v0.18.0+, PGLite 0.4.x). We create a REAL on-disk cluster with each
+// engine and export it through the version-selecting opener.
+
+// The pre-v0.18 tickets schema: no claim columns, no ticket_blocked_by table.
+const OLD_TICKETS_DDL = `
+  create table tickets (
+    id serial primary key, ticket_number text unique not null,
+    title text not null default '', details text not null default '',
+    category text not null default 'issue', priority text not null default 'default',
+    status text not null default 'not_started', up_next boolean not null default false,
+    created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+    completed_at timestamptz, deleted_at timestamptz,
+    notes text not null default '', verified_at timestamptz, tags text not null default '[]'
+  );`;
+
+async function makeDatadir(EngineClass, ddl, seed) {
+  const hs = mkdtempSync(join(tmpdir(), 'hs1-cluster-'));
+  const db = new EngineClass(join(hs, 'db'));
+  await db.exec(ddl);
+  await db.exec(seed);
+  await db.close();
+  writeFileSync(join(hs, 'settings.json'), JSON.stringify({ appName: 'HS', ticketPrefix: 'HS' }));
+  return hs;
+}
+
+describe('multi-major on-disk export', () => {
+  it(
+    'reads a PG16 (v0.17.x) datadir — older schema, tables in template1',
+    async () => {
+      const hs = await makeDatadir(
+        PGlite16,
+        OLD_TICKETS_DDL,
+        `insert into tickets (ticket_number, title, status, notes)
+         values ('HS-1', 'old one', 'completed',
+                 '[{"id":"n_1","text":"hi","created_at":"2026-01-01T00:00:00Z"}]'),
+                ('HS-2', 'old two', 'not_started', '');`,
+      );
+      try {
+        const out = await exportDatadir(hs, null);
+        expect(out.tickets).toHaveLength(2);
+        const t1 = out.tickets.find((t) => t.ticket_number === 'HS-1');
+        expect(t1.status).toBe('completed');
+        expect(t1.notes[0].text).toBe('hi');
+        // No ticket_blocked_by table in this era → degrades to empty, no throw.
+        expect(t1.blocked_by).toEqual([]);
+      } finally {
+        rmSync(hs, { recursive: true, force: true });
+      }
+    },
+    30000,
+  );
+
+  it(
+    'reads a PG17 (v0.18.0+) datadir — tables in postgres, with edges',
+    async () => {
+      const hs = await makeDatadir(
+        PGlite,
+        `${OLD_TICKETS_DDL}
+         create table ticket_blocked_by (ticket_id int, blocks_on_ticket_id int);`,
+        `insert into tickets (ticket_number, title, status)
+         values ('HS-1', 'blocker', 'completed'), ('HS-2', 'blocked', 'started');
+         insert into ticket_blocked_by (ticket_id, blocks_on_ticket_id) values (2, 1);`,
+      );
+      try {
+        const out = await exportDatadir(hs, null);
+        expect(out.tickets).toHaveLength(2);
+        const dep = out.tickets.find((t) => t.ticket_number === 'HS-2');
+        expect(dep.blocked_by).toEqual(['HS-1']);
+      } finally {
+        rmSync(hs, { recursive: true, force: true });
+      }
+    },
+    30000,
+  );
+});
+
+describe('column tolerance', () => {
+  it('exports even when optional columns are absent', async () => {
+    const db = new PGlite();
+    await db.exec(`create table tickets (
+      id serial primary key, ticket_number text, title text not null default ''
+    );
+    insert into tickets (ticket_number, title) values ('HS-1', 'minimal');`);
+    const out = await exportFromDb(db, {});
+    expect(out.tickets).toHaveLength(1);
+    expect(out.tickets[0].verified_at).toBeNull();
+    expect(out.tickets[0].status).toBeNull();
+    expect(out.tickets[0].tags).toEqual([]);
+    await db.close();
   });
 });
