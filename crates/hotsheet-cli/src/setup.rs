@@ -32,10 +32,16 @@ pub fn run_setup(
         (Some(id), _) => {
             vec![find(id).with_context(|| format!("unknown tool '{id}' (no such plugin)"))?]
         }
-        (None, true) => all_plugins(&default_dirs())
-            .into_iter()
-            .filter(is_detected)
-            .collect(),
+        (None, true) => {
+            // Honor a project's `enabled_plugins` shared setting if present (else no
+            // restriction) — HS2-94 settings driving HS2-92/HS2-98 setup.
+            let enabled = enabled_plugin_ids(store_path);
+            all_plugins(&default_dirs())
+                .into_iter()
+                .filter(is_detected)
+                .filter(|p| enabled.as_ref().is_none_or(|set| set.contains(p.id())))
+                .collect()
+        }
         (None, false) => {
             bail!("specify a tool (e.g. `hotsheet-cli setup claude`) or pass --detect")
         }
@@ -74,6 +80,21 @@ pub fn run_setup(
         });
     }
     Ok(reports)
+}
+
+/// The project's `enabled_plugins` shared setting as a set of ids, or `None` if unset
+/// (no restriction). A non-array or empty value is treated as "no restriction".
+fn enabled_plugin_ids(store: &Path) -> Option<std::collections::HashSet<String>> {
+    use hotsheet_ticketing::{Scope, Settings};
+    let value = Settings::new(store)
+        .get("enabled_plugins", Scope::Shared)
+        .ok()??;
+    let set: std::collections::HashSet<String> = value
+        .as_array()?
+        .iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .collect();
+    (!set.is_empty()).then_some(set)
 }
 
 fn is_detected(p: &Plugin) -> bool {
@@ -360,6 +381,29 @@ mod tests {
             "other server kept"
         );
         assert_eq!(mcp["mcpServers"]["hotsheet"]["command"], "hotsheet-mcp");
+    }
+
+    #[test]
+    fn enabled_plugins_setting_gates_detect() {
+        use hotsheet_ticketing::{Scope, Settings};
+        let d = project();
+        // Unset → no restriction.
+        assert!(enabled_plugin_ids(d.path()).is_none());
+        // A non-empty list → that set.
+        Settings::new(d.path())
+            .set(
+                "enabled_plugins",
+                serde_json::json!(["claude"]),
+                Scope::Shared,
+            )
+            .unwrap();
+        let set = enabled_plugin_ids(d.path()).unwrap();
+        assert!(set.contains("claude") && !set.contains("codex"));
+        // An empty list → no restriction (treated as unset).
+        Settings::new(d.path())
+            .set("enabled_plugins", serde_json::json!([]), Scope::Shared)
+            .unwrap();
+        assert!(enabled_plugin_ids(d.path()).is_none());
     }
 
     #[test]
