@@ -141,3 +141,132 @@ fn commands_on_a_non_store_report_it() {
         .failure()
         .stderr(predicate::str::contains("not a Hot Sheet store"));
 }
+
+#[test]
+fn ls_filters_and_sort() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let a = new_ticket(p, "alpha bug");
+    let b = new_ticket(p, "beta feature");
+    hs(p)
+        .args([
+            "edit",
+            &a,
+            "--status",
+            "started",
+            "--tag",
+            "urgent",
+            "--up-next",
+        ])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &b, "--priority", "high"])
+        .assert()
+        .success();
+
+    // text filter
+    hs(p)
+        .args(["ls", "--text", "BETA"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("beta feature"))
+        .stdout(predicate::str::contains("alpha").not());
+    // status filter
+    hs(p)
+        .args(["ls", "--status", "started"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alpha bug"))
+        .stdout(predicate::str::contains("beta").not());
+    // tag filter
+    hs(p)
+        .args(["ls", "--tag", "urgent"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alpha bug"));
+    // up_next only
+    hs(p)
+        .args(["ls", "--up-next"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alpha bug"))
+        .stdout(predicate::str::contains("beta").not());
+    // invalid sort errors
+    hs(p)
+        .args(["ls", "--sort", "bogus"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid sort"));
+}
+
+#[test]
+fn doctor_reports_ok_on_a_healthy_store() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    new_ticket(p, "t");
+    hs(p)
+        .arg("doctor")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No issues found"));
+}
+
+#[test]
+fn claim_next_release_and_renew() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "claim me");
+
+    hs(p)
+        .args(["claim-next", "--worker", "w1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Claimed"))
+        .stdout(predicate::str::contains(&slug));
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("claimed_by: w1"))
+        .stdout(predicate::str::contains("claim_count: 1"));
+
+    // The only ticket is now claimed → nothing left to claim.
+    hs(p)
+        .args(["claim-next", "--worker", "w2"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("No claimable tickets"));
+
+    // Renew: wrong worker rejected, holder accepted.
+    hs(p)
+        .args(["renew", &slug, "--worker", "w2"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("claimed by 'w1'"));
+    hs(p)
+        .args(["renew", &slug, "--worker", "w1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Renewed"));
+
+    // Release: wrong worker needs --force.
+    hs(p)
+        .args(["release", &slug, "--worker", "w2"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("use --force"));
+    hs(p)
+        .args(["release", &slug, "--worker", "w2", "--force"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Released"));
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("claimed_by").not());
+}
