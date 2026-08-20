@@ -14,10 +14,11 @@
 >
 > **Version coverage:** targets the **5 most recent production releases + the current
 > beta** (v0.17.2 … v0.20.0 + v0.21.0-beta), which span **two PG majors** — v0.17.x =
-> PGLite 0.3.x = **PG16**, v0.18.0+ = 0.4.x = **PG17**. A PG17 engine can't open a
-> PG16 datadir, so the exporter **bundles one engine per major** (`pglite-pg16` +
-> `@electric-sql/pglite`) and selects by the datadir's `PG_VERSION`. Verified with
-> real on-disk PG16 *and* PG17 clusters. See [`migrator/README.md`](../migrator/README.md).
+> PGLite 0.3.x = **PG16**, v0.18.0+ = 0.4.x = **PG17**. The exporter **bundles only the
+> latest engine** (`@electric-sql/pglite`, PG17) and tries it first; a datadir of a
+> different major (PG16, or a future PG18) falls back to `pglite-migrate` fetching a
+> matching engine on demand — one bundled engine, arbitrary-major support. Verified
+> with real on-disk PG16 *and* PG17 clusters. See [`migrator/README.md`](../migrator/README.md).
 >
 > **Real-cluster lessons baked into the exporter** (from the HS1 source): pick the
 > engine by PG major; the join column is **`blocks_on_ticket_id`**; a cluster
@@ -26,8 +27,9 @@
 > across releases degrades instead of erroring.
 >
 > **Not yet:** attachments (copied + written, HS2-78); the UI-prompted flow (§7.3);
-> and an *unbundled* future major (e.g. PG18) — falls back to `pglite-migrate`'s
-> fetch-missing-engine, wired but not offline-tested (HS2-82).
+> and the `pglite-migrate` **network fetch** for non-bundled majors (PG16 today, a
+> future PG18 tomorrow) — the cross-major *read* is offline-tested with a local
+> engine, but the on-demand engine acquisition itself isn't (HS2-82).
 
 ## 7.1 The problem
 

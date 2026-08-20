@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { PGlite as PGlite16 } from 'pglite-pg16';
+import { openDataDir } from 'pglite-migrate';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -173,9 +174,14 @@ async function makeDatadir(EngineClass, ddl, seed) {
   return hs;
 }
 
-describe('multi-major on-disk export', () => {
+describe('multi-major export', () => {
+  // The bundled engine is PG17, so a PG16 datadir goes through the pglite-migrate
+  // fallback, which at runtime FETCHES a PG16 engine. Offline, we prove the same
+  // cross-major READ path with a locally-installed PG16 engine (the devDependency),
+  // exactly as pglite-migrate would after acquiring it. The network fetch itself is
+  // pglite-migrate's own tested concern (HS2-82).
   it(
-    'reads a PG16 (v0.17.x) datadir — older schema, tables in template1',
+    'reads a real PG16 (v0.17.x) datadir cross-major — older schema, tables in template1',
     async () => {
       const hs = await makeDatadir(
         PGlite16,
@@ -186,13 +192,20 @@ describe('multi-major on-disk export', () => {
                 ('HS-2', 'old two', 'not_started', '');`,
       );
       try {
-        const out = await exportDatadir(hs, null);
-        expect(out.tickets).toHaveLength(2);
-        const t1 = out.tickets.find((t) => t.ticket_number === 'HS-1');
-        expect(t1.status).toBe('completed');
-        expect(t1.notes[0].text).toBe('hi');
-        // No ticket_blocked_by table in this era → degrades to empty, no throw.
-        expect(t1.blocked_by).toEqual([]);
+        const cluster = await openDataDir(join(hs, 'db'), 'pglite-pg16', {
+          pgliteOptions: { database: 'template1' },
+        });
+        try {
+          const out = await exportFromDb(cluster, { ticketPrefix: 'HS' });
+          expect(out.tickets).toHaveLength(2);
+          const t1 = out.tickets.find((t) => t.ticket_number === 'HS-1');
+          expect(t1.status).toBe('completed');
+          expect(t1.notes[0].text).toBe('hi');
+          // No ticket_blocked_by table in this era → degrades to empty, no throw.
+          expect(t1.blocked_by).toEqual([]);
+        } finally {
+          await cluster.close();
+        }
       } finally {
         rmSync(hs, { recursive: true, force: true });
       }
@@ -201,7 +214,7 @@ describe('multi-major on-disk export', () => {
   );
 
   it(
-    'reads a PG17 (v0.18.0+) datadir — tables in postgres, with edges',
+    'reads a PG17 (v0.18.0+) datadir end-to-end via the bundled engine',
     async () => {
       const hs = await makeDatadir(
         PGlite,
