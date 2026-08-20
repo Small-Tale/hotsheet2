@@ -21,6 +21,7 @@ hot-sheet2/
       src/enums.rs           #   Priority/Status/CloseReason/NoteKind/ReviewKind
       src/ids.rs             #   Ulid re-export + derive_slug (FNV-1a -> Crockford)
       src/ticket.rs          #   Ticket/Note/ReviewRequest/ExternalLink; Ticket::new
+      src/timestamp.rs       #   Timestamp: lenient RFC3339 (raw text + parsed instant)
       src/format.rs          #   parse_file / to_file_string (YAML frontmatter + body + notes)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)

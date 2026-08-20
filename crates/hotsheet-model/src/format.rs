@@ -15,6 +15,7 @@ use serde_yaml::{Mapping, Value};
 use crate::enums::NoteKind;
 use crate::ids::Ulid;
 use crate::ticket::{Note, Ticket};
+use crate::timestamp::Timestamp;
 
 /// Frontmatter keys the current schema defines. Anything else parsed from a file's
 /// frontmatter is retained in [`Ticket::extra`]. Kept in sync with `Ticket`'s fields
@@ -228,8 +229,8 @@ fn build_note(id: Ulid, kind: NoteKind, block: &str) -> Option<Note> {
         return None;
     }
     let (at, text) = match block.split_once(" — ") {
-        Some((at, text)) => (at.trim().to_string(), text.trim().to_string()),
-        None => (String::new(), block.to_string()),
+        Some((at, text)) => (Timestamp::new(at.trim()), text.trim().to_string()),
+        None => (Timestamp::default(), block.to_string()),
     };
     Some(Note { id, kind, at, text })
 }
@@ -247,7 +248,7 @@ fn notes_to_string(notes: &[&Note]) -> String {
         if n.at.is_empty() {
             out.push_str(&n.text);
         } else {
-            out.push_str(&n.at);
+            out.push_str(n.at.as_str());
             out.push_str(" — ");
             out.push_str(&n.text);
         }

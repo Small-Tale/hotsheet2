@@ -7,7 +7,9 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
-use hotsheet_model::{CloseReason, Note, NoteKind, Priority, Status, Ticket, Ulid, derive_slug};
+use hotsheet_model::{
+    CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, derive_slug,
+};
 use hotsheet_ticketing::FsStore;
 use serde::Deserialize;
 
@@ -134,8 +136,8 @@ fn build_ticket(
     t.up_next = src.up_next;
     t.tags = src.tags.clone();
     t.details = src.details.clone().unwrap_or_default();
-    t.completed_at = src.completed_at.clone();
-    t.verified_at = src.verified_at.clone();
+    t.completed_at = src.completed_at.clone().map(Timestamp::from);
+    t.verified_at = src.verified_at.clone().map(Timestamp::from);
     t.legacy_number = src.ticket_number.clone();
 
     // A completed/verified HS1 ticket carries a `completed` close outcome (docs/07).
@@ -161,7 +163,7 @@ fn build_ticket(
                 .and_then(|s| Ulid::from_string(s).ok())
                 .unwrap_or_else(Ulid::new),
             kind: NoteKind::Regular,
-            at: n.created_at.clone().unwrap_or_default(),
+            at: Timestamp::new(n.created_at.clone().unwrap_or_default()),
             text: n.text.clone(),
         })
         .collect();
@@ -263,7 +265,10 @@ mod tests {
         // completed → close outcome mapped.
         assert_eq!(root.status, Status::Completed);
         assert_eq!(root.close_reason, Some(CloseReason::Completed));
-        assert_eq!(root.closed_at.as_deref(), Some("2026-08-02T00:00:00Z"));
+        assert_eq!(
+            root.closed_at.as_ref().map(Timestamp::as_str),
+            Some("2026-08-02T00:00:00Z")
+        );
 
         // The HS1 note id (n_abc) was replaced with a real ULID.
         assert_eq!(root.notes.len(), 1);

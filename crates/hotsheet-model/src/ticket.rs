@@ -12,12 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::enums::{CloseReason, NoteKind, Priority, ReviewKind, Status};
 use crate::ids::Ulid;
-
-/// An RFC3339 timestamp.
-///
-/// Kept as a `String` for now; a typed timestamp lands with the parser refinement
-/// (tracked on HS2-3) so we don't bake a time-crate choice into the scaffold.
-pub type Timestamp = String;
+use crate::timestamp::Timestamp;
 
 /// A single note entry. `FeedbackDraft` notes are stored locally (per-user overlay),
 /// not in the committed file (`docs/02` §2.6 / `docs/17` §17.3).
@@ -140,8 +135,8 @@ impl Ticket {
         slug: impl Into<String>,
         title: impl Into<String>,
         category: impl Into<String>,
-        created_at: impl Into<String>,
-        updated_at: impl Into<String>,
+        created_at: impl Into<Timestamp>,
+        updated_at: impl Into<Timestamp>,
     ) -> Self {
         Self {
             id,
