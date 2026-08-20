@@ -16,6 +16,7 @@ path = "src/main.rs"
 hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
 hotsheet-index.workspace = true
+hotsheet-plugins.workspace = true
 axum.workspace = true
 tokio.workspace = true
 serde = { workspace = true }

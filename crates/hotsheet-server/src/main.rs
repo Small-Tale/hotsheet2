@@ -85,10 +85,9 @@ fn default_index_path(store: &FsStore) -> Result<PathBuf> {
         .canonicalize()
         .unwrap_or_else(|_| store.root().to_path_buf());
     let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
-    let base = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(std::env::temp_dir);
-    let dir = base.join(".hotsheet").join("index");
+    // HS2's own machine home (${HOTSHEET_HOME:-~/.hotsheet2}) — NOT ~/.hotsheet, which
+    // a separately installed Hot Sheet 1 owns (HS2-104).
+    let dir = hotsheet_plugins::hotsheet_home().join("index");
     std::fs::create_dir_all(&dir)?;
     Ok(dir.join(format!("{id}.sqlite")))
 }
