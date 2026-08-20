@@ -1,0 +1,19 @@
+[package]
+name = "hotsheet-mcp"
+description = "Hot Sheet 2 MCP shim: exposes the hotsheet_* tools, proxying a running server."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hotsheet-mcp"
+path = "src/main.rs"
+
+[dependencies]
+serde_json.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+ureq.workspace = true
