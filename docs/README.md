@@ -150,7 +150,8 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Filesystem watch → incremental reindex | 03 §3.4 | Design |
 | Shared **Rust** core engine (server + CLI only; clients don't embed) | 04, 09 | Confirmed |
 | Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Confirmed (design) |
-| Independent server (HTTP + WS + MCP) | 04 | Design |
+| Independent server (HTTP + WS) | 04 §4.3 | Partial (`hotsheet-server`: REST + /ws/sync + loopback auth; index/watcher/lifecycle/mTLS pending) |
+| MCP `hotsheet_*` tools (per-project shim) | 05 §5.8 | Partial (`hotsheet-mcp` shim proxies the server; config-writing pending) |
 | Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/import; merge-driver + more pending) |
 | Plugin-only AI-tool integration | 05 | Confirmed (design) |
 | Terminal/PTY hosting for AI tools | 05 §5.4 | Design |

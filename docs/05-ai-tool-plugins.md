@@ -204,6 +204,14 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 
 ## 5.8 MCP & CLI access for tools
 
+> **Status: MCP shim built (v1, HS2-7/43).** `crates/hotsheet-mcp` → the
+> `hotsheet-mcp` binary: a stdio JSON-RPC 2.0 server exposing `hotsheet_query` /
+> `get` / `create` / `update` / `close`, proxying a running `hotsheet-server` over
+> HTTP. An AI tool spawns it per project (`--server <url> --secret <s>`). The
+> plugin-config writing half (the `mcp` capability that drops the entry into each
+> tool's config) is still to come.
+
+
 AI tools reach tickets two ways, both over the one core:
 - **MCP** — the `hotsheet_*` tool surface (create/update/get/query/claim/etc.).
   **Decided (maintainer, 2026-08-19): a small per-project MCP shim** spawned into

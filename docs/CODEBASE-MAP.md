@@ -5,9 +5,11 @@ for X. Keep in sync in the same change that adds a file/dir, a command, a schema
 field, or a setting. Requirements status lives in [README.md](README.md); the field
 schema in [17-ticket-file-format.md](17-ticket-file-format.md).
 
-> **Status:** early implementation. The Rust core model + file format, a filesystem
-> store, the `hotsheet` CLI (init/new/ls/show/import), and the Node HS1 exporter
-> exist. Server, indexing, sync, clients, and plugins are still design-only.
+> **Status:** early implementation. Built: the Rust core model + file format, a
+> filesystem store, the shared engine `ops`, the `hotsheet` CLI + `hotsheet-migrate`,
+> the Node HS1 exporter, the **`hotsheet-server`** (HTTP REST + WS, loopback auth),
+> and the **`hotsheet-mcp`** shim. Still design-only: the SQLite index (HS2-5), the
+> watcher (HS2-6), server lifecycle/auto-start (HS2-59), mTLS, terminals, and clients.
 
 ## Directory tree
 
@@ -25,6 +27,7 @@ hot-sheet2/
       src/format.rs          #   parse_file / to_file_string (YAML frontmatter + body + notes)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
+      src/ops.rs             #   query/create/update/close/claim — the one op impl (CLI+server+MCP)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
     hotsheet-cli/            # two binaries + a shared lib
@@ -33,6 +36,13 @@ hot-sheet2/
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
+    hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
+      src/lib.rs             #   app() router, handlers over ops, ApiTicket DTO, auth, /ws/sync
+      src/main.rs            #   bind (loopback only) + serve; prints port + secret
+      tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
+    hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
+      src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools -> HttpBackend
+      src/main.rs            #   stdio JSON-RPC loop; --server + --secret
   migrator/                  # disposable Node HS1 exporter (docs/07)
     src/export.mjs           #   exportFromDb(db, project) + CLI (opens a datadir copy)
     src/introspect.mjs       #   schema-dump helper
@@ -52,6 +62,11 @@ hot-sheet2/
   <old/.hotsheet> -C <store>` spawns the Node exporter against a *copy* of the old
   database, then imports. Then `hotsheet`'s `ls`/`show`/`edit`/`new` operate on the
   store. Kept out of `hotsheet` so the live CLI carries no Node/migrator runtime dep.
+- **Server:** `hotsheet-server -C <store> [--bind 127.0.0.1:8787] [--secret …]` — HTTP
+  REST (`/health`, `/tickets`…) + `/ws/sync`, `X-Hotsheet-Secret` auth (Tier 0,
+  loopback only). Over `ops`; in-memory scan (index is HS2-5).
+- **MCP shim:** `hotsheet-mcp --server <url> --secret <s>` — stdio JSON-RPC exposing
+  the `hotsheet_*` tools, proxying the server. An AI tool spawns it per project.
 - **Migrator:** `migrator/src/export.mjs` → `node src/export.mjs <.hotsheet> [--out …]`.
 - **Library:** `hotsheet_model::{parse_file, to_file_string, Ticket}` is the format
   SSOT; `hotsheet_ticketing::FsStore` is the on-disk store.

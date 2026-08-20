@@ -64,6 +64,15 @@ git + a rebuildable index ([02-ticket-storage.md](02-ticket-storage.md) §2.9).
 
 ## 4.3 The server (`hotsheet-server`)
 
+> **Status: v1 built (HS2-7).** `crates/hotsheet-server` — axum HTTP REST
+> (`/health`, `/tickets` list/create, `/tickets/{id}` get/patch,
+> `/tickets/{id}/close`) + `/ws/sync` live push, over the shared engine
+> `ops`, with **Tier 0** auth (`X-Hotsheet-Secret`, loopback only — off-loopback
+> binds are refused until mTLS). It scans the store in-memory (the SQLite index is
+> HS2-5) and does **not** yet own the watcher (HS2-6), terminals (HS2-10), the
+> detached lifecycle/auto-start (HS2-59), or the long-poll fallback. MCP is a
+> separate shim, not served here (§5.8).
+
 A thin binary that wraps the core and is the **always-on service** every GUI talks
 to — **local use included**. It runs completely independently of any client (a
 chartered goal, made absolute by the maintainer 2026-08-19: there is no
