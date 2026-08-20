@@ -7,7 +7,7 @@
 //! FTS5 table over title/details/notes. The `blocked_by`/`assignees`/`reviews`
 //! facet tables in the doc schema are a follow-up.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use hotsheet_model::{Ticket, Ulid, parse_file};
 use hotsheet_ticketing::{FsStore, SortKey, TicketQuery};
@@ -108,6 +108,26 @@ impl Index {
         let conn = Connection::open(db_path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         Self::init(conn, store_id.into())
+    }
+
+    /// Open a file-backed index for a store and reconcile it against the current
+    /// files — the "restore from disk on launch" path. Reuses whatever the on-disk
+    /// index still has and only re-reads the delta. If the file can't be opened
+    /// (corrupt), it's deleted + rebuilt (corruption is a non-event, `docs/03` §3.8).
+    /// `store_id` is derived from the store root.
+    pub fn open_reconciled(db_path: &Path, store: &FsStore) -> Result<Self, IndexError> {
+        let store_id = store.root().display().to_string();
+        let index = match Self::open(db_path, store_id.clone()) {
+            Ok(index) => index,
+            Err(_) => {
+                let _ = std::fs::remove_file(db_path);
+                let _ = std::fs::remove_file(sidecar(db_path, "-wal"));
+                let _ = std::fs::remove_file(sidecar(db_path, "-shm"));
+                Self::open(db_path, store_id)?
+            }
+        };
+        index.reconcile(store)?;
+        Ok(index)
     }
 
     fn init(conn: Connection, store_id: String) -> Result<Self, IndexError> {
@@ -266,31 +286,59 @@ impl Index {
     pub fn rebuild_from_store(&self, store: &FsStore) -> Result<usize, IndexError> {
         self.conn
             .execute_batch("DELETE FROM tickets; DELETE FROM tags; DELETE FROM tickets_fts;")?;
-        let tickets_dir = store.root().join("tickets");
         let mut count = 0;
-        if tickets_dir.is_dir() {
-            for shard in std::fs::read_dir(&tickets_dir)? {
-                let shard = shard?;
-                if !shard.file_type()?.is_dir() {
-                    continue;
-                }
-                for entry in std::fs::read_dir(shard.path())? {
-                    let path = entry?.path();
-                    if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                        continue;
-                    }
-                    let bytes = std::fs::read(&path)?;
-                    let text = String::from_utf8_lossy(&bytes);
-                    let ticket = parse_file(&text).map_err(|source| IndexError::Parse {
-                        path: path.display().to_string(),
-                        source,
-                    })?;
-                    self.upsert(&ticket, &path.display().to_string(), &hash_bytes(&bytes))?;
-                    count += 1;
+        for path in ticket_files(store)? {
+            let bytes = std::fs::read(&path)?;
+            let ticket = parse_ticket(&path, &bytes)?;
+            self.upsert(&ticket, &path.display().to_string(), &hash_bytes(&bytes))?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    /// Bring the (kept) index up to date with the store: re-parse + upsert only files
+    /// whose content hash changed, and delete rows whose file is gone. Returns
+    /// `(upserted, deleted)`. Cheaper than a full rebuild on a warm index — this is
+    /// what makes "restore from disk on launch" fast (`docs/03` §3.4).
+    pub fn reconcile(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut upserted = 0;
+        for path in ticket_files(store)? {
+            // The filename stem is the ticket ULID.
+            let Some(id) = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| Ulid::from_string(s).ok())
+            else {
+                continue;
+            };
+            seen.insert(id.to_string());
+            let bytes = std::fs::read(&path)?;
+            let hash = hash_bytes(&bytes);
+            if self.content_hash(&id)?.as_deref() != Some(hash.as_str()) {
+                let ticket = parse_ticket(&path, &bytes)?;
+                self.upsert(&ticket, &path.display().to_string(), &hash)?;
+                upserted += 1;
+            }
+        }
+
+        let existing: Vec<String> = {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id FROM tickets WHERE store_id=?1")?;
+            stmt.query_map(params![self.store_id], |r| r.get(0))?
+                .collect::<Result<_, _>>()?
+        };
+        let mut deleted = 0;
+        for id in existing {
+            if !seen.contains(&id) {
+                if let Ok(u) = Ulid::from_string(&id) {
+                    self.delete(&u)?;
+                    deleted += 1;
                 }
             }
         }
-        Ok(count)
+        Ok((upserted, deleted))
     }
 
     /// Run a structured + full-text query, returning list rows.
@@ -387,6 +435,41 @@ impl Index {
 }
 
 // ---- helpers ---------------------------------------------------------------------
+
+/// Every `<ULID>.md` path under `<store>/tickets/`.
+fn ticket_files(store: &FsStore) -> Result<Vec<PathBuf>, IndexError> {
+    let dir = store.root().join("tickets");
+    let mut out = Vec::new();
+    if dir.is_dir() {
+        for shard in std::fs::read_dir(&dir)? {
+            let shard = shard?;
+            if !shard.file_type()?.is_dir() {
+                continue;
+            }
+            for entry in std::fs::read_dir(shard.path())? {
+                let path = entry?.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                    out.push(path);
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn parse_ticket(path: &Path, bytes: &[u8]) -> Result<Ticket, IndexError> {
+    parse_file(&String::from_utf8_lossy(bytes)).map_err(|source| IndexError::Parse {
+        path: path.display().to_string(),
+        source,
+    })
+}
+
+/// A SQLite WAL/SHM sidecar path (`<db>-wal`), for cleanup on a corrupt reopen.
+fn sidecar(db_path: &Path, suffix: &str) -> PathBuf {
+    let mut name = db_path.as_os_str().to_owned();
+    name.push(suffix);
+    PathBuf::from(name)
+}
 
 /// SHA-256 hex of the file bytes — the change-detection content hash (§3.4).
 pub fn hash_bytes(bytes: &[u8]) -> String {

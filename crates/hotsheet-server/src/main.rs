@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::Parser;
+use hotsheet_index::Index;
 use hotsheet_server::{AppState, app};
 use hotsheet_ticketing::FsStore;
 use tokio::net::TcpListener;
@@ -28,6 +29,9 @@ struct Cli {
     /// Shared secret required on `X-Hotsheet-Secret` (generated + printed if omitted).
     #[arg(long)]
     secret: Option<String>,
+    /// Index database file (default: ~/.hotsheet/index/<project-id>.sqlite).
+    #[arg(long)]
+    index: Option<PathBuf>,
 }
 
 #[tokio::main]
@@ -48,9 +52,17 @@ async fn main() -> Result<()> {
     }
 
     let secret = cli.secret.unwrap_or_else(|| Ulid::new().to_string());
-    let state = AppState::new(store, secret.clone())?;
 
-    // Keep the store's index fresh + broadcast external edits. Held for the run.
+    // File-backed index, restored from disk + reconciled with the current files.
+    let index_path = match cli.index {
+        Some(path) => path,
+        None => default_index_path(&store)?,
+    };
+    let index = Index::open_reconciled(&index_path, &store)?;
+    println!("index: {}", index_path.display());
+    let state = AppState::with_index(store, secret.clone(), index);
+
+    // Keep the index fresh + broadcast external edits. Held for the run.
     let _watch = hotsheet_server::spawn_watcher(state.clone())?;
 
     let listener = TcpListener::bind(addr).await?;
@@ -63,4 +75,20 @@ async fn main() -> Result<()> {
 
     axum::serve(listener, app(state)).await?;
     Ok(())
+}
+
+/// `~/.hotsheet/index/<project-id>.sqlite`, keyed by a hash of the store's path
+/// (machine-local, gitignored, disposable — `docs/03` §3.2).
+fn default_index_path(store: &FsStore) -> Result<PathBuf> {
+    let root = store
+        .root()
+        .canonicalize()
+        .unwrap_or_else(|_| store.root().to_path_buf());
+    let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
+    let base = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let dir = base.join(".hotsheet").join("index");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(format!("{id}.sqlite")))
 }

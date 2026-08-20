@@ -36,18 +36,24 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// New state over a store, guarded by `secret`. Builds the in-memory index from
-    /// the store (the index is disposable; rebuilt on each start).
-    pub fn new(store: FsStore, secret: String) -> anyhow::Result<Self> {
-        let index = Index::open_in_memory(store.root().display().to_string())?;
-        index.rebuild_from_store(&store)?;
+    /// State over a store + a prepared index, guarded by `secret`. The caller decides
+    /// whether the index is in-memory or file-backed (`Index::open_reconciled`).
+    pub fn with_index(store: FsStore, secret: String, index: Index) -> Self {
         let (events, _) = broadcast::channel(256);
-        Ok(Self {
+        Self {
             store,
             secret,
             events,
             index: Arc::new(Mutex::new(index)),
-        })
+        }
+    }
+
+    /// State over a store with a fresh **in-memory** index rebuilt from it (tests, or
+    /// a run that doesn't want to persist the cache).
+    pub fn new(store: FsStore, secret: String) -> anyhow::Result<Self> {
+        let index = Index::open_in_memory(store.root().display().to_string())?;
+        index.rebuild_from_store(&store)?;
+        Ok(Self::with_index(store, secret, index))
     }
 
     fn emit(&self, event: ChangeEvent) {
