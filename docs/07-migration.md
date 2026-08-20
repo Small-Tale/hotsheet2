@@ -4,15 +4,22 @@
 > per-project** migrator — not a first-class core feature (maintainer, 2026-08-19).
 > UI-prompted per project. Build: **HS2-14**.
 >
-> **Built so far:** the Node exporter (`migrator/src/export.mjs`, PGLite →
-> `hotsheet-export.json`) and the Rust importer (`hotsheet import`, reusing the core
-> writer for zero drift), with a cross-language conformance test (§7.2.1). We chose
-> **shape (B)** over the shape-(A) default because the Rust importer doubles as the
-> CLI's file writer and eliminates format drift. **Not yet:** attachments (copied +
-> written), the UI-prompted flow (§7.3), and validation against a real HS1 cluster —
-> the installed PGLite (0.3.16) aborts opening HS1's PG17 datadir (build/version
-> mismatch), so real-data runs need HS1's exact PGLite version. Exporter logic is
-> verified against a synthetic HS1 DB in the meantime.
+> **Built + validated on real data:** the Node exporter (`migrator/src/export.mjs`,
+> PGLite → `hotsheet-export.json`) and the Rust importer (`hotsheet import`, reusing
+> the core writer for zero drift), with a cross-language conformance test (§7.2.1).
+> We chose **shape (B)** over the shape-(A) default because the Rust importer doubles
+> as the CLI's file writer and eliminates format drift. Proven end-to-end against a
+> real HS1 cluster (this project's own snapshot): **81 tickets** exported + imported
+> with notes, `legacy_number`, and close outcomes intact.
+>
+> **Real-cluster lessons baked into the exporter** (from the HS1 source): the engine
+> must match the datadir's PG major — PGLite **0.4.x = PG17**, 0.3.x = PG16 (a
+> mismatch is an opaque WASM abort, now caught with a clear message); the join table
+> column is **`blocks_on_ticket_id`**; and a cluster predating PGLite 0.4.0 keeps its
+> tables in **`template1`**, not `postgres`, so the opener probes both.
+>
+> **Not yet:** attachments (copied + written, HS2-78); the UI-prompted flow (§7.3);
+> and cross-**major** datadirs (PG16/PG18) — bridged by `pglite-migrate` (HS2-82).
 
 ## 7.1 The problem
 
