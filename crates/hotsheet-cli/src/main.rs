@@ -167,10 +167,11 @@ fn cmd_import(path: &PathBuf, file: &PathBuf, prefix: &str) -> Result<()> {
         }
     };
 
-    let summary = import(&store, &export)?;
+    let base_dir = file.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let summary = import(&store, &export, base_dir)?;
     println!(
-        "Imported {} ticket(s), skipped {} already present.",
-        summary.written, summary.skipped
+        "Imported {} ticket(s) ({} attachment file(s)), skipped {} already present.",
+        summary.written, summary.attachments, summary.skipped
     );
     if summary.written > 0 {
         git_commit_all(

@@ -5,8 +5,9 @@
 //! Idempotent: tickets whose `legacy_number` is already present are skipped.
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use hotsheet_model::{
     CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, derive_slug,
 };
@@ -60,6 +61,8 @@ pub struct ExportTicket {
     pub updated_at: Option<String>,
     pub completed_at: Option<String>,
     pub verified_at: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<ExportAttachment>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,17 +74,29 @@ pub struct ExportNote {
     pub created_at: Option<String>,
 }
 
+/// An attachment as exported: its display filename + the staged file path (relative
+/// to the export JSON's directory, written by the migrator's staging pass).
+#[derive(Debug, Deserialize)]
+pub struct ExportAttachment {
+    pub original_filename: Option<String>,
+    pub stored_path: String,
+}
+
 /// Result of an import run.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ImportSummary {
     pub written: usize,
     pub skipped: usize,
+    pub attachments: usize,
 }
 
 /// Import `export` into `store`. Two passes: assign every source ticket a fresh ULID
 /// first, then write files with `blocked_by` remapped from old `HS-N` refs to the new
 /// ULIDs. HS1 note ids (`n_…`) are replaced with fresh ULIDs so appends merge (§2.6).
-pub fn import(store: &FsStore, export: &ExportFile) -> Result<ImportSummary> {
+///
+/// Attachment `stored_path`s are resolved relative to `base_dir` (the export JSON's
+/// directory, where the migrator staged the files) and copied into the store.
+pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<ImportSummary> {
     let prefix = store.metadata()?.ticket_prefix;
 
     let already: HashSet<String> = store
@@ -110,8 +125,32 @@ pub fn import(store: &FsStore, export: &ExportFile) -> Result<ImportSummary> {
         }
         store.write_ticket(&build_ticket(src, *id, &prefix, &id_by_number))?;
         summary.written += 1;
+        summary.attachments += copy_attachments(store, base_dir, id, &src.attachments)?;
     }
     Ok(summary)
+}
+
+/// Copy a ticket's staged attachment files into `attachments/<new-ulid>/`.
+fn copy_attachments(
+    store: &FsStore,
+    base_dir: &Path,
+    id: &Ulid,
+    attachments: &[ExportAttachment],
+) -> Result<usize> {
+    let mut n = 0;
+    for att in attachments {
+        let src = base_dir.join(&att.stored_path);
+        let bytes = std::fs::read(&src)
+            .with_context(|| format!("reading staged attachment {}", src.display()))?;
+        let filename = att
+            .original_filename
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(&att.stored_path);
+        store.write_attachment(id, filename, &bytes)?;
+        n += 1;
+    }
+    Ok(n)
 }
 
 fn build_ticket(
@@ -236,12 +275,13 @@ mod tests {
     #[test]
     fn imports_tickets_and_remaps_edges() {
         let (_dir, store) = temp_store();
-        let summary = import(&store, &export_json()).unwrap();
+        let summary = import(&store, &export_json(), Path::new(".")).unwrap();
         assert_eq!(
             summary,
             ImportSummary {
                 written: 2,
-                skipped: 0
+                skipped: 0,
+                attachments: 0,
             }
         );
 
@@ -282,15 +322,45 @@ mod tests {
     #[test]
     fn import_is_idempotent_by_legacy_number() {
         let (_dir, store) = temp_store();
-        import(&store, &export_json()).unwrap();
-        let again = import(&store, &export_json()).unwrap();
+        import(&store, &export_json(), Path::new(".")).unwrap();
+        let again = import(&store, &export_json(), Path::new(".")).unwrap();
         assert_eq!(
             again,
             ImportSummary {
                 written: 0,
-                skipped: 2
+                skipped: 2,
+                attachments: 0,
             }
         );
         assert_eq!(store.list_tickets().unwrap().len(), 2, "no duplicates");
+    }
+
+    #[test]
+    fn imports_staged_attachments_into_the_store() {
+        let (_dir, store) = temp_store();
+        // A staging dir (stands in for the export JSON's directory) with one file.
+        let staging = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(staging.path().join("attachments/0")).unwrap();
+        std::fs::write(staging.path().join("attachments/0/shot.png"), b"PNGDATA").unwrap();
+
+        let json = r#"{
+          "exportVersion": 1,
+          "project": { "ticketPrefix": "HS" },
+          "tickets": [
+            { "ticket_number": "HS-1", "title": "with attachment",
+              "notes": [], "blocked_by": [],
+              "attachments": [
+                { "original_filename": "shot.png", "stored_path": "attachments/0/shot.png" }
+              ] }
+          ]
+        }"#;
+        let export: ExportFile = serde_json::from_str(json).unwrap();
+        let summary = import(&store, &export, staging.path()).unwrap();
+        assert_eq!(summary.written, 1);
+        assert_eq!(summary.attachments, 1);
+
+        let ticket = &store.list_tickets().unwrap()[0];
+        let file = store.attachment_dir(&ticket.id).join("shot.png");
+        assert_eq!(std::fs::read(file).unwrap(), b"PNGDATA");
     }
 }

@@ -26,10 +26,16 @@
 > opener probes both); and the column set is read **tolerantly** so schema drift
 > across releases degrades instead of erroring.
 >
-> **Not yet:** attachments (copied + written, HS2-78); the UI-prompted flow (§7.3);
-> and the `pglite-migrate` **network fetch** for non-bundled majors (PG16 today, a
-> future PG18 tomorrow) — the cross-major *read* is offline-tested with a local
-> engine, but the on-demand engine acquisition itself isn't (HS2-82).
+> **Attachments** migrate: the exporter reads the `attachments` table (promoted
+> only — `draft_id IS NULL`), stages the files next to the export JSON, and rewrites
+> each `stored_path`; `hotsheet import` copies them into `attachments/<new-ulid>/`
+> (basename-sanitized). Source files resolve by basename under
+> `<.hotsheet>/attachments/` so a moved project still works.
+>
+> **Not yet:** the UI-prompted flow (§7.3); and the `pglite-migrate` **network fetch**
+> for non-bundled majors (PG16 today, a future PG18 tomorrow) — the cross-major *read*
+> is offline-tested with a local engine, but the on-demand engine acquisition itself
+> isn't (HS2-82).
 
 ## 7.1 The problem
 

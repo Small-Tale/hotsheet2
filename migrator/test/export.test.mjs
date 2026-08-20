@@ -3,7 +3,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { PGlite as PGlite16 } from 'pglite-pg16';
 import { openDataDir } from 'pglite-migrate';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -235,6 +235,61 @@ describe('multi-major export', () => {
     },
     30000,
   );
+});
+
+describe('attachments', () => {
+  it('exports promoted attachments and filters out drafts', async () => {
+    const db = new PGlite();
+    await db.exec(`
+      create table tickets (id serial primary key, ticket_number text, title text not null default '');
+      create table attachments (
+        id serial primary key, ticket_id int, original_filename text,
+        stored_path text, draft_id text
+      );
+      insert into tickets (ticket_number, title) values ('HS-1', 't');
+      insert into attachments (ticket_id, original_filename, stored_path, draft_id) values
+        (1, 'a.png', '/abs/.hotsheet/attachments/x.png', null),
+        (1, 'draft.png', '/abs/.hotsheet/attachments/y.png', 'draft-123');
+    `);
+    const out = await exportFromDb(db, {});
+    expect(out.tickets[0].attachments).toEqual([
+      { original_filename: 'a.png', stored_path: '/abs/.hotsheet/attachments/x.png' },
+    ]);
+    await db.close();
+  });
+
+  it('stages files beside the export and rewrites stored_path', async () => {
+    const hs = mkdtempSync(join(tmpdir(), 'hs1-att-'));
+    const outDir = mkdtempSync(join(tmpdir(), 'hs1-out-'));
+    try {
+      const db = new PGlite(join(hs, 'db'));
+      await db.exec(`
+        create table tickets (id serial primary key, ticket_number text, title text not null default '');
+        create table attachments (
+          id serial primary key, ticket_id int, original_filename text,
+          stored_path text, draft_id text
+        );
+        insert into tickets (ticket_number, title) values ('HS-1', 't');
+        insert into attachments (ticket_id, original_filename, stored_path, draft_id)
+          values (1, 'shot.png', '/original/machine/.hotsheet/attachments/stored-abc.png', null);
+      `);
+      await db.close();
+      writeFileSync(join(hs, 'settings.json'), JSON.stringify({ ticketPrefix: 'HS' }));
+      // The real file lives under <hs>/attachments/<basename of stored_path>.
+      mkdirSync(join(hs, 'attachments'), { recursive: true });
+      writeFileSync(join(hs, 'attachments', 'stored-abc.png'), Buffer.from('PNGDATA'));
+
+      const outPath = join(outDir, 'export.json');
+      const out = await exportDatadir(hs, outPath);
+      const att = out.tickets[0].attachments[0];
+      expect(att.original_filename).toBe('shot.png');
+      expect(att.stored_path).toBe('attachments/0/shot.png');
+      expect(existsSync(join(outDir, att.stored_path))).toBe(true);
+    } finally {
+      rmSync(hs, { recursive: true, force: true });
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  }, 30000);
 });
 
 describe('column tolerance', () => {

@@ -71,6 +71,37 @@ export async function exportFromDb(db, project = {}) {
     );
   }
 
+  // Promoted attachments (draft_id IS NULL, or no draft_id column on old schemas).
+  // Best-effort: the table didn't exist on the very earliest schemas.
+  const attByTicket = new Map(); // ticket_number -> [{original_filename, stored_path}]
+  try {
+    const cols = new Set(
+      (
+        await db.query(
+          `select column_name from information_schema.columns
+           where table_schema = 'public' and table_name = 'attachments'`,
+        )
+      ).rows.map((r) => r.column_name),
+    );
+    if (cols.has('ticket_id') && cols.has('original_filename') && cols.has('stored_path')) {
+      const where = cols.has('draft_id') ? 'where draft_id is null' : '';
+      const { rows } = await db.query(
+        `select ticket_id, original_filename, stored_path from attachments ${where} order by id`,
+      );
+      for (const a of rows) {
+        const num = numberById.get(a.ticket_id);
+        if (!num) continue;
+        if (!attByTicket.has(num)) attByTicket.set(num, []);
+        attByTicket.get(num).push({
+          original_filename: a.original_filename ?? null,
+          stored_path: a.stored_path,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`warning: could not read attachments (${err.message}); attachments not exported`);
+  }
+
   const tickets = ticketRows.map((r) => ({
     ticket_number: r.ticket_number ?? null,
     title: r.title ?? '',
@@ -87,6 +118,7 @@ export async function exportFromDb(db, project = {}) {
       created_at: iso(n.created_at),
     })),
     blocked_by: blockedBy.get(r.ticket_number) ?? [],
+    attachments: attByTicket.get(r.ticket_number) ?? [],
     created_at: iso(r.created_at),
     updated_at: iso(r.updated_at),
     completed_at: iso(r.completed_at),
@@ -112,7 +144,8 @@ export async function exportFromDb(db, project = {}) {
 export async function exportDatadir(hotsheetDir, outPath) {
   const fs = await import('node:fs');
   const os = await import('node:os');
-  const { join } = await import('node:path');
+  const path = await import('node:path');
+  const { join } = path;
 
   let project = {};
   const settingsPath = join(hotsheetDir, 'settings.json');
@@ -134,7 +167,10 @@ export async function exportDatadir(hotsheetDir, outPath) {
     }
     try {
       const exportObj = await exportFromDb(db, project);
-      if (outPath) fs.writeFileSync(outPath, `${JSON.stringify(exportObj, null, 2)}\n`);
+      if (outPath) {
+        stageAttachments(fs, path, hotsheetDir, outPath, exportObj);
+        fs.writeFileSync(outPath, `${JSON.stringify(exportObj, null, 2)}\n`);
+      }
       return exportObj;
     } finally {
       await db.close();
@@ -142,6 +178,54 @@ export async function exportDatadir(hotsheetDir, outPath) {
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
+}
+
+// ---- attachment staging ----------------------------------------------------------
+
+/**
+ * Copy each ticket's attachment files next to the export JSON and rewrite their
+ * `stored_path` to that staged, JSON-relative location, so the importer can find and
+ * copy them into the store. Files that can't be found on disk are dropped with a
+ * warning. `exportObj` is mutated in place.
+ */
+function stageAttachments(fs, path, hotsheetDir, outPath, exportObj) {
+  const outDir = path.dirname(outPath);
+  let idx = 0;
+  let staged = 0;
+  let missing = 0;
+  for (const t of exportObj.tickets) {
+    const kept = [];
+    for (const att of t.attachments ?? []) {
+      const src = resolveAttachmentSource(fs, path, hotsheetDir, att.stored_path);
+      if (!src) {
+        missing += 1;
+        continue;
+      }
+      const name = path.basename(att.original_filename || att.stored_path);
+      const rel = path.join('attachments', String(idx), name);
+      const dest = path.join(outDir, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(src, dest);
+      kept.push({ original_filename: att.original_filename ?? name, stored_path: rel });
+      idx += 1;
+      staged += 1;
+    }
+    t.attachments = kept;
+  }
+  if (staged) console.log(`Staged ${staged} attachment file(s) beside ${path.basename(outPath)}`);
+  if (missing) console.warn(`warning: ${missing} attachment file(s) not found on disk; skipped`);
+}
+
+/**
+ * HS1 `stored_path` is an absolute path under `<.hotsheet>/attachments/`. Resolve by
+ * basename against this project's attachments dir first (so a project copied to
+ * another machine still works), then fall back to the raw stored path.
+ */
+function resolveAttachmentSource(fs, path, hotsheetDir, storedPath) {
+  const byBasename = path.join(hotsheetDir, 'attachments', path.basename(storedPath));
+  if (fs.existsSync(byBasename)) return byBasename;
+  if (fs.existsSync(storedPath)) return storedPath;
+  return null;
 }
 
 // ---- engine + database selection -------------------------------------------------

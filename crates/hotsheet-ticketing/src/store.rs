@@ -125,6 +125,31 @@ impl FsStore {
         })
     }
 
+    /// The attachments directory for a ticket: `attachments/<ULID>/`.
+    pub fn attachment_dir(&self, id: &Ulid) -> PathBuf {
+        self.root.join("attachments").join(id.to_string())
+    }
+
+    /// Write an attachment file under `attachments/<ULID>/<filename>` (the filename is
+    /// reduced to its basename to prevent path traversal). Returns the written path.
+    pub fn write_attachment(
+        &self,
+        id: &Ulid,
+        filename: &str,
+        bytes: &[u8],
+    ) -> Result<PathBuf, StoreError> {
+        let name = Path::new(filename)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|n| !n.is_empty())
+            .unwrap_or("attachment");
+        let dir = self.attachment_dir(id);
+        fs::create_dir_all(&dir)?;
+        let path = dir.join(name);
+        fs::write(&path, bytes)?;
+        Ok(path)
+    }
+
     /// Read every ticket in the store, sorted by id (≈ creation order).
     pub fn list_tickets(&self) -> Result<Vec<Ticket>, StoreError> {
         let mut out = Vec::new();
@@ -206,6 +231,18 @@ mod tests {
         assert_eq!(listed.len(), 2);
         assert_eq!(listed[0].id, a.id, "sorted by id (k-sortable)");
         assert_eq!(listed[1].id, b.id);
+    }
+
+    #[test]
+    fn write_attachment_stores_under_the_ticket_and_strips_paths() {
+        let (_dir, store) = temp_store();
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        // A traversal-y filename is reduced to its basename.
+        let path = store
+            .write_attachment(&id, "../../evil/shot.png", b"PNGDATA")
+            .unwrap();
+        assert!(path.ends_with("attachments/01ARZ3NDEKTSV4RRFFQ69G5FAV/shot.png"));
+        assert_eq!(fs::read(&path).unwrap(), b"PNGDATA");
     }
 
     #[test]
