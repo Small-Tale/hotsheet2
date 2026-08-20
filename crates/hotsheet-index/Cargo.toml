@@ -1,0 +1,21 @@
+[package]
+name = "hotsheet-index"
+description = "Hot Sheet 2 index: disposable SQLite + FTS5 cache over the git-backed store."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hotsheet-model.workspace = true
+hotsheet-ticketing.workspace = true
+rusqlite.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+sha2 = { workspace = true }
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
