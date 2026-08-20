@@ -175,7 +175,8 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Terminal/PTY hosting for AI tools | 05 §5.4 | Design |
 | Multi-viewer PTY sizing (server-arbitrated, focus-follows, leased; remote-safe) | 06 §6.7 | Design |
 | Drive/transport interface (steer a running tool) | 13, 05 §5.5 | Partial (HS2-106: `Drive` trait + spawn-shape `SpawnDrive` + injected `ProcessSpawner`, fake-tested; persistent-channel/ACP + async `TurnEvent` stream pending) |
-| Connection registry / trigger / permissions / busy | 05 | Design |
+| Connection registry + busy tracking | 05 §5.6 | Partial (HS2-107: `ConnectionRegistry` + sliding-window busy built; wiring to live turns + spinner inference pending) |
+| Trigger / permissions bridge | 05 §5.5, §5.7 | Design |
 | Tauri + web client (1st) | 06 | Confirmed |
 | Native SwiftUI macOS (2nd) → iOS (3rd) | 06 | Confirmed |
 | Android client (4th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |

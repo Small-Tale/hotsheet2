@@ -58,6 +58,7 @@ hot-sheet2/
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
       src/ports.rs           #   ProcessSpawner/SpawnedProcess (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
+      src/registry.rs        #   ConnectionRegistry: live connections + sliding-window busy tracking
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)
       src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
