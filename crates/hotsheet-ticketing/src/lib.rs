@@ -8,8 +8,10 @@
 
 use hotsheet_model::Ulid;
 
+pub mod ops;
 pub mod ports;
 pub mod store;
+pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use ports::{Clock, Rng};
 pub use store::{FsStore, StoreError, StoreMetadata};
 

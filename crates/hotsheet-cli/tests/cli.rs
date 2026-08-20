@@ -107,7 +107,7 @@ fn close_duplicate_requires_a_target() {
         .args(["close", &slug, "--reason", "duplicate"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--duplicate-of"));
+        .stderr(predicate::str::contains("duplicate target is required"));
 }
 
 #[test]
@@ -264,12 +264,12 @@ fn claim_next_release_and_renew() {
         .success()
         .stdout(predicate::str::contains("Renewed"));
 
-    // Release: wrong worker needs --force.
+    // Release: wrong worker is rejected (needs --force).
     hs(p)
         .args(["release", &slug, "--worker", "w2"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("use --force"));
+        .stderr(predicate::str::contains("claimed by 'w1'"));
     hs(p)
         .args(["release", &slug, "--worker", "w2", "--force"])
         .assert()
