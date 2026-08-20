@@ -20,8 +20,16 @@ browser — those are host policy.
 
 Core modules (mirrors [01-architecture.md](01-architecture.md) §1.2):
 `model`, `store` (git-backed ticket files), `index` (SQLite/FTS5), `watch`,
-`query`, `plugins` (AI-tool host + terminal manager + permission bridge), `coord`
-(claim/lease).
+`query`, `plugins` (AI-tool **plugin loader + registry**, setup/instruction/skill/
+MCP writers, terminal manager, permission bridge — [05](05-ai-tool-plugins.md) §5.1a,
+§5.11), `settings` (shared/local project settings — §4.9), `coord` (claim/lease).
+
+Because `plugins` and `settings` are in the core, **both binaries** drive them: the
+CLI runs the one-shot half headless (`hotsheet setup`, `hotsheet plugin …`,
+`hotsheet settings …`) with no server, and the server runs the same code for
+client-driven flows and hosts the persistent half (terminals, drive, busy). This is
+the §4.5 no-duplication rule applied to setup + settings, not just ticket ops — and
+it's the reversal of HS1, where the *app layer* owned tool setup and project config.
 
 ### Why a library, not just a server
 So the **CLI can operate directly on disk with no server running** (a chartered
@@ -161,6 +169,26 @@ hotsheet doctor        # diagnose: store health, merge-driver registration, inde
 hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-ticket-storage.md §2.7)
 ```
 
+**AI-tool setup + plugins (core-owned, headless — [05](05-ai-tool-plugins.md) §5.1a, §5.11):**
+```
+hotsheet setup claude          # write CLAUDE.md/skills/MCP config/permission bridge for a tool
+hotsheet setup --detect        # set up every AI tool detected on this machine
+hotsheet plugin list           # installed + detected AI-tool plugins
+hotsheet plugin install <path|url>   # add an external plugin (trust-gated)
+hotsheet plugin verify <id>    # run the conformance suite against a plugin
+hotsheet plugin remove <id>
+```
+These run **with no server and no client** — the loader + setup writers live in the
+core (§4.1), so a purely terminal workflow prepares a project for its AI tools on
+its own. When a client is in play it asks the *server* to run the same code.
+
+**Project settings (core-owned; shared + local scopes — §4.9):**
+```
+hotsheet settings get <key> [--scope shared|local]
+hotsheet settings set <key> <value> [--scope shared|local]
+hotsheet settings list [--scope shared|local]
+```
+
 The **HS1→HS2 migrator is a separate, disposable bundled tool** (may be Node),
 **not** part of this long-lived CLI — it runs once per old project and is retired
 once data is moved. Invoke it directly (`hotsheet-migrate <old-project>`) or via the
@@ -197,13 +225,41 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
   sweep) is carried over — it's shipped, proven, and orthogonal to the storage
   rewrite. See [08-distributed-and-remote.md](08-distributed-and-remote.md).
 
-## 4.7 Open items
+## 4.7 Project settings (shared / local / client) — core-owned
+
+> **Decided (maintainer, 2026-08-20):** project settings are **core-owned and
+> CLI-manageable**, not app-only. The client owns *only* device-specific settings.
+> Build: **HS2-94**.
+
+Settings split by **scope**, which maps directly onto the already-decided
+shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
+§2.11). Each scope has a clear owner and a clear on-disk home:
+
+| Scope | Examples | On disk | Managed by |
+|---|---|---|---|
+| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, enabled-plugin set for the *project* | **committed** in the store repo (travels with the project) | core → **CLI + server + client** |
+| **Local** | which tools are enabled *on this machine*, index location, machine paths | **gitignored** overlay beside the store (machine-local, not device-app-local) | core → **CLI + server**; client via API |
+| **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7) | the client's own app storage | **client only — never enters core** |
+
+The dividing test: *does a headless CLI or the server ever need this value?* If yes,
+it's shared or local and lives in core-owned settings. If it only means something to
+a running GUI on one device, it's client-only and the core never sees it. This is
+why `hotsheet settings` (§4.4) can manage the first two scopes with no client at all,
+while a window position stays out of the core entirely.
+
+Shared settings are versioned by the same git as tickets (diffable, mergeable via
+the same driver where sensible); local settings are disposable machine state. The
+`plugins` module reads the enabled-plugin set from settings to decide what `hotsheet
+setup` writes ([05](05-ai-tool-plugins.md) §5.1a).
+
+## 4.8 Open items
 - **Language confirmation** (Rust vs Go) — [09-technology-decisions.md](09-technology-decisions.md) §9.2.
 - **MCP transport for the new server** — HS1 spawns a separate `channel.ts` MCP
   process per project. In HS2 the plugin host may let the server itself expose MCP,
   or keep a small per-project MCP shim; decided in [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.8.
 
-## 4.8 Cross-references
+## 4.9 Cross-references
 - Storage: [02-ticket-storage.md](02-ticket-storage.md) · Index: [03-indexing-and-query.md](03-indexing-and-query.md)
+- AI-tool plugins (loader, setup ownership, external plugins): [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.1a, §5.11
 - Clients (API consumers) + server auto-start lifecycle: [06-clients.md](06-clients.md) §6.2
 - Language/runtime decisions + server-separation ADR: [09-technology-decisions.md](09-technology-decisions.md) §9.1e, §9.2

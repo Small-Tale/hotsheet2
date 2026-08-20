@@ -50,7 +50,11 @@ drives AI coding tools) and rebuilds the *foundation*.
    the client**. See [04-core-server-cli.md](04-core-server-cli.md) §4.3.1.
 5. **AI-tool integration is entirely plugin-based** — no first-class tool.
    A general interface covers init/connect, list, trigger, permissions, and
-   busy-tracking. See [05-ai-tool-plugins.md](05-ai-tool-plugins.md).
+   busy-tracking. Plugins are **external + loadable** (manifest-only data →
+   subprocess/WASM for behavior), and **setup + project settings are core-owned** so
+   the **CLI can prepare a project headless** — no client, no server. See
+   [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.1a, §5.11 and
+   [04-core-server-cli.md](04-core-server-cli.md) §4.7.
 6. **Random, distributable ticket IDs** — ULID-based, no central counter,
    collision-free offline. See [02-ticket-storage.md](02-ticket-storage.md) §2.4.
 
@@ -125,6 +129,16 @@ and don't imply reading order — read by group.
 > **git-native self-claim** (ref/tag CAS, no coordinator) · UI = **Solid** · deferred
 > past v1: cross-server views, iOS push, remote terminals, iOS local stores. Remaining
 > open: the HS1 feature inventory (doc 11) + small implementation-time details.
+>
+> **Round-3 confirmation (2026-08-20):** AI-tool **setup/instructions/skills/MCP and
+> project settings are core-owned**, driven by **either the CLI (headless — no
+> client, no server) or the server**, not the app layer (reverses HS1). Plugins are
+> **external + loadable**: manifest-only (data, no ABI) for the bulk, **subprocess**
+> for process-shaped behaviors (drive/terminal/MCP) and **WASM** for pure-compute,
+> built-ins through the same loader, with a trust gate + `hotsheet plugin verify`.
+> Settings split **shared (committed) / local (gitignored, machine) / client-only
+> (device)** — core owns the first two. See [04](04-core-server-cli.md) §4.1/§4.7,
+> [05](05-ai-tool-plugins.md) §5.1a/§5.11.
 
 ## Requirements summary (synthesized status view)
 
@@ -154,6 +168,9 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | MCP `hotsheet_*` tools (per-project shim) | 05 §5.8 | Partial (`hotsheet-mcp` shim proxies the server; config-writing pending) |
 | Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/import; merge-driver + more pending) |
 | Plugin-only AI-tool integration | 05 | Confirmed (design) |
+| **Core-owned AI-tool setup/instructions/skills/MCP (headless; CLI + server, not app)** | 05 §5.1a, 04 §4.1 | Confirmed (design); build HS2-91 |
+| **External loadable plugins (manifest-only → subprocess/WASM; trust gate + verify)** | 05 §5.11 | Confirmed (design); build HS2-92/HS2-93 |
+| **Project settings, core-owned (shared/local scopes, CLI-manageable; client owns device-only)** | 04 §4.7 | Confirmed (design); build HS2-94 |
 | Terminal/PTY hosting for AI tools | 05 §5.4 | Design |
 | Multi-viewer PTY sizing (server-arbitrated, focus-follows, leased; remote-safe) | 06 §6.7 | Design |
 | Connection registry / trigger / permissions / busy | 05 | Design |

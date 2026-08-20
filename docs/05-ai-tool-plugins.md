@@ -3,6 +3,15 @@
 > **Status: Proposed.** This carries over HS1's hard-won plugin design (docs/132)
 > as a *starting point*, not an endpoint. HS1 spent an eight-phase epic clawing
 > per-tool `if (tool === …)` branches back into one interface; HS2 begins there.
+>
+> **Ownership + extensibility decided (maintainer, 2026-08-20).** Two changes from
+> HS1: (1) the plugin registry and all setup/instruction/skill/MCP/settings
+> *management* lives in the **core**, driven by **either the CLI (headless — no
+> client, no server) or the server**, not the app layer (§5.1a, §5.12). (2) plugins
+> are **external and loadable**, layered as manifest-only (data, no ABI) → behavioral
+> by capability (**subprocess** for process-shaped behaviors, **WASM** for
+> pure-compute), with built-ins shipped through the same loader and a trust gate
+> (§5.12). Build tracked in HS2-91/HS2-92/HS2-93.
 
 ## 5.1 The principle
 
@@ -16,6 +25,41 @@ precisely because it's the deepest integration).
 The hard rule, enforced by a lint/boundary check: **outside a plugin's own module,
 no code branches on a tool id.** Generic modules ask the plugin, never
 `if (tool === 'codex')`.
+
+## 5.1a Ownership: the core, not the app
+
+**Who prepares a project for an AI tool** — writes its instruction file, its skills,
+its MCP config, installs its permission bridge — was the **app layer's** job in HS1.
+That is wrong for HS2 (maintainer, 2026-08-20): it makes setup impossible headless,
+and it re-splits logic the way §4.5 forbids. In HS2 the plugin **registry and all
+setup/settings machinery live in the core** ([04-core-server-cli.md](04-core-server-cli.md)
+§4.1 `plugins`), reachable from **both** thin binaries:
+
+- **CLI, headless** — `hotsheet setup claude` / `hotsheet setup --detect` prepares a
+  project with **no client and no server running**. This is the load-bearing case:
+  a purely terminal, server-less workflow can still install instructions, skills, and
+  MCP config for whatever tools are present.
+- **Server** — the same core code runs when a client asks it to (`POST …/setup/<tool>`).
+
+The **client never implements setup**; consistent with "clients never embed the
+core" ([04](04-core-server-cli.md) §4.1), it *requests* setup through the server API
+and renders the plugin's declared `preferences`. What moved is *authorship of the
+artifacts*, from the app down into the shared core.
+
+**Which set of artifacts** to write is determined by **which plugins are active** —
+so "core-owned setup" and "external loadable plugins" (§5.12) are the same
+capability seen from two sides: the loader decides *what* tools exist, the setup
+capability decides *what each writes*, and either binary can drive it.
+
+Capabilities divide by lifetime, and that division is what makes headless work:
+
+| Bucket | Capabilities | Runs in |
+|---|---|---|
+| **One-shot, host-agnostic** | `setup`, `instructions`, `skills`, `mcp`-config, `permissions`-install, settings read/write | **CLI or server** — idempotent filesystem writes, no persistent host needed |
+| **Persistent, server-only** | terminals/PTY, `drive`/trigger, busy tracking, connection registry, runtime permission bridge | **server** — needs the always-on host (§5.4–§5.7) |
+
+The one-shot bucket is exactly the headless case. The persistent bucket is
+unchanged — it always needed the server.
 
 ## 5.2 The general interface the ticket asks for
 
@@ -88,6 +132,14 @@ instruction sections, the adapter skill-tree writer, the MCP-config primitive, t
 permission bridge, PTY/stdio framing, the commands-log emitter. A plugin *declares
 what's specific* and *calls host helpers for the rest* — a common-shape tool
 (AGENTS.md + a skills tree + a hooks file + a spawn drive) is nearly declarative.
+That "nearly" is the whole external-plugin story (§5.12): for most tools a plugin
+is *pure data*, which has no ABI problem and needs no code boundary.
+
+**"The host" is whichever binary runs the capability** (§5.1a), not "the server."
+The one-shot helpers above (instruction sections, skill-tree, MCP-config,
+permission-bridge *install*) are plain filesystem writes and run inside the **CLI**
+headless just as well as inside the server; only the persistent machinery (PTY,
+drive runtime, busy, the *live* permission bridge) requires the always-on server.
 
 ## 5.4 Terminals & initialization (init AI tools in terminals)
 
@@ -274,8 +326,62 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
 Full testing design: [12-code-organization-and-testing.md](12-code-organization-and-testing.md)
 §12.7.7. Build: **HS2-64**.
 
-## 5.11 Cross-references
+## 5.11 Plugin loading & extensibility (external plugins)
+
+> **Decided (maintainer, 2026-08-20):** plugins are **external and loadable** — a
+> third party can add a new AI tool without recompiling the core — layered so the
+> common case has no ABI at all. Build: **HS2-92** (loader + manifest),
+> **HS2-93** (behavioral boundaries + trust gate).
+
+Rust has no stable ABI, so "loadable plugin" cannot mean "load a `.dylib`." The
+**declarative/behavioral split (§5.3) is the escape hatch**: most of a plugin is
+*data*, and data has no ABI problem. Plugins are therefore layered:
+
+- **Manifest-only plugins — the bulk.** A directory with a manifest (id,
+  `detection`, `preferences`, `tier`, `transport` id, launch command, the
+  MCP-config *format*) plus template files (instruction file, skills/rules tree).
+  **No code, no ABI, no code sandbox** (there is no code). A common-shape tool
+  (§5.3) ships as *just this*. Loaded identically into the CLI and the server, so
+  `hotsheet setup <third-party-tool>` works headless.
+- **Behavioral plugins — manifest + code**, only for the custom bits (a persistent
+  channel, an app-server drive, a bespoke permission bridge). The execution boundary
+  is chosen **by capability**:
+  - **Subprocess protocol (stdio JSON-RPC)** for the **process-shaped behaviors** —
+    `drive`/trigger, terminals, MCP. These are *already* subprocess-shaped in HS2
+    (ACP, Codex app-server, the `hotsheet-mcp` shim), so an external drive plugin is
+    just another executable speaking the capability protocol. Language-agnostic; OS
+    crash-isolation.
+  - **WASM (`wasmtime`/`extism`)** for **pure-compute transforms** that want a
+    tighter sandbox — the host exposes only the §5.10 adapters (`ProcessSpawner`,
+    config writer, `PermissionTransport`, `McpConfigWriter`, `Clock`) as
+    capability-scoped imports; ambient fs/net is denied.
+
+**Built-ins ship as first-party plugins through the same loader.** Claude and Codex
+are not special-cased in core; they are plugins loaded from a bundled search-path
+entry. This is the §5.10 anti-drift discipline applied to the loader itself — the
+external interface can't rot because our own tools ride it.
+
+**The loader lives in core** (`plugins`, [04](04-core-server-cli.md) §4.1) and reads
+a search path: **bundled built-ins → `~/.hotsheet/plugins/` (machine) → project
+`.hotsheet/plugins/`**. Both binaries load the same registry, which is what lets a
+headless CLI set up a project for a plugin the user dropped in.
+
+**Trust gate (mandatory, not optional).** A manifest is inert data, but what it
+*writes* is a supply-chain surface: a plugin's instruction template steers an agent,
+and its launch command *executes*. So:
+- **Install-time consent** shows exactly what a plugin will write and what it will
+  launch, and its **provenance** (first-party / signed / unsigned third-party).
+- **`hotsheet plugin verify`** runs the §5.10 conformance suite against a plugin
+  (against `hs-fake-agent`) — the acceptance test a third-party plugin must pass,
+  since we can't gate someone else's plugin in our CI.
+- Subprocess/WASM behavior runs under the least-privilege boundary above; a
+  manifest-only plugin can *write* but never *executes host code*.
+
+CLI surface: `hotsheet plugin list | info <id> | install <path|url> | verify <id> |
+remove <id>`, and `hotsheet setup <tool|--detect>` (§5.1a).
+
+## 5.12 Cross-references
 - Storage concurrency the claim primitive protects: [02-ticket-storage.md](02-ticket-storage.md) §2.7
-- The core that hosts the plugin registry: [04-core-server-cli.md](04-core-server-cli.md)
-- Clients that render permission prompts / busy state: [06-clients.md](06-clients.md)
+- The core that hosts the plugin registry + settings model: [04-core-server-cli.md](04-core-server-cli.md) §4.1, §4.9
+- Clients that render permission prompts / busy state / plugin preferences: [06-clients.md](06-clients.md)
 - AI-tool integration testing (fake agent, conformance gate, drift layer): [12-code-organization-and-testing.md](12-code-organization-and-testing.md) §12.7.7
