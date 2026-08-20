@@ -174,7 +174,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | **Project settings, core-owned (shared/local scopes, CLI-manageable; client owns device-only)** | 04 §4.7 | Built (HS2-94): `Settings` shared/local + `hotsheet-cli settings get/set/list`; local auto-gitignored |
 | Terminal/PTY hosting for AI tools | 05 §5.4 | Design |
 | Multi-viewer PTY sizing (server-arbitrated, focus-follows, leased; remote-safe) | 06 §6.7 | Design |
-| Drive/transport interface (steer a running tool) | 13, 05 §5.5 | Partial (HS2-106: `Drive` trait + spawn-shape `SpawnDrive` + injected `ProcessSpawner`, fake-tested; persistent-channel/ACP + async `TurnEvent` stream pending) |
+| Drive/transport interface (steer a running tool) | 13, 05 §5.5 | Partial (HS2-106/108: `Drive` trait + spawn-shape `SpawnDrive`, manifest `[drive]` decl, `host::trigger` (plugin→drive→registry), fake-tested; persistent-channel/ACP + async `TurnEvent` + real CLI/server trigger pending) |
 | Connection registry + busy tracking | 05 §5.6 | Partial (HS2-107: `ConnectionRegistry` + sliding-window busy built; wiring to live turns + spinner inference pending) |
 | Trigger / permissions bridge | 05 §5.5, §5.7 | Design |
 | Tauri + web client (1st) | 06 | Confirmed |

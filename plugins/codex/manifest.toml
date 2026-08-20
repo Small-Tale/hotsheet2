@@ -28,3 +28,11 @@ format = "codex-toml"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
 args = ["--path", "{store}"]
+
+[drive]
+# How the host drives Codex (docs/13): spawn-per-run via `codex exec <prompt>`.
+transport = "spawn"
+program = "codex"
+args = ["exec"]
+content = "arg"
+interrupt = true

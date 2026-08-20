@@ -140,6 +140,74 @@ fn content_via_stdin_and_absent_interrupt_cap() {
     assert_eq!(turn.wait(), DoneReason::Completed);
 }
 
+// ---- plugins -> drive -> registry glue (host) ------------------------------------
+
+#[test]
+fn trigger_codex_registers_a_connection_and_runs() {
+    let spawner = FakeSpawner::new(0);
+    let mut reg = ConnectionRegistry::new(5_000);
+    let codex = hotsheet_plugins::find_in("codex", &[]).expect("codex plugin");
+
+    assert!(drive_for(&codex).is_some(), "codex declares a spawn drive");
+
+    let out = trigger(
+        &codex,
+        "/proj",
+        Role::DriveSpawned,
+        "sess-1".into(),
+        "work the top ticket",
+        &ctx(&spawner, "/proj"),
+        &mut reg,
+        1_000,
+    )
+    .unwrap();
+
+    // a connection was registered + marked busy
+    assert_eq!(out.connection_id, "sess-1");
+    let c = reg.get("sess-1").unwrap();
+    assert_eq!(c.tool, "codex");
+    assert_eq!(c.transport, Transport::Spawn);
+    assert_eq!(c.role, Role::DriveSpawned);
+    assert!(reg.is_busy("sess-1", 1_000));
+
+    // it ran the codex command
+    let spec = spawner.last();
+    assert_eq!(spec.program, "codex");
+    assert_eq!(spec.args, vec!["exec", "work the top ticket"]);
+
+    // and the turn completes
+    let mut turn = out.turn;
+    assert_eq!(turn.wait(), DoneReason::Completed);
+}
+
+#[test]
+fn claude_is_not_drivable_yet_and_leaves_no_connection() {
+    let claude = hotsheet_plugins::find_in("claude", &[]).expect("claude plugin");
+    assert!(drive_for(&claude).is_none(), "channel drive not built yet");
+
+    let spawner = FakeSpawner::new(0);
+    let mut reg = ConnectionRegistry::new(5_000);
+    // `Triggered` holds a trait object (not Debug), so match rather than unwrap_err.
+    match trigger(
+        &claude,
+        "/p",
+        Role::Main,
+        "s".into(),
+        "x",
+        &ctx(&spawner, "/p"),
+        &mut reg,
+        0,
+    ) {
+        Err(TriggerError::NotDrivable(id)) => assert_eq!(id, "claude"),
+        other => panic!("expected NotDrivable, got {:?}", other.is_ok()),
+    }
+    assert_eq!(
+        reg.count(),
+        0,
+        "no connection registered on a failed trigger"
+    );
+}
+
 // ---- the real adapter ------------------------------------------------------------
 
 #[test]

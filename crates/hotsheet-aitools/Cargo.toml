@@ -9,4 +9,5 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+hotsheet-plugins.workspace = true
 thiserror.workspace = true

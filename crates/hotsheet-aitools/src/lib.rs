@@ -10,6 +10,7 @@
 //! async `TurnEvent` stream land next.
 
 pub mod drive;
+pub mod host;
 pub mod ports;
 pub mod registry;
 pub mod spawn;
@@ -18,6 +19,7 @@ pub mod system;
 pub use drive::{
     DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle,
 };
+pub use host::{TriggerError, Triggered, drive_for, trigger};
 pub use ports::{ProcessSpawner, SpawnSpec, SpawnedProcess};
 pub use registry::{Connection, ConnectionRegistry, Role};
 pub use spawn::{ContentMode, SpawnConfig, SpawnDrive};

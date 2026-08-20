@@ -69,6 +69,32 @@ pub struct Manifest {
     #[serde(default)]
     pub skills: Option<Skills>,
     pub mcp: Mcp,
+    /// Optional: how the host **drives** the tool (docs/13). Absent = not drivable
+    /// (editor tools, or a transport not built yet). Declarative/client-safe — the
+    /// behavioral host (`hotsheet-aitools`) maps it to a `Drive`.
+    #[serde(default)]
+    pub drive: Option<DriveSpec>,
+}
+
+/// A tool's drive declaration (`docs/13`). Transport + content are strings here (this
+/// crate is the declarative, I/O-free loader); the host maps them to its enums.
+#[derive(Debug, Clone, Deserialize)]
+pub struct DriveSpec {
+    /// `spawn` | `claude-channel` | `app-server` | `acp`.
+    pub transport: String,
+    /// The tool's own launch program (e.g. `codex`) — NOT `hotsheet-mcp`.
+    pub program: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// `arg` (append the prompt) | `stdin` (pipe it).
+    #[serde(default = "default_content_mode")]
+    pub content: String,
+    #[serde(default)]
+    pub interrupt: bool,
+}
+
+fn default_content_mode() -> String {
+    "arg".to_string()
 }
 
 /// How the host decides the tool is installed on this machine.

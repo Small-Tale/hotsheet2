@@ -168,6 +168,15 @@ similar connections."
 
 ## 5.5 Drive / trigger (send a command to a target connection)
 
+> **Status: first slices built (HS2-106/107/108).** `crates/hotsheet-aitools` — the
+> `Drive` trait + the spawn-per-run `SpawnDrive` (Codex `exec`) over an injected
+> `ProcessSpawner`, the `ConnectionRegistry` (§5.6), and `host::trigger` which builds a
+> `Drive` from a plugin's manifest `[drive]` declaration, registers a `Connection`, and
+> runs one turn — all conformance-tested against a fake spawner (`docs/13` §13.7).
+> **Still to build:** the persistent-channel (Claude) + ACP drives with the async
+> `TurnEvent` stream (HS2-9), the permission bridge (§5.7), and the real CLI/server
+> trigger that injects `SystemSpawner` (with the HS2-103 launch-safety lessons).
+
 > **Direction confirmed (maintainer, 2026-08-19, HS2-41):** there is **no single
 > transport all tools share** — but there is **one interface with optional
 > capabilities that each tool conforms to as applicable** (absence = not supported,
