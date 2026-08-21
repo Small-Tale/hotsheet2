@@ -880,3 +880,41 @@ fn sync_pulls_and_pushes_between_clones() {
         hs(a.path()).args(["show", t]).assert().success();
     }
 }
+
+/// Per-user read tracking via the gitignored local overlay (HS2-21): a fresh ticket lists
+/// as unread (●); `read` clears it; the state lives in `local/reads.json`, gitignored.
+#[test]
+fn read_tracking_marks_and_is_gitignored() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "read me");
+
+    // Unread → the ● marker appears.
+    hs(p)
+        .arg("ls")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("●"));
+
+    hs(p)
+        .args(["read", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Marked"));
+
+    // Read → no ● marker for the single ticket.
+    hs(p)
+        .arg("ls")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("●").not());
+
+    // Durable on disk + gitignored (never committed).
+    assert!(p.join("local/reads.json").is_file());
+    let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
+    assert!(
+        gi.lines().any(|l| l.trim() == "local/"),
+        "local/ gitignored: {gi}"
+    );
+}

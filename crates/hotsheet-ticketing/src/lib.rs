@@ -10,6 +10,7 @@ use hotsheet_model::Ulid;
 
 pub mod merge;
 pub mod ops;
+pub mod overlay;
 pub mod ports;
 pub mod settings;
 pub mod store;
@@ -17,6 +18,7 @@ pub mod sync;
 pub mod wire;
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
+pub use overlay::LocalOverlay;
 pub use ports::{Clock, Rng};
 pub use settings::{Scope, Settings, SettingsError};
 pub use store::{FsStore, StoreError, StoreMetadata};

@@ -464,8 +464,30 @@ shared. That's different from Tier B: Tier C is entire tickets that are private
 (but fully git-versioned); Tier B is per-user *slivers* of otherwise-shared tickets
 that are deliberately kept out of git entirely.
 
-The precise field-by-field classification is the deliverable of **HS2-21**; the
-tiers above are the model it fills in.
+**The precise field-by-field classification (HS2-21).** Every ticket-related datum
+maps to exactly one tier:
+
+| Datum | Tier | Home |
+|---|---|---|
+| `title` · `details` · `category` · `priority` · `status` · `up_next` · `tags` · `blocked_by` · `blocked_reason` | A (shared) | committed ticket frontmatter/body |
+| `notes` (kind `regular` / `feedback_needed` / `status`) | A (shared) | committed `## Notes` |
+| `assignees` · `review_requests` · `external` | A (shared) | committed frontmatter |
+| `attachments` | A (shared) | committed `attachments/<ulid>/` |
+| `created_at` · `updated_at` · `completed_at` · `verified_at` · close/move fields (`closed_at` · `close_reason` · `duplicate_of` · `moved_to_store` · `moved_at`) | A (shared) | committed frontmatter |
+| `claimed_by` · `claim_lease_expires_at` · `worker_label` · `claim_count` | A (shared, but expiring) | committed frontmatter — a stale lease is reclaimable, never wedges |
+| **read state** (`last_read_at` / unread) | **B (local)** | `local/reads.json` (gitignored), keyed by ULID |
+| **feedback drafts** (notes of kind `feedback_draft`) | **B (local)** | dropped from the committed file today; overlay persistence is HS2-AWTHJE |
+| **UI / view state** (last view, scroll, drawer) | **B (local)** | overlay `local/…` — HS2-AWTHJE |
+| **machine preferences** | **B (local)** | `hotsheet-settings.local.json` (gitignored, `Scope::Local`) / overlay |
+| a whole `visibility: local` store | C | its own git repo, no remote, gitignored from the project |
+
+**Built (HS2-21):** the Tier B **overlay mechanism** — `ticketing::LocalOverlay`
+reads/writes gitignored files under `<store>/local/` (adding `local/` to
+`.gitignore` on first write), durable on disk so an index rebuild reconstructs it.
+Its first consumer is **read tracking** (`local/reads.json`; `hotsheet read <slug>`
+marks read, `hotsheet ls` shows an unread `●`). Feedback-draft persistence, UI/view
+state, and machine-pref reconciliation slot into the same overlay next
+(**HS2-AWTHJE**).
 
 ## 2.12 Automatic repo syncing — aggressive, hands-off
 

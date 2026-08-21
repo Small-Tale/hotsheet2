@@ -36,6 +36,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
       src/settings.rs        #   Settings: shared (committed) / local (gitignored) scopes; effective = local over shared
+      src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew/trigger/work

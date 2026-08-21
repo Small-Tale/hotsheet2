@@ -156,6 +156,8 @@ enum Cmd {
         #[arg(long)]
         yes: bool,
     },
+    /// Mark a ticket read on this machine (per-user local state; never committed).
+    Read { id: String },
     /// Sync the store with its git remote now: fetch, integrate incoming changes through
     /// the semantic merge driver (rebase), and push local commits. Normally automatic — this
     /// is the explicit "sync now" (docs/02 §2.12).
@@ -407,6 +409,7 @@ fn main() -> Result<()> {
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
         Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
+        Cmd::Read { id } => cmd_read(&cli.path, &id),
         Cmd::Sync => cmd_sync(&cli.path),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
@@ -870,10 +873,17 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         println!("(no tickets)");
         return Ok(());
     }
+    // Per-user unread state comes from the local (gitignored) overlay (HS2-21).
+    let overlay = hotsheet_ticketing::LocalOverlay::new(path.clone());
     for t in &tickets {
-        let marker = if t.up_next { "*" } else { " " };
+        let up = if t.up_next { "*" } else { " " };
+        let unread = if overlay.is_unread(t).unwrap_or(false) {
+            "●"
+        } else {
+            " "
+        };
         println!(
-            "{marker} {:<12} {:<12} {}",
+            "{up}{unread} {:<12} {:<12} {}",
             t.slug,
             status_str(t.status),
             t.title
@@ -930,6 +940,15 @@ fn cmd_move(src_path: &Path, id: &str, to: &Path, yes: bool) -> Result<()> {
         to.display(),
         src_path.display()
     );
+    Ok(())
+}
+
+fn cmd_read(path: &PathBuf, id: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket =
+        ops::resolve(&store, id)?.ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+    hotsheet_ticketing::LocalOverlay::new(path.clone()).mark_read(&ticket.id, &now_ts())?;
+    println!("Marked {} read.", ticket.slug);
     Ok(())
 }
 

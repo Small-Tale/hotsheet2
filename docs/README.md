@@ -157,7 +157,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Inline notes with timestamp-ordered UUIDs | 02 §2.6 | Confirmed |
 | Attachments support | 02 §2.5 | Confirmed |
 | **Automatic repo sync (aggressive fetch/push/rebase)** | 02 §2.12 | Partial (`ticketing::sync_once` cycle: fetch → rebase-through-merge-driver → push, offline-tolerant, conflict-aborts-clean; `hotsheet sync` CLI; bare-remote E2E — HS2-19. Always-on background loop + backoff + watcher coordination pending → HS2-731C2X) |
-| **Shared vs. local ticket data (on-disk gitignored overlay)** | 02 §2.11 | Confirmed (design) |
+| **Shared vs. local ticket data (on-disk gitignored overlay)** | 02 §2.11 | Partial (field classification + `ticketing::LocalOverlay` gitignored `<store>/local/` mechanism + read-tracking (`hotsheet read`/`ls ●`) — HS2-21; feedback-draft/UI-state/pref overlay pending → HS2-AWTHJE) |
 | **Human assignment + in-the-loop/review** | 10 | Open (proposal) |
 | **Close reasons** (completed / not planned / duplicate-of / obsolete) | 02 §2.6a | Shipped (field + `close` op + index columns + query filter `close_reason`/`closed` across CLI/MCP/server + reopen-clears; HS2-61) |
 | SQLite + FTS5 index, rebuildable from disk | 03 | Partial (`hotsheet-index`: schema/query/FTS/rebuild + **file-backed restore/reconcile on launch** built; facet tables + paging + `reindex` CLI pending) |
