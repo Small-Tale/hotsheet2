@@ -61,6 +61,7 @@ fn ctx<'a>(spawner: &'a FakeSpawner, cwd: &str) -> DriveCtx<'a> {
     DriveCtx {
         cwd: PathBuf::from(cwd),
         spawner,
+        env: Vec::new(),
         app_server: None,
         channel: None,
     }
@@ -126,6 +127,7 @@ fn appctx<'a>(spawner: &'a FakeSpawner, app: &'a FakeAppServer, cwd: &str) -> Dr
     DriveCtx {
         cwd: PathBuf::from(cwd),
         spawner,
+        env: Vec::new(),
         app_server: Some(app),
         channel: None,
     }
@@ -393,6 +395,7 @@ fn codex_client_drives_the_appserver_drive_end_to_end() {
     let ctx = DriveCtx {
         cwd: PathBuf::from("/proj"),
         spawner: &spawner,
+        env: Vec::new(),
         app_server: Some(&cx),
         channel: None,
     };
@@ -605,6 +608,7 @@ fn chanctx<'a>(spawner: &'a FakeSpawner, ch: &'a ClaudeChannel, cwd: &str) -> Dr
     DriveCtx {
         cwd: PathBuf::from(cwd),
         spawner,
+        env: Vec::new(),
         app_server: None,
         channel: Some(ch),
     }
@@ -832,6 +836,36 @@ fn run_trigger_drives_a_real_spawn_tool_and_tracks_the_connection() {
     assert!(!reg.is_busy("conn-1", 1_000), "set idle after the turn");
     // A spawn tool streams no output events, only the terminal Done.
     assert_eq!(events, vec!["Done(Completed)"]);
+}
+
+#[test]
+fn run_trigger_threads_env_into_a_spawn_tool() {
+    // The sh drive runs `/bin/sh -c <prompt>`; the prompt exits 0 only if FOO reached the
+    // process env — proving LiveTrigger.env is threaded through SpawnDrive (HS2-0TWTZ4,
+    // the HS2-103 safety PATH shim rides the same path).
+    let tmp = tempfile::tempdir().unwrap();
+    let plugin = write_sh_plugin(&tmp.path().join("shtool"));
+    let mut reg = ConnectionRegistry::new(5_000);
+
+    let mut t = live(r#"[ "$FOO" = bar ]"#, tmp.path());
+    t.env = vec![("FOO".to_string(), "bar".to_string())];
+    let reason = run_trigger(&plugin, &t, &mut reg, &mut |_| {}).unwrap();
+    assert_eq!(
+        reason,
+        DoneReason::Completed,
+        "env FOO=bar reached the spawned process"
+    );
+
+    // Sanity: without the env, the same check fails (FOO unset) — so the pass above is the
+    // env being threaded, not the prompt always succeeding.
+    let reason = run_trigger(
+        &plugin,
+        &live(r#"[ "$FOO" = bar ]"#, tmp.path()),
+        &mut reg,
+        &mut |_| {},
+    )
+    .unwrap();
+    assert_eq!(reason, DoneReason::Failed(1), "unset FOO → the check fails");
 }
 
 #[test]

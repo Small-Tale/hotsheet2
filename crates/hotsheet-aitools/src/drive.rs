@@ -43,6 +43,10 @@ pub struct DriveCtx<'a> {
     pub cwd: PathBuf,
     /// Spawn drives launch through this. (Always provide one; app-server drives ignore it.)
     pub spawner: &'a dyn ProcessSpawner,
+    /// Extra environment for a spawn-transport launch (e.g. the HS2-103 safety `PATH`
+    /// shim, or `--env` pairs the caller passed). The stream transports get their env at
+    /// spawn time instead, so they ignore this (`docs/13` §13.0, HS2-0TWTZ4).
+    pub env: Vec<(String, String)>,
     /// Present for the app-server (persistent daemon) drive; other transports ignore it.
     pub app_server: Option<&'a dyn AppServerClient>,
     /// Present for the Claude channel drive (a turn on a running `claude` stream-json

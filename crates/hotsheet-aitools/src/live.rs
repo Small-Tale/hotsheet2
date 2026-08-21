@@ -91,6 +91,7 @@ pub fn run_trigger(
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 spawner: &spawner,
+                env: t.env.clone(),
                 app_server: None,
                 channel: Some(&channel),
             };
@@ -108,6 +109,7 @@ pub fn run_trigger(
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 spawner: &spawner,
+                env: t.env.clone(),
                 app_server: Some(&app),
                 channel: None,
             };
@@ -117,6 +119,7 @@ pub fn run_trigger(
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 spawner: &spawner,
+                env: t.env.clone(),
                 app_server: None,
                 channel: None,
             };

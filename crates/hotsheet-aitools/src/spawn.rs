@@ -113,7 +113,10 @@ impl Drive for SpawnDrive {
         content: &str,
         ctx: &DriveCtx,
     ) -> Result<Box<dyn TurnHandle>, DriveError> {
-        let spec = self.spec(content, &ctx.cwd, target.0.as_deref());
+        let mut spec = self.spec(content, &ctx.cwd, target.0.as_deref());
+        // Thread the host's env (HS2-103 safety PATH shim + any --env pairs) into the
+        // spawned process — the stream transports get theirs at spawn time (HS2-0TWTZ4).
+        spec.env = ctx.env.clone();
         let proc = ctx
             .spawner
             .spawn(&spec)
