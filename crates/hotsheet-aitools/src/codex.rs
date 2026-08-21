@@ -396,15 +396,21 @@ impl AppServerTurn for CodexTurn {
 ///   persistent for that connection's many turns (no process per play). This is the
 ///   shape the live turn uses today.
 /// - [`ProxyTransport`] — `codex app-server proxy`: bridges the shared **daemon**
-///   control socket so connections could reuse one instance across the machine. Built,
-///   but **not usable yet** (HS2-115): probing showed the daemon control socket does
-///   **not** serve the app-server JSON-RPC — an `initialize` (JSONL, `Content-Length`,
-///   or raw; via the proxy or straight to the socket; with remote-control on or off)
-///   draws zero bytes, while `daemon version`/`stop` on the same socket answer. It speaks
-///   a separate **experimental, undocumented control protocol** not covered by
-///   `generate-ts`/`generate-json-schema`. Reviving this needs that protocol reverse-
-///   engineered from codex source (or a documented upstream API); `StdioTransport` is the
-///   supported path meanwhile.
+///   control socket so connections could reuse one instance across the machine. The child
+///   spawns and its stdio pipes, but our client can't drive the daemon over it yet
+///   (HS2-115). The blocker is now understood (codex 0.148 source, not an undocumented
+///   protocol): the daemon control socket is a **plain WebSocket** endpoint — its server
+///   does tungstenite `accept_async` on the UDS (`app-server-transport/.../unix_socket.rs`),
+///   so the *local* socket needs **no** auth token (the `Authorization: Bearer` check is
+///   only on the network `ws://IP:PORT` remote-control path), and the very same JSON-RPC
+///   (`initialize` → `thread/*` → `turn/*`) rides as WebSocket **text frames** on
+///   `ws://localhost/rpc`. The `proxy` subcommand is a *dumb byte relay* (`stdio_to_uds`:
+///   `tokio::io::copy` stdin↔UDS), so writing raw newline JSON-RPC through it reaches a
+///   server awaiting an HTTP/WebSocket upgrade → zero bytes back (the "no response" we
+///   saw). Making this usable needs a **WebSocket framing layer** in the transport
+///   (upgrade handshake, then text-frame each message; connect straight to the UDS, or
+///   frame over the proxy child's stdio) — the protocol engine above is unchanged.
+///   `StdioTransport` is the supported path meanwhile.
 ///
 /// `codex app-server` direct over stdio — the live-default transport.
 pub struct StdioTransport(StreamChild);
@@ -432,8 +438,10 @@ impl RpcTransport for StdioTransport {
     }
 }
 
-/// `codex app-server proxy` — bridges the shared daemon control socket (daemon handshake
-/// is blocked, HS2-115; see the transport-family doc above).
+/// `codex app-server proxy` — relays stdio to the shared daemon control socket. Not yet
+/// drivable: the socket speaks a **plain WebSocket** (text-frame JSON-RPC), so this raw
+/// byte pipe needs a WebSocket framing layer on top before `CodexAppServer` can use it
+/// (HS2-115; see the transport-family doc above).
 pub struct ProxyTransport(StreamChild);
 
 impl ProxyTransport {
