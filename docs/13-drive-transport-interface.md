@@ -34,10 +34,15 @@
 > unit-tested against an in-process **scripted daemon** (no live `codex`). **Live-verified
 > (2026-08-21, under HS2-103 safety in an isolated MCP-free `CODEX_HOME`):** a real turn
 > via `StdioTransport` opened a thread and completed (`Completed`) with the HS1 dev
-> instance untouched. Still open: the `ProxyTransport`/daemon path — the pre-initialized
-> daemon doesn't answer a fresh `initialize` yet (HS2-115) — and wiring approval
-> `ServerRequest`s to the real permission bridge (§5.7, HS2-113) rather than
-> auto-approving.
+> instance untouched. **`ProxyTransport`/shared-daemon path is blocked (HS2-115):**
+> probing the daemon control socket showed it does **not** serve the app-server JSON-RPC
+> — an `initialize` (any framing; via the proxy or the raw socket; remote-control on or
+> off) draws zero bytes, while `daemon version`/`stop` answer — so it speaks a separate
+> **experimental, undocumented control protocol** outside `generate-ts`/`generate-json-schema`.
+> Cross-connection instance sharing waits on that protocol being reverse-engineered or a
+> documented upstream API; `StdioTransport` (persistent per connection) is the supported
+> path. Also open: wiring approval `ServerRequest`s to the real permission bridge (§5.7,
+> HS2-113) rather than auto-approving.
 
 ## 13.0 Current tool capabilities (verified 2026-08-21)
 

@@ -396,9 +396,15 @@ impl AppServerTurn for CodexTurn {
 ///   persistent for that connection's many turns (no process per play). This is the
 ///   shape the live turn uses today.
 /// - [`ProxyTransport`] — `codex app-server proxy`: bridges the shared **daemon**
-///   control socket so connections reuse one instance across the machine. Built, but the
-///   daemon's pre-initialized handshake needs more protocol work (HS2-115) before it
-///   answers a fresh `initialize`, so it isn't the live default yet.
+///   control socket so connections could reuse one instance across the machine. Built,
+///   but **not usable yet** (HS2-115): probing showed the daemon control socket does
+///   **not** serve the app-server JSON-RPC — an `initialize` (JSONL, `Content-Length`,
+///   or raw; via the proxy or straight to the socket; with remote-control on or off)
+///   draws zero bytes, while `daemon version`/`stop` on the same socket answer. It speaks
+///   a separate **experimental, undocumented control protocol** not covered by
+///   `generate-ts`/`generate-json-schema`. Reviving this needs that protocol reverse-
+///   engineered from codex source (or a documented upstream API); `StdioTransport` is the
+///   supported path meanwhile.
 struct CodexChild {
     child: Child,
 }
