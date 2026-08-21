@@ -12,6 +12,7 @@
 //! should carry (`docs/07-migration.md` §7.2).
 
 pub mod import;
+pub mod launch_safety;
 pub mod plugin;
 pub mod setup;
 

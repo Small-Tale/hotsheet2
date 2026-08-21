@@ -199,9 +199,24 @@ core (§4.1), so a purely terminal workflow prepares a project for its AI tools 
 its own. When a client is in play it asks the *server* to run the same code.
 `setup <tool>` is **built (HS2-98)**: it writes a merge-safe managed block into the
 tool's instruction file (e.g. `CLAUDE.md`), the worklist skill, and an `.mcp.json`
-entry registering the serverless `hotsheet-mcp --path <store>`; re-running refreshes
-the managed pieces in place. The permission-bridge install + the `hotsheet plugin`
-management commands are still to come.
+entry registering the serverless `hotsheet-mcp --path <store>` (an **absolute**
+`hotsheet-mcp` path when one sits next to the CLI, so it works without PATH munging —
+HS2-117); re-running refreshes the managed pieces in place. The permission-bridge
+install + the `hotsheet plugin` management commands are still to come.
+
+**Drive a tool (the headless "play"):**
+```
+hotsheet trigger <tool> [--prompt …] [--project DIR] [--mcp-config F] [--env K=V]
+```
+`trigger` launches/injects one turn into an AI tool and streams it (HS2-109). It is
+**safe by default (HS2-117 launch safety):** it prepends a `hotsheet` → `hotsheet-cli`
+shim (plus the CLI's own dir) to the tool's PATH so a bare `hotsheet` can't hit an HS1
+launcher and kill the dev instance (§4.4); refuses to run when the project holds an
+HS1 store (`assert_no_hs1`) or when the tool isn't set up; and defaults `--mcp-config`
+to the tool's project config so the tool can reach **only** the Hot Sheet MCP (Claude
+via `--strict-mcp-config`). Codex's `CODEX_HOME` isolation is the remaining piece
+(**HS2-YRDQNX**); until then `trigger codex` requires an explicit `--env CODEX_HOME=…`.
+The safety primitives live in `crates/hotsheet-cli/src/launch_safety.rs`.
 
 **Project settings (core-owned; shared + local scopes — §4.9):**
 ```

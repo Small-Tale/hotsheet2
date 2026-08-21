@@ -398,7 +398,7 @@ fn cmd_trigger(
     let cwd = project.unwrap_or_else(|| store_path.to_path_buf());
 
     // `--env K=V` pairs for the launched tool (e.g. an isolated CODEX_HOME).
-    let env: Vec<(String, String)> = envs
+    let mut env: Vec<(String, String)> = envs
         .iter()
         .map(|kv| {
             kv.split_once('=')
@@ -406,6 +406,62 @@ fn cmd_trigger(
                 .with_context(|| format!("--env expects KEY=VALUE, got '{kv}'"))
         })
         .collect::<Result<_>>()?;
+
+    // ---- HS2-103 launch safety (baked in so a bare `trigger` is safe by default) ----
+    use hotsheet_cli::launch_safety;
+    launch_safety::assert_no_hs1(&cwd)?;
+
+    // Codex (`app-server`) isn't isolated by the MCP-config path below — it reads its
+    // MCP servers from `$CODEX_HOME` — so its full isolation (a fresh CODEX_HOME) is a
+    // follow-up (HS2-YRDQNX). Until then, refuse an un-isolated codex launch by default.
+    let transport = plugin
+        .manifest
+        .drive
+        .as_ref()
+        .map(|d| d.transport.as_str())
+        .unwrap_or("");
+    if transport == "app-server" && !env.iter().any(|(k, _)| k == "CODEX_HOME") {
+        bail!(
+            "refusing to drive {tool} without an isolated CODEX_HOME (its MCP servers would \
+             include your global config). Pass `--env CODEX_HOME=<dir>` for now; automatic \
+             isolation is HS2-YRDQNX."
+        );
+    }
+
+    // Put a `hotsheet` → `hotsheet-cli` shim (and the CLI's own dir) at the front of the
+    // launched tool's PATH, so a bare `hotsheet` hits our safe CLI (not an HS1 launcher).
+    let exe_dir = launch_safety::exe_dir()?;
+    let hotsheet_cli = std::env::current_exe()?;
+    let shim = launch_safety::ShimDir::create(&hotsheet_cli)?;
+    let base_path = env
+        .iter()
+        .find(|(k, _)| k == "PATH")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_else(|| std::env::var("PATH").unwrap_or_default());
+    let child_path = launch_safety::prepend_path(&[shim.path(), &exe_dir], &base_path);
+    launch_safety::assert_hotsheet_resolves(&child_path, shim.path())?;
+    env.retain(|(k, _)| k != "PATH");
+    env.push(("PATH".to_string(), child_path));
+
+    // MCP isolation: restrict the tool to only the Hot Sheet shim by defaulting
+    // `--mcp-config` to the tool's project config (Claude gets `--strict-mcp-config`).
+    // This requires the tool to have been set up in the project.
+    let mcp_config = match mcp_config {
+        Some(p) => Some(p),
+        None => {
+            let target = cwd.join(&plugin.manifest.mcp.target);
+            if !target.exists() {
+                bail!(
+                    "{tool} isn't set up for Hot Sheet in {} (no {}). Run \
+                     `hotsheet-cli setup {tool}` there first — trigger needs it for HS2-103 \
+                     MCP isolation.",
+                    cwd.display(),
+                    plugin.manifest.mcp.target
+                );
+            }
+            Some(target)
+        }
+    };
 
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

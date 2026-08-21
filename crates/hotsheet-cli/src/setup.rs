@@ -163,12 +163,15 @@ fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String> {
     let rel = &p.manifest.mcp.target;
     let target = project.join(rel);
     let name = &p.manifest.mcp.server_name;
-    let command = &p.manifest.mcp.command;
+    // Prefer the absolute `hotsheet-mcp` next to this CLI, so the MCP config works even
+    // when the tool's PATH doesn't include our install dir (HS2-103). Falls back to the
+    // manifest's bare command when there's no sibling (e.g. during tests).
+    let command = crate::launch_safety::mcp_command(&p.manifest.mcp.command);
     let args = p.mcp_args(&store_abs.to_string_lossy());
 
     match p.manifest.mcp.format.as_str() {
-        "claude-json" => write_mcp_json(&target, name, command, &args)?,
-        "codex-toml" => write_mcp_toml(&target, name, command, &args)?,
+        "claude-json" => write_mcp_json(&target, name, &command, &args)?,
+        "codex-toml" => write_mcp_toml(&target, name, &command, &args)?,
         other => bail!(
             "unknown MCP config format '{other}' for plugin '{}'",
             p.id()

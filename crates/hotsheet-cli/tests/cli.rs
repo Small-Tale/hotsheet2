@@ -213,6 +213,32 @@ fn ls_filters_and_sort() {
 }
 
 #[test]
+fn trigger_preflight_blocks_hs1_and_requires_setup() {
+    // Uses the built-in `claude` plugin (always embedded), so `trigger` gets past
+    // `find(tool)` and reaches the HS2-103 preflight gates, which both bail before any
+    // real tool is launched.
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+
+    // 1) An HS1 store under the project is refused before anything launches.
+    std::fs::create_dir(p.join(".hotsheet")).unwrap();
+    hs(p)
+        .args(["trigger", "claude"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("HS1 store"));
+    std::fs::remove_dir(p.join(".hotsheet")).unwrap();
+
+    // 2) Without the tool set up (no .mcp.json), trigger refuses (MCP isolation gate).
+    hs(p)
+        .args(["trigger", "claude"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("isn't set up"));
+}
+
+#[test]
 fn blocked_by_set_clear_and_reject() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

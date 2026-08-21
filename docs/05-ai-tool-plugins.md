@@ -177,7 +177,18 @@ similar connections."
 > integration priority** (see the current-tool matrix, `docs/13` §13.0). **Still to
 > build:** the live Codex daemon connection, the Claude channel drive + async `TurnEvent`
 > stream (HS2-9), the ACP drive (OpenCode), the permission bridge (§5.7), and the real
-> CLI/server trigger injecting `SystemSpawner` (with the HS2-103 launch-safety lessons).
+> CLI/server trigger injecting `SystemSpawner`.
+>
+> **`hotsheet-cli trigger` launch safety is baked in (HS2-117).** A bare `trigger <tool>`
+> is safe by default: it prepends a `hotsheet` → `hotsheet-cli` shim (+ the CLI's own dir)
+> to the launched tool's PATH so a bare `hotsheet` can't hit an HS1 launcher; refuses to
+> run in a project that still holds an HS1 store (`assert_no_hs1`) or one where the tool
+> isn't set up; and defaults `--mcp-config` to the tool's project config so it reaches
+> **only** the Hot Sheet shim (Claude via `--strict-mcp-config`). `setup` now writes an
+> **absolute** `hotsheet-mcp` path so the config works without the shim. Codex's
+> `CODEX_HOME` isolation is the remaining piece (**HS2-YRDQNX**); until then `trigger`
+> refuses an un-isolated codex launch unless `--env CODEX_HOME=…` is passed. See
+> `crates/hotsheet-cli/src/launch_safety.rs` and `docs/04` §4.4.
 
 > **Direction confirmed (maintainer, 2026-08-19, HS2-41):** there is **no single
 > transport all tools share** — but there is **one interface with optional

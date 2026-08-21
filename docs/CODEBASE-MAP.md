@@ -36,10 +36,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/settings.rs        #   Settings: shared (committed) / local (gitignored) scopes; effective = local over shared
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew
+      src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew/trigger
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
-      src/setup.rs           #   `hotsheet-cli setup <tool>`: write a plugin's instructions/skill/MCP config (merge-safe)
+      src/launch_safety.rs   #   HS2-103 safety for `trigger`: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, absolute hotsheet-mcp path
+      src/setup.rs           #   `hotsheet-cli setup <tool>`: write a plugin's instructions/skill/MCP config (merge-safe; absolute hotsheet-mcp path)
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
