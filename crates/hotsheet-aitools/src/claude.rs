@@ -294,6 +294,8 @@ impl ClaudeStreamTransport {
         cwd: &Path,
         resume: Option<&str>,
         mcp_config: Option<&Path>,
+        permission_mode: Option<&str>,
+        env: &[(String, String)],
     ) -> std::io::Result<Box<Self>> {
         let mut args: Vec<String> = [
             "-p",
@@ -315,12 +317,15 @@ impl ClaudeStreamTransport {
             args.push("--mcp-config".into());
             args.push(cfg.display().to_string());
         }
+        // Headless work needs a non-blocking permission mode so tools (edit/bash) don't
+        // stall waiting for a prompt (`docs/05` §5.7; the real bridge is HS2-113).
+        if let Some(mode) = permission_mode {
+            args.push("--permission-mode".into());
+            args.push(mode.to_string());
+        }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         Ok(Box::new(Self(StreamChild::spawn(
-            program,
-            &refs,
-            cwd,
-            &[],
+            program, &refs, cwd, env,
         )?)))
     }
 }

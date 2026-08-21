@@ -155,6 +155,35 @@ enum Cmd {
         #[arg(long, default_value_t = 30)]
         lease_minutes: i64,
     },
+    /// Drive a real AI tool for this project (the headless "play"): launch/inject a turn
+    /// and stream it. Applies HS2-103 launch safety. No server or client required.
+    Trigger {
+        /// The tool to drive (e.g. `claude`, `codex`).
+        tool: String,
+        /// The turn content. Defaults to a "work the top Up Next ticket" prompt.
+        #[arg(long)]
+        prompt: Option<String>,
+        /// Project directory the tool runs in (defaults to the store path).
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Resume a prior session id (channel tools).
+        #[arg(long)]
+        resume: Option<String>,
+        /// Restrict a channel tool to only this MCP config (`--strict-mcp-config`), so it
+        /// can't reach anything but the Hot Sheet shim (HS2-103 isolation).
+        #[arg(long)]
+        mcp_config: Option<PathBuf>,
+        /// Claude permission mode for headless work (e.g. `acceptEdits`,
+        /// `bypassPermissions`). Defaults to `acceptEdits`.
+        #[arg(long)]
+        permission_mode: Option<String>,
+        /// Set an env var for the launched tool (repeatable): `--env CODEX_HOME=/path`.
+        #[arg(long = "env")]
+        envs: Vec<String>,
+        /// Register the connection as a self-claim worker rather than the main session.
+        #[arg(long)]
+        worker: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -292,6 +321,109 @@ fn main() -> Result<()> {
             worker,
             lease_minutes,
         } => cmd_renew(&cli.path, &id, &worker, lease_minutes),
+        Cmd::Trigger {
+            tool,
+            prompt,
+            project,
+            resume,
+            mcp_config,
+            permission_mode,
+            envs,
+            worker,
+        } => cmd_trigger(
+            &cli.path,
+            &tool,
+            prompt,
+            project,
+            resume,
+            mcp_config,
+            permission_mode,
+            envs,
+            worker,
+        ),
+    }
+}
+
+/// The default "play" prompt: work the top Up Next ticket end to end, headless.
+const DEFAULT_TRIGGER_PROMPT: &str = "Read the Hot Sheet Up Next queue (hotsheet tools or \
+`hotsheet-cli ls --up-next`), take the highest-priority ticket, set it started, implement \
+it, and mark it completed with a note on what you did. If nothing is Up Next, say so and \
+stop.";
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_trigger(
+    store_path: &Path,
+    tool: &str,
+    prompt: Option<String>,
+    project: Option<PathBuf>,
+    resume: Option<String>,
+    mcp_config: Option<PathBuf>,
+    permission_mode: Option<String>,
+    envs: Vec<String>,
+    worker: bool,
+) -> Result<()> {
+    use hotsheet_aitools::{
+        ConnectionRegistry, DoneReason, LiveError, LiveTrigger, Role, TurnEvent, run_trigger,
+    };
+
+    let plugin = hotsheet_plugins::find(tool)
+        .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
+    let cwd = project.unwrap_or_else(|| store_path.to_path_buf());
+
+    // `--env K=V` pairs for the launched tool (e.g. an isolated CODEX_HOME).
+    let env: Vec<(String, String)> = envs
+        .iter()
+        .map(|kv| {
+            kv.split_once('=')
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .with_context(|| format!("--env expects KEY=VALUE, got '{kv}'"))
+        })
+        .collect::<Result<_>>()?;
+
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+
+    let t = LiveTrigger {
+        cwd: cwd.clone(),
+        prompt: prompt.unwrap_or_else(|| DEFAULT_TRIGGER_PROMPT.to_string()),
+        role: if worker { Role::Worker } else { Role::Main },
+        conn_id: format!("cli-{}", std::process::id()),
+        resume,
+        mcp_config,
+        // Headless work needs a non-blocking permission mode (channel tools); the real
+        // permission bridge is HS2-113.
+        permission_mode: Some(permission_mode.unwrap_or_else(|| "acceptEdits".to_string())),
+        env,
+        now_ms,
+    };
+
+    eprintln!("▶ driving {tool} in {} …", cwd.display());
+    let mut registry = ConnectionRegistry::new(30_000);
+    let reason = run_trigger(&plugin, &t, &mut registry, &mut |ev| match ev {
+        TurnEvent::Output(text) => {
+            print!("{text}");
+            let _ = std::io::Write::flush(&mut std::io::stdout());
+        }
+        TurnEvent::PermissionAsked(p) => eprintln!("\n[permission] {} — {}", p.tool, p.summary),
+        TurnEvent::Done(_) => {}
+    })
+    .map_err(|e| match e {
+        LiveError::NotDrivable(id) => {
+            anyhow::anyhow!("'{id}' is not drivable (no [drive], or its transport isn't built yet)")
+        }
+        other => anyhow::Error::new(other),
+    })?;
+
+    println!();
+    match reason {
+        DoneReason::Completed => {
+            eprintln!("✔ {tool} turn completed");
+            Ok(())
+        }
+        DoneReason::Failed(code) => bail!("{tool} turn failed (exit {code})"),
+        DoneReason::Interrupted => bail!("{tool} turn interrupted"),
     }
 }
 

@@ -581,6 +581,7 @@ version = "0.0.0"
 dependencies = [
  "hotsheet-plugins",
  "serde_json",
+ "tempfile",
  "thiserror",
 ]
 
@@ -591,6 +592,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "hotsheet-aitools",
  "hotsheet-model",
  "hotsheet-plugins",
  "hotsheet-ticketing",

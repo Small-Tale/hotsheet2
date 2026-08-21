@@ -410,13 +410,18 @@ impl AppServerTurn for CodexTurn {
 pub struct StdioTransport(StreamChild);
 
 impl StdioTransport {
-    /// Spawn `program app-server` in `cwd`, piping stdio for JSON-RPC.
-    pub fn spawn(program: &str, cwd: &Path) -> std::io::Result<Box<Self>> {
+    /// Spawn `program app-server` in `cwd` (with extra `env`, e.g. an isolated
+    /// `CODEX_HOME`), piping stdio for JSON-RPC.
+    pub fn spawn(
+        program: &str,
+        cwd: &Path,
+        env: &[(String, String)],
+    ) -> std::io::Result<Box<Self>> {
         Ok(Box::new(Self(StreamChild::spawn(
             program,
             &["app-server"],
             cwd,
-            &[],
+            env,
         )?)))
     }
 }

@@ -14,6 +14,7 @@ pub mod claude;
 pub mod codex;
 pub mod drive;
 pub mod host;
+pub mod live;
 pub mod ports;
 mod procio;
 pub mod registry;
@@ -28,6 +29,7 @@ pub use drive::{
     Transport, TurnEvent, TurnHandle,
 };
 pub use host::{TriggerError, Triggered, drive_for, trigger};
+pub use live::{LiveError, LiveTrigger, run_trigger};
 pub use ports::{
     AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner, RpcReader,
     RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,

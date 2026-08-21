@@ -60,6 +60,7 @@ hot-sheet2/
       src/codex.rs           #   CodexAppServer: real AppServerClient (codex 0.148 JSON-RPC engine) + StdioTransport (live-verified) / ProxyTransport + ensure_codex_daemon; scripted-daemon tests
       src/claude.rs          #   ClaudeChannelDrive + ClaudeChannel: turn injected into a running `claude` stream-json session, async TurnEvent stream; ClaudeStreamTransport + scripted-claude tests
       src/procio.rs          #   StreamChild: shared piped-stdio plumbing (spawn -> RpcWriter/RpcReader) for the stream transports
+      src/live.rs            #   run_trigger: spawn a REAL tool per its [drive] transport, build DriveCtx, stream one turn (behind `hotsheet-cli trigger`)
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
       src/ports.rs           #   ProcessSpawner/SpawnedProcess + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
@@ -88,7 +89,8 @@ hot-sheet2/
   Global `-C/--path` selects the store dir. Subcommands: `init`, `new`, `ls`
   (filters/sort/text), `show`, `edit`, `close`, `setup` (AI-tool setup, headless),
   `plugin` (list/install/remove external plugins), `settings` (get/set/list, shared|local),
-  `import`, `doctor`, `claim-next`, `release`, `renew`.
+  `import`, `doctor`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":
+  drive a real AI tool for the project and stream one turn — HS2-109).
 - **Migrator CLI:** `src/bin/hotsheet-migrate.rs` → **separate** binary
   `hotsheet-migrate` (rarely-used, one-time, needs Node). `hotsheet-migrate
   <old/.hotsheet> -C <store>` spawns the Node exporter against a *copy* of the old

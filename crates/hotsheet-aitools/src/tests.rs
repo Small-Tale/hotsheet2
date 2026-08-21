@@ -422,7 +422,8 @@ fn codex_live_turn_against_the_daemon() {
     let cwd = std::env::var("CODEX_LIVE_CWD")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::temp_dir());
-    let transport = crate::codex::StdioTransport::spawn(&program, &cwd).expect("app-server spawn");
+    let transport =
+        crate::codex::StdioTransport::spawn(&program, &cwd, &[]).expect("app-server spawn");
     let cx = CodexAppServer::connect(transport).expect("initialize handshake");
     let thread = cx.open_thread(None, &cwd).expect("thread/start");
     eprintln!("live: opened thread {thread}");
@@ -571,9 +572,15 @@ fn claude_live_turn_over_the_channel() {
     let mcp = std::env::var("CLAUDE_LIVE_MCP")
         .ok()
         .map(std::path::PathBuf::from);
-    let transport =
-        crate::claude::ClaudeStreamTransport::spawn(&program, &cwd, None, mcp.as_deref())
-            .expect("claude spawn");
+    let transport = crate::claude::ClaudeStreamTransport::spawn(
+        &program,
+        &cwd,
+        None,
+        mcp.as_deref(),
+        None,
+        &[],
+    )
+    .expect("claude spawn");
     let ch = ClaudeChannel::connect(transport);
     let mut turn = ch
         .start_turn("Reply with only the word: pong")
@@ -594,6 +601,129 @@ fn claude_live_turn_over_the_channel() {
     eprintln!("live: done {reason:?}, session={:?}", ch.session_id());
     assert!(saw_output, "streamed at least one assistant output");
     assert_eq!(reason, DoneReason::Completed, "live turn should complete");
+}
+
+// ---- the live trigger over a real (harmless) spawn tool (HS2-109) ----------------
+
+use crate::live::{LiveError, LiveTrigger, run_trigger};
+
+/// Write a minimal on-disk plugin whose `[drive]` is a real spawn of `/bin/sh -c <prompt>`
+/// — a genuine live trigger (SystemSpawner + host::trigger + registry) with no AI tool.
+fn write_sh_plugin(dir: &std::path::Path) -> hotsheet_plugins::Plugin {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(
+        dir.join("manifest.toml"),
+        r#"id = "shtool"
+display_name = "Sh Tool"
+product_name = "Sh Tool"
+tier = "cli-agent"
+[detection]
+binaries = ["sh"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[drive]
+transport = "spawn"
+program = "/bin/sh"
+args = ["-c"]
+content = "arg"
+interrupt = false
+"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    hotsheet_plugins::Plugin::from_fs_dir(dir).unwrap()
+}
+
+fn live(prompt: &str, cwd: &std::path::Path) -> LiveTrigger {
+    LiveTrigger {
+        cwd: cwd.to_path_buf(),
+        prompt: prompt.to_string(),
+        role: Role::Main,
+        conn_id: "conn-1".into(),
+        resume: None,
+        mcp_config: None,
+        permission_mode: None,
+        env: Vec::new(),
+        now_ms: 1_000,
+    }
+}
+
+#[test]
+fn run_trigger_drives_a_real_spawn_tool_and_tracks_the_connection() {
+    let tmp = tempfile::tempdir().unwrap();
+    let plugin = write_sh_plugin(&tmp.path().join("shtool"));
+    let mut reg = ConnectionRegistry::new(5_000);
+
+    let mut events = Vec::new();
+    let reason = run_trigger(&plugin, &live("exit 0", tmp.path()), &mut reg, &mut |ev| {
+        events.push(format!("{ev:?}"))
+    })
+    .unwrap();
+
+    assert_eq!(reason, DoneReason::Completed);
+    // The connection was registered (spawn transport) and then set idle at Done.
+    let c = reg.get("conn-1").expect("connection registered");
+    assert_eq!(c.tool, "shtool");
+    assert_eq!(c.transport, Transport::Spawn);
+    assert!(!reg.is_busy("conn-1", 1_000), "set idle after the turn");
+    // A spawn tool streams no output events, only the terminal Done.
+    assert_eq!(events, vec!["Done(Completed)"]);
+}
+
+#[test]
+fn run_trigger_reports_a_nonzero_exit_as_failed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let plugin = write_sh_plugin(&tmp.path().join("shtool"));
+    let mut reg = ConnectionRegistry::new(5_000);
+    let reason = run_trigger(&plugin, &live("exit 5", tmp.path()), &mut reg, &mut |_| {}).unwrap();
+    assert_eq!(reason, DoneReason::Failed(5));
+}
+
+#[test]
+fn run_trigger_rejects_a_non_drivable_plugin() {
+    // The built-in Claude plugin IS drivable; a plugin with no [drive] is not. Use a
+    // minimal on-disk plugin without a [drive] block.
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join("nodrive");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("manifest.toml"),
+        r#"id = "nodrive"
+display_name = "No Drive"
+product_name = "No Drive"
+tier = "cli-agent"
+[detection]
+binaries = ["nodrive"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    let plugin = hotsheet_plugins::Plugin::from_fs_dir(&dir).unwrap();
+    let mut reg = ConnectionRegistry::new(5_000);
+    match run_trigger(&plugin, &live("x", tmp.path()), &mut reg, &mut |_| {}) {
+        Err(LiveError::NotDrivable(id)) => assert_eq!(id, "nodrive"),
+        other => panic!(
+            "expected NotDrivable, got {:?}",
+            other.map(|r| format!("{r:?}"))
+        ),
+    }
+    assert_eq!(reg.count(), 0, "no connection on a non-drivable trigger");
 }
 
 // ---- the real adapter ------------------------------------------------------------
