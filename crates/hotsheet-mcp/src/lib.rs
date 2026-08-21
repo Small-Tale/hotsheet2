@@ -81,7 +81,7 @@ fn tools_list() -> Value {
     json!({ "tools": [
         {
             "name": "hotsheet_query",
-            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, sort).",
+            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results.",
             "inputSchema": { "type": "object", "properties": {
                 "status": str_prop("filter by status"),
                 "priority": str_prop("filter by priority"),
@@ -90,7 +90,9 @@ fn tools_list() -> Value {
                 "text": str_prop("substring across title/details/notes"),
                 "up_next": { "type": "boolean" },
                 "open": { "type": "boolean" },
-                "sort": str_prop("id|created|updated|priority|status|title")
+                "sort": str_prop("id|created|updated|priority|status|title"),
+                "limit": { "type": "integer", "description": "cap the number of rows returned (after sort)" },
+                "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
             } }
         },
         {
@@ -105,17 +107,19 @@ fn tools_list() -> Value {
                 "title": str_prop("required"),
                 "category": str_prop(""), "priority": str_prop(""),
                 "details": str_prop(""), "tags": { "type": "array", "items": { "type": "string" } },
-                "up_next": { "type": "boolean" }
+                "up_next": { "type": "boolean" },
+                "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "blocker tickets (slug or ULID)" }
             }, "required": ["title"] }
         },
         {
             "name": "hotsheet_update",
-            "description": "Update a ticket's fields (title/details/category/priority/status/tags/up_next) and/or append a note.",
+            "description": "Update a ticket's fields (title/details/category/priority/status/tags/up_next/blocked_by) and/or append a note.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "title": str_prop(""), "details": str_prop(""), "category": str_prop(""),
                 "priority": str_prop(""), "status": str_prop(""),
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
+                "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
                 "note": str_prop("append a progress note")
             }, "required": ["id"] }
         },
@@ -182,7 +186,8 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
 fn query_pairs(args: &Value) -> Vec<(String, String)> {
     let mut pairs = Vec::new();
     for key in [
-        "status", "priority", "category", "tags", "text", "up_next", "open", "sort",
+        "status", "priority", "category", "tags", "text", "up_next", "open", "sort", "limit",
+        "compact",
     ] {
         if let Some(v) = args.get(key) {
             let s = match v {
@@ -288,10 +293,17 @@ mod core_backend {
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
             if path == "/tickets" {
                 let q = build_query(query)?;
+                let compact = wants_compact(query);
                 let rows: Vec<TicketRow> = ops::query(&self.store, &q)
                     .map_err(store_err)?
                     .iter()
-                    .map(TicketRow::from)
+                    .map(|t| {
+                        if compact {
+                            TicketRow::compact(t)
+                        } else {
+                            TicketRow::from(t)
+                        }
+                    })
                     .collect();
                 return Ok(to_value(&rows));
             }
@@ -306,6 +318,9 @@ mod core_backend {
             match method {
                 "POST" if path == "/tickets" => {
                     let prefix = self.store.metadata().map_err(store_err)?.ticket_prefix;
+                    let blocked_by =
+                        ops::resolve_blockers(&self.store, None, &str_vec(body, "blocked_by"))
+                            .map_err(op_err)?;
                     let new = NewTicket {
                         title: str_field(body, "title")
                             .ok_or_else(|| bad_request("title is required"))?,
@@ -317,6 +332,7 @@ mod core_backend {
                             .get("up_next")
                             .and_then(Value::as_bool)
                             .unwrap_or(false),
+                        blocked_by,
                     };
                     let t = ops::create(&self.store, (self.mint)(), &prefix, (self.now)(), new)
                         .map_err(store_err)?;
@@ -340,6 +356,18 @@ mod core_backend {
                 }
                 "PATCH" if ticket_id(path).is_some() => {
                     let t = self.resolve(ticket_id(path).unwrap())?;
+                    // A present `blocked_by` (even []) replaces the set; absent leaves it.
+                    let blocked_by = match body.get("blocked_by").filter(|v| !v.is_null()) {
+                        Some(_) => Some(
+                            ops::resolve_blockers(
+                                &self.store,
+                                Some(&t.id),
+                                &str_vec(body, "blocked_by"),
+                            )
+                            .map_err(op_err)?,
+                        ),
+                        None => None,
+                    };
                     let patch = TicketPatch {
                         title: str_field(body, "title"),
                         details: str_field(body, "details"),
@@ -351,6 +379,7 @@ mod core_backend {
                             .filter(|v| !v.is_null())
                             .map(|_| str_vec(body, "tags")),
                         up_next: body.get("up_next").and_then(Value::as_bool),
+                        blocked_by,
                     };
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
@@ -415,7 +444,23 @@ mod core_backend {
             up_next_only: get("up_next") == Some("true"),
             open_only: get("open") == Some("true"),
             sort,
+            limit: match get("limit") {
+                Some(s) => Some(
+                    s.parse::<usize>()
+                        .map_err(|_| bad_request(format!("invalid limit '{s}'")))?,
+                ),
+                None => None,
+            },
         })
+    }
+
+    /// A list is compact (no Markdown body) unless `compact=false` is passed.
+    fn wants_compact(pairs: &[(String, String)]) -> bool {
+        pairs
+            .iter()
+            .find(|(k, _)| k == "compact")
+            .map(|(_, v)| v != "false")
+            .unwrap_or(true)
     }
 
     // ---- small conversions + errors ----------------------------------------------
@@ -496,7 +541,10 @@ mod core_backend {
     fn op_err(e: OpError) -> BackendError {
         match e {
             OpError::Store(s) => store_err(s),
-            OpError::DuplicateNeedsTarget => bad_request(OpError::DuplicateNeedsTarget.to_string()),
+            e @ (OpError::DuplicateNeedsTarget | OpError::SelfBlock(_)) => {
+                bad_request(e.to_string())
+            }
+            e @ OpError::UnknownTicket(_) => not_found(&e.to_string()),
             other => BackendError {
                 status: Some(409),
                 message: other.to_string(),
@@ -821,5 +869,112 @@ mod tests {
                 .unwrap()
                 .contains("duplicate target is required")
         );
+    }
+
+    #[test]
+    fn query_is_compact_by_default_and_full_on_request() {
+        let (_d, backend) = core();
+        call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "with a body", "details": "a long markdown body here" }),
+        );
+
+        // Default list omits the Markdown body entirely (the big field): the key is
+        // absent, not just empty.
+        let compact = call(&backend, "hotsheet_query", json!({}));
+        let row = &compact.as_array().unwrap()[0];
+        assert_eq!(row["title"], "with a body");
+        assert!(row.get("details").is_none(), "compact row omits details");
+
+        // Opt in to bodies with compact=false.
+        let full = call(&backend, "hotsheet_query", json!({ "compact": false }));
+        assert_eq!(
+            full.as_array().unwrap()[0]["details"],
+            "a long markdown body here"
+        );
+    }
+
+    #[test]
+    fn blocked_by_set_clear_and_reject_through_the_full_stack() {
+        let (_d, backend) = core();
+        let a = call(&backend, "hotsheet_create", json!({ "title": "blocker" }));
+        let a_slug = a["slug"].as_str().unwrap().to_string();
+        let a_id = a["id"].as_str().unwrap().to_string();
+
+        // create with a blocker by slug
+        let b = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "blocked", "blocked_by": [a_slug] }),
+        );
+        let b_id = b["id"].as_str().unwrap().to_string();
+        assert_eq!(b["blocked_by"], json!([a_id]));
+
+        // update: clearing with [] empties the set
+        let cleared = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": b_id, "blocked_by": [] }),
+        );
+        assert_eq!(cleared["blocked_by"], json!([]));
+
+        // update: omitting blocked_by leaves it unchanged (re-set first, then touch title)
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": b_id, "blocked_by": [a_id] }),
+        );
+        let touched = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": b_id, "title": "blocked v2" }),
+        );
+        assert_eq!(touched["blocked_by"], json!([a_id]), "absent leaves it");
+
+        // unknown blocker and self-reference are tool errors
+        let unknown = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": b_id, "blocked_by": ["HS-NOPE00"] }),
+        );
+        assert!(
+            unknown["error"]
+                .as_str()
+                .unwrap()
+                .contains("no ticket matching")
+        );
+        let selfblock = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": b_id, "blocked_by": [b_id] }),
+        );
+        assert!(
+            selfblock["error"]
+                .as_str()
+                .unwrap()
+                .contains("cannot block itself")
+        );
+    }
+
+    #[test]
+    fn query_limit_caps_rows_and_rejects_garbage() {
+        let (_d, backend) = core();
+        for i in 0..5 {
+            call(
+                &backend,
+                "hotsheet_create",
+                json!({ "title": format!("t{i}") }),
+            );
+        }
+        let all = call(&backend, "hotsheet_query", json!({}));
+        assert_eq!(all.as_array().unwrap().len(), 5);
+
+        let two = call(&backend, "hotsheet_query", json!({ "limit": 2 }));
+        assert_eq!(two.as_array().unwrap().len(), 2);
+
+        // A non-numeric limit is a tool error, not a silent full scan.
+        let bad = call(&backend, "hotsheet_query", json!({ "limit": "lots" }));
+        assert!(bad["error"].as_str().unwrap().contains("invalid limit"));
     }
 }

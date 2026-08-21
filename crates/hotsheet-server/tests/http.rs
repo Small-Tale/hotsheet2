@@ -142,6 +142,128 @@ async fn create_get_update_close_and_query() {
 }
 
 #[tokio::test]
+async fn blocked_by_set_clear_and_reject() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    let mk = |title: &str| format!(r#"{{"title":"{title}"}}"#);
+    let a = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(&mk("blocker"))))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let a_slug = a["slug"].as_str().unwrap().to_string();
+    let a_id = a["id"].as_str().unwrap().to_string();
+
+    // create with a blocker (by slug) resolves to the ULID on the wire
+    let b = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(&format!(
+                    r#"{{"title":"blocked","blocked_by":["{a_slug}"]}}"#
+                )),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let b_slug = b["slug"].as_str().unwrap().to_string();
+    assert_eq!(b["blocked_by"], serde_json::json!([a_id]));
+
+    // PATCH with [] clears
+    let cleared = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{b_slug}"),
+                Some(r#"{"blocked_by":[]}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(cleared["blocked_by"], serde_json::json!([]));
+
+    // self-reference → 400
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{b_slug}"),
+            Some(&format!(r#"{{"blocked_by":["{b_slug}"]}}"#)),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // unknown blocker → 404
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{b_slug}"),
+            Some(r#"{"blocked_by":["HS-NOPE00"]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn list_is_compact_by_default_and_supports_limit() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Two tickets, one with a Markdown body.
+    for body in [
+        r#"{"title":"has body","details":"a long markdown body"}"#,
+        r#"{"title":"no body"}"#,
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(authed("POST", "/tickets", Some(body)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    // Default list omits the body (the key is absent on every row).
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets", None))
+        .await
+        .unwrap();
+    let rows = body_json(resp).await;
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.get("details").is_none()));
+
+    // compact=false keeps the body.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?compact=false&text=markdown", None))
+        .await
+        .unwrap();
+    let full = body_json(resp).await;
+    assert_eq!(
+        full.as_array().unwrap()[0]["details"],
+        "a long markdown body"
+    );
+
+    // limit caps the rows.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?limit=1", None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn watcher_reindexes_an_external_write() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

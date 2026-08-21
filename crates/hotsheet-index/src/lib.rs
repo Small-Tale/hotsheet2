@@ -373,11 +373,15 @@ impl Index {
             SortKey::Title => "lower(t.title)",
         };
 
+        let limit = match q.limit {
+            Some(n) => format!(" LIMIT {n}"),
+            None => String::new(),
+        };
         let sql = format!(
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.worker_label,t.claim_count,\
-             t.legacy_number FROM {from} WHERE {} ORDER BY {order}, t.id",
+             t.legacy_number FROM {from} WHERE {} ORDER BY {order}, t.id{limit}",
             wheres.join(" AND ")
         );
 

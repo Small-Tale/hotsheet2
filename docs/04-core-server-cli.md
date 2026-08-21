@@ -155,8 +155,18 @@ hotsheet ls --up-next --status started
 hotsheet search "flicker"                 # FTS via the local index
 hotsheet show HS-7f3k9q
 hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
+hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
+hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
 hotsheet claim-next --worker worker-1     # coordination primitive
 ```
+`--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
+resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
+`--blocked-by` **replaces** the set and `--clear-blocked-by` empties it. The same edge
+is settable over the API and MCP: `blocked_by` (an array of slug/ULID strings) on
+`hotsheet_create` / `hotsheet_update` and the server's `POST` / `PATCH /tickets` — on
+update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. All
+surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
+resolved on close.
 These write ticket files directly (and commit, configurable). The CLI reads via a
 **direct store scan** — it does **not** touch the index; the index is the *server's*
 read cache, and there's no reader when no server runs. If a server is running, its

@@ -99,11 +99,17 @@ impl From<&Ticket> for ApiTicket {
 /// carried (search hits them via FTS; the file is authoritative). Enum fields are the
 /// wire string (e.g. `"high"`, `"not_started"`) so the index's SQL rows and a
 /// serverless scan agree byte-for-byte.
+///
+/// The Markdown `details` body is the one large field, so a **compact** list omits it
+/// ([`TicketRow::compact`] blanks it and it's skipped when empty). Ask for the body
+/// per-ticket via get, or with a non-compact list.
 #[derive(Debug, Clone, Serialize)]
 pub struct TicketRow {
     pub id: String,
     pub slug: String,
     pub title: String,
+    /// The Markdown body. Omitted from the wire when empty (a compact list clears it).
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub details: String,
     pub category: Option<String>,
     pub priority: Option<String>,
@@ -153,6 +159,22 @@ impl From<&Ticket> for TicketRow {
     }
 }
 
+impl TicketRow {
+    /// A list row without the Markdown `details` body — the compact projection used
+    /// for browsing (the body is the one large field; fetch it per-ticket via get).
+    pub fn compact(t: &Ticket) -> Self {
+        let mut row = TicketRow::from(t);
+        row.details.clear();
+        row
+    }
+
+    /// Drop the `details` body from this row in place (compact an already-built row,
+    /// e.g. one produced by the index's SQL).
+    pub fn make_compact(&mut self) {
+        self.details.clear();
+    }
+}
+
 /// The wire string of a serde-string enum (`"high"`, `"not_started"`, …) — the same
 /// form the index stores, so rows match regardless of how they were built.
 fn enum_str<T: Serialize>(v: &T) -> String {
@@ -192,6 +214,28 @@ mod tests {
         assert_eq!(row.category.as_deref(), Some("bug"));
         assert!(row.up_next);
         assert!(row.slug.starts_with("HS-"));
+    }
+
+    #[test]
+    fn compact_row_drops_the_body_and_serialization_omits_it() {
+        let mut t = ticket();
+        t.details = "a long markdown body".into();
+
+        // A full row carries the body and serializes it.
+        let full = TicketRow::from(&t);
+        assert_eq!(full.details, "a long markdown body");
+        let full_json = serde_json::to_value(&full).unwrap();
+        assert_eq!(full_json["details"], "a long markdown body");
+
+        // A compact row clears the body, and the empty string is skipped on the wire
+        // (the key is absent, not `""`).
+        let compact = TicketRow::compact(&t);
+        assert_eq!(compact.details, "");
+        let compact_json = serde_json::to_value(&compact).unwrap();
+        assert!(compact_json.get("details").is_none());
+        // Everything else the list needs is still there.
+        assert_eq!(compact_json["slug"], full_json["slug"]);
+        assert_eq!(compact_json["status"], "started");
     }
 
     #[test]

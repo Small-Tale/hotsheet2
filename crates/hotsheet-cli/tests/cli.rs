@@ -213,6 +213,74 @@ fn ls_filters_and_sort() {
 }
 
 #[test]
+fn blocked_by_set_clear_and_reject() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let a = new_ticket(p, "blocker");
+    let b = new_ticket(p, "blocked");
+
+    // new --blocked-by resolves a slug at create time
+    hs(p)
+        .args(["new", "--title", "child", "--blocked-by", &a])
+        .assert()
+        .success();
+
+    // edit --blocked-by sets it; show renders the frontmatter key
+    hs(p)
+        .args(["edit", &b, "--blocked-by", &a])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &b])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("blocked_by"));
+
+    // self-reference and unknown ticket are errors
+    hs(p)
+        .args(["edit", &b, "--blocked-by", &b])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot block itself"));
+    hs(p)
+        .args(["edit", &b, "--blocked-by", "HS-NOPE00"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no ticket matching"));
+
+    // --clear-blocked-by empties it (key drops from the file)
+    hs(p)
+        .args(["edit", &b, "--clear-blocked-by"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &b])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("blocked_by").not());
+}
+
+#[test]
+fn ls_limit_caps_rows_after_sort() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    new_ticket(p, "alpha");
+    new_ticket(p, "beta");
+    new_ticket(p, "gamma");
+
+    // --limit caps to the first N by the sort key (title): alpha, beta — not gamma.
+    hs(p)
+        .args(["ls", "--sort", "title", "--limit", "2"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alpha"))
+        .stdout(predicate::str::contains("beta"))
+        .stdout(predicate::str::contains("gamma").not());
+}
+
+#[test]
 fn doctor_reports_ok_on_a_healthy_store() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

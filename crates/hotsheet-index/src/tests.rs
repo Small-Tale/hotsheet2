@@ -116,6 +116,11 @@ fn structured_filters_match_the_file_scan() {
             open_only: true,
             ..Default::default()
         },
+        // A cap must pick the same rows on both paths (both order by id, then cap).
+        TicketQuery {
+            limit: Some(2),
+            ..Default::default()
+        },
     ] {
         assert_eq!(
             index_ids(&ix.query(&q).unwrap()),
@@ -123,6 +128,30 @@ fn structured_filters_match_the_file_scan() {
             "index diverged from ops::query for {q:?}"
         );
     }
+}
+
+#[test]
+fn limit_caps_the_sql_result() {
+    let (_d, _s, ix) = seeded();
+    assert_eq!(
+        ix.query(&TicketQuery {
+            limit: Some(2),
+            ..Default::default()
+        })
+        .unwrap()
+        .len(),
+        2
+    );
+    // A limit over the row count is a no-op.
+    assert_eq!(
+        ix.query(&TicketQuery {
+            limit: Some(50),
+            ..Default::default()
+        })
+        .unwrap()
+        .len(),
+        3
+    );
 }
 
 #[test]

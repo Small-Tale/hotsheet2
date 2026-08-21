@@ -51,6 +51,9 @@ enum Cmd {
         /// Add a tag (repeatable): `--tag a --tag b`.
         #[arg(long = "tag")]
         tags: Vec<String>,
+        /// Blocker ticket (slug or ULID), repeatable: `--blocked-by HS2-ABC --blocked-by HS2-DEF`.
+        #[arg(long = "blocked-by")]
+        blocked_by: Vec<String>,
     },
     /// List / query tickets with optional filters and sort.
     Ls {
@@ -76,6 +79,12 @@ enum Cmd {
         /// Replace the tag list (repeatable): `--tag a --tag b`.
         #[arg(long = "tag")]
         tags: Vec<String>,
+        /// Replace the blocker set (slug or ULID), repeatable. Ignored if --clear-blocked-by is set.
+        #[arg(long = "blocked-by", conflicts_with = "clear_blocked_by")]
+        blocked_by: Vec<String>,
+        /// Clear all blockers.
+        #[arg(long)]
+        clear_blocked_by: bool,
         /// Mark Up Next.
         #[arg(long, conflicts_with = "no_up_next")]
         up_next: bool,
@@ -256,6 +265,9 @@ struct LsFilters {
     /// Sort key: id | created | updated | priority | status | title.
     #[arg(long, default_value = "id")]
     sort: String,
+    /// Cap the number of rows shown (after sort).
+    #[arg(long)]
+    limit: Option<usize>,
 }
 
 fn main() -> Result<()> {
@@ -270,6 +282,7 @@ fn main() -> Result<()> {
             details,
             up_next,
             tags,
+            blocked_by,
         } => cmd_new(
             &cli.path,
             title.or(title_flag),
@@ -278,6 +291,7 @@ fn main() -> Result<()> {
             details,
             up_next,
             tags,
+            blocked_by,
         ),
         Cmd::Ls { filters } => cmd_ls(&cli.path, &filters),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
@@ -289,11 +303,24 @@ fn main() -> Result<()> {
             priority,
             status,
             tags,
+            blocked_by,
+            clear_blocked_by,
             up_next,
             no_up_next,
             note,
         } => cmd_edit(
-            &cli.path, &id, title, details, category, priority, status, tags, up_next, no_up_next,
+            &cli.path,
+            &id,
+            title,
+            details,
+            category,
+            priority,
+            status,
+            tags,
+            blocked_by,
+            clear_blocked_by,
+            up_next,
+            no_up_next,
             note,
         ),
         Cmd::Close {
@@ -444,10 +471,12 @@ fn cmd_new(
     details: Option<String>,
     up_next: bool,
     tags: Vec<String>,
+    blocked_by: Vec<String>,
 ) -> Result<()> {
     let title = title.context("a title is required (positional or --title)")?;
     let store = FsStore::open(path)?;
     let prefix = store.metadata()?.ticket_prefix;
+    let blocked_by = ops::resolve_blockers(&store, None, &blocked_by)?;
     let ticket = ops::create(
         &store,
         Ulid::new(),
@@ -460,6 +489,7 @@ fn cmd_new(
             details: details.unwrap_or_default(),
             tags,
             up_next,
+            blocked_by,
         },
     )?;
     println!(
@@ -482,6 +512,7 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         up_next_only: f.up_next,
         open_only: f.open,
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
+        limit: f.limit,
     };
     let tickets = ops::query(&store, &query)?;
 
@@ -617,6 +648,8 @@ fn cmd_edit(
     priority: Option<String>,
     status: Option<String>,
     tags: Vec<String>,
+    blocked_by: Vec<String>,
+    clear_blocked_by: bool,
     up_next: bool,
     no_up_next: bool,
     note: Option<String>,
@@ -630,6 +663,19 @@ fn cmd_edit(
     } else {
         None
     };
+    // Present (non-empty) --blocked-by replaces the set; --clear-blocked-by empties it;
+    // neither leaves it unchanged.
+    let blocked_by = if clear_blocked_by {
+        Some(Vec::new())
+    } else if blocked_by.is_empty() {
+        None
+    } else {
+        Some(ops::resolve_blockers(
+            &store,
+            Some(&ticket.id),
+            &blocked_by,
+        )?)
+    };
     let patch = TicketPatch {
         title,
         details,
@@ -638,6 +684,7 @@ fn cmd_edit(
         status: status.as_deref().map(parse_status_str).transpose()?,
         tags: (!tags.is_empty()).then_some(tags),
         up_next,
+        blocked_by,
     };
     let updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
     if let Some(text) = note.filter(|t| !t.is_empty()) {

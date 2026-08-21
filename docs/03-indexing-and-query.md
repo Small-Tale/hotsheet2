@@ -131,7 +131,15 @@ query(filter, sort, text?, paging) -> TicketRow[]
   ULID gives a free chronological default.
 - **text:** an FTS5 `MATCH` over title/details/notes, joined with the structured
   filter in one SQL statement.
-- **paging:** keyset pagination on `(sort_key, store_id, id)` for large stores.
+- **projection:** a query returns compact `TicketRow`s. The Markdown `details` body
+  is the one large field, so a list is **compact by default** — the body is omitted
+  (fetch it per-ticket via get, or pass `compact=false` to include it). This keeps an
+  unfiltered list small enough to browse (e.g. through the MCP tool's token budget).
+- **limit:** an optional `limit` caps the number of rows returned (applied after
+  sort, as a SQL `LIMIT` in the index and a truncate in the serverless scan). It is a
+  hard cap, never a silent default — a caller asks for it explicitly.
+- **paging:** keyset pagination on `(sort_key, store_id, id)` for large stores (the
+  general form of `limit`; not yet built).
 
 **Store + move handling (§2.2.1, §2.13):**
 - Every row carries `store_id`, so the UI can filter or group by store and show the

@@ -137,12 +137,18 @@ async fn list_tickets(
     State(state): State<AppState>,
     Query(params): Query<ListParams>,
 ) -> Result<Json<Vec<TicketRow>>, ApiError> {
+    let compact = params.compact.unwrap_or(true);
     let query = params.into_query()?;
-    let rows = state
+    let mut rows = state
         .index
         .lock()
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
         .query(&query)?;
+    if compact {
+        for row in &mut rows {
+            row.make_compact();
+        }
+    }
     Ok(Json(rows))
 }
 
@@ -159,6 +165,8 @@ async fn create_ticket(
     Json(req): Json<CreateReq>,
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
     let prefix = state.store.metadata()?.ticket_prefix;
+    let blocked_by =
+        ops::resolve_blockers(&state.store, None, &req.blocked_by.unwrap_or_default())?;
     let new = NewTicket {
         title: req.title,
         category: req.category.unwrap_or_else(|| "issue".to_string()),
@@ -166,6 +174,7 @@ async fn create_ticket(
         details: req.details.unwrap_or_default(),
         tags: req.tags.unwrap_or_default(),
         up_next: req.up_next.unwrap_or(false),
+        blocked_by,
     };
     let ticket = ops::create(&state.store, Ulid::new(), &prefix, now(), new)?;
     state.changed("created", &ticket);
@@ -178,6 +187,15 @@ async fn update_ticket(
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
+    let blocked_by = match req.blocked_by {
+        Some(needles) => Some(ops::resolve_blockers(
+            &state.store,
+            Some(&ticket.id),
+            &needles,
+        )?),
+        None => None,
+    };
     let patch = TicketPatch {
         title: req.title,
         details: req.details,
@@ -186,6 +204,7 @@ async fn update_ticket(
         status: opt_parse(req.status.as_deref())?,
         tags: req.tags,
         up_next: req.up_next,
+        blocked_by,
     };
     let updated = ops::update(&state.store, &ticket.id, now(), patch)?;
     // An optional note append rides the same update call (parity with the CLI + MCP).
@@ -261,6 +280,9 @@ struct ListParams {
     up_next: Option<bool>,
     open: Option<bool>,
     sort: Option<String>,
+    limit: Option<usize>,
+    /// Omit the Markdown body from each row (default true). `compact=false` keeps it.
+    compact: Option<bool>,
 }
 
 impl ListParams {
@@ -288,6 +310,7 @@ impl ListParams {
             up_next_only: self.up_next.unwrap_or(false),
             open_only: self.open.unwrap_or(false),
             sort,
+            limit: self.limit,
         })
     }
 }
@@ -300,6 +323,8 @@ struct CreateReq {
     details: Option<String>,
     tags: Option<Vec<String>>,
     up_next: Option<bool>,
+    /// Blocker tickets (slug or ULID), resolved to ULIDs on create.
+    blocked_by: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -311,6 +336,8 @@ struct UpdateReq {
     status: Option<String>,
     tags: Option<Vec<String>>,
     up_next: Option<bool>,
+    /// Replace the blocker set (slug or ULID); `[]` clears it, absent leaves it.
+    blocked_by: Option<Vec<String>>,
     /// Optional note to append alongside the field update.
     note: Option<String>,
 }
@@ -403,8 +430,11 @@ impl From<OpError> for ApiError {
             other @ (OpError::WrongWorker { .. } | OpError::NotClaimed(_)) => {
                 ApiError::new(StatusCode::CONFLICT, other.to_string())
             }
-            other @ OpError::DuplicateNeedsTarget => {
+            other @ (OpError::DuplicateNeedsTarget | OpError::SelfBlock(_)) => {
                 ApiError::new(StatusCode::BAD_REQUEST, other.to_string())
+            }
+            other @ OpError::UnknownTicket(_) => {
+                ApiError::new(StatusCode::NOT_FOUND, other.to_string())
             }
         }
     }

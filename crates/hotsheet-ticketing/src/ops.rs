@@ -30,6 +30,10 @@ pub enum OpError {
     NotClaimed(String),
     #[error("a duplicate target is required when the close reason is `duplicate`")]
     DuplicateNeedsTarget,
+    #[error("no ticket matching '{0}'")]
+    UnknownTicket(String),
+    #[error("a ticket cannot block itself ({0})")]
+    SelfBlock(String),
 }
 
 // ---- query -----------------------------------------------------------------------
@@ -75,9 +79,11 @@ pub struct TicketQuery {
     /// Exclude terminal/hidden statuses (completed/verified/deleted/archive/moved).
     pub open_only: bool,
     pub sort: SortKey,
+    /// Cap the number of rows returned (after sort). `None` = no cap.
+    pub limit: Option<usize>,
 }
 
-/// Run a query: read the store, filter, and sort.
+/// Run a query: read the store, filter, sort, and (if set) cap to `limit`.
 pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError> {
     let mut tickets = store.list_tickets()?;
     let text = q.text.as_deref().map(str::to_lowercase);
@@ -91,6 +97,9 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });
     sort_tickets(&mut tickets, q.sort);
+    if let Some(n) = q.limit {
+        tickets.truncate(n);
+    }
     Ok(tickets)
 }
 
@@ -170,6 +179,30 @@ pub struct NewTicket {
     pub details: String,
     pub tags: Vec<String>,
     pub up_next: bool,
+    /// Blockers, already resolved to ULIDs (see [`resolve_blockers`]).
+    pub blocked_by: Vec<Ulid>,
+}
+
+/// Resolve slug-or-ULID `needles` to blocker ULIDs, rejecting unknown tickets and
+/// (when `target` is given) a self-reference. Deduplicates while preserving order.
+/// Surfaces call this to turn user-facing strings into the `Vec<Ulid>` the model
+/// stores, mirroring how `duplicate_of` is resolved on close.
+pub fn resolve_blockers(
+    store: &FsStore,
+    target: Option<&Ulid>,
+    needles: &[String],
+) -> Result<Vec<Ulid>, OpError> {
+    let mut ids = Vec::with_capacity(needles.len());
+    for n in needles {
+        let t = resolve(store, n)?.ok_or_else(|| OpError::UnknownTicket(n.clone()))?;
+        if target == Some(&t.id) {
+            return Err(OpError::SelfBlock(t.slug));
+        }
+        if !ids.contains(&t.id) {
+            ids.push(t.id);
+        }
+    }
+    Ok(ids)
 }
 
 /// Create + write a ticket with a caller-minted id, at time `now`.
@@ -192,6 +225,7 @@ pub fn create(
     t.details = new.details;
     t.tags = new.tags;
     t.up_next = new.up_next;
+    t.blocked_by = new.blocked_by;
     store.write_ticket(&t)?;
     Ok(t)
 }
@@ -208,6 +242,8 @@ pub struct TicketPatch {
     pub status: Option<Status>,
     pub tags: Option<Vec<String>>,
     pub up_next: Option<bool>,
+    /// Replace the blocker set (already resolved to ULIDs); `Some(vec![])` clears it.
+    pub blocked_by: Option<Vec<Ulid>>,
 }
 
 /// Apply a patch to an existing ticket and write it. A move to a terminal status
@@ -236,6 +272,9 @@ pub fn update(
     }
     if let Some(v) = patch.up_next {
         t.up_next = v;
+    }
+    if let Some(v) = patch.blocked_by {
+        t.blocked_by = v;
     }
     if let Some(s) = patch.status {
         t.status = s;
@@ -414,6 +453,119 @@ mod tests {
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(s)
+    }
+
+    #[test]
+    fn query_limit_caps_after_sort() {
+        let (_d, store) = store();
+        for i in 0..5 {
+            create(
+                &store,
+                Ulid::new(),
+                "HS",
+                ts("2026-08-19T00:00:00Z"),
+                NewTicket {
+                    title: format!("t{i}"),
+                    category: "task".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let all = query(&store, &TicketQuery::default()).unwrap();
+        assert_eq!(all.len(), 5);
+
+        let capped = query(
+            &store,
+            &TicketQuery {
+                limit: Some(2),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(capped.len(), 2);
+        // The cap is applied after sort, so it's the first two by the sort key (id),
+        // not an arbitrary two.
+        assert_eq!(&capped[..], &all[..2]);
+
+        // A limit larger than the result set is a no-op, not an error.
+        let over = query(
+            &store,
+            &TicketQuery {
+                limit: Some(99),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(over.len(), 5);
+    }
+
+    #[test]
+    fn blocked_by_resolve_set_clear_and_reject() {
+        let (_d, store) = store();
+        let mk = |title: &str| {
+            create(
+                &store,
+                Ulid::new(),
+                "HS",
+                ts("2026-08-21T00:00:00Z"),
+                NewTicket {
+                    title: title.into(),
+                    category: "task".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+        let a = mk("blocker");
+        let b = mk("blocked");
+
+        // resolve by slug + ULID, deduped, order preserved
+        let ids =
+            resolve_blockers(&store, Some(&b.id), &[a.slug.clone(), a.id.to_string()]).unwrap();
+        assert_eq!(ids, vec![a.id]);
+
+        // set via update, then read back off disk
+        let set = update(
+            &store,
+            &b.id,
+            ts("2026-08-21T00:01:00Z"),
+            TicketPatch {
+                blocked_by: Some(ids),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(set.blocked_by, vec![a.id]);
+        assert_eq!(store.read_ticket(&b.id).unwrap().blocked_by, vec![a.id]);
+
+        // Some(vec![]) clears; None leaves unchanged
+        let cleared = update(
+            &store,
+            &b.id,
+            ts("2026-08-21T00:02:00Z"),
+            TicketPatch {
+                blocked_by: Some(vec![]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(cleared.blocked_by.is_empty());
+
+        // unknown ticket + self-reference are rejected
+        assert!(matches!(
+            resolve_blockers(&store, Some(&b.id), &["HS-NOPE00".into()]),
+            Err(OpError::UnknownTicket(_))
+        ));
+        assert!(matches!(
+            resolve_blockers(&store, Some(&b.id), std::slice::from_ref(&b.slug)),
+            Err(OpError::SelfBlock(_))
+        ));
+        // with no target (create-time), a self-reference can't be detected — allowed
+        assert_eq!(
+            resolve_blockers(&store, None, std::slice::from_ref(&b.slug)).unwrap(),
+            vec![b.id]
+        );
     }
 
     #[test]

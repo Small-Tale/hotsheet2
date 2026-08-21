@@ -34,7 +34,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
       src/settings.rs        #   Settings: shared (committed) / local (gitignored) scopes; effective = local over shared
-      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow + From<&Ticket> (shared by server + MCP)
+      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
@@ -86,8 +86,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 ## Entry points
 
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet-cli` (live ticket ops).
-  Global `-C/--path` selects the store dir. Subcommands: `init`, `new`, `ls`
-  (filters/sort/text), `show`, `edit`, `close`, `setup` (AI-tool setup, headless),
+  Global `-C/--path` selects the store dir. Subcommands: `init`, `new`
+  (incl. `--blocked-by`), `ls` (filters/sort/text/`--limit`), `show`, `edit`
+  (incl. `--blocked-by`/`--clear-blocked-by`), `close`, `setup` (AI-tool setup, headless),
   `plugin` (list/install/remove external plugins), `settings` (get/set/list, shared|local),
   `import`, `doctor`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":
   drive a real AI tool for the project and stream one turn — HS2-109).
