@@ -5,6 +5,8 @@
 //! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
+pub mod lifecycle;
+
 use std::path::Path as FsPath;
 use std::sync::{Arc, Mutex};
 

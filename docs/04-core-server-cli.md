@@ -132,7 +132,18 @@ The server's life is **decoupled from any client's** (maintainer requirement,
   make an independent daemon impractical); iOS connects to a *remote* server on a
   Mac. See [06-clients.md](06-clients.md) §6.4.
 
-Build/design detail for this lifecycle is tracked in **HS2-59**.
+**Built (HS2-59, server-side):** `hotsheet-server::lifecycle` implements the
+machine-local **instance registry** (`${HOTSHEET_HOME:-~/.hotsheet2}/instances/
+<project-id>.json` — not `~/.hotsheet`, which HS1 owns, HS2-104), **discovery**
+(`find_instance`, validating the recorded pid is alive so a crash leaves no false
+positive), the **per-store index-writer lock** (a second server is refused / told to
+attach; a stale lock from a dead server is reclaimed), and **stop** (`hotsheet-server
+--stop` → SIGTERM). `serve` takes the lock, writes the instance file (removed by a
+guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already serves
+the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
+The **client-side** half — a client spawning the server *detached* and *supervising*
+it — lands with the clients (**HS2-4072GM**); the server is already a separate process,
+so a detached spawn makes it outlive the client by construction.
 
 ## 4.4 The CLI (`hotsheet-cli`)
 

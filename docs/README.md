@@ -163,7 +163,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | SQLite + FTS5 index, rebuildable from disk | 03 | Partial (`hotsheet-index`: schema/query/FTS/rebuild + **file-backed restore/reconcile on launch** built; facet tables + paging + `reindex` CLI pending) |
 | Filesystem watch → incremental reindex | 03 §3.4 | Partial (server `spawn_watcher`: content-hash reindex + WS events built; git-diff fast path pending) |
 | Shared **Rust** core engine (server + CLI only; clients don't embed) | 04, 09 | Confirmed |
-| Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Confirmed (design) |
+| Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Partial (server-side lifecycle shipped — `hotsheet-server::lifecycle`: instance registry + discovery, per-store index-writer lock, `serve --stop`, graceful shutdown, attach-if-already-running; E2E-verified — HS2-59. Client-side detached auto-start + supervise pending → HS2-4072GM) |
 | Independent server (HTTP + WS) | 04 §4.3 | Partial (`hotsheet-server`: REST + /ws/sync + loopback auth; index/watcher/lifecycle/mTLS pending) |
 | MCP `hotsheet_*` tools (per-project shim) | 05 §5.8 | Partial (`hotsheet-mcp` shim: **serverless direct-to-disk (`--path`) or server-proxy (`--server`)**; config-writing pending) |
 | Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/edit/close/**setup**/import/**merge-driver**/doctor/claim/trigger/work; more pending) |
