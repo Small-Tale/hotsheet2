@@ -344,6 +344,114 @@ fn claude_is_not_drivable_yet_and_leaves_no_connection() {
     );
 }
 
+// ---- the real AppServerClient over a scripted daemon (HS2-112) -------------------
+
+use crate::codex::CodexAppServer;
+use crate::codex::scripted::{ScriptedDaemon, TurnMode};
+
+#[test]
+fn codex_client_starts_a_thread_and_completes_a_turn() {
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
+    let thread = cx
+        .open_thread(None, std::path::Path::new("/work/proj"))
+        .unwrap();
+    assert_eq!(thread, "thread-1", "new thread id from thread/start");
+
+    let mut turn = cx.start_turn(&thread, "work the top ticket").unwrap();
+    assert_eq!(turn.wait(), AppServerOutcome::Completed);
+    assert!(!turn.is_running());
+    assert_eq!(
+        turn.wait(),
+        AppServerOutcome::Completed,
+        "wait is idempotent"
+    );
+}
+
+#[test]
+fn codex_client_resumes_a_thread_by_id() {
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
+    // Resuming echoes the requested thread id back (thread/resume by threadId).
+    let thread = cx
+        .open_thread(Some("thread-42"), std::path::Path::new("/w"))
+        .unwrap();
+    assert_eq!(thread, "thread-42");
+    let mut turn = cx.start_turn(&thread, "keep going").unwrap();
+    assert_eq!(turn.wait(), AppServerOutcome::Completed);
+}
+
+#[test]
+fn codex_client_maps_a_failed_turn() {
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoFail)).unwrap();
+    let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
+    let mut turn = cx.start_turn(&thread, "x").unwrap();
+    match turn.wait() {
+        AppServerOutcome::Failed(msg) => assert_eq!(msg, "boom"),
+        other => panic!("expected Failed, got {other:?}"),
+    }
+}
+
+#[test]
+fn codex_client_interrupts_a_running_turn() {
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::UntilInterrupt)).unwrap();
+    let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
+    let mut turn = cx.start_turn(&thread, "long task").unwrap();
+    assert!(turn.is_running(), "no turn/completed until interrupt");
+    turn.interrupt();
+    assert!(!turn.is_running());
+}
+
+#[test]
+fn codex_client_drives_the_appserver_drive_end_to_end() {
+    // The real client behind the AppServerDrive: a full trigger, no process spawned.
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
+    let spawner = FakeSpawner::new(0);
+    let ctx = DriveCtx {
+        cwd: PathBuf::from("/proj"),
+        spawner: &spawner,
+        app_server: Some(&cx),
+    };
+    let mut turn = AppServerDrive
+        .run(&Target::default(), "work the top ticket", &ctx)
+        .unwrap();
+    assert_eq!(turn.wait(), DoneReason::Completed);
+    assert!(
+        spawner.last.borrow().is_none(),
+        "app-server drive spawns no process"
+    );
+}
+
+/// LIVE, gated: a real `codex app-server` turn against a persistent codex process. Off by
+/// default (and even under `--ignored` it needs `HOTSHEET_CODEX_LIVE=1`), because it needs
+/// Codex creds and invokes the model. Run under the HS2-103 launch safety (isolated
+/// `CODEX_HOME`, no HS1-reachable MCP). Proves the real `StdioTransport` + `CodexAppServer`
+/// drive one persistent instance through a complete turn (no process per play).
+#[test]
+#[ignore = "live: needs a real codex + creds; set HOTSHEET_CODEX_LIVE=1"]
+fn codex_live_turn_against_the_daemon() {
+    if std::env::var("HOTSHEET_CODEX_LIVE").as_deref() != Ok("1") {
+        eprintln!("skipped: set HOTSHEET_CODEX_LIVE=1 to run the live codex turn");
+        return;
+    }
+    let program = std::env::var("HOTSHEET_CODEX_BIN").unwrap_or_else(|_| "codex".into());
+    let cwd = std::env::var("CODEX_LIVE_CWD")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let transport = crate::codex::StdioTransport::spawn(&program, &cwd).expect("app-server spawn");
+    let cx = CodexAppServer::connect(transport).expect("initialize handshake");
+    let thread = cx.open_thread(None, &cwd).expect("thread/start");
+    eprintln!("live: opened thread {thread}");
+    let mut turn = cx
+        .start_turn(&thread, "Reply with only the word: pong")
+        .expect("turn/start");
+    let outcome = turn.wait();
+    eprintln!("live: turn outcome = {outcome:?}");
+    assert_eq!(
+        outcome,
+        AppServerOutcome::Completed,
+        "live turn should complete"
+    );
+}
+
 // ---- the real adapter ------------------------------------------------------------
 
 #[test]

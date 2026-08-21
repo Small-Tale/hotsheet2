@@ -10,6 +10,7 @@
 //! async `TurnEvent` stream land next.
 
 pub mod appserver;
+pub mod codex;
 pub mod drive;
 pub mod host;
 pub mod ports;
@@ -18,13 +19,14 @@ pub mod spawn;
 pub mod system;
 
 pub use appserver::AppServerDrive;
+pub use codex::{CodexAppServer, ProxyTransport, StdioTransport, ensure_codex_daemon};
 pub use drive::{
     DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle,
 };
 pub use host::{TriggerError, Triggered, drive_for, trigger};
 pub use ports::{
-    AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner, SpawnSpec,
-    SpawnedProcess,
+    AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner, RpcReader,
+    RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
 };
 pub use registry::{Connection, ConnectionRegistry, Role};
 pub use spawn::{ContentMode, SpawnConfig, SpawnDrive};

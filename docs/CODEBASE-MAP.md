@@ -57,8 +57,9 @@ hot-sheet2/
       src/drive.rs           #   Drive trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue
       src/appserver.rs       #   AppServerDrive (Codex persistent daemon: turn on a resumed thread) + AppServerClient port
+      src/codex.rs           #   CodexAppServer: real AppServerClient (codex 0.148 JSON-RPC engine) + StdioTransport (live-verified) / ProxyTransport + ensure_codex_daemon; scripted-daemon tests
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
-      src/ports.rs           #   ProcessSpawner/SpawnedProcess (injected) + SpawnSpec
+      src/ports.rs           #   ProcessSpawner/SpawnedProcess + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
       src/registry.rs        #   ConnectionRegistry: live connections + sliding-window busy tracking
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)

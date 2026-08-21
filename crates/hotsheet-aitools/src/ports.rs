@@ -80,3 +80,29 @@ pub enum AppServerError {
     #[error("codex app-server protocol error: {0}")]
     Protocol(String),
 }
+
+// ---- the JSON-RPC byte transport under the real client ---------------------------
+
+/// A newline-delimited JSON-RPC **duplex** to a codex app-server. This is the lowest
+/// seam: the real client (`crate::codex`) speaks the `initialize`/`thread/*`/`turn/*`
+/// protocol over it, while tests inject a **scripted daemon** so the entire protocol
+/// engine is exercised with no live `codex` (`docs/05` §5.10). The real transport bridges
+/// `codex app-server proxy` stdio to the running daemon's control socket.
+///
+/// It splits into a [`RpcWriter`] the client sends requests on and a [`RpcReader`] a
+/// background thread drains for responses + notifications.
+pub trait RpcTransport {
+    fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>);
+}
+
+/// The write half of an [`RpcTransport`] — sends one JSON message at a time.
+pub trait RpcWriter: Send {
+    /// Send one JSON-RPC message. The transport frames it (appends the newline).
+    fn send(&mut self, msg: &str) -> std::io::Result<()>;
+}
+
+/// The read half of an [`RpcTransport`] — yields one JSON message at a time.
+pub trait RpcReader: Send {
+    /// Block for the next message; `Ok(None)` means the peer closed the connection.
+    fn recv(&mut self) -> std::io::Result<Option<String>>;
+}

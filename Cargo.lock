@@ -580,6 +580,7 @@ name = "hotsheet-aitools"
 version = "0.0.0"
 dependencies = [
  "hotsheet-plugins",
+ "serde_json",
  "thiserror",
 ]
 

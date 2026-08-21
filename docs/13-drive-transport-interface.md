@@ -17,9 +17,27 @@
 > **Codex app-server drive built (HS2-110):** `AppServerDrive` — a play is a
 > `turn/start` on a new/**resumed** thread against the running `codex app-server daemon`,
 > **not a fresh process** (`Target` selects the thread; `turn/interrupt` backs interrupt).
-> It's transport logic over an injected `AppServerClient` port (fake-tested); the live
-> daemon connection (`codex app-server proxy` speaking `thread/*` + `turn/*` JSON-RPC) is
-> a follow-up. Codex's `[drive]` is now `app-server`, not `spawn`.
+> It's transport logic over an injected `AppServerClient` port (fake-tested). Codex's
+> `[drive]` is now `app-server`, not `spawn`.
+>
+> **Live Codex client built (HS2-112):** `CodexAppServer` (`src/codex.rs`) is the real
+> `AppServerClient` — a JSON-RPC engine (`CodexRpc`: a background reader thread
+> demultiplexing responses / notifications / auto-answered approval `ServerRequest`s)
+> speaking the verified `codex 0.148` protocol: `initialize`→`initialized`,
+> `thread/start`|`thread/resume`, `turn/start` (text input), observing
+> `turn/started`→`turn/completed` (busy→done), `turn/interrupt`. Threads open with
+> `approvalPolicy:"never"` + `sandbox:"workspace-write"` (headless). The bytes ride an
+> injected `RpcTransport` (`send`/`recv` newline-delimited JSON — the verified framing):
+> `StdioTransport` runs `codex app-server` **direct** (one persistent process per
+> connection — many turns, no process per play), and `ProxyTransport` runs `codex
+> app-server proxy` to bridge the shared **daemon** control socket. The whole engine is
+> unit-tested against an in-process **scripted daemon** (no live `codex`). **Live-verified
+> (2026-08-21, under HS2-103 safety in an isolated MCP-free `CODEX_HOME`):** a real turn
+> via `StdioTransport` opened a thread and completed (`Completed`) with the HS1 dev
+> instance untouched. Still open: the `ProxyTransport`/daemon path — the pre-initialized
+> daemon doesn't answer a fresh `initialize` yet (HS2-115) — and wiring approval
+> `ServerRequest`s to the real permission bridge (§5.7, HS2-113) rather than
+> auto-approving.
 
 ## 13.0 Current tool capabilities (verified 2026-08-21)
 
@@ -129,6 +147,13 @@ arguably). `Drive::service()` returns a `BackingService` when present — is-it-
 health, `prestart` (warm it up), `note_terminal_launch`, must-a-terminal-wait. A tool
 without one returns `None`, and no generic caller ever imports a tool's daemon module
 (closing the §132.11.2 leak by construction).
+
+**Built (HS2-112, Codex):** `ensure_codex_daemon(program)` is the concrete
+BackingService prestart — it runs `codex app-server daemon start` (idempotent: "start …
+if not already running") before a `ProxyTransport` connects. Every `CodexAppServer`
+connection proxies the **same** daemon, so plays reuse one persistent instance rather
+than launching a process each time. Folding this behind a `Drive::service()` accessor
+(so a generic caller warms it without importing `codex.rs`) is the remaining step.
 
 ## 13.6 Why this isn't Claude-shaped (the acceptance test)
 
