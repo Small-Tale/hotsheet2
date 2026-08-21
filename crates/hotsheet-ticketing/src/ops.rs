@@ -350,6 +350,121 @@ pub fn close(
     Ok(t)
 }
 
+// ---- cross-store copy / move (docs/02 §2.13, HS2-60) -----------------------------
+
+/// Copy a ticket into another store as a **new** ticket (new ULID, destination prefix),
+/// carrying the same content + attachments and recording `copied_from` provenance. The
+/// source is untouched. Workflow/coordination/close/move state is reset — a copy is a fresh
+/// idea (HS1's copy = a new ticket number). `new_id` is caller-minted; `now` stamps it.
+pub fn copy_ticket(
+    src: &FsStore,
+    dest: &FsStore,
+    id: &Ulid,
+    new_id: Ulid,
+    now: Timestamp,
+) -> Result<Ticket, OpError> {
+    let orig = src.read_ticket(id)?;
+    let dest_prefix = dest.metadata()?.ticket_prefix;
+
+    let mut t = orig.clone();
+    t.id = new_id;
+    t.slug = derive_slug(&new_id, &dest_prefix);
+    t.copied_from = Some(*id);
+    t.created_at = now.clone();
+    t.updated_at = now;
+    // A fresh copy starts clean: no claim, no close/move annotation, off Up Next.
+    t.status = Status::NotStarted;
+    t.up_next = false;
+    t.claimed_by = None;
+    t.claim_lease_expires_at = None;
+    t.worker_label = None;
+    t.claim_count = 0;
+    t.completed_at = None;
+    t.verified_at = None;
+    t.closed_at = None;
+    t.close_reason = None;
+    t.duplicate_of = None;
+    t.moved_to_store = None;
+    t.moved_at = None;
+
+    dest.write_ticket_committing(&t)?;
+    copy_attachments(src, dest, id, &new_id)?;
+    Ok(t)
+}
+
+/// The result of a [`move_ticket`]: the live ticket now in the destination, and the
+/// tombstone/redirect left in the source.
+#[derive(Debug, Clone)]
+pub struct MoveOutcome {
+    pub moved: Ticket,
+    pub tombstone: Ticket,
+}
+
+/// Move a ticket to another store, **keeping the same ULID** so references survive
+/// (`docs/02` §2.13). The destination gets the ticket (destination prefix → new slug) +
+/// attachments; the source keeps a `status: moved` tombstone pointing at `dest_id`. Note:
+/// git never forgets — this does **not** purge the ticket from the source's history/remote
+/// (see the retention caveat); callers surface that warning.
+pub fn move_ticket(
+    src: &FsStore,
+    dest: &FsStore,
+    id: &Ulid,
+    dest_id: &str,
+    now: Timestamp,
+) -> Result<MoveOutcome, OpError> {
+    let orig = src.read_ticket(id)?;
+    let dest_prefix = dest.metadata()?.ticket_prefix;
+
+    // Destination: same ULID, destination slug; it's the live instance.
+    let mut moved = orig.clone();
+    moved.slug = derive_slug(id, &dest_prefix);
+    moved.updated_at = now.clone();
+    moved.moved_to_store = None;
+    moved.moved_at = None;
+    dest.write_ticket_committing(&moved)?;
+    copy_attachments(src, dest, id, id)?;
+
+    // Source: a tombstone/redirect the UI hides (status = moved).
+    let mut tombstone = orig;
+    tombstone.status = Status::Moved;
+    tombstone.moved_to_store = Some(dest_id.to_string());
+    tombstone.moved_at = Some(now.clone());
+    tombstone.updated_at = now;
+    tombstone.up_next = false;
+    tombstone.claimed_by = None;
+    tombstone.claim_lease_expires_at = None;
+    src.write_ticket_committing(&tombstone)?;
+    // The attachments now live in the destination; drop the source working-tree copy
+    // (git history still retains them — that's the retention caveat).
+    let _ = std::fs::remove_dir_all(src.attachment_dir(id));
+
+    Ok(MoveOutcome { moved, tombstone })
+}
+
+/// Copy a ticket's attachment files from one store to another (best-effort: no attachments
+/// dir → nothing to do).
+fn copy_attachments(
+    src: &FsStore,
+    dest: &FsStore,
+    src_id: &Ulid,
+    dest_id: &Ulid,
+) -> Result<(), OpError> {
+    let from = src.attachment_dir(src_id);
+    let entries = match std::fs::read_dir(&from) {
+        Ok(e) => e,
+        Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(StoreError::Io(e).into()),
+    };
+    for entry in entries.flatten() {
+        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            let name = entry.file_name();
+            let bytes = std::fs::read(entry.path()).map_err(StoreError::Io)?;
+            dest.write_attachment(dest_id, &name.to_string_lossy(), &bytes)?;
+        }
+    }
+    Ok(())
+}
+
 // ---- claim / lease ---------------------------------------------------------------
 
 /// Blocked while any `blocked_by` dependency isn't done.
@@ -784,6 +899,92 @@ mod tests {
         )
         .unwrap();
         assert!(!done.up_next, "completed is not active → up_next cleared");
+    }
+
+    fn store_pfx(prefix: &str) -> (tempfile::TempDir, FsStore) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new(prefix)).unwrap();
+        (dir, store)
+    }
+
+    #[test]
+    fn copy_makes_a_fresh_ticket_in_the_destination() {
+        let (_sd, src) = store_pfx("HS");
+        let (_dd, dest) = store_pfx("SEC");
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &src,
+            id,
+            "HS",
+            ts("t0"),
+            NewTicket {
+                title: "idea".into(),
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // A started/claimed source ticket — the copy must reset that.
+        update(
+            &src,
+            &id,
+            ts("t1"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let new_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB7").unwrap();
+        let copy = copy_ticket(&src, &dest, &id, new_id, ts("t2")).unwrap();
+
+        assert_eq!(copy.id, new_id, "new ULID");
+        assert!(copy.slug.starts_with("SEC-"), "destination prefix slug");
+        assert_eq!(copy.copied_from, Some(id), "records provenance");
+        assert_eq!(copy.title, "idea", "content carried over");
+        assert_eq!(
+            copy.status,
+            Status::NotStarted,
+            "fresh copy resets workflow"
+        );
+        assert!(!copy.up_next);
+        // Source untouched (still present, still started).
+        assert_eq!(src.read_ticket(&id).unwrap().status, Status::Started);
+        // The copy is a real ticket in the destination.
+        assert_eq!(dest.read_ticket(&new_id).unwrap().slug, copy.slug);
+    }
+
+    #[test]
+    fn move_keeps_the_ulid_and_leaves_a_tombstone() {
+        let (_sd, src) = store_pfx("HS");
+        let (_dd, dest) = store_pfx("SEC");
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &src,
+            id,
+            "HS",
+            ts("t0"),
+            NewTicket {
+                title: "portable".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let out = move_ticket(&src, &dest, &id, "/stores/sec", ts("t3")).unwrap();
+
+        // Destination: SAME ULID (references survive), destination slug, live.
+        assert_eq!(out.moved.id, id);
+        assert!(out.moved.slug.starts_with("SEC-"));
+        assert_eq!(out.moved.status, Status::NotStarted);
+        assert_eq!(dest.read_ticket(&id).unwrap().title, "portable");
+        // Source: a moved tombstone pointing at the destination.
+        let tomb = src.read_ticket(&id).unwrap();
+        assert_eq!(tomb.status, Status::Moved);
+        assert_eq!(tomb.moved_to_store.as_deref(), Some("/stores/sec"));
+        assert!(tomb.moved_at.is_some());
+        assert_eq!(out.tombstone.status, Status::Moved);
     }
 
     #[test]

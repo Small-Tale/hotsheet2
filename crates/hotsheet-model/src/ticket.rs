@@ -103,6 +103,8 @@ pub struct Ticket {
     // Move tombstone (`docs/02` §2.13) — only on a `Status::Moved` record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moved_to_store: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moved_at: Option<Timestamp>,
 
     // Migration / provenance.
     #[serde(default, skip_serializing_if = "Option::is_none")]

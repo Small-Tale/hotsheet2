@@ -765,3 +765,64 @@ fn merge_driver_resolves_concurrent_ticket_edits() {
         "no conflict markers in a clean merge"
     );
 }
+
+/// Cross-store copy & move (HS2-60): copy makes a fresh SEC-prefixed ticket (source
+/// untouched); move keeps the ULID and leaves a `moved` tombstone; move refuses without
+/// --yes (the retention/exposure gate).
+#[test]
+fn copy_and_move_between_stores() {
+    let src = tempfile::tempdir().unwrap();
+    let dest = tempfile::tempdir().unwrap();
+    hs(src.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    hs(dest.path())
+        .args(["init", "--prefix", "SEC"])
+        .assert()
+        .success();
+
+    // Copy: new SEC ticket in dest, original still in src.
+    let a = new_ticket(src.path(), "copy me");
+    hs(src.path())
+        .args(["copy", &a, "--to", dest.path().to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Copied"));
+    hs(dest.path())
+        .arg("ls")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("SEC-").and(predicate::str::contains("copy me")));
+    // source keeps the original.
+    hs(src.path()).args(["show", &a]).assert().success();
+
+    // Move without --yes is refused (retention/exposure gate).
+    let b = new_ticket(src.path(), "move me");
+    hs(src.path())
+        .args(["move", &b, "--to", dest.path().to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--yes"));
+
+    // Move with --yes: same ULID in dest (SEC slug), tombstone in source.
+    hs(src.path())
+        .args(["move", &b, "--to", dest.path().to_str().unwrap(), "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Moved"));
+    // The source ticket is now a moved tombstone.
+    hs(src.path())
+        .args(["show", &b])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: moved"))
+        .stdout(predicate::str::contains("moved_to_store:"));
+    // The destination has it live under a SEC slug (same ULID → resolvable by the old ULID
+    // is not asserted here since the CLI shows by slug; ls proves it landed).
+    hs(dest.path())
+        .arg("ls")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("move me"));
+}

@@ -136,6 +136,26 @@ enum Cmd {
         #[arg(long, default_value = "HS")]
         prefix: String,
     },
+    /// Copy a ticket into another store as a new ticket (new ULID; original untouched).
+    Copy {
+        /// Ticket to copy (slug or ULID) from the `-C` store.
+        id: String,
+        /// Destination store directory.
+        #[arg(long = "to")]
+        to: PathBuf,
+    },
+    /// Move a ticket to another store, keeping its ULID (leaves a tombstone in the source).
+    /// git never forgets — this does NOT purge it from the source's history/remote.
+    Move {
+        /// Ticket to move (slug or ULID) from the `-C` store.
+        id: String,
+        /// Destination store directory.
+        #[arg(long = "to")]
+        to: PathBuf,
+        /// Confirm the move despite the retention/exposure caveat (required).
+        #[arg(long)]
+        yes: bool,
+    },
     /// Check store health (metadata, parse errors, duplicate slugs, orphans).
     Doctor,
     /// Git-invoked semantic 3-way merge for ticket files (not run by hand — it's the
@@ -381,6 +401,8 @@ fn main() -> Result<()> {
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
+        Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
+        Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
@@ -852,6 +874,57 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
             t.title
         );
     }
+    Ok(())
+}
+
+fn cmd_copy(src_path: &Path, id: &str, to: &Path) -> Result<()> {
+    let src = FsStore::open(src_path)?;
+    let dest =
+        FsStore::open(to).with_context(|| format!("opening destination store {}", to.display()))?;
+    let ticket =
+        ops::resolve(&src, id)?.ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+    let copied = ops::copy_ticket(&src, &dest, &ticket.id, Ulid::new(), now_ts())?;
+    println!(
+        "Copied {} → {} in {} (copied_from {})",
+        ticket.slug,
+        copied.slug,
+        to.display(),
+        ticket.slug
+    );
+    Ok(())
+}
+
+fn cmd_move(src_path: &Path, id: &str, to: &Path, yes: bool) -> Result<()> {
+    let src = FsStore::open(src_path)?;
+    let dest =
+        FsStore::open(to).with_context(|| format!("opening destination store {}", to.display()))?;
+    let ticket =
+        ops::resolve(&src, id)?.ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+
+    // Retention + exposure caveat (docs/02 §2.13) — git never forgets.
+    eprintln!(
+        "warning: moving {} does NOT remove it from {}'s git history or remote; and moving \
+         INTO a shared store exposes it (the sync engine will push it). True purge needs a \
+         manual history rewrite.",
+        ticket.slug,
+        src_path.display()
+    );
+    if !yes {
+        bail!("re-run with --yes to confirm the move (see the retention/exposure warning above)");
+    }
+
+    // Until store ids exist (HS2-87), identify the destination by its canonical path.
+    let dest_id = std::fs::canonicalize(to)
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| to.display().to_string());
+    let out = ops::move_ticket(&src, &dest, &ticket.id, &dest_id, now_ts())?;
+    println!(
+        "Moved {} → {} in {} (tombstone left in {})",
+        ticket.slug,
+        out.moved.slug,
+        to.display(),
+        src_path.display()
+    );
     Ok(())
 }
 

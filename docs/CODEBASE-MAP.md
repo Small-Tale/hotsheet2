@@ -30,7 +30,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/format.rs          #   parse_file / to_file_string (YAML frontmatter + body + notes)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
-      src/ops.rs             #   query/create/update/close/claim — the one op impl (CLI+server+MCP)
+      src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket — the one op impl (CLI+server+MCP)
       src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/body) behind `hotsheet merge-driver` (HS2-18)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata

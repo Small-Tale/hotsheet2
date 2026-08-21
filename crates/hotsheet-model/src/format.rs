@@ -46,6 +46,7 @@ const KNOWN_KEYS: &[&str] = &[
     "review_requests",
     "external",
     "moved_to_store",
+    "moved_at",
     "legacy_number",
     "copied_from",
     "schema",
