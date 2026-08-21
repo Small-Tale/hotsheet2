@@ -81,7 +81,7 @@ fn tools_list() -> Value {
     json!({ "tools": [
         {
             "name": "hotsheet_query",
-            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results.",
+            "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results.",
             "inputSchema": { "type": "object", "properties": {
                 "status": str_prop("filter by status"),
                 "priority": str_prop("filter by priority"),
@@ -90,6 +90,8 @@ fn tools_list() -> Value {
                 "text": str_prop("substring across title/details/notes"),
                 "up_next": { "type": "boolean" },
                 "open": { "type": "boolean" },
+                "close_reason": str_prop("filter by close reason (completed|not_planned|duplicate|obsolete)"),
+                "closed": { "type": "boolean", "description": "true = only closed tickets (a close_reason is set); false = only tickets with none" },
                 "sort": str_prop("id|created|updated|priority|status|title"),
                 "limit": { "type": "integer", "description": "cap the number of rows returned (after sort)" },
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
@@ -186,7 +188,17 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
 fn query_pairs(args: &Value) -> Vec<(String, String)> {
     let mut pairs = Vec::new();
     for key in [
-        "status", "priority", "category", "tags", "text", "up_next", "open", "sort", "limit",
+        "status",
+        "priority",
+        "category",
+        "tags",
+        "text",
+        "up_next",
+        "open",
+        "close_reason",
+        "closed",
+        "sort",
+        "limit",
         "compact",
     ] {
         if let Some(v) = args.get(key) {
@@ -443,6 +455,8 @@ mod core_backend {
             text: get("text").map(str::to_string),
             up_next_only: get("up_next") == Some("true"),
             open_only: get("open") == Some("true"),
+            close_reason: opt_enum_str(get("close_reason"))?,
+            closed: get("closed").map(|v| v == "true"),
             sort,
             limit: match get("limit") {
                 Some(s) => Some(

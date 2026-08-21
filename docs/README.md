@@ -159,7 +159,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | **Automatic repo sync (aggressive fetch/push/rebase)** | 02 §2.12 | Confirmed (design) |
 | **Shared vs. local ticket data (on-disk gitignored overlay)** | 02 §2.11 | Confirmed (design) |
 | **Human assignment + in-the-loop/review** | 10 | Open (proposal) |
-| **Close reasons** (completed / not planned / duplicate-of / obsolete) | 02 §2.6a | Confirmed (field); status coupling → HS2-24 |
+| **Close reasons** (completed / not planned / duplicate-of / obsolete) | 02 §2.6a | Shipped (field + `close` op + index columns + query filter `close_reason`/`closed` across CLI/MCP/server + reopen-clears; HS2-61) |
 | SQLite + FTS5 index, rebuildable from disk | 03 | Partial (`hotsheet-index`: schema/query/FTS/rebuild + **file-backed restore/reconcile on launch** built; facet tables + paging + `reindex` CLI pending) |
 | Filesystem watch → incremental reindex | 03 §3.4 | Partial (server `spawn_watcher`: content-hash reindex + WS events built; git-diff fast path pending) |
 | Shared **Rust** core engine (server + CLI only; clients don't embed) | 04, 09 | Confirmed |

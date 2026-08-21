@@ -78,6 +78,12 @@ pub struct TicketQuery {
     pub up_next_only: bool,
     /// Exclude terminal/hidden statuses (completed/verified/deleted/archive/moved).
     pub open_only: bool,
+    /// Filter by a specific close reason (the structured, filterable close tag, HS2-61).
+    pub close_reason: Option<CloseReason>,
+    /// `Some(true)` = only closed tickets (a `close_reason` is set); `Some(false)` = only
+    /// tickets with no close reason. `None` doesn't constrain. Orthogonal to `open_only`
+    /// (which is status-based), since `close_reason` is orthogonal to status.
+    pub closed: Option<bool>,
     pub sort: SortKey,
     /// Cap the number of rows returned (after sort). `None` = no cap.
     pub limit: Option<usize>,
@@ -93,6 +99,8 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && q.category.as_deref().is_none_or(|c| t.category == c)
             && (!q.up_next_only || t.up_next)
             && (!q.open_only || is_open(t))
+            && q.close_reason.is_none_or(|r| t.close_reason == Some(r))
+            && q.closed.is_none_or(|want| t.close_reason.is_some() == want)
             && q.tags.iter().all(|tag| t.tags.iter().any(|x| x == tag))
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });
@@ -285,6 +293,12 @@ pub fn update(
         // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
         if !s.is_active() {
             t.up_next = false;
+        } else if t.close_reason.is_some() {
+            // Reopening — moving back to an active status — clears the close annotation
+            // (close_reason/closed_at/duplicate_of), per HS2-61.
+            t.close_reason = None;
+            t.closed_at = None;
+            t.duplicate_of = None;
         }
     }
     t.updated_at = now;
@@ -770,6 +784,82 @@ mod tests {
         )
         .unwrap();
         assert!(!done.up_next, "completed is not active → up_next cleared");
+    }
+
+    #[test]
+    fn query_filters_by_close_reason_and_closed() {
+        let (_d, store) = store();
+        let a = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        let b = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap();
+        create(&store, a, "HS", ts("t0"), NewTicket::default()).unwrap();
+        create(&store, b, "HS", ts("t0"), NewTicket::default()).unwrap();
+        close(&store, &a, ts("t1"), CloseReason::Obsolete, None).unwrap();
+
+        let ids = |q: &TicketQuery| {
+            query(&store, q)
+                .unwrap()
+                .iter()
+                .map(|t| t.id)
+                .collect::<Vec<_>>()
+        };
+        // closed=true selects only the closed one; closed=false only the open one.
+        assert_eq!(
+            ids(&TicketQuery {
+                closed: Some(true),
+                ..Default::default()
+            }),
+            vec![a]
+        );
+        assert_eq!(
+            ids(&TicketQuery {
+                closed: Some(false),
+                ..Default::default()
+            }),
+            vec![b]
+        );
+        // by specific reason.
+        assert_eq!(
+            ids(&TicketQuery {
+                close_reason: Some(CloseReason::Obsolete),
+                ..Default::default()
+            }),
+            vec![a]
+        );
+        assert!(
+            ids(&TicketQuery {
+                close_reason: Some(CloseReason::Completed),
+                ..Default::default()
+            })
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn reopening_clears_the_close_annotation() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let dup = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB9").unwrap();
+        create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+        create(&store, dup, "HS", ts("t0"), NewTicket::default()).unwrap();
+
+        let c = close(&store, &id, ts("t1"), CloseReason::Duplicate, Some(dup)).unwrap();
+        assert!(c.close_reason.is_some() && c.closed_at.is_some() && c.duplicate_of.is_some());
+
+        // Reopening (back to an active status) clears close_reason/closed_at/duplicate_of.
+        let r = update(
+            &store,
+            &id,
+            ts("t2"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(r.status, Status::Started);
+        assert!(r.close_reason.is_none(), "close_reason cleared on reopen");
+        assert!(r.closed_at.is_none(), "closed_at cleared on reopen");
+        assert!(r.duplicate_of.is_none(), "duplicate_of cleared on reopen");
     }
 
     #[test]

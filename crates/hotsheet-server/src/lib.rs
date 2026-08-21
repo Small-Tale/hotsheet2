@@ -279,6 +279,10 @@ struct ListParams {
     text: Option<String>,
     up_next: Option<bool>,
     open: Option<bool>,
+    /// Filter by close reason (completed|not_planned|duplicate|obsolete).
+    close_reason: Option<String>,
+    /// `true` = only closed tickets; `false` = only tickets with no close reason.
+    closed: Option<bool>,
     sort: Option<String>,
     limit: Option<usize>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.
@@ -309,6 +313,8 @@ impl ListParams {
             text: self.text,
             up_next_only: self.up_next.unwrap_or(false),
             open_only: self.open.unwrap_or(false),
+            close_reason: opt_parse(self.close_reason.as_deref())?,
+            closed: self.closed,
             sort,
             limit: self.limit,
         })

@@ -292,6 +292,12 @@ struct LsFilters {
     /// Only open tickets (not completed/verified/deleted/archived/moved).
     #[arg(long)]
     open: bool,
+    /// Only tickets closed with this reason (completed|not_planned|duplicate|obsolete).
+    #[arg(long = "close-reason")]
+    close_reason: Option<String>,
+    /// Only tickets that have a close reason set.
+    #[arg(long)]
+    closed: bool,
     /// Sort key: id | created | updated | priority | status | title.
     #[arg(long, default_value = "id")]
     sort: String,
@@ -811,6 +817,12 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         text: f.text.clone(),
         up_next_only: f.up_next,
         open_only: f.open,
+        close_reason: f
+            .close_reason
+            .as_deref()
+            .map(parse_close_reason)
+            .transpose()?,
+        closed: f.closed.then_some(true),
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
         limit: f.limit,
     };
