@@ -102,6 +102,9 @@ pub fn default_codex_home() -> PathBuf {
 /// as the launched tool runs.
 pub struct IsolatedCodexHome {
     dir: tempfile::TempDir,
+    /// The tool program whose daemon runs against this home. `Some` for a daemon home —
+    /// its daemon is stopped on drop so a run can't orphan it (HS2-9M6T68).
+    daemon_program: Option<String>,
 }
 
 impl IsolatedCodexHome {
@@ -115,20 +118,22 @@ impl IsolatedCodexHome {
         command: &str,
         args: &[String],
     ) -> Result<Self> {
-        Self::build(source_home, server_name, command, args, false)
+        Self::build(source_home, server_name, command, args, None)
     }
 
     /// Build the isolated home for the shared **daemon** (HS2-B7C66H): like [`create`], but
     /// under a **short** root (the daemon's control socket must fit `sun_path`, ~104 bytes
     /// on macOS — the default temp dir can overflow it) and with the managed standalone
-    /// install symlinked in (the daemon needs `<home>/packages`).
+    /// install symlinked in (the daemon needs `<home>/packages`). `program` is the tool
+    /// whose daemon we start — recorded so it's stopped when this home drops (HS2-9M6T68).
     pub fn create_for_daemon(
         source_home: &Path,
         server_name: &str,
         command: &str,
         args: &[String],
+        program: &str,
     ) -> Result<Self> {
-        Self::build(source_home, server_name, command, args, true)
+        Self::build(source_home, server_name, command, args, Some(program))
     }
 
     fn build(
@@ -136,8 +141,9 @@ impl IsolatedCodexHome {
         server_name: &str,
         command: &str,
         args: &[String],
-        for_daemon: bool,
+        daemon_program: Option<&str>,
     ) -> Result<Self> {
+        let for_daemon = daemon_program.is_some();
         let mut builder = tempfile::Builder::new();
         builder.prefix("hs2cx-");
         // For the daemon, keep the base short so `<home>/app-server-control/…sock` fits
@@ -174,12 +180,27 @@ impl IsolatedCodexHome {
                 })?;
             }
         }
-        Ok(Self { dir })
+        Ok(Self {
+            dir,
+            daemon_program: daemon_program.map(str::to_string),
+        })
     }
 
     /// The isolated home (set `CODEX_HOME` to this for the launched tool).
     pub fn path(&self) -> &Path {
         self.dir.path()
+    }
+}
+
+impl Drop for IsolatedCodexHome {
+    fn drop(&mut self) {
+        // Stop this home's daemon (if any) BEFORE the TempDir removes the dir, so a
+        // shared-daemon run doesn't leave an orphaned codex process pointing at a home that
+        // no longer exists (HS2-9M6T68). Best-effort: `daemon stop` is a no-op when none is
+        // running, and any error is irrelevant to teardown.
+        if let Some(program) = &self.daemon_program {
+            let _ = hotsheet_aitools::stop_codex_daemon_in(program, self.dir.path());
+        }
     }
 }
 
@@ -405,6 +426,7 @@ mod tests {
             "hotsheet",
             "hotsheet-mcp",
             &["--path".into(), "/store".into()],
+            "true", // harmless "daemon stop" on drop
         )
         .unwrap();
 
@@ -440,6 +462,48 @@ mod tests {
             sock.display(),
             sock.to_string_lossy().len()
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn daemon_isolated_home_stops_its_daemon_on_drop() {
+        use std::os::unix::fs::PermissionsExt;
+        // A fake "codex" that records how it was invoked (args + CODEX_HOME) to a marker
+        // OUTSIDE the home (so the record survives the home's removal on drop).
+        let src = tempfile::tempdir().unwrap();
+        let marker = src.path().join("stop.log");
+        let fake = src.path().join("fakecodex");
+        std::fs::write(
+            &fake,
+            format!("#!/bin/sh\necho \"home=$CODEX_HOME args=$*\" >> {marker:?}\n"),
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let home_path;
+        {
+            let home = IsolatedCodexHome::create_for_daemon(
+                src.path(),
+                "hotsheet",
+                "hotsheet-mcp",
+                &["--path".into()],
+                fake.to_str().unwrap(),
+            )
+            .unwrap();
+            home_path = home.path().to_path_buf();
+            assert!(home_path.exists());
+        } // <- drop: must stop the daemon, then remove the dir
+
+        let log = std::fs::read_to_string(&marker).expect("daemon stop was invoked on drop");
+        assert!(
+            log.contains("args=app-server daemon stop"),
+            "drop runs `app-server daemon stop`: {log}"
+        );
+        assert!(
+            log.contains(&format!("home={}", home_path.display())),
+            "…with this home's CODEX_HOME: {log}"
+        );
+        assert!(!home_path.exists(), "the home dir is removed after drop");
     }
 
     #[test]

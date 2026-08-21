@@ -650,6 +650,20 @@ fn run_daemon_start(program: &str, codex_home: Option<&Path>) -> std::io::Result
     }
 }
 
+/// Stop the shared Codex daemon for a specific `CODEX_HOME` (`daemon stop` is a no-op if
+/// none is running). Used to tear down a per-run isolated-home daemon so it isn't orphaned
+/// when the home goes away (HS2-9M6T68). Best-effort: returns the child's status.
+pub fn stop_codex_daemon_in(program: &str, codex_home: &Path) -> std::io::Result<()> {
+    Command::new(program)
+        .args(["app-server", "daemon", "stop"])
+        .env("CODEX_HOME", codex_home)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|_| ())
+}
+
 // ---- a scripted daemon for tests (no live codex) ---------------------------------
 
 /// A loopback [`RpcTransport`] that answers the real client's protocol in-process, so

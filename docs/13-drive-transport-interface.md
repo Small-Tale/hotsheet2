@@ -178,11 +178,14 @@ targets a specific (isolated) home.
 codex --shared-daemon` builds a **daemon-ready isolated `CODEX_HOME`** (the HS2-YRDQNX
 MCP-free home, but under a short root so the control socket fits `sun_path`, with the managed
 standalone install symlinked in), starts the daemon for *that* home, and drives the turn over
-`UdsWsTransport` — so MCP isolation holds *and* one codex instance is reused. Off by default
-(a fresh `app-server` process per connection); opt-in for now. Still open: the daemon
-**lifecycle** — a one-shot `trigger` orphans the daemon it starts, so this really belongs on
-the `work` loop (the home lives for the whole loop) and needs a stop-on-drop guard
-(HS2-9M6T68); plus folding `ensure_codex_daemon` behind a `Drive::service()` accessor.
+`UdsWsTransport` — so MCP isolation holds *and* one codex instance is reused. Available on
+both `trigger` and `work` via `--shared-daemon` (off by default: a fresh `app-server` process
+per connection). **Lifecycle handled (HS2-9M6T68):** the isolated home stops its daemon on
+drop (`ensure_codex_daemon_in` starts it, `stop_codex_daemon_in` tears it down), so a run
+never orphans a codex process; the `work` loop is the best case (one daemon reused across all
+turns, torn down at loop end — live-verified 2026-08-22). Still open: folding
+`ensure_codex_daemon` behind a `Drive::service()` accessor, and a *stable* per-project home if
+cross-invocation reuse is ever wanted.
 
 ## 13.6 Why this isn't Claude-shaped (the acceptance test)
 

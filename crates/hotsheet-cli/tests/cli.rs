@@ -612,3 +612,57 @@ fn trigger_codex_shared_daemon_reuses_one_instance() {
         "no HS1 instance was launched"
     );
 }
+
+/// LIVE, gated: `hotsheet-cli work codex --shared-daemon` drains a one-ticket queue via a
+/// daemon started for the isolated CODEX_HOME (HS2-B7C66H) and, when the loop ends, leaves
+/// **no orphaned daemon home** behind (HS2-9M6T68). Off by default; set HOTSHEET_CODEX_LIVE=1.
+#[test]
+#[ignore = "live: needs a real codex + creds; set HOTSHEET_CODEX_LIVE=1"]
+fn work_shared_daemon_completes_and_leaves_no_orphan_home() {
+    if std::env::var("HOTSHEET_CODEX_LIVE").as_deref() != Ok("1") {
+        eprintln!("skipped: set HOTSHEET_CODEX_LIVE=1 to run the shared-daemon work loop");
+        return;
+    }
+    let count_homes = || {
+        std::fs::read_dir("/tmp")
+            .map(|rd| {
+                rd.filter_map(Result::ok)
+                    .filter(|e| e.file_name().to_string_lossy().starts_with("hs2cx-"))
+                    .count()
+            })
+            .unwrap_or(0)
+    };
+    let before = count_homes();
+
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let t = new_ticket(p, "Create GREETING.txt containing hello");
+    hs(p).args(["edit", &t, "--up-next"]).assert().success();
+    // Seed the file-creation instruction into the ticket the loop will read.
+    hs(p)
+        .args([
+            "edit",
+            &t,
+            "--details",
+            "Create a file named GREETING.txt containing the word hello in this project.",
+        ])
+        .assert()
+        .success();
+
+    hs(p)
+        .args(["work", "codex", "--shared-daemon", "--max", "3"])
+        .timeout(std::time::Duration::from_secs(240))
+        .assert()
+        .success();
+
+    assert!(
+        !p.join(".hotsheet").exists(),
+        "no HS1 instance was launched"
+    );
+    // The daemon home is torn down on loop exit — no NEW /tmp/hs2cx-* left behind.
+    assert!(
+        count_homes() <= before,
+        "shared-daemon loop leaked an isolated CODEX_HOME under /tmp"
+    );
+}

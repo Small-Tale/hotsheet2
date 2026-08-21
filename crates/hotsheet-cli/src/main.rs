@@ -217,6 +217,11 @@ enum Cmd {
         /// Register connections as a self-claim worker rather than the main session.
         #[arg(long)]
         worker: bool,
+        /// Codex only: drive the shared app-server **daemon** for the isolated CODEX_HOME —
+        /// one codex instance reused across the whole loop's turns instead of a fresh
+        /// process per turn (HS2-B7C66H); the daemon is stopped when the loop ends.
+        #[arg(long = "shared-daemon")]
+        shared_daemon: bool,
     },
 }
 
@@ -401,7 +406,16 @@ fn main() -> Result<()> {
             max,
             max_stall,
             worker,
-        } => cmd_work(&cli.path, &tool, project, max, max_stall, worker),
+            shared_daemon,
+        } => cmd_work(
+            &cli.path,
+            &tool,
+            project,
+            max,
+            max_stall,
+            worker,
+            shared_daemon,
+        ),
     }
 }
 
@@ -484,7 +498,14 @@ fn prepare_trigger(
         // For the shared daemon, the home must be daemon-ready (packages symlinked, short
         // socket path); otherwise the plain isolated home is enough for a direct app-server.
         let home = if shared_daemon {
-            launch_safety::IsolatedCodexHome::create_for_daemon(&source, name, &command, &args)?
+            let program = plugin.manifest.drive.as_ref().map(|d| d.program.as_str());
+            launch_safety::IsolatedCodexHome::create_for_daemon(
+                &source,
+                name,
+                &command,
+                &args,
+                program.unwrap_or("codex"),
+            )?
         } else {
             launch_safety::IsolatedCodexHome::create(&source, name, &command, &args)?
         };
@@ -647,6 +668,7 @@ fn cmd_trigger(
 /// `hotsheet-cli work <tool>`: drive the tool one turn at a time until Up Next is
 /// drained, a turn cap is hit, or the queue stops changing (thrash guard). The
 /// north-star headless loop (HS2-118), reusing `trigger`'s HS2-103 launch safety.
+#[allow(clippy::too_many_arguments)]
 fn cmd_work(
     store_path: &Path,
     tool: &str,
@@ -654,6 +676,7 @@ fn cmd_work(
     max: u32,
     max_stall: u32,
     worker: bool,
+    shared_daemon: bool,
 ) -> Result<()> {
     use hotsheet_aitools::{ConnectionRegistry, DoneReason};
     use hotsheet_cli::workloop::{Stall, queue_signature};
@@ -672,9 +695,9 @@ fn cmd_work(
         return Ok(());
     }
 
-    // `work` uses the default per-turn app-server for now; exposing --shared-daemon on the
-    // loop (its biggest beneficiary) is a follow-up once the daemon path is proven.
-    let safe = prepare_trigger(store_path, tool, project, None, None, vec![], false)?;
+    // The loop is the shared daemon's best case: one isolated CODEX_HOME + one codex
+    // instance reused across every turn, torn down when this SafeTrigger drops (HS2-9M6T68).
+    let safe = prepare_trigger(store_path, tool, project, None, None, vec![], shared_daemon)?;
     let mut registry = ConnectionRegistry::new(30_000);
     let mut stall = Stall::default();
     let mut completed = 0u32;
