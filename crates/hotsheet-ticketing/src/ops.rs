@@ -281,6 +281,11 @@ pub fn update(
             Status::Verified if t.verified_at.is_none() => t.verified_at = Some(now.clone()),
             _ => {}
         }
+        // Leaving the active set (not_started/started) drops it off Up Next — applied after
+        // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
+        if !s.is_active() {
+            t.up_next = false;
+        }
     }
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
@@ -324,6 +329,8 @@ pub fn close(
     t.close_reason = Some(reason);
     t.closed_at = Some(now.clone());
     t.duplicate_of = duplicate_of;
+    // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
+    t.up_next = false;
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -684,6 +691,85 @@ mod tests {
             close(&store, &id, ts("t1"), CloseReason::Duplicate, None),
             Err(OpError::DuplicateNeedsTarget)
         ));
+    }
+
+    #[test]
+    fn closing_clears_up_next_and_drops_it_from_the_queue() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("t0"),
+            NewTicket {
+                title: "queued work".into(),
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let up_next_q = TicketQuery {
+            up_next_only: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            query(&store, &up_next_q).unwrap().len(),
+            1,
+            "queued to start"
+        );
+
+        // close() clears up_next even though it leaves the status field untouched.
+        let c = close(&store, &id, ts("t1"), CloseReason::Completed, None).unwrap();
+        assert!(!c.up_next, "closing clears up_next");
+        assert!(
+            query(&store, &up_next_q).unwrap().is_empty(),
+            "a closed ticket is off the Up Next queue"
+        );
+    }
+
+    #[test]
+    fn moving_out_of_active_clears_up_next_but_started_keeps_it() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("t0"),
+            NewTicket {
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        // Moving to `started` (still active) keeps the ticket Up Next.
+        let s = update(
+            &store,
+            &id,
+            ts("t1"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(s.up_next, "started is active → still Up Next");
+
+        // Moving to any non-active status clears it — even if the same patch re-sets it.
+        let done = update(
+            &store,
+            &id,
+            ts("t2"),
+            TicketPatch {
+                status: Some(Status::Completed),
+                up_next: Some(true), // ignored: leaving active always wins
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!done.up_next, "completed is not active → up_next cleared");
     }
 
     #[test]

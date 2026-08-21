@@ -31,6 +31,15 @@ pub enum Status {
     Moved,
 }
 
+impl Status {
+    /// Whether the ticket is in an **active** state — the only states where being on the
+    /// Up Next queue makes sense (`not_started` / `started`). Moving to any other state
+    /// clears `up_next` (HS1 parity: only active work can be queued).
+    pub fn is_active(self) -> bool {
+        matches!(self, Status::NotStarted | Status::Started)
+    }
+}
+
 /// Why a ticket was closed. A **separate optional** field, orthogonal to `Status`
 /// (HS2-24): setting it annotates a closure, it does not change the status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
