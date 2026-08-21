@@ -666,3 +666,102 @@ fn work_shared_daemon_completes_and_leaves_no_orphan_home() {
         "shared-daemon loop leaked an isolated CODEX_HOME under /tmp"
     );
 }
+
+/// End-to-end: `init` registers the semantic merge driver, and a real git merge of two
+/// branches that edited the SAME ticket lands cleanly — frontmatter merged field-by-field,
+/// tags unioned, both notes kept — with no conflict markers (HS2-18).
+#[test]
+fn merge_driver_resolves_concurrent_ticket_edits() {
+    fn git(dir: &Path, args: &[&str]) {
+        let ok = std::process::Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok, "git {args:?} failed");
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    git(p, &["config", "user.email", "t@example.com"]);
+    git(p, &["config", "user.name", "Tester"]);
+
+    // Driver registered by init.
+    let attrs = std::fs::read_to_string(p.join(".gitattributes")).unwrap();
+    assert!(attrs.contains("tickets/**/*.md merge=hotsheet-ticket"));
+
+    // `new`/`edit` auto-commit, so the base state is already committed on the base branch.
+    let slug = new_ticket(p, "Concurrent edits");
+    hs(p)
+        .args(["edit", &slug, "--details", "shared body"])
+        .assert()
+        .success();
+    let base_branch = String::from_utf8(
+        std::process::Command::new("git")
+            .current_dir(p)
+            .args(["rev-parse", "--abbrev-ref", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let base_branch = base_branch.trim();
+
+    // Branch A: priority high + tag alpha + a note (each edit auto-commits).
+    git(p, &["checkout", "-q", "-b", "branch-a"]);
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--priority",
+            "high",
+            "--tag",
+            "alpha",
+            "--note",
+            "from A",
+        ])
+        .assert()
+        .success();
+
+    // Branch B off the base: status started + tag beta + a note.
+    git(p, &["checkout", "-q", base_branch]);
+    git(p, &["checkout", "-q", "-b", "branch-b"]);
+    hs(p)
+        .args([
+            "edit", &slug, "--status", "started", "--tag", "beta", "--note", "from B",
+        ])
+        .assert()
+        .success();
+
+    // Merge A into B — must succeed with no conflict markers.
+    let merged = std::process::Command::new("git")
+        .current_dir(p)
+        .args(["merge", "branch-a", "-m", "merge"])
+        .status()
+        .unwrap();
+    assert!(
+        merged.success(),
+        "semantic merge should resolve automatically"
+    );
+
+    let show = hs(p).args(["show", &slug]).assert().success();
+    let out = String::from_utf8(show.get_output().stdout.clone()).unwrap();
+    assert!(
+        out.contains("priority: high"),
+        "A's priority merged in:\n{out}"
+    );
+    assert!(out.contains("status: started"), "B's status merged in");
+    assert!(
+        out.contains("alpha") && out.contains("beta"),
+        "tags unioned"
+    );
+    assert!(
+        out.contains("from A") && out.contains("from B"),
+        "both notes kept"
+    );
+    assert!(
+        !out.contains("<<<<<<<"),
+        "no conflict markers in a clean merge"
+    );
+}

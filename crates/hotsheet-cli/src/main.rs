@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use hotsheet_cli::{git_init, run_import};
 use hotsheet_model::{
-    CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, to_file_string,
+    CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, parse_file, to_file_string,
 };
 use hotsheet_ticketing::{
     FsStore, NewTicket, SortKey, StoreMetadata, TicketPatch, TicketQuery, ops,
@@ -138,6 +138,15 @@ enum Cmd {
     },
     /// Check store health (metadata, parse errors, duplicate slugs, orphans).
     Doctor,
+    /// Git-invoked semantic 3-way merge for ticket files (not run by hand — it's the
+    /// `merge=hotsheet-ticket` driver `hotsheet init` registers). Args are git's
+    /// %O (base) %A (ours/output) %B (theirs). Exit 0 = clean, 1 = body conflict.
+    #[command(hide = true)]
+    MergeDriver {
+        base: PathBuf,
+        ours: PathBuf,
+        theirs: PathBuf,
+    },
     /// Claim the next available ticket for a worker (local lease).
     ClaimNext {
         /// Worker id recorded on the claim.
@@ -373,6 +382,7 @@ fn main() -> Result<()> {
         Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Doctor => cmd_doctor(&cli.path),
+        Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
             worker,
             label,
@@ -764,6 +774,7 @@ fn cmd_init(path: &PathBuf, prefix: &str) -> Result<()> {
     FsStore::init(path, &StoreMetadata::new(prefix))
         .with_context(|| format!("initializing store at {}", path.display()))?;
     git_init(path);
+    hotsheet_cli::register_merge_driver(path);
     println!("Initialized Hot Sheet store at {}", path.display());
     Ok(())
 }
@@ -898,12 +909,97 @@ fn cmd_doctor(path: &PathBuf) -> Result<()> {
         }
     }
 
+    // The semantic merge driver must be registered, or git would text-merge ticket files
+    // and could dump conflict markers over structured data (HS2-18, docs/02 §2.7).
+    if !hotsheet_cli::merge_driver_registered(path) {
+        println!(
+            "  ! semantic merge driver not registered (missing .gitattributes \
+             `merge=hotsheet-ticket` or its git config) — re-run `hotsheet-cli init` here to \
+             register it, or git may text-merge ticket files"
+        );
+        issues += 1;
+    }
+
     if issues == 0 {
         println!("No issues found.");
         Ok(())
     } else {
         bail!("{issues} issue(s) found")
     }
+}
+
+/// The `merge=hotsheet-ticket` git driver: read git's base/ours/theirs, merge semantically,
+/// write the result back to `ours` (git's `%A`). Exit 0 = clean, 1 = a body conflict git
+/// should surface. Parse failure falls back to git's text merge so data is never lost.
+fn cmd_merge_driver(base: &Path, ours: &Path, theirs: &Path) -> Result<()> {
+    let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_default();
+    let (base_txt, ours_txt, theirs_txt) = (read(base), read(ours), read(theirs));
+
+    let (b, o, t) = match (
+        parse_file(&base_txt),
+        parse_file(&ours_txt),
+        parse_file(&theirs_txt),
+    ) {
+        (Ok(b), Ok(o), Ok(t)) => (b, o, t),
+        _ => {
+            // Unparseable input → git's plain text 3-way merge (never silent data loss).
+            let (merged, clean) = git_merge_file(&ours_txt, &base_txt, &theirs_txt)?;
+            std::fs::write(ours, merged)?;
+            std::process::exit(if clean { 0 } else { 1 });
+        }
+    };
+
+    let outcome = hotsheet_ticketing::merge_tickets(&b, &o, &t);
+    let mut ticket = outcome.ticket;
+    let clean = match &outcome.body {
+        hotsheet_ticketing::BodyMerge::Resolved(_) => true,
+        hotsheet_ticketing::BodyMerge::Conflict {
+            base: bb,
+            ours: oo,
+            theirs: tt,
+        } => {
+            // Only the prose paragraph conflicts; frontmatter + notes stay cleanly merged.
+            let (body, clean) = git_merge_file(oo, bb, tt)?;
+            ticket.details = body;
+            clean
+        }
+    };
+    std::fs::write(ours, to_file_string(&ticket))?;
+    std::process::exit(if clean { 0 } else { 1 });
+}
+
+/// A plain text 3-way merge via `git merge-file` (returns the merged text — with conflict
+/// markers when it can't resolve — and whether it was clean).
+fn git_merge_file(ours: &str, base: &str, theirs: &str) -> Result<(String, bool)> {
+    let dir = tempfile::tempdir()?;
+    let write = |name: &str, s: &str| -> Result<PathBuf> {
+        let p = dir.path().join(name);
+        std::fs::write(&p, s)?;
+        Ok(p)
+    };
+    let (op, bp, tp) = (
+        write("ours", ours)?,
+        write("base", base)?,
+        write("theirs", theirs)?,
+    );
+    let out = std::process::Command::new("git")
+        .args([
+            "merge-file",
+            "-p",
+            "-L",
+            "ours",
+            "-L",
+            "base",
+            "-L",
+            "theirs",
+        ])
+        .args([&op, &bp, &tp])
+        .output()
+        .context("running `git merge-file`")?;
+    Ok((
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        out.status.success(),
+    ))
 }
 
 fn cmd_claim_next(

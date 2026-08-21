@@ -54,6 +54,7 @@ pub fn run_import(store_path: &Path, export_file: &Path, prefix: &str) -> Result
             let init_prefix = export.project.ticket_prefix.as_deref().unwrap_or(prefix);
             let store = FsStore::init(store_path, &StoreMetadata::new(init_prefix))?;
             git_init(store_path);
+            register_merge_driver(store_path);
             store
         }
     };
@@ -145,6 +146,68 @@ pub fn git_init(path: &Path) {
         return;
     }
     run_git(path, &["init", "--quiet"]);
+}
+
+/// The `.gitattributes` line + git config value that register the semantic merge driver.
+const MERGE_ATTR_LINE: &str = "tickets/**/*.md merge=hotsheet-ticket";
+const MERGE_DRIVER_NAME: &str = "hotsheet-ticket";
+
+/// Register the semantic merge driver in a store (HS2-18, docs/02 §2.7): write the
+/// `.gitattributes` line so git routes `tickets/**/*.md` through `merge=hotsheet-ticket`,
+/// and point that driver at this binary's `merge-driver` subcommand via git config.
+/// Best-effort + idempotent — safe to re-run (e.g. from `init` or a repair).
+pub fn register_merge_driver(store_path: &Path) {
+    // .gitattributes — append the line once, preserving any existing rules.
+    let ga = store_path.join(".gitattributes");
+    let existing = std::fs::read_to_string(&ga).unwrap_or_default();
+    if !existing.lines().any(|l| l.trim() == MERGE_ATTR_LINE) {
+        let mut content = existing;
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str("# Hot Sheet semantic ticket merge (HS2-18)\n");
+        content.push_str(MERGE_ATTR_LINE);
+        content.push('\n');
+        if let Err(e) = std::fs::write(&ga, content) {
+            eprintln!("warning: could not write {}: {e}", ga.display());
+        }
+    }
+    // git config — the driver command git runs (%O base, %A ours/output, %B theirs).
+    let driver = match std::env::current_exe() {
+        Ok(exe) => format!("\"{}\" merge-driver %O %A %B", exe.display()),
+        Err(_) => "hotsheet-cli merge-driver %O %A %B".to_string(),
+    };
+    run_git(
+        store_path,
+        &[
+            "config",
+            &format!("merge.{MERGE_DRIVER_NAME}.name"),
+            "Hot Sheet semantic ticket merge",
+        ],
+    );
+    run_git(
+        store_path,
+        &[
+            "config",
+            &format!("merge.{MERGE_DRIVER_NAME}.driver"),
+            &driver,
+        ],
+    );
+}
+
+/// Whether the semantic merge driver is registered: the `.gitattributes` line is present
+/// **and** git config carries the driver command (`hotsheet doctor` checks this).
+pub fn merge_driver_registered(store_path: &Path) -> bool {
+    let attr_ok = std::fs::read_to_string(store_path.join(".gitattributes"))
+        .map(|s| s.lines().any(|l| l.trim() == MERGE_ATTR_LINE))
+        .unwrap_or(false);
+    let config_ok = Command::new("git")
+        .current_dir(store_path)
+        .args(["config", &format!("merge.{MERGE_DRIVER_NAME}.driver")])
+        .output()
+        .map(|o| o.status.success() && !o.stdout.is_empty())
+        .unwrap_or(false);
+    attr_ok && config_ok
 }
 
 /// Best-effort `git add -A && git commit` (warns on failure; files are already written).

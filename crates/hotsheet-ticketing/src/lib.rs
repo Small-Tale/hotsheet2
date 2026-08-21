@@ -8,11 +8,13 @@
 
 use hotsheet_model::Ulid;
 
+pub mod merge;
 pub mod ops;
 pub mod ports;
 pub mod settings;
 pub mod store;
 pub mod wire;
+pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use ports::{Clock, Rng};
 pub use settings::{Scope, Settings, SettingsError};

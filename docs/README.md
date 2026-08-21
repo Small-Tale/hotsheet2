@@ -153,7 +153,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Store identity/naming (id + name + per-store prefix); positional membership | 02 §2.2.1 | Confirmed (design) |
 | Copy/move tickets between stores (move = copy + source tombstone) | 02 §2.13 | Confirmed (design) |
 | ULID-based ticket IDs, all-caps slug (no central sequence) | 02 §2.4 | Confirmed |
-| **Automatic conflict resolution (semantic merge driver)** | 02 §2.7 | Confirmed |
+| **Automatic conflict resolution (semantic merge driver)** | 02 §2.7 | Shipped (`hotsheet merge-driver` field-by-field 3-way merge: scalars LWW-by-`updated_at`, tags/blocked_by/assignees set-union, notes union-by-ULID, body text-merged only when both sides change it; registered by `init` via `.gitattributes`+git config; `doctor` flags missing registration; proptests + real-git E2E; HS2-18) |
 | Inline notes with timestamp-ordered UUIDs | 02 §2.6 | Confirmed |
 | Attachments support | 02 §2.5 | Confirmed |
 | **Automatic repo sync (aggressive fetch/push/rebase)** | 02 §2.12 | Confirmed (design) |
@@ -166,7 +166,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Confirmed (design) |
 | Independent server (HTTP + WS) | 04 §4.3 | Partial (`hotsheet-server`: REST + /ws/sync + loopback auth; index/watcher/lifecycle/mTLS pending) |
 | MCP `hotsheet_*` tools (per-project shim) | 05 §5.8 | Partial (`hotsheet-mcp` shim: **serverless direct-to-disk (`--path`) or server-proxy (`--server`)**; config-writing pending) |
-| Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/edit/close/**setup**/import; merge-driver + more pending) |
+| Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/edit/close/**setup**/import/**merge-driver**/doctor/claim/trigger/work; more pending) |
 | **Headless AI-tool loop** (setup → skills/CLI/MCP, with/without server) | 04 §4.4, 05 §5.1a/§5.8/§5.11 | Partial (`setup claude` + serverless/server MCP built; E2E harness `test-projects/e2e-headless-claude.sh` passes both modes; live-Claude tier opt-in — HS2-95) |
 | Plugin-only AI-tool integration | 05 | Confirmed (design) |
 | **Core-owned AI-tool setup/instructions/skills/MCP (headless; CLI + server, not app)** | 05 §5.1a, 04 §4.1 | Confirmed (design); build HS2-91 |
