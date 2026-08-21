@@ -16,6 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Configure a git identity (tests create + commit git stores)
+        run: |
+          git config --global user.name "Hot Sheet CI"
+          git config --global user.email "ci@smalltale.invalid"
+
       - name: Install the pinned toolchain
         run: rustup show # honors rust-toolchain.toml (adds rustfmt + clippy)
 
@@ -40,3 +45,21 @@ jobs:
 
       - name: Test
         run: cargo nextest run --all-features
+
+      # Node side: the migrator + the cross-language conformance test (docs/12 §12.7).
+      # Node version is pinned in .nvmrc so CI matches local dev.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: migrator/package-lock.json
+
+      - name: Build the CLI (the conformance test drives target/debug/hotsheet-cli)
+        run: cargo build --bin hotsheet-cli
+
+      - name: Migrator tests (vitest + Rust-import conformance)
+        working-directory: migrator
+        run: |
+          npm ci
+          npx vitest run
