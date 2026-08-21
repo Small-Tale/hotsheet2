@@ -31,3 +31,14 @@ format = "claude-json"
 server_name = "hotsheet"
 command = "hotsheet-mcp"
 args = ["--path", "{store}"]
+
+[drive]
+# Claude is driven the HS1 play-button way: a turn injected into a running `claude`
+# stream-json session (docs/13 §13.6). transport = claude-channel; the host owns the
+# live process, so `program`/`args` here are informational (the drive uses the injected
+# ClaudeChannelClient, not this launch line). No interrupt in phase 1 (HS2-116).
+transport = "claude-channel"
+program = "claude"
+args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]
+content = "stdin"
+interrupt = false

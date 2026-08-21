@@ -43,13 +43,21 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert_eq!(p.manifest.mcp.target, ".codex/config.toml");
     assert!(p.instructions_body().contains("Hot Sheet"));
 
-    // Codex declares the persistent app-server drive (docs/13); Claude has none yet.
+    // Codex declares the persistent app-server drive (docs/13).
     let drive = p.manifest.drive.as_ref().expect("codex declares a drive");
     assert_eq!(drive.transport, "app-server");
     assert_eq!(drive.program, "codex");
     assert_eq!(drive.args, vec!["app-server".to_string()]);
     assert!(drive.interrupt);
-    assert!(find_in("claude", &[]).unwrap().manifest.drive.is_none());
+
+    // Claude declares the channel drive (a turn injected into a running session).
+    let cd = find_in("claude", &[])
+        .unwrap()
+        .manifest
+        .drive
+        .expect("claude declares a channel drive");
+    assert_eq!(cd.transport, "claude-channel");
+    assert!(!cd.interrupt, "no channel interrupt in phase 1");
 }
 
 #[test]

@@ -8,6 +8,7 @@
 use hotsheet_plugins::Plugin;
 
 use crate::appserver::AppServerDrive;
+use crate::claude::ClaudeChannelDrive;
 use crate::drive::{Drive, DriveCtx, DriveError, Target, TurnHandle};
 use crate::registry::{Connection, ConnectionRegistry, Role};
 use crate::spawn::{ContentMode, SpawnConfig, SpawnDrive};
@@ -20,6 +21,9 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
         // Persistent daemon — a turn on a resumed thread (Codex). The drive uses the
         // injected `AppServerClient`; `program`/`args` aren't its launch line.
         "app-server" => Some(Box::new(AppServerDrive)),
+        // Persistent channel — a turn injected into a running `claude` session. Uses the
+        // injected `ClaudeChannelClient`; `program`/`args` aren't its launch line.
+        "claude-channel" => Some(Box::new(ClaudeChannelDrive)),
         // Spawn-per-run (agy, `codex exec` fallback): a fresh process per turn.
         "spawn" => Some(Box::new(SpawnDrive::new(SpawnConfig {
             program: spec.program.clone(),
@@ -31,7 +35,7 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
             interrupt: spec.interrupt,
             resume_flag: spec.resume_flag.clone(),
         }))),
-        // claude-channel / acp land with their drives (HS2-9, …).
+        // acp (OpenCode/Goose) lands with its drive later.
         _ => None,
     }
 }

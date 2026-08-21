@@ -13,9 +13,8 @@
 //! exercised with no live `codex` (`docs/05` §5.10, the load-bearing testability rule).
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Condvar, Mutex};
@@ -27,6 +26,7 @@ use crate::ports::{
     AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, RpcReader, RpcTransport,
     RpcWriter,
 };
+use crate::procio::StreamChild;
 
 /// How long to wait for a single request's response before giving up.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -405,47 +405,18 @@ impl AppServerTurn for CodexTurn {
 ///   `generate-ts`/`generate-json-schema`. Reviving this needs that protocol reverse-
 ///   engineered from codex source (or a documented upstream API); `StdioTransport` is the
 ///   supported path meanwhile.
-struct CodexChild {
-    child: Child,
-}
-
-impl CodexChild {
-    fn spawn(program: &str, args: &[&str], cwd: &Path) -> std::io::Result<Self> {
-        let child = Command::new(program)
-            .args(args)
-            .current_dir(cwd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()?;
-        Ok(Self { child })
-    }
-
-    fn into_halves(mut self) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
-        let stdin = self.child.stdin.take().expect("piped stdin");
-        let stdout = self.child.stdout.take().expect("piped stdout");
-        // The reader owns the `Child` so the process stays alive for the connection's
-        // lifetime and is reaped when the reader thread ends.
-        (
-            Box::new(PipeWriter { stdin }),
-            Box::new(PipeReader {
-                lines: BufReader::new(stdout),
-                _child: self.child,
-            }),
-        )
-    }
-}
-
+///
 /// `codex app-server` direct over stdio — the live-default transport.
-pub struct StdioTransport(CodexChild);
+pub struct StdioTransport(StreamChild);
 
 impl StdioTransport {
     /// Spawn `program app-server` in `cwd`, piping stdio for JSON-RPC.
     pub fn spawn(program: &str, cwd: &Path) -> std::io::Result<Box<Self>> {
-        Ok(Box::new(Self(CodexChild::spawn(
+        Ok(Box::new(Self(StreamChild::spawn(
             program,
             &["app-server"],
             cwd,
+            &[],
         )?)))
     }
 }
@@ -456,17 +427,18 @@ impl RpcTransport for StdioTransport {
     }
 }
 
-/// `codex app-server proxy` — bridges the shared daemon control socket (see [`CodexChild`]
-/// docs; daemon handshake is HS2-115).
-pub struct ProxyTransport(CodexChild);
+/// `codex app-server proxy` — bridges the shared daemon control socket (daemon handshake
+/// is blocked, HS2-115; see the transport-family doc above).
+pub struct ProxyTransport(StreamChild);
 
 impl ProxyTransport {
     /// Spawn `program app-server proxy` in `cwd`, piping stdio for JSON-RPC.
     pub fn spawn(program: &str, cwd: &Path) -> std::io::Result<Box<Self>> {
-        Ok(Box::new(Self(CodexChild::spawn(
+        Ok(Box::new(Self(StreamChild::spawn(
             program,
             &["app-server", "proxy"],
             cwd,
+            &[],
         )?)))
     }
 }
@@ -474,31 +446,6 @@ impl ProxyTransport {
 impl RpcTransport for ProxyTransport {
     fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
         self.0.into_halves()
-    }
-}
-
-struct PipeWriter {
-    stdin: ChildStdin,
-}
-impl RpcWriter for PipeWriter {
-    fn send(&mut self, msg: &str) -> std::io::Result<()> {
-        self.stdin.write_all(msg.as_bytes())?;
-        self.stdin.write_all(b"\n")?;
-        self.stdin.flush()
-    }
-}
-
-struct PipeReader {
-    lines: BufReader<ChildStdout>,
-    _child: Child,
-}
-impl RpcReader for PipeReader {
-    fn recv(&mut self) -> std::io::Result<Option<String>> {
-        let mut line = String::new();
-        match self.lines.read_line(&mut line)? {
-            0 => Ok(None), // EOF
-            _ => Ok(Some(line.trim_end().to_string())),
-        }
     }
 }
 

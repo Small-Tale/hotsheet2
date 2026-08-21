@@ -10,18 +10,22 @@
 //! async `TurnEvent` stream land next.
 
 pub mod appserver;
+pub mod claude;
 pub mod codex;
 pub mod drive;
 pub mod host;
 pub mod ports;
+mod procio;
 pub mod registry;
 pub mod spawn;
 pub mod system;
 
 pub use appserver::AppServerDrive;
+pub use claude::{ClaudeChannel, ClaudeChannelDrive, ClaudeStreamTransport};
 pub use codex::{CodexAppServer, ProxyTransport, StdioTransport, ensure_codex_daemon};
 pub use drive::{
-    DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle,
+    ClaudeChannelClient, DoneReason, Drive, DriveCtx, DriveError, DriveInfo, PermReq, Target,
+    Transport, TurnEvent, TurnHandle,
 };
 pub use host::{TriggerError, Triggered, drive_for, trigger};
 pub use ports::{

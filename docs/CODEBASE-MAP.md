@@ -58,6 +58,8 @@ hot-sheet2/
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue
       src/appserver.rs       #   AppServerDrive (Codex persistent daemon: turn on a resumed thread) + AppServerClient port
       src/codex.rs           #   CodexAppServer: real AppServerClient (codex 0.148 JSON-RPC engine) + StdioTransport (live-verified) / ProxyTransport + ensure_codex_daemon; scripted-daemon tests
+      src/claude.rs          #   ClaudeChannelDrive + ClaudeChannel: turn injected into a running `claude` stream-json session, async TurnEvent stream; ClaudeStreamTransport + scripted-claude tests
+      src/procio.rs          #   StreamChild: shared piped-stdio plumbing (spawn -> RpcWriter/RpcReader) for the stream transports
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
       src/ports.rs           #   ProcessSpawner/SpawnedProcess + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
@@ -67,7 +69,7 @@ hot-sheet2/
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
       src/tests.rs           #   built-in + on-disk loading, first-party-wins-collision
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)
-    claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + SKILL.md; claude-json MCP; NO drive yet
+    claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + SKILL.md; claude-json MCP; [drive] claude-channel (async)
     codex/                   #   AGENTS.md instructions; no skill; codex-toml MCP; [drive] app-server (persistent)
     antigravity/             #   AGENTS.md instructions; no skill; .agents/mcp_config.json; [drive] spawn + --conversation resume
   migrator/                  # disposable Node HS1 exporter (docs/07)

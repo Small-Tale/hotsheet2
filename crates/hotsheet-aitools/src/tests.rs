@@ -62,6 +62,7 @@ fn ctx<'a>(spawner: &'a FakeSpawner, cwd: &str) -> DriveCtx<'a> {
         cwd: PathBuf::from(cwd),
         spawner,
         app_server: None,
+        channel: None,
     }
 }
 
@@ -126,6 +127,7 @@ fn appctx<'a>(spawner: &'a FakeSpawner, app: &'a FakeAppServer, cwd: &str) -> Dr
         cwd: PathBuf::from(cwd),
         spawner,
         app_server: Some(app),
+        channel: None,
     }
 }
 
@@ -317,30 +319,13 @@ fn app_server_drive_errors_without_a_connection() {
 }
 
 #[test]
-fn claude_is_not_drivable_yet_and_leaves_no_connection() {
+fn claude_is_drivable_via_the_channel_transport() {
     let claude = hotsheet_plugins::find_in("claude", &[]).expect("claude plugin");
-    assert!(drive_for(&claude).is_none(), "channel drive not built yet");
-
-    let spawner = FakeSpawner::new(0);
-    let mut reg = ConnectionRegistry::new(5_000);
-    // `Triggered` holds a trait object (not Debug), so match rather than unwrap_err.
-    match trigger(
-        &claude,
-        "/p",
-        Role::Main,
-        "s".into(),
-        "x",
-        &ctx(&spawner, "/p"),
-        &mut reg,
-        0,
-    ) {
-        Err(TriggerError::NotDrivable(id)) => assert_eq!(id, "claude"),
-        other => panic!("expected NotDrivable, got {:?}", other.is_ok()),
-    }
-    assert_eq!(
-        reg.count(),
-        0,
-        "no connection registered on a failed trigger"
+    let drive = drive_for(&claude).expect("claude declares a channel drive");
+    assert_eq!(drive.info().transport, Transport::ClaudeChannel);
+    assert!(
+        !drive.supports_interrupt(),
+        "no channel interrupt in phase 1"
     );
 }
 
@@ -409,6 +394,7 @@ fn codex_client_drives_the_appserver_drive_end_to_end() {
         cwd: PathBuf::from("/proj"),
         spawner: &spawner,
         app_server: Some(&cx),
+        channel: None,
     };
     let mut turn = AppServerDrive
         .run(&Target::default(), "work the top ticket", &ctx)
@@ -450,6 +436,164 @@ fn codex_live_turn_against_the_daemon() {
         AppServerOutcome::Completed,
         "live turn should complete"
     );
+}
+
+// ---- the Claude channel drive over a scripted claude (HS2-116) -------------------
+
+use crate::claude::ClaudeChannel;
+use crate::claude::scripted::{ClaudeMode, ScriptedClaude};
+
+fn chanctx<'a>(spawner: &'a FakeSpawner, ch: &'a ClaudeChannel, cwd: &str) -> DriveCtx<'a> {
+    DriveCtx {
+        cwd: PathBuf::from(cwd),
+        spawner,
+        app_server: None,
+        channel: Some(ch),
+    }
+}
+
+#[test]
+fn claude_channel_streams_output_then_done() {
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Success));
+    let mut turn = ch.start_turn("work the top ticket").unwrap();
+
+    // Streaming view: assistant Output, then a terminal Done.
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Output("done: work the top ticket".into()))
+    );
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Done(DoneReason::Completed))
+    );
+    assert_eq!(turn.next_event(), None, "stream ends after Done");
+    assert!(!turn.is_busy());
+}
+
+#[test]
+fn claude_channel_captures_the_session_id_and_maps_failure() {
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Failure));
+    let mut turn = ch.start_turn("x").unwrap();
+    // wait() drains the stream to the terminal reason.
+    assert_eq!(turn.wait(), DoneReason::Failed(1));
+    // session id came from the `system`/`init` event.
+    assert_eq!(ch.session_id().as_deref(), Some("sess-abc"));
+}
+
+#[test]
+fn claude_channel_runs_two_sequential_turns() {
+    // Transition test: a second turn on the same channel starts fresh from its cursor.
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Success));
+    let mut t1 = ch.start_turn("first").unwrap();
+    assert_eq!(t1.wait(), DoneReason::Completed);
+
+    let mut t2 = ch.start_turn("second").unwrap();
+    assert_eq!(
+        t2.next_event(),
+        Some(TurnEvent::Output("done: second".into())),
+        "second turn sees its own output, not the first's"
+    );
+    assert_eq!(t2.wait(), DoneReason::Completed);
+}
+
+#[test]
+fn claude_channel_drive_runs_a_turn_end_to_end() {
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Success));
+    let spawner = FakeSpawner::new(0);
+    let mut turn = ClaudeChannelDrive
+        .run(
+            &Target::default(),
+            "work the top ticket",
+            &chanctx(&spawner, &ch, "/proj"),
+        )
+        .unwrap();
+    assert_eq!(turn.wait(), DoneReason::Completed);
+    assert!(
+        spawner.last.borrow().is_none(),
+        "channel drive spawns no process"
+    );
+}
+
+#[test]
+fn claude_channel_drive_errors_without_a_connection() {
+    let spawner = FakeSpawner::new(0);
+    // No channel in the ctx. (Box<dyn TurnHandle> isn't Debug, so match.)
+    match ClaudeChannelDrive.run(&Target::default(), "x", &ctx(&spawner, "/w")) {
+        Err(DriveError::NotConnected(_)) => {}
+        _ => panic!("expected NotConnected"),
+    }
+}
+
+#[test]
+fn trigger_claude_uses_the_channel_and_registers_a_connection() {
+    let spawner = FakeSpawner::new(0);
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Success));
+    let mut reg = ConnectionRegistry::new(5_000);
+    let claude = hotsheet_plugins::find_in("claude", &[]).expect("claude plugin");
+
+    let out = trigger(
+        &claude,
+        "/proj",
+        Role::Main,
+        "sess-1".into(),
+        "work the top ticket",
+        &chanctx(&spawner, &ch, "/proj"),
+        &mut reg,
+        1_000,
+    )
+    .unwrap();
+
+    let c = reg.get("sess-1").unwrap();
+    assert_eq!(c.tool, "claude");
+    assert_eq!(c.transport, Transport::ClaudeChannel);
+    assert!(reg.is_busy("sess-1", 1_000));
+
+    let mut turn = out.turn;
+    assert_eq!(turn.wait(), DoneReason::Completed);
+}
+
+/// LIVE, gated: a real turn through a persistent `claude` stream-json session. Off by
+/// default (needs `HOTSHEET_CLAUDE_LIVE=1`); needs Claude creds and invokes the model. Run
+/// under HS2-103 safety in an isolated, MCP-free cwd. Proves the real `ClaudeStreamTransport`
+/// + `ClaudeChannel` drive one persistent session through a complete turn.
+#[test]
+#[ignore = "live: needs a real claude + creds; set HOTSHEET_CLAUDE_LIVE=1"]
+fn claude_live_turn_over_the_channel() {
+    if std::env::var("HOTSHEET_CLAUDE_LIVE").as_deref() != Ok("1") {
+        eprintln!("skipped: set HOTSHEET_CLAUDE_LIVE=1 to run the live claude turn");
+        return;
+    }
+    let program = std::env::var("HOTSHEET_CLAUDE_BIN").unwrap_or_else(|_| "claude".into());
+    let cwd = std::env::var("CLAUDE_LIVE_CWD")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    // Only the given (empty) MCP config, so nothing else is reachable.
+    let mcp = std::env::var("CLAUDE_LIVE_MCP")
+        .ok()
+        .map(std::path::PathBuf::from);
+    let transport =
+        crate::claude::ClaudeStreamTransport::spawn(&program, &cwd, None, mcp.as_deref())
+            .expect("claude spawn");
+    let ch = ClaudeChannel::connect(transport);
+    let mut turn = ch
+        .start_turn("Reply with only the word: pong")
+        .expect("start_turn");
+    // Stream the events, then assert the terminal reason.
+    let mut saw_output = false;
+    let reason = loop {
+        match turn.next_event() {
+            Some(TurnEvent::Output(t)) => {
+                eprintln!("live: output {t:?}");
+                saw_output = true;
+            }
+            Some(TurnEvent::PermissionAsked(p)) => eprintln!("live: permission {p:?}"),
+            Some(TurnEvent::Done(r)) => break r,
+            None => break turn.wait(),
+        }
+    };
+    eprintln!("live: done {reason:?}, session={:?}", ch.session_id());
+    assert!(saw_output, "streamed at least one assistant output");
+    assert_eq!(reason, DoneReason::Completed, "live turn should complete");
 }
 
 // ---- the real adapter ------------------------------------------------------------

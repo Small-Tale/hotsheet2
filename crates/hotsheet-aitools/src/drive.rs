@@ -45,6 +45,9 @@ pub struct DriveCtx<'a> {
     pub spawner: &'a dyn ProcessSpawner,
     /// Present for the app-server (persistent daemon) drive; other transports ignore it.
     pub app_server: Option<&'a dyn AppServerClient>,
+    /// Present for the Claude channel drive (a turn on a running `claude` stream-json
+    /// session); other transports ignore it.
+    pub channel: Option<&'a dyn ClaudeChannelClient>,
 }
 
 /// Why a turn finished.
@@ -53,6 +56,31 @@ pub enum DoneReason {
     Completed,
     Failed(i32),
     Interrupted,
+}
+
+/// A tool wants approval mid-turn (the channel/ACP shapes surface these; `docs/13` §13.4,
+/// wired to the permission bridge in §5.7 later). Minimal for now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PermReq {
+    /// The tool/action asking (e.g. `"Bash"`, `"Edit"`).
+    pub tool: String,
+    /// A short human-facing description of what it wants to do.
+    pub summary: String,
+}
+
+/// One event from a streaming turn (the async view of a running turn). A drive that can
+/// stream yields these in order, ending with exactly one [`TurnEvent::Done`]; a drive that
+/// can't returns `None` from [`TurnHandle::next_event`] and the caller uses
+/// [`TurnHandle::wait`] instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TurnEvent {
+    /// Assistant output text produced during the turn.
+    Output(String),
+    /// A permission request the host must answer (unwired for now — the drive runs a
+    /// non-blocking permission mode, so this is informational).
+    PermissionAsked(PermReq),
+    /// The turn finished; terminal.
+    Done(DoneReason),
 }
 
 /// A handle to observe one running turn, **uniform across transports** (`docs/13`
@@ -66,6 +94,13 @@ pub trait TurnHandle {
     /// Interrupt this turn if the drive supports it; returns whether it acted.
     fn interrupt(&mut self) -> bool {
         false
+    }
+    /// Pull the next streaming [`TurnEvent`], blocking until one is available. A streaming
+    /// drive yields events in order ending with one [`TurnEvent::Done`], then `None`. The
+    /// default is a non-streaming drive: it returns `None` and the caller falls back to
+    /// [`wait`](Self::wait). Absence is the signal — no bool flag to drift.
+    fn next_event(&mut self) -> Option<TurnEvent> {
+        None
     }
 }
 
@@ -83,6 +118,20 @@ pub enum DriveError {
     /// The app-server (persistent daemon) transport failed.
     #[error("app-server: {0}")]
     AppServer(String),
+}
+
+/// A live, persistent `claude` session driven by the channel transport — a turn is one
+/// user message injected into the running stream-json process (`docs/13` §13.6, the
+/// interface's acceptance shape). Injected into [`DriveCtx`] so [`ClaudeChannelDrive`] is
+/// testable against a scripted claude, never a real process.
+///
+/// [`ClaudeChannelDrive`]: crate::claude::ClaudeChannelDrive
+pub trait ClaudeChannelClient {
+    /// The running session id (from the `system/init` event), for `Target`/resume; `None`
+    /// until it's been observed.
+    fn session_id(&self) -> Option<String>;
+    /// Inject one user message; returns a streaming [`TurnHandle`] for that turn.
+    fn start_turn(&self, content: &str) -> Result<Box<dyn TurnHandle>, DriveError>;
 }
 
 /// Steer a running (or one-shot) AI tool. `run` is the only required method.

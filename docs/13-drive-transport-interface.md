@@ -9,10 +9,16 @@
 > + `DoneReason`, the injected `ProcessSpawner`/`SpawnedProcess` ports + the real
 > `SystemSpawner`, and the **spawn-per-run `SpawnDrive`** (Codex `exec` shape),
 > conformance-tested against a fake spawner (§13.7, minus the fake-agent parts).
-> **First-slice simplification:** `TurnHandle` is synchronous (`is_busy` + `wait` +
-> `interrupt`), not yet the async `TurnEvent` stream — that lands with the
-> persistent-channel (Claude) drive (HS2-9), which genuinely needs it. The permission
-> sink + connection registry are later additions to `DriveCtx`.
+> **Streaming view added (HS2-116):** `TurnHandle` now also has `next_event() ->
+> Option<TurnEvent>` (`Output`/`PermissionAsked`/`Done`) — additive, so the sync
+> spawn/app-server drives keep the default (`None` → use `wait`), while the Claude channel
+> drive streams. The permission sink is still a later addition to `DriveCtx`; the
+> connection registry already landed (HS2-107).
+>
+> **Claude channel drive built (HS2-116):** `ClaudeChannelDrive` + `ClaudeChannel` — a
+> turn injected into a running `claude` stream-json session, streamed as `TurnEvent`s.
+> This is the interface's acceptance test; see §13.6. It added the `next_event()`
+> streaming view (additive).
 >
 > **Codex app-server drive built (HS2-110):** `AppServerDrive` — a play is a
 > `turn/start` on a new/**resumed** thread against the running `codex app-server daemon`,
@@ -162,10 +168,27 @@ than launching a process each time. Folding this behind a `Drive::service()` acc
 
 ## 13.6 Why this isn't Claude-shaped (the acceptance test)
 
+> **Claude channel drive built (HS2-116).** `ClaudeChannelDrive` + `ClaudeChannel`
+> (`src/claude.rs`) — a play is **one user message injected into a running, persistent
+> `claude` stream-json session** (the HS1 play-button model), observed as an **async
+> `TurnEvent` stream** (`Output` … → `Done`), not a single terminal wait. Verified
+> `claude 2.1.238` protocol: `claude -p --input-format stream-json --output-format
+> stream-json [--resume <id>]`; input `{"type":"user",…}`; output `system`/`init`
+> (session id), `assistant` (output), `result` (turn done). Same NDJSON framing as codex,
+> so it reuses the injected `RpcTransport`/`StreamChild` plumbing: `ClaudeStreamTransport`
+> spawns real `claude`, tests inject a **scripted claude**. This is what forced the
+> `TurnHandle::next_event()` streaming view (additive; sync drives keep the default).
+> **Live-verified (2026-08-21, isolated temp cwd + strict empty MCP config → nothing else
+> reachable):** a real turn streamed `Output("pong")` then `Done(Completed)` with the
+> session id captured and the HS1 dev instance untouched; gated ignored test
+> (`HOTSHEET_CLAUDE_LIVE=1`). Follow-ups: the permission bridge (§5.7, HS2-113 — the drive
+> emits `PermissionAsked` but runs a safe mode) and a channel interrupt.
+
 The interface is only real if the tool it was **not** designed around fits. Checks:
-- **Claude** needs `run` to be **async** (POST to a running session) → `run` returns a
-  `Result<TurnHandle>` and may be async; the spawn drives are sync under the same
-  signature.
+- **Claude** needs `run` to be **async** (a turn on a running session) → `run` returns a
+  `Result<TurnHandle>` whose `next_event()` streams `Output`/`PermissionAsked`/`Done`; the
+  spawn/app-server drives are sync under the same signature (they return `None` from
+  `next_event` and callers use `wait`). **Verified by construction (HS2-116).**
 - **Codex** needs **`interrupt`** and a **backing service**; Claude declares neither,
   and nothing breaks — absence is the signal.
 - **ACP** needs permission-*as-a-response* (not a hook) → the `PermissionSink` adapter
