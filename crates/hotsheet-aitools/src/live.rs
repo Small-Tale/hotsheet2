@@ -9,7 +9,10 @@ use std::path::PathBuf;
 use hotsheet_plugins::Plugin;
 
 use crate::claude::{ClaudeChannel, ClaudeStreamTransport};
-use crate::codex::{CodexAppServer, StdioTransport};
+use crate::codex::{
+    CodexAppServer, StdioTransport, UdsWsTransport, codex_control_socket_path,
+    ensure_codex_daemon_in,
+};
 use crate::drive::{DoneReason, DriveCtx, TurnEvent};
 use crate::host::{TriggerError, trigger};
 use crate::registry::{ConnectionRegistry, Role};
@@ -34,6 +37,10 @@ pub struct LiveTrigger {
     pub permission_mode: Option<String>,
     /// Extra env for the launched process (e.g. an isolated `CODEX_HOME`).
     pub env: Vec<(String, String)>,
+    /// For an app-server tool: drive the **shared daemon** for this connection's
+    /// `CODEX_HOME` (one codex instance reused across turns) instead of spawning a fresh
+    /// `app-server` process per connection (HS2-B7C66H). Requires `CODEX_HOME` in `env`.
+    pub shared_daemon: bool,
     /// Injected clock.
     pub now_ms: u64,
 }
@@ -98,14 +105,23 @@ pub fn run_trigger(
             drive_and_stream(plugin, t, &ctx, registry, on_event)
         }
         "app-server" => {
-            let transport = StdioTransport::spawn(&program, &t.cwd, &t.env).map_err(|source| {
-                LiveError::Launch {
-                    program: program.clone(),
-                    source,
-                }
-            })?;
-            let app = CodexAppServer::connect(transport)
-                .map_err(|e| LiveError::Connect(program.clone(), e.to_string()))?;
+            // Two shapes of the persistent app-server (docs/13 §13.5):
+            //  - default: spawn `codex app-server` direct — one process for this connection;
+            //  - shared_daemon: attach to the daemon for this connection's CODEX_HOME over a
+            //    WebSocket, so many connections/turns reuse ONE codex instance (HS2-B7C66H).
+            let app = if t.shared_daemon {
+                connect_shared_daemon(&program, &t.env)?
+            } else {
+                let transport =
+                    StdioTransport::spawn(&program, &t.cwd, &t.env).map_err(|source| {
+                        LiveError::Launch {
+                            program: program.clone(),
+                            source,
+                        }
+                    })?;
+                CodexAppServer::connect(transport)
+                    .map_err(|e| LiveError::Connect(program.clone(), e.to_string()))?
+            };
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 spawner: &spawner,
@@ -127,6 +143,37 @@ pub fn run_trigger(
         }
         _ => Err(LiveError::NotDrivable(plugin.id().to_string())),
     }
+}
+
+/// Attach to the shared codex daemon for the `CODEX_HOME` in `env`: start it (idempotent)
+/// and connect its WebSocket control socket. Requires `CODEX_HOME` to be set — the caller
+/// (`hotsheet-cli`) points it at a **daemon-ready isolated home** so MCP isolation holds
+/// while one instance is reused (HS2-B7C66H).
+fn connect_shared_daemon(
+    program: &str,
+    env: &[(String, String)],
+) -> Result<CodexAppServer, LiveError> {
+    let codex_home = env
+        .iter()
+        .find(|(k, _)| k == "CODEX_HOME")
+        .map(|(_, v)| PathBuf::from(v))
+        .ok_or_else(|| {
+            LiveError::Connect(
+                program.to_string(),
+                "--shared-daemon needs a CODEX_HOME (none in env)".into(),
+            )
+        })?;
+    ensure_codex_daemon_in(program, &codex_home).map_err(|source| LiveError::Launch {
+        program: program.to_string(),
+        source,
+    })?;
+    let socket = codex_control_socket_path(&codex_home);
+    let transport = UdsWsTransport::connect(&socket).map_err(|source| LiveError::Launch {
+        program: program.to_string(),
+        source,
+    })?;
+    CodexAppServer::connect(transport)
+        .map_err(|e| LiveError::Connect(program.to_string(), e.to_string()))
 }
 
 fn drive_and_stream(

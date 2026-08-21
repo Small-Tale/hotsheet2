@@ -616,16 +616,31 @@ pub fn codex_control_socket_path(codex_home: &Path) -> PathBuf {
         .join("app-server-control.sock")
 }
 
-/// Ensure the shared Codex app-server daemon is running before connecting a proxy. The
-/// CLI's `daemon start` is idempotent ("start … if it is not already running").
-/// Live-only (BackingService, `docs/13` §13.5).
+/// Ensure the shared Codex app-server daemon is running before connecting to it. The CLI's
+/// `daemon start` is idempotent ("start … if it is not already running"). Uses the ambient
+/// `CODEX_HOME`; see [`ensure_codex_daemon_in`] to target a specific home. Live-only
+/// (BackingService, `docs/13` §13.5).
 pub fn ensure_codex_daemon(program: &str) -> std::io::Result<()> {
-    let status = Command::new(program)
-        .args(["app-server", "daemon", "start"])
+    run_daemon_start(program, None)
+}
+
+/// Like [`ensure_codex_daemon`], but starts the daemon for a specific `CODEX_HOME` — so a
+/// per-project **isolated** home gets its own shared daemon (HS2-B7C66H), keeping MCP
+/// isolation while still reusing one codex instance across a run's turns.
+pub fn ensure_codex_daemon_in(program: &str, codex_home: &Path) -> std::io::Result<()> {
+    run_daemon_start(program, Some(codex_home))
+}
+
+fn run_daemon_start(program: &str, codex_home: Option<&Path>) -> std::io::Result<()> {
+    let mut cmd = Command::new(program);
+    cmd.args(["app-server", "daemon", "start"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?;
+        .stderr(Stdio::null());
+    if let Some(home) = codex_home {
+        cmd.env("CODEX_HOME", home);
+    }
+    let status = cmd.status()?;
     if status.success() {
         Ok(())
     } else {

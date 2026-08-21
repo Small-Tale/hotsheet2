@@ -572,3 +572,43 @@ fn trigger_codex_isolates_codex_home_and_completes() {
         "no HS1 instance was launched (no .hotsheet)"
     );
 }
+
+/// LIVE, gated: `hotsheet-cli trigger codex --shared-daemon` drives codex via a **daemon**
+/// started for the isolated CODEX_HOME (HS2-B7C66H) — reusing one codex instance while
+/// keeping MCP isolation — and completes a turn. Off by default; set `HOTSHEET_CODEX_LIVE=1`
+/// (needs codex + creds; invokes the model).
+#[test]
+#[ignore = "live: needs a real codex + creds; set HOTSHEET_CODEX_LIVE=1"]
+fn trigger_codex_shared_daemon_reuses_one_instance() {
+    if std::env::var("HOTSHEET_CODEX_LIVE").as_deref() != Ok("1") {
+        eprintln!("skipped: set HOTSHEET_CODEX_LIVE=1 to run the shared-daemon codex trigger");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let t = new_ticket(p, "Create GREETING.txt containing hello");
+    hs(p).args(["edit", &t, "--up-next"]).assert().success();
+
+    hs(p)
+        .args([
+            "trigger",
+            "codex",
+            "--shared-daemon",
+            "--prompt",
+            "Create a file named GREETING.txt containing the word hello in this project, \
+             then stop. If you use the shell, the CLI is hotsheet-cli (never a bare 'hotsheet').",
+        ])
+        .timeout(std::time::Duration::from_secs(180))
+        .assert()
+        .success();
+
+    assert!(
+        p.join("GREETING.txt").is_file(),
+        "codex created GREETING.txt"
+    );
+    assert!(
+        !p.join(".hotsheet").exists(),
+        "no HS1 instance was launched"
+    );
+}

@@ -171,9 +171,18 @@ BackingService prestart — it runs `codex app-server daemon start` (idempotent:
 if not already running") before a `UdsWsTransport` connects to the daemon's control
 socket at `codex_control_socket_path(codex_home)`. Every `CodexAppServer` connection over
 that transport talks to the **same** daemon, so plays reuse one persistent instance
-rather than launching a process each time. Folding this behind a `Drive::service()`
-accessor (so a generic caller warms it without importing `codex.rs`), and letting the live
-trigger *choose* the shared-daemon transport, are the remaining steps.
+rather than launching a process each time. `ensure_codex_daemon_in(program, codex_home)`
+targets a specific (isolated) home.
+
+**Wired into the trigger (HS2-B7C66H, live-verified 2026-08-21):** `hotsheet-cli trigger
+codex --shared-daemon` builds a **daemon-ready isolated `CODEX_HOME`** (the HS2-YRDQNX
+MCP-free home, but under a short root so the control socket fits `sun_path`, with the managed
+standalone install symlinked in), starts the daemon for *that* home, and drives the turn over
+`UdsWsTransport` — so MCP isolation holds *and* one codex instance is reused. Off by default
+(a fresh `app-server` process per connection); opt-in for now. Still open: the daemon
+**lifecycle** — a one-shot `trigger` orphans the daemon it starts, so this really belongs on
+the `work` loop (the home lives for the whole loop) and needs a stop-on-drop guard
+(HS2-9M6T68); plus folding `ensure_codex_daemon` behind a `Drive::service()` accessor.
 
 ## 13.6 Why this isn't Claude-shaped (the acceptance test)
 

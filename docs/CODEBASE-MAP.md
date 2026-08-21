@@ -62,7 +62,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/codex.rs           #   CodexAppServer: real AppServerClient (codex 0.148 JSON-RPC engine) + StdioTransport (live-verified) / UdsWsTransport (shared daemon: WebSocket over the control socket, HS2-115) + codex_control_socket_path + ensure_codex_daemon; loopback + scripted-WS daemon tests
       src/claude.rs          #   ClaudeChannelDrive + ClaudeChannel: turn injected into a running `claude` stream-json session, async TurnEvent stream; ClaudeStreamTransport + scripted-claude tests
       src/procio.rs          #   StreamChild: shared piped-stdio plumbing (spawn -> RpcWriter/RpcReader) for the stream transports
-      src/live.rs            #   run_trigger: spawn a REAL tool per its [drive] transport, build DriveCtx, stream one turn (behind `hotsheet-cli trigger`)
+      src/live.rs            #   run_trigger: spawn a REAL tool per its [drive] transport (codex app-server: StdioTransport, or shared-daemon UdsWsTransport when --shared-daemon), build DriveCtx, stream one turn (behind `hotsheet-cli trigger`)
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
       src/ports.rs           #   ProcessSpawner/SpawnedProcess + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)

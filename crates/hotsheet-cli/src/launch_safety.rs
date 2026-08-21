@@ -105,19 +105,50 @@ pub struct IsolatedCodexHome {
 }
 
 impl IsolatedCodexHome {
-    /// Build the isolated home: copy `auth.json` from `source_home` (if present, so the
-    /// launched codex stays signed in) and write a `config.toml` whose sole MCP server is
-    /// `server_name` → `command`/`args`. No other user state is carried over.
+    /// Build the isolated home for a **direct** `app-server` (a fresh process per
+    /// connection): copy `auth.json` from `source_home` (if present, so the launched codex
+    /// stays signed in) and write a `config.toml` whose sole MCP server is `server_name` →
+    /// `command`/`args`. No other user state is carried over.
     pub fn create(
         source_home: &Path,
         server_name: &str,
         command: &str,
         args: &[String],
     ) -> Result<Self> {
-        let dir = tempfile::Builder::new()
-            .prefix("hs2-codexhome-")
-            .tempdir()
-            .context("creating the isolated CODEX_HOME")?;
+        Self::build(source_home, server_name, command, args, false)
+    }
+
+    /// Build the isolated home for the shared **daemon** (HS2-B7C66H): like [`create`], but
+    /// under a **short** root (the daemon's control socket must fit `sun_path`, ~104 bytes
+    /// on macOS — the default temp dir can overflow it) and with the managed standalone
+    /// install symlinked in (the daemon needs `<home>/packages`).
+    pub fn create_for_daemon(
+        source_home: &Path,
+        server_name: &str,
+        command: &str,
+        args: &[String],
+    ) -> Result<Self> {
+        Self::build(source_home, server_name, command, args, true)
+    }
+
+    fn build(
+        source_home: &Path,
+        server_name: &str,
+        command: &str,
+        args: &[String],
+        for_daemon: bool,
+    ) -> Result<Self> {
+        let mut builder = tempfile::Builder::new();
+        builder.prefix("hs2cx-");
+        // For the daemon, keep the base short so `<home>/app-server-control/…sock` fits
+        // sun_path; `/tmp` is short and writable on the unix targets `trigger` supports.
+        let dir = if for_daemon && Path::new("/tmp").is_dir() {
+            builder.tempdir_in("/tmp")
+        } else {
+            builder.tempdir()
+        }
+        .context("creating the isolated CODEX_HOME")?;
+
         let auth = source_home.join("auth.json");
         if auth.is_file() {
             std::fs::copy(&auth, dir.path().join("auth.json")).with_context(|| {
@@ -129,6 +160,20 @@ impl IsolatedCodexHome {
             isolated_codex_config(server_name, command, args),
         )
         .context("writing the isolated CODEX_HOME config.toml")?;
+
+        if for_daemon {
+            // The daemon manages a standalone install under `<home>/packages`; symlink the
+            // user's so it needn't re-download into the throwaway home.
+            let src_pkgs = source_home.join("packages");
+            if src_pkgs.exists() {
+                symlink_dir(&src_pkgs, &dir.path().join("packages")).with_context(|| {
+                    format!(
+                        "symlinking {} into the isolated CODEX_HOME",
+                        src_pkgs.display()
+                    )
+                })?;
+            }
+        }
         Ok(Self { dir })
     }
 
@@ -136,6 +181,18 @@ impl IsolatedCodexHome {
     pub fn path(&self) -> &Path {
         self.dir.path()
     }
+}
+
+#[cfg(unix)]
+fn symlink_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(src, dst)
+}
+
+#[cfg(not(unix))]
+fn symlink_dir(_src: &Path, _dst: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::other(
+        "the shared codex daemon is only supported on unix",
+    ))
 }
 
 /// A `config.toml` body with a single `[mcp_servers.<name>]` and nothing else, so codex
@@ -335,6 +392,54 @@ mod tests {
             .map(|a| a.as_str().unwrap())
             .collect();
         assert_eq!(args, vec!["--path", "/store"]);
+    }
+
+    #[test]
+    fn daemon_isolated_home_symlinks_packages_and_fits_sun_path() {
+        let src = tempfile::tempdir().unwrap();
+        std::fs::write(src.path().join("auth.json"), "{}").unwrap();
+        std::fs::create_dir_all(src.path().join("packages/standalone")).unwrap();
+
+        let home = IsolatedCodexHome::create_for_daemon(
+            src.path(),
+            "hotsheet",
+            "hotsheet-mcp",
+            &["--path".into(), "/store".into()],
+        )
+        .unwrap();
+
+        // The managed install is symlinked in (a symlink, resolving to the source).
+        let pkg = home.path().join("packages");
+        assert!(
+            std::fs::symlink_metadata(&pkg)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "packages is a symlink"
+        );
+        assert!(
+            pkg.join("standalone").is_dir(),
+            "symlink resolves to source packages"
+        );
+
+        // Still MCP-only (isolation holds for the daemon path too).
+        let cfg: toml::Table =
+            toml::from_str(&std::fs::read_to_string(home.path().join("config.toml")).unwrap())
+                .unwrap();
+        assert_eq!(cfg["mcp_servers"].as_table().unwrap().len(), 1);
+
+        // The daemon's control socket path must fit the platform's sun_path limit (~104 on
+        // macOS, 108 on Linux) — the whole reason the daemon home uses a short root.
+        let sock = home
+            .path()
+            .join("app-server-control")
+            .join("app-server-control.sock");
+        assert!(
+            sock.to_string_lossy().len() < 104,
+            "socket path is too long for sun_path: {} ({} bytes)",
+            sock.display(),
+            sock.to_string_lossy().len()
+        );
     }
 
     #[test]

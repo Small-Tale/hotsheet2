@@ -194,6 +194,11 @@ enum Cmd {
         /// Register the connection as a self-claim worker rather than the main session.
         #[arg(long)]
         worker: bool,
+        /// Codex only: drive the shared app-server **daemon** for the (isolated) CODEX_HOME
+        /// — reuse one codex instance across turns instead of a fresh process per turn
+        /// (HS2-B7C66H). Needs the managed standalone install available to symlink.
+        #[arg(long = "shared-daemon")]
+        shared_daemon: bool,
     },
     /// Work the Up Next queue headlessly: drive the tool one turn at a time until Up Next
     /// is drained (or `--max` turns / a thrash stall). Applies HS2-103 launch safety.
@@ -377,6 +382,7 @@ fn main() -> Result<()> {
             permission_mode,
             envs,
             worker,
+            shared_daemon,
         } => cmd_trigger(
             &cli.path,
             &tool,
@@ -387,6 +393,7 @@ fn main() -> Result<()> {
             permission_mode,
             envs,
             worker,
+            shared_daemon,
         ),
         Cmd::Work {
             tool,
@@ -413,6 +420,9 @@ struct SafeTrigger {
     env: Vec<(String, String)>,
     mcp_config: Option<PathBuf>,
     permission_mode: String,
+    // Drive codex via its isolated-home shared daemon (reuse one instance) vs. a fresh
+    // app-server process per turn (HS2-B7C66H).
+    shared_daemon: bool,
     // Kept alive so the shim dir survives every turn; dropped when the SafeTrigger is.
     _shim: hotsheet_cli::launch_safety::ShimDir,
     // The throwaway codex CODEX_HOME (app-server tools only), kept alive for every turn.
@@ -428,6 +438,7 @@ fn prepare_trigger(
     mcp_config: Option<PathBuf>,
     permission_mode: Option<String>,
     envs: Vec<String>,
+    shared_daemon: bool,
 ) -> Result<SafeTrigger> {
     use hotsheet_cli::launch_safety;
 
@@ -468,12 +479,15 @@ fn prepare_trigger(
         })?;
         let command = launch_safety::mcp_command(&plugin.manifest.mcp.command);
         let args = plugin.mcp_args(&store_abs.to_string_lossy());
-        let home = launch_safety::IsolatedCodexHome::create(
-            &launch_safety::default_codex_home(),
-            &plugin.manifest.mcp.server_name,
-            &command,
-            &args,
-        )?;
+        let source = launch_safety::default_codex_home();
+        let name = &plugin.manifest.mcp.server_name;
+        // For the shared daemon, the home must be daemon-ready (packages symlinked, short
+        // socket path); otherwise the plain isolated home is enough for a direct app-server.
+        let home = if shared_daemon {
+            launch_safety::IsolatedCodexHome::create_for_daemon(&source, name, &command, &args)?
+        } else {
+            launch_safety::IsolatedCodexHome::create(&source, name, &command, &args)?
+        };
         env.push((
             "CODEX_HOME".to_string(),
             home.path().to_string_lossy().into_owned(),
@@ -532,6 +546,7 @@ fn prepare_trigger(
         // Headless work needs a non-blocking permission mode (channel tools); the real
         // permission bridge is HS2-113.
         permission_mode: permission_mode.unwrap_or_else(|| "acceptEdits".to_string()),
+        shared_daemon,
         _shim: shim,
         _codex_home: codex_home,
     })
@@ -562,6 +577,7 @@ impl SafeTrigger {
             mcp_config: self.mcp_config.clone(),
             permission_mode: Some(self.permission_mode.clone()),
             env: self.env.clone(),
+            shared_daemon: self.shared_daemon,
             now_ms,
         };
         run_trigger(&self.plugin, &t, registry, &mut |ev| match ev {
@@ -596,10 +612,19 @@ fn cmd_trigger(
     permission_mode: Option<String>,
     envs: Vec<String>,
     worker: bool,
+    shared_daemon: bool,
 ) -> Result<()> {
     use hotsheet_aitools::{ConnectionRegistry, DoneReason};
 
-    let safe = prepare_trigger(store_path, tool, project, mcp_config, permission_mode, envs)?;
+    let safe = prepare_trigger(
+        store_path,
+        tool,
+        project,
+        mcp_config,
+        permission_mode,
+        envs,
+        shared_daemon,
+    )?;
     eprintln!("▶ driving {tool} in {} …", safe.cwd.display());
     let mut registry = ConnectionRegistry::new(30_000);
     let reason = safe.run_turn(
@@ -647,7 +672,9 @@ fn cmd_work(
         return Ok(());
     }
 
-    let safe = prepare_trigger(store_path, tool, project, None, None, vec![])?;
+    // `work` uses the default per-turn app-server for now; exposing --shared-daemon on the
+    // loop (its biggest beneficiary) is a follow-up once the daemon path is proven.
+    let safe = prepare_trigger(store_path, tool, project, None, None, vec![], false)?;
     let mut registry = ConnectionRegistry::new(30_000);
     let mut stall = Stall::default();
     let mut completed = 0u32;
