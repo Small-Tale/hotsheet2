@@ -485,14 +485,31 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, stat
 }
 
 fn event_paths(res: notify::Result<notify::Event>) -> Vec<std::path::PathBuf> {
-    let Ok(event) = res else {
-        return Vec::new();
-    };
-    event
-        .paths
-        .into_iter()
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("md"))
-        .collect()
+    match res {
+        Ok(event) => expand_ticket_files(event.paths),
+        Err(_) => Vec::new(),
+    }
+}
+
+/// The ticket `.md` files a set of raw event paths touches. A ticket lands in a **new
+/// shard directory** (`tickets/01/<ULID>.md`), and recursive-watch backends (Linux
+/// inotify especially) reliably deliver the *directory*-create event but can miss the
+/// file event created inside a brand-new subdir — so a bare `.md` filter drops the only
+/// event we get and the reindex never fires. We therefore also expand any directory path
+/// to the `.md` files it now contains, so a new shard dir's ticket is still picked up.
+fn expand_ticket_files(paths: Vec<std::path::PathBuf>) -> Vec<std::path::PathBuf> {
+    let is_md = |p: &std::path::Path| p.extension().and_then(|e| e.to_str()) == Some("md");
+    let mut out = Vec::new();
+    for p in paths {
+        if p.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&p) {
+                out.extend(entries.flatten().map(|e| e.path()).filter(|p| is_md(p)));
+            }
+        } else if is_md(&p) {
+            out.push(p);
+        }
+    }
+    out
 }
 
 fn handle_path_change(state: &AppState, path: &FsPath) {
@@ -543,4 +560,34 @@ fn handle_path_change(state: &AppState, path: &FsPath) {
         id: ticket.id.to_string(),
         slug: ticket.slug.clone(),
     });
+}
+
+#[cfg(test)]
+mod watcher_tests {
+    use super::expand_ticket_files;
+
+    #[test]
+    fn expands_a_new_shard_dir_to_its_ticket_file() {
+        // Reproduces the inotify new-subdir race deterministically (no real FS events):
+        // only the directory event survives, and it must still yield the ticket file.
+        let dir = tempfile::tempdir().unwrap();
+        let shard = dir.path().join("tickets/01");
+        std::fs::create_dir_all(&shard).unwrap();
+        let ticket = shard.join("01ARZ3NDEKTSV4RRFFQ69G5FAV.md");
+        std::fs::write(&ticket, "x").unwrap();
+        std::fs::write(shard.join("README.txt"), "ignore").unwrap();
+
+        // A directory-only event expands to just the .md file inside it.
+        assert_eq!(
+            expand_ticket_files(vec![shard.clone()]),
+            vec![ticket.clone()]
+        );
+        // A direct .md file event passes through unchanged.
+        assert_eq!(
+            expand_ticket_files(vec![ticket.clone()]),
+            vec![ticket.clone()]
+        );
+        // Non-.md paths are ignored.
+        assert!(expand_ticket_files(vec![shard.join("README.txt")]).is_empty());
+    }
 }
