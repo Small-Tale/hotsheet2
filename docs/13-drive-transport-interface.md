@@ -51,8 +51,9 @@
 > expected (and `codex app-server proxy` is a dumb `stdio_to_uds` byte relay that does *not*
 > add the WS layer). `UdsWsTransport` now connects the UDS directly and frames JSON-RPC as
 > WS text frames (a dedicated Tokio thread bridging to the sync reader/writer halves);
-> proven end to end by a scripted-WS-daemon unit test. The **real-daemon** turn is a gated
-> live test (`HOTSHEET_CODEX_LIVE=1`). Still open: selecting the shared-daemon transport
+> proven end to end by a scripted-WS-daemon unit test **and live-verified (2026-08-21):**
+> a real turn over the shared daemon opened a thread and completed (`Completed`) via the
+> gated live test (`HOTSHEET_CODEX_LIVE=1`). Still open: selecting the shared-daemon transport
 > from the live trigger (it currently always uses `StdioTransport`), and wiring approval
 > `ServerRequest`s to the real permission bridge (§5.7, HS2-113) rather than auto-approving.
 
