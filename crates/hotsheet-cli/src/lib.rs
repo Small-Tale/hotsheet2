@@ -15,6 +15,7 @@ pub mod import;
 pub mod launch_safety;
 pub mod plugin;
 pub mod setup;
+pub mod workloop;
 
 pub use setup::{SetupReport, run_setup};
 

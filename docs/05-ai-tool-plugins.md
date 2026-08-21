@@ -189,6 +189,12 @@ similar connections."
 > `CODEX_HOME` isolation is the remaining piece (**HS2-YRDQNX**); until then `trigger`
 > refuses an un-isolated codex launch unless `--env CODEX_HOME=…` is passed. See
 > `crates/hotsheet-cli/src/launch_safety.rs` and `docs/04` §4.4.
+>
+> **`hotsheet-cli work` is the headless loop (HS2-118)** built on this: it drives one
+> safe turn at a time — each turn takes the top Up Next ticket — until the queue drains,
+> a `--max` cap, or a thrash stall (`--max-stall` turns with no queue change). It's the
+> north-star bootstrap step (HS2 driving its own dev). Cross-turn session resume (one
+> persistent instance rather than a fresh process per turn) is **HS2-3C1XK3**.
 
 > **Direction confirmed (maintainer, 2026-08-19, HS2-41):** there is **no single
 > transport all tools share** — but there is **one interface with optional

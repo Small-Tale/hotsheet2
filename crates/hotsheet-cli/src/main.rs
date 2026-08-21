@@ -11,7 +11,9 @@ use hotsheet_cli::{git_init, run_import};
 use hotsheet_model::{
     CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, to_file_string,
 };
-use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, TicketPatch, TicketQuery, ops};
+use hotsheet_ticketing::{
+    FsStore, NewTicket, SortKey, StoreMetadata, TicketPatch, TicketQuery, ops,
+};
 use time::{Duration, OffsetDateTime};
 
 #[derive(Parser)]
@@ -193,6 +195,24 @@ enum Cmd {
         #[arg(long)]
         worker: bool,
     },
+    /// Work the Up Next queue headlessly: drive the tool one turn at a time until Up Next
+    /// is drained (or `--max` turns / a thrash stall). Applies HS2-103 launch safety.
+    Work {
+        /// The tool to drive (e.g. `claude`).
+        tool: String,
+        /// Project directory the tool runs in (defaults to the store path).
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Maximum turns before stopping (a hard safety cap).
+        #[arg(long, default_value_t = 50)]
+        max: u32,
+        /// Stop after this many consecutive turns that change nothing (thrash guard).
+        #[arg(long = "max-stall", default_value_t = 3)]
+        max_stall: u32,
+        /// Register connections as a self-claim worker rather than the main session.
+        #[arg(long)]
+        worker: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -368,6 +388,13 @@ fn main() -> Result<()> {
             envs,
             worker,
         ),
+        Cmd::Work {
+            tool,
+            project,
+            max,
+            max_stall,
+            worker,
+        } => cmd_work(&cli.path, &tool, project, max, max_stall, worker),
     }
 }
 
@@ -377,21 +404,30 @@ const DEFAULT_TRIGGER_PROMPT: &str = "Read the Hot Sheet Up Next queue (hotsheet
 it, and mark it completed with a note on what you did. If nothing is Up Next, say so and \
 stop.";
 
-#[allow(clippy::too_many_arguments)]
-fn cmd_trigger(
+/// A launch-safe way to drive a tool one turn at a time. Built once (assembling the
+/// HS2-103 safety — PATH shim, MCP isolation, HS1 guard), then reused for each turn so
+/// `trigger` (one turn) and `work` (a loop) share exactly the same safety.
+struct SafeTrigger {
+    plugin: hotsheet_plugins::Plugin,
+    cwd: PathBuf,
+    env: Vec<(String, String)>,
+    mcp_config: Option<PathBuf>,
+    permission_mode: String,
+    // Kept alive so the shim dir survives every turn; dropped when the SafeTrigger is.
+    _shim: hotsheet_cli::launch_safety::ShimDir,
+}
+
+/// Resolve the tool, assemble the HS2-103 launch safety, and return a reusable
+/// [`SafeTrigger`]. Fails (before launching anything) on the preflight gates.
+fn prepare_trigger(
     store_path: &Path,
     tool: &str,
-    prompt: Option<String>,
     project: Option<PathBuf>,
-    resume: Option<String>,
     mcp_config: Option<PathBuf>,
     permission_mode: Option<String>,
     envs: Vec<String>,
-    worker: bool,
-) -> Result<()> {
-    use hotsheet_aitools::{
-        ConnectionRegistry, DoneReason, LiveError, LiveTrigger, Role, TurnEvent, run_trigger,
-    };
+) -> Result<SafeTrigger> {
+    use hotsheet_cli::launch_safety;
 
     let plugin = hotsheet_plugins::find(tool)
         .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
@@ -407,8 +443,7 @@ fn cmd_trigger(
         })
         .collect::<Result<_>>()?;
 
-    // ---- HS2-103 launch safety (baked in so a bare `trigger` is safe by default) ----
-    use hotsheet_cli::launch_safety;
+    // ---- HS2-103 launch safety (baked in so a bare `trigger`/`work` is safe) ----
     launch_safety::assert_no_hs1(&cwd)?;
 
     // Codex (`app-server`) isn't isolated by the MCP-config path below — it reads its
@@ -463,42 +498,89 @@ fn cmd_trigger(
         }
     };
 
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0);
-
-    let t = LiveTrigger {
-        cwd: cwd.clone(),
-        prompt: prompt.unwrap_or_else(|| DEFAULT_TRIGGER_PROMPT.to_string()),
-        role: if worker { Role::Worker } else { Role::Main },
-        conn_id: format!("cli-{}", std::process::id()),
-        resume,
+    Ok(SafeTrigger {
+        plugin,
+        cwd,
+        env,
         mcp_config,
         // Headless work needs a non-blocking permission mode (channel tools); the real
         // permission bridge is HS2-113.
-        permission_mode: Some(permission_mode.unwrap_or_else(|| "acceptEdits".to_string())),
-        env,
-        now_ms,
-    };
-
-    eprintln!("▶ driving {tool} in {} …", cwd.display());
-    let mut registry = ConnectionRegistry::new(30_000);
-    let reason = run_trigger(&plugin, &t, &mut registry, &mut |ev| match ev {
-        TurnEvent::Output(text) => {
-            print!("{text}");
-            let _ = std::io::Write::flush(&mut std::io::stdout());
-        }
-        TurnEvent::PermissionAsked(p) => eprintln!("\n[permission] {} — {}", p.tool, p.summary),
-        TurnEvent::Done(_) => {}
+        permission_mode: permission_mode.unwrap_or_else(|| "acceptEdits".to_string()),
+        _shim: shim,
     })
-    .map_err(|e| match e {
-        LiveError::NotDrivable(id) => {
-            anyhow::anyhow!("'{id}' is not drivable (no [drive], or its transport isn't built yet)")
-        }
-        other => anyhow::Error::new(other),
-    })?;
+}
 
+impl SafeTrigger {
+    /// Drive one turn, streaming the tool's output to stdout. Each call spawns a fresh
+    /// process (session-resume continuity is HS2-3C1XK3).
+    fn run_turn(
+        &self,
+        prompt: &str,
+        resume: Option<&str>,
+        worker: bool,
+        registry: &mut hotsheet_aitools::ConnectionRegistry,
+    ) -> Result<hotsheet_aitools::DoneReason> {
+        use hotsheet_aitools::{LiveError, LiveTrigger, Role, TurnEvent, run_trigger};
+
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let t = LiveTrigger {
+            cwd: self.cwd.clone(),
+            prompt: prompt.to_string(),
+            role: if worker { Role::Worker } else { Role::Main },
+            conn_id: format!("cli-{}", std::process::id()),
+            resume: resume.map(str::to_string),
+            mcp_config: self.mcp_config.clone(),
+            permission_mode: Some(self.permission_mode.clone()),
+            env: self.env.clone(),
+            now_ms,
+        };
+        run_trigger(&self.plugin, &t, registry, &mut |ev| match ev {
+            TurnEvent::Output(text) => {
+                print!("{text}");
+                let _ = std::io::Write::flush(&mut std::io::stdout());
+            }
+            TurnEvent::PermissionAsked(p) => {
+                eprintln!("\n[permission] {} — {}", p.tool, p.summary)
+            }
+            TurnEvent::Done(_) => {}
+        })
+        .map_err(|e| match e {
+            LiveError::NotDrivable(id) => {
+                anyhow::anyhow!(
+                    "'{id}' is not drivable (no [drive], or its transport isn't built yet)"
+                )
+            }
+            other => anyhow::Error::new(other),
+        })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_trigger(
+    store_path: &Path,
+    tool: &str,
+    prompt: Option<String>,
+    project: Option<PathBuf>,
+    resume: Option<String>,
+    mcp_config: Option<PathBuf>,
+    permission_mode: Option<String>,
+    envs: Vec<String>,
+    worker: bool,
+) -> Result<()> {
+    use hotsheet_aitools::{ConnectionRegistry, DoneReason};
+
+    let safe = prepare_trigger(store_path, tool, project, mcp_config, permission_mode, envs)?;
+    eprintln!("▶ driving {tool} in {} …", safe.cwd.display());
+    let mut registry = ConnectionRegistry::new(30_000);
+    let reason = safe.run_turn(
+        &prompt.unwrap_or_else(|| DEFAULT_TRIGGER_PROMPT.to_string()),
+        resume.as_deref(),
+        worker,
+        &mut registry,
+    )?;
     println!();
     match reason {
         DoneReason::Completed => {
@@ -509,6 +591,91 @@ fn cmd_trigger(
         DoneReason::Interrupted => bail!("{tool} turn interrupted"),
     }
 }
+
+/// `hotsheet-cli work <tool>`: drive the tool one turn at a time until Up Next is
+/// drained, a turn cap is hit, or the queue stops changing (thrash guard). The
+/// north-star headless loop (HS2-118), reusing `trigger`'s HS2-103 launch safety.
+fn cmd_work(
+    store_path: &Path,
+    tool: &str,
+    project: Option<PathBuf>,
+    max: u32,
+    max_stall: u32,
+    worker: bool,
+) -> Result<()> {
+    use hotsheet_aitools::{ConnectionRegistry, DoneReason};
+    use hotsheet_cli::workloop::{Stall, queue_signature};
+
+    let store = FsStore::open(store_path)?;
+    let up_next_query = || TicketQuery {
+        up_next_only: true,
+        open_only: true,
+        sort: SortKey::Priority,
+        ..Default::default()
+    };
+
+    // Nothing to do? Exit before requiring setup / building the launch machinery.
+    if ops::query(&store, &up_next_query())?.is_empty() {
+        eprintln!("✔ Nothing Up Next — nothing to do.");
+        return Ok(());
+    }
+
+    let safe = prepare_trigger(store_path, tool, project, None, None, vec![])?;
+    let mut registry = ConnectionRegistry::new(30_000);
+    let mut stall = Stall::default();
+    let mut completed = 0u32;
+    for turn in 1..=max {
+        let before = ops::query(&store, &up_next_query())?;
+        if before.is_empty() {
+            eprintln!(
+                "✔ Up Next drained after {} turn(s) ({completed} completed).",
+                turn - 1
+            );
+            return Ok(());
+        }
+        let top = &before[0];
+        eprintln!(
+            "── turn {turn}/{max}: {} — {} ({} up next) ──",
+            top.slug,
+            top.title,
+            before.len()
+        );
+
+        let reason = safe.run_turn(DEFAULT_TRIGGER_PROMPT_LOOP, None, worker, &mut registry)?;
+        println!();
+        match reason {
+            DoneReason::Completed => {}
+            DoneReason::Failed(code) => eprintln!("⚠ turn {turn} failed (exit {code})"),
+            DoneReason::Interrupted => bail!("interrupted during turn {turn}"),
+        }
+
+        // Progress = the Up Next queue changed (a ticket left it, or any of them was
+        // edited). No change across a whole turn trips the thrash guard.
+        let after = ops::query(&store, &up_next_query())?;
+        let progressed = queue_signature(&before) != queue_signature(&after);
+        if after.len() < before.len() {
+            completed += (before.len() - after.len()) as u32;
+        }
+        let streak = stall.record(progressed);
+        if streak >= max_stall {
+            bail!(
+                "no progress for {max_stall} turns (top ticket {} — {}); stopping. \
+                 The tool may be stuck — check it, then re-run.",
+                top.slug,
+                top.title
+            );
+        }
+    }
+    let remaining = ops::query(&store, &up_next_query())?.len();
+    bail!("reached --max {max} turns with {remaining} ticket(s) still Up Next");
+}
+
+/// The per-turn prompt for the `work` loop: like the trigger default, but explicit that
+/// exactly one ticket should be taken this turn (the loop drives the next one).
+const DEFAULT_TRIGGER_PROMPT_LOOP: &str = "Read the Hot Sheet Up Next queue (hotsheet tools \
+or `hotsheet-cli ls --up-next`) and take ONLY the single highest-priority ticket: set it \
+started, implement it, and mark it completed with a note on what you did. Do just that one \
+ticket this turn, then stop. If nothing is Up Next, say so and stop.";
 
 fn cmd_init(path: &PathBuf, prefix: &str) -> Result<()> {
     FsStore::init(path, &StoreMetadata::new(prefix))

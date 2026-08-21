@@ -213,6 +213,30 @@ fn ls_filters_and_sort() {
 }
 
 #[test]
+fn work_drains_empty_queue_and_requires_setup_when_there_is_work() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+
+    // 1) Empty Up Next → exits cleanly without needing setup or launching anything.
+    hs(p)
+        .args(["work", "claude"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Nothing Up Next"));
+
+    // 2) With work queued but the tool not set up, the shared HS2-103 preflight refuses
+    //    (proving `work` inherits `trigger`'s launch safety) before any turn runs.
+    let t = new_ticket(p, "do a thing");
+    hs(p).args(["edit", &t, "--up-next"]).assert().success();
+    hs(p)
+        .args(["work", "claude"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("isn't set up"));
+}
+
+#[test]
 fn trigger_preflight_blocks_hs1_and_requires_setup() {
     // Uses the built-in `claude` plugin (always embedded), so `trigger` gets past
     // `find(tool)` and reaches the HS2-103 preflight gates, which both bail before any

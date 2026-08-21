@@ -204,10 +204,19 @@ entry registering the serverless `hotsheet-mcp --path <store>` (an **absolute**
 HS2-117); re-running refreshes the managed pieces in place. The permission-bridge
 install + the `hotsheet plugin` management commands are still to come.
 
-**Drive a tool (the headless "play"):**
+**Drive a tool (the headless "play") + the work loop:**
 ```
 hotsheet trigger <tool> [--prompt …] [--project DIR] [--mcp-config F] [--env K=V]
+hotsheet work <tool> [--max 50] [--max-stall 3] [--project DIR] [--worker]
 ```
+`work` is the **headless loop (HS2-118)**, the north-star bootstrap step: it drives the
+tool one turn at a time — each turn takes the single highest-priority Up Next ticket —
+until Up Next is drained, a turn cap (`--max`) is hit, or the queue stops changing for
+`--max-stall` turns (a **thrash guard**, so a stuck tool doesn't spin forever). It reuses
+`trigger`'s HS2-103 launch safety and exits cleanly (no setup required) when nothing is
+Up Next. Each turn currently spawns a fresh process; cross-turn session resume is
+**HS2-3C1XK3**.
+
 `trigger` launches/injects one turn into an AI tool and streams it (HS2-109). It is
 **safe by default (HS2-117 launch safety):** it prepends a `hotsheet` → `hotsheet-cli`
 shim (plus the CLI's own dir) to the tool's PATH so a bare `hotsheet` can't hit an HS1
