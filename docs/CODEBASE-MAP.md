@@ -18,6 +18,9 @@ schema in [17-ticket-file-format.md](17-ticket-file-format.md).
 
 ```
 hot-sheet2/
+  .hotsheet2/                # DOGFOOD: this project's own HS2 store (committed, git-native)
+    hotsheet-store.json      #   store metadata (prefix HS2, ulid, shard id-prefix-2)
+    tickets/<shard>/*.md     #   the HS2 tickets, migrated from HS1 (legacy_number preserved)
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   crates/
@@ -140,3 +143,4 @@ hot-sheet2/
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
 | Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |
 | Requirements status | [README.md](README.md) |
+| This project's own tickets (dogfood) | `.hotsheet2/` — `hotsheet-cli -C .hotsheet2 ls`. Migrated from the HS1 dev instance (still in `.hotsheet/`, gitignored). |
