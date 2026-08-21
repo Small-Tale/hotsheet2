@@ -167,7 +167,13 @@ is settable over the API and MCP: `blocked_by` (an array of slug/ULID strings) o
 update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. All
 surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
 resolved on close.
-These write ticket files directly (and commit, configurable). The CLI reads via a
+These write ticket files directly and **auto-commit** each mutation to the store's git
+repo, then best-effort push (HS2-VJD1W4) — so a headless `work` run (or any CLI/MCP edit)
+never leaves the store dirty or unshared; the shared `ops` layer routes every mutation
+through `FsStore::write_ticket_committing`, so CLI + MCP + server all commit. It's a no-op
+when the store isn't a git repo, and `HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
+Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
+semantic merge driver (§2.7) resolves concurrent edits. The CLI reads via a
 **direct store scan** — it does **not** touch the index; the index is the *server's*
 read cache, and there's no reader when no server runs. If a server is running, its
 watcher observes the file change and reindexes + broadcasts, so a CLI edit shows up

@@ -12,6 +12,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use hotsheet_model::{ParseError, Ticket, Ulid, parse_file, to_file_string};
 use serde::{Deserialize, Serialize};
@@ -53,6 +54,8 @@ pub enum StoreError {
     Metadata(#[from] serde_json::Error),
     #[error("parsing ticket {path}: {source}")]
     Parse { path: PathBuf, source: ParseError },
+    #[error("git {0}")]
+    Git(String),
 }
 
 /// A filesystem-backed store rooted at a directory.
@@ -109,6 +112,63 @@ impl FsStore {
         }
         fs::write(&path, to_file_string(ticket))?;
         Ok(path)
+    }
+
+    /// Write a ticket, then **auto-commit** the change to the store's git repo and
+    /// best-effort push it (HS2-VJD1W4) — so a mutation never leaves the store dirty and
+    /// unshared, which matters for the headless `work` loop and multi-worker sync. The
+    /// commit is best-effort: the write is what must succeed, so a git failure warns but
+    /// doesn't fail the op. The mutating `ops` all go through here; `write_ticket` stays
+    /// bare for bulk writers (import) that do their own single commit.
+    pub fn write_ticket_committing(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
+        let path = self.write_ticket(ticket)?;
+        let status = serde_json::to_value(ticket.status)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_else(|| "update".into());
+        let msg = format!("{}: {status} — {}", ticket.slug, ticket.title);
+        if let Err(e) = self.autocommit(&msg) {
+            eprintln!("warning: hotsheet autocommit failed: {e}");
+        }
+        Ok(path)
+    }
+
+    /// Stage everything, commit with `message`, and best-effort push. No-op when the
+    /// store isn't a git repo or `HOTSHEET_NO_AUTOCOMMIT` is set. Returns whether a
+    /// commit was actually made. Falls back to a bot identity when the repo has none
+    /// configured, so a fresh/CI checkout still commits.
+    pub fn autocommit(&self, message: &str) -> Result<bool, StoreError> {
+        if std::env::var_os("HOTSHEET_NO_AUTOCOMMIT").is_some() || !self.root.join(".git").exists()
+        {
+            return Ok(false);
+        }
+        git(&self.root, &["add", "-A"])?;
+        // Nothing staged → nothing to commit (idempotent re-writes, no-op edits).
+        if git_ok(&self.root, &["diff", "--cached", "--quiet"]) {
+            return Ok(false);
+        }
+        let has_ident = git_stdout(&self.root, &["config", "user.email"])
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        let ident: &[&str] = if has_ident {
+            &[]
+        } else {
+            &[
+                "-c",
+                "user.name=Hot Sheet",
+                "-c",
+                "user.email=hotsheet@localhost",
+            ]
+        };
+        let mut commit = ident.to_vec();
+        commit.extend_from_slice(&["commit", "-q", "-m", message]);
+        git(&self.root, &commit)?;
+        // Push is best-effort: offline / no remote / rejected non-fast-forward are fine
+        // here (the aggressive fetch/rebase/push engine is HS2-19).
+        if git_stdout(&self.root, &["remote"]).is_some_and(|s| !s.trim().is_empty()) {
+            let _ = git(&self.root, &["push", "--quiet"]);
+        }
+        Ok(true)
     }
 
     /// Read one ticket by id.
@@ -169,9 +229,49 @@ impl FsStore {
                 }
             }
         }
-        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out.sort_by_key(|t| t.id);
         Ok(out)
     }
+}
+
+// ---- git helpers (shell-based; the store IS a git repo, docs/02 §2.3) --------------
+
+/// Run `git -C root <args>`, erroring on a non-zero exit.
+fn git(root: &Path, args: &[&str]) -> Result<(), StoreError> {
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(StoreError::Git(format!("`git {}` failed", args.join(" "))))
+    }
+}
+
+/// True when `git -C root <args>` exits 0 (used for `diff --cached --quiet`).
+fn git_ok(root: &Path, args: &[&str]) -> bool {
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Captured stdout of `git -C root <args>`, or `None` if it failed to run.
+fn git_stdout(root: &Path, args: &[&str]) -> Option<String> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 #[cfg(test)]
@@ -252,5 +352,47 @@ mod tests {
             FsStore::open(dir.path()),
             Err(StoreError::NotAStore(_))
         ));
+    }
+
+    #[test]
+    fn autocommit_is_a_noop_without_a_git_repo() {
+        let (_dir, store) = temp_store();
+        // A store that isn't a git repo (the common test/temp case) never fails and
+        // never commits — so ops in a bare dir just work.
+        assert!(!store.autocommit("nope").unwrap());
+        assert!(
+            store
+                .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn committing_write_commits_once_and_leaves_a_clean_tree() {
+        let (dir, store) = temp_store();
+        // Make it a git repo, as `hotsheet init` does. No user config → autocommit's
+        // bot-identity fallback still lets commits land (mirrors a fresh CI checkout).
+        git(dir.path(), &["init", "-q"]).unwrap();
+
+        let t = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        store.write_ticket_committing(&t).unwrap();
+
+        // Working tree is clean (nothing left uncommitted) after the mutation.
+        assert!(
+            git_ok(dir.path(), &["diff", "--quiet"])
+                && git_ok(dir.path(), &["diff", "--cached", "--quiet"]),
+            "the store should be clean after a committing write"
+        );
+        let count = git_stdout(dir.path(), &["rev-list", "--count", "HEAD"]).unwrap();
+        assert_eq!(count.trim(), "1", "one commit for the mutation");
+
+        // Re-writing identical content stages nothing → no empty commit.
+        store.write_ticket_committing(&t).unwrap();
+        let count = git_stdout(dir.path(), &["rev-list", "--count", "HEAD"]).unwrap();
+        assert_eq!(
+            count.trim(),
+            "1",
+            "an unchanged re-write must not add a commit"
+        );
     }
 }

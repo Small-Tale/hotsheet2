@@ -1,3 +1,6 @@
+# Pinned (not floating `stable`) so local == CI: a new stable's clippy lints can't
+# surprise-break CI on an unrelated push. Bump this deliberately (and run the full
+# `cargo clippy -D warnings` pass when you do).
 [toolchain]
-channel = "stable"
+channel = "1.97.0"
 components = ["rustfmt", "clippy"]

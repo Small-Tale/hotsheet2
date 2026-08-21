@@ -129,7 +129,7 @@ fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
 
 fn sort_tickets(tickets: &mut [Ticket], key: SortKey) {
     match key {
-        SortKey::Id => tickets.sort_by(|a, b| a.id.cmp(&b.id)),
+        SortKey::Id => tickets.sort_by_key(|t| t.id),
         SortKey::Created => {
             tickets.sort_by(|a, b| a.created_at.as_str().cmp(b.created_at.as_str()))
         }
@@ -138,9 +138,7 @@ fn sort_tickets(tickets: &mut [Ticket], key: SortKey) {
         }
         SortKey::Priority => tickets.sort_by_key(|t| priority_rank(t.priority)),
         SortKey::Status => tickets.sort_by_key(|t| t.status as u8),
-        SortKey::Title => {
-            tickets.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
-        }
+        SortKey::Title => tickets.sort_by_key(|t| t.title.to_lowercase()),
     }
 }
 
@@ -226,7 +224,7 @@ pub fn create(
     t.tags = new.tags;
     t.up_next = new.up_next;
     t.blocked_by = new.blocked_by;
-    store.write_ticket(&t)?;
+    store.write_ticket_committing(&t)?;
     Ok(t)
 }
 
@@ -285,7 +283,7 @@ pub fn update(
         }
     }
     t.updated_at = now;
-    store.write_ticket(&t)?;
+    store.write_ticket_committing(&t)?;
     Ok(t)
 }
 
@@ -307,7 +305,7 @@ pub fn add_note(
         text,
     });
     t.updated_at = now;
-    store.write_ticket(&t)?;
+    store.write_ticket_committing(&t)?;
     Ok(t)
 }
 
@@ -327,7 +325,7 @@ pub fn close(
     t.closed_at = Some(now.clone());
     t.duplicate_of = duplicate_of;
     t.updated_at = now;
-    store.write_ticket(&t)?;
+    store.write_ticket_committing(&t)?;
     Ok(t)
 }
 
@@ -382,7 +380,7 @@ pub fn claim_next(
     t.worker_label = label;
     t.claim_count += 1;
     t.updated_at = now.clone();
-    store.write_ticket(&t)?;
+    store.write_ticket_committing(&t)?;
     Ok(Some(t))
 }
 
@@ -410,7 +408,7 @@ pub fn release(
     t.claim_lease_expires_at = None;
     t.worker_label = None;
     t.updated_at = now;
-    store.write_ticket(&t)?;
+    store.write_ticket_committing(&t)?;
     Ok(t)
 }
 
@@ -436,7 +434,7 @@ pub fn renew(
     }
     t.claim_lease_expires_at = Some(lease_expires);
     t.updated_at = now;
-    store.write_ticket(&t)?;
+    store.write_ticket_committing(&t)?;
     Ok(t)
 }
 
