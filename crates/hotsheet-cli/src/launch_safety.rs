@@ -85,6 +85,75 @@ fn write_shim(_dir: &Path, _hotsheet_cli: &Path) -> Result<()> {
     bail!("`hotsheet-cli trigger` launch safety is only implemented on unix");
 }
 
+/// The user's real `CODEX_HOME` — the ambient `$CODEX_HOME` if set, else `~/.codex`. Used
+/// as the source to copy auth from when building an isolated home.
+pub fn default_codex_home() -> PathBuf {
+    std::env::var_os("CODEX_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")))
+        .unwrap_or_else(|| PathBuf::from(".codex"))
+}
+
+/// A transient, MCP-free `CODEX_HOME` for a headless codex launch (HS2-YRDQNX). Codex reads
+/// its MCP servers from `$CODEX_HOME/config.toml`, so `--mcp-config` can't isolate it the
+/// way it isolates Claude; instead we hand codex a throwaway home whose ONLY `mcp_servers`
+/// entry is the Hot Sheet shim — never the user's global servers (which may include an HS1
+/// channel that could kill the dev instance). Cleaned on drop, so keep it alive for as long
+/// as the launched tool runs.
+pub struct IsolatedCodexHome {
+    dir: tempfile::TempDir,
+}
+
+impl IsolatedCodexHome {
+    /// Build the isolated home: copy `auth.json` from `source_home` (if present, so the
+    /// launched codex stays signed in) and write a `config.toml` whose sole MCP server is
+    /// `server_name` → `command`/`args`. No other user state is carried over.
+    pub fn create(
+        source_home: &Path,
+        server_name: &str,
+        command: &str,
+        args: &[String],
+    ) -> Result<Self> {
+        let dir = tempfile::Builder::new()
+            .prefix("hs2-codexhome-")
+            .tempdir()
+            .context("creating the isolated CODEX_HOME")?;
+        let auth = source_home.join("auth.json");
+        if auth.is_file() {
+            std::fs::copy(&auth, dir.path().join("auth.json")).with_context(|| {
+                format!("copying {} into the isolated CODEX_HOME", auth.display())
+            })?;
+        }
+        std::fs::write(
+            dir.path().join("config.toml"),
+            isolated_codex_config(server_name, command, args),
+        )
+        .context("writing the isolated CODEX_HOME config.toml")?;
+        Ok(Self { dir })
+    }
+
+    /// The isolated home (set `CODEX_HOME` to this for the launched tool).
+    pub fn path(&self) -> &Path {
+        self.dir.path()
+    }
+}
+
+/// A `config.toml` body with a single `[mcp_servers.<name>]` and nothing else, so codex
+/// loads only the Hot Sheet shim.
+fn isolated_codex_config(server_name: &str, command: &str, args: &[String]) -> String {
+    let mut entry = toml::Table::new();
+    entry.insert("command".into(), toml::Value::String(command.to_string()));
+    entry.insert(
+        "args".into(),
+        toml::Value::Array(args.iter().cloned().map(toml::Value::String).collect()),
+    );
+    let mut servers = toml::Table::new();
+    servers.insert(server_name.to_string(), toml::Value::Table(entry));
+    let mut root = toml::Table::new();
+    root.insert("mcp_servers".into(), toml::Value::Table(servers));
+    toml::to_string_pretty(&root).expect("serializing the isolated codex config")
+}
+
 /// Build a child `PATH` with `dirs` prepended (in order) ahead of `base`, dropping
 /// duplicates so the shim keeps priority.
 pub fn prepend_path(dirs: &[&Path], base: &str) -> String {
@@ -225,6 +294,58 @@ mod tests {
     fn assert_hotsheet_resolves_errors_when_absent() {
         let shim = tempfile::tempdir().unwrap();
         assert!(assert_hotsheet_resolves("/usr/bin:/bin", shim.path()).is_err());
+    }
+
+    #[test]
+    fn isolated_codex_home_copies_auth_and_writes_an_mcp_only_config() {
+        // A fake user CODEX_HOME with auth + a global MCP server that must NOT leak in.
+        let src = tempfile::tempdir().unwrap();
+        std::fs::write(src.path().join("auth.json"), r#"{"token":"secret"}"#).unwrap();
+        std::fs::write(
+            src.path().join("config.toml"),
+            "[mcp_servers.evil]\ncommand = \"hs1-channel\"\n",
+        )
+        .unwrap();
+
+        let home = IsolatedCodexHome::create(
+            src.path(),
+            "hotsheet",
+            "/abs/hotsheet-mcp",
+            &["--path".into(), "/store".into()],
+        )
+        .unwrap();
+
+        // auth carried over verbatim.
+        assert_eq!(
+            std::fs::read_to_string(home.path().join("auth.json")).unwrap(),
+            r#"{"token":"secret"}"#
+        );
+        // config has ONLY the hotsheet server — the user's global one is gone.
+        let cfg: toml::Table =
+            toml::from_str(&std::fs::read_to_string(home.path().join("config.toml")).unwrap())
+                .unwrap();
+        let servers = cfg["mcp_servers"].as_table().unwrap();
+        assert_eq!(servers.len(), 1, "no user servers leak in");
+        let hs = servers["hotsheet"].as_table().unwrap();
+        assert_eq!(hs["command"].as_str().unwrap(), "/abs/hotsheet-mcp");
+        let args: Vec<&str> = hs["args"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a.as_str().unwrap())
+            .collect();
+        assert_eq!(args, vec!["--path", "/store"]);
+    }
+
+    #[test]
+    fn isolated_codex_home_without_auth_still_writes_config() {
+        // No auth.json in the source → none copied, but the isolated config is still written.
+        let src = tempfile::tempdir().unwrap();
+        let home =
+            IsolatedCodexHome::create(src.path(), "hotsheet", "hotsheet-mcp", &["--path".into()])
+                .unwrap();
+        assert!(!home.path().join("auth.json").exists());
+        assert!(home.path().join("config.toml").is_file());
     }
 
     #[test]

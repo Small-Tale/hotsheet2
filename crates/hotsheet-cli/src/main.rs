@@ -415,6 +415,8 @@ struct SafeTrigger {
     permission_mode: String,
     // Kept alive so the shim dir survives every turn; dropped when the SafeTrigger is.
     _shim: hotsheet_cli::launch_safety::ShimDir,
+    // The throwaway codex CODEX_HOME (app-server tools only), kept alive for every turn.
+    _codex_home: Option<hotsheet_cli::launch_safety::IsolatedCodexHome>,
 }
 
 /// Resolve the tool, assemble the HS2-103 launch safety, and return a reusable
@@ -446,22 +448,40 @@ fn prepare_trigger(
     // ---- HS2-103 launch safety (baked in so a bare `trigger`/`work` is safe) ----
     launch_safety::assert_no_hs1(&cwd)?;
 
-    // Codex (`app-server`) isn't isolated by the MCP-config path below — it reads its
-    // MCP servers from `$CODEX_HOME` — so its full isolation (a fresh CODEX_HOME) is a
-    // follow-up (HS2-YRDQNX). Until then, refuse an un-isolated codex launch by default.
+    // Codex (`app-server`) reads its MCP servers from `$CODEX_HOME`, so the `--mcp-config`
+    // isolation below can't reach it. Instead, unless the caller pinned a `CODEX_HOME`, hand
+    // it a throwaway MCP-free home whose only server is the Hot Sheet shim (HS2-YRDQNX) — so
+    // a bare `trigger codex` can't load the user's global MCP servers (e.g. an HS1 channel).
     let transport = plugin
         .manifest
         .drive
         .as_ref()
         .map(|d| d.transport.as_str())
         .unwrap_or("");
-    if transport == "app-server" && !env.iter().any(|(k, _)| k == "CODEX_HOME") {
-        bail!(
-            "refusing to drive {tool} without an isolated CODEX_HOME (its MCP servers would \
-             include your global config). Pass `--env CODEX_HOME=<dir>` for now; automatic \
-             isolation is HS2-YRDQNX."
-        );
-    }
+    let is_app_server = transport == "app-server";
+    let codex_home = if is_app_server && !env.iter().any(|(k, _)| k == "CODEX_HOME") {
+        let store_abs = store_path.canonicalize().with_context(|| {
+            format!(
+                "store path does not exist: {} (run `hotsheet-cli init` first)",
+                store_path.display()
+            )
+        })?;
+        let command = launch_safety::mcp_command(&plugin.manifest.mcp.command);
+        let args = plugin.mcp_args(&store_abs.to_string_lossy());
+        let home = launch_safety::IsolatedCodexHome::create(
+            &launch_safety::default_codex_home(),
+            &plugin.manifest.mcp.server_name,
+            &command,
+            &args,
+        )?;
+        env.push((
+            "CODEX_HOME".to_string(),
+            home.path().to_string_lossy().into_owned(),
+        ));
+        Some(home)
+    } else {
+        None
+    };
 
     // Put a `hotsheet` → `hotsheet-cli` shim (and the CLI's own dir) at the front of the
     // launched tool's PATH, so a bare `hotsheet` hits our safe CLI (not an HS1 launcher).
@@ -480,21 +500,27 @@ fn prepare_trigger(
 
     // MCP isolation: restrict the tool to only the Hot Sheet shim by defaulting
     // `--mcp-config` to the tool's project config (Claude gets `--strict-mcp-config`).
-    // This requires the tool to have been set up in the project.
-    let mcp_config = match mcp_config {
-        Some(p) => Some(p),
-        None => {
-            let target = cwd.join(&plugin.manifest.mcp.target);
-            if !target.exists() {
-                bail!(
-                    "{tool} isn't set up for Hot Sheet in {} (no {}). Run \
-                     `hotsheet-cli setup {tool}` there first — trigger needs it for HS2-103 \
-                     MCP isolation.",
-                    cwd.display(),
-                    plugin.manifest.mcp.target
-                );
+    // This requires the tool to have been set up in the project. Codex (`app-server`)
+    // isolates via its throwaway `CODEX_HOME/config.toml` above, not `--mcp-config`, so it
+    // needs no project setup here.
+    let mcp_config = if is_app_server {
+        None
+    } else {
+        match mcp_config {
+            Some(p) => Some(p),
+            None => {
+                let target = cwd.join(&plugin.manifest.mcp.target);
+                if !target.exists() {
+                    bail!(
+                        "{tool} isn't set up for Hot Sheet in {} (no {}). Run \
+                         `hotsheet-cli setup {tool}` there first — trigger needs it for HS2-103 \
+                         MCP isolation.",
+                        cwd.display(),
+                        plugin.manifest.mcp.target
+                    );
+                }
+                Some(target)
             }
-            Some(target)
         }
     };
 
@@ -507,6 +533,7 @@ fn prepare_trigger(
         // permission bridge is HS2-113.
         permission_mode: permission_mode.unwrap_or_else(|| "acceptEdits".to_string()),
         _shim: shim,
+        _codex_home: codex_home,
     })
 }
 

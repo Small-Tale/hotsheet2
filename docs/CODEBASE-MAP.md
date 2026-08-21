@@ -39,7 +39,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew/trigger/work
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
-      src/launch_safety.rs   #   HS2-103 safety for `trigger`/`work`: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, absolute hotsheet-mcp path
+      src/launch_safety.rs   #   HS2-103 safety for `trigger`/`work`: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, absolute hotsheet-mcp path, IsolatedCodexHome (auto MCP-free CODEX_HOME, HS2-YRDQNX)
       src/workloop.rs        #   `work` loop pure helpers: Up Next queue signature + thrash-guard Stall counter
       src/setup.rs           #   `hotsheet-cli setup <tool>`: write a plugin's instructions/skill/MCP config (merge-safe; absolute hotsheet-mcp path)
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins

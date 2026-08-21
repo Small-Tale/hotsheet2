@@ -229,9 +229,11 @@ shim (plus the CLI's own dir) to the tool's PATH so a bare `hotsheet` can't hit 
 launcher and kill the dev instance (§4.4); refuses to run when the project holds an
 HS1 store (`assert_no_hs1`) or when the tool isn't set up; and defaults `--mcp-config`
 to the tool's project config so the tool can reach **only** the Hot Sheet MCP (Claude
-via `--strict-mcp-config`). Codex's `CODEX_HOME` isolation is the remaining piece
-(**HS2-YRDQNX**); until then `trigger codex` requires an explicit `--env CODEX_HOME=…`.
-The safety primitives live in `crates/hotsheet-cli/src/launch_safety.rs`.
+via `--strict-mcp-config`). Codex reads its MCP servers from `$CODEX_HOME`, so `trigger`
+**auto-builds a throwaway MCP-free `CODEX_HOME`** for it (HS2-YRDQNX): a copy of the
+user's `auth.json` plus a `config.toml` whose only server is the Hot Sheet shim — so a
+bare `trigger codex` can't load the user's global MCP servers (pass `--env CODEX_HOME=…`
+to override). The safety primitives live in `crates/hotsheet-cli/src/launch_safety.rs`.
 
 **Project settings (core-owned; shared + local scopes — §4.9):**
 ```

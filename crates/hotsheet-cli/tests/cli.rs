@@ -532,3 +532,43 @@ fn settings_shared_and_local_scopes() {
         .failure()
         .stderr(predicate::str::contains("no setting 'nope'"));
 }
+
+/// LIVE, gated: a real `hotsheet-cli trigger codex` drives codex in an auto-built,
+/// MCP-free isolated CODEX_HOME (HS2-YRDQNX) and completes a turn, leaving the user's
+/// `~/.codex` and any HS1 instance untouched. Off by default; set `HOTSHEET_CODEX_LIVE=1`
+/// (needs codex + creds; invokes the model).
+#[test]
+#[ignore = "live: needs a real codex + creds; set HOTSHEET_CODEX_LIVE=1"]
+fn trigger_codex_isolates_codex_home_and_completes() {
+    if std::env::var("HOTSHEET_CODEX_LIVE").as_deref() != Ok("1") {
+        eprintln!("skipped: set HOTSHEET_CODEX_LIVE=1 to run the live codex trigger");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let t = new_ticket(p, "Create GREETING.txt containing hello");
+    hs(p).args(["edit", &t, "--up-next"]).assert().success();
+
+    // Bare `trigger codex` — no --env CODEX_HOME — must auto-isolate and NOT refuse.
+    hs(p)
+        .args([
+            "trigger",
+            "codex",
+            "--prompt",
+            "Create a file named GREETING.txt containing the word hello in this project, \
+             then stop. If you use the shell, the CLI is hotsheet-cli (never a bare 'hotsheet').",
+        ])
+        .timeout(std::time::Duration::from_secs(180))
+        .assert()
+        .success();
+
+    assert!(
+        p.join("GREETING.txt").is_file(),
+        "codex created GREETING.txt"
+    );
+    assert!(
+        !p.join(".hotsheet").exists(),
+        "no HS1 instance was launched (no .hotsheet)"
+    );
+}

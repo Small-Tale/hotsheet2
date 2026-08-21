@@ -185,9 +185,11 @@ similar connections."
 > run in a project that still holds an HS1 store (`assert_no_hs1`) or one where the tool
 > isn't set up; and defaults `--mcp-config` to the tool's project config so it reaches
 > **only** the Hot Sheet shim (Claude via `--strict-mcp-config`). `setup` now writes an
-> **absolute** `hotsheet-mcp` path so the config works without the shim. Codex's
-> `CODEX_HOME` isolation is the remaining piece (**HS2-YRDQNX**); until then `trigger`
-> refuses an un-isolated codex launch unless `--env CODEX_HOME=…` is passed. See
+> **absolute** `hotsheet-mcp` path so the config works without the shim. Codex reads its
+> MCP servers from `$CODEX_HOME`, so `trigger` **auto-builds a throwaway MCP-free
+> `CODEX_HOME`** for it (HS2-YRDQNX) — a copy of `auth.json` plus a `config.toml` whose
+> only server is the Hot Sheet shim — so a bare `trigger codex` can't reach the user's
+> global MCP servers (`--env CODEX_HOME=…` overrides). See
 > `crates/hotsheet-cli/src/launch_safety.rs` and `docs/04` §4.4.
 >
 > **`hotsheet-cli work` is the headless loop (HS2-118)** built on this: it drives one
