@@ -33,22 +33,28 @@
 > `thread/start`|`thread/resume`, `turn/start` (text input), observing
 > `turn/started`→`turn/completed` (busy→done), `turn/interrupt`. Threads open with
 > `approvalPolicy:"never"` + `sandbox:"workspace-write"` (headless). The bytes ride an
-> injected `RpcTransport` (`send`/`recv` newline-delimited JSON — the verified framing):
+> injected `RpcTransport` (`send`/`recv` line-oriented JSON — the verified framing):
 > `StdioTransport` runs `codex app-server` **direct** (one persistent process per
-> connection — many turns, no process per play), and `ProxyTransport` runs `codex
-> app-server proxy` to bridge the shared **daemon** control socket. The whole engine is
-> unit-tested against an in-process **scripted daemon** (no live `codex`). **Live-verified
-> (2026-08-21, under HS2-103 safety in an isolated MCP-free `CODEX_HOME`):** a real turn
-> via `StdioTransport` opened a thread and completed (`Completed`) with the HS1 dev
-> instance untouched. **`ProxyTransport`/shared-daemon path is blocked (HS2-115):**
-> probing the daemon control socket showed it does **not** serve the app-server JSON-RPC
-> — an `initialize` (any framing; via the proxy or the raw socket; remote-control on or
-> off) draws zero bytes, while `daemon version`/`stop` answer — so it speaks a separate
-> **experimental, undocumented control protocol** outside `generate-ts`/`generate-json-schema`.
-> Cross-connection instance sharing waits on that protocol being reverse-engineered or a
-> documented upstream API; `StdioTransport` (persistent per connection) is the supported
-> path. Also open: wiring approval `ServerRequest`s to the real permission bridge (§5.7,
-> HS2-113) rather than auto-approving.
+> connection — many turns, no process per play), and `UdsWsTransport` speaks the shared
+> **daemon**'s control socket so many connections reuse one codex instance. The whole
+> engine is unit-tested against in-process **scripted daemons** (a loopback and a scripted
+> WebSocket over a temp socket — no live `codex`). **Live-verified (2026-08-21, under
+> HS2-103 safety in an isolated MCP-free `CODEX_HOME`):** a real turn via `StdioTransport`
+> opened a thread and completed (`Completed`) with the HS1 dev instance untouched.
+> **Shared-daemon path (HS2-115):** the earlier "does not serve JSON-RPC / undocumented
+> protocol" reading was wrong. From codex 0.148 source, the daemon control socket is a
+> **plain WebSocket** endpoint (server does tungstenite `accept_async` on the UDS — **no**
+> auth token for the *local* socket; the `Authorization: Bearer` check is only on the
+> network `ws://IP:PORT` remote-control path), carrying the *same* `initialize`→`thread/*`→
+> `turn/*` JSON-RPC as WebSocket **text frames** on `ws://localhost/rpc`. The prior probe
+> drew zero bytes because it wrote raw newline JSON where an HTTP/WebSocket upgrade was
+> expected (and `codex app-server proxy` is a dumb `stdio_to_uds` byte relay that does *not*
+> add the WS layer). `UdsWsTransport` now connects the UDS directly and frames JSON-RPC as
+> WS text frames (a dedicated Tokio thread bridging to the sync reader/writer halves);
+> proven end to end by a scripted-WS-daemon unit test. The **real-daemon** turn is a gated
+> live test (`HOTSHEET_CODEX_LIVE=1`). Still open: selecting the shared-daemon transport
+> from the live trigger (it currently always uses `StdioTransport`), and wiring approval
+> `ServerRequest`s to the real permission bridge (§5.7, HS2-113) rather than auto-approving.
 
 ## 13.0 Current tool capabilities (verified 2026-08-21)
 
@@ -159,12 +165,14 @@ health, `prestart` (warm it up), `note_terminal_launch`, must-a-terminal-wait. A
 without one returns `None`, and no generic caller ever imports a tool's daemon module
 (closing the §132.11.2 leak by construction).
 
-**Built (HS2-112, Codex):** `ensure_codex_daemon(program)` is the concrete
+**Built (HS2-112/HS2-115, Codex):** `ensure_codex_daemon(program)` is the concrete
 BackingService prestart — it runs `codex app-server daemon start` (idempotent: "start …
-if not already running") before a `ProxyTransport` connects. Every `CodexAppServer`
-connection proxies the **same** daemon, so plays reuse one persistent instance rather
-than launching a process each time. Folding this behind a `Drive::service()` accessor
-(so a generic caller warms it without importing `codex.rs`) is the remaining step.
+if not already running") before a `UdsWsTransport` connects to the daemon's control
+socket at `codex_control_socket_path(codex_home)`. Every `CodexAppServer` connection over
+that transport talks to the **same** daemon, so plays reuse one persistent instance
+rather than launching a process each time. Folding this behind a `Drive::service()`
+accessor (so a generic caller warms it without importing `codex.rs`), and letting the live
+trigger *choose* the shared-daemon transport, are the remaining steps.
 
 ## 13.6 Why this isn't Claude-shaped (the acceptance test)
 

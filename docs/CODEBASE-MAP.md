@@ -59,7 +59,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/drive.rs           #   Drive trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue
       src/appserver.rs       #   AppServerDrive (Codex persistent daemon: turn on a resumed thread) + AppServerClient port
-      src/codex.rs           #   CodexAppServer: real AppServerClient (codex 0.148 JSON-RPC engine) + StdioTransport (live-verified) / ProxyTransport + ensure_codex_daemon; scripted-daemon tests
+      src/codex.rs           #   CodexAppServer: real AppServerClient (codex 0.148 JSON-RPC engine) + StdioTransport (live-verified) / UdsWsTransport (shared daemon: WebSocket over the control socket, HS2-115) + codex_control_socket_path + ensure_codex_daemon; loopback + scripted-WS daemon tests
       src/claude.rs          #   ClaudeChannelDrive + ClaudeChannel: turn injected into a running `claude` stream-json session, async TurnEvent stream; ClaudeStreamTransport + scripted-claude tests
       src/procio.rs          #   StreamChild: shared piped-stdio plumbing (spawn -> RpcWriter/RpcReader) for the stream transports
       src/live.rs            #   run_trigger: spawn a REAL tool per its [drive] transport, build DriveCtx, stream one turn (behind `hotsheet-cli trigger`)

@@ -34,6 +34,8 @@ assert_cmd = "2"
 predicates = "3"
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
+tokio-tungstenite = "0.29"
+futures-util = "0.3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 ureq = "2"

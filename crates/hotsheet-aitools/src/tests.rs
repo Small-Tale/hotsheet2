@@ -439,6 +439,163 @@ fn codex_live_turn_against_the_daemon() {
     );
 }
 
+// ---- the shared-daemon WebSocket transport over a scripted WS daemon (HS2-115) ----
+
+/// A scripted WebSocket "daemon": binds a Unix socket, upgrades one connection with
+/// `accept_async` (exactly like the real codex control socket), and answers the
+/// `initialize`/`thread/start`/`turn/start` JSON-RPC as text frames — so the real
+/// [`UdsWsTransport`] and [`CodexAppServer`] are exercised end to end over a WebSocket with
+/// no codex. It signals `ready` only after the listener binds so the client can't race it.
+fn spawn_scripted_ws_daemon(sock: std::path::PathBuf) -> std::sync::mpsc::Receiver<()> {
+    let (ready_tx, ready_rx) = std::sync::mpsc::channel::<()>();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move {
+            use futures_util::{SinkExt, StreamExt};
+            use serde_json::{Value, json};
+            use tokio_tungstenite::tungstenite::Message;
+
+            let listener = tokio::net::UnixListener::bind(&sock).expect("bind uds");
+            ready_tx.send(()).unwrap();
+
+            let (stream, _) = listener.accept().await.expect("accept");
+            let ws = tokio_tungstenite::accept_async(stream)
+                .await
+                .expect("ws upgrade");
+            let (mut write, mut read) = ws.split();
+
+            while let Some(Ok(Message::Text(t))) = read.next().await {
+                let v: Value = serde_json::from_str(&t).expect("client sends valid JSON");
+                let method = v.get("method").and_then(Value::as_str).unwrap_or("");
+                let id = v.get("id").cloned();
+                let mut out: Vec<Value> = Vec::new();
+                match method {
+                    "initialize" => {
+                        if let Some(id) = &id {
+                            out.push(json!({"jsonrpc":"2.0","id":id,
+                                "result":{"userAgent":"codex/test"}}));
+                        }
+                    }
+                    "initialized" => {}
+                    "thread/start" => {
+                        if let Some(id) = &id {
+                            out.push(json!({"jsonrpc":"2.0","id":id,
+                                "result":{"thread":{"id":"thread-1"}}}));
+                        }
+                    }
+                    "turn/start" => {
+                        let thread_id = v
+                            .pointer("/params/threadId")
+                            .and_then(Value::as_str)
+                            .unwrap_or("thread-1")
+                            .to_string();
+                        if let Some(id) = &id {
+                            out.push(json!({"jsonrpc":"2.0","id":id,
+                                "result":{"turn":{"id":"turn-1","status":"inProgress"}}}));
+                        }
+                        out.push(json!({"jsonrpc":"2.0","method":"turn/completed",
+                            "params":{"threadId":thread_id,
+                                      "turn":{"id":"turn-1","status":"completed"}}}));
+                    }
+                    _ => {
+                        if let Some(id) = &id {
+                            out.push(json!({"jsonrpc":"2.0","id":id,"result":{}}));
+                        }
+                    }
+                }
+                for msg in out {
+                    if write
+                        .send(Message::Text(msg.to_string().into()))
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+        });
+    });
+    ready_rx
+}
+
+/// Proves the WebSocket framing: the real [`UdsWsTransport`] connects to a scripted WS
+/// daemon over a temp UDS, and the unchanged [`CodexAppServer`] engine handshakes, opens a
+/// thread, and completes a turn — the same protocol as [`ScriptedDaemon`], just WS-framed.
+#[test]
+fn codex_client_drives_a_turn_over_a_websocket_uds() {
+    use crate::codex::UdsWsTransport;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("s.sock");
+    let ready = spawn_scripted_ws_daemon(sock.clone());
+    ready.recv().expect("daemon bound its socket");
+
+    let transport = UdsWsTransport::connect(&sock).expect("connect + ws handshake");
+    let cx = CodexAppServer::connect(transport).expect("initialize over websocket");
+    let thread = cx
+        .open_thread(None, std::path::Path::new("/work/proj"))
+        .expect("thread/start over websocket");
+    assert_eq!(thread, "thread-1");
+    let mut turn = cx.start_turn(&thread, "work the top ticket").unwrap();
+    assert_eq!(turn.wait(), AppServerOutcome::Completed);
+}
+
+/// Connecting to a socket path that no daemon is serving fails at connect time (a clean
+/// error), not as a later `initialize` timeout.
+#[test]
+fn uds_ws_transport_reports_a_missing_socket() {
+    use crate::codex::UdsWsTransport;
+    let dir = tempfile::tempdir().unwrap();
+    let missing = dir.path().join("nope.sock");
+    assert!(
+        UdsWsTransport::connect(&missing).is_err(),
+        "no daemon at the path → connect fails"
+    );
+}
+
+/// LIVE, gated: a real turn against the **shared** codex daemon over the WebSocket control
+/// socket ([`UdsWsTransport`]). Off by default; set `HOTSHEET_CODEX_LIVE=1`. Proves the
+/// shared-daemon path (multiple host connections can reuse one codex instance) end to end.
+#[test]
+#[ignore = "live: needs a real codex daemon + creds; set HOTSHEET_CODEX_LIVE=1"]
+fn codex_live_turn_over_the_shared_daemon() {
+    use crate::codex::{UdsWsTransport, codex_control_socket_path, ensure_codex_daemon};
+
+    if std::env::var("HOTSHEET_CODEX_LIVE").as_deref() != Ok("1") {
+        eprintln!("skipped: set HOTSHEET_CODEX_LIVE=1 to run the shared-daemon turn");
+        return;
+    }
+    let program = std::env::var("HOTSHEET_CODEX_BIN").unwrap_or_else(|_| "codex".into());
+    let codex_home = std::env::var("CODEX_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap()).join(".codex")
+        });
+    let cwd = std::env::var("CODEX_LIVE_CWD")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+
+    ensure_codex_daemon(&program).expect("daemon start");
+    let sock = codex_control_socket_path(&codex_home);
+    let transport = UdsWsTransport::connect(&sock).expect("connect to control socket");
+    let cx = CodexAppServer::connect(transport).expect("initialize over the shared daemon");
+    let thread = cx.open_thread(None, &cwd).expect("thread/start");
+    eprintln!("live(shared): opened thread {thread}");
+    let mut turn = cx
+        .start_turn(&thread, "Reply with only the word: pong")
+        .expect("turn/start");
+    let outcome = turn.wait();
+    eprintln!("live(shared): turn outcome = {outcome:?}");
+    assert_eq!(
+        outcome,
+        AppServerOutcome::Completed,
+        "live turn should complete"
+    );
+}
+
 // ---- the Claude channel drive over a scripted claude (HS2-116) -------------------
 
 use crate::claude::ClaudeChannel;

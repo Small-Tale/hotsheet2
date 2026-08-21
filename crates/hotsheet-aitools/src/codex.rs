@@ -7,13 +7,15 @@
 //! It drives a **persistent** codex the HS1 way — a turn on a running (or resumed)
 //! thread, never a fresh process per play. The bytes go over an injected
 //! [`RpcTransport`]: [`StdioTransport`] runs `codex app-server` direct (one persistent
-//! process per connection — the live-verified default), [`ProxyTransport`] bridges the
-//! shared `codex app-server proxy` daemon socket; tests inject a **scripted daemon**, so
-//! the whole protocol engine ([`CodexRpc`], [`CodexAppServer`], [`CodexTurn`]) is
-//! exercised with no live `codex` (`docs/05` §5.10, the load-bearing testability rule).
+//! process per connection — the live-verified default), while [`UdsWsTransport`] speaks the
+//! **shared daemon**'s WebSocket control socket so many connections reuse one codex
+//! instance (HS2-115). Tests inject a **scripted daemon** (both a loopback and a scripted
+//! WebSocket over a temp socket), so the whole protocol engine ([`CodexRpc`],
+//! [`CodexAppServer`], [`CodexTurn`]) is exercised with no live `codex` (`docs/05` §5.10,
+//! the load-bearing testability rule).
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::mpsc::{Sender, channel};
@@ -460,6 +462,158 @@ impl RpcTransport for ProxyTransport {
     fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
         self.0.into_halves()
     }
+}
+
+// ---- the shared-daemon transport: a WebSocket over the control socket ------------
+
+/// A live [`RpcTransport`] to the **shared** Codex app-server daemon (HS2-115). The daemon
+/// control socket (`$CODEX_HOME/app-server-control/app-server-control.sock`) is a *plain*
+/// WebSocket endpoint — its server does tungstenite `accept_async` on the UDS (no auth
+/// token for the local socket) and carries the same `initialize`/`thread/*`/`turn/*`
+/// JSON-RPC as WebSocket **text frames** on `ws://localhost/rpc`. So this connects the UDS
+/// directly (the way codex's own client does), upgrades to a WebSocket, and adapts it to
+/// the line-oriented [`RpcTransport`] the [`CodexAppServer`] engine expects.
+///
+/// One dedicated thread owns a current-thread Tokio runtime that drives a single `select!`
+/// loop over the split sink/stream, bridged to the sync [`RpcWriter`]/[`RpcReader`] halves
+/// by channels — so the [`tokio_tungstenite`] `WebSocketStream` (single-owner) never has to
+/// be shared across threads. Multiple host connections can each open one of these against
+/// the *same* daemon, reusing one codex instance across the machine.
+pub struct UdsWsTransport {
+    /// Outbound JSON-RPC lines → the ws task (which frames them as text messages).
+    out_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    /// Inbound JSON-RPC lines the ws task decoded from text frames.
+    in_rx: std::sync::mpsc::Receiver<String>,
+}
+
+impl UdsWsTransport {
+    /// Connect to the daemon control socket at `socket_path`, performing the WebSocket
+    /// upgrade before returning so a bad socket / failed handshake surfaces here (not as a
+    /// later `initialize` timeout). Live-only; unit tests point it at a scripted WebSocket
+    /// daemon over a temp UDS.
+    pub fn connect(socket_path: &Path) -> std::io::Result<Box<Self>> {
+        use std::sync::mpsc::channel as std_channel;
+
+        let (out_tx, mut out_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
+        let (in_tx, in_rx) = std_channel::<String>();
+        // Reports the handshake result back to this call before the loop takes over.
+        let (ready_tx, ready_rx) = std_channel::<std::io::Result<()>>();
+        let path = socket_path.to_path_buf();
+
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    let _ = ready_tx.send(Err(e));
+                    return;
+                }
+            };
+            rt.block_on(async move {
+                use futures_util::{SinkExt, StreamExt};
+                use tokio_tungstenite::tungstenite::Message;
+
+                let stream = match tokio::net::UnixStream::connect(&path).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(e));
+                        return;
+                    }
+                };
+                // Plain WS upgrade; the local UDS server ignores host/path/origin.
+                let ws = match tokio_tungstenite::client_async("ws://localhost/rpc", stream).await {
+                    Ok((ws, _resp)) => ws,
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(std::io::Error::other(e)));
+                        return;
+                    }
+                };
+                let _ = ready_tx.send(Ok(()));
+
+                let (mut write, mut read) = ws.split();
+                loop {
+                    tokio::select! {
+                        // Prefer draining outbound so a request is on the wire before we
+                        // block again on the read.
+                        biased;
+                        outbound = out_rx.recv() => match outbound {
+                            Some(line) => {
+                                if write.send(Message::Text(line.into())).await.is_err() {
+                                    break;
+                                }
+                            }
+                            None => break, // all RpcWriters dropped → connection done
+                        },
+                        frame = read.next() => match frame {
+                            Some(Ok(Message::Text(t))) => {
+                                if in_tx.send(t.to_string()).is_err() {
+                                    break; // reader gone
+                                }
+                            }
+                            // Keep the connection healthy; ignore server data frames.
+                            Some(Ok(Message::Ping(p))) => {
+                                let _ = write.send(Message::Pong(p)).await;
+                            }
+                            Some(Ok(Message::Close(_))) | None => break,
+                            Some(Ok(_)) => {}
+                            Some(Err(_)) => break,
+                        },
+                    }
+                }
+            });
+        });
+
+        match ready_rx.recv() {
+            Ok(Ok(())) => Ok(Box::new(Self { out_tx, in_rx })),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(std::io::Error::other(
+                "websocket thread exited before the handshake completed",
+            )),
+        }
+    }
+}
+
+impl RpcTransport for UdsWsTransport {
+    fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
+        let Self { out_tx, in_rx } = *self;
+        (Box::new(WsWriter { out_tx }), Box::new(WsReader { in_rx }))
+    }
+}
+
+/// Write half: hand each JSON-RPC line to the ws task to be framed as a text message.
+struct WsWriter {
+    out_tx: tokio::sync::mpsc::UnboundedSender<String>,
+}
+
+impl RpcWriter for WsWriter {
+    fn send(&mut self, msg: &str) -> std::io::Result<()> {
+        self.out_tx
+            .send(msg.to_string())
+            .map_err(|_| std::io::Error::other("websocket connection closed"))
+    }
+}
+
+/// Read half: the ws task pushes each decoded text frame here; a closed channel is EOF.
+struct WsReader {
+    in_rx: std::sync::mpsc::Receiver<String>,
+}
+
+impl RpcReader for WsReader {
+    fn recv(&mut self) -> std::io::Result<Option<String>> {
+        Ok(self.in_rx.recv().ok())
+    }
+}
+
+/// The shared daemon's control-socket path for a given `CODEX_HOME`, mirroring codex's own
+/// `app_server_control_socket_path`: `<codex_home>/app-server-control/app-server-control.sock`.
+/// (Note: codex binds it directly there, so a very long `CODEX_HOME` can exceed the
+/// platform's `sun_path` limit — keep the home short for the daemon.)
+pub fn codex_control_socket_path(codex_home: &Path) -> PathBuf {
+    codex_home
+        .join("app-server-control")
+        .join("app-server-control.sock")
 }
 
 /// Ensure the shared Codex app-server daemon is running before connecting a proxy. The
