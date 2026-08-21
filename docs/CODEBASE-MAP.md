@@ -32,6 +32,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   mint_ulid(clock, rng)
       src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket — the one op impl (CLI+server+MCP)
       src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/body) behind `hotsheet merge-driver` (HS2-18)
+      src/sync.rs            #   sync_once: one fetch → rebase-through-merge-driver → push cycle (offline/conflict-tolerant) behind `hotsheet sync` (HS2-19)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
       src/settings.rs        #   Settings: shared (committed) / local (gitignored) scopes; effective = local over shared

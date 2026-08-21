@@ -156,6 +156,10 @@ enum Cmd {
         #[arg(long)]
         yes: bool,
     },
+    /// Sync the store with its git remote now: fetch, integrate incoming changes through
+    /// the semantic merge driver (rebase), and push local commits. Normally automatic — this
+    /// is the explicit "sync now" (docs/02 §2.12).
+    Sync,
     /// Check store health (metadata, parse errors, duplicate slugs, orphans).
     Doctor,
     /// Git-invoked semantic 3-way merge for ticket files (not run by hand — it's the
@@ -403,6 +407,7 @@ fn main() -> Result<()> {
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
         Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
+        Cmd::Sync => cmd_sync(&cli.path),
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
@@ -925,6 +930,33 @@ fn cmd_move(src_path: &Path, id: &str, to: &Path, yes: bool) -> Result<()> {
         to.display(),
         src_path.display()
     );
+    Ok(())
+}
+
+fn cmd_sync(path: &Path) -> Result<()> {
+    use hotsheet_ticketing::SyncReport;
+    FsStore::open(path)?; // validate it's a store before touching git
+    match hotsheet_ticketing::sync_once(path) {
+        SyncReport::NoRemote => println!("Local-only store — no remote to sync."),
+        SyncReport::UpToDate => println!("Already up to date."),
+        SyncReport::Synced { pulled, pushed } => {
+            let mut parts = Vec::new();
+            if pulled {
+                parts.push("pulled remote changes");
+            }
+            if pushed {
+                parts.push("pushed local commits");
+            }
+            println!("Synced — {}.", parts.join(" + "));
+        }
+        SyncReport::Offline => {
+            println!("Remote unreachable — kept working locally; the next sync will retry.")
+        }
+        SyncReport::Conflict => bail!(
+            "a ticket had a body change on both sides that couldn't auto-merge — resolve it \
+             manually, then commit (the working tree was left clean; nothing was lost)"
+        ),
+    }
     Ok(())
 }
 

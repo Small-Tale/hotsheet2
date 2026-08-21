@@ -156,7 +156,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | **Automatic conflict resolution (semantic merge driver)** | 02 §2.7 | Shipped (`hotsheet merge-driver` field-by-field 3-way merge: scalars LWW-by-`updated_at`, tags/blocked_by/assignees set-union, notes union-by-ULID, body text-merged only when both sides change it; registered by `init` via `.gitattributes`+git config; `doctor` flags missing registration; proptests + real-git E2E; HS2-18) |
 | Inline notes with timestamp-ordered UUIDs | 02 §2.6 | Confirmed |
 | Attachments support | 02 §2.5 | Confirmed |
-| **Automatic repo sync (aggressive fetch/push/rebase)** | 02 §2.12 | Confirmed (design) |
+| **Automatic repo sync (aggressive fetch/push/rebase)** | 02 §2.12 | Partial (`ticketing::sync_once` cycle: fetch → rebase-through-merge-driver → push, offline-tolerant, conflict-aborts-clean; `hotsheet sync` CLI; bare-remote E2E — HS2-19. Always-on background loop + backoff + watcher coordination pending → HS2-731C2X) |
 | **Shared vs. local ticket data (on-disk gitignored overlay)** | 02 §2.11 | Confirmed (design) |
 | **Human assignment + in-the-loop/review** | 10 | Open (proposal) |
 | **Close reasons** (completed / not planned / duplicate-of / obsolete) | 02 §2.6a | Shipped (field + `close` op + index columns + query filter `close_reason`/`closed` across CLI/MCP/server + reopen-clears; HS2-61) |

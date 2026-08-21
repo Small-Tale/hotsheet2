@@ -826,3 +826,57 @@ fn copy_and_move_between_stores() {
         .success()
         .stdout(predicate::str::contains("move me"));
 }
+
+/// End-to-end sync across two clones of a bare remote (HS2-19): each side pushes its own
+/// ticket, and a sync on the other side pulls it in (rebase) and pushes — hands-off.
+#[test]
+fn sync_pulls_and_pushes_between_clones() {
+    fn git(dir: &Path, args: &[&str]) -> bool {
+        std::process::Command::new("git")
+            .current_dir(dir)
+            .args(args)
+            .status()
+            .unwrap()
+            .success()
+    }
+    let bare = tempfile::tempdir().unwrap();
+    assert!(git(bare.path(), &["init", "--bare", "--quiet"]));
+    let bare_url = bare.path().to_str().unwrap();
+
+    // Store A: init + remote + first ticket, then publish.
+    let a = tempfile::tempdir().unwrap();
+    hs(a.path()).arg("init").assert().success();
+    git(a.path(), &["config", "user.email", "a@example.com"]);
+    git(a.path(), &["config", "user.name", "A"]);
+    git(a.path(), &["remote", "add", "origin", bare_url]);
+    let tx = new_ticket(a.path(), "ticket X");
+    hs(a.path()).arg("sync").assert().success();
+
+    // Store B: clone the bare (inherits X).
+    let bwrap = tempfile::tempdir().unwrap();
+    let b = bwrap.path().join("clone");
+    assert!(git(
+        bwrap.path(),
+        &["clone", "--quiet", bare_url, b.to_str().unwrap()]
+    ));
+    git(&b, &["config", "user.email", "b@example.com"]);
+    git(&b, &["config", "user.name", "B"]);
+    hs(&b).args(["show", &tx]).assert().success(); // B sees X
+
+    // B adds Y and syncs (push).
+    let ty = new_ticket(&b, "ticket Y");
+    hs(&b).arg("sync").assert().success();
+
+    // A adds Z and syncs — must PULL Y (rebase) and push Z.
+    let tz = new_ticket(a.path(), "ticket Z");
+    hs(a.path())
+        .arg("sync")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pulled"));
+
+    // A now holds all three tickets.
+    for t in [&tx, &ty, &tz] {
+        hs(a.path()).args(["show", t]).assert().success();
+    }
+}

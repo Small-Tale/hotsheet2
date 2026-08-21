@@ -13,12 +13,14 @@ pub mod ops;
 pub mod ports;
 pub mod settings;
 pub mod store;
+pub mod sync;
 pub mod wire;
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use ports::{Clock, Rng};
 pub use settings::{Scope, Settings, SettingsError};
 pub use store::{FsStore, StoreError, StoreMetadata};
+pub use sync::{SyncReport, sync_once};
 pub use wire::{ApiNote, ApiTicket, TicketRow};
 
 /// Mint a new ticket ULID from an injected clock + rng.
