@@ -99,7 +99,7 @@ and don't imply reading order — read by group.
 **F · Collaboration & distribution**
 | Doc | Topic | Status |
 |---|---|---|
-| [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim) | Design |
+| [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md) | Human assignment + in-the-loop/review (vs machine claim) | Partial (data model + write path + CLI; derived views/delivery deferred) |
 | [08-distributed-and-remote.md](08-distributed-and-remote.md) | Multi-server orchestration, mobile, git-native claim/lease | Design |
 
 **G · Integrations**
@@ -158,7 +158,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Attachments support | 02 §2.5 | Confirmed |
 | **Automatic repo sync (aggressive fetch/push/rebase)** | 02 §2.12 | Partial (`ticketing::sync_once` cycle: fetch → rebase-through-merge-driver → push, offline-tolerant, conflict-aborts-clean; `hotsheet sync` CLI; bare-remote E2E — HS2-19. Always-on background loop + backoff + watcher coordination pending → HS2-731C2X) |
 | **Shared vs. local ticket data (on-disk gitignored overlay)** | 02 §2.11 | Partial (field classification + `ticketing::LocalOverlay` gitignored `<store>/local/` mechanism + read-tracking (`hotsheet read`/`ls ●`) — HS2-21; feedback-draft/UI-state/pref overlay pending → HS2-AWTHJE) |
-| **Human assignment + in-the-loop/review** | 10 | Open (proposal) |
+| **Human assignment + in-the-loop/review** | 10 | Partial (`assignees` + `review_requests` fields, committed `people.json` roster, `merge_reviews` union-by-ULID, `ops::assign`, `assignee` query filter on the file-scan path, CLI `assign`/`people` — HS2-20. Server-side `assignee` filter (index facet, HS2-89), "assigned to me"/"needs my review" derived views, and live/on-sync attention delivery deferred → HS2-89 + follow-up) |
 | **Close reasons** (completed / not planned / duplicate-of / obsolete) | 02 §2.6a | Shipped (field + `close` op + index columns + query filter `close_reason`/`closed` across CLI/MCP/server + reopen-clears; HS2-61) |
 | SQLite + FTS5 index, rebuildable from disk | 03 | Partial (`hotsheet-index`: schema/query/FTS/rebuild + **file-backed restore/reconcile on launch** built; facet tables + paging + `reindex` CLI pending) |
 | Filesystem watch → incremental reindex | 03 §3.4 | Partial (server `spawn_watcher`: content-hash reindex + WS events built; git-diff fast path pending) |

@@ -9,10 +9,11 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use hotsheet_cli::{git_init, run_import};
 use hotsheet_model::{
-    CloseReason, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, parse_file, to_file_string,
+    CloseReason, NoteKind, Priority, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid,
+    parse_file, to_file_string,
 };
 use hotsheet_ticketing::{
-    FsStore, NewTicket, SortKey, StoreMetadata, TicketPatch, TicketQuery, ops,
+    FsStore, NewTicket, Person, Roster, SortKey, StoreMetadata, TicketPatch, TicketQuery, ops,
 };
 use time::{Duration, OffsetDateTime};
 
@@ -156,6 +157,26 @@ enum Cmd {
         #[arg(long)]
         yes: bool,
     },
+    /// Assign people to a ticket and/or request their involvement (docs/10 §10.2). Person
+    /// identity is the git email; `hotsheet people` maps it to a name.
+    Assign {
+        id: String,
+        /// A person expected to do the work (git email), repeatable — replaces the set.
+        #[arg(long = "to")]
+        to: Vec<String>,
+        /// Clear all assignees.
+        #[arg(long)]
+        clear: bool,
+        /// Request a person's involvement as `email:kind` (kind = feedback|review|fyi|work),
+        /// repeatable. Soft (attention only) — use --blocked-by for hard ordering.
+        #[arg(long = "review")]
+        review: Vec<String>,
+    },
+    /// Manage the committed `people.json` roster (git email → friendly name).
+    People {
+        #[command(subcommand)]
+        cmd: PeopleCmd,
+    },
     /// Mark a ticket read on this machine (per-user local state; never committed).
     Read { id: String },
     /// Sync the store with its git remote now: fetch, integrate incoming changes through
@@ -280,6 +301,21 @@ enum PluginCmd {
 }
 
 #[derive(Subcommand)]
+enum PeopleCmd {
+    /// List the roster (email → name).
+    List,
+    /// Add or update a person (matched by email).
+    Add {
+        /// The person's git email (their identity).
+        email: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        github: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum SettingsCmd {
     /// Read a setting (effective = local over shared, unless --scope is given).
     Get {
@@ -333,6 +369,9 @@ struct LsFilters {
     /// Only tickets that have a close reason set.
     #[arg(long)]
     closed: bool,
+    /// Only tickets assigned to this person (git email).
+    #[arg(long)]
+    assignee: Option<String>,
     /// Sort key: id | created | updated | priority | status | title.
     #[arg(long, default_value = "id")]
     sort: String,
@@ -409,6 +448,13 @@ fn main() -> Result<()> {
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
         Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
+        Cmd::Assign {
+            id,
+            to,
+            clear,
+            review,
+        } => cmd_assign(&cli.path, &id, to, clear, review),
+        Cmd::People { cmd } => cmd_people(&cli.path, cmd),
         Cmd::Read { id } => cmd_read(&cli.path, &id),
         Cmd::Sync => cmd_sync(&cli.path),
         Cmd::Doctor => cmd_doctor(&cli.path),
@@ -864,6 +910,7 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
             .map(parse_close_reason)
             .transpose()?,
         closed: f.closed.then_some(true),
+        assignee: f.assignee.clone(),
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
         limit: f.limit,
     };
@@ -940,6 +987,100 @@ fn cmd_move(src_path: &Path, id: &str, to: &Path, yes: bool) -> Result<()> {
         to.display(),
         src_path.display()
     );
+    Ok(())
+}
+
+fn cmd_assign(
+    path: &Path,
+    id: &str,
+    to: Vec<String>,
+    clear: bool,
+    review: Vec<String>,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket =
+        ops::resolve(&store, id)?.ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+
+    // `--clear` empties the set; otherwise `--to` (if any) replaces it; else leave unchanged.
+    let set_assignees = if clear {
+        Some(Vec::new())
+    } else if !to.is_empty() {
+        Some(to)
+    } else {
+        None
+    };
+
+    let now = now_ts();
+    let reviews = review
+        .iter()
+        .map(|spec| {
+            let (who, kind) = spec
+                .split_once(':')
+                .with_context(|| format!("--review expects email:kind, got '{spec}'"))?;
+            Ok(ReviewRequest {
+                who: who.to_string(),
+                kind: parse_review_kind(kind)?,
+                by: Ulid::new(),
+                at: now.clone(),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let t = ops::assign(&store, &ticket.id, now, set_assignees, reviews)?;
+    let names = if t.assignees.is_empty() {
+        "(none)".to_string()
+    } else {
+        t.assignees.join(", ")
+    };
+    println!(
+        "Assigned {} → {names}{}",
+        t.slug,
+        if t.review_requests.is_empty() {
+            String::new()
+        } else {
+            format!("  ({} review request(s))", t.review_requests.len())
+        }
+    );
+    Ok(())
+}
+
+fn parse_review_kind(s: &str) -> Result<ReviewKind> {
+    Ok(match s {
+        "work" => ReviewKind::Work,
+        "feedback" => ReviewKind::Feedback,
+        "review" => ReviewKind::Review,
+        "fyi" => ReviewKind::Fyi,
+        other => bail!("invalid review kind '{other}' (work|feedback|review|fyi)"),
+    })
+}
+
+fn cmd_people(path: &Path, cmd: PeopleCmd) -> Result<()> {
+    FsStore::open(path)?; // validate it's a store (people.json lives at its root)
+    match cmd {
+        PeopleCmd::List => {
+            let roster = Roster::load(path)?;
+            if roster.people.is_empty() {
+                println!("(no people)");
+            }
+            for p in &roster.people {
+                println!("{:<32} {}", p.email, p.name.as_deref().unwrap_or(""));
+            }
+        }
+        PeopleCmd::Add {
+            email,
+            name,
+            github,
+        } => {
+            let mut roster = Roster::load(path)?;
+            roster.upsert(Person {
+                email: email.clone(),
+                name,
+                github,
+            });
+            roster.save(path)?;
+            println!("Added {email} to people.json (commit to share it with the team)");
+        }
+    }
     Ok(())
 }
 

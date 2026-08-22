@@ -422,3 +422,77 @@ async fn setup_endpoint_needs_the_secret() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 }
+
+/// The `close_reason` / `closed` list filters are served through the **index**
+/// (the server lists via `index.query`, not `ops::query`), so this pins that the
+/// structured close tag actually round-trips to SQLite and back (HS2-61 / HS2-20).
+#[tokio::test]
+async fn list_filters_by_close_reason_and_closed_through_the_index() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // One open ticket, one closed as `duplicate`, one closed as `completed`.
+    let mut slugs = vec![];
+    for title in ["still open", "a dup", "done deal"] {
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(&format!(r#"{{"title":"{title}"}}"#)),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        slugs.push(body_json(resp).await["slug"].as_str().unwrap().to_string());
+    }
+    // Need a real duplicate target for reason=duplicate.
+    let dup_target = &slugs[0];
+    for (slug, body) in [
+        (
+            &slugs[1],
+            format!(r#"{{"reason":"duplicate","duplicate_of":"{dup_target}"}}"#),
+        ),
+        (&slugs[2], r#"{"reason":"completed"}"#.to_string()),
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/tickets/{slug}/close"),
+                Some(&body),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // closed=true → the two closed ones; closed=false → only the open one.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?closed=true", None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await.as_array().unwrap().len(), 2);
+
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?closed=false", None))
+        .await
+        .unwrap();
+    let open = body_json(resp).await;
+    let open = open.as_array().unwrap();
+    assert_eq!(open.len(), 1);
+    assert_eq!(open[0]["title"], "still open");
+
+    // close_reason=completed → just the one.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?close_reason=completed", None))
+        .await
+        .unwrap();
+    let done = body_json(resp).await;
+    let done = done.as_array().unwrap();
+    assert_eq!(done.len(), 1);
+    assert_eq!(done[0]["title"], "done deal");
+}

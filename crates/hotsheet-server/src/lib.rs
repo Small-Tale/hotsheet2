@@ -299,6 +299,8 @@ struct ListParams {
     close_reason: Option<String>,
     /// `true` = only closed tickets; `false` = only tickets with no close reason.
     closed: Option<bool>,
+    /// Only tickets assigned to this person (git email).
+    assignee: Option<String>,
     sort: Option<String>,
     limit: Option<usize>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.
@@ -331,6 +333,7 @@ impl ListParams {
             open_only: self.open.unwrap_or(false),
             close_reason: opt_parse(self.close_reason.as_deref())?,
             closed: self.closed,
+            assignee: self.assignee,
             sort,
             limit: self.limit,
         })

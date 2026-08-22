@@ -1,11 +1,25 @@
 # 10. Assignment & Human-in-the-Loop Collaboration
 
-> **Status: Open (design proposal).** Addresses the maintainer's note (2026-08-19):
-> *"need to think about ticket assignment/claiming in a distributed setting and
-> tickets that humans need to be assigned to / in the loop for. On teams we might
-> want the specific attention of one or more people to either directly do work or
-> to provide feedback. Need to figure out how that works with git-based tickets."*
-> Tracked: HS2-20.
+> **Status: Core data model + write path shipped (HS2-20).** Addresses the
+> maintainer's note (2026-08-19): *"need to think about ticket assignment/claiming in
+> a distributed setting and tickets that humans need to be assigned to / in the loop
+> for. On teams we might want the specific attention of one or more people to either
+> directly do work or to provide feedback. Need to figure out how that works with
+> git-based tickets."* Tracked: HS2-20.
+>
+> **Built:** the `assignees` / `review_requests` frontmatter fields (§10.2), the
+> committed **`people.json` roster** (`hotsheet-ticketing::roster`), the semantic
+> **union merge** of review requests by their own ULID (`merge.rs::merge_reviews`),
+> the **`ops::assign`** write (set assignees + union review requests), an
+> **`assignee` query filter** (CLI/`ops`/MCP file-scan path), and the CLI surface —
+> `hotsheet-cli assign <slug> --to <email> [--clear] [--review <email>:<kind>]` and
+> `hotsheet-cli people list|add`.
+>
+> **Not yet built (follow-ups):** server-side `assignee` filtering needs an index
+> **facet table** like `tags` (HS2-89) — the index query serves `close_reason` /
+> `closed` but not `assignee`; the "assigned to me / needs my review" **derived
+> views** and the **live/on-sync attention delivery** of §10.3; and the GitHub-seed
+> of `people.json` (§10.5). See the follow-up ticket for the exact split.
 
 ## 10.1 Two different "who's on this?" concepts — keep them separate
 

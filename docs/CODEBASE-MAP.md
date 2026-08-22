@@ -30,8 +30,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/format.rs          #   parse_file / to_file_string (YAML frontmatter + body + notes)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
-      src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket — the one op impl (CLI+server+MCP)
-      src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/body) behind `hotsheet merge-driver` (HS2-18)
+      src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter (HS2-20)
+      src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)
+      src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/reviews-union-by-ULID/body) behind `hotsheet merge-driver` (HS2-18, HS2-20)
       src/sync.rs            #   sync_once: one fetch → rebase-through-merge-driver → push cycle (offline/conflict-tolerant) behind `hotsheet sync` (HS2-19)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
@@ -39,7 +40,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/setup/import/doctor/claim-next/release/renew/trigger/work
+      src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/assign/people/setup/import/doctor/claim-next/release/renew/trigger/work
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
       src/launch_safety.rs   #   HS2-103 safety for `trigger`/`work`: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, absolute hotsheet-mcp path, IsolatedCodexHome (auto MCP-free CODEX_HOME, HS2-YRDQNX)
@@ -126,6 +127,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   `ticketPrefix`, `idStrategy`, `shard`). See `store.rs::StoreMetadata`.
 - **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`
   (local, gitignored) — flat key→JSON maps. See `settings.rs::Settings`.
+- **People roster:** `people.json` (shared, committed) — `{people:[{email,name?,github?}]}`
+  mapping git identity → display name for assignment. See `roster.rs::Roster` (HS2-20).
 - **Export interchange:** `hotsheet-export.json` (`exportVersion`, `project`,
   `tickets[]`) — [07](07-migration.md) §7.2.1; produced by the migrator, consumed by
   `hotsheet-cli import` (`import.rs::ExportFile`).

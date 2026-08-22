@@ -918,3 +918,68 @@ fn read_tracking_marks_and_is_gitignored() {
         "local/ gitignored: {gi}"
     );
 }
+
+/// Human assignment + the people.json roster (HS2-20): add a person, assign a ticket + a
+/// review request, filter by assignee, and clear.
+#[test]
+fn assign_and_people_roster() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "needs an owner");
+
+    // Roster: add + list (committed people.json).
+    hs(p)
+        .args(["people", "add", "dana@example.com", "--name", "Dana"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Added"));
+    hs(p)
+        .args(["people", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dana@example.com").and(predicate::str::contains("Dana")));
+    assert!(p.join("people.json").is_file());
+
+    // Assign a doer + a soft review request.
+    hs(p)
+        .args([
+            "assign",
+            &slug,
+            "--to",
+            "dana@example.com",
+            "--review",
+            "sam@example.com:review",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Assigned"));
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("assignees").and(predicate::str::contains("dana@example.com")),
+        )
+        .stdout(predicate::str::contains("review_requests"));
+
+    // Filter by assignee.
+    hs(p)
+        .args(["ls", "--assignee", "dana@example.com"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("needs an owner"));
+    hs(p)
+        .args(["ls", "--assignee", "nobody@example.com"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(no tickets)"));
+
+    // Clear assignees.
+    hs(p).args(["assign", &slug, "--clear"]).assert().success();
+    hs(p)
+        .args(["ls", "--assignee", "dana@example.com"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(no tickets)"));
+}

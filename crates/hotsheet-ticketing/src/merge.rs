@@ -175,13 +175,9 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
     m.blocked_by = union3(&base.blocked_by, &ours.blocked_by, &theirs.blocked_by);
     m.assignees = union3(&base.assignees, &ours.assignees, &theirs.assignees);
 
-    // Rarely-touched record lists: whole-value last-writer-wins (keeps it a clean merge).
-    m.review_requests = pick3(
-        &base.review_requests,
-        &ours.review_requests,
-        &theirs.review_requests,
-        ours_wins,
-    );
+    // Review requests each carry their own ULID (`by`), so — like notes — they **union**:
+    // two people adding a reviewer never conflict (docs/10 §10.2, HS2-20).
+    m.review_requests = merge_reviews(&ours.review_requests, &theirs.review_requests);
     m.external = pick3(&base.external, &ours.external, &theirs.external, ours_wins);
     m.extra = pick3(&base.extra, &ours.extra, &theirs.extra, ours_wins);
 
@@ -240,6 +236,26 @@ fn merge_notes(ours: &[Note], theirs: &[Note]) -> Vec<Note> {
                 }
             })
             .or_insert_with(|| n.clone());
+    }
+    by_id.into_values().collect()
+}
+
+/// Union review requests by their own ULID (`by`), keeping the newer timestamp on a
+/// collision, and sort by that id (chronological) — the same clean union as notes.
+fn merge_reviews(
+    ours: &[hotsheet_model::ReviewRequest],
+    theirs: &[hotsheet_model::ReviewRequest],
+) -> Vec<hotsheet_model::ReviewRequest> {
+    let mut by_id: BTreeMap<hotsheet_model::Ulid, hotsheet_model::ReviewRequest> = BTreeMap::new();
+    for r in ours.iter().chain(theirs.iter()) {
+        by_id
+            .entry(r.by)
+            .and_modify(|cur| {
+                if r.at.as_str() > cur.at.as_str() {
+                    *cur = r.clone();
+                }
+            })
+            .or_insert_with(|| r.clone());
     }
     by_id.into_values().collect()
 }
@@ -359,6 +375,29 @@ mod tests {
         theirs.details = "theirs body".into();
         let two = merge_tickets(&base, &ours, &theirs);
         assert!(two.has_body_conflict());
+    }
+
+    #[test]
+    fn review_requests_union_by_their_own_id() {
+        use hotsheet_model::{ReviewKind, ReviewRequest};
+        let review = |uid: &str, at: &str| ReviewRequest {
+            who: "dana@x.co".into(),
+            kind: ReviewKind::Review,
+            by: ulid(uid),
+            at: ts(at),
+        };
+        let base = base_ticket();
+        let mut ours = base.clone();
+        ours.review_requests = vec![review("01ARZ3NDEKTSV4RRFFQ69G5FB0", "2026-08-19T01:00:00Z")];
+        let mut theirs = base.clone();
+        theirs.review_requests = vec![review("01ARZ3NDEKTSV4RRFFQ69G5FB1", "2026-08-19T02:00:00Z")];
+        // Two people each add a reviewer → both kept, no conflict (union by `by`).
+        let m = merge_tickets(&base, &ours, &theirs).ticket;
+        assert_eq!(m.review_requests.len(), 2);
+        assert!(
+            m.review_requests[0].by < m.review_requests[1].by,
+            "sorted by id"
+        );
     }
 
     #[test]

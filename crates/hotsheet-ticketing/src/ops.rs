@@ -10,7 +10,8 @@ use std::collections::HashSet;
 use std::str::FromStr;
 
 use hotsheet_model::{
-    CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, derive_slug,
+    CloseReason, Note, NoteKind, Priority, ReviewRequest, Status, Ticket, Timestamp, Ulid,
+    derive_slug,
 };
 
 use crate::store::{FsStore, StoreError};
@@ -84,6 +85,8 @@ pub struct TicketQuery {
     /// tickets with no close reason. `None` doesn't constrain. Orthogonal to `open_only`
     /// (which is status-based), since `close_reason` is orthogonal to status.
     pub closed: Option<bool>,
+    /// Only tickets this person (git email) is an assignee of (HS2-20).
+    pub assignee: Option<String>,
     pub sort: SortKey,
     /// Cap the number of rows returned (after sort). `None` = no cap.
     pub limit: Option<usize>,
@@ -101,6 +104,9 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && (!q.open_only || is_open(t))
             && q.close_reason.is_none_or(|r| t.close_reason == Some(r))
             && q.closed.is_none_or(|want| t.close_reason.is_some() == want)
+            && q.assignee
+                .as_deref()
+                .is_none_or(|a| t.assignees.iter().any(|x| x == a))
             && q.tags.iter().all(|tag| t.tags.iter().any(|x| x == tag))
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });
@@ -463,6 +469,38 @@ fn copy_attachments(
         }
     }
     Ok(())
+}
+
+// ---- human assignment (docs/10 §10.2, HS2-20) ------------------------------------
+
+/// Set a ticket's `assignees` (people expected to *do* it) and/or **add** review requests
+/// (people wanted in the loop). Assignees are **replaced** (`None` = leave unchanged); review
+/// requests are **appended**, deduped by their own ULID `by`, so they set-union across
+/// workers exactly like notes — two people adding a reviewer never conflict. Person identity
+/// is the git email; the `people.json` roster (see [`crate::roster`]) maps it to a name.
+pub fn assign(
+    store: &FsStore,
+    id: &Ulid,
+    now: Timestamp,
+    set_assignees: Option<Vec<String>>,
+    add_reviews: Vec<ReviewRequest>,
+) -> Result<Ticket, StoreError> {
+    let mut t = store.read_ticket(id)?;
+    if let Some(assignees) = set_assignees {
+        let mut seen = HashSet::new();
+        t.assignees = assignees
+            .into_iter()
+            .filter(|e| seen.insert(e.clone()))
+            .collect();
+    }
+    for r in add_reviews {
+        if !t.review_requests.iter().any(|x| x.by == r.by) {
+            t.review_requests.push(r);
+        }
+    }
+    t.updated_at = now;
+    store.write_ticket_committing(&t)?;
+    Ok(t)
 }
 
 // ---- claim / lease ---------------------------------------------------------------
@@ -985,6 +1023,67 @@ mod tests {
         assert_eq!(tomb.moved_to_store.as_deref(), Some("/stores/sec"));
         assert!(tomb.moved_at.is_some());
         assert_eq!(out.tombstone.status, Status::Moved);
+    }
+
+    #[test]
+    fn assign_sets_people_and_unions_review_requests() {
+        use hotsheet_model::{ReviewKind, ReviewRequest};
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+
+        let review = |uid: &str| ReviewRequest {
+            who: "dana@x.co".into(),
+            kind: ReviewKind::Feedback,
+            by: Ulid::from_string(uid).unwrap(),
+            at: ts("t1"),
+        };
+        // Assign two people + one review request.
+        let t = assign(
+            &store,
+            &id,
+            ts("t1"),
+            Some(vec!["alex@x.co".into(), "sam@x.co".into()]),
+            vec![review("01ARZ3NDEKTSV4RRFFQ69G5FB0")],
+        )
+        .unwrap();
+        assert_eq!(t.assignees, vec!["alex@x.co", "sam@x.co"]);
+        assert_eq!(t.review_requests.len(), 1);
+
+        // Re-assign replaces assignees but ADDS a new review (deduped by `by`).
+        let t = assign(
+            &store,
+            &id,
+            ts("t2"),
+            Some(vec!["alex@x.co".into()]),
+            vec![
+                review("01ARZ3NDEKTSV4RRFFQ69G5FB0"), // same `by` → not duplicated
+                review("01ARZ3NDEKTSV4RRFFQ69G5FB1"), // new `by` → added
+            ],
+        )
+        .unwrap();
+        assert_eq!(t.assignees, vec!["alex@x.co"], "assignees replaced");
+        assert_eq!(t.review_requests.len(), 2, "review requests union by `by`");
+
+        // Filter by assignee.
+        let mine = query(
+            &store,
+            &TicketQuery {
+                assignee: Some("alex@x.co".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(mine.len(), 1);
+        let theirs = query(
+            &store,
+            &TicketQuery {
+                assignee: Some("nobody@x.co".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(theirs.is_empty());
     }
 
     #[test]

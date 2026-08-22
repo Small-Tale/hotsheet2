@@ -345,6 +345,18 @@ impl Index {
                 "t.status NOT IN ('completed','verified','deleted','archive','moved')".into(),
             );
         }
+        if let Some(r) = q.close_reason {
+            wheres.push("t.close_reason = ?".into());
+            args.push(Box::new(enum_str(&r)));
+        }
+        if let Some(want) = q.closed {
+            // `closed` = a close_reason is set; orthogonal to status (HS2-61).
+            wheres.push(if want {
+                "t.close_reason IS NOT NULL".into()
+            } else {
+                "t.close_reason IS NULL".into()
+            });
+        }
         if !q.tags.is_empty() {
             let placeholders = vec!["?"; q.tags.len()].join(",");
             wheres.push(format!(
