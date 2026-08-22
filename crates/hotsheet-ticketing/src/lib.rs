@@ -8,6 +8,7 @@
 
 use hotsheet_model::Ulid;
 
+pub mod distclaim;
 pub mod merge;
 pub mod ops;
 pub mod overlay;
@@ -19,6 +20,7 @@ pub mod store;
 pub mod sync;
 pub mod wire;
 pub mod worklist;
+pub use distclaim::{ClaimMarker, ClaimResult, DistError};
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use overlay::LocalOverlay;

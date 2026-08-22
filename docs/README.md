@@ -185,7 +185,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Code organization (Cargo workspace/crates) + test strategy | 12 | Decided |
 | PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; UI flow deferred) |
 | Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |
-| Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Confirmed (design); spike HS2-63 |
+| Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Partial (`ticketing::distclaim`: `refs/hotsheet/claims/<ulid>` push-CAS claim [first-wins], `--force-with-lease` renew/steal, `ls-remote` enumerate, expiry sweep — bare-remote E2E; HS2-84. Consumer wiring [CLI/server work loop] → HS2-E7RXXR) |
 | Mobile ↔ server configuration/pairing (mTLS + QR) | 08 §8.3 | Design |
 
 ## Conventions
