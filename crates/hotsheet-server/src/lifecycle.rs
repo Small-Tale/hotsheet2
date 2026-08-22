@@ -5,7 +5,10 @@
 //!
 //! - **Instance file** — `${HOTSHEET_HOME}/instances/<project-id>.json` written on start and
 //!   removed on graceful shutdown; [`find_instance`] returns it only if the recorded pid is
-//!   still alive (a crashed server leaves a stale file that reads as "none").
+//!   still alive (a crashed server leaves a stale file that reads as "none"). Under the
+//!   multi-store topology (HS2-87, topology A) the **one** machine server writes one such
+//!   file per hosted project, all pointing at itself — so "who serves project X?" resolves
+//!   to that single server for every project it hosts.
 //! - **Index-writer lock** — a per-store lock so a **second** server on the same store
 //!   refuses instead of double-writing the disposable index (join-don't-collide). A stale
 //!   lock from a dead server is reclaimed.

@@ -947,3 +947,50 @@ async fn startup_discovery_hosts_stores_from_stores_json() {
         std::env::remove_var("HOTSHEET_HOME");
     }
 }
+
+#[tokio::test]
+async fn one_machine_server_is_discoverable_for_every_hosted_store() {
+    use hotsheet_server::lifecycle;
+
+    let home = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_HOME", home.path());
+    }
+
+    // Primary store + machine server.
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let st = AppState::new(store, SECRET.into()).unwrap();
+
+    // Publish the machine server's coordinates → the primary gets a discovery file.
+    st.publish_instances(
+        "http://127.0.0.1:9999".into(),
+        "2026-08-22T00:00:00Z".into(),
+    );
+    let app = app(st);
+
+    // Register a second store at runtime; it advertises the same machine server.
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // "Who serves project X?" resolves to the ONE machine server for BOTH projects.
+    let primary = lifecycle::find_instance(dir.path()).expect("primary discoverable");
+    assert_eq!(primary.url, "http://127.0.0.1:9999");
+    let second = lifecycle::find_instance(dir2.path()).expect("registered store discoverable");
+    assert_eq!(second.url, "http://127.0.0.1:9999");
+    assert_eq!(
+        second.pid, primary.pid,
+        "same machine server process hosts both"
+    );
+
+    unsafe {
+        std::env::remove_var("HOTSHEET_HOME");
+    }
+}

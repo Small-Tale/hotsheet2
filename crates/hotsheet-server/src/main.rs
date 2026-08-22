@@ -116,18 +116,13 @@ async fn main() -> Result<()> {
     );
     println!("secret: {secret}");
 
-    // Register this instance so clients/CLIs can discover it; the guard removes the file on
-    // graceful shutdown (a crash leaves a stale file that `find_instance` ignores).
+    // Register a discovery instance file for EVERY hosted store (the primary + any from
+    // stores.json), all pointing at this one machine server — the topology-A reconciliation
+    // (HS2-87): one server per machine, discoverable per project. Guards live in the state
+    // and remove the files on graceful shutdown; a crash leaves stale files `find_instance`
+    // ignores. Runtime `POST /stores` additions register themselves the same way.
     let started_at = Timestamp::from_datetime(OffsetDateTime::now_utc());
-    let info = hotsheet_server::lifecycle::InstanceInfo {
-        pid: std::process::id(),
-        url,
-        secret,
-        store_path: cli.path.display().to_string(),
-        index_path: index_path.display().to_string(),
-        started_at: started_at.as_str().to_string(),
-    };
-    let _instance = hotsheet_server::lifecycle::register_instance(&info, &cli.path)?;
+    state.publish_instances(url, started_at.as_str().to_string());
 
     // Explicit shutdown only (HS2-59): serve until SIGTERM / Ctrl-C, then the guards drop
     // (instance file + writer lock removed), and any in-flight work has already run in the

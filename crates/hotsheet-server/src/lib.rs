@@ -49,6 +49,21 @@ pub struct AppState {
     /// Off by default so tests stay hermetic (they never touch the machine home); the
     /// server binary turns it on for a real run.
     persist_indexes: bool,
+    /// The machine server's coordinates, set after bind in a real run (HS2-87, topology A):
+    /// when present, every hosted store gets a per-store discovery instance file pointing
+    /// here, so `lifecycle::find_instance(storeX)` resolves to this one machine server for
+    /// each project it hosts. `None` in tests (they never write under the machine home).
+    instance: Arc<Mutex<Option<InstanceMeta>>>,
+    /// Keeps the per-store instance-file guards alive; they remove their files on shutdown.
+    instance_guards: Arc<Mutex<Vec<lifecycle::InstanceGuard>>>,
+}
+
+/// The machine server's coordinates, shared by every hosted store's discovery instance file.
+#[derive(Clone)]
+struct InstanceMeta {
+    url: String,
+    secret: String,
+    started_at: String,
 }
 
 impl AppState {
@@ -72,6 +87,8 @@ impl AppState {
             host,
             watchers: Arc::new(Mutex::new(Vec::new())),
             persist_indexes: false,
+            instance: Arc::new(Mutex::new(None)),
+            instance_guards: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -105,6 +122,7 @@ impl AppState {
             index: Arc::new(Mutex::new(index)),
         };
         self.host.register(entry.clone());
+        let store_root = store.root().to_path_buf();
         match spawn_watcher_for(WatchTarget {
             entry,
             store_id: id,
@@ -115,12 +133,65 @@ impl AppState {
                     w.push(handle);
                 }
             }
+            Err(e) => eprintln!("watcher for {} failed to start: {e}", store_root.display()),
+        }
+        // Advertise the newly-hosted store for discovery (real run only; a no-op in tests).
+        self.register_store_instance(&store_root);
+        Ok(true)
+    }
+
+    /// Record the machine server's coordinates (URL + start time; a real run, after bind)
+    /// and register a discovery instance file for **every** already-hosted store, so a
+    /// client asking "who serves project X?" finds this one machine server for each project
+    /// it hosts (HS2-87 topology A). Runtime `POST /stores` additions register via
+    /// [`Self::host_store`]. No-op'd in tests (they never call this).
+    pub fn publish_instances(&self, url: String, started_at: String) {
+        if let Ok(mut m) = self.instance.lock() {
+            *m = Some(InstanceMeta {
+                url,
+                secret: self.secret.clone(),
+                started_at,
+            });
+        }
+        for info in self.host.list() {
+            self.register_store_instance(FsPath::new(&info.root));
+        }
+    }
+
+    /// Write the discovery instance file for one hosted store (if instance publishing is
+    /// on), retaining its guard so the file is removed on shutdown.
+    fn register_store_instance(&self, store_path: &FsPath) {
+        let Some(meta) = self.instance.lock().ok().and_then(|m| m.clone()) else {
+            return; // not a published (real) run — nothing to register
+        };
+        let index_path = if self.persist_indexes {
+            FsStore::open(store_path)
+                .ok()
+                .and_then(|s| multistore::index_path_for(&s).ok())
+                .map(|p| p.display().to_string())
+                .unwrap_or_default()
+        } else {
+            "(in-memory)".into()
+        };
+        let info = lifecycle::InstanceInfo {
+            pid: std::process::id(),
+            url: meta.url,
+            secret: meta.secret,
+            store_path: store_path.display().to_string(),
+            index_path,
+            started_at: meta.started_at,
+        };
+        match lifecycle::register_instance(&info, store_path) {
+            Ok(guard) => {
+                if let Ok(mut g) = self.instance_guards.lock() {
+                    g.push(guard);
+                }
+            }
             Err(e) => eprintln!(
-                "watcher for {} failed to start: {e}",
-                store.root().display()
+                "instance registration failed for {}: {e}",
+                store_path.display()
             ),
         }
-        Ok(true)
     }
 
     /// Auto-host the stores listed in `${HOTSHEET_HOME}/stores.json` (HS2-87 startup
