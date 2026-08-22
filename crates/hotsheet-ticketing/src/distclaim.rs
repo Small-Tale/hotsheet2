@@ -35,6 +35,8 @@ pub enum DistError {
     NoRemote,
     #[error("git {op} failed: {msg}")]
     Git { op: String, msg: String },
+    #[error("store: {0}")]
+    Store(String),
 }
 
 /// The parsed payload of a claim marker.

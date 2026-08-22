@@ -9,6 +9,7 @@
 use hotsheet_model::Ulid;
 
 pub mod distclaim;
+pub mod distwork;
 pub mod merge;
 pub mod metrics;
 pub mod ops;
