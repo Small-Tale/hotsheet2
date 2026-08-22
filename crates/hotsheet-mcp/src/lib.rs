@@ -134,6 +134,33 @@ fn tools_list() -> Value {
                 "reason": str_prop("completed|not_planned|duplicate|obsolete"),
                 "duplicate_of": str_prop("required when reason=duplicate")
             }, "required": ["id", "reason"] }
+        },
+        {
+            "name": "hotsheet_claim_next",
+            "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next). Returns the claimed ticket, or null if nothing is claimable.",
+            "inputSchema": { "type": "object", "properties": {
+                "worker": str_prop("worker id recorded on the claim (default: worker)"),
+                "label": str_prop("human-readable worker label"),
+                "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" }
+            } }
+        },
+        {
+            "name": "hotsheet_release",
+            "description": "Release a claim (only the holding worker unless force).",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("slug or ULID"),
+                "worker": str_prop("the releasing worker (default: worker)"),
+                "force": { "type": "boolean", "description": "release even if held by another worker" }
+            }, "required": ["id"] }
+        },
+        {
+            "name": "hotsheet_renew",
+            "description": "Renew a claim's lease (must be the holding worker).",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("slug or ULID"),
+                "worker": str_prop("the holding worker (default: worker)"),
+                "lease_minutes": { "type": "integer", "description": "new lease length in minutes (default 30)" }
+            }, "required": ["id"] }
         }
     ] })
 }
@@ -180,6 +207,27 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
             });
             backend
                 .send("POST", &format!("/tickets/{id}/close"), &body)
+                .map_err(be_msg)
+        }
+        "hotsheet_claim_next" => backend.send("POST", "/claim-next", args).map_err(be_msg),
+        "hotsheet_release" => {
+            let id = arg_str(args, "id")?;
+            backend
+                .send(
+                    "POST",
+                    &format!("/tickets/{id}/release"),
+                    &without(args, "id"),
+                )
+                .map_err(be_msg)
+        }
+        "hotsheet_renew" => {
+            let id = arg_str(args, "id")?;
+            backend
+                .send(
+                    "POST",
+                    &format!("/tickets/{id}/renew"),
+                    &without(args, "id"),
+                )
                 .map_err(be_msg)
         }
         other => Err(format!("unknown tool: {other}")),
@@ -411,9 +459,46 @@ mod core_backend {
                     };
                     Ok(to_value(&ApiTicket::from(&latest)))
                 }
+                // Coordination (HS2-86): claim the next available ticket / release / renew.
+                "POST" if path == "/claim-next" => {
+                    let now = (self.now)();
+                    let lease = now.plus_minutes(lease_minutes(body));
+                    let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
+                    let label = str_field(body, "label");
+                    let claimed = ops::claim_next(&self.store, &now, lease, &worker, label)
+                        .map_err(store_err)?;
+                    Ok(match claimed {
+                        Some(t) => to_value(&ApiTicket::from(&t)),
+                        None => Value::Null,
+                    })
+                }
+                "POST" if release_id(path).is_some() => {
+                    let t = self.resolve(release_id(path).unwrap())?;
+                    let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
+                    let force = body.get("force").and_then(Value::as_bool).unwrap_or(false);
+                    let released = ops::release(&self.store, &t.id, (self.now)(), &worker, force)
+                        .map_err(op_err)?;
+                    Ok(to_value(&ApiTicket::from(&released)))
+                }
+                "POST" if renew_id(path).is_some() => {
+                    let t = self.resolve(renew_id(path).unwrap())?;
+                    let now = (self.now)();
+                    let lease = now.plus_minutes(lease_minutes(body));
+                    let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
+                    let renewed =
+                        ops::renew(&self.store, &t.id, now, lease, &worker).map_err(op_err)?;
+                    Ok(to_value(&ApiTicket::from(&renewed)))
+                }
                 _ => Err(bad_request(format!("unsupported {method} {path}"))),
             }
         }
+    }
+
+    /// The lease length from a request body (minutes), defaulting to 30.
+    fn lease_minutes(body: &Value) -> i64 {
+        body.get("lease_minutes")
+            .and_then(Value::as_i64)
+            .unwrap_or(30)
     }
 
     fn default_now() -> Timestamp {
@@ -429,6 +514,16 @@ mod core_backend {
     /// `/tickets/{id}/close` → the id.
     fn close_id(path: &str) -> Option<&str> {
         path.strip_prefix("/tickets/")?.strip_suffix("/close")
+    }
+
+    /// `/tickets/{id}/release` → the id.
+    fn release_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?.strip_suffix("/release")
+    }
+
+    /// `/tickets/{id}/renew` → the id.
+    fn renew_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?.strip_suffix("/renew")
     }
 
     fn build_query(pairs: &[(String, String)]) -> Result<TicketQuery, BackendError> {
@@ -866,6 +961,70 @@ mod tests {
         );
         let open = call(&backend, "hotsheet_query", json!({ "open": true }));
         assert_eq!(open.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn corebackend_claim_release_renew_over_mcp() {
+        let (_d, backend) = core();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "drain me", "up_next": true }),
+        );
+        let slug = created["slug"].as_str().unwrap().to_string();
+
+        // Claim the next available ticket for a worker.
+        let claimed = call(
+            &backend,
+            "hotsheet_claim_next",
+            json!({ "worker": "agent-1" }),
+        );
+        assert_eq!(claimed["slug"], slug);
+        assert_eq!(claimed["claimed_by"], "agent-1");
+
+        // Renew extends the lease (holder only).
+        let renewed = call(
+            &backend,
+            "hotsheet_renew",
+            json!({ "id": slug, "worker": "agent-1", "lease_minutes": 60 }),
+        );
+        assert_eq!(renewed["claimed_by"], "agent-1");
+
+        // A wrong worker can't release without force → tool error.
+        let denied = call(
+            &backend,
+            "hotsheet_release",
+            json!({ "id": slug, "worker": "someone-else" }),
+        );
+        assert!(denied["error"].as_str().unwrap().contains("claimed by"));
+
+        // The holder releases it.
+        let released = call(
+            &backend,
+            "hotsheet_release",
+            json!({ "id": slug, "worker": "agent-1" }),
+        );
+        assert!(released["claimed_by"].is_null());
+
+        // Nothing left to claim → null.
+        let none = call(
+            &backend,
+            "hotsheet_claim_next",
+            json!({ "worker": "agent-1" }),
+        );
+        // ... after releasing, the ticket is claimable again, so claim it, then complete it.
+        assert_eq!(none["slug"], slug, "released ticket is claimable again");
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": slug, "status": "completed" }),
+        );
+        let empty = call(
+            &backend,
+            "hotsheet_claim_next",
+            json!({ "worker": "agent-1" }),
+        );
+        assert!(empty.is_null(), "no claimable tickets → null");
     }
 
     #[test]

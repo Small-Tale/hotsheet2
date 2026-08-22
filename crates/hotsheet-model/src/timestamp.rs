@@ -52,6 +52,15 @@ impl Timestamp {
         self.parsed
     }
 
+    /// This timestamp plus `minutes` (used to compute a claim-lease expiry). If the text
+    /// isn't valid RFC3339, returns a clone unchanged.
+    pub fn plus_minutes(&self, minutes: i64) -> Timestamp {
+        match self.parsed {
+            Some(dt) => Timestamp::from_datetime(dt + time::Duration::minutes(minutes)),
+            None => self.clone(),
+        }
+    }
+
     /// Whether the text parsed as valid RFC3339.
     pub fn is_valid(&self) -> bool {
         self.parsed.is_some()

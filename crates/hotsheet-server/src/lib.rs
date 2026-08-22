@@ -302,6 +302,10 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/close", post(close_ticket))
+        // Coordination: claim the next available ticket, release, renew a lease (HS2-86).
+        .route("/claim-next", post(claim_next_ticket))
+        .route("/tickets/{id}/release", post(release_ticket))
+        .route("/tickets/{id}/renew", post(renew_ticket))
         .route("/setup/{tool}", post(setup_tool))
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
@@ -562,6 +566,63 @@ async fn close_ticket(
     Ok(Json(do_close(&state, &state.default_entry(), &id, req)?))
 }
 
+// ---- coordination: claim / release / renew (HS2-86) ------------------------------
+
+const DEFAULT_LEASE_MINUTES: i64 = 30;
+
+/// `POST /claim-next` — atomically claim the top available ticket for a worker. Returns the
+/// claimed ticket, or `null` (200) when nothing is claimable.
+async fn claim_next_ticket(
+    State(state): State<AppState>,
+    Json(req): Json<ClaimReq>,
+) -> Result<Json<Option<ApiTicket>>, ApiError> {
+    let entry = state.default_entry();
+    let now = now();
+    let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let claimed = ops::claim_next(&entry.store, &now, lease, &worker, req.label)?;
+    if let Some(t) = &claimed {
+        state.changed_in(&entry, "claimed", t);
+    }
+    Ok(Json(claimed.as_ref().map(ApiTicket::from)))
+}
+
+/// `POST /tickets/{id}/release` — release a claim (holder-only unless `force`).
+async fn release_ticket(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<ReleaseReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = state.default_entry();
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let released = ops::release(
+        &entry.store,
+        &ticket.id,
+        now(),
+        &worker,
+        req.force.unwrap_or(false),
+    )?;
+    state.changed_in(&entry, "released", &released);
+    Ok(Json((&released).into()))
+}
+
+/// `POST /tickets/{id}/renew` — extend a claim's lease (holder-only).
+async fn renew_ticket(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<RenewReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = state.default_entry();
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let now = now();
+    let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let renewed = ops::renew(&entry.store, &ticket.id, now, lease, &worker)?;
+    state.changed_in(&entry, "renewed", &renewed);
+    Ok(Json((&renewed).into()))
+}
+
 // ---- store-scoped write routes (multi-store, HS2-87) -----------------------------
 
 /// Look up a hosted store by URL id, 404 if not hosted.
@@ -762,6 +823,25 @@ struct UpdateReq {
 struct CloseReq {
     reason: String,
     duplicate_of: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ClaimReq {
+    worker: Option<String>,
+    label: Option<String>,
+    lease_minutes: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReleaseReq {
+    worker: Option<String>,
+    force: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RenewReq {
+    worker: Option<String>,
+    lease_minutes: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]

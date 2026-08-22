@@ -1017,3 +1017,96 @@ async fn background_sync_covers_every_hosted_store() {
     assert_eq!(reports.len(), 2, "both hosted stores synced");
     assert!(reports.iter().all(|(_, r)| *r == SyncReport::NoRemote));
 }
+
+#[tokio::test]
+async fn claim_next_release_renew_over_http() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // A claimable Up Next ticket.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"drain","up_next":true}"#),
+        ))
+        .await
+        .unwrap();
+    let slug = body_json(resp).await["slug"].as_str().unwrap().to_string();
+
+    // Claim it.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/claim-next",
+            Some(r#"{"worker":"w1","lease_minutes":15}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let claimed = body_json(resp).await;
+    assert_eq!(claimed["slug"], slug);
+    assert_eq!(claimed["claimed_by"], "w1");
+
+    // Renew (holder).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/renew"),
+            Some(r#"{"worker":"w1"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // A non-holder release without force → 4xx (wrong worker).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/release"),
+            Some(r#"{"worker":"w2"}"#),
+        ))
+        .await
+        .unwrap();
+    assert!(resp.status().is_client_error());
+
+    // Holder releases → claimed_by cleared.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/release"),
+            Some(r#"{"worker":"w1"}"#),
+        ))
+        .await
+        .unwrap();
+    assert!(body_json(resp).await["claimed_by"].is_null());
+
+    // Nothing claimable now (it's claimable again but let's assert null when queue drained):
+    // claim it again then complete, then claim-next returns null.
+    app.clone()
+        .oneshot(authed("POST", "/claim-next", Some(r#"{"worker":"w1"}"#)))
+        .await
+        .unwrap();
+    app.clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{slug}"),
+            Some(r#"{"status":"completed"}"#),
+        ))
+        .await
+        .unwrap();
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/claim-next", Some(r#"{}"#)))
+        .await
+        .unwrap();
+    assert!(
+        body_json(resp).await.is_null(),
+        "no claimable tickets → null"
+    );
+}
