@@ -201,18 +201,172 @@ fn drive_and_stream(
 
     let conn_id = out.connection_id.clone();
     let mut turn = out.turn;
+    // Heartbeat the connection's busy state at a **live** clock so an external observer
+    // (the server drive loop / a UI) sees `is_busy` track the running turn, not a stamp
+    // frozen at the turn's start (HS2-34X6BW). Anchored at `now_ms` (wall-clock epoch ms in
+    // production) + elapsed, so it stays on the same time base an observer queries with.
+    let start = std::time::Instant::now();
+    let base = t.now_ms;
+    let mut clock = move || base + start.elapsed().as_millis() as u64;
+    let reason = pump_turn(turn.as_mut(), &conn_id, registry, &mut clock, on_event);
+    Ok(reason)
+}
+
+/// Drain a turn's streaming events, heartbeating the connection busy at each one (via
+/// `clock`, so an external observer's `is_busy` tracks the live turn) and setting it idle
+/// on the terminal `Done` (`docs/13` §13.4, HS2-34X6BW). A non-streaming drive (spawn /
+/// app-server: no events) falls back to the terminal wait — it registered busy at trigger
+/// time and goes idle here. Pure over the injected `clock`, so the busy feed is testable
+/// with a fake `TurnHandle` + a scripted clock, no real tool.
+fn pump_turn(
+    turn: &mut dyn crate::drive::TurnHandle,
+    conn_id: &str,
+    registry: &mut ConnectionRegistry,
+    clock: &mut dyn FnMut() -> u64,
+    on_event: &mut dyn FnMut(&TurnEvent),
+) -> DoneReason {
     let reason = loop {
         match turn.next_event() {
             Some(TurnEvent::Done(r)) => break r,
             Some(ev) => {
                 on_event(&ev);
-                registry.note_activity(&conn_id, t.now_ms);
+                registry.note_activity(conn_id, clock());
             }
             // Non-streaming drives (spawn / app-server): no events, just the terminal wait.
             None => break turn.wait(),
         }
     };
     on_event(&TurnEvent::Done(reason));
-    registry.set_idle(&conn_id);
-    Ok(reason)
+    registry.set_idle(conn_id);
+    reason
+}
+
+#[cfg(test)]
+mod pump_tests {
+    use super::*;
+    use crate::drive::{DoneReason, Transport, TurnEvent, TurnHandle};
+    use crate::registry::{Connection, ConnectionRegistry, Role};
+
+    /// A streaming TurnHandle that yields a scripted queue of events (ending in `Done`).
+    struct ScriptedTurn {
+        events: std::collections::VecDeque<TurnEvent>,
+    }
+    impl TurnHandle for ScriptedTurn {
+        fn is_busy(&mut self) -> bool {
+            !self.events.is_empty()
+        }
+        fn wait(&mut self) -> DoneReason {
+            DoneReason::Completed
+        }
+        fn next_event(&mut self) -> Option<TurnEvent> {
+            self.events.pop_front()
+        }
+    }
+
+    fn reg_with(conn: &str) -> ConnectionRegistry {
+        let mut r = ConnectionRegistry::new(5_000);
+        r.register(Connection {
+            id: conn.into(),
+            project: "/p".into(),
+            tool: "fake".into(),
+            role: Role::Main,
+            transport: Transport::ClaudeChannel,
+            pid: None,
+            started_at_ms: 0,
+        });
+        r
+    }
+
+    #[test]
+    fn pump_heartbeats_once_per_streamed_event_at_the_live_clock() {
+        // Three output events then Done. A live clock advances 1s per event; each streamed
+        // (non-Done) event must heartbeat exactly once at the *current* time — not a frozen
+        // start stamp — so an external observer's `is_busy` tracks the running turn.
+        let mut turn = ScriptedTurn {
+            events: [
+                TurnEvent::Output("a".into()),
+                TurnEvent::Output("b".into()),
+                TurnEvent::Output("c".into()),
+                TurnEvent::Done(DoneReason::Completed),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let mut reg = reg_with("c1");
+        // Record every clock read: proves one live-clock heartbeat per non-Done event.
+        let reads = std::cell::RefCell::new(Vec::new());
+        let ticks = std::cell::Cell::new(0u64);
+        let mut clock = || {
+            let t = 1_000 + ticks.get() * 1_000;
+            ticks.set(ticks.get() + 1);
+            reads.borrow_mut().push(t);
+            t
+        };
+        let mut seen = Vec::new();
+
+        let reason = pump_turn(&mut turn, "c1", &mut reg, &mut clock, &mut |ev| {
+            seen.push(format!("{ev:?}"))
+        });
+
+        assert_eq!(reason, DoneReason::Completed);
+        // Exactly one heartbeat per streamed output event, at the advancing clock (not a
+        // single frozen `now_ms`); Done doesn't heartbeat.
+        assert_eq!(reads.borrow().as_slice(), &[1_000, 2_000, 3_000]);
+        // Every event (including the terminal Done) was surfaced to the observer, in order.
+        assert_eq!(
+            seen,
+            vec![
+                "Output(\"a\")",
+                "Output(\"b\")",
+                "Output(\"c\")",
+                "Done(Completed)"
+            ]
+        );
+        // Done idled the connection immediately (past the 3_000 heartbeat's window anyway).
+        assert!(!reg.is_busy("c1", 3_100), "idle after Done");
+    }
+
+    #[test]
+    fn done_sets_idle_immediately_even_inside_the_busy_window() {
+        // One event heartbeat at 1_000, then Done — set_idle must win over the window.
+        let mut turn = ScriptedTurn {
+            events: [
+                TurnEvent::Output("x".into()),
+                TurnEvent::Done(DoneReason::Completed),
+            ]
+            .into_iter()
+            .collect(),
+        };
+        let mut reg = reg_with("c1");
+        let mut clock = || 1_000u64;
+        let _ = pump_turn(&mut turn, "c1", &mut reg, &mut clock, &mut |_| {});
+        // 1_100 is well inside the 5s window of the 1_000 heartbeat, yet Done idled it.
+        assert!(!reg.is_busy("c1", 1_100), "Done drops busy immediately");
+    }
+
+    #[test]
+    fn a_non_streaming_turn_falls_back_to_wait_and_idles() {
+        // No events (spawn / app-server shape): pump waits, then idles. The clock is never
+        // called (nothing to heartbeat) — the connection was marked busy at trigger time.
+        struct SilentTurn;
+        impl TurnHandle for SilentTurn {
+            fn is_busy(&mut self) -> bool {
+                false
+            }
+            fn wait(&mut self) -> DoneReason {
+                DoneReason::Failed(3)
+            }
+        }
+        let mut reg = reg_with("c1");
+        reg.note_activity("c1", 1_000); // trigger-time busy
+        let reason = pump_turn(
+            &mut SilentTurn,
+            "c1",
+            &mut reg,
+            &mut || panic!("a non-streaming turn must not heartbeat"),
+            &mut |_| {},
+        );
+        assert_eq!(reason, DoneReason::Failed(3));
+        assert!(!reg.is_busy("c1", 1_100), "idled on the terminal wait");
+    }
 }
