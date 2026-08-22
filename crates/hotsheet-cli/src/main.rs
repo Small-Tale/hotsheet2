@@ -193,6 +193,9 @@ enum Cmd {
         #[arg(long)]
         index: Option<PathBuf>,
     },
+    /// Show the usage/cost metrics rollup for this store (docs/14) — total cost + tokens,
+    /// by model, and by day, read from the raw JSONL. DB-free.
+    Metrics,
     /// Regenerate the derived `worklist.md` at the store root from the current tickets
     /// (the file-based worklist any AI tool can read without the API; docs/03 §3.6). The
     /// server does this automatically on change — this is the headless "regenerate now".
@@ -485,6 +488,7 @@ fn main() -> Result<()> {
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::Reindex { index } => cmd_reindex(&cli.path, index),
         Cmd::Worklist => cmd_worklist(&cli.path),
+        Cmd::Metrics => cmd_metrics(&cli.path),
         Cmd::Serve { bind, secret, stop } => cmd_serve(&cli.path, &bind, secret, stop),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
@@ -1246,6 +1250,29 @@ fn cmd_reindex(path: &Path, index: Option<PathBuf>) -> Result<()> {
     let idx = hotsheet_index::Index::open(&index_path, store.root().display().to_string())?;
     let n = idx.rebuild_from_store(&store)?;
     println!("reindexed {n} ticket(s) → {}", index_path.display());
+    Ok(())
+}
+
+/// Show the usage/cost rollup for the store (`hotsheet-cli metrics`, docs/14).
+fn cmd_metrics(path: &Path) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let r = hotsheet_ticketing::metrics::summary(&store)?;
+    println!(
+        "Usage: {} events · {} tokens in / {} out · ${:.4} total",
+        r.events, r.tokens_in, r.tokens_out, r.cost_usd
+    );
+    if !r.by_model.is_empty() {
+        println!("By model:");
+        for (m, c) in &r.by_model {
+            println!("  {m}: ${c:.4}");
+        }
+    }
+    if !r.by_day.is_empty() {
+        println!("By day:");
+        for (d, c) in &r.by_day {
+            println!("  {d}: ${c:.4}");
+        }
+    }
     Ok(())
 }
 

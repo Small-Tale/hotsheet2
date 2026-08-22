@@ -93,7 +93,7 @@ and don't imply reading order — read by group.
 |---|---|---|
 | [05-ai-tool-plugins.md](05-ai-tool-plugins.md) | Plugin interface overview (capabilities), terminals, permissions, testability | Decided |
 | [13-drive-transport-interface.md](13-drive-transport-interface.md) | Drive/transport capability (capability-based, all tools) | Design |
-| [14-metrics-interface.md](14-metrics-interface.md) | Usage/cost metrics capability + JSONL/rollup storage | Design |
+| [14-metrics-interface.md](14-metrics-interface.md) | Usage/cost metrics capability + JSONL/rollup storage | Partial (ticketing::metrics: UsageEvent + raw JSONL writer/reader + rollup/summary + `hotsheet-cli metrics` — HS2-69. Plugin mappers, rollup files, git-sharing → HS2-8BCRHS) |
 | [15-activity-narration-interface.md](15-activity-narration-interface.md) | Activity/narration capability (for the Announcer) | Design |
 
 **F · Collaboration & distribution**
