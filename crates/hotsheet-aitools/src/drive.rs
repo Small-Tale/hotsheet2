@@ -157,4 +157,26 @@ pub trait Drive {
     fn supports_interrupt(&self) -> bool {
         false
     }
+
+    /// The long-lived [`BackingService`] this drive depends on, if any. A generic caller
+    /// warms/health-checks it **without importing the tool's daemon module** (closes the
+    /// `docs/13` §13.5 leak by construction). Spawn/channel shapes own their process per
+    /// turn and return the `None` default; the app-server shape returns its daemon.
+    fn service(&self) -> Option<&dyn BackingService> {
+        None
+    }
+}
+
+/// A persistent process a drive connects to across turns (e.g. the Codex `app-server`
+/// daemon), rather than spawning per turn. Exposed through [`Drive::service`] so a
+/// tool-id-free caller can prestart/health-check it without depending on a concrete
+/// tool's daemon module (`docs/13` §13.5). Live-only: the fakes used in tests return a
+/// no-op service or `None`.
+pub trait BackingService {
+    /// Stable identity for logs/metrics (e.g. `"codex-app-server"`).
+    fn name(&self) -> &str;
+
+    /// Idempotently start the service if it is not already running, so the next
+    /// connection succeeds. Cheap to call repeatedly — HS1's `daemon start` semantics.
+    fn prestart(&self) -> std::io::Result<()>;
 }

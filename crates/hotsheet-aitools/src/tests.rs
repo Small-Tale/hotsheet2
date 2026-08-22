@@ -278,7 +278,7 @@ fn trigger_codex_uses_the_app_server_and_registers_a_connection() {
 fn app_server_drive_resumes_a_thread_and_interrupts() {
     let spawner = FakeSpawner::new(0);
     let app = FakeAppServer::default();
-    let drive = AppServerDrive;
+    let drive = AppServerDrive::new();
     assert_eq!(drive.info().transport, Transport::AppServer);
     assert!(drive.supports_interrupt());
 
@@ -304,7 +304,7 @@ fn app_server_drive_resumes_a_thread_and_interrupts() {
 fn app_server_drive_errors_without_a_connection() {
     let spawner = FakeSpawner::new(0);
     // No app_server in the ctx. (Box<dyn TurnHandle> isn't Debug, so match.)
-    match AppServerDrive.run(&Target::default(), "x", &ctx(&spawner, "/w")) {
+    match AppServerDrive::new().run(&Target::default(), "x", &ctx(&spawner, "/w")) {
         Err(DriveError::NotConnected(_)) => {}
         _ => panic!("expected NotConnected"),
     }
@@ -314,7 +314,7 @@ fn app_server_drive_errors_without_a_connection() {
         fail: true,
         ..Default::default()
     };
-    match AppServerDrive.run(&Target::default(), "x", &appctx(&spawner, &app, "/w")) {
+    match AppServerDrive::new().run(&Target::default(), "x", &appctx(&spawner, &app, "/w")) {
         Err(DriveError::AppServer(_)) => {}
         _ => panic!("expected AppServer error"),
     }
@@ -399,7 +399,7 @@ fn codex_client_drives_the_appserver_drive_end_to_end() {
         app_server: Some(&cx),
         channel: None,
     };
-    let mut turn = AppServerDrive
+    let mut turn = AppServerDrive::new()
         .run(&Target::default(), "work the top ticket", &ctx)
         .unwrap();
     assert_eq!(turn.wait(), DoneReason::Completed);
@@ -932,4 +932,73 @@ fn system_spawner_runs_a_real_process() {
     };
     assert_eq!(s.spawn(&spec("exit 0")).unwrap().wait(), 0);
     assert_eq!(s.spawn(&spec("exit 7")).unwrap().wait(), 7);
+}
+
+// ---- BackingService accessor (HS2-V5Z2EY) ----------------------------------------
+
+#[test]
+fn spawn_and_channel_drives_have_no_backing_service() {
+    // A generic caller sees `None` and warms nothing — the process is owned per turn.
+    assert!(SpawnDrive::codex().service().is_none());
+    assert!(ClaudeChannelDrive.service().is_none());
+    assert!(AppServerDrive::new().service().is_none());
+}
+
+#[test]
+fn app_server_drive_exposes_its_daemon_as_a_backing_service() {
+    // `with_daemon` surfaces the Codex daemon through the tool-id-free accessor, so a
+    // caller prestarts it without importing `codex`. `true`/`false` stand in for the
+    // real `codex` binary: they ignore the `app-server daemon start` args and exit 0/1.
+    let drive = AppServerDrive::with_daemon("true");
+    let svc = drive
+        .service()
+        .expect("app-server drive has a backing service");
+    assert_eq!(svc.name(), "codex-app-server");
+    assert!(svc.prestart().is_ok(), "`true` prestart exits 0 → Ok");
+
+    let failing = AppServerDrive::with_daemon("false");
+    assert!(
+        failing.service().unwrap().prestart().is_err(),
+        "`false` prestart exits 1 → Err"
+    );
+}
+
+#[test]
+fn drive_for_app_server_plugin_carries_the_daemon_service() {
+    // The host builds the daemon accessor from the plugin's `program` (`true` stands in
+    // for a real `codex`: it ignores the daemon-start args and exits 0).
+    let dir = std::env::temp_dir().join(format!("hs2-appsvc-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join("manifest.toml"),
+        r#"id = "appsvc"
+display_name = "App Svc"
+product_name = "App Svc"
+tier = "cli-agent"
+[detection]
+binaries = ["true"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[drive]
+transport = "app-server"
+program = "true"
+interrupt = true
+"#,
+    )
+    .unwrap();
+    std::fs::write(dir.join("instructions.md"), "## Hot Sheet\n").unwrap();
+    let plugin = hotsheet_plugins::Plugin::from_fs_dir(&dir).unwrap();
+
+    let drive = drive_for(&plugin).expect("app-server is drivable");
+    let svc = drive.service().expect("drive_for wired the daemon service");
+    assert_eq!(svc.name(), "codex-app-server");
+    assert!(svc.prestart().is_ok());
+    std::fs::remove_dir_all(&dir).ok();
 }

@@ -8,13 +8,45 @@
 //! the daemon over `codex app-server proxy` / the control socket and speaking the
 //! `thread/*` + `turn/*` JSON-RPC — is a follow-up (HS2-110).
 
+use crate::codex::CodexDaemonService;
 use crate::drive::{
-    DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle,
+    BackingService, DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport,
+    TurnHandle,
 };
 use crate::ports::{AppServerError, AppServerOutcome, AppServerTurn};
 
-/// Drives Codex via its persistent app-server daemon.
-pub struct AppServerDrive;
+/// Drives Codex via its persistent app-server daemon. Optionally carries the
+/// [`CodexDaemonService`] so a generic caller can prestart the daemon through
+/// [`Drive::service`] without importing [`crate::codex`] (`docs/13` §13.5).
+#[derive(Default)]
+pub struct AppServerDrive {
+    service: Option<CodexDaemonService>,
+}
+
+impl AppServerDrive {
+    /// A drive with no backing-service handle — [`Drive::service`] returns `None`, so the
+    /// daemon must already be warm (the historical unit-struct behavior).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A drive that exposes `program`'s app-server daemon through [`Drive::service`].
+    pub fn with_daemon(program: impl Into<String>) -> Self {
+        Self {
+            service: Some(CodexDaemonService::new(program)),
+        }
+    }
+
+    /// A drive whose backing daemon targets a specific isolated `CODEX_HOME` (HS2-B7C66H).
+    pub fn with_daemon_home(
+        program: impl Into<String>,
+        codex_home: impl Into<std::path::PathBuf>,
+    ) -> Self {
+        Self {
+            service: Some(CodexDaemonService::with_home(program, codex_home)),
+        }
+    }
+}
 
 impl Drive for AppServerDrive {
     fn info(&self) -> DriveInfo {
@@ -25,6 +57,10 @@ impl Drive for AppServerDrive {
 
     fn supports_interrupt(&self) -> bool {
         true // `turn/interrupt`
+    }
+
+    fn service(&self) -> Option<&dyn BackingService> {
+        self.service.as_ref().map(|s| s as &dyn BackingService)
     }
 
     fn run(

@@ -19,8 +19,9 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
     let spec = plugin.manifest.drive.as_ref()?;
     match spec.transport.as_str() {
         // Persistent daemon — a turn on a resumed thread (Codex). The drive uses the
-        // injected `AppServerClient`; `program`/`args` aren't its launch line.
-        "app-server" => Some(Box::new(AppServerDrive)),
+        // injected `AppServerClient`; `program`/`args` aren't its launch line, but `program`
+        // is the daemon prestart binary exposed via `Drive::service`.
+        "app-server" => Some(Box::new(AppServerDrive::with_daemon(spec.program.clone()))),
         // Persistent channel — a turn injected into a running `claude` session. Uses the
         // injected `ClaudeChannelClient`; `program`/`args` aren't its launch line.
         "claude-channel" => Some(Box::new(ClaudeChannelDrive)),

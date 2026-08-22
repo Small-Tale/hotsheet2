@@ -728,6 +728,53 @@ fn run_daemon_start(program: &str, codex_home: Option<&Path>) -> std::io::Result
     }
 }
 
+/// The Codex `app-server daemon` as a [`BackingService`] (`docs/13` §13.5): the concrete
+/// [`ensure_codex_daemon_in`] prestart behind the tool-id-free [`Drive::service`] accessor,
+/// so a generic caller warms the daemon without importing this module. Carries the `codex`
+/// program name and an optional per-project isolated `CODEX_HOME` (HS2-B7C66H).
+///
+/// [`BackingService`]: crate::drive::BackingService
+/// [`Drive::service`]: crate::drive::Drive::service
+#[derive(Debug, Clone)]
+pub struct CodexDaemonService {
+    program: String,
+    codex_home: Option<std::path::PathBuf>,
+}
+
+impl CodexDaemonService {
+    /// A service for the ambient `CODEX_HOME`.
+    pub fn new(program: impl Into<String>) -> Self {
+        Self {
+            program: program.into(),
+            codex_home: None,
+        }
+    }
+
+    /// A service targeting a specific (isolated) `CODEX_HOME`.
+    pub fn with_home(
+        program: impl Into<String>,
+        codex_home: impl Into<std::path::PathBuf>,
+    ) -> Self {
+        Self {
+            program: program.into(),
+            codex_home: Some(codex_home.into()),
+        }
+    }
+}
+
+impl crate::drive::BackingService for CodexDaemonService {
+    fn name(&self) -> &str {
+        "codex-app-server"
+    }
+
+    fn prestart(&self) -> std::io::Result<()> {
+        match &self.codex_home {
+            Some(home) => ensure_codex_daemon_in(&self.program, home),
+            None => ensure_codex_daemon(&self.program),
+        }
+    }
+}
+
 /// Stop the shared Codex daemon for a specific `CODEX_HOME` (`daemon stop` is a no-op if
 /// none is running). Used to tear down a per-run isolated-home daemon so it isn't orphaned
 /// when the home goes away (HS2-9M6T68). Best-effort: returns the child's status.
