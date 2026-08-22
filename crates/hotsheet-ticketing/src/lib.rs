@@ -15,6 +15,7 @@ pub mod metrics;
 pub mod ops;
 pub mod overlay;
 pub mod ports;
+pub mod pricing;
 pub mod registry;
 pub mod roster;
 pub mod settings;

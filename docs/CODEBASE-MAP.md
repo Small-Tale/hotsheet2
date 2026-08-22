@@ -34,7 +34,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)
       src/distclaim.rs       #   git-native distributed claim/lease: refs/hotsheet/claims/<ulid> push-CAS (first-wins), force-with-lease renew/steal, ls-remote enumerate, expiry sweep (docs/08 §8.5, HS2-84)
       src/distwork.rs        #   distributed self-claim fan-out: select_and_claim (worklist candidate + git-ref CAS → local claim; two machines never double-claim) + work_once (claim→drive→renew/release lease cycle, injected drive); docs/08 §8.5, HS2-E7RXXR/HS2-DTPX2V
-      src/metrics.rs         #   usage/cost metrics: UsageEvent → raw JSONL (metrics/raw/<day>.jsonl, gitignored) + rollup/summary aggregation (DB-free read); docs/14, HS2-69
+      src/metrics.rs         #   usage/cost metrics: UsageEvent → raw JSONL (metrics/raw/<day>.jsonl, gitignored) + rollup/summary aggregation (DB-free read) + record_priced (fills cost from the table); docs/14, HS2-69
+      src/pricing.rs         #   per-model price table (USD/Mtok): default_prices + metrics/prices.json override + cost(); so cost is always present (docs/14 §14.2, HS2-8BCRHS)
       src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/reviews-union-by-ULID/body) behind `hotsheet merge-driver` (HS2-18, HS2-20)
       src/sync.rs            #   sync_once: one fetch → rebase-through-merge-driver → push cycle (offline/conflict-tolerant) behind `hotsheet sync` (HS2-19)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)

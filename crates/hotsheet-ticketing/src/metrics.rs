@@ -125,6 +125,19 @@ pub fn rollup(events: &[UsageEvent]) -> Rollup {
     r
 }
 
+/// Record a usage event, filling `cost_usd` from the store's price table (`docs/14` §14.2)
+/// when the tool didn't report a cost and the model is priced — so cost is always present.
+pub fn record_priced(store: &FsStore, mut event: UsageEvent) -> io::Result<()> {
+    if event.cost_usd.is_none() {
+        if let Some(model) = &event.model {
+            let prices = crate::pricing::load_prices(store);
+            event.cost_usd =
+                crate::pricing::cost(&prices, model, event.tokens_in, event.tokens_out);
+        }
+    }
+    record(store, &event)
+}
+
 /// The store's usage rollup — read the raw JSONL and aggregate (the DB-free read path).
 pub fn summary(store: &FsStore) -> io::Result<Rollup> {
     Ok(rollup(&read_raw(store)?))
@@ -266,5 +279,55 @@ mod tests {
         let (_d, store) = store();
         let r = summary(&store).unwrap();
         assert_eq!(r, Rollup::default());
+    }
+}
+
+#[cfg(test)]
+mod priced_tests {
+    use super::*;
+    use crate::store::StoreMetadata;
+
+    #[test]
+    fn record_priced_fills_cost_from_the_table_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        // No cost reported, but the model is priced → cost is computed.
+        record_priced(
+            &store,
+            UsageEvent {
+                ts: "2026-08-19T10:00:00Z".into(),
+                tool: "claude".into(),
+                model: Some("claude-opus-4-8".into()),
+                tokens_in: 1_000_000,
+                tokens_out: 0,
+                cost_usd: None,
+                ticket: None,
+                session: None,
+            },
+        )
+        .unwrap();
+        // A tool-reported cost is kept as-is (not recomputed).
+        record_priced(
+            &store,
+            UsageEvent {
+                ts: "2026-08-19T11:00:00Z".into(),
+                tool: "claude".into(),
+                model: Some("claude-opus-4-8".into()),
+                tokens_in: 1_000_000,
+                tokens_out: 0,
+                cost_usd: Some(0.01),
+                ticket: None,
+                session: None,
+            },
+        )
+        .unwrap();
+
+        let r = summary(&store).unwrap();
+        // opus input is $15/Mtok → the first event computes to 15.00; the second keeps 0.01.
+        assert!(
+            (r.cost_usd - 15.01).abs() < 1e-9,
+            "computed + reported: {}",
+            r.cost_usd
+        );
     }
 }
