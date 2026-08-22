@@ -76,6 +76,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
       src/tests.rs           #   built-in + on-disk loading, first-party-wins-collision
+      tests/no_tool_id_branches.rs # HS2-9 plugin-first lint: core must not branch on a tool id (ids derived from the registry)
   plugins/                   # first-party AI-tool plugin dirs, bundled into the binary (docs/05 §5.11)
     claude/                  #   manifest.toml + instructions.md (CLAUDE.md) + SKILL.md; claude-json MCP; [drive] claude-channel (async)
     codex/                   #   AGENTS.md instructions; no skill; codex-toml MCP; [drive] app-server (persistent)
