@@ -1010,3 +1010,26 @@ fn reindex_rebuilds_the_index_from_disk() {
         .success()
         .stdout(predicate::str::contains("reindexed 2 ticket"));
 }
+
+#[test]
+fn worklist_regenerates_a_derived_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    let slug = new_ticket(p, "draft the readme");
+    hs(p).args(["edit", &slug, "--up-next"]).assert().success();
+
+    hs(p)
+        .arg("worklist")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("worklist.md"));
+
+    let body = std::fs::read_to_string(p.join("worklist.md")).unwrap();
+    assert!(body.contains("## Up Next"));
+    assert!(body.contains("draft the readme"));
+
+    // It's gitignored (derived output, not committed).
+    let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
+    assert!(gi.lines().any(|l| l.trim() == "worklist.md"));
+}

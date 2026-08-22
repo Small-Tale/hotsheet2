@@ -303,6 +303,44 @@ async fn watcher_reindexes_an_external_write() {
     panic!("watcher did not reindex the external write within 4s");
 }
 
+/// The watcher also regenerates the derived `worklist.md` on change (HS2-90) — once per
+/// debounced batch, from the store root (outside the watched tickets/ dir).
+#[tokio::test]
+async fn watcher_regenerates_the_worklist() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let state = AppState::new(store.clone(), SECRET.into()).unwrap();
+    let _watch = hotsheet_server::spawn_watcher(state).unwrap();
+
+    ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        Timestamp::new("2026-08-19T00:00:00Z"),
+        NewTicket {
+            title: "worklist me".into(),
+            category: "task".into(),
+            up_next: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    let worklist = dir.path().join("worklist.md");
+    for _ in 0..40 {
+        if let Ok(body) = std::fs::read_to_string(&worklist) {
+            if body.contains("worklist me") && body.contains("## Up Next") {
+                return;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("watcher did not regenerate worklist.md within 4s");
+}
+
 #[tokio::test]
 async fn close_duplicate_without_target_is_a_400() {
     let (_d, st) = state();

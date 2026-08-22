@@ -503,8 +503,18 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, stat
         }
         paths.sort();
         paths.dedup();
-        for path in paths {
-            handle_path_change(&state, &path);
+        if paths.is_empty() {
+            continue;
+        }
+        for path in &paths {
+            handle_path_change(&state, path);
+        }
+        // The derived worklist.md is regenerated once per debounced batch (not per file),
+        // so it stays in sync with the tickets without churning on every event (docs/03
+        // §3.6, HS2-90). worklist.md lives at the store root — outside the watched
+        // tickets/ dir — so this write never re-triggers the watcher.
+        if let Err(e) = hotsheet_ticketing::worklist::regenerate(&state.store) {
+            eprintln!("worklist regenerate failed: {e}");
         }
     }
 }
