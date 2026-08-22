@@ -834,8 +834,9 @@ mod tests {
         assert_eq!(updated["tags"], json!(["ui", "urgent"]));
         assert_eq!(updated["notes"][0]["text"], "picked this up");
 
-        // close → records the outcome, orthogonal to status (docs/02 §2.6a): the
-        // close_reason is set but status stays `started`, so it's still "open".
+        // close → records the outcome AND settles status: a close_reason may never sit on
+        // an active status, so closing the `started` ticket moves it to `completed`
+        // (HS2-3XHT9P). It drops from an open query and its completed_at is stamped.
         let closed = call(
             &backend,
             "hotsheet_close",
@@ -843,21 +844,28 @@ mod tests {
         );
         assert_eq!(closed["close_reason"], "completed");
         assert!(closed["closed_at"].is_string());
-        assert_eq!(closed["status"], "started", "close doesn't change status");
-        let still_open = call(&backend, "hotsheet_query", json!({ "open": true }));
-        assert_eq!(still_open.as_array().unwrap().len(), 1);
-
-        // a terminal *status* is what drops it from an open query — and it persisted
-        // to disk throughout (each call re-reads the store).
-        let done = call(
-            &backend,
-            "hotsheet_update",
-            json!({ "id": id, "status": "completed" }),
+        assert_eq!(
+            closed["status"], "completed",
+            "close settles active → completed"
         );
-        assert_eq!(done["status"], "completed");
-        assert!(done["completed_at"].is_string());
+        assert!(closed["completed_at"].is_string());
         let open = call(&backend, "hotsheet_query", json!({ "open": true }));
         assert!(open.as_array().unwrap().is_empty());
+
+        // Reopening (status → started) clears the close annotation — the inverse half of
+        // the invariant, so the two can never disagree.
+        let reopened = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "status": "started" }),
+        );
+        assert_eq!(reopened["status"], "started");
+        assert!(
+            reopened["close_reason"].is_null(),
+            "reopen clears close_reason"
+        );
+        let open = call(&backend, "hotsheet_query", json!({ "open": true }));
+        assert_eq!(open.as_array().unwrap().len(), 1);
     }
 
     #[test]

@@ -82,8 +82,10 @@ pub struct TicketQuery {
     /// Filter by a specific close reason (the structured, filterable close tag, HS2-61).
     pub close_reason: Option<CloseReason>,
     /// `Some(true)` = only closed tickets (a `close_reason` is set); `Some(false)` = only
-    /// tickets with no close reason. `None` doesn't constrain. Orthogonal to `open_only`
-    /// (which is status-based), since `close_reason` is orthogonal to status.
+    /// tickets with no close reason. `None` doesn't constrain. Distinct from `open_only`
+    /// (status-based): a `close_reason` now implies a terminal status (HS2-3XHT9P), but a
+    /// ticket can be `completed` *without* a close_reason (marked done, never formally
+    /// closed), so the two filters still differ.
     pub closed: Option<bool>,
     /// Only tickets this person (git email) is an assignee of (HS2-20).
     pub assignee: Option<String>,
@@ -334,7 +336,12 @@ pub fn add_note(
     Ok(t)
 }
 
-/// Record a close outcome (orthogonal to status; `docs/02` §2.6a).
+/// Record a close outcome (`docs/02` §2.6a). Closing **settles the status**: a
+/// close_reason may never coexist with an active status (not_started/started), so an
+/// active ticket is moved to `completed` (stamping `completed_at`). A ticket already
+/// in another terminal status (verified/deleted/archive/moved) keeps that status —
+/// closing a verified ticket doesn't downgrade it. The inverse (moving back to an
+/// active status clears the close annotation) lives in [`update`] (HS2-3XHT9P).
 pub fn close(
     store: &FsStore,
     id: &Ulid,
@@ -349,6 +356,15 @@ pub fn close(
     t.close_reason = Some(reason);
     t.closed_at = Some(now.clone());
     t.duplicate_of = duplicate_of;
+    // A close_reason can't sit on an active status — settle it to `completed` (a ticket
+    // already in another terminal status keeps it). This is the write-side half of the
+    // invariant `update` enforces from the other direction (HS2-3XHT9P).
+    if t.status.is_active() {
+        t.status = Status::Completed;
+        if t.completed_at.is_none() {
+            t.completed_at = Some(now.clone());
+        }
+    }
     // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
     t.up_next = false;
     t.updated_at = now;
@@ -1160,6 +1176,96 @@ mod tests {
         assert!(r.close_reason.is_none(), "close_reason cleared on reopen");
         assert!(r.closed_at.is_none(), "closed_at cleared on reopen");
         assert!(r.duplicate_of.is_none(), "duplicate_of cleared on reopen");
+    }
+
+    /// The forward half of the invariant (HS2-3XHT9P): closing an **active** ticket
+    /// settles its status to `completed`; closing an already-terminal ticket keeps the
+    /// terminal status. Walks the state matrix rather than one op from a clean start.
+    #[test]
+    fn closing_settles_status_and_never_leaves_active_plus_close_reason() {
+        let (_d, store) = store();
+        let mk = |hex: &str| {
+            let id = Ulid::from_string(hex).unwrap();
+            create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
+            id
+        };
+
+        // not_started --close--> completed (+ completed_at stamped).
+        let a = mk("01ARZ3NDEKTSV4RRFFQ69G5A00");
+        let ca = close(&store, &a, ts("t1"), CloseReason::Obsolete, None).unwrap();
+        assert_eq!(ca.status, Status::Completed);
+        assert_eq!(ca.close_reason, Some(CloseReason::Obsolete));
+        assert!(ca.completed_at.is_some(), "completed_at stamped on close");
+
+        // started --close--> completed.
+        let b = mk("01ARZ3NDEKTSV4RRFFQ69G5B00");
+        update(
+            &store,
+            &b,
+            ts("t1"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let cb = close(&store, &b, ts("t2"), CloseReason::Completed, None).unwrap();
+        assert_eq!(cb.status, Status::Completed, "started settles to completed");
+
+        // verified --close--> stays verified (an already-terminal status is NOT downgraded).
+        let c = mk("01ARZ3NDEKTSV4RRFFQ69G5C00");
+        update(
+            &store,
+            &c,
+            ts("t1"),
+            TicketPatch {
+                status: Some(Status::Verified),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let cc = close(&store, &c, ts("t2"), CloseReason::Obsolete, None).unwrap();
+        assert_eq!(cc.status, Status::Verified, "terminal status preserved");
+        assert_eq!(cc.close_reason, Some(CloseReason::Obsolete));
+
+        // Adversarial sequence: close → reopen (clears) → re-close → reopen. The active
+        // state must NEVER coexist with a close_reason at any step.
+        let d = mk("01ARZ3NDEKTSV4RRFFQ69G5D00");
+        let steps: &[(Option<Status>, Option<CloseReason>)] = &[
+            (None, Some(CloseReason::Completed)), // close
+            (Some(Status::Started), None),        // reopen
+            (None, Some(CloseReason::Obsolete)),  // re-close
+            (Some(Status::NotStarted), None),     // reopen to not_started
+        ];
+        for (clock, (set_status, do_close)) in (1..).zip(steps.iter()) {
+            let t = if let Some(s) = set_status {
+                update(
+                    &store,
+                    &d,
+                    ts(&format!("t{clock}")),
+                    TicketPatch {
+                        status: Some(*s),
+                        ..Default::default()
+                    },
+                )
+                .unwrap()
+            } else {
+                close(
+                    &store,
+                    &d,
+                    ts(&format!("t{clock}")),
+                    do_close.unwrap(),
+                    None,
+                )
+                .unwrap()
+            };
+            assert!(
+                !(t.status.is_active() && t.close_reason.is_some()),
+                "invariant violated: status={:?} + close_reason={:?}",
+                t.status,
+                t.close_reason
+            );
+        }
     }
 
     #[test]

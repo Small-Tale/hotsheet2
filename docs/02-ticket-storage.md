@@ -286,20 +286,26 @@ workflow `status`:
 - **`closed_at`** — timestamp of the close.
 
 **Relationship to `status` (and to the status decision, HS2-24).** `close_reason`
-is *orthogonal metadata on a closed ticket*, not a replacement for the status:
+is *metadata on a closed ticket* that records **why**, not a replacement for the
+status. It is a separate OPTIONAL field and we do **not** collapse the status set
+into an open/closed axis or add a `closed` status (HS1's set stays as-is:
+`not_started` / `started` / `completed` / `verified` / `backlog` / `archive` /
+`deleted`, plus our `moved` tombstone). But the two are **not free to disagree** — a
+`close_reason` may never sit on an *active* status (**HS2-3XHT9P**):
 
-- The **done path** — `completed` / `verified` — carries `close_reason: completed`
-  (implied/defaulted; `verified` adds the human-checked bit on top).
-**`close_reason` is a separate OPTIONAL field, orthogonal to `status` — the statuses
-are unchanged (maintainer, 2026-08-19, HS2-24).** We do **not** collapse the status
-set into an open/closed axis and do **not** add a `closed` status. HS1's status set
-stays as-is (`not_started` / `started` / `completed` / `verified` / `backlog` /
-`archive` / `deleted`, plus our `moved` tombstone). When a ticket is closed out
-(typically moved to `completed`), you may **optionally** set `close_reason` to record
-*why* — `completed` vs `duplicate` (+ `duplicate_of`) vs `not_planned` vs `obsolete`
-— purely for tracking and filtering. It annotates the closure; it does not change or
-replace the status. `verified` remains the human-checked flag on top of a completed
-ticket. A ticket with no `close_reason` set is simply untracked in that dimension.
+- **Setting a `close_reason` settles the status.** Closing an active ticket
+  (`not_started` / `started`) moves it to `completed` (stamping `completed_at`). A
+  ticket already in another terminal status (`verified` / `archive` / `deleted` /
+  `moved`) keeps that status — closing a `verified` ticket does not downgrade it.
+- **Reopening clears the `close_reason`.** Moving a closed ticket back to an active
+  status clears `close_reason` / `closed_at` / `duplicate_of`, so the invariant holds
+  from both directions.
+
+So the field still just *annotates why*, and a ticket with no `close_reason` is
+untracked in that dimension — but "closed" (a reason is set) always implies a terminal
+status, and `verified` remains the human-checked flag on top of a completed ticket.
+This mirrors the up-next rule (a ticket leaving the active set drops off Up Next,
+HS2-55610S).
 
 **Freeform vs. structured.** `close_reason` is the *structured* tag (filterable,
 reportable). A **note** still carries any freeform explanation ("closing — we chose
