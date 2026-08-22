@@ -15,7 +15,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -46,6 +46,8 @@ CREATE TABLE tickets (
 CREATE INDEX idx_tickets_status ON tickets(store_id, status);
 CREATE TABLE tags (store_id TEXT, ticket_id TEXT, tag TEXT);
 CREATE INDEX idx_tags ON tags(store_id, tag);
+CREATE TABLE assignees (store_id TEXT, ticket_id TEXT, assignee TEXT);
+CREATE INDEX idx_assignees ON assignees(store_id, assignee);
 CREATE VIRTUAL TABLE tickets_fts USING fts5(title, details, notes);
 CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);
 "#;
@@ -135,6 +137,7 @@ impl Index {
         if version != Some(SCHEMA_VERSION) {
             conn.execute_batch(
                 "DROP TABLE IF EXISTS tickets; DROP TABLE IF EXISTS tags; \
+                 DROP TABLE IF EXISTS assignees; \
                  DROP TABLE IF EXISTS tickets_fts; DROP TABLE IF EXISTS index_meta;",
             )?;
             conn.execute_batch(SCHEMA)?;
@@ -243,6 +246,18 @@ impl Index {
             )?;
         }
 
+        // assignees facet (HS2-89) — the assignee query filter joins on this, like tags.
+        self.conn.execute(
+            "DELETE FROM assignees WHERE store_id=?1 AND ticket_id=?2",
+            params![self.store_id, id],
+        )?;
+        for a in &t.assignees {
+            self.conn.execute(
+                "INSERT INTO assignees(store_id,ticket_id,assignee) VALUES(?1,?2,?3)",
+                params![self.store_id, id, a],
+            )?;
+        }
+
         // FTS
         let notes = t
             .notes
@@ -282,13 +297,19 @@ impl Index {
             "DELETE FROM tags WHERE store_id=?1 AND ticket_id=?2",
             params![self.store_id, id],
         )?;
+        self.conn.execute(
+            "DELETE FROM assignees WHERE store_id=?1 AND ticket_id=?2",
+            params![self.store_id, id],
+        )?;
         Ok(())
     }
 
     /// Drop all rows and rebuild from a full store walk. Always safe (disposable).
     pub fn rebuild_from_store(&self, store: &FsStore) -> Result<usize, IndexError> {
         self.conn
-            .execute_batch("DELETE FROM tickets; DELETE FROM tags; DELETE FROM tickets_fts;")?;
+            .execute_batch(
+                "DELETE FROM tickets; DELETE FROM tags; DELETE FROM assignees; DELETE FROM tickets_fts;",
+            )?;
         let mut count = 0;
         for path in ticket_files(store)? {
             let bytes = std::fs::read(&path)?;
@@ -443,6 +464,23 @@ impl Index {
                 "t.close_reason IS NOT NULL".into()
             } else {
                 "t.close_reason IS NULL".into()
+            });
+        }
+        // Assignee — via the assignees facet table (HS2-89), so the server-backed filter
+        // works index-side too (previously silently ignored, HS2-20).
+        if let Some(a) = &q.assignee {
+            wheres.push(
+                "t.id IN (SELECT ticket_id FROM assignees WHERE store_id=? AND assignee=?)".into(),
+            );
+            args.push(Box::new(self.store_id.clone()));
+            args.push(Box::new(a.clone()));
+        }
+        // Claimed / unclaimed — a lease holder is set or not (HS2-89).
+        if let Some(want) = q.claimed {
+            wheres.push(if want {
+                "t.claimed_by IS NOT NULL".into()
+            } else {
+                "t.claimed_by IS NULL".into()
             });
         }
         if !q.tags.is_empty() {

@@ -93,6 +93,7 @@ fn tools_list() -> Value {
                 "close_reason": str_prop("filter by close reason (completed|not_planned|duplicate|obsolete)"),
                 "closed": { "type": "boolean", "description": "true = only closed tickets (a close_reason is set); false = only tickets with none" },
                 "assignee": str_prop("filter to tickets assigned to this person (git email)"),
+                "claimed": { "type": "boolean", "description": "true = only claimed tickets; false = only unclaimed" },
                 "sort": str_prop("id|created|updated|priority|status|title"),
                 "limit": { "type": "integer", "description": "cap the number of rows returned (after sort)" },
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
@@ -258,6 +259,7 @@ fn query_pairs(args: &Value) -> Vec<(String, String)> {
         "close_reason",
         "closed",
         "assignee",
+        "claimed",
         "sort",
         "limit",
         "compact",
@@ -598,6 +600,7 @@ mod core_backend {
             close_reason: opt_enum_str(get("close_reason"))?,
             closed: get("closed").map(|v| v == "true"),
             assignee: get("assignee").map(str::to_string),
+            claimed: get("claimed").map(|v| v == "true"),
             sort,
             limit: match get("limit") {
                 Some(s) => Some(

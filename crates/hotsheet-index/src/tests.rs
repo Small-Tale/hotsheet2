@@ -419,3 +419,72 @@ fn dirty_tree_falls_back_to_the_full_walk() {
     );
     assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 2);
 }
+
+// ---- facet filters (HS2-89) -------------------------------------------------------
+
+#[test]
+fn assignee_facet_and_claimed_filters() {
+    let (_d, store, ix) = seeded();
+    let now = Timestamp::new("2026-08-22T00:00:00Z");
+    let fb0 = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let _fb1 = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
+
+    // Assign one ticket to Dana, claim another; reindex so the facets + columns update.
+    ops::assign(
+        &store,
+        &fb0,
+        now.clone(),
+        Some(vec!["dana@x.co".into()]),
+        vec![],
+    )
+    .unwrap();
+    ops::claim_next(
+        &store,
+        &now,
+        Timestamp::new("2026-08-22T01:00:00Z"),
+        "worker-a",
+        None,
+    )
+    .unwrap();
+    ix.reconcile(&store).unwrap();
+
+    // Assignee filter now resolves index-side (via the assignees facet), not silently ignored.
+    let dana = ix
+        .query(&TicketQuery {
+            assignee: Some("dana@x.co".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(dana.len(), 1);
+    assert_eq!(dana[0].id, fb0.to_string());
+    // A non-assignee matches nothing.
+    assert!(
+        ix.query(&TicketQuery {
+            assignee: Some("nobody@x.co".into()),
+            ..Default::default()
+        })
+        .unwrap()
+        .is_empty()
+    );
+
+    // claimed=true → exactly the claimed one; claimed=false → the rest.
+    let claimed = ix
+        .query(&TicketQuery {
+            claimed: Some(true),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(claimed.len(), 1);
+    assert_eq!(
+        claimed[0].id,
+        fb0.to_string(),
+        "claim_next took the Up Next ticket (FB0)"
+    );
+    let unclaimed = ix
+        .query(&TicketQuery {
+            claimed: Some(false),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(unclaimed.len(), 2);
+}

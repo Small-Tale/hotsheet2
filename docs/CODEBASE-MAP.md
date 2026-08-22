@@ -73,7 +73,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/busy.rs            #   BusyDetector: streaming OSC-133 busy/idle inference + contains_spinner hint (feeds HS2-107)
       src/env.rs             #   scrub_env: drop TSX_/npm_/NODE_/HOTSHEET_ markers before a child inherits
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
-      src/lib.rs             #   Index: open_reconciled/reconcile (git-diff fast path on a clean HEAD move, else full hash-walk)/rebuild/upsert/delete/query + hash_bytes
+      src/lib.rs             #   Index: open_reconciled/reconcile (git-diff fast path on a clean HEAD move, else full hash-walk)/rebuild/upsert/delete/query + hash_bytes; facets: tags + assignees tables; filters incl. assignee (facet join) + claimed (HS2-89)
     hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
       src/drive.rs           #   Drive trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue

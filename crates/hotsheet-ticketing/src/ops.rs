@@ -89,6 +89,9 @@ pub struct TicketQuery {
     pub closed: Option<bool>,
     /// Only tickets this person (git email) is an assignee of (HS2-20).
     pub assignee: Option<String>,
+    /// `Some(true)` = only claimed tickets (a `claimed_by` is set); `Some(false)` = only
+    /// unclaimed. `None` doesn't constrain (HS2-89).
+    pub claimed: Option<bool>,
     pub sort: SortKey,
     /// Cap the number of rows returned (after sort). `None` = no cap.
     pub limit: Option<usize>,
@@ -109,6 +112,7 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && q.assignee
                 .as_deref()
                 .is_none_or(|a| t.assignees.iter().any(|x| x == a))
+            && q.claimed.is_none_or(|want| t.claimed_by.is_some() == want)
             && q.tags.iter().all(|tag| t.tags.iter().any(|x| x == tag))
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });

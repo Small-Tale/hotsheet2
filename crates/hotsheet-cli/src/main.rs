@@ -400,6 +400,9 @@ struct LsFilters {
     /// Only tickets assigned to this person (git email).
     #[arg(long)]
     assignee: Option<String>,
+    /// Only tickets with a worker claim (a held lease).
+    #[arg(long)]
+    claimed: bool,
     /// Sort key: id | created | updated | priority | status | title.
     #[arg(long, default_value = "id")]
     sort: String,
@@ -943,6 +946,7 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
             .transpose()?,
         closed: f.closed.then_some(true),
         assignee: f.assignee.clone(),
+        claimed: f.claimed.then_some(true),
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
         limit: f.limit,
     };
