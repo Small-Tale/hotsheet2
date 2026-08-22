@@ -742,3 +742,55 @@ async fn store_scoped_writes_are_isolated_to_their_store() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn a_registered_store_gets_its_own_watcher() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Register an empty second store.
+    let dir2 = tempfile::tempdir().unwrap();
+    let store2 = FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    let id2 = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    // Write a ticket to the registered store's disk WITHOUT the API (a CLI/git edit).
+    ops::create(
+        &store2,
+        Ulid::new(),
+        "BB",
+        Timestamp::new("2026-08-19T00:00:00Z"),
+        NewTicket {
+            title: "external to store2".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // The per-store watcher should reindex it; poll the scoped list until it appears.
+    for _ in 0..40 {
+        let resp = app
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/stores/{id2}/tickets?text=external"),
+                None,
+            ))
+            .await
+            .unwrap();
+        if body_json(resp).await.as_array().unwrap().len() == 1 {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    panic!("the registered store's watcher did not reindex the external write within 4s");
+}

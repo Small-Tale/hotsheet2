@@ -41,6 +41,9 @@ pub struct AppState {
     /// Every store this machine server hosts (HS2-87). The primary `store` is registered
     /// here as the default entry; additional stores are added via `POST /stores`.
     host: StoreHost,
+    /// Keeps the fs-watchers of `POST /stores`-registered stores alive (the default
+    /// store's watcher is held by the server binary). Never read — just not dropped.
+    watchers: Arc<Mutex<Vec<WatchHandle>>>,
 }
 
 impl AppState {
@@ -62,6 +65,7 @@ impl AppState {
             events,
             index,
             host,
+            watchers: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -232,10 +236,29 @@ async fn add_store(
     if !already {
         let index = Index::open_in_memory(store.root().display().to_string())?;
         index.rebuild_from_store(&store)?;
-        state.host.register(StoreEntry {
-            store,
+        let entry = StoreEntry {
+            store: store.clone(),
             index: Arc::new(Mutex::new(index)),
-        });
+        };
+        state.host.register(entry.clone());
+        // Keep the newly-hosted store fresh: watch it like the default store, tagging its
+        // change events with its own id (HS2-87). The handle is retained so it keeps
+        // running for the life of the server.
+        match spawn_watcher_for(WatchTarget {
+            entry,
+            store_id: id.clone(),
+            events: state.events.clone(),
+        }) {
+            Ok(handle) => {
+                if let Ok(mut w) = state.watchers.lock() {
+                    w.push(handle);
+                }
+            }
+            Err(e) => eprintln!(
+                "watcher for {} failed to start: {e}",
+                store.root().display()
+            ),
+        }
     }
     let info = state
         .host
@@ -663,10 +686,32 @@ pub struct WatchHandle {
 /// made outside the server (CLI, `git pull`, another writer). A change whose content
 /// hash already matches the index (e.g. the server's own write) is a no-op, so
 /// server-driven writes don't double-emit (`docs/03` §3.4).
+/// What a watcher thread keeps fresh: one store's entry, its URL id (for tagging change
+/// events), and the shared broadcast bus. Store-scoped so the default store and any
+/// `POST /stores`-registered store are watched by the same code (HS2-87).
+#[derive(Clone)]
+struct WatchTarget {
+    entry: StoreEntry,
+    store_id: String,
+    events: broadcast::Sender<ChangeEvent>,
+}
+
+/// Watch the **default** store (back-compat entry point used by the server binary).
 pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
+    let target = WatchTarget {
+        entry: state.default_entry(),
+        store_id: multistore::store_url_id(&state.store),
+        events: state.events.clone(),
+    };
+    spawn_watcher_for(target)
+}
+
+/// Watch one store (any hosted store). The returned [`WatchHandle`] must be kept alive
+/// for the watcher to run.
+fn spawn_watcher_for(target: WatchTarget) -> anyhow::Result<WatchHandle> {
     use notify::{RecursiveMode, Watcher};
 
-    let tickets_dir = state.store.root().join("tickets");
+    let tickets_dir = target.entry.store.root().join("tickets");
     std::fs::create_dir_all(&tickets_dir)?;
 
     let (tx, rx) = std::sync::mpsc::channel();
@@ -675,11 +720,11 @@ pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
     })?;
     watcher.watch(&tickets_dir, RecursiveMode::Recursive)?;
 
-    std::thread::spawn(move || watch_loop(rx, state));
+    std::thread::spawn(move || watch_loop(rx, target));
     Ok(WatchHandle { _watcher: watcher })
 }
 
-fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, state: AppState) {
+fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, target: WatchTarget) {
     use std::time::Duration;
 
     while let Ok(first) = rx.recv() {
@@ -694,13 +739,13 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, stat
             continue;
         }
         for path in &paths {
-            handle_path_change(&state, path);
+            handle_path_change(&target, path);
         }
         // The derived worklist.md is regenerated once per debounced batch (not per file),
         // so it stays in sync with the tickets without churning on every event (docs/03
         // §3.6, HS2-90). worklist.md lives at the store root — outside the watched
         // tickets/ dir — so this write never re-triggers the watcher.
-        if let Err(e) = hotsheet_ticketing::worklist::regenerate(&state.store) {
+        if let Err(e) = hotsheet_ticketing::worklist::regenerate(&target.entry.store) {
             eprintln!("worklist regenerate failed: {e}");
         }
     }
@@ -734,7 +779,7 @@ fn expand_ticket_files(paths: Vec<std::path::PathBuf>) -> Vec<std::path::PathBuf
     out
 }
 
-fn handle_path_change(state: &AppState, path: &FsPath) {
+fn handle_path_change(target: &WatchTarget, path: &FsPath) {
     // The filename stem is the ticket ULID.
     let Some(id) = path
         .file_stem()
@@ -743,17 +788,21 @@ fn handle_path_change(state: &AppState, path: &FsPath) {
     else {
         return;
     };
+    let index = &target.entry.index;
+    let emit = |kind: &str, id: String, slug: String| {
+        let _ = target.events.send(ChangeEvent {
+            store: target.store_id.clone(),
+            kind: kind.to_string(),
+            id,
+            slug,
+        });
+    };
 
     if !path.exists() {
-        if let Ok(index) = state.index.lock() {
+        if let Ok(index) = index.lock() {
             let _ = index.delete(&id);
         }
-        state.emit(ChangeEvent {
-            store: multistore::store_url_id(&state.store),
-            kind: "deleted".into(),
-            id: id.to_string(),
-            slug: String::new(),
-        });
+        emit("deleted", id.to_string(), String::new());
         return;
     }
 
@@ -763,8 +812,7 @@ fn handle_path_change(state: &AppState, path: &FsPath) {
     let hash = hash_bytes(&bytes);
 
     // Unchanged since we last indexed it (incl. the server's own write) → skip.
-    let already = state
-        .index
+    let already = index
         .lock()
         .ok()
         .and_then(|index| index.content_hash(&id).ok().flatten());
@@ -775,15 +823,10 @@ fn handle_path_change(state: &AppState, path: &FsPath) {
     let Ok(ticket) = parse_file(&String::from_utf8_lossy(&bytes)) else {
         return;
     };
-    if let Ok(index) = state.index.lock() {
+    if let Ok(index) = index.lock() {
         let _ = index.upsert(&ticket, &path.display().to_string(), &hash);
     }
-    state.emit(ChangeEvent {
-        store: multistore::store_url_id(&state.store),
-        kind: "changed".into(),
-        id: ticket.id.to_string(),
-        slug: ticket.slug.clone(),
-    });
+    emit("changed", ticket.id.to_string(), ticket.slug.clone());
 }
 
 #[cfg(test)]
