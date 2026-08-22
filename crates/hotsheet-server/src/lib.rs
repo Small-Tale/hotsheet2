@@ -77,15 +77,26 @@ impl AppState {
         let _ = self.events.send(event); // Err just means no subscribers
     }
 
-    /// Reindex a ticket the server just wrote, then broadcast. The index now carries
-    /// the file's hash, so the watcher will see "no change" and not re-emit.
-    fn changed(&self, kind: &str, t: &Ticket) {
+    /// The default (primary) served store as a host entry — what the unprefixed routes
+    /// operate on.
+    fn default_entry(&self) -> StoreEntry {
+        StoreEntry {
+            store: self.store.clone(),
+            index: self.index.clone(),
+        }
+    }
+
+    /// Reindex a ticket the server just wrote into `entry`'s index, then broadcast a
+    /// change tagged with the store it happened in. The index now carries the file's
+    /// hash, so the watcher sees "no change" and won't re-emit.
+    fn changed_in(&self, entry: &StoreEntry, kind: &str, t: &Ticket) {
         let text = to_file_string(t);
-        let path = self.store.ticket_path(&t.id).display().to_string();
-        if let Ok(index) = self.index.lock() {
+        let path = entry.store.ticket_path(&t.id).display().to_string();
+        if let Ok(index) = entry.index.lock() {
             let _ = index.upsert(t, &path, &hash_bytes(text.as_bytes()));
         }
         self.emit(ChangeEvent {
+            store: multistore::store_url_id(&entry.store),
             kind: kind.to_string(),
             id: t.id.to_string(),
             slug: t.slug.clone(),
@@ -96,6 +107,8 @@ impl AppState {
 /// A live-change event pushed over `/ws/sync`.
 #[derive(Clone, Debug, Serialize)]
 pub struct ChangeEvent {
+    /// The URL id of the store the change happened in (multi-store, HS2-87).
+    pub store: String,
     pub kind: String,
     pub id: String,
     pub slug: String,
@@ -109,9 +122,21 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/close", post(close_ticket))
         .route("/setup/{tool}", post(setup_tool))
-        // Multi-store (HS2-87): list/register hosted stores + a store-scoped read path.
+        // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
+        // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
         .route("/stores", get(list_stores).post(add_store))
-        .route("/stores/{store_id}/tickets", get(list_store_tickets))
+        .route(
+            "/stores/{store_id}/tickets",
+            get(list_store_tickets).post(create_store_ticket),
+        )
+        .route(
+            "/stores/{store_id}/tickets/{id}",
+            get(get_store_ticket).patch(update_store_ticket),
+        )
+        .route(
+            "/stores/{store_id}/tickets/{id}/close",
+            post(close_store_ticket),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -252,13 +277,13 @@ async fn list_store_tickets(
     Ok(Json(rows))
 }
 
-async fn create_ticket(
-    State(state): State<AppState>,
-    Json(req): Json<CreateReq>,
-) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
-    let prefix = state.store.metadata()?.ticket_prefix;
+// The write logic is store-generic: it operates on a `StoreEntry` so the unprefixed
+// (default store) routes and the `/stores/{id}/…` scoped routes share one implementation.
+
+fn do_create(state: &AppState, entry: &StoreEntry, req: CreateReq) -> Result<ApiTicket, ApiError> {
+    let prefix = entry.store.metadata()?.ticket_prefix;
     let blocked_by =
-        ops::resolve_blockers(&state.store, None, &req.blocked_by.unwrap_or_default())?;
+        ops::resolve_blockers(&entry.store, None, &req.blocked_by.unwrap_or_default())?;
     let new = NewTicket {
         title: req.title,
         category: req.category.unwrap_or_else(|| "issue".to_string()),
@@ -268,21 +293,22 @@ async fn create_ticket(
         up_next: req.up_next.unwrap_or(false),
         blocked_by,
     };
-    let ticket = ops::create(&state.store, Ulid::new(), &prefix, now(), new)?;
-    state.changed("created", &ticket);
-    Ok((StatusCode::CREATED, Json((&ticket).into())))
+    let ticket = ops::create(&entry.store, Ulid::new(), &prefix, now(), new)?;
+    state.changed_in(entry, "created", &ticket);
+    Ok((&ticket).into())
 }
 
-async fn update_ticket(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Json(req): Json<UpdateReq>,
-) -> Result<Json<ApiTicket>, ApiError> {
-    let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+fn do_update(
+    state: &AppState,
+    entry: &StoreEntry,
+    id: &str,
+    req: UpdateReq,
+) -> Result<ApiTicket, ApiError> {
+    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
     let blocked_by = match req.blocked_by {
         Some(needles) => Some(ops::resolve_blockers(
-            &state.store,
+            &entry.store,
             Some(&ticket.id),
             &needles,
         )?),
@@ -298,11 +324,11 @@ async fn update_ticket(
         up_next: req.up_next,
         blocked_by,
     };
-    let updated = ops::update(&state.store, &ticket.id, now(), patch)?;
+    let updated = ops::update(&entry.store, &ticket.id, now(), patch)?;
     // An optional note append rides the same update call (parity with the CLI + MCP).
     let latest = match req.note.filter(|t| !t.is_empty()) {
         Some(text) => ops::add_note(
-            &state.store,
+            &entry.store,
             &ticket.id,
             Ulid::new(),
             now(),
@@ -311,8 +337,45 @@ async fn update_ticket(
         )?,
         None => updated,
     };
-    state.changed("updated", &latest);
-    Ok(Json((&latest).into()))
+    state.changed_in(entry, "updated", &latest);
+    Ok((&latest).into())
+}
+
+fn do_close(
+    state: &AppState,
+    entry: &StoreEntry,
+    id: &str,
+    req: CloseReq,
+) -> Result<ApiTicket, ApiError> {
+    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let reason: CloseReason = opt_parse(Some(req.reason.as_str()))?.expect("reason present");
+    let dup = match req.duplicate_of {
+        Some(d) => Some(
+            ops::resolve(&entry.store, &d)?
+                .ok_or_else(|| ApiError::not_found(&d))?
+                .id,
+        ),
+        None => None,
+    };
+    let closed = ops::close(&entry.store, &ticket.id, now(), reason, dup)?;
+    state.changed_in(entry, "closed", &closed);
+    Ok((&closed).into())
+}
+
+async fn create_ticket(
+    State(state): State<AppState>,
+    Json(req): Json<CreateReq>,
+) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    let ticket = do_create(&state, &state.default_entry(), req)?;
+    Ok((StatusCode::CREATED, Json(ticket)))
+}
+
+async fn update_ticket(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    Ok(Json(do_update(&state, &state.default_entry(), &id, req)?))
 }
 
 async fn close_ticket(
@@ -320,19 +383,54 @@ async fn close_ticket(
     Path(id): Path<String>,
     Json(req): Json<CloseReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
-    let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    let reason: CloseReason = opt_parse(Some(req.reason.as_str()))?.expect("reason present");
-    let dup = match req.duplicate_of {
-        Some(d) => Some(
-            ops::resolve(&state.store, &d)?
-                .ok_or_else(|| ApiError::not_found(&d))?
-                .id,
-        ),
-        None => None,
-    };
-    let closed = ops::close(&state.store, &ticket.id, now(), reason, dup)?;
-    state.changed("closed", &closed);
-    Ok(Json((&closed).into()))
+    Ok(Json(do_close(&state, &state.default_entry(), &id, req)?))
+}
+
+// ---- store-scoped write routes (multi-store, HS2-87) -----------------------------
+
+/// Look up a hosted store by URL id, 404 if not hosted.
+fn scoped_entry(state: &AppState, store_id: &str) -> Result<StoreEntry, ApiError> {
+    state
+        .host
+        .get(store_id)
+        .ok_or_else(|| ApiError::not_found(store_id))
+}
+
+async fn create_store_ticket(
+    State(state): State<AppState>,
+    Path(store_id): Path<String>,
+    Json(req): Json<CreateReq>,
+) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    let entry = scoped_entry(&state, &store_id)?;
+    let ticket = do_create(&state, &entry, req)?;
+    Ok((StatusCode::CREATED, Json(ticket)))
+}
+
+async fn update_store_ticket(
+    State(state): State<AppState>,
+    Path((store_id, id)): Path<(String, String)>,
+    Json(req): Json<UpdateReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = scoped_entry(&state, &store_id)?;
+    Ok(Json(do_update(&state, &entry, &id, req)?))
+}
+
+async fn close_store_ticket(
+    State(state): State<AppState>,
+    Path((store_id, id)): Path<(String, String)>,
+    Json(req): Json<CloseReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = scoped_entry(&state, &store_id)?;
+    Ok(Json(do_close(&state, &entry, &id, req)?))
+}
+
+async fn get_store_ticket(
+    State(state): State<AppState>,
+    Path((store_id, id)): Path<(String, String)>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = scoped_entry(&state, &store_id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    Ok(Json((&ticket).into()))
 }
 
 /// Prepare the served project for an AI tool — the same core setup the CLI runs headless
@@ -651,6 +749,7 @@ fn handle_path_change(state: &AppState, path: &FsPath) {
             let _ = index.delete(&id);
         }
         state.emit(ChangeEvent {
+            store: multistore::store_url_id(&state.store),
             kind: "deleted".into(),
             id: id.to_string(),
             slug: String::new(),
@@ -680,6 +779,7 @@ fn handle_path_change(state: &AppState, path: &FsPath) {
         let _ = index.upsert(&ticket, &path.display().to_string(), &hash);
     }
     state.emit(ChangeEvent {
+        store: multistore::store_url_id(&state.store),
         kind: "changed".into(),
         id: ticket.id.to_string(),
         slug: ticket.slug.clone(),

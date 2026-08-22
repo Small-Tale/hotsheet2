@@ -53,7 +53,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
-      src/lib.rs             #   app() router, handlers over ops, ApiTicket DTO, auth, /ws/sync, POST /setup/{tool} (core-owned setup, HS2-91), GET/POST /stores + GET /stores/{id}/tickets (multi-store, HS2-87)
+      src/lib.rs             #   app() router, handlers over ops (store-generic do_create/update/close), ApiTicket DTO, auth, /ws/sync (ChangeEvent tagged by store), POST /setup/{tool} (HS2-91), GET/POST /stores + scoped /stores/{id}/tickets[/{id}[/close]] read+write (multi-store, HS2-87)
       src/main.rs            #   bind (loopback only) + serve; instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/lifecycle.rs       #   server lifecycle: InstanceInfo registry + discovery, per-store index-writer lock, stop_instance (HS2-59)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87 increment 1)

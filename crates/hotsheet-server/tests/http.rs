@@ -640,3 +640,105 @@ async fn hosts_multiple_stores_and_serves_a_scoped_list() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn store_scoped_writes_are_isolated_to_their_store() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Register a second store, empty to start.
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    let id2 = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    // Create a ticket in the SCOPED store.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/stores/{id2}/tickets"),
+            Some(r#"{"title":"scoped work","priority":"high"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let created = body_json(resp).await;
+    let slug = created["slug"].as_str().unwrap().to_string();
+    assert!(
+        slug.starts_with("BB-"),
+        "minted with the scoped store's prefix"
+    );
+
+    // It shows in the scoped list but NOT in the default store's list (isolation).
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", &format!("/stores/{id2}/tickets"), None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await.as_array().unwrap().len(), 1);
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(resp).await.as_array().unwrap().len(),
+        0,
+        "default store untouched"
+    );
+
+    // PATCH via the scoped route.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/stores/{id2}/tickets/{slug}"),
+            Some(r#"{"status":"started"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await["status"], "started");
+
+    // Close via the scoped route.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/stores/{id2}/tickets/{slug}/close"),
+            Some(r#"{"reason":"completed"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(body_json(resp).await["close_reason"], "completed");
+
+    // GET one scoped ticket.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/stores/{id2}/tickets/{slug}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await["slug"], slug);
+
+    // Writing to an unknown store id → 404.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/stores/deadbeefdeadbeef/tickets",
+            Some(r#"{"title":"x"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
