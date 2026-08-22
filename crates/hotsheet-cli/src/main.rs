@@ -342,10 +342,10 @@ enum PeopleCmd {
 
 #[derive(Subcommand)]
 enum SettingsCmd {
-    /// Read a setting (effective = local over shared, unless --scope is given).
+    /// Read a setting (effective precedence global < shared < local, unless --scope is given).
     Get {
         key: String,
-        /// shared | local (default: the effective value).
+        /// global | shared | local (default: the effective value).
         #[arg(long)]
         scope: Option<String>,
     },
@@ -353,7 +353,7 @@ enum SettingsCmd {
     Set {
         key: String,
         value: String,
-        /// shared | local (default: shared).
+        /// global | shared | local (default: shared).
         #[arg(long)]
         scope: Option<String>,
     },
@@ -1624,9 +1624,10 @@ fn cmd_settings(store: &Path, cmd: SettingsCmd) -> Result<()> {
     let parse_scope = |s: &Option<String>| -> Result<Option<Scope>> {
         match s.as_deref() {
             None => Ok(None),
+            Some("global") => Ok(Some(Scope::Global)),
             Some("shared") => Ok(Some(Scope::Shared)),
             Some("local") => Ok(Some(Scope::Local)),
-            Some(other) => bail!("invalid scope '{other}' (shared|local)"),
+            Some(other) => bail!("invalid scope '{other}' (global|shared|local)"),
         }
     };
     let settings = Settings::new(store);
@@ -1646,10 +1647,10 @@ fn cmd_settings(store: &Path, cmd: SettingsCmd) -> Result<()> {
             // Parse as JSON (numbers/bools/arrays/objects), else store the raw string.
             let parsed = serde_json::from_str(&value).unwrap_or(serde_json::Value::String(value));
             settings.set(&key, parsed, scope)?;
-            let where_ = if scope == Scope::Shared {
-                "shared (committed)"
-            } else {
-                "local (gitignored)"
+            let where_ = match scope {
+                Scope::Global => "global (machine-wide)",
+                Scope::Shared => "shared (committed)",
+                Scope::Local => "local (gitignored)",
             };
             println!("Set {key} in {where_}");
         }

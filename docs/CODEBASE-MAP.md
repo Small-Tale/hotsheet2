@@ -37,7 +37,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
-      src/settings.rs        #   Settings: shared (committed) / local (gitignored) scopes; effective = local over shared
+      src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
@@ -129,7 +129,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 - **Store metadata:** `hotsheet-store.json` (camelCase: `schemaVersion`,
   `ticketPrefix`, `idStrategy`, `shard`). See `store.rs::StoreMetadata`.
 - **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`
-  (local, gitignored) — flat key→JSON maps. See `settings.rs::Settings`.
+  (local, gitignored), plus **global** `${HOTSHEET_HOME}/settings.json` (machine-wide) —
+  flat key→JSON maps, effective precedence global<shared<local. See `settings.rs::Settings`.
 - **People roster:** `people.json` (shared, committed) — `{people:[{email,name?,github?}]}`
   mapping git identity → display name for assignment. See `roster.rs::Roster` (HS2-20).
 - **Export interchange:** `hotsheet-export.json` (`exportVersion`, `project`,

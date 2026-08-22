@@ -1033,3 +1033,63 @@ fn worklist_regenerates_a_derived_file() {
     let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
     assert!(gi.lines().any(|l| l.trim() == "worklist.md"));
 }
+
+#[test]
+fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let home = tempfile::tempdir().unwrap();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+
+    // A global default, then a project (shared) override of the same key.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "settings",
+            "set",
+            "default_tool",
+            "claude",
+            "--scope",
+            "global",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("global (machine-wide)"));
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "settings",
+            "set",
+            "default_tool",
+            "codex",
+            "--scope",
+            "shared",
+        ])
+        .assert()
+        .success();
+
+    // Global lives under HOTSHEET_HOME, not the store.
+    assert!(home.path().join("settings.json").is_file());
+    assert!(!p.join("settings.json").exists());
+
+    // Effective: shared beats global for the shared key.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "get", "default_tool"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("codex"));
+
+    // A global-only key surfaces through the effective value.
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "set", "editor", "vim", "--scope", "global"])
+        .assert()
+        .success();
+    hs(p)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["settings", "get", "editor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("vim"));
+}

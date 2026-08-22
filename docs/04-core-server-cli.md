@@ -291,11 +291,13 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 
 ## 4.7 Project settings (shared / local / client) — core-owned
 
-> **Built (HS2-94):** `hotsheet_ticketing::settings::Settings` — a flat `key -> JSON`
-> map per scope beside the store: **shared** `hotsheet-settings.json` (committed) and
-> **local** `hotsheet-settings.local.json` (auto-added to `.gitignore`). The effective
-> value is local-over-shared. Driven headless by `hotsheet-cli settings get|set|list
-> [--scope shared|local]`. Client/device-only settings still never enter core.
+> **Built (HS2-94, HS2-34):** `hotsheet_ticketing::settings::Settings` — a flat
+> `key -> JSON` map per scope: **global** `${HOTSHEET_HOME}/settings.json`
+> (machine-wide, store-independent), **shared** `hotsheet-settings.json` (committed
+> beside the store) and **local** `hotsheet-settings.local.json` (auto-added to
+> `.gitignore`). The effective value resolves in precedence **global < shared < local**
+> (most specific wins). Driven headless by `hotsheet-cli settings get|set|list
+> [--scope global|shared|local]`. Client/device-only settings still never enter core.
 >
 > **Decided (maintainer, 2026-08-20):** project settings are **core-owned and
 > CLI-manageable**, not app-only. The client owns *only* device-specific settings.
@@ -307,6 +309,7 @@ shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ti
 
 | Scope | Examples | On disk | Managed by |
 |---|---|---|---|
+| **Global** | cross-project personal defaults (default AI tool, editor) set once per machine | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store) | core → **CLI + server** |
 | **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, enabled-plugin set for the *project* | **committed** in the store repo (travels with the project) | core → **CLI + server + client** |
 | **Local** | which tools are enabled *on this machine*, index location, machine paths | **gitignored** overlay beside the store (machine-local, not device-app-local) | core → **CLI + server**; client via API |
 | **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7) | the client's own app storage | **client only — never enters core** |

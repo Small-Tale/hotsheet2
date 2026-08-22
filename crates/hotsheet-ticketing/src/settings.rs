@@ -1,5 +1,8 @@
-//! Project settings — **core-owned**, split into two on-disk scopes (`docs/04` §4.7):
+//! Project settings — **core-owned**, split into three on-disk scopes (`docs/04` §4.7,
+//! HS2-34):
 //!
+//! - **Global** (`${HOTSHEET_HOME}/settings.json`): machine-wide, **not** tied to a
+//!   store — a person's cross-project defaults (default AI tool, editor…) they set once.
 //! - **Shared** (`hotsheet-settings.json`): committed in the store repo, travels with
 //!   the project (categories, auto-context guidance, custom views, enabled plugins…).
 //! - **Local** (`hotsheet-settings.local.json`): machine-local, **gitignored** (tools
@@ -7,8 +10,9 @@
 //!   to the store's `.gitignore` so it never gets committed.
 //!
 //! Each scope is a flat `key -> JSON value` map. The **effective** value of a key is
-//! the local one if present, else the shared one. Device/app-only settings (window
-//! geometry, theme) are the client's concern and never live here.
+//! resolved in precedence order **Global < Shared < Local** — the most specific wins.
+//! Device/app-only settings (window geometry, theme) are the client's concern and never
+//! live here.
 
 use std::path::PathBuf;
 
@@ -29,6 +33,8 @@ pub enum SettingsError {
 /// Which settings file a read/write targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
+    /// Machine-wide, store-independent (`${HOTSHEET_HOME}/settings.json`).
+    Global,
     /// Committed, travels with the project.
     Shared,
     /// Machine-local, gitignored.
@@ -36,13 +42,28 @@ pub enum Scope {
 }
 
 impl Scope {
-    /// The file name for this scope, relative to the store root.
+    /// The file name for this scope. For `Global` this is just the basename; its file
+    /// lives under `${HOTSHEET_HOME}`, not the store root (see [`Settings::path`]).
     pub fn file_name(self) -> &'static str {
         match self {
+            Scope::Global => "settings.json",
             Scope::Shared => "hotsheet-settings.json",
             Scope::Local => "hotsheet-settings.local.json",
         }
     }
+}
+
+/// The machine-wide Hot Sheet 2 home (`${HOTSHEET_HOME}`, else `~/.hotsheet2`). Kept in
+/// sync with `hotsheet_plugins::hotsheet_home` but resolved here so `ticketing` stays free
+/// of a dependency on the plugin crate (`docs/12` §12.2.1). NOT `~/.hotsheet` (HS1's).
+fn hotsheet_home() -> PathBuf {
+    if let Some(h) = std::env::var_os("HOTSHEET_HOME") {
+        return PathBuf::from(h);
+    }
+    std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join(".hotsheet2")
 }
 
 /// Read/write the project settings beside a store root.
@@ -57,7 +78,11 @@ impl Settings {
     }
 
     fn path(&self, scope: Scope) -> PathBuf {
-        self.root.join(scope.file_name())
+        match scope {
+            // Global lives under the machine home, independent of any store.
+            Scope::Global => hotsheet_home().join(Scope::Global.file_name()),
+            _ => self.root.join(scope.file_name()),
+        }
     }
 
     /// The raw map for one scope (empty if the file doesn't exist yet).
@@ -77,9 +102,14 @@ impl Settings {
         }
     }
 
-    /// The effective map: shared overlaid by local.
+    /// The effective map, in precedence order **Global < Shared < Local** (most specific
+    /// wins): machine-wide defaults, overlaid by the project's committed settings, overlaid
+    /// by this machine's local overrides.
     pub fn effective(&self) -> Result<Map<String, Value>, SettingsError> {
-        let mut merged = self.map(Scope::Shared)?;
+        let mut merged = self.map(Scope::Global)?;
+        for (k, v) in self.map(Scope::Shared)? {
+            merged.insert(k, v);
+        }
         for (k, v) in self.map(Scope::Local)? {
             merged.insert(k, v);
         }
@@ -91,7 +121,7 @@ impl Settings {
         Ok(self.map(scope)?.get(key).cloned())
     }
 
-    /// One key's effective value (local wins over shared).
+    /// One key's effective value (precedence Global < Shared < Local).
     pub fn get_effective(&self, key: &str) -> Result<Option<Value>, SettingsError> {
         Ok(self.effective()?.get(key).cloned())
     }
@@ -117,7 +147,14 @@ impl Settings {
     fn write(&self, scope: Scope, map: &Map<String, Value>) -> Result<(), SettingsError> {
         let text = serde_json::to_string_pretty(&Value::Object(map.clone()))
             .unwrap_or_else(|_| "{}".to_string());
-        std::fs::write(self.path(scope), text + "\n")?;
+        let path = self.path(scope);
+        // Global lives under ${HOTSHEET_HOME}, which may not exist yet.
+        if scope == Scope::Global {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+        std::fs::write(&path, text + "\n")?;
         if scope == Scope::Local {
             self.ensure_gitignored(Scope::Local.file_name())?;
         }
@@ -241,5 +278,50 @@ mod tests {
         assert!(s.map(Scope::Shared).unwrap().is_empty());
         assert!(s.effective().unwrap().is_empty());
         assert_eq!(s.get_effective("x").unwrap(), None);
+    }
+
+    #[test]
+    fn global_layer_is_machine_wide_and_lowest_precedence() {
+        // nextest runs each test in its own process, so pointing HOTSHEET_HOME at a temp
+        // dir here is isolated. SAFETY: single-threaded test process.
+        let home = root();
+        unsafe {
+            std::env::set_var("HOTSHEET_HOME", home.path());
+        }
+
+        let d = root();
+        let s = Settings::new(d.path());
+
+        // A global default + a project override of the same key.
+        s.set("default_tool", json!("claude"), Scope::Global)
+            .unwrap();
+        s.set("editor", json!("vim"), Scope::Global).unwrap();
+        s.set("default_tool", json!("codex"), Scope::Shared)
+            .unwrap();
+
+        // Global lives under ${HOTSHEET_HOME}, NOT the store — the store dir has no
+        // settings.json.
+        assert!(home.path().join("settings.json").is_file());
+        assert!(!d.path().join("settings.json").exists());
+
+        // Precedence Global < Shared < Local: shared wins the shared key, global fills
+        // the one only it sets.
+        assert_eq!(
+            s.get_effective("default_tool").unwrap(),
+            Some(json!("codex"))
+        );
+        assert_eq!(s.get_effective("editor").unwrap(), Some(json!("vim")));
+
+        // Local still beats both.
+        s.set("default_tool", json!("gemini"), Scope::Local)
+            .unwrap();
+        assert_eq!(
+            s.get_effective("default_tool").unwrap(),
+            Some(json!("gemini"))
+        );
+
+        unsafe {
+            std::env::remove_var("HOTSHEET_HOME");
+        }
     }
 }
