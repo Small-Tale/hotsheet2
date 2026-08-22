@@ -905,3 +905,45 @@ async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
         std::env::remove_var("HOTSHEET_HOME");
     }
 }
+
+#[tokio::test]
+async fn startup_discovery_hosts_stores_from_stores_json() {
+    let home = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_HOME", home.path());
+    }
+
+    // Two stores on disk; one listed in stores.json, one bogus path (must be skipped).
+    let good = tempfile::tempdir().unwrap();
+    FsStore::init(good.path(), &StoreMetadata::new("BB")).unwrap();
+    let stores_json = serde_json::json!({
+        "stores": [good.path().to_string_lossy(), "/nonexistent/nope"]
+    });
+    std::fs::write(home.path().join("stores.json"), stores_json.to_string()).unwrap();
+
+    // Primary store + discovery.
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let st = AppState::new(store, SECRET.into()).unwrap();
+    let hosted = st.host_configured_stores();
+    assert_eq!(hosted, 1, "one good store hosted, the bogus path skipped");
+
+    // /stores now lists the primary + the discovered one.
+    let app = app(st);
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/stores", None))
+        .await
+        .unwrap();
+    let stores = body_json(resp).await;
+    let arr = stores.as_array().unwrap();
+    assert_eq!(arr.len(), 2);
+    assert!(
+        arr.iter().any(|s| s["prefix"] == "BB"),
+        "the discovered store is served"
+    );
+
+    unsafe {
+        std::env::remove_var("HOTSHEET_HOME");
+    }
+}

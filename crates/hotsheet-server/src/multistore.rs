@@ -33,6 +33,28 @@ pub fn store_url_id(store: &FsStore) -> String {
     hash_bytes(root.to_string_lossy().as_bytes())[..16].to_string()
 }
 
+/// The store paths a machine server should auto-host at startup, read from
+/// `${HOTSHEET_HOME}/stores.json` — `{ "stores": ["/path/a", "/path/b"] }` (HS2-87). A
+/// missing or malformed file yields an empty list (nothing extra hosted; the primary
+/// store is always served regardless).
+pub fn configured_store_paths() -> Vec<std::path::PathBuf> {
+    #[derive(serde::Deserialize, Default)]
+    struct Config {
+        #[serde(default)]
+        stores: Vec<String>,
+    }
+    let path = hotsheet_plugins::hotsheet_home().join("stores.json");
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    serde_json::from_str::<Config>(&text)
+        .unwrap_or_default()
+        .stores
+        .into_iter()
+        .map(std::path::PathBuf::from)
+        .collect()
+}
+
 /// The file-backed index path for a hosted store — `${HOTSHEET_HOME}/index/<id>.sqlite`,
 /// the same convention the server binary uses for the primary store, so a store's index
 /// file is shared whether it's served as the primary or a registered store.

@@ -83,6 +83,64 @@ impl AppState {
         self
     }
 
+    /// Host a store: build its index (file-backed when persisting, else in-memory),
+    /// register it, and spawn its fs-watcher. Idempotent by store id — returns whether it
+    /// was newly added. Shared by `POST /stores` and startup discovery.
+    fn host_store(&self, store: FsStore) -> Result<bool, ApiError> {
+        let id = multistore::store_url_id(&store);
+        if self.host.contains(&id) {
+            return Ok(false);
+        }
+        let index = if self.persist_indexes {
+            let path = multistore::index_path_for(&store)
+                .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            Index::open_reconciled(&path, &store)?
+        } else {
+            let ix = Index::open_in_memory(store.root().display().to_string())?;
+            ix.rebuild_from_store(&store)?;
+            ix
+        };
+        let entry = StoreEntry {
+            store: store.clone(),
+            index: Arc::new(Mutex::new(index)),
+        };
+        self.host.register(entry.clone());
+        match spawn_watcher_for(WatchTarget {
+            entry,
+            store_id: id,
+            events: self.events.clone(),
+        }) {
+            Ok(handle) => {
+                if let Ok(mut w) = self.watchers.lock() {
+                    w.push(handle);
+                }
+            }
+            Err(e) => eprintln!(
+                "watcher for {} failed to start: {e}",
+                store.root().display()
+            ),
+        }
+        Ok(true)
+    }
+
+    /// Auto-host the stores listed in `${HOTSHEET_HOME}/stores.json` (HS2-87 startup
+    /// discovery). A path that isn't a store is logged and skipped — one bad entry never
+    /// stops the server. Returns how many were newly hosted.
+    pub fn host_configured_stores(&self) -> usize {
+        let mut hosted = 0;
+        for path in multistore::configured_store_paths() {
+            match FsStore::open(&path) {
+                Ok(store) => match self.host_store(store) {
+                    Ok(true) => hosted += 1,
+                    Ok(false) => {}
+                    Err(e) => eprintln!("could not host {}: {}", path.display(), e.message),
+                },
+                Err(e) => eprintln!("configured store {} skipped: {e}", path.display()),
+            }
+        }
+        hosted
+    }
+
     /// State over a store with a fresh **in-memory** index rebuilt from it (tests, or
     /// a run that doesn't want to persist the cache).
     pub fn new(store: FsStore, secret: String) -> anyhow::Result<Self> {
@@ -249,52 +307,17 @@ async fn add_store(
     let store = FsStore::open(&body.path)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     let id = multistore::store_url_id(&store);
-    let already = state.host.contains(&id);
-    if !already {
-        // File-backed (persists + restores) in a real run; in-memory in tests.
-        let index = if state.persist_indexes {
-            let path = multistore::index_path_for(&store)
-                .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-            Index::open_reconciled(&path, &store)?
-        } else {
-            let ix = Index::open_in_memory(store.root().display().to_string())?;
-            ix.rebuild_from_store(&store)?;
-            ix
-        };
-        let entry = StoreEntry {
-            store: store.clone(),
-            index: Arc::new(Mutex::new(index)),
-        };
-        state.host.register(entry.clone());
-        // Keep the newly-hosted store fresh: watch it like the default store, tagging its
-        // change events with its own id (HS2-87). The handle is retained so it keeps
-        // running for the life of the server.
-        match spawn_watcher_for(WatchTarget {
-            entry,
-            store_id: id.clone(),
-            events: state.events.clone(),
-        }) {
-            Ok(handle) => {
-                if let Ok(mut w) = state.watchers.lock() {
-                    w.push(handle);
-                }
-            }
-            Err(e) => eprintln!(
-                "watcher for {} failed to start: {e}",
-                store.root().display()
-            ),
-        }
-    }
+    let newly = state.host_store(store)?;
     let info = state
         .host
         .list()
         .into_iter()
         .find(|s| s.id == id)
         .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "store vanished"))?;
-    let code = if already {
-        StatusCode::OK
-    } else {
+    let code = if newly {
         StatusCode::CREATED
+    } else {
+        StatusCode::OK
     };
     Ok((code, Json(info)))
 }

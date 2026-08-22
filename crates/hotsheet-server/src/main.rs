@@ -93,6 +93,12 @@ async fn main() -> Result<()> {
     let state =
         AppState::with_index(store, secret.clone(), index).with_persistent_registered_indexes();
 
+    // Auto-host any stores configured in ${HOTSHEET_HOME}/stores.json (HS2-87 discovery).
+    let extra = state.host_configured_stores();
+    if extra > 0 {
+        println!("hosting {extra} configured store(s) from stores.json");
+    }
+
     // Keep the index fresh + broadcast external edits. Held for the run.
     let _watch = hotsheet_server::spawn_watcher(state.clone())?;
 

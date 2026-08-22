@@ -56,7 +56,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   app() router, handlers over ops (store-generic do_create/update/close), ApiTicket DTO, auth, /ws/sync (ChangeEvent tagged by store), POST /setup/{tool} (HS2-91), GET/POST /stores + scoped /stores/{id}/tickets[/{id}[/close]] read+write + GET /resolve/{ulid} cross-store (multi-store, HS2-87)
       src/main.rs            #   bind (loopback only) + serve; instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/lifecycle.rs       #   server lifecycle: InstanceInfo registry + discovery, per-store index-writer lock, stop_instance (HS2-59)
-      src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). Per-store fs-watcher via WatchTarget; registered stores watched like the default
+      src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend:
@@ -134,6 +134,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   flat key→JSON maps, effective precedence global<shared<local. See `settings.rs::Settings`.
 - **People roster:** `people.json` (shared, committed) — `{people:[{email,name?,github?}]}`
   mapping git identity → display name for assignment. See `roster.rs::Roster` (HS2-20).
+- **Multi-store discovery:** `${HOTSHEET_HOME}/stores.json` — `{"stores":["/path/a",…]}`,
+  the extra local projects a machine server auto-hosts at startup. See
+  `server::multistore::configured_store_paths` (HS2-87).
 - **Export interchange:** `hotsheet-export.json` (`exportVersion`, `project`,
   `tickets[]`) — [07](07-migration.md) §7.2.1; produced by the migrator, consumed by
   `hotsheet-cli import` (`import.rs::ExportFile`).
