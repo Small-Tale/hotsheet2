@@ -983,3 +983,30 @@ fn assign_and_people_roster() {
         .success()
         .stdout(predicate::str::contains("(no tickets)"));
 }
+
+#[test]
+fn reindex_rebuilds_the_index_from_disk() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    new_ticket(p, "first");
+    new_ticket(p, "second");
+
+    // Explicit --index into the tempdir so the test never touches the shared HOTSHEET_HOME.
+    let index = p.join("idx.sqlite");
+    hs(p)
+        .args(["reindex", "--index"])
+        .arg(&index)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("reindexed 2 ticket"));
+    assert!(index.exists(), "the index file was written");
+
+    // Idempotent: a second reindex still reports both tickets (full rebuild).
+    hs(p)
+        .args(["reindex", "--index"])
+        .arg(&index)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("reindexed 2 ticket"));
+}

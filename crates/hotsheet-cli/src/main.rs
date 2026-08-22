@@ -185,6 +185,27 @@ enum Cmd {
     Sync,
     /// Check store health (metadata, parse errors, duplicate slugs, orphans).
     Doctor,
+    /// Rebuild the on-disk index (SQLite/FTS) from a full store walk. The index is a
+    /// disposable cache, so this is always safe — use it after an external edit or if the
+    /// index looks stale. Writes to the same path the server reads (docs/03 §3.4).
+    Reindex {
+        /// Index database file (default: ${HOTSHEET_HOME}/index/<project-id>.sqlite).
+        #[arg(long)]
+        index: Option<PathBuf>,
+    },
+    /// Run the Hot Sheet server for this store in the foreground (execs the sibling
+    /// `hotsheet-server` binary). Detached/supervised start is client-owned (HS2-4072GM).
+    Serve {
+        /// Address to bind (loopback only until mTLS lands). Port 0 = ephemeral.
+        #[arg(long, default_value = "127.0.0.1:8787")]
+        bind: String,
+        /// Shared secret for `X-Hotsheet-Secret` (generated + printed by the server if omitted).
+        #[arg(long)]
+        secret: Option<String>,
+        /// Stop the running server for this store, then exit.
+        #[arg(long)]
+        stop: bool,
+    },
     /// Git-invoked semantic 3-way merge for ticket files (not run by hand — it's the
     /// `merge=hotsheet-ticket` driver `hotsheet init` registers). Args are git's
     /// %O (base) %A (ours/output) %B (theirs). Exit 0 = clean, 1 = body conflict.
@@ -458,6 +479,8 @@ fn main() -> Result<()> {
         Cmd::Read { id } => cmd_read(&cli.path, &id),
         Cmd::Sync => cmd_sync(&cli.path),
         Cmd::Doctor => cmd_doctor(&cli.path),
+        Cmd::Reindex { index } => cmd_reindex(&cli.path, index),
+        Cmd::Serve { bind, secret, stop } => cmd_serve(&cli.path, &bind, secret, stop),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
             worker,
@@ -1191,6 +1214,64 @@ fn cmd_doctor(path: &PathBuf) -> Result<()> {
     } else {
         bail!("{issues} issue(s) found")
     }
+}
+
+/// Default index DB path for a store — mirrors the server's `default_index_path` so the
+/// CLI and server share one index file (`${HOTSHEET_HOME}/index/<project-id>.sqlite`).
+fn default_index_path(store: &FsStore) -> Result<PathBuf> {
+    let root = store
+        .root()
+        .canonicalize()
+        .unwrap_or_else(|_| store.root().to_path_buf());
+    let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
+    let dir = hotsheet_plugins::hotsheet_home().join("index");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(format!("{id}.sqlite")))
+}
+
+/// Rebuild the disposable index from a full store walk (`hotsheet-cli reindex`).
+fn cmd_reindex(path: &Path, index: Option<PathBuf>) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let index_path = match index {
+        Some(p) => p,
+        None => default_index_path(&store)?,
+    };
+    // Same store_id derivation the server uses (the store root), so the rebuilt file is
+    // the one the server reconciles against.
+    let idx = hotsheet_index::Index::open(&index_path, store.root().display().to_string())?;
+    let n = idx.rebuild_from_store(&store)?;
+    println!("reindexed {n} ticket(s) → {}", index_path.display());
+    Ok(())
+}
+
+/// Run the server for this store in the foreground by exec'ing the sibling
+/// `hotsheet-server` binary (the CLI stays free of a server dependency). Detached +
+/// supervised start is client-owned (HS2-59 / HS2-4072GM).
+fn cmd_serve(path: &Path, bind: &str, secret: Option<String>, stop: bool) -> Result<()> {
+    let exe = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("hotsheet-server")))
+        .filter(|p| p.exists())
+        .unwrap_or_else(|| PathBuf::from("hotsheet-server"));
+
+    let mut cmd = std::process::Command::new(&exe);
+    cmd.arg("-C").arg(path).arg("--bind").arg(bind);
+    if let Some(s) = secret {
+        cmd.arg("--secret").arg(s);
+    }
+    if stop {
+        cmd.arg("--stop");
+    }
+    let status = cmd.status().map_err(|e| {
+        anyhow::anyhow!(
+            "could not launch `{}`: {e} — is hotsheet-server installed alongside hotsheet-cli?",
+            exe.display()
+        )
+    })?;
+    if !status.success() {
+        bail!("hotsheet-server exited with {status}");
+    }
+    Ok(())
 }
 
 /// The `merge=hotsheet-ticket` git driver: read git's base/ours/theirs, merge semantically,

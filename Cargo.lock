@@ -608,6 +608,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "hotsheet-aitools",
+ "hotsheet-index",
  "hotsheet-model",
  "hotsheet-plugins",
  "hotsheet-ticketing",
