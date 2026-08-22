@@ -48,6 +48,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
+      tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
       src/lib.rs             #   app() router, handlers over ops, ApiTicket DTO, auth, /ws/sync
       src/main.rs            #   bind (loopback only) + serve; instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret

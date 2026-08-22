@@ -234,6 +234,19 @@ MCP config. **A new tool inherits the entire suite by existing**, and can't merg
 until it passes conformance *and* the fake-agent E2E. This is the forcing function
 that makes adding a tool boring instead of painful.
 
+> **Built (HS2-64):** `crates/hotsheet-cli/tests/plugin_conformance.rs` — parameterized
+> over `builtin_plugins()` **and** a fresh on-disk plugin (so a third-party tool is
+> validated the same way): identity/detection, instructions (managed block present +
+> safe target), **skills absence-as-feature** (accessor ⇔ manifest agree), **MCP config
+> written + re-parses** in its declared format with the shim server present, **drive
+> declaration resolves to a real host `Drive`** of the matching transport, no write
+> target escapes the project, and a **full headless `setup` E2E** (idempotent). Runs
+> under `cargo nextest run`, so it's already the hard CI gate. Testability rule (part 1)
+> is enforced by `hotsheet-aitools`' injected adapters; the busy-state transition matrix
+> (part 3) is covered by `ConnectionRegistry` tests (HS2-107). The `hs-fake-agent`
+> PTY/permission emulator + terminal E2E (parts 2/3) need terminals (HS2-10) + the
+> permission bridge (HS2-113) → **HS2-1GJY50**.
+
 **5 — The drift layer (thin + explicit), for real-tool protocol changes:**
 - **Recorded contracts** — capture each real tool's actual protocol messages once as
   fixtures (cassette-style) and replay them in fast CI; if a tool's real format

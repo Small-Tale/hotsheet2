@@ -170,7 +170,8 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | **Headless AI-tool loop** (setup → skills/CLI/MCP, with/without server) | 04 §4.4, 05 §5.1a/§5.8/§5.11 | Partial (`setup claude` + serverless/server MCP built; E2E harness `test-projects/e2e-headless-claude.sh` passes both modes; live-Claude tier opt-in — HS2-95) |
 | Plugin-only AI-tool integration | 05 | Confirmed (design) |
 | **Core-owned AI-tool setup/instructions/skills/MCP (headless; CLI + server, not app)** | 05 §5.1a, 04 §4.1 | Confirmed (design); build HS2-91 |
-| **External loadable plugins (manifest-only → subprocess/WASM; trust gate + verify)** | 05 §5.11 | Partial (HS2-92 loader + `setup <third-party>`; HS2-93 trust gate: `plugin verify`/`info`/`install` disclosure + path-safety; subprocess/WASM sandbox + fake-agent conformance still to come) |
+| **External loadable plugins (manifest-only → subprocess/WASM; trust gate + verify)** | 05 §5.11 | Partial (HS2-92 loader + `setup <third-party>`; HS2-93 trust gate: `plugin verify`/`info`/`install` disclosure + path-safety; subprocess/WASM sandbox still to come) |
+| **AI-tool testing harness: conformance gate + hs-fake-agent** | 12 §12.7.7 | Partial (HS2-64: registry-parameterized **conformance suite** — identity/detection/instructions/skills/MCP-config-validity/drive-resolution/target-safety + headless-setup E2E, inherited by any new plugin incl. on-disk, a hard `nextest` CI gate. hs-fake-agent PTY/permission emulator + terminal E2E blocked on HS2-10/HS2-113 → HS2-1GJY50) |
 | **Project settings, core-owned (shared/local scopes, CLI-manageable; client owns device-only)** | 04 §4.7 | Built (HS2-94): `Settings` shared/local + `hotsheet-cli settings get/set/list`; local auto-gitignored |
 | Terminal/PTY hosting for AI tools | 05 §5.4 | Design |
 | Multi-viewer PTY sizing (server-arbitrated, focus-follows, leased; remote-safe) | 06 §6.7 | Design |
