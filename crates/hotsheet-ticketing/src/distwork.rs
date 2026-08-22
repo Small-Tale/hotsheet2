@@ -12,7 +12,7 @@
 
 use hotsheet_model::{Timestamp, Ulid};
 
-use crate::distclaim::{self, ClaimResult, DistError};
+use crate::distclaim::{self, ClaimMarker, ClaimResult, DistError};
 use crate::ops::{self, priority_rank};
 use crate::store::{FsStore, StoreError};
 
@@ -20,29 +20,75 @@ fn store_err(e: StoreError) -> DistError {
     DistError::Store(e.to_string())
 }
 
+/// What driving a claimed ticket produced — decides whether to keep the lease or drop it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkOutcome {
+    /// The ticket's work is finished — release the claim marker.
+    Completed,
+    /// More turns to go — renew the lease and keep it.
+    Continued,
+    /// The turn failed — release so another worker can retry (poison-count guards spins).
+    Failed,
+}
+
 /// Self-claim the next available ticket for `worker` over the shared remote (a lease of
 /// `lease_minutes`). Scans candidates in worklist order and attempts the distributed CAS on
-/// each; the first **won** claim is recorded locally (claim frontmatter) and returned.
-/// `Ok(None)` when nothing is claimable (queue drained, or every candidate lost the race).
+/// each; the first **won** claim is recorded locally (claim frontmatter) and its marker
+/// returned. `Ok(None)` when nothing is claimable (queue drained, or every candidate lost
+/// the race).
 pub fn select_and_claim(
     store: &FsStore,
     worker: &str,
     lease_minutes: i64,
     now: &Timestamp,
-) -> Result<Option<Ulid>, DistError> {
+) -> Result<Option<ClaimMarker>, DistError> {
     let expires = now.plus_minutes(lease_minutes);
     for id in candidates(store, now)? {
         match distclaim::claim(store.root(), &id, worker, expires.clone(), now)? {
-            ClaimResult::Won(_) => {
+            ClaimResult::Won(marker) => {
                 // The distributed CAS is ours — reflect the claim in the ticket file too, so
                 // the local view (and the index) shows the holder + lease.
                 record_local_claim(store, &id, worker, &expires, now)?;
-                return Ok(Some(id));
+                return Ok(Some(marker));
             }
             ClaimResult::Lost => continue, // another worker holds it — try the next
         }
     }
     Ok(None)
+}
+
+/// One distributed work cycle: self-claim the next ticket, drive it (the injected `drive`
+/// does the actual AI turn — `live::run_trigger` in production, a fake in tests), then keep
+/// or drop the lease per the outcome. `Ok(None)` when the queue is drained. Renewing on
+/// `Continued` uses the marker we just took (force-with-lease), so a lease we already lost
+/// isn't clobbered.
+pub fn work_once<F>(
+    store: &FsStore,
+    worker: &str,
+    lease_minutes: i64,
+    now: &Timestamp,
+    drive: F,
+) -> Result<Option<(Ulid, WorkOutcome)>, DistError>
+where
+    F: FnOnce(&Ulid) -> WorkOutcome,
+{
+    let Some(marker) = select_and_claim(store, worker, lease_minutes, now)? else {
+        return Ok(None);
+    };
+    let id = marker.id.expect("a won marker carries its id");
+    let outcome = drive(&id);
+    match outcome {
+        WorkOutcome::Continued => {
+            let expires = now.plus_minutes(lease_minutes);
+            let _ = distclaim::renew(store.root(), &id, worker, &marker.oid, expires, now)?;
+        }
+        WorkOutcome::Completed | WorkOutcome::Failed => {
+            distclaim::release(store.root(), &id)?;
+            // Drop the local claim too when we're done with it (Failed leaves it claimable).
+            let _ = crate::ops::release(store, &id, now.clone(), worker, true);
+        }
+    }
+    Ok(Some((id, outcome)))
 }
 
 /// The candidate ticket ids, in the same order [`ops::claim_next`] prefers: open + unblocked
@@ -168,10 +214,18 @@ mod tests {
         let now = ts("10");
 
         // Worker A claims the first candidate.
-        let a_got = select_and_claim(&a, "worker-a", 30, &now).unwrap().unwrap();
+        let a_got = select_and_claim(&a, "worker-a", 30, &now)
+            .unwrap()
+            .unwrap()
+            .id
+            .unwrap();
         // Worker B, scanning the SAME local queue, tries A's ticket first, loses the CAS,
         // and falls through to the other one.
-        let b_got = select_and_claim(&b, "worker-b", 30, &now).unwrap().unwrap();
+        let b_got = select_and_claim(&b, "worker-b", 30, &now)
+            .unwrap()
+            .unwrap()
+            .id
+            .unwrap();
 
         assert_ne!(a_got, b_got, "the remote CAS prevents a double-claim");
         assert!([x, y].contains(&a_got) && [x, y].contains(&b_got));
@@ -187,6 +241,58 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn work_once_completed_releases_the_marker_continued_keeps_it() {
+        let (_d, a, _b, _x, _y) = two_workers_sharing_a_queue();
+        let now = ts("10");
+
+        // A Continued turn keeps the claim (marker still on the remote).
+        let (id1, out1) = work_once(&a, "w", 30, &now, |_id| WorkOutcome::Continued)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out1, WorkOutcome::Continued);
+        let claims = distclaim::list_claims(a.root()).unwrap();
+        assert!(
+            claims.iter().any(|c| c.id == Some(id1)),
+            "Continued keeps the marker"
+        );
+
+        // A Completed turn on the next ticket releases its marker. A real drive marks the
+        // ticket done; the fake does the same so it leaves the queue.
+        let drive_complete = |id: &Ulid| {
+            crate::ops::update(
+                &a,
+                id,
+                ts("11"),
+                crate::ops::TicketPatch {
+                    status: Some(hotsheet_model::Status::Completed),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            WorkOutcome::Completed
+        };
+        let (id2, out2) = work_once(&a, "w", 30, &now, drive_complete)
+            .unwrap()
+            .unwrap();
+        assert_eq!(out2, WorkOutcome::Completed);
+        assert_ne!(id1, id2);
+        let claims = distclaim::list_claims(a.root()).unwrap();
+        assert!(
+            !claims.iter().any(|c| c.id == Some(id2)),
+            "Completed released the marker"
+        );
+
+        // The drive callback is skipped when nothing is claimable.
+        let mut driven = false;
+        let none = work_once(&a, "w", 30, &now, |_id| {
+            driven = true;
+            WorkOutcome::Completed
+        })
+        .unwrap();
+        assert!(none.is_none() && !driven, "no claim → no drive");
     }
 
     #[test]
