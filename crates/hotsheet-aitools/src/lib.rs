@@ -25,8 +25,8 @@ pub mod system;
 pub use appserver::AppServerDrive;
 pub use claude::{ClaudeChannel, ClaudeChannelDrive, ClaudeStreamTransport};
 pub use codex::{
-    CodexAppServer, ProxyTransport, StdioTransport, UdsWsTransport, codex_control_socket_path,
-    ensure_codex_daemon, ensure_codex_daemon_in, stop_codex_daemon_in,
+    CodexAppServer, PermissionPolicy, ProxyTransport, StdioTransport, UdsWsTransport,
+    codex_control_socket_path, ensure_codex_daemon, ensure_codex_daemon_in, stop_codex_daemon_in,
 };
 pub use drive::{
     ClaudeChannelClient, DoneReason, Drive, DriveCtx, DriveError, DriveInfo, PermReq, Target,

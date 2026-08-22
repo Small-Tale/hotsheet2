@@ -24,11 +24,21 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use crate::permission::{Decision, Outcome, PermissionBridge, Scope};
 use crate::ports::{
     AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, RpcReader, RpcTransport,
     RpcWriter,
 };
 use crate::procio::StreamChild;
+
+/// How a Codex approval ServerRequest is decided (`docs/05` §5.7, HS2-113): the shared
+/// [`PermissionBridge`] answers from its allow-rules; anything it can't auto-resolve falls
+/// back to `default` (the headless policy — a real human round-trip over the bridge's
+/// WebSocket transport is the remaining piece, HS2-0QGW07 follow-on).
+pub struct PermissionPolicy {
+    pub bridge: Arc<Mutex<PermissionBridge>>,
+    pub default: Decision,
+}
 
 /// How long to wait for a single request's response before giving up.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -48,6 +58,9 @@ struct Inner {
     notes: Mutex<Vec<Value>>,
     cvar: Condvar,
     closed: AtomicBool,
+    /// How approval ServerRequests are decided; `None` = permissively auto-approve (the
+    /// back-compat default, and what the isolated headless launch expects).
+    permission: Mutex<Option<PermissionPolicy>>,
 }
 
 impl Inner {
@@ -131,14 +144,9 @@ impl Inner {
     fn auto_answer_server_request(&self, v: &Value) {
         let Some(id) = v.get("id") else { return };
         let method = v.get("method").and_then(Value::as_str).unwrap_or("");
-        // Map each known approval to its permissive decision; unknown → empty result.
-        let result = match method {
-            "execCommandApproval" | "applyPatchApproval" => json!({ "decision": "approved" }),
-            "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
-                json!({ "decision": "accept" })
-            }
-            _ => json!({}),
-        };
+        let params = v.get("params").cloned().unwrap_or(Value::Null);
+        let policy = self.permission.lock().unwrap();
+        let result = decide_approval(policy.as_ref(), method, &params);
         let reply = json!({ "jsonrpc": "2.0", "id": id, "result": result });
         let _ = self.send_raw(&reply.to_string());
     }
@@ -149,6 +157,66 @@ impl Inner {
         let _guard = self.notes.lock().unwrap();
         self.cvar.notify_all();
     }
+}
+
+/// Decide a Codex approval ServerRequest (`docs/05` §5.7). Without a policy, auto-approve
+/// (back-compat — what the isolated headless launch expects). With one, the
+/// [`PermissionBridge`] answers from its allow-rules and anything it can't auto-resolve
+/// falls back to the policy `default`. An unknown request method → empty result (no-op).
+fn decide_approval(policy: Option<&PermissionPolicy>, method: &str, params: &Value) -> Value {
+    let Some((yes, no)) = approval_tokens(method) else {
+        return json!({}); // not an approval we recognize → empty result
+    };
+    let decision = match policy {
+        None => Decision::Allow,
+        Some(p) => resolve_decision(p, method, params),
+    };
+    let tok = if decision == Decision::Allow { yes } else { no };
+    json!({ "decision": tok })
+}
+
+/// The (approve, deny) reply tokens for each known approval method.
+fn approval_tokens(method: &str) -> Option<(&'static str, &'static str)> {
+    match method {
+        "execCommandApproval" | "applyPatchApproval" => Some(("approved", "denied")),
+        "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
+            Some(("accept", "reject"))
+        }
+        _ => None,
+    }
+}
+
+/// Consult the bridge: an allow-rule auto-resolves; a pending request (no live human
+/// transport yet) falls back to the policy default and is resolved so the queue can't leak.
+fn resolve_decision(p: &PermissionPolicy, method: &str, params: &Value) -> Decision {
+    let action = approval_action(params);
+    let Ok(mut bridge) = p.bridge.lock() else {
+        return p.default;
+    };
+    match bridge.request("codex", method, action) {
+        Outcome::Auto(d) => d,
+        Outcome::Pending(reqid) => {
+            let _ = bridge.resolve(reqid, p.default, Scope::Once);
+            p.default
+        }
+    }
+}
+
+/// A coarse action string for rule-matching: the command (joined), else a call id / path.
+fn approval_action(params: &Value) -> String {
+    if let Some(cmd) = params.get("command").and_then(Value::as_array) {
+        return cmd
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join(" ");
+    }
+    for k in ["call_id", "path", "reason"] {
+        if let Some(s) = params.get(k).and_then(Value::as_str) {
+            return s.to_string();
+        }
+    }
+    String::new()
 }
 
 /// Starts the reader thread over a split transport and returns the shared [`Inner`].
@@ -164,6 +232,7 @@ impl CodexRpc {
             notes: Mutex::new(Vec::new()),
             cvar: Condvar::new(),
             closed: AtomicBool::new(false),
+            permission: Mutex::new(None),
         });
         let ri = inner.clone();
         std::thread::spawn(move || {
@@ -206,6 +275,15 @@ impl CodexAppServer {
         )?;
         inner.notify("initialized", json!(null))?;
         Ok(Self { inner })
+    }
+
+    /// Route Codex approval ServerRequests through a permission policy instead of
+    /// auto-approving (HS2-0QGW07 / §5.7). Set it before running a turn; without one,
+    /// approvals are auto-approved (the isolated headless default).
+    pub fn set_permission_policy(&self, policy: PermissionPolicy) {
+        if let Ok(mut p) = self.inner.permission.lock() {
+            *p = Some(policy);
+        }
     }
 }
 
@@ -800,5 +878,79 @@ pub(crate) mod scripted {
             // Block until the writer queues a reply, or all writers drop (connection end).
             Ok(self.inbox.recv().ok())
         }
+    }
+}
+
+#[cfg(test)]
+mod approval_tests {
+    use super::*;
+    use crate::permission::{Decision, PermissionBridge, Rule};
+
+    fn policy(rules: Vec<Rule>, default: Decision) -> PermissionPolicy {
+        PermissionPolicy {
+            bridge: Arc::new(Mutex::new(PermissionBridge::with_rules(rules))),
+            default,
+        }
+    }
+
+    #[test]
+    fn no_policy_auto_approves_and_maps_reply_tokens() {
+        // Back-compat: without a policy, approvals are granted with the method's token.
+        let exec = decide_approval(None, "execCommandApproval", &json!({"command": ["ls"]}));
+        assert_eq!(exec["decision"], "approved");
+        let item = decide_approval(None, "item/fileChange/requestApproval", &json!({}));
+        assert_eq!(item["decision"], "accept");
+        // An unrecognized request → empty result.
+        assert_eq!(
+            decide_approval(None, "somethingElse", &json!({})),
+            json!({})
+        );
+    }
+
+    #[test]
+    fn an_allow_rule_approves_and_a_deny_rule_denies() {
+        let p = policy(
+            vec![
+                Rule {
+                    tool: "execCommandApproval".into(),
+                    action: "git status".into(),
+                    decision: Decision::Allow,
+                    persist: true,
+                },
+                Rule {
+                    tool: "execCommandApproval".into(),
+                    action: "rm -rf /".into(),
+                    decision: Decision::Deny,
+                    persist: true,
+                },
+            ],
+            Decision::Deny,
+        );
+        // A matching allow-rule → approved.
+        let ok = decide_approval(
+            Some(&p),
+            "execCommandApproval",
+            &json!({"command": ["git", "status"]}),
+        );
+        assert_eq!(ok["decision"], "approved");
+        // A matching deny-rule → denied (mapped token).
+        let no = decide_approval(
+            Some(&p),
+            "execCommandApproval",
+            &json!({"command": ["rm", "-rf", "/"]}),
+        );
+        assert_eq!(no["decision"], "denied");
+        // Unmatched → the policy default (Deny here), and the pending request is cleared.
+        let def = decide_approval(
+            Some(&p),
+            "execCommandApproval",
+            &json!({"command": ["curl", "x"]}),
+        );
+        assert_eq!(def["decision"], "denied");
+        assert_eq!(
+            p.bridge.lock().unwrap().pending_count(),
+            0,
+            "no leaked pending requests"
+        );
     }
 }
