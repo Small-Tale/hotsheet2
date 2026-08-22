@@ -180,9 +180,16 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   + seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
   port), and an in-memory adapter set for pure unit tests.
-- **CI (GitHub Actions):** `fmt --check`, `clippy -D warnings`, `nextest`, the
-  conformance test, web E2E, coverage — split into a **fast tier** and a **full/live
-  tier** (GitHub-remote + creds-gated), mirroring HS1's split.
+- **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`,
+  `clippy -D warnings`, `nextest`, the plugin **conformance test** (HS2-64), the CLI
+  build, and the **migrator vitest + cross-language conformance**. A separate
+  report-only **`coverage` job** runs `cargo llvm-cov nextest --summary-only` and
+  uploads an lcov artifact (a *separate* per-language summary, not one merged lcov).
+  **Pending (HS2-8WR8XF):** coverage **threshold gates** (report-only today),
+  migrator/web coverage, the **web E2E (Playwright)** — blocked on the Kerf client
+  existing — and a scheduled **full/live tier** (GitHub-remote + creds-gated
+  `HOTSHEET_CODEX_LIVE` smoke) split out from the default fast tier, plus a macOS
+  matrix leg for the terminal/SwiftUI surfaces.
 - **Manual test plan** (`docs/manual-test-plan.md`, created with the first code):
   real multi-device terminal-sizing focus handoff (iOS↔macOS), mTLS enrollment / QR
   pairing across devices, native-client UX, long-term GitHub custom-ref behavior —
