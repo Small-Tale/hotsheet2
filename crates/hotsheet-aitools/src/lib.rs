@@ -37,7 +37,7 @@ pub use live::{LiveError, LiveTrigger, run_trigger};
 pub use permission::{
     Decision as PermissionDecision, Outcome as PermissionOutcome, PermissionBridge,
     Request as PermissionRequest, Resolved as PermissionResolved, Rule as PermissionRule,
-    Scope as PermissionScope,
+    Scope as PermissionScope, SharedPermissionBridge,
 };
 pub use ports::{
     AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner, RpcReader,

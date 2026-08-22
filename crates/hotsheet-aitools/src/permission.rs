@@ -17,7 +17,8 @@
 //! on top (HS2-113 / HS2-0QGW07). Kept pure so it gets transition-matrix + adversarial
 //! sequence tests directly.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Condvar, Mutex};
 
 /// An allow/deny decision on a permission request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,9 +182,107 @@ impl PermissionBridge {
     }
 }
 
+/// A thread-safe [`PermissionBridge`] that supports the **live human round-trip**
+/// (`docs/05` §5.7, HS2-9R9YZW): a tool thread calls [`request_blocking`] and **blocks**
+/// until a person answers over a separate path (an HTTP route-back on the server that calls
+/// [`resolve`]). An allow-rule still auto-resolves without blocking. Deadlock-free — the
+/// inner lock is never held while waiting.
+///
+/// [`request_blocking`]: SharedPermissionBridge::request_blocking
+/// [`resolve`]: SharedPermissionBridge::resolve
+#[derive(Default)]
+pub struct SharedPermissionBridge {
+    inner: Mutex<PermissionBridge>,
+    /// Decisions delivered by `resolve`, keyed by request id, awaiting their waiter.
+    results: Mutex<HashMap<u64, Decision>>,
+    cvar: Condvar,
+}
+
+impl SharedPermissionBridge {
+    pub fn new(bridge: PermissionBridge) -> Self {
+        Self {
+            inner: Mutex::new(bridge),
+            results: Mutex::new(HashMap::new()),
+            cvar: Condvar::new(),
+        }
+    }
+
+    /// Raise a request and **block** until it's decided: an allow-rule answers immediately;
+    /// otherwise it's enqueued and this waits until a [`resolve`](Self::resolve) with its id
+    /// arrives (a human answering over the route-back).
+    pub fn request_blocking(
+        &self,
+        connection: impl Into<String>,
+        tool: impl Into<String>,
+        action: impl Into<String>,
+    ) -> Decision {
+        let id = match self.inner.lock().unwrap().request(connection, tool, action) {
+            Outcome::Auto(d) => return d, // a rule answered — no human needed
+            Outcome::Pending(id) => id,
+        };
+        // Wait for the answer. If `resolve` already ran (before we started waiting), the
+        // result is already present, so there's no lost wakeup.
+        let mut results = self.results.lock().unwrap();
+        loop {
+            if let Some(d) = results.remove(&id) {
+                return d;
+            }
+            results = self.cvar.wait(results).unwrap();
+        }
+    }
+
+    /// The pending requests (for the server to push over the WS to clients).
+    pub fn pending(&self) -> Vec<Request> {
+        self.inner.lock().unwrap().pending().cloned().collect()
+    }
+
+    /// Answer a pending request (the route-back a client POSTs). Wakes the blocked waiter and
+    /// returns who raised it + any rule to persist. `None` if the id isn't pending.
+    pub fn resolve(&self, id: u64, decision: Decision, scope: Scope) -> Option<Resolved> {
+        let resolved = self.inner.lock().unwrap().resolve(id, decision, scope)?;
+        self.results.lock().unwrap().insert(id, decision);
+        self.cvar.notify_all();
+        Some(resolved)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_bridge_blocks_until_a_human_resolves() {
+        use std::sync::Arc;
+        // A seeded rule auto-resolves with no blocking.
+        let b = Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
+            vec![Rule {
+                tool: "Bash".into(),
+                action: "ls".into(),
+                decision: Decision::Allow,
+                persist: true,
+            }],
+        )));
+        assert_eq!(b.request_blocking("c", "Bash", "ls"), Decision::Allow);
+
+        // An unruled request blocks a tool thread until the "human" answers.
+        let bt = b.clone();
+        let handle = std::thread::spawn(move || bt.request_blocking("c", "Bash", "rm x"));
+
+        // Wait for the request to show up as pending, then answer it.
+        let id = loop {
+            if let Some(r) = b.pending().into_iter().next() {
+                break r.id;
+            }
+            std::thread::yield_now();
+        };
+        let resolved = b.resolve(id, Decision::Deny, Scope::Once).unwrap();
+        assert_eq!(resolved.connection, "c");
+        assert_eq!(
+            handle.join().unwrap(),
+            Decision::Deny,
+            "the waiter got the human's answer"
+        );
+    }
 
     #[test]
     fn concurrent_requests_are_preserved_and_answered_out_of_order() {

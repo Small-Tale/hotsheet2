@@ -82,7 +82,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/system.rs          #   SystemSpawner (real std::process adapter)
       src/registry.rs        #   ConnectionRegistry: live connections + sliding-window busy tracking
       src/permission.rs      #   PermissionBridge: FIFO request queue (concurrent-preserving, fixes HS1 overwrite) + allow-rules (once/session/always) + route-back (docs/05 §5.7, HS2-11)
-      src/codex.rs (perm)    #   Codex approval ServerRequests route through a PermissionPolicy (bridge allow-rules + default) via decide_approval, not blind-approve (HS2-0QGW07); live human WS round-trip pending (HS2-113)
+      src/codex.rs (perm)    #   Codex approval ServerRequests route through a PermissionPolicy (bridge allow-rules + default) via decide_approval, not blind-approve (HS2-0QGW07); live human WS round-trip pending (HS2-9R9YZW)
+      src/permission.rs (2)  #   SharedPermissionBridge: thread-safe request_blocking (blocks a tool until a human resolve() over the route-back) + pending() + resolve() — the human-round-trip primitive (docs/05 §5.7, HS2-9R9YZW); server WS + POST /permissions + codex wiring pending
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)
       src/setup.rs           #   run_setup: core-owned one-shot setup writers (instructions/skill/MCP-config) + mcp_command — shared by CLI + server (HS2-91)
       src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
