@@ -30,6 +30,7 @@ use hotsheet_ticketing::{
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 use time::OffsetDateTime;
 use tokio::sync::broadcast;
 
@@ -40,6 +41,11 @@ pub struct AppState {
     secret: String,
     events: broadcast::Sender<ChangeEvent>,
     index: Arc<Mutex<Index>>,
+    /// A bounded, sequenced log of recent [`ChangeEvent`]s backing the **long-poll**
+    /// fallback (`GET /ws/poll`) for clients that can't hold a WebSocket (HS2-P3P3CC). The
+    /// live push over `/ws/sync` is the primary transport; this replays "everything since
+    /// cursor N" over plain HTTP.
+    event_log: Arc<Mutex<EventLog>>,
     /// Every store this machine server hosts (HS2-87). The primary `store` is registered
     /// here as the default entry; additional stores are added via `POST /stores`.
     host: StoreHost,
@@ -90,6 +96,7 @@ impl AppState {
             secret,
             events,
             index,
+            event_log: Arc::new(Mutex::new(EventLog::default())),
             host,
             watchers: Arc::new(Mutex::new(Vec::new())),
             persist_indexes: false,
@@ -254,7 +261,17 @@ impl AppState {
     }
 
     fn emit(&self, event: ChangeEvent) {
+        // Record in the long-poll ring first (so a poller that races the broadcast still
+        // sees it by cursor), then push live to WebSocket subscribers.
+        if let Ok(mut log) = self.event_log.lock() {
+            log.push(event.clone());
+        }
         let _ = self.events.send(event); // Err just means no subscribers
+    }
+
+    /// The current long-poll cursor (the last emitted event's seq; 0 if none).
+    fn event_cursor(&self) -> u64 {
+        self.event_log.lock().map(|l| l.seq).unwrap_or(0)
     }
 
     /// The default (primary) served store as a host entry — what the unprefixed routes
@@ -294,6 +311,100 @@ pub struct ChangeEvent {
     pub kind: String,
     pub id: String,
     pub slug: String,
+}
+
+/// How many recent events the long-poll ring retains. A poller whose cursor falls behind
+/// this many events gets an `overflow` signal and should re-sync via a full list.
+const EVENT_LOG_CAP: usize = 512;
+
+/// A bounded, monotonically-sequenced ring of recent [`ChangeEvent`]s, so a long-poll
+/// client can ask "everything since cursor N" without holding a socket (HS2-P3P3CC). Each
+/// event gets a `seq`; the ring keeps the newest [`EVENT_LOG_CAP`].
+#[derive(Default)]
+struct EventLog {
+    /// The last sequence number assigned (0 = nothing emitted yet).
+    seq: u64,
+    /// `(seq, event)`, oldest first, capped at [`EVENT_LOG_CAP`].
+    ring: std::collections::VecDeque<(u64, ChangeEvent)>,
+}
+
+impl EventLog {
+    /// Record an event, assigning it the next seq.
+    fn push(&mut self, event: ChangeEvent) {
+        self.seq += 1;
+        self.ring.push_back((self.seq, event));
+        while self.ring.len() > EVENT_LOG_CAP {
+            self.ring.pop_front();
+        }
+    }
+
+    /// Events with `seq > since`, plus whether `since` fell off the back of the ring
+    /// (the caller lost events and should re-sync). `since >= seq` (caught up / future) is
+    /// not an overflow — it just yields no events.
+    fn since(&self, since: u64) -> (Vec<ChangeEvent>, bool) {
+        let oldest = self.ring.front().map(|(s, _)| *s);
+        // Overflow only when we've dropped events the caller hadn't seen: they ask for
+        // `since` strictly before our oldest retained event, and we have emitted past it.
+        let overflow = matches!(oldest, Some(o) if since + 1 < o);
+        let events = self
+            .ring
+            .iter()
+            .filter(|(s, _)| *s > since)
+            .map(|(_, e)| e.clone())
+            .collect();
+        (events, overflow)
+    }
+}
+
+#[cfg(test)]
+mod event_log_tests {
+    use super::{ChangeEvent, EVENT_LOG_CAP, EventLog};
+
+    fn ev(n: usize) -> ChangeEvent {
+        ChangeEvent {
+            store: "s".into(),
+            kind: "created".into(),
+            id: format!("id-{n}"),
+            slug: format!("HS-{n}"),
+        }
+    }
+
+    #[test]
+    fn since_returns_the_tail_and_advances_the_cursor() {
+        let mut log = EventLog::default();
+        for i in 0..3 {
+            log.push(ev(i));
+        }
+        assert_eq!(log.seq, 3);
+        // Everything since 0 = all three; since 2 = just the last; caught up = none.
+        let (all, of) = log.since(0);
+        assert_eq!(all.len(), 3);
+        assert!(!of);
+        assert_eq!(log.since(2).0.len(), 1);
+        assert!(log.since(3).0.is_empty(), "caught up → none");
+        // A future/equal cursor is not an overflow.
+        assert!(!log.since(3).1);
+        assert!(!log.since(99).1);
+    }
+
+    #[test]
+    fn falling_behind_the_ring_signals_overflow() {
+        let mut log = EventLog::default();
+        // Emit more than the ring holds, so the oldest retained seq > 1.
+        for i in 0..(EVENT_LOG_CAP + 10) {
+            log.push(ev(i));
+        }
+        // A poller stuck at cursor 1 lost events that aged out → overflow.
+        let (_, overflow) = log.since(1);
+        assert!(
+            overflow,
+            "cursor before the oldest retained event overflows"
+        );
+        // A poller within the retained window does not overflow.
+        let recent = log.seq - 5;
+        assert!(!log.since(recent).1);
+        assert_eq!(log.since(recent).0.len(), 5);
+    }
 }
 
 /// Build the router. Ticket routes require the secret; `/health` and `/ws/sync` don't
@@ -339,6 +450,10 @@ pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health))
         .route("/ws/sync", get(ws_sync))
+        // Long-poll fallback for clients that can't hold a WebSocket (HS2-P3P3CC). Like
+        // `/ws/sync`, it authenticates via a `secret` query param (not a header) so the
+        // same constrained clients can use it.
+        .route("/ws/poll", get(poll_events))
         .merge(protected)
         .with_state(state)
 }
@@ -853,6 +968,91 @@ async fn ws_loop(mut socket: WebSocket, mut rx: broadcast::Receiver<ChangeEvent>
             break;
         }
     }
+}
+
+/// The default and max time a long-poll request will wait for a new event.
+const POLL_DEFAULT_MS: u64 = 25_000;
+const POLL_MAX_MS: u64 = 55_000;
+
+#[derive(Debug, Deserialize)]
+struct PollParams {
+    secret: Option<String>,
+    /// Return events with `seq > since`. Omit to just fetch the current cursor (no backlog),
+    /// the way a fresh WebSocket only sees future events.
+    since: Option<u64>,
+    /// How long to block for the next event when none are newer than `since` (ms, capped).
+    timeout_ms: Option<u64>,
+}
+
+/// One long-poll response: the new cursor, any events since the requested one, and whether
+/// the caller fell so far behind the ring that events were lost (→ re-sync via a full list).
+#[derive(Debug, Serialize)]
+struct PollResponse {
+    cursor: u64,
+    events: Vec<ChangeEvent>,
+    overflow: bool,
+}
+
+/// `GET /ws/poll?secret=…&since=<seq>&timeout_ms=<n>` — the long-poll fallback to `/ws/sync`
+/// (HS2-P3P3CC). Returns immediately with any events after `since`; otherwise subscribes and
+/// waits up to `timeout_ms` for the next one, returning an empty list (with the current
+/// cursor) on timeout. The client re-polls with the returned `cursor`.
+async fn poll_events(State(state): State<AppState>, Query(params): Query<PollParams>) -> Response {
+    if params.secret.as_deref() != Some(state.secret.as_str()) {
+        return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
+    }
+    // No `since` → hand back the current cursor with no backlog (initial handshake).
+    let Some(since) = params.since else {
+        return Json(PollResponse {
+            cursor: state.event_cursor(),
+            events: Vec::new(),
+            overflow: false,
+        })
+        .into_response();
+    };
+
+    // Subscribe BEFORE reading the log, so an event emitted in the gap isn't missed: it
+    // either lands in the log we read, or wakes the receiver below.
+    let mut rx = state.events.subscribe();
+    let (backlog, overflow) = match state.event_log.lock() {
+        Ok(log) => log.since(since),
+        Err(_) => (Vec::new(), false),
+    };
+    if overflow || !backlog.is_empty() {
+        return Json(PollResponse {
+            cursor: state.event_cursor(),
+            events: backlog,
+            overflow,
+        })
+        .into_response();
+    }
+
+    // Caught up — wait for the next event (or time out with an empty list).
+    let wait = Duration::from_millis(
+        params
+            .timeout_ms
+            .unwrap_or(POLL_DEFAULT_MS)
+            .min(POLL_MAX_MS),
+    );
+    let events = match tokio::time::timeout(wait, rx.recv()).await {
+        Ok(Ok(ev)) => vec![ev],
+        // Lagged (fell behind the broadcast buffer) → signal overflow so the client re-syncs.
+        Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
+            return Json(PollResponse {
+                cursor: state.event_cursor(),
+                events: Vec::new(),
+                overflow: true,
+            })
+            .into_response();
+        }
+        Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => Vec::new(),
+    };
+    Json(PollResponse {
+        cursor: state.event_cursor(),
+        events,
+        overflow: false,
+    })
+    .into_response()
 }
 
 // ---- request / response DTOs -----------------------------------------------------

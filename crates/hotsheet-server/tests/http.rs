@@ -868,6 +868,102 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 }
 
 #[tokio::test]
+async fn long_poll_hands_back_a_cursor_then_replays_events_since_it() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Handshake: no `since` → the current cursor (0) + no backlog.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/ws/poll?secret=test-secret", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let hs = body_json(resp).await;
+    assert_eq!(hs["cursor"], 0);
+    assert_eq!(hs["events"].as_array().unwrap().len(), 0);
+    assert_eq!(hs["overflow"], false);
+
+    // Two writes emit two change events.
+    for t in [r#"{"title":"one"}"#, r#"{"title":"two"}"#] {
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(t)))
+            .await
+            .unwrap();
+    }
+
+    // Poll since the handshake cursor → both events, cursor advanced to 2.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/ws/poll?secret=test-secret&since=0", None))
+        .await
+        .unwrap();
+    let got = body_json(resp).await;
+    assert_eq!(got["cursor"], 2);
+    let evs = got["events"].as_array().unwrap();
+    assert_eq!(evs.len(), 2);
+    assert_eq!(evs[0]["kind"], "created");
+    assert!(evs[0]["slug"].as_str().unwrap().starts_with("HS-"));
+
+    // Caught up: a poll at the current cursor with a tiny timeout returns empty, same cursor.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/ws/poll?secret=test-secret&since=2&timeout_ms=1",
+            None,
+        ))
+        .await
+        .unwrap();
+    let caught_up = body_json(resp).await;
+    assert_eq!(caught_up["cursor"], 2);
+    assert_eq!(caught_up["events"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn long_poll_requires_the_secret() {
+    let (_d, st) = state();
+    let resp = app(st)
+        .oneshot(authed("GET", "/ws/poll?secret=wrong&since=0", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn long_poll_blocks_then_wakes_on_the_next_event() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Start a poll that's caught up (since=0, cursor=0) with a generous timeout — it blocks.
+    let poll_app = app.clone();
+    let poll = tokio::spawn(async move {
+        poll_app
+            .oneshot(authed(
+                "GET",
+                "/ws/poll?secret=test-secret&since=0&timeout_ms=5000",
+                None,
+            ))
+            .await
+            .unwrap()
+    });
+
+    // Give the poll a moment to subscribe, then write — which should wake it.
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    app.clone()
+        .oneshot(authed("POST", "/tickets", Some(r#"{"title":"live"}"#)))
+        .await
+        .unwrap();
+
+    let resp = poll.await.unwrap();
+    let got = body_json(resp).await;
+    assert_eq!(got["cursor"], 1, "the write advanced the cursor");
+    let evs = got["events"].as_array().unwrap();
+    assert_eq!(evs.len(), 1, "the blocked poll woke on the new event");
+    assert_eq!(evs[0]["kind"], "created");
+}
+
+#[tokio::test]
 async fn cross_store_copy_and_move_between_hosted_stores() {
     let (_d, st) = state();
     let app = app(st);
