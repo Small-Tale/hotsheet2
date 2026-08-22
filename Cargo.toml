@@ -9,6 +9,7 @@ members = [
     "crates/hotsheet-index",
     "crates/hotsheet-plugins",
     "crates/hotsheet-aitools",
+    "crates/hotsheet-terminals",
 ]
 
 [workspace.package]
@@ -44,6 +45,7 @@ sha2 = "0.10"
 notify = "6"
 toml = "0.8"
 include_dir = "0.7"
+portable-pty = "0.8"
 
 # internal
 hotsheet-model = { path = "crates/hotsheet-model" }
@@ -51,3 +53,4 @@ hotsheet-ticketing = { path = "crates/hotsheet-ticketing" }
 hotsheet-index = { path = "crates/hotsheet-index" }
 hotsheet-plugins = { path = "crates/hotsheet-plugins" }
 hotsheet-aitools = { path = "crates/hotsheet-aitools" }
+hotsheet-terminals = { path = "crates/hotsheet-terminals" }

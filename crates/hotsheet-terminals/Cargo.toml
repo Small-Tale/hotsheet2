@@ -1,0 +1,15 @@
+[package]
+name = "hotsheet-terminals"
+description = "Hot Sheet 2 terminal/PTY manager: per-project PTYs, scrollback, busy inference."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+portable-pty.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]

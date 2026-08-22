@@ -67,6 +67,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend:
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
+    hotsheet-terminals/      # PTY manager (nearly standalone; dep portable-pty) — docs/05 §5.4, HS2-10
+      src/terminal.rs        #   Terminal: spawn a command in a PTY, scrollback ring, drain thread, write/resize/kill; env-scrubbed + parent-env-inherited
+      src/manager.rs         #   TerminalManager: per-(project,terminal) lazy spawn + shared Arc<Terminal> + list/get/kill/reap
+      src/busy.rs            #   BusyDetector: streaming OSC-133 busy/idle inference + contains_spinner hint (feeds HS2-107)
+      src/env.rs             #   scrub_env: drop TSX_/npm_/NODE_/HOTSHEET_ markers before a child inherits
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index: open_reconciled/reconcile (git-diff fast path on a clean HEAD move, else full hash-walk)/rebuild/upsert/delete/query + hash_bytes
     hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
