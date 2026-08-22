@@ -994,3 +994,26 @@ async fn one_machine_server_is_discoverable_for_every_hosted_store() {
         std::env::remove_var("HOTSHEET_HOME");
     }
 }
+
+#[tokio::test]
+async fn background_sync_covers_every_hosted_store() {
+    use hotsheet_server::sync_loop::sync_all;
+    use hotsheet_ticketing::sync::SyncReport;
+
+    let (_d, st) = state();
+    let app = app(st.clone());
+
+    // Register a second (local-only, no-remote) store.
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    app.clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+
+    // One sync pass reports on BOTH hosted stores; a local-only store is NoRemote.
+    let reports = sync_all(&st);
+    assert_eq!(reports.len(), 2, "both hosted stores synced");
+    assert!(reports.iter().all(|(_, r)| *r == SyncReport::NoRemote));
+}

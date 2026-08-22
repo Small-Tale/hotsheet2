@@ -58,6 +58,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/main.rs            #   bind (loopback only) + serve; instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/lifecycle.rs       #   server lifecycle: InstanceInfo registry + discovery (one machine server writes a discovery file per hosted store, HS2-87 topology A), per-store index-writer lock, stop_instance (HS2-59)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
+      src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up)
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend:

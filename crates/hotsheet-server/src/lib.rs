@@ -7,6 +7,7 @@
 
 pub mod lifecycle;
 pub mod multistore;
+pub mod sync_loop;
 
 use std::path::Path as FsPath;
 use std::sync::{Arc, Mutex};
@@ -56,6 +57,10 @@ pub struct AppState {
     instance: Arc<Mutex<Option<InstanceMeta>>>,
     /// Keeps the per-store instance-file guards alive; they remove their files on shutdown.
     instance_guards: Arc<Mutex<Vec<lifecycle::InstanceGuard>>>,
+    /// A "kick" to the background sync loop (HS2-731C2X): a server write signals it so local
+    /// changes push promptly rather than waiting for the next interval. `None` until the
+    /// loop is spawned (tests don't run it).
+    sync_kick: Arc<Mutex<Option<std::sync::mpsc::Sender<()>>>>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -89,6 +94,33 @@ impl AppState {
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
             instance_guards: Arc::new(Mutex::new(Vec::new())),
+            sync_kick: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// The `(url-id, root-path)` of every hosted store — the set the background sync loop
+    /// iterates.
+    pub fn hosted_store_roots(&self) -> Vec<(String, String)> {
+        self.host
+            .list()
+            .into_iter()
+            .map(|s| (s.id, s.root))
+            .collect()
+    }
+
+    /// Register the background sync loop's kick channel (called by [`sync_loop::spawn_sync_loop`]).
+    pub fn set_sync_kicker(&self, tx: std::sync::mpsc::Sender<()>) {
+        if let Ok(mut k) = self.sync_kick.lock() {
+            *k = Some(tx);
+        }
+    }
+
+    /// Nudge the sync loop to run now (best-effort; a no-op if the loop isn't running).
+    fn kick_sync(&self) {
+        if let Ok(k) = self.sync_kick.lock() {
+            if let Some(tx) = k.as_ref() {
+                let _ = tx.send(());
+            }
         }
     }
 
@@ -248,6 +280,8 @@ impl AppState {
             id: t.id.to_string(),
             slug: t.slug.clone(),
         });
+        // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
+        self.kick_sync();
     }
 }
 

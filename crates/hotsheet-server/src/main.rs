@@ -102,6 +102,13 @@ async fn main() -> Result<()> {
     // Keep the index fresh + broadcast external edits. Held for the run.
     let _watch = hotsheet_server::spawn_watcher(state.clone())?;
 
+    // Aggressively sync each hosted store with its git remote in the background (HS2-19
+    // follow-up): interval + kick-on-write + backoff. Held for the run.
+    let _sync = hotsheet_server::sync_loop::spawn_sync_loop(
+        state.clone(),
+        hotsheet_server::sync_loop::DEFAULT_INTERVAL,
+    );
+
     // Take the exclusive index-writer lock before binding — a second server on this store
     // would otherwise double-write the index (join-don't-collide, HS2-59).
     let _lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
