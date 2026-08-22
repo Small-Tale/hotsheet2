@@ -33,6 +33,15 @@ pub fn store_url_id(store: &FsStore) -> String {
     hash_bytes(root.to_string_lossy().as_bytes())[..16].to_string()
 }
 
+/// The file-backed index path for a hosted store — `${HOTSHEET_HOME}/index/<id>.sqlite`,
+/// the same convention the server binary uses for the primary store, so a store's index
+/// file is shared whether it's served as the primary or a registered store.
+pub fn index_path_for(store: &FsStore) -> std::io::Result<std::path::PathBuf> {
+    let dir = hotsheet_plugins::hotsheet_home().join("index");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(format!("{}.sqlite", store_url_id(store))))
+}
+
 /// A served store as listed by `GET /stores`.
 #[derive(Debug, Serialize)]
 pub struct StoreInfo {

@@ -866,3 +866,42 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
+    // Hermetic: point HOTSHEET_HOME at a tempdir (nextest isolates each test process).
+    let home = tempfile::tempdir().unwrap();
+    unsafe {
+        std::env::set_var("HOTSHEET_HOME", home.path());
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_persistent_registered_indexes();
+    let app = app(st);
+
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let id2 = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    // The registered store's index was written under ${HOTSHEET_HOME}/index/<id>.sqlite.
+    let index_file = home.path().join("index").join(format!("{id2}.sqlite"));
+    assert!(
+        index_file.is_file(),
+        "file-backed index persisted: {}",
+        index_file.display()
+    );
+
+    unsafe {
+        std::env::remove_var("HOTSHEET_HOME");
+    }
+}

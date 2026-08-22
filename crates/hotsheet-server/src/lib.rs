@@ -44,6 +44,11 @@ pub struct AppState {
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive (the default
     /// store's watcher is held by the server binary). Never read — just not dropped.
     watchers: Arc<Mutex<Vec<WatchHandle>>>,
+    /// Whether a `POST /stores`-registered store gets a **file-backed** index
+    /// (`${HOTSHEET_HOME}/index/<id>.sqlite`, persists + restores) or an in-memory one.
+    /// Off by default so tests stay hermetic (they never touch the machine home); the
+    /// server binary turns it on for a real run.
+    persist_indexes: bool,
 }
 
 impl AppState {
@@ -66,7 +71,16 @@ impl AppState {
             index,
             host,
             watchers: Arc::new(Mutex::new(Vec::new())),
+            persist_indexes: false,
         }
+    }
+
+    /// Persist the indexes of `POST /stores`-registered stores to
+    /// `${HOTSHEET_HOME}/index/` (call this in a real server run; leave off in tests so
+    /// they never write under the machine home). Builder-style.
+    pub fn with_persistent_registered_indexes(mut self) -> Self {
+        self.persist_indexes = true;
+        self
     }
 
     /// State over a store with a fresh **in-memory** index rebuilt from it (tests, or
@@ -237,8 +251,16 @@ async fn add_store(
     let id = multistore::store_url_id(&store);
     let already = state.host.contains(&id);
     if !already {
-        let index = Index::open_in_memory(store.root().display().to_string())?;
-        index.rebuild_from_store(&store)?;
+        // File-backed (persists + restores) in a real run; in-memory in tests.
+        let index = if state.persist_indexes {
+            let path = multistore::index_path_for(&store)
+                .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            Index::open_reconciled(&path, &store)?
+        } else {
+            let ix = Index::open_in_memory(store.root().display().to_string())?;
+            ix.rebuild_from_store(&store)?;
+            ix
+        };
         let entry = StoreEntry {
             store: store.clone(),
             index: Arc::new(Mutex::new(index)),

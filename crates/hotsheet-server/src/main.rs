@@ -89,7 +89,9 @@ async fn main() -> Result<()> {
     };
     let index = Index::open_reconciled(&index_path, &store)?;
     println!("index: {}", index_path.display());
-    let state = AppState::with_index(store, secret.clone(), index);
+    // A real run persists the indexes of any POST /stores-registered store too.
+    let state =
+        AppState::with_index(store, secret.clone(), index).with_persistent_registered_indexes();
 
     // Keep the index fresh + broadcast external edits. Held for the run.
     let _watch = hotsheet_server::spawn_watcher(state.clone())?;
