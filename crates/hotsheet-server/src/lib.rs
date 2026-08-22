@@ -5,6 +5,7 @@
 //! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
+pub mod dist_work_loop;
 pub mod lifecycle;
 pub mod multistore;
 pub mod sync_loop;
