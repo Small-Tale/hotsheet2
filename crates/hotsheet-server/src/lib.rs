@@ -306,6 +306,7 @@ pub fn app(state: AppState) -> Router {
         .route("/claim-next", post(claim_next_ticket))
         .route("/tickets/{id}/release", post(release_ticket))
         .route("/tickets/{id}/renew", post(renew_ticket))
+        .route("/batch", post(batch_update))
         .route("/setup/{tool}", post(setup_tool))
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
@@ -566,6 +567,27 @@ async fn close_ticket(
     Ok(Json(do_close(&state, &state.default_entry(), &id, req)?))
 }
 
+/// `POST /batch` — apply the same field update to many tickets (HS2-86). One bad id doesn't
+/// abort the rest: each ticket's outcome is reported. Default-store.
+async fn batch_update(
+    State(state): State<AppState>,
+    Json(req): Json<BatchReq>,
+) -> Json<BatchResult> {
+    let entry = state.default_entry();
+    let mut updated = Vec::new();
+    let mut errors = Vec::new();
+    for id in &req.ids {
+        match do_update(&state, &entry, id, req.update.clone()) {
+            Ok(t) => updated.push(t.slug),
+            Err(e) => errors.push(BatchError {
+                id: id.clone(),
+                message: e.message,
+            }),
+        }
+    }
+    Json(BatchResult { updated, errors })
+}
+
 // ---- coordination: claim / release / renew (HS2-86) ------------------------------
 
 const DEFAULT_LEASE_MINUTES: i64 = 30;
@@ -804,7 +826,7 @@ struct CreateReq {
     blocked_by: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct UpdateReq {
     title: Option<String>,
     details: Option<String>,
@@ -817,6 +839,31 @@ struct UpdateReq {
     blocked_by: Option<Vec<String>>,
     /// Optional note to append alongside the field update.
     note: Option<String>,
+}
+
+/// `POST /batch` body: apply the same field update to every listed ticket (HS2-86).
+#[derive(Debug, Deserialize)]
+struct BatchReq {
+    /// Tickets to update (slug or ULID).
+    ids: Vec<String>,
+    /// The same update applied to each — the `UpdateReq` fields, flattened in.
+    #[serde(flatten)]
+    update: UpdateReq,
+}
+
+/// The per-ticket outcome of a batch update.
+#[derive(Debug, Serialize)]
+struct BatchResult {
+    /// Slugs of the tickets updated.
+    updated: Vec<String>,
+    /// Tickets that failed, with why (a bad batch never aborts the rest).
+    errors: Vec<BatchError>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchError {
+    id: String,
+    message: String,
 }
 
 #[derive(Debug, Deserialize)]

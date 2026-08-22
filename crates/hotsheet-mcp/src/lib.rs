@@ -136,6 +136,16 @@ fn tools_list() -> Value {
             }, "required": ["id", "reason"] }
         },
         {
+            "name": "hotsheet_batch",
+            "description": "Apply the same field update (status/priority/tags/up_next/category) to many tickets at once. Returns {updated:[slugs], errors:[{id,message}]} — one bad id never aborts the rest.",
+            "inputSchema": { "type": "object", "properties": {
+                "ids": { "type": "array", "items": { "type": "string" }, "description": "tickets to update (slug or ULID)" },
+                "status": str_prop(""), "priority": str_prop(""), "category": str_prop(""),
+                "up_next": { "type": "boolean" },
+                "tags": { "type": "array", "items": { "type": "string" }, "description": "replace the tag set on each" }
+            }, "required": ["ids"] }
+        },
+        {
             "name": "hotsheet_claim_next",
             "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next). Returns the claimed ticket, or null if nothing is claimable.",
             "inputSchema": { "type": "object", "properties": {
@@ -209,6 +219,7 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 .send("POST", &format!("/tickets/{id}/close"), &body)
                 .map_err(be_msg)
         }
+        "hotsheet_batch" => backend.send("POST", "/batch", args).map_err(be_msg),
         "hotsheet_claim_next" => backend.send("POST", "/claim-next", args).map_err(be_msg),
         "hotsheet_release" => {
             let id = arg_str(args, "id")?;
@@ -458,6 +469,38 @@ mod core_backend {
                         None => updated,
                     };
                     Ok(to_value(&ApiTicket::from(&latest)))
+                }
+                // Batch (HS2-86): apply the same update to many tickets, reusing PATCH so the
+                // per-ticket behavior is identical. One bad id doesn't abort the rest.
+                "POST" if path == "/batch" => {
+                    let ids: Vec<String> = body
+                        .get("ids")
+                        .and_then(Value::as_array)
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str().map(str::to_string))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let mut update = body.clone();
+                    if let Some(o) = update.as_object_mut() {
+                        o.remove("ids");
+                    }
+                    let mut updated = Vec::new();
+                    let mut errors = Vec::new();
+                    for id in ids {
+                        match self.send("PATCH", &format!("/tickets/{id}"), &update) {
+                            Ok(t) => {
+                                if let Some(slug) = t.get("slug").and_then(Value::as_str) {
+                                    updated.push(Value::from(slug));
+                                }
+                            }
+                            Err(e) => {
+                                errors.push(serde_json::json!({ "id": id, "message": e.message }))
+                            }
+                        }
+                    }
+                    Ok(serde_json::json!({ "updated": updated, "errors": errors }))
                 }
                 // Coordination (HS2-86): claim the next available ticket / release / renew.
                 "POST" if path == "/claim-next" => {
@@ -1025,6 +1068,38 @@ mod tests {
             json!({ "worker": "agent-1" }),
         );
         assert!(empty.is_null(), "no claimable tickets → null");
+    }
+
+    #[test]
+    fn corebackend_batch_updates_many_and_reports_bad_ids() {
+        let (_d, backend) = core();
+        let a = call(&backend, "hotsheet_create", json!({ "title": "one" }));
+        let b = call(&backend, "hotsheet_create", json!({ "title": "two" }));
+        let a_slug = a["slug"].as_str().unwrap().to_string();
+        let b_slug = b["slug"].as_str().unwrap().to_string();
+
+        // Batch: mark both started + up_next, plus one bad id that must not abort the rest.
+        let res = call(
+            &backend,
+            "hotsheet_batch",
+            json!({ "ids": [a_slug, b_slug, "HS-NOPE00"], "status": "started", "up_next": true }),
+        );
+        let updated = res["updated"].as_array().unwrap();
+        assert_eq!(updated.len(), 2, "both good ids updated");
+        assert_eq!(
+            res["errors"].as_array().unwrap().len(),
+            1,
+            "the bad id is reported"
+        );
+        assert_eq!(res["errors"][0]["id"], "HS-NOPE00");
+
+        // The updates actually applied.
+        let started = call(
+            &backend,
+            "hotsheet_query",
+            json!({ "status": "started", "up_next": true }),
+        );
+        assert_eq!(started.as_array().unwrap().len(), 2);
     }
 
     #[test]
