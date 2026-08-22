@@ -35,7 +35,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/reviews-union-by-ULID/body) behind `hotsheet merge-driver` (HS2-18, HS2-20)
       src/sync.rs            #   sync_once: one fetch → rebase-through-merge-driver → push cycle (offline/conflict-tolerant) behind `hotsheet sync` (HS2-19)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
-      src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata
+      src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: shared (committed) / local (gitignored) scopes; effective = local over shared
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
@@ -62,7 +62,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
-      src/lib.rs             #   Index: open_reconciled/reconcile/rebuild/upsert/delete/query + hash_bytes
+      src/lib.rs             #   Index: open_reconciled/reconcile (git-diff fast path on a clean HEAD move, else full hash-walk)/rebuild/upsert/delete/query + hash_bytes
     hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
       src/drive.rs           #   Drive trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue

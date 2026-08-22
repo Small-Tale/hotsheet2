@@ -232,6 +232,61 @@ impl FsStore {
         out.sort_by_key(|t| t.id);
         Ok(out)
     }
+
+    // ---- git-diff fast path (docs/03 §3.4, HS2-90) --------------------------------
+
+    /// The current `HEAD` commit id, or `None` if the store isn't a git repo yet or has
+    /// no commits. Used to detect a HEAD move (commit/pull/checkout) for the incremental
+    /// reindex fast path.
+    pub fn head_commit(&self) -> Option<String> {
+        git_stdout(&self.root, &["rev-parse", "HEAD"]).map(|s| s.trim().to_string())
+    }
+
+    /// Whether the working tree + index are clean (no uncommitted changes). The fast path
+    /// only fires on a *pure* HEAD move; any local edits fall back to the full hash-walk.
+    pub fn is_working_tree_clean(&self) -> bool {
+        git_stdout(&self.root, &["status", "--porcelain"])
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(false)
+    }
+
+    /// The ticket ULIDs whose files changed between two commits (`git diff --name-only
+    /// old new -- tickets/`), parsed from the `tickets/NN/<ULID>.md` paths. Renames are
+    /// broken into a delete + add (`--no-renames`) so both endpoints reconcile. A path
+    /// that no longer parses as a ULID is skipped.
+    pub fn changed_ticket_ids_between(
+        &self,
+        old: &str,
+        new: &str,
+    ) -> Result<Vec<Ulid>, StoreError> {
+        let out = git_stdout(
+            &self.root,
+            &[
+                "diff",
+                "--name-only",
+                "--no-renames",
+                old,
+                new,
+                "--",
+                "tickets",
+            ],
+        )
+        .ok_or_else(|| StoreError::Git(format!("`git diff {old} {new}` failed")))?;
+
+        let mut ids = Vec::new();
+        for line in out.lines() {
+            if let Some(id) = Path::new(line.trim())
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| Ulid::from_string(s).ok())
+            {
+                ids.push(id);
+            }
+        }
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
 }
 
 // ---- git helpers (shell-based; the store IS a git repo, docs/02 §2.3) --------------

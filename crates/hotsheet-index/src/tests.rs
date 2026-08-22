@@ -317,3 +317,105 @@ fn a_corrupt_index_file_is_deleted_and_rebuilt() {
     let ix = Index::open_reconciled(&db, &store).unwrap();
     assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 1);
 }
+
+// ---- git-diff fast path (docs/03 §3.4, HS2-90) ------------------------------------
+
+/// A store that is a real git repo (as `hotsheet init` makes it), so autocommit + HEAD
+/// tracking work.
+fn git_store() -> (tempfile::TempDir, FsStore) {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let ok = std::process::Command::new("git")
+        .args(["-C"])
+        .arg(dir.path())
+        .args(["init", "-q", "-b", "main"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    assert!(ok, "git init");
+    (dir, store)
+}
+
+/// A committing create → the store has a HEAD and a clean tree.
+fn commit_ticket(store: &FsStore, id: &str, title: &str) {
+    ops::create(
+        store,
+        ulid(id),
+        "HS",
+        Timestamp::new("2026-08-19T00:00:00Z"),
+        NewTicket {
+            title: title.into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn reconcile_uses_the_git_diff_fast_path_on_a_clean_head_move() {
+    let (_dir, store) = git_store();
+    commit_ticket(&store, "01ARZ3NDEKTSV4RRFFQ69G5FB0", "first");
+
+    // Baseline reconcile records HEAD + indexes the first ticket.
+    let ix = Index::open_in_memory(store.root().display().to_string()).unwrap();
+    assert_eq!(ix.reconcile(&store).unwrap(), (1, 0));
+
+    // No change since last reconcile → HEAD unchanged + clean tree → zero-work fast path.
+    assert!(store.is_working_tree_clean());
+    assert_eq!(
+        ix.reconcile(&store).unwrap(),
+        (0, 0),
+        "unchanged HEAD is a no-op"
+    );
+
+    // A committed add moves HEAD; the fast path reconciles only the one new ticket.
+    commit_ticket(&store, "01ARZ3NDEKTSV4RRFFQ69G5FB1", "second");
+    assert_eq!(ix.reconcile(&store).unwrap(), (1, 0), "only the delta");
+    assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 2);
+}
+
+#[test]
+fn changed_ticket_ids_between_two_commits_lists_the_delta() {
+    let (_dir, store) = git_store();
+    commit_ticket(&store, "01ARZ3NDEKTSV4RRFFQ69G5FB0", "first");
+    let base = store.head_commit().unwrap();
+    commit_ticket(&store, "01ARZ3NDEKTSV4RRFFQ69G5FB1", "second");
+    let head = store.head_commit().unwrap();
+
+    let changed = store.changed_ticket_ids_between(&base, &head).unwrap();
+    assert_eq!(
+        changed,
+        vec![ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1")],
+        "only the new ticket"
+    );
+}
+
+#[test]
+fn dirty_tree_falls_back_to_the_full_walk() {
+    let (_dir, store) = git_store();
+    commit_ticket(&store, "01ARZ3NDEKTSV4RRFFQ69G5FB0", "committed");
+    let ix = Index::open_in_memory(store.root().display().to_string()).unwrap();
+    assert_eq!(ix.reconcile(&store).unwrap(), (1, 0));
+
+    // Write a ticket WITHOUT committing — the tree is now dirty, so the fast path is
+    // skipped and the full hash-walk still picks up the uncommitted file.
+    let mut t = store
+        .read_ticket(&ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"))
+        .unwrap();
+    t.id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2");
+    t.slug = "HS-UNCOMMD".into();
+    t.title = "uncommitted".into();
+    store.write_ticket(&t).unwrap();
+    assert!(
+        !store.is_working_tree_clean(),
+        "uncommitted write dirties the tree"
+    );
+
+    assert_eq!(
+        ix.reconcile(&store).unwrap(),
+        (1, 0),
+        "full walk indexes the uncommitted add"
+    );
+    assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 2);
+}

@@ -62,6 +62,8 @@ pub enum IndexError {
         path: String,
         source: hotsheet_model::ParseError,
     },
+    #[error("store: {0}")]
+    Store(String),
 }
 
 /// A query result row. Defined once in `hotsheet_ticketing::wire` (the wire SSOT,
@@ -142,6 +144,28 @@ impl Index {
             )?;
         }
         Ok(Self { conn, store_id })
+    }
+
+    /// Read an `index_meta` value by key.
+    fn get_meta(&self, key: &str) -> Result<Option<String>, IndexError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT value FROM index_meta WHERE key=?1",
+                params![key],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Upsert an `index_meta` value.
+    fn set_meta(&self, key: &str, value: &str) -> Result<(), IndexError> {
+        self.conn.execute(
+            "INSERT INTO index_meta(key, value) VALUES(?1, ?2) \
+             ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
     }
 
     /// The stored content hash for a ticket, or `None` if not indexed (change detection).
@@ -280,6 +304,70 @@ impl Index {
     /// `(upserted, deleted)`. Cheaper than a full rebuild on a warm index — this is
     /// what makes "restore from disk on launch" fast (`docs/03` §3.4).
     pub fn reconcile(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
+        // Git-aware fast path (docs/03 §3.4, HS2-90): when the working tree is clean, HEAD
+        // is a faithful identity for the store's state. If HEAD is unchanged since the last
+        // reconcile the index is already current; if HEAD only *moved* (a commit / pull /
+        // checkout with a clean tree) we reconcile just the diffed delta — O(changes), not
+        // O(tickets). Any uncommitted edit makes the tree dirty and falls back to the full
+        // hash-walk, which is always correct.
+        if store.is_working_tree_clean() {
+            if let Some(current) = store.head_commit() {
+                match self.get_meta("head")? {
+                    Some(stored) if stored == current => return Ok((0, 0)),
+                    Some(stored) => {
+                        let result = self.reconcile_head_move(store, &stored, &current)?;
+                        self.set_meta("head", &current)?;
+                        return Ok(result);
+                    }
+                    None => {} // no baseline yet — full walk below, then record HEAD
+                }
+            }
+        }
+        let result = self.reconcile_full(store)?;
+        if store.is_working_tree_clean() {
+            if let Some(current) = store.head_commit() {
+                self.set_meta("head", &current)?;
+            }
+        }
+        Ok(result)
+    }
+
+    /// Reconcile exactly the ticket files that changed between two commits (the git-diff
+    /// fast path). Each changed ULID is re-read + upserted if its file still exists, or
+    /// deleted if it's gone. Hash-guarded so an unchanged blob (e.g. a path listed twice)
+    /// is a no-op.
+    fn reconcile_head_move(
+        &self,
+        store: &FsStore,
+        old: &str,
+        new: &str,
+    ) -> Result<(usize, usize), IndexError> {
+        let mut upserted = 0;
+        let mut deleted = 0;
+        for id in store
+            .changed_ticket_ids_between(old, new)
+            .map_err(|e| IndexError::Store(e.to_string()))?
+        {
+            let path = store.ticket_path(&id);
+            if path.exists() {
+                let bytes = std::fs::read(&path)?;
+                let hash = hash_bytes(&bytes);
+                if self.content_hash(&id)?.as_deref() != Some(hash.as_str()) {
+                    let ticket = parse_ticket(&path, &bytes)?;
+                    self.upsert(&ticket, &path.display().to_string(), &hash)?;
+                    upserted += 1;
+                }
+            } else if self.content_hash(&id)?.is_some() {
+                self.delete(&id)?;
+                deleted += 1;
+            }
+        }
+        Ok((upserted, deleted))
+    }
+
+    /// Full hash-walk reconcile: re-read every ticket file, upsert those whose content
+    /// changed, delete index rows whose file is gone. Always correct (the fallback).
+    fn reconcile_full(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut upserted = 0;
         for path in ticket_files(store)? {
