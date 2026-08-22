@@ -24,7 +24,7 @@ use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
 use hotsheet_model::{CloseReason, NoteKind, Ticket, Timestamp, Ulid, parse_file, to_file_string};
 use hotsheet_ticketing::{
-    FsStore, NewTicket, OpError, SortKey, StoreError, TicketPatch, TicketQuery, ops,
+    FsStore, NewTicket, OpError, SortKey, StoreError, StoreRegistry, TicketPatch, TicketQuery, ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -306,6 +306,10 @@ pub fn app(state: AppState) -> Router {
         .route("/claim-next", post(claim_next_ticket))
         .route("/tickets/{id}/release", post(release_ticket))
         .route("/tickets/{id}/renew", post(renew_ticket))
+        // Cross-store copy / move (HS2-60 / HS2-S4H2AM): source is the default store,
+        // `?to=<store_id>` names a hosted destination store.
+        .route("/tickets/{id}/copy", post(copy_ticket_route))
+        .route("/tickets/{id}/move", post(move_ticket_route))
         .route("/batch", post(batch_update))
         .route("/setup/{tool}", post(setup_tool))
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
@@ -643,6 +647,99 @@ async fn renew_ticket(
     let renewed = ops::renew(&entry.store, &ticket.id, now, lease, &worker)?;
     state.changed_in(&entry, "renewed", &renewed);
     Ok(Json((&renewed).into()))
+}
+
+// ---- cross-store copy / move (HS2-60 / HS2-S4H2AM) -------------------------------
+
+/// Body for copy: `to` names the hosted destination store (its URL id).
+#[derive(Deserialize)]
+struct CopyBody {
+    to: String,
+}
+
+/// Body for move: destination store + the explicit `confirm` acknowledging that git
+/// history in the source never forgets (the retention/exposure caveat, `docs/02` §2.13).
+#[derive(Deserialize)]
+struct MoveBody {
+    to: String,
+    #[serde(default)]
+    confirm: bool,
+}
+
+/// A copy result: the new ticket + the destination store it now lives in.
+#[derive(Serialize)]
+struct CopyResult {
+    /// URL id of the destination store.
+    store: String,
+    #[serde(flatten)]
+    ticket: ApiTicket,
+}
+
+/// A move result: the live ticket (now in `store`), the source store it left, and the
+/// tombstone slug left behind in the source.
+#[derive(Serialize)]
+struct MoveResult {
+    /// URL id of the destination store (where the live ticket now is).
+    store: String,
+    /// URL id of the source store (which keeps a `moved` tombstone).
+    source_store: String,
+    /// Slug of the tombstone left in the source store.
+    tombstone: String,
+    #[serde(flatten)]
+    ticket: ApiTicket,
+}
+
+/// `POST /tickets/{id}/copy` `{to:<store_id>}` — copy a default-store ticket into another
+/// hosted store as a **new** ticket (new ULID, `copied_from` provenance). Source untouched.
+async fn copy_ticket_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<CopyBody>,
+) -> Result<(StatusCode, Json<CopyResult>), ApiError> {
+    let src = state.default_entry();
+    let dest = scoped_entry(&state, &body.to)?;
+    let ticket = ops::resolve(&src.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let new = ops::copy_ticket(&src.store, &dest.store, &ticket.id, Ulid::new(), now())?;
+    state.changed_in(&dest, "created", &new);
+    Ok((
+        StatusCode::CREATED,
+        Json(CopyResult {
+            store: multistore::store_url_id(&dest.store),
+            ticket: (&new).into(),
+        }),
+    ))
+}
+
+/// `POST /tickets/{id}/move` `{to:<store_id>, confirm:true}` — move a default-store ticket
+/// to another hosted store, keeping the same ULID and leaving a `moved` tombstone behind.
+/// Requires `confirm:true` (the git-retention caveat); without it, 400.
+async fn move_ticket_route(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<MoveBody>,
+) -> Result<Json<MoveResult>, ApiError> {
+    if !body.confirm {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "move requires confirm=true: the source store's git history keeps the ticket \
+             (and any attachments) even after the move — see docs/02 §2.13",
+        ));
+    }
+    let src = state.default_entry();
+    let dest = scoped_entry(&state, &body.to)?;
+    let ticket = ops::resolve(&src.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    // Record the destination's canonical root as `moved_to_store` — the identity the
+    // `StoreRegistry` follows when resolving the ULID to its live instance.
+    let dest_id = StoreRegistry::store_id(&dest.store);
+    let outcome = ops::move_ticket(&src.store, &dest.store, &ticket.id, &dest_id, now())?;
+    state.changed_in(&dest, "created", &outcome.moved);
+    state.changed_in(&src, "moved", &outcome.tombstone);
+    Ok(Json(MoveResult {
+        store: multistore::store_url_id(&dest.store),
+        source_store: multistore::store_url_id(&src.store),
+        tombstone: outcome.tombstone.slug.clone(),
+        ticket: (&outcome.moved).into(),
+    }))
 }
 
 // ---- store-scoped write routes (multi-store, HS2-87) -----------------------------

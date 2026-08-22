@@ -571,9 +571,12 @@ engine (§2.12) will push it. **Hot Sheet warns before any move that changes a
 ticket's exposure** (private → shared, or shared → "hidden" that history retains).
 
 **Surfaces.** `hotsheet copy <slug> --to <store>` / `hotsheet move <slug> --to
-<store>` (CLI), matching MCP tools, and a UI affordance (drag a ticket onto a store,
-or a "Move to store…" menu — mirroring HS1's cross-project drag), with the exposure
-warning shown before confirming. Build: **HS2-60**.
+<store>` (CLI, **HS2-60**); the `hotsheet_copy` / `hotsheet_move` MCP tools and the
+`POST /tickets/{id}/copy` / `…/move` server endpoints (`{to, confirm}` bodies —
+`move` requires `confirm:true`, the retention gate above) with `copied_from` /
+`moved_to_store` now on the wire (**HS2-S4H2AM**); and a UI affordance (drag a ticket
+onto a store, or a "Move to store…" menu — mirroring HS1's cross-project drag), with
+the exposure warning shown before confirming — still to build (**client work**).
 
 ## 2.14 Cross-references
 - IDs and slugs feed the index: [03-indexing-and-query.md](03-indexing-and-query.md).

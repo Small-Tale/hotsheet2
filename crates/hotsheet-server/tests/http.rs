@@ -868,6 +868,88 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 }
 
 #[tokio::test]
+async fn cross_store_copy_and_move_between_hosted_stores() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // A ticket in the default store, and a second hosted store to copy/move into.
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/tickets", Some(r#"{"title":"portable"}"#)))
+        .await
+        .unwrap();
+    let id = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("DS")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    let store2 = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    // copy → 201, NEW ULID in DS with copied_from provenance; source still resolves.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{id}/copy"),
+            Some(&format!(r#"{{"to":"{store2}"}}"#)),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let copied = body_json(resp).await;
+    assert_ne!(copied["id"].as_str().unwrap(), id, "copy mints a new ULID");
+    assert!(copied["slug"].as_str().unwrap().starts_with("DS-"));
+    assert_eq!(copied["copied_from"], id);
+    assert_eq!(copied["store"], store2);
+
+    // move without confirm → 400 naming the caveat.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{id}/move"),
+            Some(&format!(r#"{{"to":"{store2}"}}"#)),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // move with confirm → same ULID now hosted by store2 (resolve follows the tombstone).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{id}/move"),
+            Some(&format!(r#"{{"to":"{store2}","confirm":true}}"#)),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let moved = body_json(resp).await;
+    assert_eq!(moved["id"], id, "move keeps the ULID");
+    assert_eq!(moved["store"], store2);
+    assert!(moved["tombstone"].as_str().unwrap().starts_with("HS-"));
+
+    // The global resolve now lands in store2 (the live instance, past the tombstone).
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", &format!("/resolve/{id}"), None))
+        .await
+        .unwrap();
+    let got = body_json(resp).await;
+    assert_eq!(got["store"], store2, "resolves to the destination store");
+    assert_ne!(
+        got["status"], "moved",
+        "the live instance, not the tombstone"
+    );
+}
+
+#[tokio::test]
 async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
     // Hermetic: point HOTSHEET_HOME at a tempdir (nextest isolates each test process).
     let home = tempfile::tempdir().unwrap();

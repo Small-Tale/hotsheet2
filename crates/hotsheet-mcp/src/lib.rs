@@ -172,6 +172,23 @@ fn tools_list() -> Value {
                 "worker": str_prop("the holding worker (default: worker)"),
                 "lease_minutes": { "type": "integer", "description": "new lease length in minutes (default 30)" }
             }, "required": ["id"] }
+        },
+        {
+            "name": "hotsheet_copy",
+            "description": "Copy a ticket into another store as a NEW ticket (new ULID, destination prefix, copied_from provenance). The source is untouched; workflow/claim/close state is reset. Returns the new ticket + its destination store.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("source ticket (slug or ULID)"),
+                "to": str_prop("destination store: its URL id (server) or path (serverless)")
+            }, "required": ["id", "to"] }
+        },
+        {
+            "name": "hotsheet_move",
+            "description": "Move a ticket to another store, KEEPING the same ULID so references survive. The source keeps a `moved` tombstone redirecting to the destination. Requires confirm=true: git history in the source never forgets, so the ticket (and attachments) remain recoverable there.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("ticket to move (slug or ULID)"),
+                "to": str_prop("destination store: its URL id (server) or path (serverless)"),
+                "confirm": { "type": "boolean", "description": "must be true — acknowledges the source git-retention caveat" }
+            }, "required": ["id", "to", "confirm"] }
         }
     ] })
 }
@@ -240,6 +257,20 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                     &format!("/tickets/{id}/renew"),
                     &without(args, "id"),
                 )
+                .map_err(be_msg)
+        }
+        // Cross-store copy / move (HS2-60 / HS2-S4H2AM): `to` + `confirm` ride the body
+        // (a serverless `to` is a store path with slashes, so it can't go in the URL).
+        "hotsheet_copy" => {
+            let id = arg_str(args, "id")?;
+            backend
+                .send("POST", &format!("/tickets/{id}/copy"), &without(args, "id"))
+                .map_err(be_msg)
+        }
+        "hotsheet_move" => {
+            let id = arg_str(args, "id")?;
+            backend
+                .send("POST", &format!("/tickets/{id}/move"), &without(args, "id"))
                 .map_err(be_msg)
         }
         other => Err(format!("unknown tool: {other}")),
@@ -314,8 +345,8 @@ mod core_backend {
     use super::{Backend, BackendError};
     use hotsheet_model::{NoteKind, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
-        ApiTicket, FsStore, NewTicket, OpError, SortKey, StoreError, TicketPatch, TicketQuery,
-        TicketRow, ops,
+        ApiTicket, FsStore, NewTicket, OpError, SortKey, StoreError, StoreRegistry, TicketPatch,
+        TicketQuery, TicketRow, ops,
     };
     use serde_json::Value;
     use std::path::Path;
@@ -361,6 +392,12 @@ mod core_backend {
             ops::resolve(&self.store, needle)
                 .map_err(store_err)?
                 .ok_or_else(|| not_found(needle))
+        }
+
+        /// Open the destination store for a copy/move — serverless, `to` is its path.
+        fn open_dest(&self, body: &Value) -> Result<FsStore, BackendError> {
+            let to = str_field(body, "to").ok_or_else(|| bad_request("'to' is required"))?;
+            FsStore::open(Path::new(&to)).map_err(store_err)
         }
     }
 
@@ -534,6 +571,47 @@ mod core_backend {
                         ops::renew(&self.store, &t.id, now, lease, &worker).map_err(op_err)?;
                     Ok(to_value(&ApiTicket::from(&renewed)))
                 }
+                // Cross-store copy (HS2-60 / HS2-S4H2AM): serverless, `to` is the
+                // destination store's path. New ULID + `copied_from`; source untouched.
+                "POST" if copy_id(path).is_some() => {
+                    let t = self.resolve(copy_id(path).unwrap())?;
+                    let dest = self.open_dest(body)?;
+                    let new =
+                        ops::copy_ticket(&self.store, &dest, &t.id, (self.mint)(), (self.now)())
+                            .map_err(op_err)?;
+                    Ok(with_store(
+                        to_value(&ApiTicket::from(&new)),
+                        &[("store", StoreRegistry::store_id(&dest))],
+                    ))
+                }
+                // Cross-store move (HS2-60 / HS2-S4H2AM): same ULID + source tombstone.
+                // Requires confirm=true (the git-retention caveat, docs/02 §2.13).
+                "POST" if move_id(path).is_some() => {
+                    if !body
+                        .get("confirm")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                    {
+                        return Err(bad_request(
+                            "move requires confirm=true: the source store's git history keeps \
+                             the ticket (and any attachments) even after the move — docs/02 §2.13",
+                        ));
+                    }
+                    let t = self.resolve(move_id(path).unwrap())?;
+                    let dest = self.open_dest(body)?;
+                    let dest_id = StoreRegistry::store_id(&dest);
+                    let outcome =
+                        ops::move_ticket(&self.store, &dest, &t.id, &dest_id, (self.now)())
+                            .map_err(op_err)?;
+                    Ok(with_store(
+                        to_value(&ApiTicket::from(&outcome.moved)),
+                        &[
+                            ("store", dest_id),
+                            ("source_store", StoreRegistry::store_id(&self.store)),
+                            ("tombstone", outcome.tombstone.slug.clone()),
+                        ],
+                    ))
+                }
                 _ => Err(bad_request(format!("unsupported {method} {path}"))),
             }
         }
@@ -569,6 +647,27 @@ mod core_backend {
     /// `/tickets/{id}/renew` → the id.
     fn renew_id(path: &str) -> Option<&str> {
         path.strip_prefix("/tickets/")?.strip_suffix("/renew")
+    }
+
+    /// `/tickets/{id}/copy` → the id.
+    fn copy_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?.strip_suffix("/copy")
+    }
+
+    /// `/tickets/{id}/move` → the id.
+    fn move_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?.strip_suffix("/move")
+    }
+
+    /// Flatten extra string fields onto an `ApiTicket` value object (the `store` /
+    /// `source_store` / `tombstone` copy/move envelope; matches the server's flattened DTO).
+    fn with_store(mut ticket: Value, extra: &[(&str, String)]) -> Value {
+        if let Some(o) = ticket.as_object_mut() {
+            for (k, v) in extra {
+                o.insert((*k).to_string(), Value::from(v.clone()));
+            }
+        }
+        ticket
     }
 
     fn build_query(pairs: &[(String, String)]) -> Result<TicketQuery, BackendError> {
@@ -906,7 +1005,7 @@ mod tests {
 
     // ---- CoreBackend: the whole loop, serverless, straight to disk ----------------
 
-    use hotsheet_ticketing::{FsStore, StoreMetadata};
+    use hotsheet_ticketing::{FsStore, StoreMetadata, ops};
 
     /// A CoreBackend over a fresh temp store (real ops, no server).
     fn core() -> (tempfile::TempDir, CoreBackend) {
@@ -1007,6 +1106,68 @@ mod tests {
         );
         let open = call(&backend, "hotsheet_query", json!({ "open": true }));
         assert_eq!(open.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn corebackend_cross_store_copy_and_move_over_mcp() {
+        let (_srcd, backend) = core(); // source store, prefix HS
+        let destd = tempfile::tempdir().unwrap();
+        let dest = FsStore::init(destd.path(), &StoreMetadata::new("DS")).unwrap();
+        let to = destd.path().display().to_string();
+
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "Portable idea", "up_next": true }),
+        );
+        let id = created["id"].as_str().unwrap().to_string();
+        let src_slug = created["slug"].as_str().unwrap().to_string();
+
+        // copy → NEW ULID, destination prefix, copied_from provenance; source untouched.
+        let copied = call(&backend, "hotsheet_copy", json!({ "id": id, "to": to }));
+        assert_ne!(copied["id"], created["id"], "copy mints a new ULID");
+        assert!(copied["slug"].as_str().unwrap().starts_with("DS-"));
+        assert_eq!(copied["copied_from"], created["id"]);
+        assert_eq!(copied["status"], "not_started");
+        assert!(
+            copied["up_next"].as_bool() == Some(false),
+            "copy resets up_next"
+        );
+        // The source still resolves to the original (a copy leaves it be).
+        assert_eq!(
+            call(&backend, "hotsheet_get", json!({ "id": id }))["id"],
+            created["id"]
+        );
+
+        // move without confirm → a tool error naming the caveat; source unchanged.
+        let denied = call(&backend, "hotsheet_move", json!({ "id": id, "to": to }));
+        assert!(denied["error"].as_str().unwrap().contains("confirm"));
+        assert_eq!(
+            call(&backend, "hotsheet_get", json!({ "id": id }))["status"],
+            "not_started",
+            "a denied move changes nothing"
+        );
+
+        // move with confirm → same ULID lives in dest; source becomes a `moved` tombstone.
+        let moved = call(
+            &backend,
+            "hotsheet_move",
+            json!({ "id": id, "to": to, "confirm": true }),
+        );
+        assert_eq!(moved["id"], created["id"], "move keeps the ULID");
+        assert!(moved["slug"].as_str().unwrap().starts_with("DS-"));
+        assert_eq!(
+            moved["tombstone"], src_slug,
+            "tombstone keeps the source slug"
+        );
+        assert!(!moved["source_store"].as_str().unwrap().is_empty());
+        // Source now holds a moved tombstone redirecting to the destination store.
+        let tomb = call(&backend, "hotsheet_get", json!({ "id": id }));
+        assert_eq!(tomb["status"], "moved");
+        assert!(tomb["moved_to_store"].is_string());
+        // The live instance is really in the destination store.
+        let live = ops::resolve(&dest, &id).unwrap().expect("live in dest");
+        assert_eq!(live.status, hotsheet_model::Status::NotStarted);
     }
 
     #[test]

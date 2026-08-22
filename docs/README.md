@@ -151,7 +151,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Multiple ticket stores per project (mixed permissions/locality) | 02 | Confirmed |
 | Every store is a git repo (local-only = no remote) | 02 §2.1 | Confirmed |
 | Store identity/naming (id + name + per-store prefix); positional membership | 02 §2.2.1 | Confirmed (design) |
-| Copy/move tickets between stores (move = copy + source tombstone) | 02 §2.13 | Partial (core `ops::copy_ticket`/`move_ticket` + `hotsheet copy`/`move` CLI with attachments, `moved_at` tombstone, retention/exposure gate — HS2-60; MCP/server surfaces + cross-store index resolve pending → HS2-S4H2AM) |
+| Copy/move tickets between stores (move = copy + source tombstone) | 02 §2.13 | Shipped, minus UI (core `ops::copy_ticket`/`move_ticket` + `hotsheet copy`/`move` CLI — HS2-60; `hotsheet_copy`/`hotsheet_move` MCP tools + `POST /tickets/{id}/copy\|move` server endpoints + `copied_from`/`moved_to_store` on the wire + cross-store index resolve via `StoreHost::resolve`/`open_only` — HS2-S4H2AM. Remaining: the drag-onto-store / "Move to store…" **client** affordance) |
 | ULID-based ticket IDs, all-caps slug (no central sequence) | 02 §2.4 | Confirmed |
 | **Automatic conflict resolution (semantic merge driver)** | 02 §2.7 | Shipped (`hotsheet merge-driver` field-by-field 3-way merge: scalars LWW-by-`updated_at`, tags/blocked_by/assignees set-union, notes union-by-ULID, body text-merged only when both sides change it; registered by `init` via `.gitattributes`+git config; `doctor` flags missing registration; proptests + real-git E2E; HS2-18) |
 | Inline notes with timestamp-ordered UUIDs | 02 §2.6 | Confirmed |

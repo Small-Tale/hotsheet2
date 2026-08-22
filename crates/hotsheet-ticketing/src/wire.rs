@@ -35,6 +35,12 @@ pub struct ApiTicket {
     pub closed_at: Option<String>,
     pub close_reason: Option<CloseReason>,
     pub duplicate_of: Option<String>,
+    /// Provenance of a cross-store copy: the source ticket's ULID (HS2-60).
+    pub copied_from: Option<String>,
+    /// A `moved` tombstone's redirect: the destination store this ULID now lives in (HS2-60).
+    pub moved_to_store: Option<String>,
+    /// When the move happened (tombstones only).
+    pub moved_at: Option<String>,
     pub claimed_by: Option<String>,
     pub worker_label: Option<String>,
     pub claim_count: u32,
@@ -75,6 +81,9 @@ impl From<&Ticket> for ApiTicket {
             closed_at: ts(&t.closed_at),
             close_reason: t.close_reason,
             duplicate_of: t.duplicate_of.map(|u| u.to_string()),
+            copied_from: t.copied_from.map(|u| u.to_string()),
+            moved_to_store: t.moved_to_store.clone(),
+            moved_at: ts(&t.moved_at),
             claimed_by: t.claimed_by.clone(),
             worker_label: t.worker_label.clone(),
             claim_count: t.claim_count,
