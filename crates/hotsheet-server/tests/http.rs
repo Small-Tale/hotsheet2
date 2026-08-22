@@ -534,3 +534,109 @@ async fn list_filters_by_close_reason_and_closed_through_the_index() {
     assert_eq!(done.len(), 1);
     assert_eq!(done[0]["title"], "done deal");
 }
+
+// ---- multi-store (HS2-87) --------------------------------------------------------
+
+#[tokio::test]
+async fn hosts_multiple_stores_and_serves_a_scoped_list() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let (_d, st) = state();
+    let app = app(st);
+
+    // The primary store is the single hosted entry to start.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/stores", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let stores = body_json(resp).await;
+    assert_eq!(stores.as_array().unwrap().len(), 1, "primary store hosted");
+
+    // A second store on disk with one ticket.
+    let dir2 = tempfile::tempdir().unwrap();
+    let store2 = FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    ops::create(
+        &store2,
+        Ulid::new(),
+        "BB",
+        Timestamp::new("2026-08-19T00:00:00Z"),
+        NewTicket {
+            title: "second-store ticket".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // Register it.
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let info = body_json(resp).await;
+    let id2 = info["id"].as_str().unwrap().to_string();
+    assert_eq!(info["prefix"], "BB");
+    assert_eq!(info["tickets"], 1);
+
+    // Now two stores are hosted.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/stores", None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await.as_array().unwrap().len(), 2);
+
+    // The store-scoped list serves the second store's ticket from its own index.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", &format!("/stores/{id2}/tickets"), None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let rows = body_json(resp).await;
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["title"], "second-store ticket");
+
+    // Re-registering the same store is idempotent (200, not a duplicate).
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/stores", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(resp).await.as_array().unwrap().len(),
+        2,
+        "no duplicate"
+    );
+
+    // Unknown store id → 404; a non-store path → 400.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/stores/deadbeefdeadbeef/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/stores",
+            Some(r#"{"path":"/nonexistent/nope"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}

@@ -6,9 +6,12 @@
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
 pub mod lifecycle;
+pub mod multistore;
 
 use std::path::Path as FsPath;
 use std::sync::{Arc, Mutex};
+
+use multistore::{StoreEntry, StoreHost, StoreInfo};
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, Request, State};
@@ -35,6 +38,9 @@ pub struct AppState {
     secret: String,
     events: broadcast::Sender<ChangeEvent>,
     index: Arc<Mutex<Index>>,
+    /// Every store this machine server hosts (HS2-87). The primary `store` is registered
+    /// here as the default entry; additional stores are added via `POST /stores`.
+    host: StoreHost,
 }
 
 impl AppState {
@@ -42,11 +48,20 @@ impl AppState {
     /// whether the index is in-memory or file-backed (`Index::open_reconciled`).
     pub fn with_index(store: FsStore, secret: String, index: Index) -> Self {
         let (events, _) = broadcast::channel(256);
+        let index = Arc::new(Mutex::new(index));
+        let host = StoreHost::new();
+        // The primary store is the default hosted entry (shares the same index Arc, so
+        // the unprefixed routes and /stores/{default}/… see one index).
+        host.register(StoreEntry {
+            store: store.clone(),
+            index: index.clone(),
+        });
         Self {
             store,
             secret,
             events,
-            index: Arc::new(Mutex::new(index)),
+            index,
+            host,
         }
     }
 
@@ -94,6 +109,9 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/close", post(close_ticket))
         .route("/setup/{tool}", post(setup_tool))
+        // Multi-store (HS2-87): list/register hosted stores + a store-scoped read path.
+        .route("/stores", get(list_stores).post(add_store))
+        .route("/stores/{store_id}/tickets", get(list_store_tickets))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -161,6 +179,77 @@ async fn get_ticket(
 ) -> Result<Json<ApiTicket>, ApiError> {
     let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json((&ticket).into()))
+}
+
+// ---- multi-store (HS2-87) --------------------------------------------------------
+
+/// `GET /stores` — the stores this machine server hosts.
+async fn list_stores(State(state): State<AppState>) -> Json<Vec<StoreInfo>> {
+    Json(state.host.list())
+}
+
+/// Body for `POST /stores`: register another local store by its path.
+#[derive(Deserialize)]
+struct AddStoreBody {
+    path: String,
+}
+
+/// `POST /stores` — open a store at `path` (building its own in-memory index) and host it.
+/// Idempotent: registering an already-hosted store just returns it.
+async fn add_store(
+    State(state): State<AppState>,
+    Json(body): Json<AddStoreBody>,
+) -> Result<(StatusCode, Json<StoreInfo>), ApiError> {
+    let store = FsStore::open(&body.path)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let id = multistore::store_url_id(&store);
+    let already = state.host.contains(&id);
+    if !already {
+        let index = Index::open_in_memory(store.root().display().to_string())?;
+        index.rebuild_from_store(&store)?;
+        state.host.register(StoreEntry {
+            store,
+            index: Arc::new(Mutex::new(index)),
+        });
+    }
+    let info = state
+        .host
+        .list()
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "store vanished"))?;
+    let code = if already {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    Ok((code, Json(info)))
+}
+
+/// `GET /stores/{store_id}/tickets` — the store-scoped list, served from that store's own
+/// index. Unknown id → 404.
+async fn list_store_tickets(
+    State(state): State<AppState>,
+    Path(store_id): Path<String>,
+    Query(params): Query<ListParams>,
+) -> Result<Json<Vec<TicketRow>>, ApiError> {
+    let entry = state
+        .host
+        .get(&store_id)
+        .ok_or_else(|| ApiError::not_found(&store_id))?;
+    let compact = params.compact.unwrap_or(true);
+    let query = params.into_query()?;
+    let mut rows = entry
+        .index
+        .lock()
+        .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
+        .query(&query)?;
+    if compact {
+        for row in &mut rows {
+            row.make_compact();
+        }
+    }
+    Ok(Json(rows))
 }
 
 async fn create_ticket(
