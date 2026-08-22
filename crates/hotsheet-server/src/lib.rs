@@ -93,6 +93,7 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/close", post(close_ticket))
+        .route("/setup/{tool}", post(setup_tool))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -243,6 +244,19 @@ async fn close_ticket(
     let closed = ops::close(&state.store, &ticket.id, now(), reason, dup)?;
     state.changed("closed", &closed);
     Ok(Json((&closed).into()))
+}
+
+/// Prepare the served project for an AI tool — the same core setup the CLI runs headless
+/// (`POST /setup/<tool>`, HS2-91). The server serves one store, so the project dir is the
+/// store root; a single named tool doesn't need the enabled-plugin filter.
+async fn setup_tool(
+    State(state): State<AppState>,
+    Path(tool): Path<String>,
+) -> Result<Json<Vec<hotsheet_plugins::SetupReport>>, ApiError> {
+    let store = state.store.root().to_path_buf();
+    let reports = hotsheet_plugins::run_setup(&store, &store, Some(&tool), false, None)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok(Json(reports))
 }
 
 async fn ws_sync(

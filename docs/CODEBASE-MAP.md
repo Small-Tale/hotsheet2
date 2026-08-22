@@ -44,13 +44,13 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
       src/launch_safety.rs   #   HS2-103 safety for `trigger`/`work`: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, absolute hotsheet-mcp path, IsolatedCodexHome (auto MCP-free CODEX_HOME, HS2-YRDQNX)
       src/workloop.rs        #   `work` loop pure helpers: Up Next queue signature + thrash-guard Stall counter
-      src/setup.rs           #   `hotsheet-cli setup <tool>`: write a plugin's instructions/skill/MCP config (merge-safe; absolute hotsheet-mcp path)
+      src/setup.rs           #   `hotsheet-cli setup <tool>`: thin wrapper over hotsheet_plugins::run_setup (adds the enabled-plugin filter from Settings)
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
-      src/lib.rs             #   app() router, handlers over ops, ApiTicket DTO, auth, /ws/sync
+      src/lib.rs             #   app() router, handlers over ops, ApiTicket DTO, auth, /ws/sync, POST /setup/{tool} (core-owned setup, HS2-91)
       src/main.rs            #   bind (loopback only) + serve; instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/lifecycle.rs       #   server lifecycle: InstanceInfo registry + discovery, per-store index-writer lock, stop_instance (HS2-59)
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
@@ -73,6 +73,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/system.rs          #   SystemSpawner (real std::process adapter)
       src/registry.rs        #   ConnectionRegistry: live connections + sliding-window busy tracking
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)
+      src/setup.rs           #   run_setup: core-owned one-shot setup writers (instructions/skill/MCP-config) + mcp_command — shared by CLI + server (HS2-91)
       src/lib.rs             #   Manifest/Plugin, from_dir (bundled) + from_fs_dir (on-disk),
                              #     all_plugins(search_dirs)/find_in/builtin_plugins; ${HOTSHEET_HOME:-~/.hotsheet2}/plugins
       src/tests.rs           #   built-in + on-disk loading, first-party-wins-collision

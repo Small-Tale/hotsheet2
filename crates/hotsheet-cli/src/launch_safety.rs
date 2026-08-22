@@ -30,20 +30,11 @@ pub fn exe_dir() -> Result<PathBuf> {
         .context("the hotsheet-cli executable has no parent directory")
 }
 
-/// The `hotsheet-mcp` command string to record in a tool's MCP config: the absolute
-/// sibling next to the running CLI when it exists (so the config needs no PATH munging —
-/// HS2-103), otherwise the bare `fallback` (resolved via PATH at launch).
-pub fn mcp_command(fallback: &str) -> String {
-    mcp_command_for(exe_dir().ok().as_deref(), fallback)
-}
-
-fn mcp_command_for(exe_dir: Option<&Path>, fallback: &str) -> String {
-    exe_dir
-        .map(|d| d.join("hotsheet-mcp"))
-        .filter(|p| p.is_file())
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|| fallback.to_string())
-}
+/// The `hotsheet-mcp` command string to record in a tool's MCP config — the core resolver
+/// (absolute sibling next to the running binary, else the bare fallback). Re-exported here
+/// for the CLI's launch paths (`IsolatedCodexHome`); the canonical impl lives in the core
+/// plugins crate so the server resolves it identically (HS2-91).
+pub use hotsheet_plugins::mcp_command;
 
 /// A transient directory holding a `hotsheet` → `hotsheet-cli` shim. Cleaned on drop, so
 /// keep it alive for as long as the launched tool runs.
@@ -516,22 +507,5 @@ mod tests {
         assert!(!home.path().join("auth.json").exists());
         assert!(home.path().join("config.toml").is_file());
     }
-
-    #[test]
-    fn mcp_command_prefers_the_absolute_sibling() {
-        let dir = tempfile::tempdir().unwrap();
-        // No sibling yet → falls back to the bare command.
-        assert_eq!(
-            mcp_command_for(Some(dir.path()), "hotsheet-mcp"),
-            "hotsheet-mcp"
-        );
-        assert_eq!(mcp_command_for(None, "hotsheet-mcp"), "hotsheet-mcp");
-        // With a sibling present → the absolute path.
-        let sib = dir.path().join("hotsheet-mcp");
-        std::fs::write(&sib, "x").unwrap();
-        assert_eq!(
-            mcp_command_for(Some(dir.path()), "hotsheet-mcp"),
-            sib.to_string_lossy()
-        );
-    }
+    // `mcp_command` now lives in `hotsheet-plugins` (its resolver is tested there, HS2-91).
 }

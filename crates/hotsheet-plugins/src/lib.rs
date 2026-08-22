@@ -21,6 +21,9 @@ use std::path::{Path, PathBuf};
 use include_dir::{Dir, include_dir};
 use serde::Deserialize;
 
+pub mod setup;
+pub use setup::{SetupError, SetupReport, mcp_command, run_setup};
+
 /// The bundled first-party plugins, embedded from the repo's `plugins/` tree at build
 /// time. Adding a first-party tool = adding a directory here.
 static CLAUDE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/claude");

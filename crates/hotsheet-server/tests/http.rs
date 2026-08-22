@@ -369,3 +369,56 @@ async fn update_can_append_a_note() {
     .await;
     assert_eq!(got["notes"][0]["text"], "kicked it off");
 }
+
+#[tokio::test]
+async fn setup_endpoint_prepares_the_project_like_the_cli() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let st = AppState::new(store, SECRET.into()).unwrap();
+
+    let resp = app(st)
+        .oneshot(authed("POST", "/setup/codex", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let reports = body_json(resp).await;
+    assert_eq!(reports[0]["tool"], "Codex CLI");
+
+    // Same artifacts the CLI's `setup codex` writes, into the served store.
+    let agents = std::fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+    assert!(agents.contains("<!-- BEGIN hotsheet:codex -->"));
+    let cfg = std::fs::read_to_string(dir.path().join(".codex/config.toml")).unwrap();
+    assert!(cfg.contains("mcp_servers") && cfg.contains("hotsheet"));
+}
+
+#[tokio::test]
+async fn setup_endpoint_rejects_an_unknown_tool() {
+    let (_d, st) = state();
+    let resp = app(st)
+        .oneshot(authed("POST", "/setup/nope", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(resp).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("unknown tool 'nope'")
+    );
+}
+
+#[tokio::test]
+async fn setup_endpoint_needs_the_secret() {
+    let (_d, st) = state();
+    let resp = app(st)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/setup/codex")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
