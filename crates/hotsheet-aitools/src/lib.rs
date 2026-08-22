@@ -15,6 +15,7 @@ pub mod codex;
 pub mod drive;
 pub mod host;
 pub mod live;
+pub mod permission;
 pub mod ports;
 mod procio;
 pub mod registry;
@@ -33,6 +34,11 @@ pub use drive::{
 };
 pub use host::{TriggerError, Triggered, drive_for, trigger};
 pub use live::{LiveError, LiveTrigger, run_trigger};
+pub use permission::{
+    Decision as PermissionDecision, Outcome as PermissionOutcome, PermissionBridge,
+    Request as PermissionRequest, Resolved as PermissionResolved, Rule as PermissionRule,
+    Scope as PermissionScope,
+};
 pub use ports::{
     AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner, RpcReader,
     RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
