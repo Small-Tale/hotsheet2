@@ -126,7 +126,7 @@ and don't imply reading order — read by group.
 > MCP shim · close-reason open/closed axis · id-prefix sharding · PTY sizing
 > focus-follows · assignment = git email + committed `people.json` + one control +
 > soft review · orchestration **live-mount only** (no auto-clone) · multi-machine =
-> **git-native self-claim** (ref/tag CAS, no coordinator) · UI = **Solid** · deferred
+> **git-native self-claim** (ref/tag CAS, no coordinator) · UI = **Kerf (`kerfjs`)** (maintainer's own framework; revises the 2026-08-19 Solid pick, see 09 §9.5) · deferred
 > past v1: cross-server views, iOS push, remote terminals, iOS local stores. Remaining
 > open: the HS1 feature inventory (doc 11) + small implementation-time details.
 >

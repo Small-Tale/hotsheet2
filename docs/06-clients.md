@@ -50,12 +50,18 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Remote projects use the Rust-side mTLS proxy already designed and scaffolded in
   HS1 (§112.5.1 — a loopback proxy that presents the device cert, sidestepping
   every WebView's broken client-cert handling).
-- **UI framework:** open choice. Options: a mainstream reactive framework
-  (Svelte/Solid/React) for velocity, or a continuation of a lightweight custom
-  runtime. Recommendation: **pick a small, well-supported reactive framework**
-  (Solid or Svelte) rather than hand-rolling a runtime again — HS1's bespoke
-  `kerfjs`/JSX runtime was a maintenance tax the rewrite should not repeat. This is
-  a client-local decision, revisitable, and does not affect the service.
+- **UI framework: Kerf (`kerfjs`)** (maintainer, 2026-08-22 — revises the earlier
+  "small mainstream framework / not kerf" lean). The web UI uses **Kerf**, the
+  maintainer's own fine-grained-signals + JSX framework (~12 KB, no vDOM, no
+  compiler): `signal`/`array-signal` for live WS-driven ticket lists, `ref`/`scope`
+  for imperative widgets like the xterm terminal, tree-shakable list virtualization
+  (kerf 4.2), and a planned tree-shakable router. Since HS1 the framework has matured
+  into a published, well-tested v4 — so the "don't re-hand-roll a runtime" concern
+  that pointed away from it no longer applies, and dogfooding HS2 on kerf keeps the
+  whole self-hosting loop (agents included — kerf ships an AI skill + `llms.txt`) in
+  tooling the maintainer owns. Client-local, revisitable, and it does not affect the
+  service. (Standing caveat: single-maintainer bus factor, mitigated by it being
+  dogfooded by that same maintainer.)
 - **Platforms:** macOS primary; Linux/Windows via the same Tauri pipeline as HS1
   (best-effort, community-tested).
 

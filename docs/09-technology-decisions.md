@@ -188,10 +188,22 @@ remote-first on iOS). Android later, same API. No `uniffi`/JNI bindings.
 
 Detail: [06](06-clients.md).
 
-**Sub-decision (client UI framework) — Solid** (maintainer, 2026-08-19). The Tauri
-web UI uses **Solid** (a small, fast, fine-grained-reactive framework — closest in
-spirit to HS1's signals approach without the hand-rolled `kerfjs`/JSX runtime tax).
-Client-local and revisitable, but Solid is the pick.
+**Sub-decision (client UI framework) — Kerf (`kerfjs`)** (maintainer, 2026-08-22 —
+**revises** the 2026-08-19 Solid pick). The Tauri web UI uses **Kerf**, the
+maintainer's own fine-grained-signals + JSX framework (~12 KB, no virtual DOM, no
+compiler; DOM morphing applies the smallest mutation that makes the live tree
+match). It ships exactly the primitives this client needs: `signal` / `array-signal`
+(keyed list reactivity for live, WS-driven ticket updates — the same fine-grained
+class as Solid), `ref` / `scope` (imperative mount + lifecycle cleanup, e.g. an
+xterm terminal), and **tree-shakable list virtualization** (kerf 4.2) for large
+ticket lists; a small tree-shakable **router** is a planned kerf addition. *Rationale
+for the reversal:* kerf is now a **mature, published, well-tested** framework (v4.x),
+not the hand-rolled runtime the earlier note worried about — so the maintenance-tax
+argument that motivated Solid no longer holds. Using kerf also keeps the entire
+self-hosting loop (including the AI agents that build HS2) in tooling the maintainer
+owns and has already taught them — kerf ships an AI skill + `llms.txt`. Standing
+caveat: single-maintainer bus factor, mitigated here because it's dogfooded by that
+same maintainer. Client-local and revisitable.
 
 ---
 
@@ -309,7 +321,7 @@ The crate boundary keeps that split a later, cheap change. Detail:
 | — | Human assignment | git email + **committed `people.json`**; **one "People…" control**; review = **soft** — [10](10-assignment-and-collaboration.md) §10.5 |
 | — | Orchestration | **Live-mount only** — no auto-clone (users clone by hand → a normal local project) — [08](08-distributed-and-remote.md) O1 |
 | — | Multi-machine coordination | **Git-native decentralized self-claim** (ref/tag CAS), no central coordinator — [08](08-distributed-and-remote.md) §8.5 |
-| — | Client UI framework | **Solid** — §9.5 |
+| — | Client UI framework | **Kerf (`kerfjs`)** — maintainer's own fine-grained-signals framework (revises the earlier Solid pick) — §9.5 |
 | — | Async model | **Sync core + async facade**; WAL read-pool + single writer — §9.12 |
 | — | Git access | **gix local, git CLI network** — §9.13 |
 | — | Terminal topology | **Separable crate, one server + broker; split deferred** — §9.14 |

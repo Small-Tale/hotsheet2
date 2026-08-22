@@ -42,12 +42,12 @@ hotsheet2/
                                   #   Deps: ticketing + HTTP.  NO terminals.  (docs/16)
     hotsheet-terminals/           # PTY manager + broker client + busy inference. Nearly standalone
                                   #   (needs project cwd/config, not the ticket index).
-    hotsheet-types/               # wire/API types (serde) + client codegen (ts-rs → Solid; later Swift)
+    hotsheet-types/               # wire/API types (serde) + client codegen (ts-rs → Kerf/TS; later Swift)
     hotsheet-server/  (bin)       # axum/tokio — HTTP/WS/MCP + watcher + terminal host
     hotsheet-cli/     (bin)       # clap — ticket ops + init/serve/reindex/doctor + merge-driver
     hotsheet-ptybroker/ (bin)     # the detached PTY broker
   clients/
-    web/                          # Solid SPA (the Tauri webview UI and the browser build)
+    web/                          # Kerf (kerfjs) SPA (the Tauri webview UI and the browser build)
     tauri/                        # Rust shell: launches/supervises the server, mTLS proxy
     apple/                        # SwiftUI macOS/iOS (stages 2–3)
     android/                      # Kotlin/Compose (stage 4)
@@ -112,7 +112,7 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
 - Errors: `thiserror` in libraries, `anyhow` at binary edges; `Result` throughout.
 - Logging: `tracing` structured logs.
 - Workspace-level dependency versions; `rustfmt` + `clippy -D warnings` enforced in CI.
-- Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for Solid;
+- Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
 
 ---
@@ -133,7 +133,7 @@ transition-matrix tests are the real assurance.
   "write ticket → file committed → index upserted → query returns it."
 - **Server E2E:** boot the real server on an ephemeral port against a temp store;
   drive it over HTTP/WS with a test client; assert full flows with minimal mocks.
-- **Client E2E:** the Solid web UI via **Playwright** against a real running server;
+- **Client E2E:** the Kerf web UI via **Playwright** against a real running server;
   the Tauri app via its harness; SwiftUI via XCUITest (later).
 - **CLI + MCP E2E:** drive the CLI against a temp store (assert disk state +
   idempotence); drive the `hotsheet_*` MCP tools via a test MCP client.
