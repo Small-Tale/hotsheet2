@@ -12,7 +12,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use hotsheet_index::{Index, hash_bytes};
-use hotsheet_ticketing::FsStore;
+use hotsheet_model::{Ticket, Ulid};
+use hotsheet_ticketing::{FsStore, StoreError, StoreRegistry};
 use serde::Serialize;
 
 /// One served store: its file store + its own index.
@@ -100,5 +101,22 @@ impl StoreHost {
     /// How many stores are hosted.
     pub fn count(&self) -> usize {
         self.stores.lock().map(|m| m.len()).unwrap_or(0)
+    }
+
+    /// Resolve a ULID to its single **live** instance across every hosted store,
+    /// following `moved_to_store` tombstones (`StoreRegistry`, HS2-79RXD1). Returns the
+    /// hosting store's URL id + the ticket, or `None` if no hosted store has it. This is
+    /// how a cross-store `blocked_by` / `duplicate_of` / mention resolves (HS2-S4H2AM).
+    pub fn resolve(&self, id: &Ulid) -> Result<Option<(String, Ticket)>, StoreError> {
+        let mut reg = StoreRegistry::new();
+        if let Ok(map) = self.stores.lock() {
+            for e in map.values() {
+                reg.add(e.store.clone());
+            }
+        }
+        match reg.resolve(id)? {
+            Some((store, ticket)) => Ok(Some((store_url_id(store), ticket))),
+            None => Ok(None),
+        }
     }
 }

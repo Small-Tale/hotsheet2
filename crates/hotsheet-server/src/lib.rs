@@ -141,6 +141,9 @@ pub fn app(state: AppState) -> Router {
             "/stores/{store_id}/tickets/{id}/close",
             post(close_store_ticket),
         )
+        // Cross-store resolve: a global ULID → its live instance in whichever store hosts
+        // it (follows moved tombstones). HS2-87 / HS2-S4H2AM.
+        .route("/resolve/{id}", get(resolve_ticket))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -454,6 +457,34 @@ async fn get_store_ticket(
     let entry = scoped_entry(&state, &store_id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json((&ticket).into()))
+}
+
+/// A cross-store resolve result: the ticket + which hosted store it lives in.
+#[derive(Serialize)]
+struct ResolvedTicket {
+    /// URL id of the store the live instance lives in.
+    store: String,
+    #[serde(flatten)]
+    ticket: ApiTicket,
+}
+
+/// `GET /resolve/{ulid}` — resolve a **global ULID** to its single live instance across
+/// every hosted store, following `moved_to_store` tombstones (HS2-87 / HS2-S4H2AM). By
+/// ULID (not slug): slugs are per-store-prefix, but a ULID is global. 404 if unhosted.
+async fn resolve_ticket(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let ulid = Ulid::from_string(&id)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, format!("not a ULID: {id}")))?;
+    let (store, ticket) = state
+        .host
+        .resolve(&ulid)?
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    Ok(Json(ResolvedTicket {
+        store,
+        ticket: (&ticket).into(),
+    }))
 }
 
 /// Prepare the served project for an AI tool — the same core setup the CLI runs headless

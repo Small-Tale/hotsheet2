@@ -794,3 +794,75 @@ async fn a_registered_store_gets_its_own_watcher() {
     }
     panic!("the registered store's watcher did not reindex the external write within 4s");
 }
+
+#[tokio::test]
+async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // A ticket in the default store.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"in default"}"#),
+        ))
+        .await
+        .unwrap();
+    let default_id = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    // A second store with its own ticket.
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    let store2 = body_json(resp).await["id"].as_str().unwrap().to_string();
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/stores/{store2}/tickets"),
+            Some(r#"{"title":"in store2"}"#),
+        ))
+        .await
+        .unwrap();
+    let ulid2 = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    // Resolving each ULID reports the correct hosting store + the ticket.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", &format!("/resolve/{default_id}"), None))
+        .await
+        .unwrap();
+    let got = body_json(resp).await;
+    assert_eq!(got["title"], "in default");
+    assert!(got["store"].is_string());
+
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", &format!("/resolve/{ulid2}"), None))
+        .await
+        .unwrap();
+    let got = body_json(resp).await;
+    assert_eq!(got["title"], "in store2");
+    assert_eq!(got["store"], store2, "resolved to the store that hosts it");
+
+    // Unknown ULID → 404; a non-ULID → 400.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/resolve/01ARZ3NDEKTSV4RRFFQ69G5FAV", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/resolve/not-a-ulid", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
