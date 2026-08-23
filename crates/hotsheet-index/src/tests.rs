@@ -154,6 +154,48 @@ fn limit_caps_the_sql_result() {
     );
 }
 
+#[test]
+fn keyset_paging_matches_the_file_scan_and_is_exclusive() {
+    let (_d, store, ix) = seeded();
+    // Ids FB0 < FB1 < FB2 (default sort = id). Paging after FB0 yields FB1, FB2 — in order.
+    let after_first = TicketQuery {
+        page_after: Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0")),
+        ..Default::default()
+    };
+    let ordered = |rows: &[TicketRow]| rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+    let idx_rows = ix.query(&after_first).unwrap();
+    assert_eq!(
+        ordered(&idx_rows),
+        vec![
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1".to_string(),
+            "01ARZ3NDEKTSV4RRFFQ69G5FB2".to_string(),
+        ]
+    );
+    // Same ordered result on the file-scan path (keyset parity, not just filter parity).
+    let ops_rows: Vec<String> = ops::query(&store, &after_first)
+        .unwrap()
+        .into_iter()
+        .map(|t| t.id.to_string())
+        .collect();
+    assert_eq!(ordered(&idx_rows), ops_rows);
+
+    // Exclusive: after the last id → empty on both paths.
+    let after_last = TicketQuery {
+        page_after: Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2")),
+        ..Default::default()
+    };
+    assert!(ix.query(&after_last).unwrap().is_empty());
+    assert!(ops::query(&store, &after_last).unwrap().is_empty());
+
+    // A stale cursor (not in the store) → empty page, never the whole list, on both paths.
+    let stale = TicketQuery {
+        page_after: Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FBZ")),
+        ..Default::default()
+    };
+    assert!(ix.query(&stale).unwrap().is_empty());
+    assert!(ops::query(&store, &stale).unwrap().is_empty());
+}
+
 /// A fixture exercising blocked/review/moved/date filters, + the index-vs-file-scan parity.
 #[test]
 fn blocked_review_moved_and_date_filters_match_the_file_scan() {

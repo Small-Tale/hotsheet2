@@ -422,9 +422,12 @@ struct LsFilters {
     /// Only tickets that have a close reason set.
     #[arg(long)]
     closed: bool,
-    /// Only tickets assigned to this person (git email).
+    /// Only tickets assigned to this person (git email, or `me` for your git identity).
     #[arg(long)]
     assignee: Option<String>,
+    /// Only tickets with a review request for this person (git email, or `me`).
+    #[arg(long = "review-requested")]
+    review_requested: Option<String>,
     /// Only tickets with a worker claim (a held lease).
     #[arg(long)]
     claimed: bool,
@@ -440,6 +443,10 @@ struct LsFilters {
     /// Cap the number of rows shown (after sort).
     #[arg(long)]
     limit: Option<usize>,
+    /// Keyset cursor (a ULID): show rows strictly after this one, in `sort` order. Page a
+    /// large store without OFFSET — pass the last slug/ULID of the previous page.
+    #[arg(long = "page-after")]
+    page_after: Option<String>,
 }
 
 impl LsFilters {
@@ -838,6 +845,27 @@ fn cmd_new(
 
 fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
     let store = FsStore::open(path)?;
+    // `me` in a person filter → this store's git user.email; an unresolvable `me` errors
+    // rather than silently matching everyone (HS2-TCDTCH, docs/10 §10.3).
+    let resolve_person = |v: &Option<String>| -> Result<Option<String>> {
+        match v {
+            None => Ok(None),
+            Some(raw) if raw.eq_ignore_ascii_case(hotsheet_ticketing::ME) => {
+                hotsheet_ticketing::current_user_email(path)
+                    .map(Some)
+                    .ok_or_else(|| anyhow::anyhow!("cannot resolve 'me': no git user.email set"))
+            }
+            Some(raw) => Ok(Some(raw.clone())),
+        }
+    };
+    let page_after = match &f.page_after {
+        Some(s) => Some(
+            ops::resolve(&store, s)?
+                .ok_or_else(|| anyhow::anyhow!("page-after: no ticket '{s}'"))?
+                .id,
+        ),
+        None => None,
+    };
     let query = TicketQuery {
         // Validate enum filters up front so a typo errors instead of matching none.
         status: f.status.as_deref().map(parse_status_str).transpose()?,
@@ -853,11 +881,13 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
             .map(parse_close_reason)
             .transpose()?,
         closed: f.closed.then_some(true),
-        assignee: f.assignee.clone(),
+        assignee: resolve_person(&f.assignee)?,
+        review_requested: resolve_person(&f.review_requested)?,
         claimed: f.claimed.then_some(true),
         blocked: f.blocked_filter(),
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
         limit: f.limit,
+        page_after,
         ..Default::default()
     };
     let tickets = ops::query(&store, &query)?;

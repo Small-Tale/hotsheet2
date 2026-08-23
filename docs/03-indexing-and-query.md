@@ -8,9 +8,11 @@
 > and broadcasts change events — so a CLI/git edit shows up live. The index is
 > **file-backed** at `~/.hotsheet/index/<hash>.sqlite` and **restored + reconciled on
 > launch** (`Index::open_reconciled`: keep valid rows, re-read only the changed delta,
-> rebuild if corrupt). **Not yet:** the `hotsheet reindex` command + no-server index
-> maintenance, the git-diff fast path (§3.4), the `blocked_by`/`assignees`/`reviews`
-> facet tables, and keyset paging. SQLite + FTS5 is the recommendation; §3.7.
+> rebuild if corrupt). Built: the `hotsheet-cli reindex` command, the git-diff
+> reconcile fast path (§3.4), the `blocked_by`/`assignees`/`reviews` facet tables, and
+> **keyset paging** (`page_after` cursor) + `me` identity resolution (§3.5, HS2-TCDTCH).
+> **Not yet:** no-server incremental index maintenance and the watcher's git-diff
+> fast path. SQLite + FTS5 is the recommendation; §3.7.
 
 ## 3.1 Why an index at all
 
@@ -138,8 +140,20 @@ query(filter, sort, text?, paging) -> TicketRow[]
 - **limit:** an optional `limit` caps the number of rows returned (applied after
   sort, as a SQL `LIMIT` in the index and a truncate in the serverless scan). It is a
   hard cap, never a silent default — a caller asks for it explicitly.
-- **paging:** keyset pagination on `(sort_key, store_id, id)` for large stores (the
-  general form of `limit`; not yet built).
+- **paging:** keyset pagination for large stores — the general form of `limit`
+  (HS2-TCDTCH, **built**). A `page_after=<ULID>` cursor returns only the rows that
+  sort **strictly after** that ticket in the current `(sort, id)` total order, so a
+  client pages a big store without SQL `OFFSET`. The index does it as a type-exact
+  row-value comparison — `(order, t.id) > (SELECT order, id FROM the cursor row)` —
+  and the serverless file-scan slices the sorted list after the cursor position; both
+  paths return an **empty page** for a stale cursor (a ULID no longer in the store),
+  so the client restarts from the top. To page, pass the last row's ULID as the next
+  `page_after`. The CLI (`ls --page-after <slug|ULID>`) accepts a slug for convenience.
+- **"me":** the `assignee` / `review_requested` person filters accept the sentinel
+  `me`, resolved to the store's **git `user.email`** (the same identity assignment
+  writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).
+  An unresolvable `me` (no git identity) is an **error**, never a silent
+  match-everyone.
 
 **Store + move handling (§2.2.1, §2.13):**
 - Every row carries `store_id`, so the UI can filter or group by store and show the

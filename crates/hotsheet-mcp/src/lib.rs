@@ -416,7 +416,7 @@ mod core_backend {
     impl Backend for CoreBackend {
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
             if path == "/tickets" {
-                let q = build_query(query)?;
+                let q = build_query(query, self.store.root())?;
                 let compact = wants_compact(query);
                 let rows: Vec<TicketRow> = ops::query(&self.store, &q)
                     .map_err(store_err)?
@@ -682,7 +682,10 @@ mod core_backend {
         ticket
     }
 
-    fn build_query(pairs: &[(String, String)]) -> Result<TicketQuery, BackendError> {
+    fn build_query(
+        pairs: &[(String, String)],
+        store_root: &std::path::Path,
+    ) -> Result<TicketQuery, BackendError> {
         let get = |k: &str| {
             pairs
                 .iter()
@@ -692,6 +695,28 @@ mod core_backend {
         let sort = match get("sort") {
             Some(s) => s.parse::<SortKey>().map_err(bad_request)?,
             None => SortKey::default(),
+        };
+        // `me` → the store's git user.email; an unresolvable `me` is an error, not a silent
+        // match-everyone (HS2-TCDTCH, docs/10 §10.3).
+        let resolve_person = |v: Option<&str>| -> Result<Option<String>, BackendError> {
+            match v {
+                None => Ok(None),
+                Some(raw) if raw.eq_ignore_ascii_case(hotsheet_ticketing::ME) => {
+                    hotsheet_ticketing::current_user_email(store_root)
+                        .map(Some)
+                        .ok_or_else(|| {
+                            bad_request("cannot resolve 'me': no git user.email configured")
+                        })
+                }
+                Some(raw) => Ok(Some(raw.to_string())),
+            }
+        };
+        let page_after = match get("page_after") {
+            Some(s) => Some(
+                hotsheet_model::Ulid::from_string(s)
+                    .map_err(|_| bad_request(format!("invalid page_after cursor '{s}'")))?,
+            ),
+            None => None,
         };
         Ok(TicketQuery {
             status: opt_enum_str(get("status"))?,
@@ -710,9 +735,9 @@ mod core_backend {
             open_only: get("open") == Some("true"),
             close_reason: opt_enum_str(get("close_reason"))?,
             closed: get("closed").map(|v| v == "true"),
-            assignee: get("assignee").map(str::to_string),
+            assignee: resolve_person(get("assignee"))?,
             claimed: get("claimed").map(|v| v == "true"),
-            review_requested: get("review_requested").map(str::to_string),
+            review_requested: resolve_person(get("review_requested"))?,
             blocked: get("blocked").map(|v| v == "true"),
             sort,
             limit: match get("limit") {
@@ -722,6 +747,7 @@ mod core_backend {
                 ),
                 None => None,
             },
+            page_after,
             ..Default::default()
         })
     }

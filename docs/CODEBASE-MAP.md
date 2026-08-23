@@ -33,7 +33,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/format.rs          #   parse_file / to_file_string (YAML frontmatter + body + notes)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
-      src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter (HS2-20)
+      src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
+      src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)
       src/distclaim.rs       #   git-native distributed claim/lease: refs/hotsheet/claims/<ulid> push-CAS (first-wins), force-with-lease renew/steal, ls-remote enumerate, expiry sweep (docs/08 §8.5, HS2-84)
       src/distwork.rs        #   distributed self-claim fan-out: select_and_claim (worklist candidate + git-ref CAS → local claim; two machines never double-claim) + work_once (claim→drive→renew/release lease cycle, injected drive); docs/08 §8.5, HS2-E7RXXR/HS2-DTPX2V

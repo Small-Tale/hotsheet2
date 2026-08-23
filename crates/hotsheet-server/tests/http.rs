@@ -264,6 +264,139 @@ async fn list_is_compact_by_default_and_supports_limit() {
 }
 
 #[tokio::test]
+async fn keyset_paging_walks_the_store_and_rejects_a_bad_cursor() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Three tickets.
+    for i in 0..3 {
+        let body = format!(r#"{{"title":"t{i}"}}"#);
+        let resp = app
+            .clone()
+            .oneshot(authed("POST", "/tickets", Some(&body)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    // Page one row at a time via page_after=<last id>, and reassemble the walk.
+    let mut seen: Vec<String> = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let uri = match &cursor {
+            Some(c) => format!("/tickets?limit=1&page_after={c}"),
+            None => "/tickets?limit=1".to_string(),
+        };
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", &uri, None))
+            .await
+            .unwrap();
+        let rows = body_json(resp).await;
+        let rows = rows.as_array().unwrap();
+        if rows.is_empty() {
+            break;
+        }
+        let id = rows[0]["id"].as_str().unwrap().to_string();
+        cursor = Some(id.clone());
+        seen.push(id);
+    }
+    assert_eq!(seen.len(), 3, "keyset walk should visit every ticket once");
+    let unique: std::collections::HashSet<_> = seen.iter().collect();
+    assert_eq!(unique.len(), 3, "no ticket should appear twice");
+
+    // A non-ULID cursor is a 400, not a silent full list.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?page_after=not-a-ulid", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn assignee_me_resolves_to_the_stores_git_identity() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    // `me` resolves via `git config user.email`, so the store dir must be a repo with a
+    // pinned local identity (deterministic regardless of global git config).
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(dir.path())
+        .arg("init")
+        .output()
+        .unwrap();
+    for args in [["user.email", "me@hs.test"], ["user.name", "Me"]] {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir.path())
+            .arg("config")
+            .args(args)
+            .output()
+            .unwrap();
+    }
+    let now = Timestamp::new("2026-08-19T00:00:00Z");
+    let mine = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        now.clone(),
+        NewTicket {
+            title: "mine".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let theirs = ops::create(
+        &store,
+        Ulid::new(),
+        "HS",
+        now.clone(),
+        NewTicket {
+            title: "theirs".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::assign(
+        &store,
+        &mine.id,
+        now.clone(),
+        Some(vec!["me@hs.test".into()]),
+        vec![],
+    )
+    .unwrap();
+    ops::assign(
+        &store,
+        &theirs.id,
+        now,
+        Some(vec!["other@hs.test".into()]),
+        vec![],
+    )
+    .unwrap();
+
+    // Index reflects the assignments (built at construction, over the seeded store).
+    let app = app(AppState::new(store, SECRET.into()).unwrap());
+
+    // assignee=me resolves to me@hs.test and returns only my ticket.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?assignee=me", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let rows = body_json(resp).await;
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["title"], "mine");
+}
+
+#[tokio::test]
 async fn watcher_reindexes_an_external_write() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};
@@ -776,8 +909,9 @@ async fn a_registered_store_gets_its_own_watcher() {
     )
     .unwrap();
 
-    // The per-store watcher should reindex it; poll the scoped list until it appears.
-    for _ in 0..40 {
+    // The per-store watcher should reindex it; poll the scoped list until it appears. Use a
+    // non-blocking async sleep (a blocking sleep starves the runtime the watcher shares).
+    for _ in 0..80 {
         let resp = app
             .clone()
             .oneshot(authed(
@@ -790,7 +924,7 @@ async fn a_registered_store_gets_its_own_watcher() {
         if body_json(resp).await.as_array().unwrap().len() == 1 {
             return;
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
     panic!("the registered store's watcher did not reindex the external write within 4s");
 }

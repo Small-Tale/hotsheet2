@@ -573,7 +573,7 @@ async fn list_tickets(
     Query(params): Query<ListParams>,
 ) -> Result<Json<Vec<TicketRow>>, ApiError> {
     let compact = params.compact.unwrap_or(true);
-    let query = params.into_query()?;
+    let query = params.into_query(state.store.root())?;
     let mut rows = state
         .index
         .lock()
@@ -644,7 +644,7 @@ async fn list_store_tickets(
         .get(&store_id)
         .ok_or_else(|| ApiError::not_found(&store_id))?;
     let compact = params.compact.unwrap_or(true);
-    let query = params.into_query()?;
+    let query = params.into_query(entry.store.root())?;
     let mut rows = entry
         .index
         .lock()
@@ -1438,17 +1438,48 @@ struct ListParams {
     updated_before: Option<String>,
     sort: Option<String>,
     limit: Option<usize>,
+    /// Keyset cursor (a ULID): return rows strictly after this one in `sort` order (HS2-TCDTCH).
+    page_after: Option<String>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.
     compact: Option<bool>,
 }
 
 impl ListParams {
-    fn into_query(self) -> Result<TicketQuery, ApiError> {
+    /// Build the `TicketQuery`, resolving the `me` sentinel in person filters against the
+    /// store's git identity (HS2-TCDTCH). `store_root` is the store the query runs against.
+    fn into_query(self, store_root: &FsPath) -> Result<TicketQuery, ApiError> {
         let sort = match self.sort {
             Some(s) => s
                 .parse::<SortKey>()
                 .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e))?,
             None => SortKey::default(),
+        };
+        // `me` → the store's git user.email; a `me` that can't be resolved is an error, not a
+        // silent match-everyone (docs/10 §10.3).
+        let resolve_person = |v: Option<String>| -> Result<Option<String>, ApiError> {
+            match v {
+                None => Ok(None),
+                Some(raw) if raw.eq_ignore_ascii_case(hotsheet_ticketing::ME) => {
+                    hotsheet_ticketing::current_user_email(store_root)
+                        .map(Some)
+                        .ok_or_else(|| {
+                            ApiError::new(
+                                StatusCode::BAD_REQUEST,
+                                "cannot resolve 'me': no git user.email configured",
+                            )
+                        })
+                }
+                Some(raw) => Ok(Some(raw)),
+            }
+        };
+        let page_after = match self.page_after {
+            Some(s) => Some(Ulid::from_string(&s).map_err(|_| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid page_after cursor (not a ULID)",
+                )
+            })?),
+            None => None,
         };
         Ok(TicketQuery {
             status: opt_parse(self.status.as_deref())?,
@@ -1468,8 +1499,8 @@ impl ListParams {
             open_only: self.open.unwrap_or(false),
             close_reason: opt_parse(self.close_reason.as_deref())?,
             closed: self.closed,
-            assignee: self.assignee,
-            review_requested: self.review_requested,
+            assignee: resolve_person(self.assignee)?,
+            review_requested: resolve_person(self.review_requested)?,
             claimed: self.claimed,
             blocked: self.blocked,
             created_after: self.created_after,
@@ -1478,6 +1509,7 @@ impl ListParams {
             updated_before: self.updated_before,
             sort,
             limit: self.limit,
+            page_after,
         })
     }
 }

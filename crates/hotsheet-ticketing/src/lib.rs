@@ -10,6 +10,7 @@ use hotsheet_model::Ulid;
 
 pub mod distclaim;
 pub mod distwork;
+pub mod identity;
 pub mod merge;
 pub mod metrics;
 pub mod ops;
@@ -24,6 +25,7 @@ pub mod sync;
 pub mod wire;
 pub mod worklist;
 pub use distclaim::{ClaimMarker, ClaimResult, DistError};
+pub use identity::{ME, current_user_email, resolve_me};
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
 pub use metrics::{Rollup, UsageEvent};
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};

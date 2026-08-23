@@ -106,6 +106,12 @@ pub struct TicketQuery {
     pub sort: SortKey,
     /// Cap the number of rows returned (after sort). `None` = no cap.
     pub limit: Option<usize>,
+    /// Keyset cursor: return only rows that sort **strictly after** the ticket with this
+    /// ULID, in the current `sort` order (with `id` as the stable tiebreaker — the same total
+    /// order the index uses). `None` = start at the top. The general form of `limit`, so a
+    /// client pages a large store without `OFFSET` (docs/03 §3.5, HS2-TCDTCH). If the cursor
+    /// ticket no longer exists, the page is empty (the client should restart from the top).
+    pub page_after: Option<Ulid>,
 }
 
 /// Run a query: read the store, filter, sort, and (if set) cap to `limit`.
@@ -152,6 +158,16 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });
     sort_tickets(&mut tickets, q.sort);
+    // Keyset: drop everything up to and including the cursor row (HS2-TCDTCH). A missing
+    // cursor id yields an empty page — the client restarts from the top.
+    if let Some(cursor) = q.page_after {
+        match tickets.iter().position(|t| t.id == cursor) {
+            Some(pos) => {
+                tickets.drain(..=pos);
+            }
+            None => tickets.clear(),
+        }
+    }
     if let Some(n) = q.limit {
         tickets.truncate(n);
     }
@@ -183,17 +199,38 @@ fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
 }
 
 fn sort_tickets(tickets: &mut [Ticket], key: SortKey) {
+    // Every arm breaks ties by `id` last, so the order is total and deterministic — the same
+    // `ORDER BY {col}, t.id` the index uses. Keyset pagination (`page_after`) relies on this.
     match key {
         SortKey::Id => tickets.sort_by_key(|t| t.id),
-        SortKey::Created => {
-            tickets.sort_by(|a, b| a.created_at.as_str().cmp(b.created_at.as_str()))
-        }
-        SortKey::Updated => {
-            tickets.sort_by(|a, b| a.updated_at.as_str().cmp(b.updated_at.as_str()))
-        }
-        SortKey::Priority => tickets.sort_by_key(|t| priority_rank(t.priority)),
-        SortKey::Status => tickets.sort_by_key(|t| t.status as u8),
-        SortKey::Title => tickets.sort_by_key(|t| t.title.to_lowercase()),
+        SortKey::Created => tickets.sort_by(|a, b| {
+            a.created_at
+                .as_str()
+                .cmp(b.created_at.as_str())
+                .then(a.id.cmp(&b.id))
+        }),
+        SortKey::Updated => tickets.sort_by(|a, b| {
+            a.updated_at
+                .as_str()
+                .cmp(b.updated_at.as_str())
+                .then(a.id.cmp(&b.id))
+        }),
+        SortKey::Priority => tickets.sort_by(|a, b| {
+            priority_rank(a.priority)
+                .cmp(&priority_rank(b.priority))
+                .then(a.id.cmp(&b.id))
+        }),
+        SortKey::Status => tickets.sort_by(|a, b| {
+            (a.status as u8)
+                .cmp(&(b.status as u8))
+                .then(a.id.cmp(&b.id))
+        }),
+        SortKey::Title => tickets.sort_by(|a, b| {
+            a.title
+                .to_lowercase()
+                .cmp(&b.title.to_lowercase())
+                .then(a.id.cmp(&b.id))
+        }),
     }
 }
 
@@ -725,6 +762,71 @@ mod tests {
         )
         .unwrap();
         assert_eq!(over.len(), 5);
+    }
+
+    #[test]
+    fn keyset_paging_walks_the_whole_store_without_gaps_or_overlap() {
+        let (_d, store) = store();
+        for i in 0..7 {
+            create(
+                &store,
+                Ulid::new(),
+                "HS",
+                ts("2026-08-19T00:00:00Z"),
+                NewTicket {
+                    title: format!("t{i}"),
+                    category: "task".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let all = query(&store, &TicketQuery::default()).unwrap();
+        assert_eq!(all.len(), 7);
+
+        // Page through in chunks of 3 using the last row's id as the next cursor, and
+        // reassemble — it must equal the single-shot sorted list exactly (no gaps, no dupes).
+        let mut paged: Vec<Ulid> = Vec::new();
+        let mut cursor: Option<Ulid> = None;
+        loop {
+            let page = query(
+                &store,
+                &TicketQuery {
+                    limit: Some(3),
+                    page_after: cursor,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            if page.is_empty() {
+                break;
+            }
+            cursor = Some(page.last().unwrap().id);
+            paged.extend(page.iter().map(|t| t.id));
+        }
+        assert_eq!(paged, all.iter().map(|t| t.id).collect::<Vec<_>>());
+
+        // The cursor is strictly exclusive: page_after the last row yields nothing.
+        let after_last = query(
+            &store,
+            &TicketQuery {
+                page_after: Some(all.last().unwrap().id),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(after_last.is_empty());
+
+        // A stale cursor (a ULID not in the store) yields an empty page, not the whole list.
+        let stale = query(
+            &store,
+            &TicketQuery {
+                page_after: Some(Ulid::new()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(stale.is_empty());
     }
 
     #[test]

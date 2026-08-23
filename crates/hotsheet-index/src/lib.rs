@@ -568,6 +568,19 @@ impl Index {
             SortKey::Title => "lower(t.title)",
         };
 
+        // Keyset pagination (HS2-TCDTCH): rows strictly after the cursor row in the total
+        // `(order, t.id)` sort order. The subquery selects the SAME sort expression from the
+        // cursor row, so the row-value comparison is type-exact; a missing cursor row makes
+        // the subquery NULL → an empty page (matching the ops::query file-scan path).
+        if let Some(cursor) = q.page_after {
+            wheres.push(format!(
+                "({order}, t.id) > (SELECT {order}, t.id FROM tickets t \
+                 WHERE t.id = ? AND t.store_id = ?)"
+            ));
+            args.push(Box::new(cursor.to_string()));
+            args.push(Box::new(self.store_id.clone()));
+        }
+
         let limit = match q.limit {
             Some(n) => format!(" LIMIT {n}"),
             None => String::new(),
