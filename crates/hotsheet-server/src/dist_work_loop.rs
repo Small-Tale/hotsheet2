@@ -191,8 +191,12 @@ pub fn outcome_from_turn(
 pub fn live_drive(
     tool: String,
     prompt: String,
+    permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
 ) -> impl Fn(&FsStore, &hotsheet_model::Ulid) -> WorkOutcome + Send + 'static {
-    move |store, id| drive_one_ticket(store, id, &tool, &prompt).unwrap_or(WorkOutcome::Failed)
+    move |store, id| {
+        drive_one_ticket(store, id, &tool, &prompt, permission_bridge.clone())
+            .unwrap_or(WorkOutcome::Failed)
+    }
 }
 
 fn drive_one_ticket(
@@ -200,11 +204,17 @@ fn drive_one_ticket(
     id: &hotsheet_model::Ulid,
     tool: &str,
     prompt: &str,
+    permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
 ) -> anyhow::Result<WorkOutcome> {
     use hotsheet_aitools::{ConnectionRegistry, prepare_trigger};
     let before = store.read_ticket(id)?;
     // Fresh launch isolation per ticket (throwaway CODEX_HOME + PATH shim; HS2-103).
-    let safe = prepare_trigger(store.root(), tool, None, None, None, Vec::new(), false)?;
+    let mut safe = prepare_trigger(store.root(), tool, None, None, None, Vec::new(), false)?;
+    // Attach the server's permission bridge so a driven codex's approvals block for a human
+    // answering over POST /permissions instead of auto-approving (HS2-Q1F6HV).
+    if let Some(bridge) = permission_bridge {
+        safe = safe.with_permission_bridge(bridge);
+    }
     let mut registry = ConnectionRegistry::new(30_000);
     // A server-driven turn is a worker role; output is streamed to a quiet sink (logged
     // elsewhere), and the connection is labelled per ticket for busy tracking.

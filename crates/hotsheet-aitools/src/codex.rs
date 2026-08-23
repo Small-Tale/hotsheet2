@@ -24,20 +24,27 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
-use crate::permission::{Decision, Outcome, PermissionBridge, Scope};
+use crate::permission::{Decision, SharedPermissionBridge};
 use crate::ports::{
     AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, RpcReader, RpcTransport,
     RpcWriter,
 };
 use crate::procio::StreamChild;
 
-/// How a Codex approval ServerRequest is decided (`docs/05` §5.7, HS2-113): the shared
-/// [`PermissionBridge`] answers from its allow-rules; anything it can't auto-resolve falls
-/// back to `default` (the headless policy — a real human round-trip over the bridge's
-/// WebSocket transport is the remaining piece, HS2-0QGW07 follow-on).
+/// How a Codex approval ServerRequest is decided (`docs/05` §5.7, HS2-0QGW07 → HS2-Q1F6HV):
+/// the shared [`SharedPermissionBridge`] answers from its allow-rules; anything it can't
+/// auto-resolve **blocks the turn** for a human answering over the server's route-back
+/// (`POST /permissions/{id}`), up to `timeout`, then falls back to `default` (typically
+/// `Deny`) so an unattended run can't hang.
 pub struct PermissionPolicy {
-    pub bridge: Arc<Mutex<PermissionBridge>>,
+    pub bridge: Arc<SharedPermissionBridge>,
+    /// The live connection id attributed on requests (so a client shows which running tool
+    /// is asking).
+    pub connection: String,
+    /// The safe fallback applied when no human answers within `timeout`.
     pub default: Decision,
+    /// How long to block for a human before falling back to `default`.
+    pub timeout: Duration,
 }
 
 /// How long to wait for a single request's response before giving up.
@@ -186,20 +193,14 @@ fn approval_tokens(method: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-/// Consult the bridge: an allow-rule auto-resolves; a pending request (no live human
-/// transport yet) falls back to the policy default and is resolved so the queue can't leak.
+/// Consult the bridge: an allow-rule auto-resolves; otherwise **block the turn** for a
+/// human answering over the route-back (up to `timeout`, then the safe `default`). Runs on
+/// the RPC reader thread, so the turn is paused exactly while approval is pending — the
+/// route-back resolve arrives on a different (server HTTP) thread and wakes it.
 fn resolve_decision(p: &PermissionPolicy, method: &str, params: &Value) -> Decision {
     let action = approval_action(params);
-    let Ok(mut bridge) = p.bridge.lock() else {
-        return p.default;
-    };
-    match bridge.request("codex", method, action) {
-        Outcome::Auto(d) => d,
-        Outcome::Pending(reqid) => {
-            let _ = bridge.resolve(reqid, p.default, Scope::Once);
-            p.default
-        }
-    }
+    p.bridge
+        .request_blocking_timeout(p.connection.clone(), method, action, p.timeout, p.default)
 }
 
 /// A coarse action string for rule-matching: the command (joined), else a call id / path.
@@ -931,12 +932,17 @@ pub(crate) mod scripted {
 #[cfg(test)]
 mod approval_tests {
     use super::*;
-    use crate::permission::{Decision, PermissionBridge, Rule};
+    use crate::permission::{Decision, PermissionBridge, Rule, SharedPermissionBridge};
 
     fn policy(rules: Vec<Rule>, default: Decision) -> PermissionPolicy {
         PermissionPolicy {
-            bridge: Arc::new(Mutex::new(PermissionBridge::with_rules(rules))),
+            bridge: Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
+                rules,
+            ))),
+            connection: "codex".into(),
             default,
+            // Short so the "unmatched → blocks then falls back to default" test is quick.
+            timeout: Duration::from_millis(30),
         }
     }
 
@@ -994,10 +1000,50 @@ mod approval_tests {
             &json!({"command": ["curl", "x"]}),
         );
         assert_eq!(def["decision"], "denied");
-        assert_eq!(
-            p.bridge.lock().unwrap().pending_count(),
-            0,
-            "no leaked pending requests"
+        assert!(
+            p.bridge.pending().is_empty(),
+            "no leaked pending requests after the timeout fallback"
         );
+    }
+
+    #[test]
+    fn a_pending_approval_blocks_until_a_human_resolves_it() {
+        use std::sync::Arc;
+        // No rule → the approval must block for a human. A generous timeout; the "human"
+        // (another thread) approves it, and the reader-thread decision reflects that.
+        let p = Arc::new(policy_with_timeout(std::time::Duration::from_secs(5)));
+        let bridge = p.bridge.clone();
+        let pt = p.clone();
+        let waiter = std::thread::spawn(move || {
+            decide_approval(
+                Some(&pt),
+                "execCommandApproval",
+                &json!({"command": ["git", "push"]}),
+            )
+        });
+        // Wait for it to enqueue, then approve as the human would over the route-back.
+        let id = loop {
+            if let Some(r) = bridge.pending().into_iter().next() {
+                break r.id;
+            }
+            std::thread::yield_now();
+        };
+        bridge
+            .resolve(id, Decision::Allow, crate::permission::Scope::Once)
+            .unwrap();
+        assert_eq!(
+            waiter.join().unwrap()["decision"],
+            "approved",
+            "the blocked approval got the human's answer"
+        );
+    }
+
+    fn policy_with_timeout(timeout: std::time::Duration) -> PermissionPolicy {
+        PermissionPolicy {
+            bridge: Arc::new(SharedPermissionBridge::default()),
+            connection: "codex".into(),
+            default: Decision::Deny,
+            timeout,
+        }
     }
 }

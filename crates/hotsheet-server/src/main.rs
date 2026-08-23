@@ -148,7 +148,14 @@ async fn main() -> Result<()> {
             tool: tool.clone(),
             ..Default::default()
         };
-        let drive = live_drive(cfg.tool.clone(), cfg.prompt.clone());
+        // Driven approvals block on the server's permission bridge, so a client answering
+        // over POST /permissions steers the tool (HS2-Q1F6HV); without a client they time
+        // out to the safe default (Deny).
+        let drive = live_drive(
+            cfg.tool.clone(),
+            cfg.prompt.clone(),
+            Some(state.permission_bridge()),
+        );
         Some(spawn_dist_work_loop(
             state.clone(),
             cfg,

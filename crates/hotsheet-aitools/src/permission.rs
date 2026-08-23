@@ -20,6 +20,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::{Condvar, Mutex};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -273,6 +274,65 @@ impl SharedPermissionBridge {
         }
     }
 
+    /// Like [`request_blocking`], but if no human answers within `timeout` it resolves the
+    /// pending request with `on_timeout` and returns it — so an unattended driven turn can't
+    /// hang forever waiting on a client that never comes (HS2-Q1F6HV). An allow-rule still
+    /// answers immediately without waiting.
+    pub fn request_blocking_timeout(
+        &self,
+        connection: impl Into<String>,
+        tool: impl Into<String>,
+        action: impl Into<String>,
+        timeout: Duration,
+        on_timeout: Decision,
+    ) -> Decision {
+        let (connection, tool, action) = (connection.into(), tool.into(), action.into());
+        let id = match self.inner.lock().unwrap().request(
+            connection.clone(),
+            tool.clone(),
+            action.clone(),
+        ) {
+            Outcome::Auto(d) => return d,
+            Outcome::Pending(id) => id,
+        };
+        if let Some(f) = self.on_pending.lock().unwrap().as_ref() {
+            f(&Request {
+                id,
+                connection,
+                tool,
+                action,
+            });
+        }
+        let deadline = Instant::now() + timeout;
+        let mut results = self.results.lock().unwrap();
+        loop {
+            if let Some(d) = results.remove(&id) {
+                return d;
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                drop(results);
+                // Win the race to abandon it; if a human resolved it just now, honor that.
+                return match self
+                    .inner
+                    .lock()
+                    .unwrap()
+                    .resolve(id, on_timeout, Scope::Once)
+                {
+                    Some(_) => on_timeout,
+                    None => self
+                        .results
+                        .lock()
+                        .unwrap()
+                        .remove(&id)
+                        .unwrap_or(on_timeout),
+                };
+            }
+            let (guard, _) = self.cvar.wait_timeout(results, deadline - now).unwrap();
+            results = guard;
+        }
+    }
+
     /// The pending requests (for the server to push over the WS to clients).
     pub fn pending(&self) -> Vec<Request> {
         self.inner.lock().unwrap().pending().cloned().collect()
@@ -383,6 +443,62 @@ mod tests {
             Decision::Deny,
             "the waiter got the human's answer"
         );
+    }
+
+    #[test]
+    fn request_blocking_timeout_falls_back_when_no_one_answers() {
+        use std::sync::Arc;
+        let b = Arc::new(SharedPermissionBridge::default());
+        // No human, short timeout → the fallback decision is applied and nothing leaks.
+        let d = b.request_blocking_timeout(
+            "c",
+            "Bash",
+            "rm x",
+            Duration::from_millis(20),
+            Decision::Deny,
+        );
+        assert_eq!(d, Decision::Deny, "timed out → the safe fallback");
+        assert!(b.pending().is_empty(), "the timed-out request was cleared");
+    }
+
+    #[test]
+    fn request_blocking_timeout_returns_a_human_answer_that_beats_the_timeout() {
+        use std::sync::Arc;
+        let b = Arc::new(SharedPermissionBridge::default());
+        let bt = b.clone();
+        // A generous timeout; a human answers well within it.
+        let waiter = std::thread::spawn(move || {
+            bt.request_blocking_timeout("c", "Bash", "ls", Duration::from_secs(5), Decision::Deny)
+        });
+        let id = loop {
+            if let Some(r) = b.pending().into_iter().next() {
+                break r.id;
+            }
+            std::thread::yield_now();
+        };
+        b.resolve(id, Decision::Allow, Scope::Once).unwrap();
+        assert_eq!(
+            waiter.join().unwrap(),
+            Decision::Allow,
+            "the human answer wins"
+        );
+    }
+
+    #[test]
+    fn request_blocking_timeout_auto_resolves_a_ruled_request_without_waiting() {
+        use std::sync::Arc;
+        let b = Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
+            vec![Rule {
+                tool: "Bash".into(),
+                action: "ls".into(),
+                decision: Decision::Allow,
+                persist: true,
+            }],
+        )));
+        // A rule answers immediately — the (tiny) timeout is never reached.
+        let d =
+            b.request_blocking_timeout("c", "Bash", "ls", Duration::from_millis(1), Decision::Deny);
+        assert_eq!(d, Decision::Allow);
     }
 
     #[test]

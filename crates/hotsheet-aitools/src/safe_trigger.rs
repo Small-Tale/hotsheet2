@@ -23,6 +23,9 @@ pub struct SafeTrigger {
     // Drive codex via its isolated-home shared daemon (reuse one instance) vs. a fresh
     // app-server process per turn (HS2-B7C66H).
     shared_daemon: bool,
+    // A live permission bridge to block approvals on a human (HS2-Q1F6HV); None = auto-
+    // approve (the CLI's headless default).
+    permission_bridge: Option<std::sync::Arc<crate::permission::SharedPermissionBridge>>,
     // Kept alive so the shim dir survives every turn; dropped when the SafeTrigger is.
     _shim: launch_safety::ShimDir,
     // The throwaway codex CODEX_HOME (app-server tools only), kept alive for every turn.
@@ -152,6 +155,7 @@ pub fn prepare_trigger(
         // permission bridge round-trip is HS2-9R9YZW / HS2-Q1F6HV.
         permission_mode: permission_mode.unwrap_or_else(|| "acceptEdits".to_string()),
         shared_daemon,
+        permission_bridge: None,
         _shim: shim,
         _codex_home: codex_home,
     })
@@ -161,6 +165,16 @@ impl SafeTrigger {
     /// The plugin id being driven.
     pub fn tool(&self) -> &str {
         self.plugin.id()
+    }
+
+    /// Attach a live permission bridge so a driven codex's approvals **block for a human**
+    /// (the server route-back) instead of auto-approving (HS2-Q1F6HV). Builder-style.
+    pub fn with_permission_bridge(
+        mut self,
+        bridge: std::sync::Arc<crate::permission::SharedPermissionBridge>,
+    ) -> Self {
+        self.permission_bridge = Some(bridge);
+        self
     }
 
     /// Drive one turn, streaming the tool's events to `on_event` (including the terminal
@@ -190,6 +204,7 @@ impl SafeTrigger {
             permission_mode: Some(self.permission_mode.clone()),
             env: self.env.clone(),
             shared_daemon: self.shared_daemon,
+            permission_bridge: self.permission_bridge.clone(),
             now_ms,
         };
         run_trigger(&self.plugin, &t, registry, on_event).map_err(|e| match e {

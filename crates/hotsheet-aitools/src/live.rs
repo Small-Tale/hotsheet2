@@ -41,9 +41,16 @@ pub struct LiveTrigger {
     /// `CODEX_HOME` (one codex instance reused across turns) instead of spawning a fresh
     /// `app-server` process per connection (HS2-B7C66H). Requires `CODEX_HOME` in `env`.
     pub shared_daemon: bool,
+    /// A live permission bridge to **block approvals on a human** (HS2-Q1F6HV). `None` =
+    /// auto-approve (the headless default; a bare CLI run has no human UI). Only the
+    /// app-server (codex) transport consults it today.
+    pub permission_bridge: Option<std::sync::Arc<crate::permission::SharedPermissionBridge>>,
     /// Injected clock.
     pub now_ms: u64,
 }
+
+/// How long a driven codex approval blocks for a human before the safe fallback (`Deny`).
+const PERMISSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
 /// A failed live trigger.
 #[derive(Debug, thiserror::Error)]
@@ -122,6 +129,17 @@ pub fn run_trigger(
                 CodexAppServer::connect(transport)
                     .map_err(|e| LiveError::Connect(program.clone(), e.to_string()))?
             };
+            // Attach the live permission bridge (if any): approvals now BLOCK the turn for a
+            // human answering over the server route-back instead of auto-approving
+            // (HS2-Q1F6HV). Without one, the isolated headless default (auto-approve) holds.
+            if let Some(bridge) = &t.permission_bridge {
+                app.set_permission_policy(crate::codex::PermissionPolicy {
+                    bridge: bridge.clone(),
+                    connection: t.conn_id.clone(),
+                    default: crate::permission::Decision::Deny,
+                    timeout: PERMISSION_TIMEOUT,
+                });
+            }
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
                 spawner: &spawner,

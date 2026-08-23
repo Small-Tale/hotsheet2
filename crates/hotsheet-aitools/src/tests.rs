@@ -813,6 +813,7 @@ fn live(prompt: &str, cwd: &std::path::Path) -> LiveTrigger {
         permission_mode: None,
         env: Vec::new(),
         shared_daemon: false,
+        permission_bridge: None,
         now_ms: 1_000,
     }
 }
