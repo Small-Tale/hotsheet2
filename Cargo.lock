@@ -814,6 +814,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "futures-util",
  "hotsheet-aitools",
  "hotsheet-index",
  "hotsheet-model",
@@ -834,8 +835,10 @@ dependencies = [
  "time",
  "tokio",
  "tokio-rustls",
+ "tokio-tungstenite",
  "tower",
  "ulid",
+ "ureq",
 ]
 
 [[package]]
@@ -844,6 +847,7 @@ version = "0.0.0"
 dependencies = [
  "portable-pty",
  "thiserror 2.0.20",
+ "tokio",
 ]
 
 [[package]]

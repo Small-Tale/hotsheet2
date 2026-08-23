@@ -595,6 +595,10 @@ pub fn app(state: AppState) -> Router {
         // `/ws/sync`, it authenticates via a `secret` query param (not a header) so the
         // same constrained clients can use it.
         .route("/ws/poll", get(poll_events))
+        // Live terminal attach (HS2-XTTTMV): a WebSocket that replays the scrollback then
+        // streams new PTY output + forwards the viewer's input. Query-param auth (a WS
+        // upgrade can't set headers from a browser), like `/ws/sync`.
+        .route("/terminals/{id}/attach", get(attach_terminal))
         .merge(protected)
         .with_state(state)
 }
@@ -1239,6 +1243,69 @@ async fn kill_terminal(
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::not_found(&id))
+    }
+}
+
+/// `GET /terminals/{id}/attach?secret=…` — the **live** terminal attach (HS2-XTTTMV): a
+/// WebSocket that first replays the scrollback (one binary frame), then streams each new PTY
+/// output chunk as a binary frame and forwards any binary/text the viewer sends as PTY input.
+/// The socket closes when the terminal's child exits or the viewer disconnects.
+async fn attach_terminal(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(params): Query<WsParams>,
+    ws: WebSocketUpgrade,
+) -> Response {
+    if params.secret.as_deref() != Some(state.secret.as_str()) {
+        return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
+    }
+    let Some(term) = state.terminals.get(&term_key(&state, &id)) else {
+        return (StatusCode::NOT_FOUND, "no such terminal").into_response();
+    };
+    ws.on_upgrade(move |socket| terminal_attach_loop(socket, term))
+}
+
+/// Drive one attached viewer: replay scrollback, then interleave live output → socket and
+/// socket input → PTY on one task via `select!` (no socket split needed).
+async fn terminal_attach_loop(
+    mut socket: WebSocket,
+    term: std::sync::Arc<hotsheet_terminals::Terminal>,
+) {
+    use tokio::sync::broadcast::error::RecvError;
+
+    // Subscribe BEFORE snapshotting so no chunk is lost between the snapshot and the stream
+    // (a small overlap of already-seen bytes is harmless — the terminal renders it fine).
+    let mut rx = term.subscribe();
+    let snapshot = term.scrollback();
+    if !snapshot.is_empty() && socket.send(Message::Binary(snapshot.into())).await.is_err() {
+        return;
+    }
+
+    loop {
+        tokio::select! {
+            output = rx.recv() => match output {
+                Ok(chunk) => {
+                    if socket.send(Message::Binary(chunk.into())).await.is_err() {
+                        break; // viewer went away
+                    }
+                }
+                // Fell behind the fan-out buffer — re-sync from a fresh snapshot.
+                Err(RecvError::Lagged(_)) => {
+                    let snap = term.scrollback();
+                    if socket.send(Message::Binary(snap.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(RecvError::Closed) => break, // terminal ended
+            },
+            inbound = socket.recv() => match inbound {
+                Some(Ok(Message::Binary(b))) => { let _ = term.write(&b); }
+                Some(Ok(Message::Text(t))) => { let _ = term.write(t.as_bytes()); }
+                Some(Ok(Message::Close(_))) | None => break,
+                Some(Ok(_)) => {} // ping/pong handled by axum
+                Some(Err(_)) => break,
+            },
+        }
     }
 }
 

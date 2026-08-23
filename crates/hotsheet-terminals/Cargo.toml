@@ -11,5 +11,8 @@ rust-version.workspace = true
 [dependencies]
 portable-pty.workspace = true
 thiserror.workspace = true
+# A live output fan-out so a WS viewer streams new bytes as they arrive (HS2-XTTTMV).
+# `sync` only — the drain thread (a std thread) sends; async subscribers await.
+tokio = { workspace = true }
 
 [dev-dependencies]

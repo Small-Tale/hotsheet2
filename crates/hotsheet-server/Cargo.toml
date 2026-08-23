@@ -41,3 +41,6 @@ tempfile.workspace = true
 tower.workspace = true
 http-body-util.workspace = true
 hotsheet-aitools.workspace = true
+tokio-tungstenite.workspace = true
+futures-util.workspace = true
+ureq.workspace = true

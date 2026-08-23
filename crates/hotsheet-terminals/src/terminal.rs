@@ -12,12 +12,17 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use tokio::sync::broadcast;
 
 use crate::busy::{Activity, BusyDetector};
 use crate::env::scrub_env;
 
 /// How much recent PTY output to retain for a re-attaching viewer.
 pub const SCROLLBACK_BYTES: usize = 256 * 1024;
+
+/// How many recent output chunks the live fan-out buffers. A viewer that falls this far
+/// behind gets a `Lagged` signal and should re-sync from the scrollback snapshot.
+const OUTPUT_CHANNEL_CAP: usize = 256;
 
 /// An error spawning or driving a terminal.
 #[derive(Debug, thiserror::Error)]
@@ -91,6 +96,9 @@ pub struct Terminal {
     writer: Mutex<Box<dyn Write + Send>>,
     scrollback: Arc<Mutex<Ring>>,
     busy: Arc<Mutex<BusyDetector>>,
+    /// Live output fan-out: every drained chunk is broadcast so a WS viewer streams new bytes
+    /// as they arrive (after replaying the scrollback snapshot). HS2-XTTTMV.
+    output_tx: broadcast::Sender<Vec<u8>>,
 }
 
 impl Terminal {
@@ -129,7 +137,8 @@ impl Terminal {
 
         let scrollback = Arc::new(Mutex::new(Ring::new(SCROLLBACK_BYTES)));
         let busy = Arc::new(Mutex::new(BusyDetector::new()));
-        let (sb, bz) = (scrollback.clone(), busy.clone());
+        let (output_tx, _) = broadcast::channel(OUTPUT_CHANNEL_CAP);
+        let (sb, bz, tx) = (scrollback.clone(), busy.clone(), output_tx.clone());
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -143,6 +152,8 @@ impl Terminal {
                         if let Ok(mut d) = bz.lock() {
                             d.feed(chunk);
                         }
+                        // Fan out to live viewers (Err just means no one is attached).
+                        let _ = tx.send(chunk.to_vec());
                     }
                 }
             }
@@ -154,7 +165,15 @@ impl Terminal {
             writer: Mutex::new(writer),
             scrollback,
             busy,
+            output_tx,
         })
+    }
+
+    /// Subscribe to the live output stream — each drained PTY chunk, as it arrives. A viewer
+    /// should first replay [`scrollback`](Self::scrollback), then stream from here. A slow
+    /// subscriber may see `Lagged` and should re-sync from a fresh snapshot.
+    pub fn subscribe(&self) -> broadcast::Receiver<Vec<u8>> {
+        self.output_tx.subscribe()
     }
 
     /// Write input bytes to the terminal (keystrokes / a command).
@@ -247,6 +266,34 @@ mod tests {
         );
         // The short-lived child exits.
         assert!(wait_until(|| !term.is_alive(), 5), "printf should exit");
+    }
+
+    #[test]
+    fn subscribe_streams_live_output_to_a_late_and_early_subscriber() {
+        let term = Terminal::spawn(TermSpec::new("cat")).expect("spawn cat");
+        // Subscribe BEFORE writing — the subscriber should see the live echo.
+        let mut rx = term.subscribe();
+        term.write(b"live-line\n").unwrap();
+
+        let mut acc: Vec<u8> = Vec::new();
+        let saw = wait_until(
+            || {
+                while let Ok(chunk) = rx.try_recv() {
+                    acc.extend_from_slice(&chunk);
+                }
+                String::from_utf8_lossy(&acc).contains("live-line")
+            },
+            5,
+        );
+        assert!(saw, "a live subscriber streams new output as it arrives");
+
+        // A brand-new subscriber only gets FUTURE output (the fan-out isn't a replay — that's
+        // what `scrollback()` is for); the earlier line is available via the snapshot.
+        assert!(
+            String::from_utf8_lossy(&term.scrollback()).contains("live-line"),
+            "the scrollback snapshot carries the earlier output for a late viewer"
+        );
+        term.kill().unwrap();
     }
 
     #[test]
