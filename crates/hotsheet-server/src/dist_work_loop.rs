@@ -188,22 +188,26 @@ pub fn outcome_from_turn(
 /// Live-only (spawns a real AI tool), so it isn't unit-tested; the pure mapping
 /// ([`outcome_from_turn`]) and the loop orchestration ([`work_pass`]) are. Any error
 /// (tool not set up, launch failure, …) becomes `Failed` so the claim releases for retry.
+/// The server handles the live drive threads through to each driven turn: the permission
+/// bridge (codex approvals block on it), the shared connection registry (GET /connections),
+/// and the server's own URL+secret to inject so a driven tool's permission hook can reach
+/// the route-back (HS2-XCTAHM). All optional — a bare loop drives with none.
+#[derive(Clone, Default)]
+pub struct LiveDriveCtx {
+    pub permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
+    pub drive_registry:
+        Option<std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>>,
+    /// `(url, secret)` set as `HOTSHEET_SERVER`/`HOTSHEET_SECRET` in a driven tool's env.
+    pub server_env: Option<(String, String)>,
+}
+
 pub fn live_drive(
     tool: String,
     prompt: String,
-    permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
-    drive_registry: Option<std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>>,
+    ctx: LiveDriveCtx,
 ) -> impl Fn(&FsStore, &hotsheet_model::Ulid) -> WorkOutcome + Send + 'static {
     move |store, id| {
-        drive_one_ticket(
-            store,
-            id,
-            &tool,
-            &prompt,
-            permission_bridge.clone(),
-            drive_registry.clone(),
-        )
-        .unwrap_or(WorkOutcome::Failed)
+        drive_one_ticket(store, id, &tool, &prompt, &ctx).unwrap_or(WorkOutcome::Failed)
     }
 }
 
@@ -227,23 +231,31 @@ fn drive_one_ticket(
     id: &hotsheet_model::Ulid,
     tool: &str,
     prompt: &str,
-    permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
-    drive_registry: Option<std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>>,
+    ctx: &LiveDriveCtx,
 ) -> anyhow::Result<WorkOutcome> {
     use hotsheet_aitools::{ConnectionRegistry, prepare_trigger};
     let before = store.read_ticket(id)?;
+    // Inject the server's URL+secret so a driven tool's permission hook can reach the
+    // route-back (HS2-XCTAHM); without it the hook defers to the tool's own flow.
+    let envs = match &ctx.server_env {
+        Some((url, secret)) => vec![
+            format!("HOTSHEET_SERVER={url}"),
+            format!("HOTSHEET_SECRET={secret}"),
+        ],
+        None => Vec::new(),
+    };
     // Fresh launch isolation per ticket (throwaway CODEX_HOME + PATH shim; HS2-103).
-    let mut safe = prepare_trigger(store.root(), tool, None, None, None, Vec::new(), false)?;
+    let mut safe = prepare_trigger(store.root(), tool, None, None, None, envs, false)?;
     // Attach the server's permission bridge so a driven codex's approvals block for a human
     // answering over POST /permissions instead of auto-approving (HS2-Q1F6HV).
-    if let Some(bridge) = permission_bridge {
-        safe = safe.with_permission_bridge(bridge);
+    if let Some(bridge) = &ctx.permission_bridge {
+        safe = safe.with_permission_bridge(bridge.clone());
     }
     let mut registry = ConnectionRegistry::new(30_000);
     let conn = format!("srv-{id}");
     // Advertise this ticket as being driven on the SHARED registry (GET /connections), busy
     // for the turn; the guard removes it when the turn ends (HS2-TCV3BF).
-    let _guard = drive_registry.map(|reg| {
+    let _guard = ctx.drive_registry.clone().map(|reg| {
         if let Ok(mut r) = reg.lock() {
             r.register(hotsheet_aitools::Connection {
                 id: conn.clone(),

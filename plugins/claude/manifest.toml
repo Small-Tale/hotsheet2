@@ -47,3 +47,10 @@ interrupt = false
 # Claude reports token usage on its stream-json `result` event; the host maps it to a
 # UsageEvent (docs/14, HS2-TJ8FGR). `source` selects the `claude_result_usage` parser.
 source = "claude-usage"
+
+[hooks]
+# The PreToolUse permission hook (docs/05 §5.7, HS2-YMR9HE): Claude runs it before each
+# tool use; it asks the running Hot Sheet server for an allow/deny (else defers to Claude).
+target = ".claude/settings.json"
+event = "PreToolUse"
+command = "hotsheet-cli permission-hook"

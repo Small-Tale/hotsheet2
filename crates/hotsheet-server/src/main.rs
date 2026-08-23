@@ -125,11 +125,26 @@ async fn main() -> Result<()> {
         hotsheet_server::sync_loop::DEFAULT_INTERVAL,
     );
 
+    // Take the exclusive index-writer lock before binding — a second server on this store
+    // would otherwise double-write the index (join-don't-collide, HS2-59).
+    let _lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    let listener = TcpListener::bind(addr).await?;
+    let local = listener.local_addr()?;
+    let url = format!("http://{local}");
+    println!(
+        "hotsheet-server listening on {url} (store: {})",
+        cli.path.display()
+    );
+    println!("secret: {secret}");
+
     // Opt-in distributed driving loop (HS2-1TY7GC): spawn a real AI tool per self-claimed
-    // ticket across hosted stores with a remote. Off unless `--drive-tool` is given.
+    // ticket. Off unless `--drive-tool` is given. Spawned after bind so the driven tool's
+    // permission hook gets the real server URL injected (HS2-XCTAHM). Held for the run.
     let _drive = if let Some(tool) = cli.drive_tool.clone() {
         use hotsheet_server::dist_work_loop::{
-            DEFAULT_INTERVAL, DistWorkConfig, live_drive, spawn_dist_work_loop,
+            DEFAULT_INTERVAL, DistWorkConfig, LiveDriveCtx, live_drive, spawn_dist_work_loop,
         };
         let worker = cli
             .drive_worker
@@ -149,14 +164,14 @@ async fn main() -> Result<()> {
             ..Default::default()
         };
         // Driven approvals block on the server's permission bridge, so a client answering
-        // over POST /permissions steers the tool (HS2-Q1F6HV); without a client they time
-        // out to the safe default (Deny).
-        let drive = live_drive(
-            cfg.tool.clone(),
-            cfg.prompt.clone(),
-            Some(state.permission_bridge()),
-            Some(state.drive_registry()),
-        );
+        // over POST /permissions steers the tool (HS2-Q1F6HV / HS2-YMR9HE); the server URL +
+        // secret let a Claude permission hook reach that route-back (HS2-XCTAHM).
+        let ctx = LiveDriveCtx {
+            permission_bridge: Some(state.permission_bridge()),
+            drive_registry: Some(state.drive_registry()),
+            server_env: Some((url.clone(), secret.clone())),
+        };
+        let drive = live_drive(cfg.tool.clone(), cfg.prompt.clone(), ctx);
         Some(spawn_dist_work_loop(
             state.clone(),
             cfg,
@@ -166,20 +181,6 @@ async fn main() -> Result<()> {
     } else {
         None
     };
-
-    // Take the exclusive index-writer lock before binding — a second server on this store
-    // would otherwise double-write the index (join-don't-collide, HS2-59).
-    let _lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
-        .map_err(|e| anyhow::anyhow!("{e}"))?;
-
-    let listener = TcpListener::bind(addr).await?;
-    let local = listener.local_addr()?;
-    let url = format!("http://{local}");
-    println!(
-        "hotsheet-server listening on {url} (store: {})",
-        cli.path.display()
-    );
-    println!("secret: {secret}");
 
     // Register a discovery instance file for EVERY hosted store (the primary + any from
     // stores.json), all pointing at this one machine server — the topology-A reconciliation

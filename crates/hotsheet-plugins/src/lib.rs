@@ -83,6 +83,26 @@ pub struct Manifest {
     /// signal). Names the tool's native telemetry `source` so the host picks the right mapper.
     #[serde(default)]
     pub metrics: Option<MetricsSpec>,
+    /// Optional: a **permission hook** the tool runs before each tool use (`docs/05` §5.7,
+    /// HS2-YMR9HE). `setup` registers it in the tool's config so a Hot Sheet-driven run
+    /// routes approvals to the bridge. Absent = no hook (the tool has its own approval path,
+    /// e.g. codex's app-server ServerRequests).
+    #[serde(default)]
+    pub hooks: Option<HooksSpec>,
+}
+
+/// A tool's permission-hook declaration (`docs/05` §5.7). Declarative — `setup` merges it
+/// into the tool's config; the hook `command` (its first token resolved to the sibling
+/// binary) routes the prompt to the Hot Sheet server.
+#[derive(Debug, Clone, Deserialize)]
+pub struct HooksSpec {
+    /// The tool config file the hook is written into (e.g. `.claude/settings.json`).
+    pub target: String,
+    /// The hook event to register on (e.g. `PreToolUse`).
+    pub event: String,
+    /// The command line to run (e.g. `hotsheet-cli permission-hook`); its first token is
+    /// resolved to the absolute sibling binary at setup (no PATH reliance, HS2-103).
+    pub command: String,
 }
 
 /// A tool's metrics-capability declaration (`docs/14` §14.2). Declarative — the behavioral

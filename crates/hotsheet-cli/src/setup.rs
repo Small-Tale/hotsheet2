@@ -90,6 +90,51 @@ mod tests {
     }
 
     #[test]
+    fn setup_claude_registers_the_permission_hook_idempotently() {
+        let d = project();
+        // A user's own PreToolUse hook + settings should be preserved.
+        std::fs::create_dir_all(d.path().join(".claude")).unwrap();
+        std::fs::write(
+            d.path().join(".claude/settings.json"),
+            r#"{"model":"opus","hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-hook"}]}]}}"#,
+        )
+        .unwrap();
+
+        run_setup(d.path(), d.path(), Some("claude"), false).unwrap();
+        run_setup(d.path(), d.path(), Some("claude"), false).unwrap(); // twice → no dupes
+
+        let s: serde_json::Value =
+            serde_json::from_str(&read(d.path(), ".claude/settings.json")).unwrap();
+        assert_eq!(s["model"], "opus", "user settings kept");
+        let pre = s["hooks"]["PreToolUse"].as_array().unwrap();
+        // The user's own hook survives; exactly one Hot Sheet hook is registered.
+        assert!(
+            pre.iter()
+                .any(|e| e["hooks"][0]["command"] == "my-own-hook"),
+            "user's hook kept"
+        );
+        let ours: Vec<_> = pre
+            .iter()
+            .filter(|e| {
+                e["hooks"][0]["command"]
+                    .as_str()
+                    .is_some_and(|c| c.ends_with("permission-hook"))
+            })
+            .collect();
+        assert_eq!(ours.len(), 1, "exactly one Hot Sheet hook, no duplicates");
+        assert_eq!(ours[0]["matcher"], "*");
+        // Codex declares no hook → its setup writes none.
+        let d2 = project();
+        let reports = run_setup(d2.path(), d2.path(), Some("codex"), false).unwrap();
+        assert!(
+            reports[0]
+                .wrote
+                .iter()
+                .all(|w| w != ".claude/settings.json")
+        );
+    }
+
+    #[test]
     fn setup_codex_uses_agents_md_and_toml_and_no_skill() {
         let d = project();
         let reports = run_setup(d.path(), d.path(), Some("codex"), false).unwrap();

@@ -86,6 +86,9 @@ pub fn run_setup(
             wrote.push(skill); // absent for tools with no skills concept (e.g. Codex)
         }
         wrote.push(write_mcp(project_dir, &store_abs, &p)?);
+        if let Some(hook) = write_hooks(project_dir, &p)? {
+            wrote.push(hook); // absent for tools with their own approval path (e.g. Codex)
+        }
         reports.push(SetupReport {
             tool: p.manifest.product_name.clone(),
             wrote,
@@ -194,6 +197,94 @@ fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String, Set
         }
     }
     Ok(rel.clone())
+}
+
+/// Register the tool's permission hook (`docs/05` §5.7, HS2-YMR9HE) in its config, if it
+/// declares one. Claude's `.claude/settings.json` shape:
+/// `{ "hooks": { "<event>": [ { "matcher": "*", "hooks": [ { "type": "command", "command": … } ] } ] } }`.
+/// Merge-safe + idempotent: an existing Hot Sheet hook (same resolved command) is not
+/// duplicated. Returns the written path when a hook was registered.
+fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError> {
+    let Some(spec) = &p.manifest.hooks else {
+        return Ok(None);
+    };
+    let target = project.join(&spec.target);
+    let command = resolve_hook_command(&spec.command);
+
+    let mut root: serde_json::Value = std::fs::read_to_string(&target)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    let obj = root.as_object_mut().unwrap();
+
+    let hooks = obj.entry("hooks").or_insert_with(|| serde_json::json!({}));
+    if !hooks.is_object() {
+        *hooks = serde_json::json!({});
+    }
+    let event = hooks
+        .as_object_mut()
+        .unwrap()
+        .entry(spec.event.clone())
+        .or_insert_with(|| serde_json::json!([]));
+    if !event.is_array() {
+        *event = serde_json::json!([]);
+    }
+    let arr = event.as_array_mut().unwrap();
+
+    // Our hook entry (matcher "*" = every tool use).
+    let entry = serde_json::json!({
+        "matcher": "*",
+        "hooks": [ { "type": "command", "command": command } ],
+    });
+    // Idempotent: drop any prior Hot Sheet permission-hook entry before re-adding, so
+    // re-running setup doesn't stack duplicates. We recognize it by our command tail.
+    arr.retain(|e| !is_hotsheet_hook(e));
+    arr.push(entry);
+
+    write_file(
+        &target,
+        &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
+    )?;
+    Ok(Some(spec.target.clone()))
+}
+
+/// Whether a hook-array entry is a Hot Sheet permission hook (any of its commands ends with
+/// `permission-hook`) — used to de-dupe on re-setup without touching the user's own hooks.
+fn is_hotsheet_hook(entry: &serde_json::Value) -> bool {
+    entry
+        .get("hooks")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|hs| {
+            hs.iter().any(|h| {
+                h.get("command")
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|c| c.trim_end().ends_with("permission-hook"))
+            })
+        })
+}
+
+/// Resolve a hook command's binary (its first token) to the absolute sibling next to the
+/// running binary when present (no PATH reliance, HS2-103), keeping the rest of the args.
+fn resolve_hook_command(command: &str) -> String {
+    let mut parts = command.split_whitespace();
+    let Some(bin) = parts.next() else {
+        return command.to_string();
+    };
+    let resolved = std::env::current_exe()
+        .ok()
+        .as_deref()
+        .and_then(Path::parent)
+        .map(|d| d.join(bin))
+        .filter(|pth| pth.is_file())
+        .map(|pth| pth.to_string_lossy().into_owned())
+        .unwrap_or_else(|| bin.to_string());
+    let rest: Vec<&str> = parts.collect();
+    if rest.is_empty() {
+        resolved
+    } else {
+        format!("{resolved} {}", rest.join(" "))
+    }
 }
 
 /// Claude-style `.mcp.json`: `{ "mcpServers": { "<name>": { command, args } } }`.
