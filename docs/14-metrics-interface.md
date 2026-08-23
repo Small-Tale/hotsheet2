@@ -117,13 +117,14 @@ Metrics can be shared across a team **through git** — no server sync needed:
   path + retention + **per-contributor git-sharing** (`roll_up_through` /
   `summary_settled` / `prune_raw_before` / `team_summary`, exposed via
   `hotsheet-cli metrics --roll-up/--prune-before/--team`, HS2-8BCRHS).
-- **In progress (HS2-8PSAFE):** the `metrics` plugin capability is declared
-  (`Manifest.metrics` = `MetricsSpec{source}`; codex opts in with `source="codex-usage"`),
-  and the codex mapper primitive exists (`hotsheet_aitools::codex_turn_usage` →
-  `drive::Usage`, lenient about field names). **Remaining:** surface `Usage` through the
-  drive (a turn/completed hook) and record it per turn via `record_priced` attributed to
-  the claimed ticket + session; the **Claude OTLP** mapper; verifying codex's real usage
-  field names against a live codex (→ HS2-…).
+- **Shipped (HS2-8PSAFE / HS2-0WCRZY):** the `metrics` plugin capability
+  (`Manifest.metrics` = `MetricsSpec{source}`; codex opts in with `source="codex-usage"`);
+  the codex mapper (`codex_turn_usage` → `drive::Usage`, lenient); and the **end-to-end
+  codex path** — `CodexTurn` captures usage from `turn/completed`, the drive surfaces it as
+  `TurnEvent::Usage`, and the server driving loop records it per turn via `record_priced`
+  attributed to the claimed ticket + session. **Remaining (HS2-0WCRZY):** the **Claude
+  OTLP** mapper, and verifying codex's real usage field names against a live codex (the
+  parser is lenient and yields `None` on mismatch).
 - **Remaining:** wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references

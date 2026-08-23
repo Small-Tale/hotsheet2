@@ -342,6 +342,7 @@ impl AppServerClient for CodexAppServer {
             turn_id,
             cursor,
             done: None,
+            usage: None,
         }))
     }
 }
@@ -357,6 +358,8 @@ struct CodexTurn {
     /// Where in the shared notification log this turn has scanned up to.
     cursor: usize,
     done: Option<AppServerOutcome>,
+    /// Token usage captured from `turn/completed`, if the turn reported any (HS2-0WCRZY).
+    usage: Option<crate::drive::Usage>,
 }
 
 /// If `n` is this turn's `turn/completed`, map its status to an outcome.
@@ -429,6 +432,10 @@ impl CodexTurn {
             let n = &notes[self.cursor];
             self.cursor += 1;
             if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
+                self.usage = n
+                    .get("params")
+                    .and_then(|p| p.get("turn"))
+                    .and_then(turn_usage);
                 self.done = Some(o);
                 return;
             }
@@ -456,6 +463,10 @@ impl AppServerTurn for CodexTurn {
                 let n = &notes[self.cursor];
                 self.cursor += 1;
                 if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
+                    self.usage = n
+                        .get("params")
+                        .and_then(|p| p.get("turn"))
+                        .and_then(turn_usage);
                     self.done = Some(o.clone());
                     return o;
                 }
@@ -489,6 +500,11 @@ impl AppServerTurn for CodexTurn {
         // The drive's TurnHandle records `Interrupted`; keep our own state terminal so a
         // later `wait()` can't block on a `turn/completed` that may never arrive.
         self.done = Some(AppServerOutcome::Failed("interrupted".into()));
+    }
+
+    fn usage(&mut self) -> Option<crate::drive::Usage> {
+        self.poll(); // ensure a just-arrived `turn/completed` has been scanned
+        self.usage.clone()
     }
 }
 
@@ -920,7 +936,9 @@ pub(crate) mod scripted {
                             json!({ "id": "turn-1", "status": "failed",
                                     "error": { "message": "boom" } })
                         } else {
-                            json!({ "id": "turn-1", "status": status })
+                            // A completed turn reports token usage (docs/14, HS2-0WCRZY).
+                            json!({ "id": "turn-1", "status": status, "model": "gpt-5-codex",
+                                    "usage": { "input_tokens": 1200, "output_tokens": 340 } })
                         };
                         self.push(json!({ "jsonrpc": "2.0", "method": "turn/completed",
                             "params": { "threadId": thread_id, "turn": turn } }));

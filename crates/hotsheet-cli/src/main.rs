@@ -580,6 +580,9 @@ fn stream_to_stdout(ev: &hotsheet_aitools::TurnEvent) {
         TurnEvent::PermissionAsked(p) => {
             eprintln!("\n[permission] {} — {}", p.tool, p.summary)
         }
+        TurnEvent::Usage(u) => {
+            eprintln!("\n[usage] {} in / {} out", u.tokens_in, u.tokens_out)
+        }
         TurnEvent::Done(_) => {}
     }
 }

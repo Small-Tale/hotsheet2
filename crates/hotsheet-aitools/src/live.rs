@@ -254,6 +254,11 @@ fn pump_turn(
             None => break turn.wait(),
         }
     };
+    // Surface any usage the turn reported (codex), just before the terminal Done, so the
+    // host can record a UsageEvent (HS2-0WCRZY).
+    if let Some(usage) = turn.usage() {
+        on_event(&TurnEvent::Usage(usage));
+    }
     on_event(&TurnEvent::Done(reason));
     registry.set_idle(conn_id);
     reason
@@ -293,6 +298,50 @@ mod pump_tests {
             started_at_ms: 0,
         });
         r
+    }
+
+    #[test]
+    fn pump_surfaces_turn_usage_just_before_done() {
+        use crate::drive::Usage;
+        // A non-streaming turn (spawn/app-server shape) that reports usage: pump falls back
+        // to wait(), then emits a Usage event before the terminal Done (HS2-0WCRZY).
+        struct UsageTurn {
+            usage: Option<Usage>,
+        }
+        impl TurnHandle for UsageTurn {
+            fn is_busy(&mut self) -> bool {
+                false
+            }
+            fn wait(&mut self) -> DoneReason {
+                DoneReason::Completed
+            }
+            fn usage(&mut self) -> Option<Usage> {
+                self.usage.take()
+            }
+        }
+        let mut turn = UsageTurn {
+            usage: Some(Usage {
+                model: Some("gpt".into()),
+                tokens_in: 100,
+                tokens_out: 20,
+            }),
+        };
+        let mut reg = reg_with("c1");
+        let mut clock = || 0u64;
+        let mut seen = Vec::new();
+        pump_turn(&mut turn, "c1", &mut reg, &mut clock, &mut |ev| {
+            seen.push(format!("{ev:?}"))
+        });
+        // Usage is emitted, and it comes immediately before Done.
+        let usage_idx = seen
+            .iter()
+            .position(|s| s.starts_with("Usage"))
+            .expect("usage emitted");
+        assert!(
+            seen[usage_idx + 1].starts_with("Done"),
+            "usage precedes Done"
+        );
+        assert!(seen[usage_idx].contains("100") && seen[usage_idx].contains("20"));
     }
 
     #[test]

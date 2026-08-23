@@ -352,6 +352,10 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
         AppServerOutcome::Completed,
         "wait is idempotent"
     );
+    // The completed turn's token usage is captured from turn/completed (HS2-0WCRZY).
+    let usage = turn.usage().expect("completed turn reports usage");
+    assert_eq!(usage.model.as_deref(), Some("gpt-5-codex"));
+    assert_eq!((usage.tokens_in, usage.tokens_out), (1200, 340));
 }
 
 #[test]
@@ -755,6 +759,7 @@ fn claude_live_turn_over_the_channel() {
                 saw_output = true;
             }
             Some(TurnEvent::PermissionAsked(p)) => eprintln!("live: permission {p:?}"),
+            Some(TurnEvent::Usage(u)) => eprintln!("live: usage {u:?}"),
             Some(TurnEvent::Done(r)) => break r,
             None => break turn.wait(),
         }

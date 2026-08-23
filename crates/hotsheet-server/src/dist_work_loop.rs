@@ -216,16 +216,30 @@ fn drive_one_ticket(
         safe = safe.with_permission_bridge(bridge);
     }
     let mut registry = ConnectionRegistry::new(30_000);
-    // A server-driven turn is a worker role; output is streamed to a quiet sink (logged
-    // elsewhere), and the connection is labelled per ticket for busy tracking.
-    let done = safe.run_turn(
-        prompt,
-        None,
-        true,
-        format!("srv-{id}"),
-        &mut registry,
-        &mut |_ev| {},
-    )?;
+    let conn = format!("srv-{id}");
+    // Capture any usage the turn reports so it can be recorded against this ticket
+    // (HS2-0WCRZY). Output is otherwise streamed to a quiet sink (logged elsewhere).
+    let mut usage: Option<hotsheet_aitools::Usage> = None;
+    let done = safe.run_turn(prompt, None, true, conn.clone(), &mut registry, &mut |ev| {
+        if let hotsheet_aitools::TurnEvent::Usage(u) = ev {
+            usage = Some(u.clone());
+        }
+    })?;
+    // Record the turn's usage attributed to this ticket (cost filled from the price table
+    // when the tool didn't report one). Best-effort — never fail the drive over metrics.
+    if let Some(u) = usage {
+        let event = hotsheet_ticketing::metrics::UsageEvent {
+            ts: crate::now().as_str().to_string(),
+            tool: tool.to_string(),
+            model: u.model,
+            tokens_in: u.tokens_in,
+            tokens_out: u.tokens_out,
+            cost_usd: None,
+            ticket: Some(id.to_string()),
+            session: Some(conn),
+        };
+        let _ = hotsheet_ticketing::metrics::record_priced(store, event);
+    }
     let after = store.read_ticket(id)?;
     let progressed = after.updated_at != before.updated_at;
     Ok(outcome_from_turn(

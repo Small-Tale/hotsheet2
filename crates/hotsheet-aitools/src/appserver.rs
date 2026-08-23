@@ -117,4 +117,8 @@ impl TurnHandle for AppServerTurnHandle {
             false
         }
     }
+
+    fn usage(&mut self) -> Option<crate::drive::Usage> {
+        self.turn.usage()
+    }
 }

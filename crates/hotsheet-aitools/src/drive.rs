@@ -83,6 +83,9 @@ pub enum TurnEvent {
     /// A permission request the host must answer (unwired for now — the drive runs a
     /// non-blocking permission mode, so this is informational).
     PermissionAsked(PermReq),
+    /// Token usage the turn reported (`docs/14`, HS2-0WCRZY) — emitted just before `Done`
+    /// when the tool exposes it, so the host can record a `UsageEvent`.
+    Usage(Usage),
     /// The turn finished; terminal.
     Done(DoneReason),
 }
@@ -104,6 +107,11 @@ pub trait TurnHandle {
     /// default is a non-streaming drive: it returns `None` and the caller falls back to
     /// [`wait`](Self::wait). Absence is the signal — no bool flag to drift.
     fn next_event(&mut self) -> Option<TurnEvent> {
+        None
+    }
+    /// Token usage the turn reported, if the transport exposes it (`docs/14`, HS2-0WCRZY).
+    /// Default `None`; the app-server (codex) handle overrides it.
+    fn usage(&mut self) -> Option<Usage> {
         None
     }
 }
