@@ -1,0 +1,18 @@
+[package]
+name = "hotsheet-tls"
+description = "Hot Sheet 2 Tier-1 mTLS material: per-project CA + device cert issuance + revocation (rcgen)."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rcgen = { workspace = true, features = ["pem", "x509-parser"] }
+sha2.workspace = true
+thiserror.workspace = true
+hotsheet-plugins.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

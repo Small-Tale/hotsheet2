@@ -20,6 +20,7 @@ hotsheet-ticketing.workspace = true
 hotsheet-index.workspace = true
 hotsheet-plugins.workspace = true
 hotsheet-aitools.workspace = true
+hotsheet-tls.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 ulid.workspace = true

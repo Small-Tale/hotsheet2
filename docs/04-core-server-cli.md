@@ -75,8 +75,9 @@ git + a rebuildable index ([02-ticket-storage.md](02-ticket-storage.md) §2.9).
 > **Status: v1 built (HS2-7).** `crates/hotsheet-server` — axum HTTP REST
 > (`/health`, `/tickets` list/create, `/tickets/{id}` get/patch,
 > `/tickets/{id}/close`) + `/ws/sync` live push, over the shared engine
-> `ops`, with **Tier 0** auth (`X-Hotsheet-Secret`, loopback only — off-loopback
-> binds are refused until mTLS). It serves reads from the **SQLite/FTS index** (HS2-5)
+> `ops`, with **Tier 0** auth (`X-Hotsheet-Secret`) on loopback and **Tier 1 mTLS**
+> (per-project CA + per-device client certs, HS2-VT3JMF) on off-loopback binds — see
+> §4.6. It serves reads from the **SQLite/FTS index** (HS2-5)
 > and owns the **filesystem watcher** (HS2-6) that reindexes changed files + emits
 > change events, so a CLI/git edit shows up live. It does **not** yet own terminals
 > (HS2-10), the detached lifecycle/auto-start (HS2-59), or the long-poll fallback.
@@ -284,10 +285,21 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 - **Tier 0 — loopback:** plain HTTP + per-project shared secret. The default; the
   single-user local case. Trusts localhost.
 - **Tier 1 — exposed:** binding off-loopback requires **mTLS + per-device client
-  certs + ACLs**, or the server refuses to start (never serves plaintext). The
-  entire HS1 §94/§97 model (per-project CA, `.p12`/QR enrollment, revocation
-  sweep) is carried over — it's shipped, proven, and orthogonal to the storage
-  rewrite. See [08-distributed-and-remote.md](08-distributed-and-remote.md).
+  certs**, or the server refuses to start (never serves plaintext).
+  See [08-distributed-and-remote.md](08-distributed-and-remote.md).
+
+  > **Built (HS2-VT3JMF):** a **per-project CA** (`hotsheet-tls`, rcgen) signs the
+  > server leaf + every device's client cert; `hotsheet-cli cert init|issue|revoke`
+  > manages it (material under `${HOTSHEET_HOME}/tls/<project-id>/`, machine-local —
+  > the CA key is a secret, never committed). An off-loopback `serve` bind loads a
+  > rustls `ServerConfig` and serves over a manual `tokio-rustls` acceptor (axum 0.8
+  > has no built-in TLS), **requiring** a client cert that chains to the CA and isn't
+  > on the `revoked` fingerprint list; loopback stays Tier-0 plaintext. Chain
+  > validation is delegated to rustls's `WebPkiClientVerifier` (not hand-rolled), with
+  > a revocation gate layered on. A full mTLS-handshake E2E proves valid-in /
+  > no-cert-out / revoked-out. **Deferred:** revocation **hot-reload** (a running
+  > server snapshots the list at start — revoke then restart), `.p12` bundling + QR
+  > enrollment (client work), and richer per-identity **ACLs** beyond CA membership.
 
 ## 4.7 Project settings (shared / local / client) — core-owned
 

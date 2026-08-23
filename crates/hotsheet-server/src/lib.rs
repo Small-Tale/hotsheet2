@@ -9,6 +9,7 @@ pub mod dist_work_loop;
 pub mod lifecycle;
 pub mod multistore;
 pub mod sync_loop;
+pub mod tls;
 
 use std::path::Path as FsPath;
 use std::sync::{Arc, Mutex};

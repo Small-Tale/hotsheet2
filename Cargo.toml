@@ -10,6 +10,7 @@ members = [
     "crates/hotsheet-plugins",
     "crates/hotsheet-aitools",
     "crates/hotsheet-terminals",
+    "crates/hotsheet-tls",
 ]
 
 [workspace.package]
@@ -46,6 +47,14 @@ notify = "6"
 toml = "0.8"
 include_dir = "0.7"
 portable-pty = "0.8"
+# Tier-1 mTLS (HS2-VT3JMF): rustls server + rcgen cert generation + a manual TLS accept
+# loop (axum 0.8 has no built-in TLS) via hyper/hyper-util (already in the tree under axum).
+rustls = "0.23"
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+rcgen = "0.13"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server", "server-graceful", "service", "tokio"] }
 
 # internal
 hotsheet-model = { path = "crates/hotsheet-model" }
@@ -54,3 +63,4 @@ hotsheet-index = { path = "crates/hotsheet-index" }
 hotsheet-plugins = { path = "crates/hotsheet-plugins" }
 hotsheet-aitools = { path = "crates/hotsheet-aitools" }
 hotsheet-terminals = { path = "crates/hotsheet-terminals" }
+hotsheet-tls = { path = "crates/hotsheet-tls" }

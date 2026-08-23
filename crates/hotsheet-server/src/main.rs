@@ -5,7 +5,7 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use hotsheet_index::Index;
 use hotsheet_model::Timestamp;
@@ -88,13 +88,27 @@ async fn main() -> Result<()> {
         .bind
         .parse()
         .map_err(|_| anyhow::anyhow!("invalid --bind '{}' (want IP:port)", cli.bind))?;
-    // Tier 0 only for now: off-loopback binds require mTLS (Tier 1), which isn't built.
-    if !addr.ip().is_loopback() {
-        bail!(
-            "refusing to bind {addr}: off-loopback needs mTLS (not yet built); \
-             bind a loopback address"
-        );
-    }
+    // Tier 0 = loopback + shared secret (plaintext). Off-loopback = Tier 1 mTLS: every client
+    // must present a project-CA cert (HS2-VT3JMF). Build the TLS config before binding so a
+    // missing `cert init` fails fast rather than after announcing a listener.
+    let tls_config = if addr.ip().is_loopback() {
+        None
+    } else {
+        let paths = hotsheet_tls::Paths::for_store(&cli.path);
+        Some(
+            hotsheet_server::tls::build_server_config(&paths).map_err(|e| {
+                anyhow::anyhow!(
+                    "off-loopback bind {addr} needs mTLS: {e}\n\
+                 run `hotsheet-cli cert init` (optionally --host <ip/dns>) first"
+                )
+            })?,
+        )
+    };
+    let scheme = if tls_config.is_some() {
+        "https"
+    } else {
+        "http"
+    };
 
     let secret = cli.secret.unwrap_or_else(|| Ulid::new().to_string());
 
@@ -132,10 +146,15 @@ async fn main() -> Result<()> {
 
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
-    let url = format!("http://{local}");
+    let url = format!("{scheme}://{local}");
     println!(
-        "hotsheet-server listening on {url} (store: {})",
-        cli.path.display()
+        "hotsheet-server listening on {url} (store: {}){}",
+        cli.path.display(),
+        if tls_config.is_some() {
+            " [mTLS — client cert required]"
+        } else {
+            ""
+        }
     );
     println!("secret: {secret}");
 
@@ -193,9 +212,19 @@ async fn main() -> Result<()> {
     // Explicit shutdown only (HS2-59): serve until SIGTERM / Ctrl-C, then the guards drop
     // (instance file + writer lock removed), and any in-flight work has already run in the
     // separate process a client can't kill by closing.
-    axum::serve(listener, app(state))
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    match tls_config {
+        // Tier 1: serve over mutual TLS (manual acceptor; graceful stop-accepting on signal).
+        Some(config) => {
+            hotsheet_server::tls::serve_tls(listener, app(state), config, shutdown_signal())
+                .await?;
+        }
+        // Tier 0: plaintext loopback, with axum's per-connection graceful shutdown.
+        None => {
+            axum::serve(listener, app(state))
+                .with_graceful_shutdown(shutdown_signal())
+                .await?;
+        }
+    }
     Ok(())
 }
 

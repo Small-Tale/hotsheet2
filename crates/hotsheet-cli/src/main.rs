@@ -228,7 +228,8 @@ enum Cmd {
     /// Run the Hot Sheet server for this store in the foreground (execs the sibling
     /// `hotsheet-server` binary). Detached/supervised start is client-owned (HS2-4072GM).
     Serve {
-        /// Address to bind (loopback only until mTLS lands). Port 0 = ephemeral.
+        /// Address to bind. Loopback = Tier 0 (plaintext + shared secret); an off-loopback
+        /// address serves over mTLS and needs `cert init` first (HS2-VT3JMF). Port 0 = ephemeral.
         #[arg(long, default_value = "127.0.0.1:8787")]
         bind: String,
         /// Shared secret for `X-Hotsheet-Secret` (generated + printed by the server if omitted).
@@ -237,6 +238,12 @@ enum Cmd {
         /// Stop the running server for this store, then exit.
         #[arg(long)]
         stop: bool,
+    },
+    /// Manage this project's Tier-1 mTLS material — a per-project CA + per-device client
+    /// certs — so the server can bind off-loopback securely (HS2-VT3JMF).
+    Cert {
+        #[command(subcommand)]
+        cmd: CertCmd,
     },
     /// Git-invoked semantic 3-way merge for ticket files (not run by hand — it's the
     /// `merge=hotsheet-ticket` driver `hotsheet init` registers). Args are git's
@@ -332,6 +339,22 @@ enum Cmd {
         #[arg(long = "shared-daemon")]
         shared_daemon: bool,
     },
+}
+
+#[derive(Subcommand)]
+enum CertCmd {
+    /// Create the per-project CA + server cert (refuses if one already exists). Pass `--host`
+    /// once per IP/DNS the server will be reached at off-loopback; `localhost` + `127.0.0.1`
+    /// are always covered.
+    Init {
+        #[arg(long = "host")]
+        hosts: Vec<String>,
+    },
+    /// Issue a client (device) cert signed by the project CA, printing the cert + key + CA
+    /// PEMs to copy to the device. `name` identifies it for later revocation.
+    Issue { name: String },
+    /// Revoke a previously-issued device by name (takes effect on the server's next start).
+    Revoke { name: String },
 }
 
 #[derive(Subcommand)]
@@ -555,6 +578,7 @@ fn main() -> Result<()> {
         } => cmd_metrics(&cli.path, roll_up, prune_before, team),
         Cmd::PermissionHook => cmd_permission_hook(),
         Cmd::Serve { bind, secret, stop } => cmd_serve(&cli.path, &bind, secret, stop),
+        Cmd::Cert { cmd } => cmd_cert(&cli.path, &cmd),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
             worker,
@@ -1337,6 +1361,48 @@ fn cmd_serve(path: &Path, bind: &str, secret: Option<String>, stop: bool) -> Res
     })?;
     if !status.success() {
         bail!("hotsheet-server exited with {status}");
+    }
+    Ok(())
+}
+
+/// Manage the project's Tier-1 mTLS material (HS2-VT3JMF): a per-project CA, per-device
+/// client certs, and revocation. Lives under `${HOTSHEET_HOME}/tls/<project-id>/`.
+fn cmd_cert(store_path: &Path, cmd: &CertCmd) -> Result<()> {
+    let paths = hotsheet_tls::Paths::for_store(store_path);
+    match cmd {
+        CertCmd::Init { hosts } => {
+            hotsheet_tls::init_ca(&paths, hosts)?;
+            println!(
+                "Initialized mTLS for this store under {}",
+                paths.dir.display()
+            );
+            println!("  CA cert:     {}", paths.ca_cert().display());
+            println!("  server cert: {}", paths.server_cert().display());
+            print!("  server SANs: localhost, 127.0.0.1");
+            for h in hosts {
+                print!(", {h}");
+            }
+            println!();
+            println!("Next: `hotsheet-cli cert issue <device-name>` to enroll a client, then");
+            println!("bind the server off-loopback (e.g. `serve --bind 0.0.0.0:8787`).");
+        }
+        CertCmd::Issue { name } => {
+            let dev = hotsheet_tls::issue_device(&paths, name)?;
+            eprintln!(
+                "Issued client cert for '{}' (fingerprint {}). Copy all three PEMs to the device:",
+                dev.name, dev.fingerprint
+            );
+            println!("# ===== client certificate ({}.crt) =====", dev.name);
+            print!("{}", dev.cert_pem);
+            println!("# ===== client private key ({}.key) =====", dev.name);
+            print!("{}", dev.key_pem);
+            println!("# ===== project CA (ca.crt — to verify the server) =====");
+            print!("{}", dev.ca_pem);
+        }
+        CertCmd::Revoke { name } => {
+            let fpr = hotsheet_tls::revoke_device(&paths, name)?;
+            println!("Revoked '{name}' ({fpr}). Restart the server to apply.");
+        }
     }
     Ok(())
 }

@@ -165,7 +165,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Filesystem watch → incremental reindex | 03 §3.4 | Partial (server `spawn_watcher`: content-hash reindex + WS events built; git-diff fast path pending) |
 | Shared **Rust** core engine (server + CLI only; clients don't embed) | 04, 09 | Confirmed |
 | Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Partial (server-side lifecycle shipped — `hotsheet-server::lifecycle`: instance registry + discovery, per-store index-writer lock, `serve --stop`, graceful shutdown, attach-if-already-running; E2E-verified — HS2-59. Client-side detached auto-start + supervise pending → HS2-4072GM) |
-| Independent server (HTTP + WS) | 04 §4.3 | Partial (`hotsheet-server`: REST + /ws/sync + loopback auth; index/watcher/lifecycle shipped; mTLS pending) |
+| Independent server (HTTP + WS) | 04 §4.3 | Partial (`hotsheet-server`: REST + /ws/sync + loopback auth; index/watcher/lifecycle shipped; **Tier-1 mTLS shipped** — off-loopback binds require a per-project-CA client cert, HS2-VT3JMF) |
 | One server per machine serves all projects (multi-store) | 04 §4.3.1 | Partial (`server::multistore`: StoreHost + GET/POST /stores + scoped /stores/{id}/tickets read+write + GET /resolve/{ulid} cross-store + per-store watcher + file-backed indexes + stores.json discovery + one-machine-server-per-project discovery reconciliation (topology A) — HS2-87; **per-store index-writer locks** for every hosted store — HS2-AYCA1W. Remaining: a client to drive multi-project discovery/join → HS2-4072GM) |
 | MCP `hotsheet_*` tools (per-project shim) | 05 §5.8 | Partial (`hotsheet-mcp` shim: **serverless direct-to-disk (`--path`) or server-proxy (`--server`)**; config-writing pending) |
 | Direct-to-disk CLI (+ `merge-driver`) | 04 §4.4 | Partial (`hotsheet` init/new/ls/show/edit/close/**setup**/import/**merge-driver**/doctor/claim/trigger/work; more pending) |
@@ -187,7 +187,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; UI flow deferred) |
 | Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |
 | Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Shipped (`ticketing::distclaim`: `refs/hotsheet/claims/<ulid>` push-CAS claim [first-wins], `--force-with-lease` renew/steal, `ls-remote` enumerate, expiry sweep — bare-remote E2E; HS2-84. `distwork::select_and_claim`/`work_once` self-claim cycle [HS2-E7RXXR]; `server::dist_work_loop` drives a real AI tool per claimed ticket [`--drive-tool`, off by default, HS2-DTPX2V/HS2-1TY7GC]) |
-| Mobile ↔ server configuration/pairing (mTLS + QR) | 08 §8.3 | Design |
+| Mobile ↔ server configuration/pairing (mTLS + QR) | 08 §8.3 | Partial (the mTLS core is built — per-project CA + device certs + revocation + off-loopback serving, HS2-VT3JMF; `.p12`/QR enrollment for the pairing UX stays with the client work) |
 
 ## Conventions
 
