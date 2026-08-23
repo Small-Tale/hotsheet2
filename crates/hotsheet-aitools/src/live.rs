@@ -338,6 +338,7 @@ mod pump_tests {
                 model: Some("gpt".into()),
                 tokens_in: 100,
                 tokens_out: 20,
+                cost_usd: None,
             }),
         };
         let mut reg = reg_with("c1");

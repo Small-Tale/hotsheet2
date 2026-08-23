@@ -125,10 +125,16 @@ Metrics can be shared across a team **through git** — no server sync needed:
   attributed to the claimed ticket + session. **Claude** (HS2-TJ8FGR) is now mapped the
   same way — `claude_result_usage` reads the in-band stream-json `result` event's `usage`
   (declared `[metrics] source="claude-usage"`), `ClaudeTurn::usage()` surfaces it, and it
-  flows through `TurnEvent::Usage` + the driving-loop recorder unchanged. **Remaining:**
-  verifying codex's + claude's real usage field names against live tools (the parsers are
-  lenient — `None` on mismatch — and don't yet split cached-token variants); ACP counters
-  when an ACP tool lands.
+  flows through `TurnEvent::Usage` + the driving-loop recorder unchanged.
+- **Hardened (HS2-CQ6B96):** both mappers now **fold cached-prompt tokens into the input
+  total** (claude: `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`;
+  codex: `input_tokens` + `cached_input_tokens`) so the count is complete, and carry a
+  **tool-reported cost** through `drive::Usage.cost_usd` (claude's top-level
+  `total_cost_usd`) into the recorded `UsageEvent` (else `record_priced` prices from the
+  table). Sample-tested. **Still remaining (needs a live run):** confirming the exact codex
+  `turn/completed` + claude stream-json field names against real tools — the parsers stay
+  lenient (`None` on a total mismatch), so a wrong guess silently records nothing; and an
+  **ACP counters mapper** (`source="acp"`) when an ACP tool (OpenCode/Goose) lands.
 - **Remaining:** wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references

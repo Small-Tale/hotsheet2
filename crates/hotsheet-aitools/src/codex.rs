@@ -420,16 +420,25 @@ pub fn turn_usage(turn: &Value) -> Option<crate::drive::Usage> {
         keys.iter()
             .find_map(|k| usage.get(*k).and_then(Value::as_u64))
     };
-    let tokens_in = pick(&["input_tokens", "prompt_tokens", "tokens_in"])?;
+    let base_in = pick(&["input_tokens", "prompt_tokens", "tokens_in"])?;
+    // Fold in cached-prompt tokens when codex reports them separately (HS2-CQ6B96), so the
+    // input count is the total processed.
+    let cached_in = pick(&["cached_input_tokens", "cache_read_input_tokens"]).unwrap_or(0);
+    let tokens_in = base_in + cached_in;
     let tokens_out = pick(&["output_tokens", "completion_tokens", "tokens_out"]).unwrap_or(0);
     let model = turn
         .get("model")
         .and_then(Value::as_str)
         .map(str::to_string);
+    let cost_usd = usage
+        .get("cost_usd")
+        .or_else(|| turn.get("cost_usd"))
+        .and_then(Value::as_f64);
     Some(crate::drive::Usage {
         model,
         tokens_in,
         tokens_out,
+        cost_usd,
     })
 }
 
@@ -1140,5 +1149,28 @@ mod usage_tests {
             turn_usage(&json!({ "usage": { "output_tokens": 5 } })).is_none(),
             "no input token count → nothing to attribute"
         );
+    }
+
+    #[test]
+    fn turn_usage_folds_in_cached_tokens_and_reads_cost() {
+        // Cached-prompt tokens are summed into the input total (HS2-CQ6B96).
+        let u = turn_usage(&json!({
+            "model": "gpt-5-codex",
+            "usage": {
+                "input_tokens": 1000,
+                "cached_input_tokens": 250,
+                "output_tokens": 40,
+                "cost_usd": 0.012
+            }
+        }))
+        .unwrap();
+        assert_eq!(u.tokens_in, 1250, "base 1000 + 250 cached");
+        assert_eq!(u.tokens_out, 40);
+        assert_eq!(u.cost_usd, Some(0.012));
+
+        // No cached field + no cost → base input, cost None.
+        let u = turn_usage(&json!({ "usage": { "input_tokens": 7 } })).unwrap();
+        assert_eq!(u.tokens_in, 7);
+        assert_eq!(u.cost_usd, None);
     }
 }

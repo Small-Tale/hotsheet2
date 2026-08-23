@@ -156,20 +156,32 @@ struct ClaudeTurn {
 /// tweak degrades quietly. The exact field names should be confirmed against a live claude.
 pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
     let usage = result.get("usage")?;
-    let pick = |keys: &[&str]| {
+    let u64_at = |keys: &[&str]| {
         keys.iter()
             .find_map(|k| usage.get(*k).and_then(Value::as_u64))
     };
-    let tokens_in = pick(&["input_tokens", "prompt_tokens"])?;
-    let tokens_out = pick(&["output_tokens", "completion_tokens"]).unwrap_or(0);
+    // Base (uncached) input, plus the cached-prompt tokens Claude reports separately, so the
+    // count is the total the model actually processed (HS2-CQ6B96).
+    let base_in = u64_at(&["input_tokens", "prompt_tokens"])?;
+    let cache_read = u64_at(&["cache_read_input_tokens"]).unwrap_or(0);
+    let cache_creation = u64_at(&["cache_creation_input_tokens"]).unwrap_or(0);
+    let tokens_in = base_in + cache_read + cache_creation;
+    let tokens_out = u64_at(&["output_tokens", "completion_tokens"]).unwrap_or(0);
+    // Claude Code's stream-json result reports the model + a total cost at the top level.
     let model = result
         .get("model")
+        .or_else(|| usage.get("model"))
         .and_then(Value::as_str)
         .map(str::to_string);
+    let cost_usd = result
+        .get("total_cost_usd")
+        .or_else(|| result.get("cost_usd"))
+        .and_then(Value::as_f64);
     Some(crate::drive::Usage {
         model,
         tokens_in,
         tokens_out,
+        cost_usd,
     })
 }
 
@@ -463,5 +475,48 @@ pub(crate) mod scripted {
         fn recv(&mut self) -> std::io::Result<Option<String>> {
             Ok(self.inbox.recv().ok())
         }
+    }
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn claude_result_usage_sums_cached_input_and_reads_cost_and_model() {
+        // The Claude Code stream-json `result` event: base input + cache read + cache
+        // creation are distinct fields; all are input the model processed (HS2-CQ6B96).
+        let ev = json!({
+            "type": "result",
+            "model": "claude-opus-4-8",
+            "total_cost_usd": 0.0731,
+            "usage": {
+                "input_tokens": 1000,
+                "cache_read_input_tokens": 4000,
+                "cache_creation_input_tokens": 200,
+                "output_tokens": 350
+            }
+        });
+        let u = claude_result_usage(&ev).unwrap();
+        assert_eq!(u.tokens_in, 5200, "1000 + 4000 + 200");
+        assert_eq!(u.tokens_out, 350);
+        assert_eq!(u.model.as_deref(), Some("claude-opus-4-8"));
+        assert_eq!(u.cost_usd, Some(0.0731));
+    }
+
+    #[test]
+    fn claude_result_usage_handles_the_minimal_shape() {
+        // Only base input/output, no cache, no cost → still parses; cost is None.
+        let u = claude_result_usage(&json!({
+            "usage": { "input_tokens": 12, "output_tokens": 3 }
+        }))
+        .unwrap();
+        assert_eq!((u.tokens_in, u.tokens_out), (12, 3));
+        assert_eq!(u.cost_usd, None);
+        assert_eq!(u.model, None);
+
+        // No usage block → nothing to attribute.
+        assert!(claude_result_usage(&json!({ "type": "result" })).is_none());
     }
 }

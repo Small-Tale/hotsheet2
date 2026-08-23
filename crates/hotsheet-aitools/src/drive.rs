@@ -76,7 +76,7 @@ pub struct PermReq {
 /// stream yields these in order, ending with exactly one [`TurnEvent::Done`]; a drive that
 /// can't returns `None` from [`TurnHandle::next_event`] and the caller uses
 /// [`TurnHandle::wait`] instead.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TurnEvent {
     /// Assistant output text produced during the turn.
     Output(String),
@@ -118,12 +118,20 @@ pub trait TurnHandle {
 
 /// Token usage observed for one turn, mapped from a tool's native telemetry (`docs/14`,
 /// HS2-8PSAFE). The host turns this + the active ticket into a `UsageEvent` it records.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// `tokens_in` is the **total** input the model processed, including any cached-prompt
+/// tokens (cache-read + cache-creation) the tool reports separately — they're summed in so
+/// the count is complete (a finer cached/uncached split is a future enhancement, docs/14).
+/// `cost_usd` carries a tool-reported cost when the tool provides one (e.g. Claude Code's
+/// `total_cost_usd`); otherwise `None`, and the metrics layer prices it from the table.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Usage {
     /// The model that ran, when the tool reports it.
     pub model: Option<String>,
     pub tokens_in: u64,
     pub tokens_out: u64,
+    /// A tool-reported cost in USD, when available (HS2-CQ6B96). `None` → priced from the table.
+    pub cost_usd: Option<f64>,
 }
 
 /// A failed `run`.

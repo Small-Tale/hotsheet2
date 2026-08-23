@@ -291,7 +291,8 @@ fn drive_one_ticket(
             model: u.model,
             tokens_in: u.tokens_in,
             tokens_out: u.tokens_out,
-            cost_usd: None,
+            // A tool-reported cost when present; else record_priced fills from the table.
+            cost_usd: u.cost_usd,
             ticket: Some(id.to_string()),
             session: Some(conn),
         };
