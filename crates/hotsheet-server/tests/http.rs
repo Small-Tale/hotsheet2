@@ -315,7 +315,7 @@ async fn keyset_paging_walks_the_store_and_rejects_a_bad_cursor() {
 }
 
 #[tokio::test]
-async fn assignee_me_resolves_to_the_stores_git_identity() {
+async fn me_views_resolve_assigned_to_me_and_needs_my_review() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};
 
@@ -371,19 +371,26 @@ async fn assignee_me_resolves_to_the_stores_git_identity() {
         vec![],
     )
     .unwrap();
+    // `theirs` is assigned to someone else but has a review request for ME — so the two
+    // `me` views (assigned-to-me vs needs-my-review) must return *different* tickets.
     ops::assign(
         &store,
         &theirs.id,
-        now,
+        now.clone(),
         Some(vec!["other@hs.test".into()]),
-        vec![],
+        vec![hotsheet_model::ReviewRequest {
+            who: "me@hs.test".into(),
+            kind: hotsheet_model::ReviewKind::Feedback,
+            by: Ulid::new(),
+            at: now,
+        }],
     )
     .unwrap();
 
-    // Index reflects the assignments (built at construction, over the seeded store).
+    // Index reflects the assignments/reviews (built at construction, over the seeded store).
     let app = app(AppState::new(store, SECRET.into()).unwrap());
 
-    // assignee=me resolves to me@hs.test and returns only my ticket.
+    // "Assigned to me": assignee=me resolves to me@hs.test and returns only my ticket.
     let resp = app
         .clone()
         .oneshot(authed("GET", "/tickets?assignee=me", None))
@@ -394,6 +401,18 @@ async fn assignee_me_resolves_to_the_stores_git_identity() {
     let rows = rows.as_array().unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["title"], "mine");
+
+    // "Needs my review": review_requested=me returns the *other* ticket, not the assigned one.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?review_requested=me", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let rows = body_json(resp).await;
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["title"], "theirs");
 }
 
 #[tokio::test]

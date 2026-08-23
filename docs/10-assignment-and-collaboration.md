@@ -15,11 +15,14 @@
 > `hotsheet-cli assign <slug> --to <email> [--clear] [--review <email>:<kind>]` and
 > `hotsheet-cli people list|add`.
 >
-> **Not yet built (follow-ups):** server-side `assignee` filtering needs an index
-> **facet table** like `tags` (HS2-89) — the index query serves `close_reason` /
-> `closed` but not `assignee`; the "assigned to me / needs my review" **derived
-> views** and the **live/on-sync attention delivery** of §10.3; and the GitHub-seed
-> of `people.json` (§10.5). See the follow-up ticket for the exact split.
+> **Now also built:** the index `assignees`/`reviews` **facet tables** so
+> `assignee` + `review_requested` filter index-side too (HS2-89/HS2-T84F9F), and the
+> **"assigned to me" / "needs my review" derived views** via the `me` sentinel —
+> `assignee=me` / `review_requested=me` resolve to the store's git `user.email` in the
+> CLI, server, and MCP (HS2-TCDTCH). **Still not built (follow-ups):** the **"I
+> requested" view** (needs a requester identity on `ReviewRequest`, which today
+> carries only `who`), the **live/on-sync attention delivery** of §10.3, and the
+> GitHub-seed of `people.json` (§10.5).
 
 ## 10.1 Two different "who's on this?" concepts — keep them separate
 
