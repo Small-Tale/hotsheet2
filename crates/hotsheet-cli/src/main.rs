@@ -194,8 +194,21 @@ enum Cmd {
         index: Option<PathBuf>,
     },
     /// Show the usage/cost metrics rollup for this store (docs/14) — total cost + tokens,
-    /// by model, and by day, read from the raw JSONL. DB-free.
-    Metrics,
+    /// by model, and by day. DB-free: settled rollup files + a live scan of the raw tail.
+    Metrics {
+        /// Settle history through this day (YYYY-MM-DD) into the per-contributor rollup
+        /// file, advancing `last_rolled_up_through`, before reporting (docs/14 §14.3).
+        #[arg(long, value_name = "YYYY-MM-DD")]
+        roll_up: Option<String>,
+        /// Retention: delete raw JSONL files whose day is before this (only what's already
+        /// rolled up is removed). Runs after `--roll-up`.
+        #[arg(long, value_name = "YYYY-MM-DD")]
+        prune_before: Option<String>,
+        /// Sum across every contributor's shared rollup file (a team view), not just this
+        /// contributor (docs/14 §14.4).
+        #[arg(long)]
+        team: bool,
+    },
     /// Regenerate the derived `worklist.md` at the store root from the current tickets
     /// (the file-based worklist any AI tool can read without the API; docs/03 §3.6). The
     /// server does this automatically on change — this is the headless "regenerate now".
@@ -491,7 +504,11 @@ fn main() -> Result<()> {
         Cmd::Doctor => cmd_doctor(&cli.path),
         Cmd::Reindex { index } => cmd_reindex(&cli.path, index),
         Cmd::Worklist => cmd_worklist(&cli.path),
-        Cmd::Metrics => cmd_metrics(&cli.path),
+        Cmd::Metrics {
+            roll_up,
+            prune_before,
+            team,
+        } => cmd_metrics(&cli.path, roll_up, prune_before, team),
         Cmd::Serve { bind, secret, stop } => cmd_serve(&cli.path, &bind, secret, stop),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
@@ -1258,12 +1275,37 @@ fn cmd_reindex(path: &Path, index: Option<PathBuf>) -> Result<()> {
 }
 
 /// Show the usage/cost rollup for the store (`hotsheet-cli metrics`, docs/14).
-fn cmd_metrics(path: &Path) -> Result<()> {
+fn cmd_metrics(
+    path: &Path,
+    roll_up: Option<String>,
+    prune_before: Option<String>,
+    team: bool,
+) -> Result<()> {
+    use hotsheet_ticketing::metrics;
     let store = FsStore::open(path)?;
-    let r = hotsheet_ticketing::metrics::summary(&store)?;
+
+    if let Some(day) = roll_up.as_deref() {
+        metrics::roll_up_through(&store, day)?;
+        eprintln!("✔ rolled up through {day}");
+    }
+    if let Some(day) = prune_before.as_deref() {
+        let n = metrics::prune_raw_before(&store, day)?;
+        eprintln!("✔ pruned {n} settled raw file(s) before {day}");
+    }
+
+    // DB-free read path: settled rollup + live tail (or the cross-contributor team sum).
+    let r = if team {
+        metrics::team_summary(&store)?
+    } else {
+        metrics::summary_settled(&store)?
+    };
     println!(
-        "Usage: {} events · {} tokens in / {} out · ${:.4} total",
-        r.events, r.tokens_in, r.tokens_out, r.cost_usd
+        "Usage{}: {} events · {} tokens in / {} out · ${:.4} total",
+        if team { " (team)" } else { "" },
+        r.events,
+        r.tokens_in,
+        r.tokens_out,
+        r.cost_usd
     );
     if !r.by_model.is_empty() {
         println!("By model:");

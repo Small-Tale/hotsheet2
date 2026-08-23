@@ -112,9 +112,14 @@ Metrics can be shared across a team **through git** — no server sync needed:
 
 ## 14.7 Build plan (follow-ups)
 - HS2-69 (this) = the spec.
-- Follow-ups to file: the `metrics` plugin capability + the Claude mapper; the
-  raw-JSONL writer + rollup job + the read path; the git-sharing (per-contributor
-  rollups); wiring the dashboards (HS2-47).
+- **Shipped:** the raw-JSONL writer + aggregation + DB-free read (HS2-69); the price
+  table (`record_priced`, HS2-8BCRHS); the **rollup files** + settled-plus-tail read
+  path + retention + **per-contributor git-sharing** (`roll_up_through` /
+  `summary_settled` / `prune_raw_before` / `team_summary`, exposed via
+  `hotsheet-cli metrics --roll-up/--prune-before/--team`, HS2-8BCRHS).
+- **Remaining:** the `metrics` plugin capability + per-tool telemetry mappers (Claude
+  OTLP / Codex usage → `UsageEvent`, needs live telemetry formats + drive integration);
+  wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references
 - The `metrics` plugin capability: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.3
