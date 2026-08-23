@@ -16,6 +16,7 @@ use tokio::sync::broadcast;
 
 use crate::busy::{Activity, BusyDetector};
 use crate::env::scrub_env;
+use crate::osc::{OscScanner, TermState};
 
 /// How much recent PTY output to retain for a re-attaching viewer.
 pub const SCROLLBACK_BYTES: usize = 256 * 1024;
@@ -96,6 +97,8 @@ pub struct Terminal {
     writer: Mutex<Box<dyn Write + Send>>,
     scrollback: Arc<Mutex<Ring>>,
     busy: Arc<Mutex<BusyDetector>>,
+    /// Informational OSC 7/8/9 state (cwd / hyperlink / progress), parsed from output (HS2-RCKEJ9).
+    osc: Arc<Mutex<OscScanner>>,
     /// Live output fan-out: every drained chunk is broadcast so a WS viewer streams new bytes
     /// as they arrive (after replaying the scrollback snapshot). HS2-XTTTMV.
     output_tx: broadcast::Sender<Vec<u8>>,
@@ -137,8 +140,14 @@ impl Terminal {
 
         let scrollback = Arc::new(Mutex::new(Ring::new(SCROLLBACK_BYTES)));
         let busy = Arc::new(Mutex::new(BusyDetector::new()));
+        let osc = Arc::new(Mutex::new(OscScanner::new()));
         let (output_tx, _) = broadcast::channel(OUTPUT_CHANNEL_CAP);
-        let (sb, bz, tx) = (scrollback.clone(), busy.clone(), output_tx.clone());
+        let (sb, bz, oc, tx) = (
+            scrollback.clone(),
+            busy.clone(),
+            osc.clone(),
+            output_tx.clone(),
+        );
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             loop {
@@ -151,6 +160,9 @@ impl Terminal {
                         }
                         if let Ok(mut d) = bz.lock() {
                             d.feed(chunk);
+                        }
+                        if let Ok(mut o) = oc.lock() {
+                            o.feed(chunk);
                         }
                         // Fan out to live viewers (Err just means no one is attached).
                         let _ = tx.send(chunk.to_vec());
@@ -165,6 +177,7 @@ impl Terminal {
             writer: Mutex::new(writer),
             scrollback,
             busy,
+            osc,
             output_tx,
         })
     }
@@ -212,6 +225,11 @@ impl Terminal {
             .lock()
             .map(|d| d.activity())
             .unwrap_or(Activity::Idle)
+    }
+
+    /// Informational terminal state parsed from OSC 7/8/9 (cwd / hyperlink / progress).
+    pub fn term_state(&self) -> TermState {
+        self.osc.lock().map(|o| o.state()).unwrap_or_default()
     }
 
     /// Whether the child process is still running.

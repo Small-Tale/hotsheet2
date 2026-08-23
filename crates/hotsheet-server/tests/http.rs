@@ -1225,6 +1225,46 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 }
 
 #[tokio::test]
+async fn terminal_surfaces_osc7_cwd_in_its_state() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // A terminal whose child emits an OSC 7 (cwd) sequence, then some text. The drain thread
+    // parses it and the state shows up on GET /terminals/{id}. The ESC/BEL bytes are real
+    // (JSON \u escapes); printf prints its arg literally.
+    let body =
+        "{\"command\":\"printf\",\"args\":[\"\\u001b]7;file://host/tmp/osc-e2e\\u0007ready\\n\"]}";
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/terminals", Some(body)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let id = body_json(resp).await["id"].as_str().unwrap().to_string();
+
+    // Poll the state until the parsed cwd appears.
+    let mut cwd = None;
+    for _ in 0..60 {
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", &format!("/terminals/{id}"), None))
+            .await
+            .unwrap();
+        let v = body_json(resp).await;
+        if let Some(c) = v.get("cwd").and_then(|c| c.as_str()) {
+            cwd = Some(c.to_string());
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    assert_eq!(
+        cwd.as_deref(),
+        Some("/tmp/osc-e2e"),
+        "OSC 7 cwd should surface"
+    );
+}
+
+#[tokio::test]
 async fn terminals_open_read_input_and_kill() {
     let (_d, st) = state();
     let app = app(st);

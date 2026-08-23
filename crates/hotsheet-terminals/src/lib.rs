@@ -3,19 +3,23 @@
 //! multi-viewer sharing, environment scrubbing, and byte-stream **busy inference** (OSC 133
 //! + a spinner hint) that feeds the connection registry.
 //!
-//! Built here: [`Terminal`] (one PTY session), [`TerminalManager`] (lazy per-project
-//! terminals), [`BusyDetector`] + [`contains_spinner`], and env [`scrub_env`]. The server
-//! HTTP routes (`/terminals` open/list, `/terminals/{id}` read/kill, `/terminals/{id}/input`)
-//! are wired (HS2-A6R5QV). Follow-ons: the **detached broker** (survive server restart),
-//! live **WS streaming** of terminal output, server-arbitrated **PTY sizing** (HS2-62), and
-//! OSC 7/8 cwd/hyperlink handling (HS2-XTTTMV).
+//! Built here: [`Terminal`] (one PTY session, with a live output fan-out via
+//! [`Terminal::subscribe`]), [`TerminalManager`] (lazy per-project terminals),
+//! [`BusyDetector`] + [`contains_spinner`], the [`OscScanner`] (OSC 7/8/9 cwd/hyperlink/
+//! progress → [`TermState`]), and env [`scrub_env`]. The server wires the HTTP routes
+//! (`/terminals` open/list, `/terminals/{id}` read/kill, `/terminals/{id}/input`) + the live
+//! WS attach (`/terminals/{id}/attach`) — HS2-A6R5QV/HS2-XTTTMV. Follow-ons: the **detached
+//! broker** (survive server restart), server-arbitrated **PTY sizing** (HS2-62), and feeding
+//! busy → the connection registry (HS2-4M67VN).
 
 pub mod busy;
 pub mod env;
 pub mod manager;
+pub mod osc;
 pub mod terminal;
 
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;
 pub use manager::{TermKey, TerminalManager};
+pub use osc::{OscScanner, TermState};
 pub use terminal::{SCROLLBACK_BYTES, TermError, TermSpec, Terminal};

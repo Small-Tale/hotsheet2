@@ -1136,6 +1136,15 @@ struct TerminalInfo {
     alive: bool,
     /// Inferred busy (a tool is actively working) vs idle.
     busy: bool,
+    /// The shell's reported working directory (OSC 7), if any (HS2-RCKEJ9).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cwd: Option<String>,
+    /// A currently-open hyperlink URI (OSC 8), if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    link: Option<String>,
+    /// Tool progress percent 0-100 (OSC 9;4), if reported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    progress: Option<u8>,
 }
 
 /// The terminal-manager key for a terminal id — the served store root is the project.
@@ -1144,10 +1153,14 @@ fn term_key(state: &AppState, id: &str) -> hotsheet_terminals::TermKey {
 }
 
 fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
+    let osc = term.term_state();
     TerminalInfo {
         id: id.to_string(),
         alive: term.is_alive(),
         busy: term.activity() == hotsheet_terminals::Activity::Busy,
+        cwd: osc.cwd,
+        link: osc.link,
+        progress: osc.progress,
     }
 }
 
