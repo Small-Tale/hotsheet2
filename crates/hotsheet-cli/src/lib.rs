@@ -30,6 +30,68 @@ use hotsheet_ticketing::{FsStore, StoreMetadata};
 
 use crate::import::{ExportFile, ImportSummary, SUPPORTED_EXPORT_VERSION, import};
 
+/// The per-machine link file a code repo drops to point at its **standalone** ticket store
+/// (`docs/02` §2.8, HS2-5CXKZ0). Gitignored — the store path is absolute + machine-local.
+pub const STORE_LINK: &str = ".hotsheet/store";
+
+/// Resolve which store directory a command operates on (HS2-5CXKZ0), so `hotsheet-cli` run
+/// inside a **code** repo finds its separate ticket store without `-C` every time:
+/// 1. an explicit `-C <path>` (anything but the default `.`) wins;
+/// 2. else `$HOTSHEET_STORE`;
+/// 3. else walk up from `cwd` for a [`STORE_LINK`] file (written by `hotsheet-cli link`);
+/// 4. else the requested path (`.`).
+pub fn resolve_store_path(requested: PathBuf, cwd: &Path) -> PathBuf {
+    if requested != Path::new(".") {
+        return requested;
+    }
+    if let Some(p) = std::env::var_os("HOTSHEET_STORE").filter(|v| !v.is_empty()) {
+        return PathBuf::from(p);
+    }
+    let mut dir = Some(cwd);
+    while let Some(d) = dir {
+        if let Ok(s) = std::fs::read_to_string(d.join(STORE_LINK)) {
+            let linked = s.trim();
+            if !linked.is_empty() {
+                return PathBuf::from(linked);
+            }
+        }
+        dir = d.parent();
+    }
+    requested
+}
+
+/// Link the current directory (a code repo) to its standalone ticket `store`: verify the
+/// store, write its absolute path to `.hotsheet/store`, and gitignore that link (it's
+/// machine-local). So later `hotsheet-cli` calls here resolve to the store with no `-C`.
+pub fn link_store(store: &Path, project_dir: &Path) -> Result<PathBuf> {
+    let abs = store
+        .canonicalize()
+        .with_context(|| format!("store path does not exist: {}", store.display()))?;
+    FsStore::open(&abs).with_context(|| format!("{} is not a Hot Sheet store", abs.display()))?;
+    let hs = project_dir.join(".hotsheet");
+    std::fs::create_dir_all(&hs)?;
+    std::fs::write(hs.join("store"), format!("{}\n", abs.display()))?;
+    ensure_gitignored(project_dir, STORE_LINK)?;
+    Ok(abs)
+}
+
+/// Append `entry` to `<dir>/.gitignore` if not already present.
+fn ensure_gitignored(dir: &Path, entry: &str) -> Result<()> {
+    let gi = dir.join(".gitignore");
+    let existing = std::fs::read_to_string(&gi).unwrap_or_default();
+    if existing.lines().any(|l| l.trim() == entry) {
+        return Ok(());
+    }
+    let mut out = existing;
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(entry);
+    out.push('\n');
+    std::fs::write(&gi, out)?;
+    Ok(())
+}
+
 /// Read a `hotsheet-export.json` and import it into the store (creating the store on
 /// first import). Prints progress + warnings and commits; returns the summary so the
 /// caller can phrase the final line.
@@ -224,5 +286,61 @@ fn run_git(path: &Path, args: &[&str]) {
         Ok(status) if status.success() => {}
         Ok(status) => eprintln!("warning: git {} exited with {status}", args.join(" ")),
         Err(err) => eprintln!("warning: could not run git {}: {err}", args.join(" ")),
+    }
+}
+
+#[cfg(test)]
+mod store_link_tests {
+    use super::*;
+
+    #[test]
+    fn explicit_c_wins_and_a_missing_link_is_the_requested_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        // An explicit non-"." path is returned as-is.
+        assert_eq!(
+            resolve_store_path(PathBuf::from("/some/store"), tmp.path()),
+            PathBuf::from("/some/store")
+        );
+        // No link anywhere up the tree → the requested "." (env not set in this scope).
+        // (HOTSHEET_STORE is process-global, so only assert the walk-up when unset.)
+        if std::env::var_os("HOTSHEET_STORE").is_none() {
+            assert_eq!(
+                resolve_store_path(PathBuf::from("."), tmp.path()),
+                PathBuf::from(".")
+            );
+        }
+    }
+
+    #[test]
+    fn link_store_writes_a_gitignored_pointer_that_resolves_from_a_subdir() {
+        // A standalone store + a separate code repo that links to it.
+        let store_dir = tempfile::tempdir().unwrap();
+        FsStore::init(store_dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let code = tempfile::tempdir().unwrap();
+        let nested = code.path().join("src").join("deep");
+        std::fs::create_dir_all(&nested).unwrap();
+
+        let abs = link_store(store_dir.path(), code.path()).unwrap();
+        assert_eq!(abs, store_dir.path().canonicalize().unwrap());
+        // The link file + a gitignore entry were written.
+        let linked = std::fs::read_to_string(code.path().join(STORE_LINK)).unwrap();
+        assert_eq!(linked.trim(), abs.display().to_string());
+        let gi = std::fs::read_to_string(code.path().join(".gitignore")).unwrap();
+        assert!(
+            gi.lines().any(|l| l.trim() == STORE_LINK),
+            "link is gitignored"
+        );
+
+        // Resolving from a nested subdir walks up and finds the store (no -C).
+        if std::env::var_os("HOTSHEET_STORE").is_none() {
+            assert_eq!(resolve_store_path(PathBuf::from("."), &nested), abs);
+        }
+    }
+
+    #[test]
+    fn link_store_rejects_a_non_store_path() {
+        let not_store = tempfile::tempdir().unwrap();
+        let code = tempfile::tempdir().unwrap();
+        assert!(link_store(not_store.path(), code.path()).is_err());
     }
 }

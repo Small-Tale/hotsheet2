@@ -46,7 +46,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/assign/people/setup/import/doctor/reindex/worklist/metrics/serve/claim-next/release/renew/trigger/work/permission-hook
+      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/assign/people/setup/import/doctor/reindex/worklist/metrics/serve/claim-next/release/renew/trigger/work/permission-hook; resolve_store_path finds a standalone store without -C (-C > $HOTSHEET_STORE > .hotsheet/store link, HS2-5CXKZ0)
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety

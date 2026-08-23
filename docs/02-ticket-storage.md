@@ -415,6 +415,29 @@ store (or any store that isn't already inside a repo) it **runs `git init`** and
 installs the merge driver (§2.7) — a local-only store is a perfectly normal repo
 that simply has no remote added.
 
+**Recommended default — standalone for actively-developed projects** (maintainer,
+2026-08-21, HS2-5CXKZ0): for a project under active development, the **standalone**
+tickets repo (option 2) is the recommended default, **not** in-repo and **not** a
+submodule. Ticket updates churn aggressively and *independently* of code commits, so
+co-locating them pollutes the code repo's history, branches, and CI; a submodule just
+re-introduces that churn as pinned-SHA bumps (plus submodule pain). **In-repo** stays
+a fine choice for **low-churn** projects or where tight ticket↔PR coupling is wanted.
+Because a standalone store lives at a machine-specific path, the code↔ticket link is
+recorded **by commit SHA on the tickets** (not by co-location), and the tool config
+that references the store path (`.mcp.json`, the hooks command) is per-machine.
+
+**Finding the store without `-C`** (HS2-5CXKZ0): a code repo can point at its
+standalone store with `hotsheet-cli link <store>`, which writes a **gitignored**
+`.hotsheet/store` file holding the store's absolute path. Any later `hotsheet-cli`
+run inside that repo resolves the store automatically: an explicit `-C` wins, else
+`$HOTSHEET_STORE`, else the nearest `.hotsheet/store` walking up from the cwd. A
+standalone store also wants **aggressive auto commit+push** so its independent churn
+propagates without manual git — the ticket write auto-commit + the server's
+background sync loop cover this (§2.12).
+
+Hot Sheet 2 itself uses this shape: its tickets live in the standalone repo
+`Small-Tale/hotsheet-2.hs2`, migrated off HS1.
+
 ## 2.9 What we drop from HS1 storage
 
 - The embedded Postgres cluster, the `template1` pin, tiered snapshots, backups,

@@ -35,6 +35,13 @@ enum Cmd {
         #[arg(long, default_value = "HS")]
         prefix: String,
     },
+    /// Link this directory (a code repo) to its **standalone** ticket store, so later
+    /// `hotsheet-cli` calls here find it without `-C` (docs/02 §2.8, HS2-5CXKZ0). Writes a
+    /// gitignored `.hotsheet/store` pointing at the store's absolute path.
+    Link {
+        /// Path to the existing standalone ticket store.
+        store: PathBuf,
+    },
     /// Create a new ticket.
     New {
         /// Ticket title (positional). Alternatively pass --title.
@@ -447,9 +454,17 @@ impl LsFilters {
 }
 
 fn main() -> Result<()> {
-    let cli = Cli::parse();
+    let mut cli = Cli::parse();
+    // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
+    // `.hotsheet/store` link walked up from cwd — so a standalone store is found without -C
+    // (HS2-5CXKZ0). `init`/`link` operate on the literal path, not a resolved one.
+    if !matches!(cli.command, Cmd::Init { .. } | Cmd::Link { .. }) {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
+    }
     match cli.command {
         Cmd::Init { prefix } => cmd_init(&cli.path, &prefix),
+        Cmd::Link { store } => cmd_link(&store),
         Cmd::New {
             title,
             title_flag,
@@ -767,6 +782,19 @@ fn cmd_init(path: &PathBuf, prefix: &str) -> Result<()> {
     git_init(path);
     hotsheet_cli::register_merge_driver(path);
     println!("Initialized Hot Sheet store at {}", path.display());
+    Ok(())
+}
+
+/// Link the current directory to a standalone store (`hotsheet-cli link <store>`).
+fn cmd_link(store: &Path) -> Result<()> {
+    let cwd = std::env::current_dir()?;
+    let abs = hotsheet_cli::link_store(store, &cwd)?;
+    println!(
+        "Linked {} → {} (via {})",
+        cwd.display(),
+        abs.display(),
+        hotsheet_cli::STORE_LINK
+    );
     Ok(())
 }
 
