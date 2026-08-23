@@ -98,6 +98,14 @@ pub fn pid_alive(pid: u32) -> bool {
 
 #[cfg(unix)]
 fn signal(pid: u32, sig: &str) -> bool {
+    // Guard against `kill` targeting a process GROUP / everything: a stringified pid that
+    // wraps past `pid_t` (i32) — e.g. a garbage lock file holding `u32::MAX` — parses to a
+    // negative number, and `kill -0 -1` signals every reachable process and *succeeds*,
+    // wrongly reading as "alive" (so a corrupt lock would block forever). Only a real,
+    // positive, single-process pid is a valid target.
+    if pid == 0 || pid > i32::MAX as u32 {
+        return false;
+    }
     std::process::Command::new("kill")
         .arg(format!("-{sig}"))
         .arg(pid.to_string())
@@ -255,5 +263,17 @@ mod tests {
         let lock = acquire_writer_lock(store.path()).expect("stale lock reclaimed");
         drop(lock);
         assert!(!lock_path.exists(), "lock released on drop");
+    }
+
+    #[test]
+    fn out_of_range_pids_never_read_as_alive() {
+        // Regression: `u32::MAX` stringified and handed to `kill` wraps to -1 on Linux,
+        // signalling every process and reporting "alive" — so a corrupt lock file would
+        // block forever. Pid 0 (the caller's own group) is the same hazard. Both must be
+        // treated as dead so the stale lock is reclaimable.
+        assert!(!pid_alive(u32::MAX), "u32::MAX pid is not a live process");
+        assert!(!pid_alive(0), "pid 0 is not a single live process");
+        // Sanity: this test's own process IS alive.
+        assert!(pid_alive(std::process::id()));
     }
 }
