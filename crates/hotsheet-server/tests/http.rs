@@ -981,6 +981,52 @@ async fn permission_round_trip_lists_answers_and_unblocks_the_tool() {
 }
 
 #[tokio::test]
+async fn permissions_ask_blocks_then_returns_the_human_answer() {
+    let (_d, st) = state();
+    let bridge = st.permission_bridge();
+    let app = app(st);
+
+    // The asking side (a Claude hook) raises a blocking request.
+    let ask_app = app.clone();
+    let ask = tokio::spawn(async move {
+        ask_app
+            .oneshot(authed(
+                "POST",
+                "/permissions/ask",
+                Some(r#"{"connection":"claude-1","tool":"Bash","action":"rm x"}"#),
+            ))
+            .await
+            .unwrap()
+    });
+
+    // It shows up on GET /permissions; a human answers allow.
+    let id = loop {
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(first) = body_json(resp).await.as_array().unwrap().first() {
+            assert_eq!(first["connection"], "claude-1");
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    bridge
+        .resolve(
+            id,
+            hotsheet_aitools::PermissionDecision::Allow,
+            hotsheet_aitools::PermissionScope::Once,
+        )
+        .unwrap();
+
+    // The blocked ask returns the decision.
+    let resp = ask.await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(body_json(resp).await["decision"], "allow");
+}
+
+#[tokio::test]
 async fn permissions_require_the_secret() {
     let (_d, st) = state();
     let resp = app(st)

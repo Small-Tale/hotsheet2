@@ -508,6 +508,9 @@ pub fn app(state: AppState) -> Router {
         // answer one (allow/deny + once/session/always).
         .route("/permissions", get(list_permissions))
         .route("/permissions/{id}", post(resolve_permission))
+        // Raise a blocking permission request (the asking side — e.g. a Claude PreToolUse
+        // hook), HS2-YMR9HE. Blocks until answered over the route-back, or times out.
+        .route("/permissions/ask", post(ask_permission))
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
         .route_layer(middleware::from_fn_with_state(
@@ -841,6 +844,44 @@ async fn list_permissions(
     State(state): State<AppState>,
 ) -> Json<Vec<hotsheet_aitools::PermissionRequest>> {
     Json(state.permissions.pending())
+}
+
+/// How long `POST /permissions/ask` blocks for a human before the safe fallback (`deny`).
+const ASK_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Body for `POST /permissions/ask`: who's asking + what.
+#[derive(Deserialize)]
+struct AskBody {
+    /// The live connection id (so a client attributes the prompt to the right tool).
+    connection: String,
+    /// The tool/action asking (e.g. `"Bash"`, `"Edit"`) — the rule-match key.
+    tool: String,
+    action: String,
+}
+
+/// `POST /permissions/ask` `{connection, tool, action}` — raise a permission request and
+/// **block** until a human answers over the route-back (`POST /permissions/{id}`), up to a
+/// timeout then a safe `deny`. This is the *asking* side, for an external tool transport
+/// like the Claude PreToolUse hook (HS2-YMR9HE). An allow-rule answers immediately.
+async fn ask_permission(
+    State(state): State<AppState>,
+    Json(body): Json<AskBody>,
+) -> Json<serde_json::Value> {
+    let bridge = state.permissions.clone();
+    // request_blocking_timeout blocks (Condvar); run it off the async runtime.
+    let decision = tokio::task::spawn_blocking(move || {
+        bridge.request_blocking_timeout(
+            body.connection,
+            body.tool,
+            body.action,
+            ASK_TIMEOUT,
+            hotsheet_aitools::PermissionDecision::Deny,
+        )
+    })
+    .await
+    .unwrap_or(hotsheet_aitools::PermissionDecision::Deny);
+    let allow = decision == hotsheet_aitools::PermissionDecision::Allow;
+    Json(serde_json::json!({ "decision": if allow { "allow" } else { "deny" } }))
 }
 
 /// One driven connection as reported by `GET /connections`.

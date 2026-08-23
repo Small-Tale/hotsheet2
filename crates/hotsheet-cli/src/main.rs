@@ -209,6 +209,11 @@ enum Cmd {
         #[arg(long)]
         team: bool,
     },
+    /// Claude PreToolUse **permission hook** (docs/05 §5.7, HS2-YMR9HE): reads the tool-use
+    /// JSON on stdin, asks the running Hot Sheet server (via $HOTSHEET_SERVER/$HOTSHEET_SECRET)
+    /// for an allow/deny, and writes the decision to stdout. With no server it emits `ask`
+    /// (defer to Claude's normal flow). Register it as a Claude `PreToolUse` hook.
+    PermissionHook,
     /// Regenerate the derived `worklist.md` at the store root from the current tickets
     /// (the file-based worklist any AI tool can read without the API; docs/03 §3.6). The
     /// server does this automatically on change — this is the headless "regenerate now".
@@ -509,6 +514,7 @@ fn main() -> Result<()> {
             prune_before,
             team,
         } => cmd_metrics(&cli.path, roll_up, prune_before, team),
+        Cmd::PermissionHook => cmd_permission_hook(),
         Cmd::Serve { bind, secret, stop } => cmd_serve(&cli.path, &bind, secret, stop),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
@@ -1160,6 +1166,58 @@ fn cmd_metrics(
         }
     }
     Ok(())
+}
+
+/// Claude PreToolUse permission hook (HS2-YMR9HE): stdin tool-use JSON → ask the running
+/// server → stdout decision. Always exits 0 (a hook failure must not wedge the tool); the
+/// decision word carries allow/deny/ask. Fail-safe: any error → `ask` (defer to Claude).
+fn cmd_permission_hook() -> Result<()> {
+    use hotsheet_cli::permission_hook::{
+        HookDecision, decision_from_server, hook_connection, hook_decision_json, hook_tool_action,
+    };
+    let input: serde_json::Value =
+        serde_json::from_reader(std::io::stdin()).unwrap_or(serde_json::Value::Null);
+
+    let decision = match (
+        std::env::var("HOTSHEET_SERVER").ok(),
+        std::env::var("HOTSHEET_SECRET").ok(),
+    ) {
+        // Governed by a Hot Sheet server: raise a blocking request and honor the answer.
+        (Some(url), Some(secret)) => {
+            let (tool, action) = hook_tool_action(&input);
+            let connection = hook_connection(&input);
+            match ask_server(&url, &secret, &connection, &tool, &action) {
+                Ok(reply) => decision_from_server(&reply),
+                // Server unreachable / error → defer to Claude rather than block it.
+                Err(_) => HookDecision::Ask,
+            }
+        }
+        // Not a Hot Sheet-governed run → defer to Claude's normal permission flow.
+        _ => HookDecision::Ask,
+    };
+    println!("{}", hook_decision_json(decision));
+    Ok(())
+}
+
+/// POST the ask to the server's `/permissions/ask`, returning its JSON reply.
+fn ask_server(
+    url: &str,
+    secret: &str,
+    connection: &str,
+    tool: &str,
+    action: &str,
+) -> Result<serde_json::Value> {
+    let endpoint = format!("{}/permissions/ask", url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "connection": connection, "tool": tool, "action": action,
+    })
+    .to_string();
+    let text = ureq::post(&endpoint)
+        .set("X-Hotsheet-Secret", secret)
+        .set("Content-Type", "application/json")
+        .send_string(&body)?
+        .into_string()?;
+    Ok(serde_json::from_str(&text)?)
 }
 
 /// Regenerate the derived `worklist.md` from the store's tickets (`hotsheet-cli worklist`).
