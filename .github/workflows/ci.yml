@@ -131,5 +131,7 @@ jobs:
       - name: Rust coverage summary + threshold gate
         env:
           RUSTFLAGS: ""
-        # Conservative starting floor; raise it once measured runs settle (HS2-8WR8XF).
-        run: cargo llvm-cov report --summary-only --fail-under-lines 55
+        # Baseline measured at ~85.8% lines (HS2-8WR8XF); floor set a few points under so
+        # a real regression fails the job without flaking on normal fluctuation. Raise as
+        # coverage climbs.
+        run: cargo llvm-cov report --summary-only --fail-under-lines 80
