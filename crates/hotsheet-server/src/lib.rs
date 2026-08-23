@@ -124,6 +124,7 @@ impl AppState {
                     kind: "permission_asked".to_string(),
                     id: req.id.to_string(),
                     slug: req.tool.clone(),
+                    message: None,
                 };
                 if let Ok(mut l) = log.lock() {
                     l.push(ev.clone());
@@ -159,6 +160,11 @@ impl AppState {
     /// drives, and `GET /connections` reads it (HS2-TCV3BF).
     pub fn drive_registry(&self) -> Arc<Mutex<hotsheet_aitools::ConnectionRegistry>> {
         self.drive_registry.clone()
+    }
+
+    /// Subscribe to the live change/announce bus (what `/ws/sync` pushes).
+    pub fn subscribe(&self) -> broadcast::Receiver<ChangeEvent> {
+        self.events.subscribe()
     }
 
     /// Seed the permission bridge with the durable `Always` allow-rules stored at `path`,
@@ -391,9 +397,25 @@ impl AppState {
             kind: kind.to_string(),
             id: t.id.to_string(),
             slug: t.slug.clone(),
+            message: None,
         });
         // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
         self.kick_sync();
+    }
+
+    /// Broadcast an **ephemeral announcement** to live `/ws/sync` subscribers (HS2-HHDNTH):
+    /// a store-level message that is **not** persisted — it rides the WS bus only, so it is
+    /// NOT recorded in the long-poll ring and never replayed. A client not connected when it
+    /// fires simply misses it. `store` is the target store's URL id (empty = the default).
+    pub fn announce(&self, store: String, message: String) {
+        // WS-only: intentionally skip the EventLog ring (ephemeral, unlike `emit`).
+        let _ = self.events.send(ChangeEvent {
+            store,
+            kind: "announce".to_string(),
+            id: String::new(),
+            slug: String::new(),
+            message: Some(message),
+        });
     }
 }
 
@@ -405,6 +427,10 @@ pub struct ChangeEvent {
     pub kind: String,
     pub id: String,
     pub slug: String,
+    /// For `kind == "announce"` (HS2-HHDNTH): the broadcast message text. `None` for
+    /// ticket-change events (omitted on the wire).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// How many recent events the long-poll ring retains. A poller whose cursor falls behind
@@ -460,6 +486,7 @@ mod event_log_tests {
             kind: "created".into(),
             id: format!("id-{n}"),
             slug: format!("HS-{n}"),
+            message: None,
         }
     }
 
@@ -553,6 +580,9 @@ pub fn app(state: AppState) -> Router {
         // Activity timeline (HS2-KP31ZE): ingest a tool's activity event, and read the
         // per-ticket/session "what happened" window (docs/15). The Announcer/timeline consumer.
         .route("/activity", get(list_activity).post(ingest_activity))
+        // Ephemeral store-level announcement broadcast over the WS bus (HS2-HHDNTH) — not
+        // persisted, live subscribers only.
+        .route("/announce", post(post_announce))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -711,6 +741,31 @@ async fn list_activity(
     let events = hotsheet_ticketing::activity::timeline(&state.store, &filter)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(events))
+}
+
+/// `POST /announce` body: a store-level broadcast message (HS2-HHDNTH).
+#[derive(Debug, Deserialize)]
+struct AnnounceReq {
+    message: String,
+    /// The target store's URL id; omitted = the default store.
+    #[serde(default)]
+    store: Option<String>,
+}
+
+/// `POST /announce` — broadcast an ephemeral message to live `/ws/sync` subscribers. Not
+/// persisted (no long-poll replay); a client not connected when it fires misses it.
+async fn post_announce(
+    State(state): State<AppState>,
+    Json(body): Json<AnnounceReq>,
+) -> Result<StatusCode, ApiError> {
+    if body.message.trim().is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "empty announcement"));
+    }
+    let store = body
+        .store
+        .unwrap_or_else(|| multistore::store_url_id(&state.store));
+    state.announce(store, body.message);
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---- multi-store (HS2-87) --------------------------------------------------------
@@ -1954,6 +2009,7 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
             kind: kind.to_string(),
             id,
             slug,
+            message: None,
         });
     };
 

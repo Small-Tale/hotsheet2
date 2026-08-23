@@ -155,6 +155,14 @@ fn tools_list() -> Value {
             }, "required": ["ids"] }
         },
         {
+            "name": "hotsheet_announce",
+            "description": "Broadcast an ephemeral message to everyone watching this project live (over the WebSocket bus). Not persisted — it isn't a ticket note and isn't replayed; a client not connected when it fires misses it. Requires a running server (the serverless direct-to-disk mode has no bus).",
+            "inputSchema": { "type": "object", "properties": {
+                "message": str_prop("the announcement text"),
+                "store": str_prop("target store URL id (default: this project's store)")
+            }, "required": ["message"] }
+        },
+        {
             "name": "hotsheet_claim_next",
             "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next). Returns the claimed ticket, or null if nothing is claimable.",
             "inputSchema": { "type": "object", "properties": {
@@ -259,6 +267,7 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 .map_err(be_msg)
         }
         "hotsheet_batch" => backend.send("POST", "/batch", args).map_err(be_msg),
+        "hotsheet_announce" => backend.send("POST", "/announce", args).map_err(be_msg),
         "hotsheet_claim_next" => backend.send("POST", "/claim-next", args).map_err(be_msg),
         "hotsheet_release" => {
             let id = arg_str(args, "id")?;
@@ -645,6 +654,12 @@ mod core_backend {
                         ],
                     ))
                 }
+                // Announce (HS2-HHDNTH) is a live WS broadcast — there's no bus in the
+                // serverless direct-to-disk mode, so guide the caller to a server.
+                "POST" if path == "/announce" => Err(bad_request(
+                    "announce needs a running server (a live WebSocket broadcast); \
+                     run the MCP shim with --server, or start `hotsheet-cli serve`",
+                )),
                 _ => Err(bad_request(format!("unsupported {method} {path}"))),
             }
         }
@@ -1122,6 +1137,30 @@ mod tests {
         assert!(
             !out.contains('\n'),
             "a large result should be compact JSON, not pretty-printed"
+        );
+    }
+
+    #[test]
+    fn announce_is_a_tool_but_errors_serverless() {
+        // It's advertised in the tool list.
+        let tools = tools_list();
+        let names: Vec<&str> = tools["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert!(names.contains(&"hotsheet_announce"));
+
+        // Serverless (CoreBackend) has no WS bus → a clear "needs a server" error.
+        let (_d, backend) = core();
+        let r = call(&backend, "hotsheet_announce", json!({ "message": "hi" }));
+        assert!(
+            r["error"]
+                .as_str()
+                .unwrap_or("")
+                .contains("needs a running server"),
+            "expected a needs-a-server error, got {r}"
         );
     }
 

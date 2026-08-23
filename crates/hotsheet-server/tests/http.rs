@@ -264,6 +264,72 @@ async fn list_is_compact_by_default_and_supports_limit() {
 }
 
 #[tokio::test]
+async fn announce_broadcasts_live_but_is_not_persisted_in_the_poll_ring() {
+    let (_d, st) = state();
+    // Subscribe to the live bus before announcing.
+    let mut rx = st.subscribe();
+    let app = app(st);
+
+    // An empty announcement is rejected.
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/announce", Some(r#"{"message":"  "}"#)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // A real announcement broadcasts to live subscribers.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/announce",
+            Some(r#"{"message":"deploying now"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+    let ev = rx
+        .try_recv()
+        .expect("a live subscriber receives the announcement");
+    assert_eq!(ev.kind, "announce");
+    assert_eq!(ev.message.as_deref(), Some("deploying now"));
+
+    // Ephemeral: it is NOT in the long-poll ring. Create a ticket (which IS logged), then a
+    // poll since=0 sees the ticket event but never the announcement.
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/tickets", Some(r#"{"title":"logged"}"#)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/ws/poll?secret={SECRET}&since=0&timeout_ms=0"),
+            None,
+        ))
+        .await
+        .unwrap();
+    let polled = body_json(resp).await;
+    let kinds: Vec<&str> = polled["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["kind"].as_str().unwrap())
+        .collect();
+    assert!(
+        kinds.contains(&"created"),
+        "the ticket change is in the ring"
+    );
+    assert!(
+        !kinds.contains(&"announce"),
+        "the announcement must not be persisted in the poll ring: {kinds:?}"
+    );
+}
+
+#[tokio::test]
 async fn activity_ingest_then_timeline_filters_by_ticket_and_importance() {
     let (_d, st) = state();
     let app = app(st);
