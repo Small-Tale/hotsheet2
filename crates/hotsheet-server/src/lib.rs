@@ -79,6 +79,9 @@ pub struct AppState {
     /// server is driving registers here for its turn, so `GET /connections` shows what's
     /// live and (once driving is concurrent) the in-flight bound can consult busy state.
     drive_registry: Arc<Mutex<hotsheet_aitools::ConnectionRegistry>>,
+    /// The in-process PTY manager (HS2-10) exposed over HTTP (HS2-A6R5QV): open/list/input/
+    /// read/kill terminals. Lazy — a terminal spawns on first `POST /terminals`.
+    terminals: Arc<hotsheet_terminals::TerminalManager>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -141,6 +144,7 @@ impl AppState {
             drive_registry: Arc::new(Mutex::new(hotsheet_aitools::ConnectionRegistry::new(
                 60_000,
             ))),
+            terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
         }
     }
 
@@ -513,6 +517,11 @@ pub fn app(state: AppState) -> Router {
         .route("/permissions/ask", post(ask_permission))
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
+        // Terminals (HS2-A6R5QV): open a PTY, list them, feed input, read the scrollback,
+        // kill one — the HTTP attach surface over the in-process TerminalManager.
+        .route("/terminals", get(list_terminals).post(open_terminal))
+        .route("/terminals/{id}", get(read_terminal).delete(kill_terminal))
+        .route("/terminals/{id}/input", post(write_terminal))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -924,6 +933,139 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+// ---- terminals (HS2-A6R5QV) ------------------------------------------------------
+
+/// Body for `POST /terminals`: what to run.
+#[derive(Deserialize)]
+struct OpenTerminalReq {
+    /// The program to spawn (e.g. `bash`, `codex`).
+    command: String,
+    #[serde(default)]
+    args: Vec<String>,
+    /// Working directory (defaults to the served store root).
+    cwd: Option<String>,
+    /// Client-chosen terminal id; a ULID is minted when omitted.
+    id: Option<String>,
+}
+
+/// One terminal as reported by `GET /terminals`.
+#[derive(Serialize)]
+struct TerminalInfo {
+    id: String,
+    /// The PTY is still running.
+    alive: bool,
+    /// Inferred busy (a tool is actively working) vs idle.
+    busy: bool,
+}
+
+/// The terminal-manager key for a terminal id — the served store root is the project.
+fn term_key(state: &AppState, id: &str) -> hotsheet_terminals::TermKey {
+    (state.store.root().display().to_string(), id.to_string())
+}
+
+fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
+    TerminalInfo {
+        id: id.to_string(),
+        alive: term.is_alive(),
+        busy: term.activity() == hotsheet_terminals::Activity::Busy,
+    }
+}
+
+/// `POST /terminals` `{command, args?, cwd?, id?}` — open (or reattach to) a PTY.
+async fn open_terminal(
+    State(state): State<AppState>,
+    Json(req): Json<OpenTerminalReq>,
+) -> Result<Json<TerminalInfo>, ApiError> {
+    let id = req.id.unwrap_or_else(|| Ulid::new().to_string());
+    let spec = hotsheet_terminals::TermSpec {
+        command: req.command,
+        args: req.args,
+        cwd: Some(
+            req.cwd
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| state.store.root().to_path_buf()),
+        ),
+        env: Vec::new(),
+        rows: 24,
+        cols: 80,
+    };
+    let term = state
+        .terminals
+        .get_or_spawn(term_key(&state, &id), spec)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok(Json(term_info(&term, &id)))
+}
+
+/// `GET /terminals` — the live terminals (id, alive, busy).
+async fn list_terminals(State(state): State<AppState>) -> Json<Vec<TerminalInfo>> {
+    let infos = state
+        .terminals
+        .list()
+        .into_iter()
+        .filter_map(|key| state.terminals.get(&key).map(|t| term_info(&t, &key.1)))
+        .collect();
+    Json(infos)
+}
+
+/// A terminal's current scrollback + state (`GET /terminals/{id}`). The scrollback is what a
+/// re-attaching viewer replays; it's returned as lossy UTF-8 text.
+#[derive(Serialize)]
+struct TerminalRead {
+    #[serde(flatten)]
+    info: TerminalInfo,
+    scrollback: String,
+}
+
+async fn read_terminal(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<TerminalRead>, ApiError> {
+    let term = state
+        .terminals
+        .get(&term_key(&state, &id))
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    Ok(Json(TerminalRead {
+        info: term_info(&term, &id),
+        scrollback: String::from_utf8_lossy(&term.scrollback()).into_owned(),
+    }))
+}
+
+/// Body for `POST /terminals/{id}/input`.
+#[derive(Deserialize)]
+struct TerminalInput {
+    /// Bytes to write to the PTY (as text — includes any control chars like `\n`).
+    data: String,
+}
+
+async fn write_terminal(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<TerminalInput>,
+) -> Result<StatusCode, ApiError> {
+    let term = state
+        .terminals
+        .get(&term_key(&state, &id))
+        .ok_or_else(|| ApiError::not_found(&id))?;
+    term.write(body.data.as_bytes())
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn kill_terminal(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let killed = state
+        .terminals
+        .kill(&term_key(&state, &id))
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    if killed {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::not_found(&id))
+    }
 }
 
 /// Body for `POST /permissions/{id}`: the human's answer.

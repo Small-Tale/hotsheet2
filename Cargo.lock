@@ -707,6 +707,7 @@ dependencies = [
  "hotsheet-index",
  "hotsheet-model",
  "hotsheet-plugins",
+ "hotsheet-terminals",
  "hotsheet-ticketing",
  "http-body-util",
  "notify",

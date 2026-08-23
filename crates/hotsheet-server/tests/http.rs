@@ -868,6 +868,94 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 }
 
 #[tokio::test]
+async fn terminals_open_read_input_and_kill() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Open a `cat` terminal (echoes stdin) so we can test both output + input.
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/terminals", Some(r#"{"command":"cat"}"#)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let opened = body_json(resp).await;
+    let id = opened["id"].as_str().unwrap().to_string();
+    assert_eq!(opened["alive"], true);
+
+    // It appears in the list.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/terminals", None))
+        .await
+        .unwrap();
+    let list = body_json(resp).await;
+    assert!(
+        list.as_array().unwrap().iter().any(|t| t["id"] == id),
+        "the terminal is listed"
+    );
+
+    // Write to the PTY; `cat` echoes it back into the scrollback.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/terminals/{id}/input"),
+            Some(r#"{"data":"hotsheet-echo\n"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // Poll the scrollback until the echo shows up (PTY output is async).
+    let mut saw = false;
+    for _ in 0..40 {
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", &format!("/terminals/{id}"), None))
+            .await
+            .unwrap();
+        let read = body_json(resp).await;
+        if read["scrollback"]
+            .as_str()
+            .unwrap_or("")
+            .contains("hotsheet-echo")
+        {
+            saw = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    assert!(saw, "cat echoed the input into the scrollback");
+
+    // Kill it, then a read is 404.
+    let resp = app
+        .clone()
+        .oneshot(authed("DELETE", &format!("/terminals/{id}"), None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
+
+    // A write/read to an unknown terminal is 404; auth is required.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/terminals/nope", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    let resp = hotsheet_server::app(state().1)
+        .oneshot(
+            Request::builder()
+                .uri("/terminals")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn connections_lists_what_the_driving_loop_is_running() {
     let (_d, st) = state();
     let reg = st.drive_registry();
