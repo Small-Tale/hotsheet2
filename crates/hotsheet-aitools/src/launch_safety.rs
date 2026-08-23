@@ -190,7 +190,7 @@ impl Drop for IsolatedCodexHome {
         // no longer exists (HS2-9M6T68). Best-effort: `daemon stop` is a no-op when none is
         // running, and any error is irrelevant to teardown.
         if let Some(program) = &self.daemon_program {
-            let _ = hotsheet_aitools::stop_codex_daemon_in(program, self.dir.path());
+            let _ = crate::stop_codex_daemon_in(program, self.dir.path());
         }
     }
 }

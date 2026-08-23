@@ -14,11 +14,13 @@ pub mod claude;
 pub mod codex;
 pub mod drive;
 pub mod host;
+pub mod launch_safety;
 pub mod live;
 pub mod permission;
 pub mod ports;
 mod procio;
 pub mod registry;
+pub mod safe_trigger;
 pub mod spawn;
 pub mod system;
 
@@ -46,6 +48,7 @@ pub use ports::{
     RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
 };
 pub use registry::{Connection, ConnectionRegistry, Role};
+pub use safe_trigger::{SafeTrigger, prepare_trigger};
 pub use spawn::{ContentMode, SpawnConfig, SpawnDrive};
 pub use system::SystemSpawner;
 

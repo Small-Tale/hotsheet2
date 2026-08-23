@@ -12,7 +12,9 @@
 //! should carry (`docs/07-migration.md` §7.2).
 
 pub mod import;
-pub mod launch_safety;
+// Launch-safety machinery lives in the shared `hotsheet-aitools` crate (so the server can
+// reuse it too, HS2-1TY7GC); re-exported here to keep the `hotsheet_cli::launch_safety` path.
+pub use hotsheet_aitools::launch_safety;
 pub mod plugin;
 pub mod setup;
 pub mod workloop;
