@@ -549,6 +549,9 @@ pub fn app(state: AppState) -> Router {
         .route("/terminals", get(list_terminals).post(open_terminal))
         .route("/terminals/{id}", get(read_terminal).delete(kill_terminal))
         .route("/terminals/{id}/input", post(write_terminal))
+        // Activity timeline (HS2-KP31ZE): ingest a tool's activity event, and read the
+        // per-ticket/session "what happened" window (docs/15). The Announcer/timeline consumer.
+        .route("/activity", get(list_activity).post(ingest_activity))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -621,6 +624,92 @@ async fn get_ticket(
 ) -> Result<Json<ApiTicket>, ApiError> {
     let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json((&ticket).into()))
+}
+
+// ---- activity timeline (HS2-KP31ZE) ----------------------------------------------
+
+/// `POST /activity` body — a tool's activity signal. The server stamps `id`/`ts`; `summary`
+/// and `importance` default from the kind unless the caller provides them (docs/15 §15.7).
+#[derive(Debug, Deserialize)]
+struct ActivityIngest {
+    tool: String,
+    kind: hotsheet_ticketing::ActivityKind,
+    #[serde(default)]
+    detail: serde_json::Value,
+    #[serde(default)]
+    ticket: Option<String>,
+    #[serde(default)]
+    session: Option<String>,
+    #[serde(default)]
+    project: Option<String>,
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(default)]
+    importance: Option<hotsheet_ticketing::Importance>,
+}
+
+/// `POST /activity` — record one activity event to the store's rolling window.
+async fn ingest_activity(
+    State(state): State<AppState>,
+    Json(body): Json<ActivityIngest>,
+) -> Result<Json<hotsheet_ticketing::ActivityEvent>, ApiError> {
+    let mut ev = hotsheet_ticketing::ActivityEvent::new(
+        Ulid::new().to_string(),
+        now().as_str().to_string(),
+        body.tool,
+        body.kind,
+        body.detail,
+    );
+    ev.ticket = body.ticket;
+    ev.session = body.session;
+    ev.project = body.project;
+    if let Some(s) = body.summary {
+        ev.summary = s;
+    }
+    if let Some(i) = body.importance {
+        ev.importance = i;
+    }
+    hotsheet_ticketing::activity::record(&state.store, &ev)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(ev))
+}
+
+/// `GET /activity` query params — the timeline filter (docs/15 §15.6).
+#[derive(Debug, Default, Deserialize)]
+struct ActivityParams {
+    ticket: Option<String>,
+    session: Option<String>,
+    /// `low` | `normal` | `high` — only events at or above this emphasis.
+    min_importance: Option<String>,
+    limit: Option<usize>,
+}
+
+/// `GET /activity` — the per-ticket/session "what happened" window, most-recent-capped.
+async fn list_activity(
+    State(state): State<AppState>,
+    Query(params): Query<ActivityParams>,
+) -> Result<Json<Vec<hotsheet_ticketing::ActivityEvent>>, ApiError> {
+    let min_importance = match params.min_importance.as_deref() {
+        None => None,
+        Some("low") => Some(hotsheet_ticketing::Importance::Low),
+        Some("normal") => Some(hotsheet_ticketing::Importance::Normal),
+        Some("high") => Some(hotsheet_ticketing::Importance::High),
+        Some(other) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                format!("invalid min_importance '{other}' (low|normal|high)"),
+            ));
+        }
+    };
+    let filter = hotsheet_ticketing::TimelineFilter {
+        ticket: params.ticket,
+        session: params.session,
+        min_importance,
+        limit: params.limit,
+    };
+    let events = hotsheet_ticketing::activity::timeline(&state.store, &filter)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(events))
 }
 
 // ---- multi-store (HS2-87) --------------------------------------------------------

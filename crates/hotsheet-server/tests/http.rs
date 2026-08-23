@@ -264,6 +264,64 @@ async fn list_is_compact_by_default_and_supports_limit() {
 }
 
 #[tokio::test]
+async fn activity_ingest_then_timeline_filters_by_ticket_and_importance() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // Ingest three events: two on ticket T1 (an edit + a turn_end), one on T2.
+    for body in [
+        r#"{"tool":"claude","kind":"edit","detail":{"path":"src/a.rs"},"ticket":"T1","session":"s1"}"#,
+        r#"{"tool":"claude","kind":"turn_end","ticket":"T1","session":"s1"}"#,
+        r#"{"tool":"codex","kind":"command","detail":{"command":"ls"},"ticket":"T2"}"#,
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(authed("POST", "/activity", Some(body)))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        // The server composes a default summary from the kind.
+        let ev = body_json(resp).await;
+        assert!(ev["summary"].as_str().unwrap().len() > 3);
+    }
+
+    // Timeline for T1 → the two T1 events, chronological.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/activity?ticket=T1", None))
+        .await
+        .unwrap();
+    let rows = body_json(resp).await;
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["kind"], "edit");
+    assert_eq!(rows[1]["kind"], "turn_end");
+
+    // High-importance digest of T1 → only the turn_end (edit is normal).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/activity?ticket=T1&min_importance=high",
+            None,
+        ))
+        .await
+        .unwrap();
+    let rows = body_json(resp).await;
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["kind"], "turn_end");
+
+    // A bad importance is a 400.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/activity?min_importance=urgent", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn fields_projection_returns_a_leaner_row() {
     let (_d, st) = state();
     let app = app(st);

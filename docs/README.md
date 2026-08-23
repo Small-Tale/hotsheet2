@@ -95,7 +95,7 @@ and don't imply reading order — read by group.
 | [05-ai-tool-plugins.md](05-ai-tool-plugins.md) | Plugin interface overview (capabilities), terminals, permissions, testability | Decided |
 | [13-drive-transport-interface.md](13-drive-transport-interface.md) | Drive/transport capability (capability-based, all tools) | Design |
 | [14-metrics-interface.md](14-metrics-interface.md) | Usage/cost metrics capability + JSONL/rollup storage | Partial (ticketing::metrics: UsageEvent + raw JSONL writer/reader + per-contributor rollup files (`metrics/rollups/<git-email>/rollup.json`) + summary + `hotsheet-cli metrics` — HS2-69; plugin `[metrics]` mappers `claude_result_usage`/`codex_turn_usage` wired — HS2-TJ8FGR/HS2-8PSAFE. Git-sharing/team delivery → HS2-8BCRHS) |
-| [15-activity-narration-interface.md](15-activity-narration-interface.md) | Activity/narration capability (for the Announcer) | Design |
+| [15-activity-narration-interface.md](15-activity-narration-interface.md) | Activity/narration capability (for the Announcer) | Partial (HS2-KP31ZE: `ticketing::activity` event model + closed kind vocabulary + importance/summary heuristics + bounded rolling store + `timeline` consumer + `GET`/`POST /activity`; `[activity]` plugin capability; claude/codex sample-tested mappers. Live-drive wiring + WS broadcast + the Announcer (HS2-17) remain) |
 
 **F · Collaboration & distribution**
 | Doc | Topic | Status |

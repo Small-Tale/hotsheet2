@@ -89,6 +89,20 @@ pub struct Manifest {
     /// e.g. codex's app-server ServerRequests).
     #[serde(default)]
     pub hooks: Option<HooksSpec>,
+    /// Optional: the tool exposes narratable **activity** signals (`docs/15`, HS2-KP31ZE) —
+    /// absence means it doesn't (it can still show coarse busy/idle from the drive). Names
+    /// the native `source` so the host picks the right activity mapper.
+    #[serde(default)]
+    pub activity: Option<ActivitySpec>,
+}
+
+/// A tool's activity-capability declaration (`docs/15` §15.3). Declarative — the behavioral
+/// host maps `source` to the concrete signal parser (codex transcript / claude hooks / …).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ActivitySpec {
+    /// Which native signal stream the tool exposes: `codex-transcript` | `claude-hooks` |
+    /// `acp` | ….
+    pub source: String,
 }
 
 /// A tool's permission-hook declaration (`docs/05` §5.7). Declarative — `setup` merges it

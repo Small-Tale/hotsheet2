@@ -99,9 +99,25 @@ The `activity` capability turns native signals → events; the host owns the str
 
 ## 15.8 Build plan (follow-ups)
 - HS2-70 (this) = the spec.
-- Follow-up to file: the `activity` plugin capability + the Claude & Codex mappers +
-  the event stream/store + a **timeline** consumer (the cheap first consumer). The
-  full **Announcer** stays the post-floor feature (HS2-17) that consumes it.
+- **Shipped (HS2-KP31ZE) — the interface + storage + first consumer:**
+  - The **event model** — `ticketing::activity::{ActivityEvent, ActivityKind, Importance}`
+    with the closed kind vocabulary, a `kind → default_importance` heuristic, and a host
+    `default_summary` composer (a tool may override, §15.7).
+  - The **bounded rolling store** — `record` / `read_recent` / `prune_before` over
+    `activity/recent/<YYYY-MM-DD>.jsonl` (per-device, gitignored — like metrics raw, §15.4).
+  - The **timeline** consumer — `activity::timeline(store, TimelineFilter)` (by
+    ticket/session/min-importance, most-recent-capped), exposed as `GET /activity`; plus
+    `POST /activity` to ingest an event (server stamps id/ts, defaults summary/importance).
+  - The **`activity` plugin capability** — `Manifest.activity = ActivitySpec{source}`;
+    codex declares `source="codex-transcript"`, claude `source="claude-hooks"`.
+  - The **mappers** — `activity::claude_activity` (from the PreToolUse/UserPromptSubmit/Stop
+    hook JSON — the real shape the permission hook already receives) and `codex_activity`
+    (from transcript items, lenient — the exact codex item vocabulary wants live
+    confirmation, like the usage mappers). Both sample-tested.
+- **Remaining (follow-up):** wiring the mappers into the **live drive** so real turns emit
+  activity as they run (call the mappers on each native hook/transcript event + record +
+  broadcast over the WS bus for the *live* consumer mode, §15.4), and the full **Announcer**
+  (post-floor, HS2-17) that consumes the stream.
 
 ## 15.9 Cross-references
 - The `activity` plugin capability: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.3

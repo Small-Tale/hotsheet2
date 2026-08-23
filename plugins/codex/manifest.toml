@@ -43,3 +43,7 @@ interrupt = true
 # Codex reports token usage on its `turn/completed` notification; the host maps it to a
 # UsageEvent (docs/14, HS2-8PSAFE). `source` selects the `codex_turn_usage` parser.
 source = "codex-usage"
+[activity]
+# Codex's app-server turn transcript (start/item/end) maps to activity events (docs/15,
+# HS2-KP31ZE). `source` selects the `codex_activity` mapper.
+source = "codex-transcript"

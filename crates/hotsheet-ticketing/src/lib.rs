@@ -8,6 +8,7 @@
 
 use hotsheet_model::Ulid;
 
+pub mod activity;
 pub mod distclaim;
 pub mod distwork;
 pub mod identity;
@@ -24,6 +25,7 @@ pub mod store;
 pub mod sync;
 pub mod wire;
 pub mod worklist;
+pub use activity::{ActivityEvent, ActivityKind, Importance, TimelineFilter};
 pub use distclaim::{ClaimMarker, ClaimResult, DistError};
 pub use identity::{ME, current_user_email, resolve_me};
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
