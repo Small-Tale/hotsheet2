@@ -257,6 +257,9 @@ impl CodexRpc {
 /// the `thread/*` + `turn/*` JSON-RPC over an [`RpcTransport`].
 pub struct CodexAppServer {
     inner: Arc<Inner>,
+    /// The most recently opened thread id — surfaced as the session id for cross-turn
+    /// resume (HS2-3C1XK3).
+    last_thread: Mutex<Option<String>>,
 }
 
 impl CodexAppServer {
@@ -275,7 +278,10 @@ impl CodexAppServer {
             }),
         )?;
         inner.notify("initialized", json!(null))?;
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            last_thread: Mutex::new(None),
+        })
     }
 
     /// Route Codex approval ServerRequests through a permission policy instead of
@@ -313,7 +319,13 @@ impl AppServerClient for CodexAppServer {
                 json!({ "cwd": cwd, "approvalPolicy": "never", "sandbox": "workspace-write" }),
             )?,
         };
-        thread_id_of(&result)
+        let id = thread_id_of(&result)?;
+        *self.last_thread.lock().unwrap() = Some(id.clone());
+        Ok(id)
+    }
+
+    fn session_id(&self) -> Option<String> {
+        self.last_thread.lock().unwrap().clone()
     }
 
     fn start_turn(

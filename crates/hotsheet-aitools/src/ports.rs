@@ -52,6 +52,11 @@ pub trait AppServerClient {
         thread_id: &str,
         content: &str,
     ) -> Result<Box<dyn AppServerTurn>, AppServerError>;
+    /// The most recently opened thread id (for cross-turn resume, HS2-3C1XK3). `None`
+    /// until a thread has been opened.
+    fn session_id(&self) -> Option<String> {
+        None
+    }
 }
 
 /// A turn running on the app-server — observed via its `turn/started` → `turn/completed`

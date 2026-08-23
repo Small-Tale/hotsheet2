@@ -613,7 +613,7 @@ fn cmd_trigger(
     )?;
     eprintln!("▶ driving {tool} in {} …", safe.cwd.display());
     let mut registry = ConnectionRegistry::new(30_000);
-    let reason = safe.run_turn(
+    let done = safe.run_turn(
         &prompt.unwrap_or_else(|| DEFAULT_TRIGGER_PROMPT.to_string()),
         resume.as_deref(),
         worker,
@@ -622,7 +622,10 @@ fn cmd_trigger(
         &mut stream_to_stdout,
     )?;
     println!();
-    match reason {
+    if let Some(sid) = &done.session_id {
+        eprintln!("  session: {sid}");
+    }
+    match done.reason {
         DoneReason::Completed => {
             eprintln!("✔ {tool} turn completed");
             Ok(())
@@ -668,6 +671,9 @@ fn cmd_work(
     let mut registry = ConnectionRegistry::new(30_000);
     let mut stall = Stall::default();
     let mut completed = 0u32;
+    // The tool's session/thread id, captured from turn 1 and passed as `resume` on every
+    // subsequent turn so one session carries context across the loop (HS2-3C1XK3).
+    let mut session: Option<String> = None;
     for turn in 1..=max {
         let before = ops::query(&store, &up_next_query())?;
         if before.is_empty() {
@@ -685,16 +691,20 @@ fn cmd_work(
             before.len()
         );
 
-        let reason = safe.run_turn(
+        let done = safe.run_turn(
             DEFAULT_TRIGGER_PROMPT_LOOP,
-            None,
+            session.as_deref(),
             worker,
             format!("cli-{}", std::process::id()),
             &mut registry,
             &mut stream_to_stdout,
         )?;
         println!();
-        match reason {
+        // Remember the session so the next turn resumes it (first non-None wins).
+        if session.is_none() {
+            session = done.session_id.clone();
+        }
+        match done.reason {
             DoneReason::Completed => {}
             DoneReason::Failed(code) => eprintln!("⚠ turn {turn} failed (exit {code})"),
             DoneReason::Interrupted => bail!("interrupted during turn {turn}"),

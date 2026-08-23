@@ -343,6 +343,8 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
         .open_thread(None, std::path::Path::new("/work/proj"))
         .unwrap();
     assert_eq!(thread, "thread-1", "new thread id from thread/start");
+    // The opened thread id is exposed for cross-turn resume (HS2-3C1XK3).
+    assert_eq!(cx.session_id().as_deref(), Some("thread-1"));
 
     let mut turn = cx.start_turn(&thread, "work the top ticket").unwrap();
     assert_eq!(turn.wait(), AppServerOutcome::Completed);
@@ -366,6 +368,8 @@ fn codex_client_resumes_a_thread_by_id() {
         .open_thread(Some("thread-42"), std::path::Path::new("/w"))
         .unwrap();
     assert_eq!(thread, "thread-42");
+    // The resumed thread id is surfaced as the session id (cross-turn resume, HS2-3C1XK3).
+    assert_eq!(cx.session_id().as_deref(), Some("thread-42"));
     let mut turn = cx.start_turn(&thread, "keep going").unwrap();
     assert_eq!(turn.wait(), AppServerOutcome::Completed);
 }
@@ -833,7 +837,8 @@ fn run_trigger_drives_a_real_spawn_tool_and_tracks_the_connection() {
     let reason = run_trigger(&plugin, &live("exit 0", tmp.path()), &mut reg, &mut |ev| {
         events.push(format!("{ev:?}"))
     })
-    .unwrap();
+    .unwrap()
+    .reason;
 
     assert_eq!(reason, DoneReason::Completed);
     // The connection was registered (spawn transport) and then set idle at Done.
@@ -856,7 +861,9 @@ fn run_trigger_threads_env_into_a_spawn_tool() {
 
     let mut t = live(r#"[ "$FOO" = bar ]"#, tmp.path());
     t.env = vec![("FOO".to_string(), "bar".to_string())];
-    let reason = run_trigger(&plugin, &t, &mut reg, &mut |_| {}).unwrap();
+    let reason = run_trigger(&plugin, &t, &mut reg, &mut |_| {})
+        .unwrap()
+        .reason;
     assert_eq!(
         reason,
         DoneReason::Completed,
@@ -871,7 +878,8 @@ fn run_trigger_threads_env_into_a_spawn_tool() {
         &mut reg,
         &mut |_| {},
     )
-    .unwrap();
+    .unwrap()
+    .reason;
     assert_eq!(reason, DoneReason::Failed(1), "unset FOO → the check fails");
 }
 
@@ -880,7 +888,9 @@ fn run_trigger_reports_a_nonzero_exit_as_failed() {
     let tmp = tempfile::tempdir().unwrap();
     let plugin = write_sh_plugin(&tmp.path().join("shtool"));
     let mut reg = ConnectionRegistry::new(5_000);
-    let reason = run_trigger(&plugin, &live("exit 5", tmp.path()), &mut reg, &mut |_| {}).unwrap();
+    let reason = run_trigger(&plugin, &live("exit 5", tmp.path()), &mut reg, &mut |_| {})
+        .unwrap()
+        .reason;
     assert_eq!(reason, DoneReason::Failed(5));
 }
 

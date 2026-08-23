@@ -52,6 +52,14 @@ pub struct LiveTrigger {
 /// How long a driven codex approval blocks for a human before the safe fallback (`Deny`).
 const PERMISSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
+/// The result of one driven turn: why it ended, plus the tool's session/thread id (when it
+/// reports one) so the next turn can resume the same session (HS2-3C1XK3).
+#[derive(Debug, Clone)]
+pub struct TurnDone {
+    pub reason: DoneReason,
+    pub session_id: Option<String>,
+}
+
 /// A failed live trigger.
 #[derive(Debug, thiserror::Error)]
 pub enum LiveError {
@@ -76,7 +84,7 @@ pub fn run_trigger(
     t: &LiveTrigger,
     registry: &mut ConnectionRegistry,
     on_event: &mut dyn FnMut(&TurnEvent),
-) -> Result<DoneReason, LiveError> {
+) -> Result<TurnDone, LiveError> {
     let spec = plugin
         .manifest
         .drive
@@ -200,7 +208,7 @@ fn drive_and_stream(
     ctx: &DriveCtx,
     registry: &mut ConnectionRegistry,
     on_event: &mut dyn FnMut(&TurnEvent),
-) -> Result<DoneReason, LiveError> {
+) -> Result<TurnDone, LiveError> {
     let project = t.cwd.display().to_string();
     let out = trigger(
         plugin,
@@ -227,7 +235,13 @@ fn drive_and_stream(
     let base = t.now_ms;
     let mut clock = move || base + start.elapsed().as_millis() as u64;
     let reason = pump_turn(turn.as_mut(), &conn_id, registry, &mut clock, on_event);
-    Ok(reason)
+    // Surface the session/thread id so the caller can resume the same session next turn
+    // (HS2-3C1XK3): claude reports it from `system/init`, codex from `thread/start|resume`.
+    let session_id = ctx
+        .channel
+        .and_then(|c| c.session_id())
+        .or_else(|| ctx.app_server.and_then(|a| a.session_id()));
+    Ok(TurnDone { reason, session_id })
 }
 
 /// Drain a turn's streaming events, heartbeating the connection busy at each one (via

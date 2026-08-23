@@ -36,7 +36,7 @@ pub use drive::{
     PermReq, Target, Transport, TurnEvent, TurnHandle, Usage,
 };
 pub use host::{TriggerError, Triggered, drive_for, trigger};
-pub use live::{LiveError, LiveTrigger, run_trigger};
+pub use live::{LiveError, LiveTrigger, TurnDone, run_trigger};
 pub use permission::{
     Decision as PermissionDecision, Outcome as PermissionOutcome, PermissionBridge,
     Request as PermissionRequest, Resolved as PermissionResolved, Rule as PermissionRule,

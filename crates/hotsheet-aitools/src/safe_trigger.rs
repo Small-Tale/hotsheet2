@@ -10,7 +10,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::launch_safety;
 use crate::registry::ConnectionRegistry;
-use crate::{DoneReason, LiveError, LiveTrigger, Role, TurnEvent, run_trigger};
+use crate::{LiveError, LiveTrigger, Role, TurnDone, TurnEvent, run_trigger};
 
 /// A resolved tool + its HS2-103 launch isolation, reusable across turns.
 pub struct SafeTrigger {
@@ -178,9 +178,10 @@ impl SafeTrigger {
     }
 
     /// Drive one turn, streaming the tool's events to `on_event` (including the terminal
-    /// `Done`). Each call spawns a fresh process (session-resume continuity is HS2-3C1XK3).
-    /// `conn_id` labels the connection in `registry` (busy tracking) — a caller that drives
-    /// several tickets should pass a distinct id per ticket.
+    /// `Done`). Returns why it ended **and the tool's session/thread id** so a loop can pass
+    /// it back as `resume` on the next turn (HS2-3C1XK3). `conn_id` labels the connection in
+    /// `registry` (busy tracking) — a caller driving several tickets should pass a distinct
+    /// id per ticket.
     pub fn run_turn(
         &self,
         prompt: &str,
@@ -189,7 +190,7 @@ impl SafeTrigger {
         conn_id: String,
         registry: &mut ConnectionRegistry,
         on_event: &mut dyn FnMut(&TurnEvent),
-    ) -> Result<DoneReason> {
+    ) -> Result<TurnDone> {
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)

@@ -225,6 +225,7 @@ fn drive_one_ticket(
             usage = Some(u.clone());
         }
     })?;
+    let done = done.reason;
     // Record the turn's usage attributed to this ticket (cost filled from the price table
     // when the tool didn't report one). Best-effort — never fail the drive over metrics.
     if let Some(u) = usage {
