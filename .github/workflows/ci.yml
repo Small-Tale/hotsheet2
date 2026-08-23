@@ -58,19 +58,29 @@ jobs:
       - name: Build the CLI (the conformance test drives target/debug/hotsheet-cli)
         run: cargo build --bin hotsheet-cli
 
-      - name: Migrator tests (vitest + Rust-import conformance)
+      - name: Migrator tests + coverage (vitest + Rust-import conformance)
         working-directory: migrator
+        # `test:coverage` runs the same suite under v8 coverage and fails under the
+        # per-language thresholds in vitest.config.mjs (HS2-8WR8XF). Its own summary — NOT
+        # merged into the Rust lcov.
         run: |
           npm ci
-          npx vitest run
+          npm run test:coverage
 
-  # Per-language coverage (docs/12 §12.7.5): report-only for now — a separate summary,
-  # NOT one merged lcov. Threshold gates + migrator/web coverage are HS2-8WR8XF.
+      - name: Upload migrator coverage (lcov)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrator-coverage-lcov
+          path: migrator/coverage/lcov.info
+          if-no-files-found: ignore
+
+  # Per-language coverage (docs/12 §12.7.5): a separate Rust summary, NOT one merged lcov.
+  # Now GATED on a conservative line floor (HS2-8WR8XF) — a real gate that catches a
+  # coverage collapse without being flaky. Raise the floor as measured runs settle.
   coverage:
-    name: coverage (Rust, report-only)
+    name: coverage (Rust, gated)
     runs-on: ubuntu-latest
-    # A red coverage report must never block a PR while it's non-gating.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -97,19 +107,29 @@ jobs:
         with:
           tool: cargo-llvm-cov,nextest
 
-      - name: Rust coverage summary
-        # `-D warnings` breaks coverage instrumentation builds; unset it here.
+      - name: Collect Rust coverage
+        # `-D warnings` breaks coverage instrumentation builds; unset it here. `--no-report`
+        # runs the tests + collects profiles once; the report/gate steps reuse them.
         env:
           RUSTFLAGS: ""
-        run: cargo llvm-cov nextest --all-features --summary-only
+        run: cargo llvm-cov nextest --all-features --no-report
 
-      - name: Rust coverage lcov (uploaded as an artifact)
+      - name: Rust coverage lcov (artifact)
         env:
           RUSTFLAGS: ""
         run: cargo llvm-cov report --lcov --output-path lcov.info
 
       - name: Upload lcov
+        # Upload before the gate so the artifact exists even when the threshold fails.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: rust-coverage-lcov
           path: lcov.info
+          if-no-files-found: ignore
+
+      - name: Rust coverage summary + threshold gate
+        env:
+          RUSTFLAGS: ""
+        # Conservative starting floor; raise it once measured runs settle (HS2-8WR8XF).
+        run: cargo llvm-cov report --summary-only --fail-under-lines 55

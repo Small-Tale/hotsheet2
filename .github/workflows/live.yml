@@ -1,0 +1,62 @@
+name: Live tier
+
+# The full/live test tier (docs/12 §12.7, HS2-8WR8XF) — the creds-gated tests the fast
+# CI tier deliberately skips: real codex / claude turns (HOTSHEET_CODEX_LIVE=1,
+# HOTSHEET_CLAUDE_LIVE=1) and any GitHub-remote-backed tests. These need real tool binaries
+# + credentials, so they only run on a runner provisioned for it — a self-hosted runner, or
+# a hosted one where you've wired the tools + secrets. It is NEVER on the PR critical path.
+#
+# Trigger: nightly, or manually via the Actions tab ("Run workflow"). The live steps no-op
+# with a clear message unless the runner is flagged live-capable (secrets.HOTSHEET_LIVE_RUNNER
+# == 'true'), so a scheduled run on a vanilla runner passes green instead of failing on a
+# missing `codex`.
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # 07:00 UTC nightly
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  live:
+    name: live tests (codex / claude, creds-gated)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure a git identity
+        run: |
+          git config --global user.name "Hot Sheet CI"
+          git config --global user.email "ci@smalltale.invalid"
+
+      - name: Install the pinned toolchain
+        run: rustup show
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Gate on a live-capable runner
+        id: gate
+        # A vanilla hosted runner has no `codex`/`claude` + no creds; only run the live
+        # tests where the operator has flagged the runner and provided the tools + secrets.
+        run: |
+          if [ "${HOTSHEET_LIVE_RUNNER}" = "true" ]; then
+            echo "live=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "live=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping live tests — set the HOTSHEET_LIVE_RUNNER secret to 'true' on a runner that has codex/claude + creds."
+          fi
+        env:
+          HOTSHEET_LIVE_RUNNER: ${{ secrets.HOTSHEET_LIVE_RUNNER }}
+
+      - name: Live codex + claude turns (ignored tests, run for real)
+        if: steps.gate.outputs.live == 'true'
+        # `--run-ignored all` includes the `#[ignore]` live tests; each still self-checks its
+        # HOTSHEET_*_LIVE env, so setting them here is what actually exercises the tools.
+        env:
+          RUSTFLAGS: -D warnings
+          HOTSHEET_CODEX_LIVE: '1'
+          HOTSHEET_CLAUDE_LIVE: '1'
+        run: cargo nextest run --all-features --run-ignored all

@@ -12,13 +12,15 @@
   "scripts": {
     "export": "node src/export.mjs",
     "introspect": "node src/introspect.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.4.6",
     "pglite-migrate": "^2.1.0"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^3.0.0",
     "pglite-old": "npm:@electric-sql/pglite@^0.3.16",
     "vitest": "^3.0.0"
   }

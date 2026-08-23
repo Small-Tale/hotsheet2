@@ -34,10 +34,14 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 > ingests the Node exporter's JSON). **Property tests** cover the parser (`proptest`:
 > round-trip + byte-idempotent + never-panics), and a **cargo-fuzz** target exists
 > (`crates/hotsheet-model/fuzz`, nightly: `cargo +nightly fuzz run parse_file`).
-> Snapshot tests, server/web E2E, and per-language coverage gates are not wired yet.
-> Commands that work now:
+> **Per-language coverage gates** are wired for Rust (CI `cargo llvm-cov` with a
+> `--fail-under-lines` floor) and the migrator (`npm run test:coverage`, thresholds in
+> `migrator/vitest.config.mjs`); a creds-gated **live tier** (`.github/workflows/live.yml`)
+> runs the `#[ignore]` codex/claude turns nightly. Snapshot tests and server/web E2E are
+> not wired yet. Commands that work now:
 > `cargo build` · `cargo nextest run` · `cargo fmt --all --check` · `cargo clippy
-> --all-targets --all-features -- -D warnings` · `npx vitest run` (in `migrator/`).
+> --all-targets --all-features -- -D warnings` · `npx vitest run` / `npm run test:coverage`
+> (in `migrator/`).
 
 - **Rust unit + integration** (`crates/*/src/**` inline `#[cfg(test)]` and
   `crates/*/tests/**`): run with **`cargo-nextest`**. Pure logic uses injected-fake

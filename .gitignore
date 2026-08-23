@@ -36,6 +36,7 @@ pnpm-debug.log*
 # --- Common build/test/coverage output ---
 /dist/
 /coverage/
+coverage/
 /test-results/
 /playwright-report/
 .nyc_output/

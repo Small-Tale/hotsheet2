@@ -182,14 +182,18 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   port), and an in-memory adapter set for pure unit tests.
 - **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`,
   `clippy -D warnings`, `nextest`, the plugin **conformance test** (HS2-64), the CLI
-  build, and the **migrator vitest + cross-language conformance**. A separate
-  report-only **`coverage` job** runs `cargo llvm-cov nextest --summary-only` and
-  uploads an lcov artifact (a *separate* per-language summary, not one merged lcov).
-  **Pending (HS2-8WR8XF):** coverage **threshold gates** (report-only today),
-  migrator/web coverage, the **web E2E (Playwright)** — blocked on the Kerf client
-  existing — and a scheduled **full/live tier** (GitHub-remote + creds-gated
-  `HOTSHEET_CODEX_LIVE` smoke) split out from the default fast tier, plus a macOS
-  matrix leg for the terminal/SwiftUI surfaces.
+  build, and the **migrator vitest + coverage** (now `test:coverage`, gated on the
+  per-language thresholds in `migrator/vitest.config.mjs`) + the cross-language
+  conformance. A separate **`coverage` job** collects Rust coverage once
+  (`cargo llvm-cov nextest --no-report`), uploads an lcov artifact (a *separate*
+  per-language summary, not one merged lcov), and **gates** on a conservative line
+  floor (`report --fail-under-lines`). A scheduled, creds-gated **`Live tier`**
+  workflow (`live.yml`, nightly + manual dispatch) runs the `#[ignore]` live
+  codex/claude turns (`HOTSHEET_CODEX_LIVE`/`HOTSHEET_CLAUDE_LIVE`) only on a runner
+  flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. **Pending
+  (HS2-8WR8XF):** raising the coverage floors as measured runs settle, **web
+  coverage + the web E2E (Playwright)** — blocked on the Kerf client existing — and a
+  macOS matrix leg for the terminal/SwiftUI surfaces.
 - **Manual test plan** (`docs/manual-test-plan.md`, created with the first code):
   real multi-device terminal-sizing focus handoff (iOS↔macOS), mTLS enrollment / QR
   pairing across devices, native-client UX, long-term GitHub custom-ref behavior —
