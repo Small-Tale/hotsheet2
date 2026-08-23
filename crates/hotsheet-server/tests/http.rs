@@ -264,6 +264,43 @@ async fn list_is_compact_by_default_and_supports_limit() {
 }
 
 #[tokio::test]
+async fn fields_projection_returns_a_leaner_row() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"lean me","category":"bug"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    // fields=status,up_next keeps only those (+ slug, always). category/title are dropped.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/tickets?fields=status,up_next", None))
+        .await
+        .unwrap();
+    let rows = body_json(resp).await;
+    let row = &rows.as_array().unwrap()[0];
+    let keys: std::collections::HashSet<&str> = row
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        keys,
+        ["slug", "status", "up_next"].into_iter().collect(),
+        "only the requested fields (+ slug) are present: {row}"
+    );
+}
+
+#[tokio::test]
 async fn keyset_paging_walks_the_store_and_rejects_a_bad_cursor() {
     let (_d, st) = state();
     let app = app(st);

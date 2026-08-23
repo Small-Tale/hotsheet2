@@ -184,6 +184,31 @@ impl TicketRow {
     }
 }
 
+/// A leaner-than-compact list projection (HS2-GY3GWT item 1): keep only `fields` on each
+/// row object, for a truly minimal browse row (e.g. `slug,status,up_next,title`) without
+/// changing the shared [`TicketRow`] wire shape. Operates on already-serialized rows so the
+/// server and MCP share one implementation. Rules:
+/// - `slug` is **always** kept, so a projected row is still identifiable even if the caller
+///   forgot to ask for it.
+/// - Unknown field names are ignored; a non-object element is left untouched.
+/// - An empty `fields` list is a no-op (returns the full rows).
+pub fn project_fields(rows: &mut [serde_json::Value], fields: &[String]) {
+    use std::collections::HashSet;
+    if fields.is_empty() {
+        return;
+    }
+    let keep: HashSet<&str> = fields
+        .iter()
+        .map(String::as_str)
+        .chain(std::iter::once("slug"))
+        .collect();
+    for row in rows.iter_mut() {
+        if let Some(obj) = row.as_object_mut() {
+            obj.retain(|k, _| keep.contains(k.as_str()));
+        }
+    }
+}
+
 /// The wire string of a serde-string enum (`"high"`, `"not_started"`, …) — the same
 /// form the index stores, so rows match regardless of how they were built.
 fn enum_str<T: Serialize>(v: &T) -> String {
@@ -245,6 +270,38 @@ mod tests {
         // Everything else the list needs is still there.
         assert_eq!(compact_json["slug"], full_json["slug"]);
         assert_eq!(compact_json["status"], "started");
+    }
+
+    #[test]
+    fn project_fields_keeps_only_requested_keys_plus_slug() {
+        let row = serde_json::to_value(TicketRow::from(&ticket())).unwrap();
+        let mut rows = vec![row];
+        // Ask for status + title; slug is kept implicitly, everything else dropped.
+        project_fields(&mut rows, &["status".into(), "title".into()]);
+        let obj = rows[0].as_object().unwrap();
+        let keys: std::collections::HashSet<&str> = obj.keys().map(String::as_str).collect();
+        assert_eq!(
+            keys,
+            ["slug", "status", "title"].into_iter().collect(),
+            "only the requested fields (+ slug) survive"
+        );
+        assert_eq!(obj["status"], "started");
+
+        // An empty projection is a no-op (the full row is preserved).
+        let mut full = vec![serde_json::to_value(TicketRow::from(&ticket())).unwrap()];
+        let before = full[0].as_object().unwrap().len();
+        project_fields(&mut full, &[]);
+        assert_eq!(full[0].as_object().unwrap().len(), before);
+
+        // An unknown field name is ignored (doesn't error, just isn't added).
+        let mut r = vec![serde_json::to_value(TicketRow::from(&ticket())).unwrap()];
+        project_fields(&mut r, &["nonesuch".into()]);
+        let keys: Vec<&String> = r[0].as_object().unwrap().keys().collect();
+        assert_eq!(
+            keys,
+            vec!["slug"],
+            "only slug remains — the unknown key added nothing"
+        );
     }
 
     #[test]

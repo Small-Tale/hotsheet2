@@ -571,8 +571,9 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
 async fn list_tickets(
     State(state): State<AppState>,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<TicketRow>>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let compact = params.compact.unwrap_or(true);
+    let fields = parse_fields(&params.fields);
     let query = params.into_query(state.store.root())?;
     let mut rows = state
         .index
@@ -584,7 +585,7 @@ async fn list_tickets(
             row.make_compact();
         }
     }
-    Ok(Json(rows))
+    Ok(Json(rows_to_json(rows, &fields)))
 }
 
 async fn get_ticket(
@@ -638,12 +639,13 @@ async fn list_store_tickets(
     State(state): State<AppState>,
     Path(store_id): Path<String>,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<TicketRow>>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     let entry = state
         .host
         .get(&store_id)
         .ok_or_else(|| ApiError::not_found(&store_id))?;
     let compact = params.compact.unwrap_or(true);
+    let fields = parse_fields(&params.fields);
     let query = params.into_query(entry.store.root())?;
     let mut rows = entry
         .index
@@ -655,7 +657,7 @@ async fn list_store_tickets(
             row.make_compact();
         }
     }
-    Ok(Json(rows))
+    Ok(Json(rows_to_json(rows, &fields)))
 }
 
 // The write logic is store-generic: it operates on a `StoreEntry` so the unprefixed
@@ -1442,6 +1444,32 @@ struct ListParams {
     page_after: Option<String>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.
     compact: Option<bool>,
+    /// Comma-separated field allow-list for a leaner-than-compact projection (HS2-GY3GWT):
+    /// each row keeps only these keys (plus `slug`). Empty/absent = the full compact row.
+    fields: Option<String>,
+}
+
+/// Parse the `fields=` allow-list (comma-separated, empties dropped).
+fn parse_fields(fields: &Option<String>) -> Vec<String> {
+    fields
+        .as_deref()
+        .map(|f| {
+            f.split(',')
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Serialize compact rows to a JSON array, applying the `fields` projection if any.
+fn rows_to_json(rows: Vec<TicketRow>, fields: &[String]) -> serde_json::Value {
+    let mut vals: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|r| serde_json::to_value(r).unwrap_or(serde_json::Value::Null))
+        .collect();
+    hotsheet_ticketing::wire::project_fields(&mut vals, fields);
+    serde_json::Value::Array(vals)
 }
 
 impl ListParams {

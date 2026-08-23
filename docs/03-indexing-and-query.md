@@ -137,6 +137,11 @@ query(filter, sort, text?, paging) -> TicketRow[]
   is the one large field, so a list is **compact by default** — the body is omitted
   (fetch it per-ticket via get, or pass `compact=false` to include it). This keeps an
   unfiltered list small enough to browse (e.g. through the MCP tool's token budget).
+  For an even leaner row, `fields=slug,status,up_next,title` keeps only the named keys
+  (plus `slug`, always) — a JSON allow-list applied at the wire layer over the shared
+  `TicketRow`, so server + MCP share one projection (`wire::project_fields`, HS2-GY3GWT).
+  The MCP shim additionally drops from pretty- to **compact JSON** once a result crosses
+  ~8 KB, so a big list dump doesn't spend the caller's tokens on indentation.
 - **limit:** an optional `limit` caps the number of rows returned (applied after
   sort, as a SQL `LIMIT` in the index and a truncate in the serverless scan). It is a
   hard cap, never a silent default — a caller asks for it explicitly.

@@ -92,8 +92,8 @@ fn tools_list() -> Value {
                 "open": { "type": "boolean" },
                 "close_reason": str_prop("filter by close reason (completed|not_planned|duplicate|obsolete)"),
                 "closed": { "type": "boolean", "description": "true = only closed tickets (a close_reason is set); false = only tickets with none" },
-                "assignee": str_prop("filter to tickets assigned to this person (git email)"),
-                "review_requested": str_prop("filter to tickets with a review request for this person (git email)"),
+                "assignee": str_prop("filter to tickets assigned to this person (git email, or 'me' for your git identity)"),
+                "review_requested": str_prop("filter to tickets with a review request for this person (git email, or 'me')"),
                 "claimed": { "type": "boolean", "description": "true = only claimed tickets; false = only unclaimed" },
                 "blocked": { "type": "boolean", "description": "true = only blocked tickets (a blocker isn't done); false = only unblocked" },
                 "created_after": str_prop("only tickets created at/after this ISO-8601 time"),
@@ -102,6 +102,8 @@ fn tools_list() -> Value {
                 "updated_before": str_prop("only tickets updated at/before this ISO-8601 time"),
                 "sort": str_prop("id|created|updated|priority|status|title"),
                 "limit": { "type": "integer", "description": "cap the number of rows returned (after sort)" },
+                "page_after": str_prop("keyset cursor: a ULID; return only rows strictly after it in sort order (page a large store without OFFSET)"),
+                "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept"),
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
             } }
         },
@@ -212,12 +214,25 @@ fn call_tool(params: Option<&Value>, backend: &dyn Backend) -> Result<Value, Rpc
 
     // Tool-level failures are reported as an `isError` result, not an RPC error.
     Ok(match dispatch(name, &args, backend) {
-        Ok(value) => tool_text(
-            &serde_json::to_string_pretty(&value).unwrap_or_default(),
-            false,
-        ),
+        Ok(value) => tool_text(&render_result(&value), false),
         Err(message) => tool_text(&message, true),
     })
+}
+
+/// Above this many bytes the pretty-printer's indentation is pure token overhead (a
+/// whole-store list dump), so we drop to compact JSON. Small results stay pretty for
+/// readability (HS2-GY3GWT item 2).
+const PRETTY_MAX_BYTES: usize = 8 * 1024;
+
+/// Serialize a tool result: pretty when small, compact once it crosses [`PRETTY_MAX_BYTES`]
+/// (the whitespace on a big list would otherwise inflate the caller's token count).
+fn render_result(value: &Value) -> String {
+    let pretty = serde_json::to_string_pretty(value).unwrap_or_default();
+    if pretty.len() <= PRETTY_MAX_BYTES {
+        pretty
+    } else {
+        serde_json::to_string(value).unwrap_or(pretty)
+    }
 }
 
 fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
@@ -305,6 +320,8 @@ fn query_pairs(args: &Value) -> Vec<(String, String)> {
         "updated_before",
         "sort",
         "limit",
+        "page_after",
+        "fields",
         "compact",
     ] {
         if let Some(v) = args.get(key) {
@@ -429,7 +446,11 @@ mod core_backend {
                         }
                     })
                     .collect();
-                return Ok(to_value(&rows));
+                // Optional leaner projection (fields=slug,status,…) — HS2-GY3GWT.
+                let fields = query_fields(query);
+                let mut vals: Vec<Value> = rows.iter().map(to_value).collect();
+                hotsheet_ticketing::wire::project_fields(&mut vals, &fields);
+                return Ok(Value::Array(vals));
             }
             if let Some(id) = ticket_id(path) {
                 let t = self.resolve(id)?;
@@ -752,6 +773,20 @@ mod core_backend {
         })
     }
 
+    /// The `fields=` allow-list for a leaner list projection (comma-separated; HS2-GY3GWT).
+    fn query_fields(pairs: &[(String, String)]) -> Vec<String> {
+        pairs
+            .iter()
+            .find(|(k, _)| k == "fields")
+            .map(|(_, v)| {
+                v.split(',')
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// A list is compact (no Markdown body) unless `compact=false` is passed.
     fn wants_compact(pairs: &[(String, String)]) -> bool {
         pairs
@@ -1067,6 +1102,56 @@ mod tests {
             return json!({ "error": text });
         }
         serde_json::from_str(text).unwrap_or_else(|_| json!({ "raw": text }))
+    }
+
+    #[test]
+    fn render_result_switches_to_compact_above_the_threshold() {
+        // A small result stays pretty (indented, multi-line) for readability.
+        let small = render_result(&json!({ "a": 1, "b": 2 }));
+        assert!(
+            small.contains('\n'),
+            "small result should be pretty-printed"
+        );
+
+        // A large result drops to compact (no indentation newlines) to save tokens.
+        let big: Vec<Value> = (0..3000)
+            .map(|i| json!({ "slug": format!("HS-{i:05}"), "title": "some title text" }))
+            .collect();
+        let out = render_result(&Value::Array(big));
+        assert!(out.len() > PRETTY_MAX_BYTES);
+        assert!(
+            !out.contains('\n'),
+            "a large result should be compact JSON, not pretty-printed"
+        );
+    }
+
+    #[test]
+    fn query_supports_fields_projection_over_the_shim() {
+        let (_d, backend) = core();
+        call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "a", "category": "bug" }),
+        );
+        call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "b", "category": "task" }),
+        );
+
+        // fields=status keeps only status (+ slug, always) on every row.
+        let rows = call(&backend, "hotsheet_query", json!({ "fields": "status" }));
+        let arr = rows.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        for row in arr {
+            let keys: std::collections::HashSet<&str> = row
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            assert_eq!(keys, ["slug", "status"].into_iter().collect());
+        }
     }
 
     #[test]
