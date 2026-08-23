@@ -4,9 +4,12 @@
 //! (this is what HS1 used, docs/121, and what agy/spawn deliberately isn't).
 //!
 //! The drive is transport logic over an injected [`AppServerClient`] (in the
-//! [`DriveCtx`]), so it's testable against a fake daemon. The real client — connecting to
-//! the daemon over `codex app-server proxy` / the control socket and speaking the
-//! `thread/*` + `turn/*` JSON-RPC — is a follow-up (HS2-110).
+//! [`DriveCtx`]), so it's testable against a fake daemon. The real client is
+//! [`crate::codex::CodexAppServer`] — it speaks the `initialize` → `thread/*` → `turn/*`
+//! JSON-RPC over stdio ([`crate::codex::StdioTransport`]) and over the daemon's control
+//! socket ([`crate::codex::UdsWsTransport`], via `live::connect_shared_daemon`). Driving
+//! the daemon through the `codex app-server proxy` byte-relay specifically is still open
+//! (HS2-115).
 
 use crate::codex::CodexDaemonService;
 use crate::drive::{

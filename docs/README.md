@@ -2,8 +2,9 @@
 
 This directory holds the design for **Hot Sheet 2** — a **Small Tale Inc.** project,
 and a from-scratch rewrite of the original Hot Sheet (`~/Documents/hotsheet`). It is
-**design only** — no implementation exists yet. These documents are the source of
-truth for what we are going to build and why.
+in **early implementation** — the Rust core, CLI, server, index, MCP shim, and
+AI-tool plugins are built; see [CODEBASE-MAP.md](CODEBASE-MAP.md) for what exists.
+These documents remain the source of truth for what we are building and why.
 
 > Status legend used throughout: **Decided** (recommendation made, ready to
 > build) · **Proposed** (recommendation made, wants maintainer confirmation) ·
@@ -93,7 +94,7 @@ and don't imply reading order — read by group.
 |---|---|---|
 | [05-ai-tool-plugins.md](05-ai-tool-plugins.md) | Plugin interface overview (capabilities), terminals, permissions, testability | Decided |
 | [13-drive-transport-interface.md](13-drive-transport-interface.md) | Drive/transport capability (capability-based, all tools) | Design |
-| [14-metrics-interface.md](14-metrics-interface.md) | Usage/cost metrics capability + JSONL/rollup storage | Partial (ticketing::metrics: UsageEvent + raw JSONL writer/reader + rollup/summary + `hotsheet-cli metrics` — HS2-69. Plugin mappers, rollup files, git-sharing → HS2-8BCRHS) |
+| [14-metrics-interface.md](14-metrics-interface.md) | Usage/cost metrics capability + JSONL/rollup storage | Partial (ticketing::metrics: UsageEvent + raw JSONL writer/reader + per-contributor rollup files (`metrics/rollups/<git-email>/rollup.json`) + summary + `hotsheet-cli metrics` — HS2-69; plugin `[metrics]` mappers `claude_result_usage`/`codex_turn_usage` wired — HS2-TJ8FGR/HS2-8PSAFE. Git-sharing/team delivery → HS2-8BCRHS) |
 | [15-activity-narration-interface.md](15-activity-narration-interface.md) | Activity/narration capability (for the Announcer) | Design |
 
 **F · Collaboration & distribution**
@@ -158,9 +159,9 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Attachments support | 02 §2.5 | Confirmed |
 | **Automatic repo sync (aggressive fetch/push/rebase)** | 02 §2.12 | Partial (`ticketing::sync_once` cycle: fetch → rebase-through-merge-driver → push, offline-tolerant, conflict-aborts-clean; `hotsheet sync` CLI; bare-remote E2E — HS2-19. Always-on background loop + backoff + watcher coordination pending → HS2-731C2X) |
 | **Shared vs. local ticket data (on-disk gitignored overlay)** | 02 §2.11 | Partial (field classification + `ticketing::LocalOverlay` gitignored `<store>/local/` mechanism + read-tracking (`hotsheet read`/`ls ●`) — HS2-21; feedback-draft/UI-state/pref overlay pending → HS2-AWTHJE) |
-| **Human assignment + in-the-loop/review** | 10 | Partial (`assignees` + `review_requests` fields, committed `people.json` roster, `merge_reviews` union-by-ULID, `ops::assign`, `assignee` query filter on the file-scan path, CLI `assign`/`people` — HS2-20. Server-side `assignee` filter (index facet, HS2-89), "assigned to me"/"needs my review" derived views, and live/on-sync attention delivery deferred → HS2-89 + follow-up) |
+| **Human assignment + in-the-loop/review** | 10 | Partial (`assignees` + `review_requests` fields, committed `people.json` roster, `merge_reviews` union-by-ULID, `ops::assign`, `assignee` query filter on the file-scan path, CLI `assign`/`people` — HS2-20; server-side `assignee` + `review_requested` filters via the index `assignees`/`reviews` facet joins — HS2-89/HS2-T84F9F. "Assigned to me"/"needs my review" derived views + live/on-sync attention delivery deferred → follow-up) |
 | **Close reasons** (completed / not planned / duplicate-of / obsolete) | 02 §2.6a | Shipped (field + `close` op + index columns + query filter `close_reason`/`closed` across CLI/MCP/server + reopen-clears; HS2-61) |
-| SQLite + FTS5 index, rebuildable from disk | 03 | Partial (`hotsheet-index`: schema/query/FTS/rebuild + **file-backed restore/reconcile on launch** built; facet tables + paging + `reindex` CLI pending) |
+| SQLite + FTS5 index, rebuildable from disk | 03 | Partial (`hotsheet-index`: schema/query/FTS/rebuild + **file-backed restore/reconcile on launch** + facet tables (tags/assignees/reviews) + `reindex` CLI built; keyset paging pending → HS2-TCDTCH) |
 | Filesystem watch → incremental reindex | 03 §3.4 | Partial (server `spawn_watcher`: content-hash reindex + WS events built; git-diff fast path pending) |
 | Shared **Rust** core engine (server + CLI only; clients don't embed) | 04, 09 | Confirmed |
 | Server always separate + client auto-start + outlives client | 04 §4.3.1, 09 §9.1e | Partial (server-side lifecycle shipped — `hotsheet-server::lifecycle`: instance registry + discovery, per-store index-writer lock, `serve --stop`, graceful shutdown, attach-if-already-running; E2E-verified — HS2-59. Client-side detached auto-start + supervise pending → HS2-4072GM) |
@@ -174,11 +175,11 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | **External loadable plugins (manifest-only → subprocess/WASM; trust gate + verify)** | 05 §5.11 | Partial (HS2-92 loader + `setup <third-party>`; HS2-93 trust gate: `plugin verify`/`info`/`install` disclosure + path-safety; subprocess/WASM sandbox still to come) |
 | **AI-tool testing harness: conformance gate + hs-fake-agent** | 12 §12.7.7 | Partial (HS2-64: registry-parameterized **conformance suite** — identity/detection/instructions/skills/MCP-config-validity/drive-resolution/target-safety + headless-setup E2E, inherited by any new plugin incl. on-disk, a hard `nextest` CI gate. hs-fake-agent PTY/permission emulator + terminal E2E blocked on HS2-10/HS2-113 → HS2-1GJY50) |
 | **Project settings, core-owned (shared/local scopes, CLI-manageable; client owns device-only)** | 04 §4.7 | Built (HS2-94): `Settings` shared/local + `hotsheet-cli settings get/set/list`; local auto-gitignored |
-| Terminal/PTY hosting for AI tools | 05 §5.4 | Design |
+| Terminal/PTY hosting for AI tools | 05 §5.4 | Partial (`hotsheet-terminals`: `Terminal` (PTY + scrollback ring), `TerminalManager`, `BusyDetector`; server `/terminals`,`/terminals/{id}`,`/terminals/{id}/input` open/read/input/kill routes — HS2-10/HS2-A6R5QV. Remaining: live WS streaming + OSC/tool-launch → HS2-XTTTMV) |
 | Multi-viewer PTY sizing (server-arbitrated, focus-follows, leased; remote-safe) | 06 §6.7 | Design |
-| Drive/transport interface (steer a running tool) | 13, 05 §5.5 | Partial (HS2-106/108: `Drive` trait + spawn-shape `SpawnDrive`, manifest `[drive]` decl, `host::trigger` (plugin→drive→registry), fake-tested; persistent-channel/ACP + async `TurnEvent` + real CLI/server trigger pending) |
-| Connection registry + busy tracking | 05 §5.6 | Partial (HS2-107: `ConnectionRegistry` + sliding-window busy built; wiring to live turns + spinner inference pending) |
-| Trigger / permissions bridge | 05 §5.5, §5.7 | Design |
+| Drive/transport interface (steer a running tool) | 13, 05 §5.5 | Partial (HS2-106/108: `Drive` trait + spawn-shape `SpawnDrive`, manifest `[drive]` decl, `host::trigger` (plugin→drive→registry); persistent-channel drives (`AppServerDrive`/`ClaudeChannelDrive`) + async `TurnEvent` stream (incl. `Usage`) + `hotsheet-cli trigger`/`work` + server `dist_work_loop` shipped — HS2-115/HS2-DTPX2V/HS2-1TY7GC. Remaining: live-tool protocol verification) |
+| Connection registry + busy tracking | 05 §5.6 | Partial (HS2-107: `ConnectionRegistry` + sliding-window busy; `live::pump_turn` heartbeats it per streamed event and `terminals::contains_spinner` does spinner inference — both wired) |
+| Trigger / permissions bridge | 05 §5.5, §5.7 | Partial/Shipped (`hotsheet-cli trigger`/`work`; FIFO `SharedPermissionBridge` (blocking + timeout) + durable Always-rules; server `/permissions`,`/permissions/{id}`,`/permissions/ask` routes; codex approval path + Claude PreToolUse `permission-hook` — HS2-11/HS2-9R9YZW/HS2-YMR9HE/HS2-XCTAHM) |
 | Tauri + web client (1st) | 06 | Confirmed |
 | Native SwiftUI macOS (2nd) → iOS (3rd) | 06 | Confirmed |
 | Android client (4th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |

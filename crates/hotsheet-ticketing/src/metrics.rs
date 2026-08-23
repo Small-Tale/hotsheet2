@@ -9,8 +9,11 @@
 //! read path is DB-free and O(tail): [`summary_settled`] loads the settled rollup + live-
 //! scans only the raw newer than `last_rolled_up_through`; [`roll_up_through`] advances that
 //! frontier and [`prune_raw_before`] bounds the raw once settled. Rollups are a **derived
-//! cache** — delete one and [`roll_up_through`] rebuilds it from the raw JSONL. The remaining
-//! follow-on is the per-plugin **telemetry mappers** (`docs/14` §14.7, tool → `UsageEvent`).
+//! cache** — delete one and [`roll_up_through`] rebuilds it from the raw JSONL. The per-plugin
+//! **telemetry mappers** (`docs/14` §14.7, tool → `UsageEvent`) are wired for codex
+//! (`aitools::codex_turn_usage`, HS2-8PSAFE) and claude (`aitools::claude_result_usage`,
+//! HS2-TJ8FGR), recorded end-to-end via `TurnEvent::Usage` → `record_priced`; mappers for
+//! further plugins are the remaining follow-on.
 
 use std::collections::BTreeMap;
 use std::fs;

@@ -37,8 +37,9 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 > **Per-language coverage gates** are wired for Rust (CI `cargo llvm-cov` with a
 > `--fail-under-lines` floor) and the migrator (`npm run test:coverage`, thresholds in
 > `migrator/vitest.config.mjs`); a creds-gated **live tier** (`.github/workflows/live.yml`)
-> runs the `#[ignore]` codex/claude turns nightly. Snapshot tests and server/web E2E are
-> not wired yet. Commands that work now:
+> runs the `#[ignore]` codex/claude turns nightly. Server E2E is wired
+> (`crates/hotsheet-server/tests/http.rs` — in-process HTTP/WS against a temp store);
+> snapshot tests and **web** (Playwright) E2E are not wired yet. Commands that work now:
 > `cargo build` · `cargo nextest run` · `cargo fmt --all --check` · `cargo clippy
 > --all-targets --all-features -- -D warnings` · `npx vitest run` / `npm run test:coverage`
 > (in `migrator/`).

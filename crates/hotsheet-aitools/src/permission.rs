@@ -12,10 +12,11 @@
 //!    the raising connection + decision so the caller can route the answer back, and
 //!    persisting a rule when the answer's scope says to remember it.
 //!
-//! This is the **pure core**: no I/O, no globals. The WebSocket push to clients, the
-//! per-plugin transport adapters, and durable rule storage are the server/plugin wiring
-//! on top (HS2-113 / HS2-0QGW07). Kept pure so it gets transition-matrix + adversarial
-//! sequence tests directly.
+//! The request queue and rule matching are the **pure core**: no globals, no I/O — kept
+//! that way so they get transition-matrix + adversarial sequence tests directly. Durable
+//! allow-rule storage lives below in this crate ([`load_rules`]/[`append_rule`], a JSON
+//! file — HS2-9R9YZW). The WebSocket push to clients and the per-plugin transport adapters
+//! are the server/plugin wiring on top (HS2-113 / HS2-0QGW07).
 
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;

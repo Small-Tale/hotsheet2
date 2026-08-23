@@ -10,9 +10,12 @@ schema in [17-ticket-file-format.md](17-ticket-file-format.md).
 > **filesystem watcher** (live reindex), the `hotsheet-cli` CLI + `hotsheet-migrate`,
 > the Node HS1 exporter, the **`hotsheet-server`** (index-backed HTTP REST + WS,
 > loopback auth; **file-backed index restored + reconciled on launch**), and the
-> **`hotsheet-mcp`** shim. Still design-only: server lifecycle/auto-start (HS2-59),
-> the `hotsheet-cli reindex` CLI + no-server index maintenance, git-aware fast-path
-> reindex, mTLS, terminals, and clients.
+> **`hotsheet-mcp`** shim, the **server-side lifecycle** (instance registry, writer
+> lock, `serve --stop`; HS2-59), the `hotsheet-cli reindex` CLI, the plugin host +
+> AI-tool **drive/permission/metrics** stack (`hotsheet-aitools`, `hotsheet-plugins`),
+> and **`hotsheet-terminals`** (PTY + manager + busy) with server `/terminals*` routes.
+> Still design-only: **client** auto-start/supervise, no-server index maintenance,
+> git-aware fast-path reindex, mTLS, live-tool protocol verification, and the clients.
 
 ## Directory tree
 
@@ -46,7 +49,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/assign/people/setup/import/doctor/reindex/worklist/metrics/serve/claim-next/release/renew/trigger/work/permission-hook; resolve_store_path finds a standalone store without -C (-C > $HOTSHEET_STORE > .hotsheet/store link, HS2-5CXKZ0)
+      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/copy/move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor/reindex/worklist/metrics/serve/claim-next/release/renew/trigger/work/permission-hook; resolve_store_path finds a standalone store without -C (-C > $HOTSHEET_STORE > .hotsheet/store link, HS2-5CXKZ0)
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
@@ -111,7 +114,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   test-projects/             # full-binary E2E harnesses (not in-process unit tests)
     e2e-headless-claude.sh   #   headless loop: setup + drive hotsheet-mcp (serverless + server) [HS2-99]
   docs/                      # design docs 00–17 (+ this map)
-  .github/workflows/ci.yml   # fmt --check · clippy -D warnings · nextest
+  .github/workflows/ci.yml   # fmt --check · clippy -D warnings · nextest · migrator vitest · gated cargo-llvm-cov (--fail-under-lines 80)
+  .github/workflows/live.yml # creds-gated nightly live tier (#[ignore] codex/claude turns)
 ```
 
 ## Entry points
@@ -132,7 +136,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   store. Kept out of `hotsheet-cli` so the live CLI carries no Node/migrator runtime dep.
 - **Server:** `hotsheet-server -C <store> [--bind 127.0.0.1:8787] [--secret …]` — HTTP
   REST (`/health`, `/tickets`…) + `/ws/sync`, `X-Hotsheet-Secret` auth (Tier 0,
-  loopback only). Over `ops`; in-memory scan (index is HS2-5).
+  loopback only). Queries go through the file-backed SQLite index (restored + reconciled
+  on launch), with `ops` as the write path.
 - **MCP shim:** `hotsheet-mcp --path <store>` (serverless, direct-to-disk — the
   headless default) **or** `--server <url> --secret <s>` (proxy a running server).
   Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project.

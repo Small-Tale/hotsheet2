@@ -541,10 +541,11 @@ impl AppServerTurn for CodexTurn {
 ///   `ws://localhost/rpc`. The `proxy` subcommand is a *dumb byte relay* (`stdio_to_uds`:
 ///   `tokio::io::copy` stdin↔UDS), so writing raw newline JSON-RPC through it reaches a
 ///   server awaiting an HTTP/WebSocket upgrade → zero bytes back (the "no response" we
-///   saw). Making this usable needs a **WebSocket framing layer** in the transport
-///   (upgrade handshake, then text-frame each message; connect straight to the UDS, or
-///   frame over the proxy child's stdio) — the protocol engine above is unchanged.
-///   `StdioTransport` is the supported path meanwhile.
+///   saw). The **WebSocket framing layer** this needs now exists as [`UdsWsTransport`]
+///   (upgrade handshake, then text-frame each message) — but it connects **straight to the
+///   UDS**, so the shared daemon is already drivable today (`live::connect_shared_daemon`).
+///   Wiring the framing over the `proxy` child's stdio specifically is the only part left
+///   open (HS2-115); the protocol engine above is unchanged.
 ///
 /// `codex app-server` direct over stdio — the live-default transport.
 pub struct StdioTransport(StreamChild);
@@ -572,10 +573,11 @@ impl RpcTransport for StdioTransport {
     }
 }
 
-/// `codex app-server proxy` — relays stdio to the shared daemon control socket. Not yet
-/// drivable: the socket speaks a **plain WebSocket** (text-frame JSON-RPC), so this raw
-/// byte pipe needs a WebSocket framing layer on top before `CodexAppServer` can use it
-/// (HS2-115; see the transport-family doc above).
+/// `codex app-server proxy` — relays stdio to the shared daemon control socket. The socket
+/// speaks a **plain WebSocket** (text-frame JSON-RPC); the daemon is already driven today
+/// via [`UdsWsTransport`] (straight to the UDS), so this raw byte-relay variant is unused —
+/// wiring the WebSocket framing over *this* child's stdio is optional (HS2-115; see the
+/// transport-family doc above).
 pub struct ProxyTransport(StreamChild);
 
 impl ProxyTransport {
