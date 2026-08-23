@@ -868,6 +868,60 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 }
 
 #[tokio::test]
+async fn connections_lists_what_the_driving_loop_is_running() {
+    let (_d, st) = state();
+    let reg = st.drive_registry();
+    let app = app(st);
+
+    // Nothing driving yet → empty.
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/connections", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(body_json(resp).await.as_array().unwrap().is_empty());
+
+    // Simulate a driven ticket registering (what live_drive does per turn).
+    {
+        let mut r = reg.lock().unwrap();
+        r.register(hotsheet_aitools::Connection {
+            id: "srv-01ABC".into(),
+            project: "/proj".into(),
+            tool: "codex".into(),
+            role: hotsheet_aitools::Role::Worker,
+            transport: hotsheet_aitools::Transport::AppServer,
+            pid: None,
+            started_at_ms: 1000,
+        });
+        r.note_activity("srv-01ABC", 1000);
+    }
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/connections", None))
+        .await
+        .unwrap();
+    let list = body_json(resp).await;
+    let arr = list.as_array().unwrap();
+    assert_eq!(arr.len(), 1);
+    assert_eq!(arr[0]["id"], "srv-01ABC");
+    assert_eq!(arr[0]["tool"], "codex");
+    assert_eq!(arr[0]["role"], "worker");
+
+    // Auth is required.
+    let resp = hotsheet_server::app(state().1)
+        .oneshot(
+            Request::builder()
+                .uri("/connections")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
 async fn permission_round_trip_lists_answers_and_unblocks_the_tool() {
     let (_d, st) = state();
     let bridge = st.permission_bridge();

@@ -155,6 +155,7 @@ async fn main() -> Result<()> {
             cfg.tool.clone(),
             cfg.prompt.clone(),
             Some(state.permission_bridge()),
+            Some(state.drive_registry()),
         );
         Some(spawn_dist_work_loop(
             state.clone(),

@@ -75,6 +75,10 @@ pub struct AppState {
     /// Where `Always` allow-rules persist (a store-local JSON file), so remembered answers
     /// survive a restart. `None` in tests (they don't touch disk for rules).
     permission_rules_path: Option<std::path::PathBuf>,
+    /// The **shared** connection registry for the driving loop (HS2-TCV3BF): each ticket the
+    /// server is driving registers here for its turn, so `GET /connections` shows what's
+    /// live and (once driving is concurrent) the in-flight bound can consult busy state.
+    drive_registry: Arc<Mutex<hotsheet_aitools::ConnectionRegistry>>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -132,7 +136,18 @@ impl AppState {
             sync_kick: Arc::new(Mutex::new(None)),
             permissions,
             permission_rules_path: None,
+            // A generous busy window: a driven turn heartbeats via the local registry, but
+            // the shared one tracks "currently driving" by registration, not the window.
+            drive_registry: Arc::new(Mutex::new(hotsheet_aitools::ConnectionRegistry::new(
+                60_000,
+            ))),
         }
+    }
+
+    /// The shared driving-loop connection registry — the loop registers each ticket it
+    /// drives, and `GET /connections` reads it (HS2-TCV3BF).
+    pub fn drive_registry(&self) -> Arc<Mutex<hotsheet_aitools::ConnectionRegistry>> {
+        self.drive_registry.clone()
     }
 
     /// Seed the permission bridge with the durable `Always` allow-rules stored at `path`,
@@ -493,6 +508,8 @@ pub fn app(state: AppState) -> Router {
         // answer one (allow/deny + once/session/always).
         .route("/permissions", get(list_permissions))
         .route("/permissions/{id}", post(resolve_permission))
+        // What the server is currently driving (HS2-TCV3BF).
+        .route("/connections", get(list_connections))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -824,6 +841,48 @@ async fn list_permissions(
     State(state): State<AppState>,
 ) -> Json<Vec<hotsheet_aitools::PermissionRequest>> {
     Json(state.permissions.pending())
+}
+
+/// One driven connection as reported by `GET /connections`.
+#[derive(Serialize)]
+struct ConnectionInfo {
+    id: String,
+    tool: String,
+    project: String,
+    /// `main` | `worker`.
+    role: String,
+    /// Whether the connection is busy (a turn is actively streaming) right now.
+    busy: bool,
+}
+
+/// `GET /connections` — what the server's driving loop is currently running (HS2-TCV3BF):
+/// one entry per in-flight driven ticket. Empty when nothing is being driven.
+async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionInfo>> {
+    let now = now_ms();
+    let reg = match state.drive_registry.lock() {
+        Ok(r) => r,
+        Err(_) => return Json(Vec::new()),
+    };
+    let infos = reg
+        .list()
+        .into_iter()
+        .map(|c| ConnectionInfo {
+            id: c.id.clone(),
+            tool: c.tool.clone(),
+            project: c.project.clone(),
+            role: format!("{:?}", c.role).to_lowercase(),
+            busy: reg.is_busy(&c.id, now),
+        })
+        .collect();
+    Json(infos)
+}
+
+/// Wall-clock epoch milliseconds (the driving loop's busy-tracking time base).
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// Body for `POST /permissions/{id}`: the human's answer.

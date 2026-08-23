@@ -192,10 +192,33 @@ pub fn live_drive(
     tool: String,
     prompt: String,
     permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
+    drive_registry: Option<std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>>,
 ) -> impl Fn(&FsStore, &hotsheet_model::Ulid) -> WorkOutcome + Send + 'static {
     move |store, id| {
-        drive_one_ticket(store, id, &tool, &prompt, permission_bridge.clone())
-            .unwrap_or(WorkOutcome::Failed)
+        drive_one_ticket(
+            store,
+            id,
+            &tool,
+            &prompt,
+            permission_bridge.clone(),
+            drive_registry.clone(),
+        )
+        .unwrap_or(WorkOutcome::Failed)
+    }
+}
+
+/// Registers a driven connection on the shared registry for its lifetime, removing it on
+/// drop — so `GET /connections` shows exactly what's in flight (HS2-TCV3BF).
+struct DriveGuard {
+    registry: std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>,
+    id: String,
+}
+
+impl Drop for DriveGuard {
+    fn drop(&mut self) {
+        if let Ok(mut r) = self.registry.lock() {
+            r.unregister(&self.id);
+        }
     }
 }
 
@@ -205,6 +228,7 @@ fn drive_one_ticket(
     tool: &str,
     prompt: &str,
     permission_bridge: Option<std::sync::Arc<hotsheet_aitools::SharedPermissionBridge>>,
+    drive_registry: Option<std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>>,
 ) -> anyhow::Result<WorkOutcome> {
     use hotsheet_aitools::{ConnectionRegistry, prepare_trigger};
     let before = store.read_ticket(id)?;
@@ -217,6 +241,26 @@ fn drive_one_ticket(
     }
     let mut registry = ConnectionRegistry::new(30_000);
     let conn = format!("srv-{id}");
+    // Advertise this ticket as being driven on the SHARED registry (GET /connections), busy
+    // for the turn; the guard removes it when the turn ends (HS2-TCV3BF).
+    let _guard = drive_registry.map(|reg| {
+        if let Ok(mut r) = reg.lock() {
+            r.register(hotsheet_aitools::Connection {
+                id: conn.clone(),
+                project: store.root().display().to_string(),
+                tool: tool.to_string(),
+                role: hotsheet_aitools::Role::Worker,
+                transport: hotsheet_aitools::Transport::AppServer,
+                pid: None,
+                started_at_ms: crate::now_ms(),
+            });
+            r.note_activity(&conn, crate::now_ms());
+        }
+        DriveGuard {
+            registry: reg,
+            id: conn.clone(),
+        }
+    });
     // Capture any usage the turn reports so it can be recorded against this ticket
     // (HS2-0WCRZY). Output is otherwise streamed to a quiet sink (logged elsewhere).
     let mut usage: Option<hotsheet_aitools::Usage> = None;
