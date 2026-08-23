@@ -54,10 +54,15 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     // host maps via the `codex-usage` source.
     let metrics = p.manifest.metrics.as_ref().expect("codex declares metrics");
     assert_eq!(metrics.source, "codex-usage");
-    // Claude has no metrics block yet → the capability is absent.
-    assert!(
-        find_in("claude", &[]).unwrap().manifest.metrics.is_none(),
-        "absence is the signal — claude opts out until its OTLP mapper lands"
+    // Claude declares its own metrics source (its stream-json result usage, HS2-TJ8FGR).
+    assert_eq!(
+        find_in("claude", &[])
+            .unwrap()
+            .manifest
+            .metrics
+            .as_ref()
+            .map(|m| m.source.clone()),
+        Some("claude-usage".to_string())
     );
 
     // Claude declares the channel drive (a turn injected into a running session).

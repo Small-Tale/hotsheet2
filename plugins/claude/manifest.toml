@@ -42,3 +42,8 @@ program = "claude"
 args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]
 content = "stdin"
 interrupt = false
+
+[metrics]
+# Claude reports token usage on its stream-json `result` event; the host maps it to a
+# UsageEvent (docs/14, HS2-TJ8FGR). `source` selects the `claude_result_usage` parser.
+source = "claude-usage"

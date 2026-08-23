@@ -638,6 +638,10 @@ fn claude_channel_streams_output_then_done() {
     );
     assert_eq!(turn.next_event(), None, "stream ends after Done");
     assert!(!turn.is_busy());
+    // Token usage captured from the `result` event (HS2-TJ8FGR).
+    let usage = turn.usage().expect("result reported usage");
+    assert_eq!(usage.model.as_deref(), Some("claude-opus-4-8"));
+    assert_eq!((usage.tokens_in, usage.tokens_out), (800, 150));
 }
 
 #[test]

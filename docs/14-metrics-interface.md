@@ -122,9 +122,13 @@ Metrics can be shared across a team **through git** — no server sync needed:
   the codex mapper (`codex_turn_usage` → `drive::Usage`, lenient); and the **end-to-end
   codex path** — `CodexTurn` captures usage from `turn/completed`, the drive surfaces it as
   `TurnEvent::Usage`, and the server driving loop records it per turn via `record_priced`
-  attributed to the claimed ticket + session. **Remaining (HS2-0WCRZY):** the **Claude
-  OTLP** mapper, and verifying codex's real usage field names against a live codex (the
-  parser is lenient and yields `None` on mismatch).
+  attributed to the claimed ticket + session. **Claude** (HS2-TJ8FGR) is now mapped the
+  same way — `claude_result_usage` reads the in-band stream-json `result` event's `usage`
+  (declared `[metrics] source="claude-usage"`), `ClaudeTurn::usage()` surfaces it, and it
+  flows through `TurnEvent::Usage` + the driving-loop recorder unchanged. **Remaining:**
+  verifying codex's + claude's real usage field names against live tools (the parsers are
+  lenient — `None` on mismatch — and don't yet split cached-token variants); ACP counters
+  when an ACP tool lands.
 - **Remaining:** wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references

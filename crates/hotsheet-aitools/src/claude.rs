@@ -133,6 +133,7 @@ impl ClaudeChannelClient for ClaudeChannel {
             inner: self.inner.clone(),
             cursor,
             done: None,
+            usage: None,
         }))
     }
 }
@@ -145,6 +146,31 @@ struct ClaudeTurn {
     inner: Arc<Inner>,
     cursor: usize,
     done: Option<DoneReason>,
+    /// Token usage captured from the final `result` event, if it reported any (HS2-TJ8FGR).
+    usage: Option<crate::drive::Usage>,
+}
+
+/// Extract token usage from a Claude stream-json `result` event (`docs/14`, the
+/// `claude-usage` mapper for HS2-TJ8FGR — reads the in-band stream result rather than a
+/// separate OTLP collector). Lenient: `None` when the event reports no usage, so a schema
+/// tweak degrades quietly. The exact field names should be confirmed against a live claude.
+pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
+    let usage = result.get("usage")?;
+    let pick = |keys: &[&str]| {
+        keys.iter()
+            .find_map(|k| usage.get(*k).and_then(Value::as_u64))
+    };
+    let tokens_in = pick(&["input_tokens", "prompt_tokens"])?;
+    let tokens_out = pick(&["output_tokens", "completion_tokens"]).unwrap_or(0);
+    let model = result
+        .get("model")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Some(crate::drive::Usage {
+        model,
+        tokens_in,
+        tokens_out,
+    })
 }
 
 /// Map one output event to a user-visible [`TurnEvent`], or `None` to skip it.
@@ -197,7 +223,12 @@ impl ClaudeTurn {
         let mut events = self.inner.events.lock().unwrap();
         loop {
             while self.cursor < events.len() {
-                let mapped = map_event(&events[self.cursor]);
+                let ev = &events[self.cursor];
+                // Capture token usage from the terminal `result` event (HS2-TJ8FGR).
+                if ev.get("type").and_then(Value::as_str) == Some("result") {
+                    self.usage = claude_result_usage(ev);
+                }
+                let mapped = map_event(ev);
                 self.cursor += 1;
                 if let Some(te) = mapped {
                     if let TurnEvent::Done(r) = &te {
@@ -250,6 +281,10 @@ impl TurnHandle for ClaudeTurn {
 
     fn next_event(&mut self) -> Option<TurnEvent> {
         self.pull()
+    }
+
+    fn usage(&mut self) -> Option<crate::drive::Usage> {
+        self.usage.clone()
     }
 }
 
@@ -412,7 +447,9 @@ pub(crate) mod scripted {
                 };
                 self.push(
                     json!({ "type": "result", "subtype": subtype, "is_error": is_error,
-                    "result": result, "session_id": "sess-abc", "num_turns": 1 }),
+                    "result": result, "session_id": "sess-abc", "num_turns": 1,
+                    "model": "claude-opus-4-8",
+                    "usage": { "input_tokens": 800, "output_tokens": 150 } }),
                 );
             }
             Ok(())
