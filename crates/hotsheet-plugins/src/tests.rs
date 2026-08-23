@@ -50,6 +50,16 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert_eq!(drive.args, vec!["app-server".to_string()]);
     assert!(drive.interrupt);
 
+    // Codex opts into the metrics capability (docs/14, HS2-8PSAFE): it reports usage the
+    // host maps via the `codex-usage` source.
+    let metrics = p.manifest.metrics.as_ref().expect("codex declares metrics");
+    assert_eq!(metrics.source, "codex-usage");
+    // Claude has no metrics block yet → the capability is absent.
+    assert!(
+        find_in("claude", &[]).unwrap().manifest.metrics.is_none(),
+        "absence is the signal — claude opts out until its OTLP mapper lands"
+    );
+
     // Claude declares the channel drive (a turn injected into a running session).
     let cd = find_in("claude", &[])
         .unwrap()

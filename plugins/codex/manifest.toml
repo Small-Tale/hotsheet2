@@ -38,3 +38,8 @@ program = "codex"
 args = ["app-server"]
 content = "arg"
 interrupt = true
+
+[metrics]
+# Codex reports token usage on its `turn/completed` notification; the host maps it to a
+# UsageEvent (docs/14, HS2-8PSAFE). `source` selects the `codex_turn_usage` parser.
+source = "codex-usage"

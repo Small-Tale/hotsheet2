@@ -78,6 +78,19 @@ pub struct Manifest {
     /// behavioral host (`hotsheet-aitools`) maps it to a `Drive`.
     #[serde(default)]
     pub drive: Option<DriveSpec>,
+    /// Optional: the tool emits usage/cost **telemetry** the host maps to `UsageEvent`s
+    /// (`docs/14`, HS2-8PSAFE). Absent = no metrics captured for this tool (absence is the
+    /// signal). Names the tool's native telemetry `source` so the host picks the right mapper.
+    #[serde(default)]
+    pub metrics: Option<MetricsSpec>,
+}
+
+/// A tool's metrics-capability declaration (`docs/14` §14.2). Declarative — the behavioral
+/// host maps `source` to the concrete telemetry parser (codex usage / claude OTLP / …).
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetricsSpec {
+    /// Which native telemetry the tool exposes: `codex-usage` | `claude-otlp` | `acp` | ….
+    pub source: String,
 }
 
 /// A tool's drive declaration (`docs/13`). Transport + content are strings here (this

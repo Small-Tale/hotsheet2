@@ -108,6 +108,16 @@ pub trait TurnHandle {
     }
 }
 
+/// Token usage observed for one turn, mapped from a tool's native telemetry (`docs/14`,
+/// HS2-8PSAFE). The host turns this + the active ticket into a `UsageEvent` it records.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Usage {
+    /// The model that ran, when the tool reports it.
+    pub model: Option<String>,
+    pub tokens_in: u64,
+    pub tokens_out: u64,
+}
+
 /// A failed `run`.
 #[derive(Debug, thiserror::Error)]
 pub enum DriveError {

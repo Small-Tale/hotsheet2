@@ -393,6 +393,31 @@ fn completed_outcome(
     })
 }
 
+/// Extract token usage from a codex `turn/completed` notification's `turn` object
+/// (`docs/14`, the `codex-usage` mapper for HS2-8PSAFE). Lenient about field names
+/// (`input_tokens`/`prompt_tokens`, `output_tokens`/`completion_tokens`) so a protocol
+/// tweak degrades to `None` rather than crashing; `None` when the turn reports no usage.
+/// **Note:** the exact codex field names should be confirmed against a live codex — a
+/// mismatch yields `None` (no metrics), never an error.
+pub fn turn_usage(turn: &Value) -> Option<crate::drive::Usage> {
+    let usage = turn.get("usage")?;
+    let pick = |keys: &[&str]| {
+        keys.iter()
+            .find_map(|k| usage.get(*k).and_then(Value::as_u64))
+    };
+    let tokens_in = pick(&["input_tokens", "prompt_tokens", "tokens_in"])?;
+    let tokens_out = pick(&["output_tokens", "completion_tokens", "tokens_out"]).unwrap_or(0);
+    let model = turn
+        .get("model")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    Some(crate::drive::Usage {
+        model,
+        tokens_in,
+        tokens_out,
+    })
+}
+
 impl CodexTurn {
     /// Non-blocking scan of newly-arrived notifications for this turn's completion.
     fn poll(&mut self) {
@@ -1045,5 +1070,43 @@ mod approval_tests {
             default: Decision::Deny,
             timeout,
         }
+    }
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+
+    #[test]
+    fn turn_usage_reads_tokens_and_model_leniently() {
+        // Canonical field names.
+        let u = turn_usage(&json!({
+            "model": "gpt-5-codex",
+            "usage": { "input_tokens": 1200, "output_tokens": 340 }
+        }))
+        .expect("usage present");
+        assert_eq!(u.model.as_deref(), Some("gpt-5-codex"));
+        assert_eq!(u.tokens_in, 1200);
+        assert_eq!(u.tokens_out, 340);
+
+        // Alias field names (prompt/completion) + missing model.
+        let u = turn_usage(&json!({
+            "usage": { "prompt_tokens": 50, "completion_tokens": 10 }
+        }))
+        .unwrap();
+        assert_eq!(u.model, None);
+        assert_eq!((u.tokens_in, u.tokens_out), (50, 10));
+    }
+
+    #[test]
+    fn turn_usage_is_none_without_usage_or_input_tokens() {
+        assert!(
+            turn_usage(&json!({ "model": "x" })).is_none(),
+            "no usage block"
+        );
+        assert!(
+            turn_usage(&json!({ "usage": { "output_tokens": 5 } })).is_none(),
+            "no input token count → nothing to attribute"
+        );
     }
 }
