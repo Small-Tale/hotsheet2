@@ -37,6 +37,22 @@ struct Cli {
     /// Stop the running server for this store (explicit shutdown), then exit.
     #[arg(long)]
     stop: bool,
+
+    /// **Opt-in** distributed driving loop (HS2-1TY7GC): spawn this AI tool (plugin id,
+    /// e.g. `codex`) on each self-claimed ticket across hosted stores that have a git
+    /// remote. Omitted → the loop is off (the default; the server never drives a tool
+    /// unless asked, like the live-tool test tier).
+    #[arg(long, value_name = "TOOL")]
+    drive_tool: Option<String>,
+    /// Max tickets the driving loop runs concurrently across hosted stores (default 1).
+    #[arg(long, default_value_t = 1)]
+    drive_workers: usize,
+    /// Claim lease length for driven tickets, in minutes (default 30).
+    #[arg(long, default_value_t = 30)]
+    drive_lease_min: i64,
+    /// Worker id recorded on claims (default: the store's git email, else `server`).
+    #[arg(long)]
+    drive_worker: Option<String>,
 }
 
 #[tokio::main]
@@ -109,6 +125,40 @@ async fn main() -> Result<()> {
         hotsheet_server::sync_loop::DEFAULT_INTERVAL,
     );
 
+    // Opt-in distributed driving loop (HS2-1TY7GC): spawn a real AI tool per self-claimed
+    // ticket across hosted stores with a remote. Off unless `--drive-tool` is given.
+    let _drive = if let Some(tool) = cli.drive_tool.clone() {
+        use hotsheet_server::dist_work_loop::{
+            DEFAULT_INTERVAL, DistWorkConfig, live_drive, spawn_dist_work_loop,
+        };
+        let worker = cli
+            .drive_worker
+            .clone()
+            .or_else(|| git_email(&cli.path))
+            .unwrap_or_else(|| "server".to_string());
+        println!(
+            "driving loop: tool={tool} worker={worker} max_in_flight={} lease={}min",
+            cli.drive_workers, cli.drive_lease_min
+        );
+        let cfg = DistWorkConfig {
+            enabled: true,
+            worker,
+            lease_minutes: cli.drive_lease_min,
+            max_in_flight: cli.drive_workers,
+            tool: tool.clone(),
+            ..Default::default()
+        };
+        let drive = live_drive(cfg.tool.clone(), cfg.prompt.clone());
+        Some(spawn_dist_work_loop(
+            state.clone(),
+            cfg,
+            DEFAULT_INTERVAL,
+            drive,
+        ))
+    } else {
+        None
+    };
+
     // Take the exclusive index-writer lock before binding — a second server on this store
     // would otherwise double-write the index (join-don't-collide, HS2-59).
     let _lock = hotsheet_server::lifecycle::acquire_writer_lock(&cli.path)
@@ -158,6 +208,22 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = term => {},
     }
+}
+
+/// The store's git `user.email`, if configured — the default worker id for the driving
+/// loop (HS2-1TY7GC), matching how assignment identifies people (docs/10).
+fn git_email(path: &std::path::Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "user.email"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let email = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!email.is_empty()).then_some(email)
 }
 
 /// `~/.hotsheet/index/<project-id>.sqlite`, keyed by a hash of the store's path

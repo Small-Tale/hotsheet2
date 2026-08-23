@@ -54,7 +54,18 @@ pub struct DistWorkConfig {
     pub max_in_flight: usize,
     /// Which stores participate.
     pub participation: Participation,
+    /// The plugin id of the AI tool to spawn per claimed ticket (e.g. `"codex"`), used by
+    /// [`live_drive`]. Ignored by an injected test drive.
+    pub tool: String,
+    /// The per-turn prompt handed to the tool (defaults to [`DEFAULT_WORK_PROMPT`]).
+    pub prompt: String,
 }
+
+/// The default per-turn prompt for the server driving loop — take the one claimed ticket,
+/// implement it, mark it completed. Mirrors the CLI `work` loop's prompt.
+pub const DEFAULT_WORK_PROMPT: &str = "You have claimed one Hot Sheet ticket. Read it (the \
+     hotsheet tools or `hotsheet-cli show <slug>`), set it started, implement it, and mark it \
+     completed with a note on what you did. Do just that one ticket, then stop.";
 
 impl Default for DistWorkConfig {
     fn default() -> Self {
@@ -64,6 +75,8 @@ impl Default for DistWorkConfig {
             lease_minutes: 30,
             max_in_flight: 1,
             participation: Participation::AllWithRemote,
+            tool: String::new(),
+            prompt: DEFAULT_WORK_PROMPT.to_string(),
         }
     }
 }
@@ -143,6 +156,75 @@ where
     out
 }
 
+// ---- the production (live) drive (HS2-1TY7GC) ------------------------------------
+
+/// Map one driven turn to a [`WorkOutcome`] (pure, testable in isolation): a failed or
+/// interrupted turn releases the claim for another worker to retry; a completed turn that
+/// took the ticket **out of the open/claimable set** is done; one that left it open but
+/// changed it keeps the lease for another turn; a completed turn with **no progress**
+/// releases (the stall guard, mirroring the CLI `work` loop's thrash guard).
+pub fn outcome_from_turn(
+    done: hotsheet_aitools::DoneReason,
+    after_open: bool,
+    progressed: bool,
+) -> WorkOutcome {
+    use hotsheet_aitools::DoneReason;
+    match done {
+        DoneReason::Failed(_) | DoneReason::Interrupted => WorkOutcome::Failed,
+        DoneReason::Completed => {
+            if !after_open {
+                WorkOutcome::Completed
+            } else if progressed {
+                WorkOutcome::Continued
+            } else {
+                WorkOutcome::Failed
+            }
+        }
+    }
+}
+
+/// The **production** drive: spawn `tool` on each claimed ticket via a launch-safe
+/// [`SafeTrigger`](hotsheet_aitools::SafeTrigger) and map the turn to a [`WorkOutcome`].
+/// Live-only (spawns a real AI tool), so it isn't unit-tested; the pure mapping
+/// ([`outcome_from_turn`]) and the loop orchestration ([`work_pass`]) are. Any error
+/// (tool not set up, launch failure, …) becomes `Failed` so the claim releases for retry.
+pub fn live_drive(
+    tool: String,
+    prompt: String,
+) -> impl Fn(&FsStore, &hotsheet_model::Ulid) -> WorkOutcome + Send + 'static {
+    move |store, id| drive_one_ticket(store, id, &tool, &prompt).unwrap_or(WorkOutcome::Failed)
+}
+
+fn drive_one_ticket(
+    store: &FsStore,
+    id: &hotsheet_model::Ulid,
+    tool: &str,
+    prompt: &str,
+) -> anyhow::Result<WorkOutcome> {
+    use hotsheet_aitools::{ConnectionRegistry, prepare_trigger};
+    let before = store.read_ticket(id)?;
+    // Fresh launch isolation per ticket (throwaway CODEX_HOME + PATH shim; HS2-103).
+    let safe = prepare_trigger(store.root(), tool, None, None, None, Vec::new(), false)?;
+    let mut registry = ConnectionRegistry::new(30_000);
+    // A server-driven turn is a worker role; output is streamed to a quiet sink (logged
+    // elsewhere), and the connection is labelled per ticket for busy tracking.
+    let done = safe.run_turn(
+        prompt,
+        None,
+        true,
+        format!("srv-{id}"),
+        &mut registry,
+        &mut |_ev| {},
+    )?;
+    let after = store.read_ticket(id)?;
+    let progressed = after.updated_at != before.updated_at;
+    Ok(outcome_from_turn(
+        done,
+        hotsheet_ticketing::ops::is_open(&after),
+        progressed,
+    ))
+}
+
 /// Keeps the driving-loop thread alive; **dropping it stops the loop** after its current
 /// pass (the thread observes the disconnected channel). Inert when the loop is disabled.
 pub struct DistWorkHandle {
@@ -191,10 +273,39 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hotsheet_aitools::DoneReason;
     use hotsheet_model::Ulid;
     use hotsheet_ticketing::ops::{NewTicket, create};
     use hotsheet_ticketing::{FsStore, StoreMetadata};
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn outcome_mapping_covers_done_open_and_progress() {
+        // A completed turn that closed/left the open set → the ticket is done.
+        assert_eq!(
+            outcome_from_turn(DoneReason::Completed, false, true),
+            WorkOutcome::Completed
+        );
+        // Completed but still open + it changed → more turns to go (keep the lease).
+        assert_eq!(
+            outcome_from_turn(DoneReason::Completed, true, true),
+            WorkOutcome::Continued
+        );
+        // Completed, still open, and nothing changed → stall guard: release for retry.
+        assert_eq!(
+            outcome_from_turn(DoneReason::Completed, true, false),
+            WorkOutcome::Failed
+        );
+        // A failed / interrupted turn always releases.
+        assert_eq!(
+            outcome_from_turn(DoneReason::Failed(1), false, true),
+            WorkOutcome::Failed
+        );
+        assert_eq!(
+            outcome_from_turn(DoneReason::Interrupted, false, true),
+            WorkOutcome::Failed
+        );
+    }
 
     const SECRET: &str = "test-secret";
 

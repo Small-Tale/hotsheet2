@@ -194,7 +194,9 @@ impl SafeTrigger {
         };
         run_trigger(&self.plugin, &t, registry, on_event).map_err(|e| match e {
             LiveError::NotDrivable(id) => {
-                anyhow::anyhow!("'{id}' is not drivable (no [drive], or its transport isn't built yet)")
+                anyhow::anyhow!(
+                    "'{id}' is not drivable (no [drive], or its transport isn't built yet)"
+                )
             }
             other => anyhow::Error::new(other),
         })

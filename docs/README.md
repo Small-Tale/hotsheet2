@@ -185,7 +185,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Code organization (Cargo workspace/crates) + test strategy | 12 | Decided |
 | PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; UI flow deferred) |
 | Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |
-| Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Partial (`ticketing::distclaim`: `refs/hotsheet/claims/<ulid>` push-CAS claim [first-wins], `--force-with-lease` renew/steal, `ls-remote` enumerate, expiry sweep — bare-remote E2E; HS2-84. Consumer wiring [CLI/server work loop] → HS2-E7RXXR) |
+| Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Shipped (`ticketing::distclaim`: `refs/hotsheet/claims/<ulid>` push-CAS claim [first-wins], `--force-with-lease` renew/steal, `ls-remote` enumerate, expiry sweep — bare-remote E2E; HS2-84. `distwork::select_and_claim`/`work_once` self-claim cycle [HS2-E7RXXR]; `server::dist_work_loop` drives a real AI tool per claimed ticket [`--drive-tool`, off by default, HS2-DTPX2V/HS2-1TY7GC]) |
 | Mobile ↔ server configuration/pairing (mTLS + QR) | 08 §8.3 | Design |
 
 ## Conventions

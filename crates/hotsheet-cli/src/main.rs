@@ -584,7 +584,6 @@ fn stream_to_stdout(ev: &hotsheet_aitools::TurnEvent) {
     }
 }
 
-
 #[allow(clippy::too_many_arguments)]
 fn cmd_trigger(
     store_path: &Path,

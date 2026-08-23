@@ -48,9 +48,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: init/new/ls/show/edit/close/assign/people/setup/import/doctor/reindex/worklist/metrics/serve/claim-next/release/renew/trigger/work
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
-      src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free)
-      src/launch_safety.rs   #   HS2-103 safety for `trigger`/`work`: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, absolute hotsheet-mcp path, IsolatedCodexHome (auto MCP-free CODEX_HOME, HS2-YRDQNX)
+      src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
       src/workloop.rs        #   `work` loop pure helpers: Up Next queue signature + thrash-guard Stall counter
+      # (launch_safety + SafeTrigger/prepare_trigger moved to hotsheet-aitools so the server reuses them — HS2-1TY7GC)
       src/setup.rs           #   `hotsheet-cli setup <tool>`: thin wrapper over hotsheet_plugins::run_setup (adds the enabled-plugin filter from Settings)
       src/plugin.rs          #   `hotsheet-cli plugin list|info|install|verify|remove`: manage + trust-gate external plugins
       src/import.rs          #   hotsheet-export.json -> store (two-pass, idempotent)
@@ -59,7 +59,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
       src/lib.rs             #   app() router, handlers over ops (store-generic do_create/update/close), ApiTicket DTO (incl. copied_from/moved_to_store/moved_at provenance), auth, /ws/sync (ChangeEvent tagged by store) + /ws/poll long-poll fallback (sequenced EventLog ring + cursor, HS2-P3P3CC), GET/POST /permissions live human round-trip (SharedPermissionBridge in AppState + permission_asked event nudge + durable Always-rules via with_permission_rules, HS2-9R9YZW), POST /setup/{tool} (HS2-91), POST /batch (bulk update), GET/POST /stores + scoped /stores/{id}/tickets[/{id}[/close]] read+write + GET /resolve/{ulid} cross-store + POST /tickets/{id}/copy|move {to,confirm} cross-store copy/move (multi-store, HS2-87/HS2-S4H2AM)
       src/main.rs            #   bind (loopback only) + serve; instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
-      src/dist_work_loop.rs  #   server-hosted distributed driving loop (HS2-DTPX2V): DistWorkConfig (off by default) + work_pass (participation filter + NoRemote skip + in-flight bound + sweep_expired, over distwork::work_once) + spawn_dist_work_loop generic over an injected drive; live run_trigger drive wiring is HS2-1TY7GC
+      src/dist_work_loop.rs  #   server-hosted distributed driving loop (HS2-DTPX2V/HS2-1TY7GC): DistWorkConfig (off by default; tool/worker/lease/max_in_flight/participation) + work_pass (filter + NoRemote skip + in-flight bound + sweep_expired, over distwork::work_once) + spawn_dist_work_loop + live_drive (SafeTrigger per claimed ticket) + outcome_from_turn (done/open/progress -> WorkOutcome, stall guard); wired into main.rs via --drive-tool
       src/lifecycle.rs       #   server lifecycle: InstanceInfo registry + discovery (one machine server writes a discovery file per hosted store, HS2-87 topology A), per-store index-writer lock, stop_instance (HS2-59)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
       src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up)
@@ -84,6 +84,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/claude.rs          #   ClaudeChannelDrive + ClaudeChannel: turn injected into a running `claude` stream-json session, async TurnEvent stream; ClaudeStreamTransport + scripted-claude tests
       src/procio.rs          #   StreamChild: shared piped-stdio plumbing (spawn -> RpcWriter/RpcReader) for the stream transports
       src/live.rs            #   run_trigger: spawn a REAL tool per its [drive] transport (codex app-server: StdioTransport, or shared-daemon UdsWsTransport when --shared-daemon), build DriveCtx, pump_turn one turn (behind `hotsheet-cli trigger`); pump_turn heartbeats ConnectionRegistry busy at a LIVE clock per streamed event + idle on Done (HS2-34X6BW)
+      src/launch_safety.rs   #   HS2-103 safety: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, absolute hotsheet-mcp path, IsolatedCodexHome (auto MCP-free CODEX_HOME, HS2-YRDQNX) — moved here so CLI + server share it (HS2-1TY7GC)
+      src/safe_trigger.rs    #   SafeTrigger + prepare_trigger: resolve a tool + assemble launch safety once, run_turn(on_event sink, conn_id) per turn; shared by `hotsheet-cli trigger`/`work` and the server driving loop (HS2-1TY7GC)
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
       src/ports.rs           #   ProcessSpawner/SpawnedProcess + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
