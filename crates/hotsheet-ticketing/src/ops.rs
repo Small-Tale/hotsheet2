@@ -89,9 +89,20 @@ pub struct TicketQuery {
     pub closed: Option<bool>,
     /// Only tickets this person (git email) is an assignee of (HS2-20).
     pub assignee: Option<String>,
+    /// Only tickets this person (git email) has a review request on (HS2-T84F9F).
+    pub review_requested: Option<String>,
     /// `Some(true)` = only claimed tickets (a `claimed_by` is set); `Some(false)` = only
     /// unclaimed. `None` doesn't constrain (HS2-89).
     pub claimed: Option<bool>,
+    /// `Some(true)` = only **blocked** tickets (some `blocked_by` isn't a done ticket);
+    /// `Some(false)` = only **unblocked**. `None` doesn't constrain (HS2-T84F9F, docs/03 §3.3).
+    pub blocked: Option<bool>,
+    /// Half-open `created_at` / `updated_at` range filters (ISO-8601 strings; inclusive
+    /// lower, inclusive upper — lexical compare works on RFC3339). Custom-view dimensions.
+    pub created_after: Option<String>,
+    pub created_before: Option<String>,
+    pub updated_after: Option<String>,
+    pub updated_before: Option<String>,
     pub sort: SortKey,
     /// Cap the number of rows returned (after sort). `None` = no cap.
     pub limit: Option<usize>,
@@ -101,18 +112,42 @@ pub struct TicketQuery {
 pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError> {
     let mut tickets = store.list_tickets()?;
     let text = q.text.as_deref().map(str::to_lowercase);
+    // The done set, for the blocked/unblocked filter (a blocker not in it → still blocking).
+    let done: HashSet<Ulid> = tickets
+        .iter()
+        .filter(|t| is_done(t))
+        .map(|t| t.id)
+        .collect();
     tickets.retain(|t| {
         q.status.is_none_or(|s| t.status == s)
             && q.priority.is_none_or(|p| t.priority == p)
             && q.category.as_deref().is_none_or(|c| t.category == c)
             && (!q.up_next_only || t.up_next)
             && (!q.open_only || is_open(t))
+            // Moved tombstones are hidden from lists unless explicitly asked for (docs/03 §3.5).
+            && (q.status == Some(Status::Moved) || t.status != Status::Moved)
             && q.close_reason.is_none_or(|r| t.close_reason == Some(r))
             && q.closed.is_none_or(|want| t.close_reason.is_some() == want)
             && q.assignee
                 .as_deref()
                 .is_none_or(|a| t.assignees.iter().any(|x| x == a))
+            && q.review_requested
+                .as_deref()
+                .is_none_or(|who| t.review_requests.iter().any(|r| r.who == who))
             && q.claimed.is_none_or(|want| t.claimed_by.is_some() == want)
+            && q.blocked.is_none_or(|want| is_blocked(t, &done) == want)
+            && q.created_after
+                .as_deref()
+                .is_none_or(|a| t.created_at.as_str() >= a)
+            && q.created_before
+                .as_deref()
+                .is_none_or(|b| t.created_at.as_str() <= b)
+            && q.updated_after
+                .as_deref()
+                .is_none_or(|a| t.updated_at.as_str() >= a)
+            && q.updated_before
+                .as_deref()
+                .is_none_or(|b| t.updated_at.as_str() <= b)
             && q.tags.iter().all(|tag| t.tags.iter().any(|x| x == tag))
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });

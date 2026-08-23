@@ -421,12 +421,29 @@ struct LsFilters {
     /// Only tickets with a worker claim (a held lease).
     #[arg(long)]
     claimed: bool,
+    /// Only tickets that are blocked (a blocker isn't done yet).
+    #[arg(long, conflicts_with = "unblocked")]
+    blocked: bool,
+    /// Only tickets that are unblocked (all blockers done / none).
+    #[arg(long)]
+    unblocked: bool,
     /// Sort key: id | created | updated | priority | status | title.
     #[arg(long, default_value = "id")]
     sort: String,
     /// Cap the number of rows shown (after sort).
     #[arg(long)]
     limit: Option<usize>,
+}
+
+impl LsFilters {
+    /// `Some(true)` for `--blocked`, `Some(false)` for `--unblocked`, else `None`.
+    fn blocked_filter(&self) -> Option<bool> {
+        match (self.blocked, self.unblocked) {
+            (true, _) => Some(true),
+            (_, true) => Some(false),
+            _ => None,
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -810,8 +827,10 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         closed: f.closed.then_some(true),
         assignee: f.assignee.clone(),
         claimed: f.claimed.then_some(true),
+        blocked: f.blocked_filter(),
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
         limit: f.limit,
+        ..Default::default()
     };
     let tickets = ops::query(&store, &query)?;
 

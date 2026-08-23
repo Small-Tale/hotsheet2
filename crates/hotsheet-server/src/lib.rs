@@ -1283,8 +1283,17 @@ struct ListParams {
     closed: Option<bool>,
     /// Only tickets assigned to this person (git email).
     assignee: Option<String>,
+    /// Only tickets with a review request for this person (git email).
+    review_requested: Option<String>,
     /// `true` = only claimed tickets; `false` = only unclaimed.
     claimed: Option<bool>,
+    /// `true` = only blocked tickets; `false` = only unblocked (HS2-T84F9F).
+    blocked: Option<bool>,
+    /// ISO-8601 `created_at` / `updated_at` range bounds (inclusive).
+    created_after: Option<String>,
+    created_before: Option<String>,
+    updated_after: Option<String>,
+    updated_before: Option<String>,
     sort: Option<String>,
     limit: Option<usize>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.
@@ -1318,7 +1327,13 @@ impl ListParams {
             close_reason: opt_parse(self.close_reason.as_deref())?,
             closed: self.closed,
             assignee: self.assignee,
+            review_requested: self.review_requested,
             claimed: self.claimed,
+            blocked: self.blocked,
+            created_after: self.created_after,
+            created_before: self.created_before,
+            updated_after: self.updated_after,
+            updated_before: self.updated_before,
             sort,
             limit: self.limit,
         })

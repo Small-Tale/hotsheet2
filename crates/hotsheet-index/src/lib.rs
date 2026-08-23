@@ -3,9 +3,10 @@
 //! that can be dropped and rebuilt at any time. It powers fast structured queries +
 //! full-text search so the UI never walks the store to draw a list.
 //!
-//! v1 indexes the queryable ticket fields + a `tags` table (for tag filters) + an
-//! FTS5 table over title/details/notes. The `blocked_by`/`assignees`/`reviews`
-//! facet tables in the doc schema are a follow-up.
+//! Indexes the queryable ticket fields + `tags`/`assignees`/`reviews` facet tables + an
+//! FTS5 table over title/details/notes, plus blocked/unblocked (via `json_each` over
+//! `blocked_by_json` against the done set) and created/updated date-range filters
+//! (HS2-89/HS2-T84F9F). Keyset pagination for very large stores is the remaining follow-up.
 
 use std::path::{Path, PathBuf};
 
@@ -15,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -48,6 +49,8 @@ CREATE TABLE tags (store_id TEXT, ticket_id TEXT, tag TEXT);
 CREATE INDEX idx_tags ON tags(store_id, tag);
 CREATE TABLE assignees (store_id TEXT, ticket_id TEXT, assignee TEXT);
 CREATE INDEX idx_assignees ON assignees(store_id, assignee);
+CREATE TABLE reviews (store_id TEXT, ticket_id TEXT, who TEXT);
+CREATE INDEX idx_reviews ON reviews(store_id, who);
 CREATE VIRTUAL TABLE tickets_fts USING fts5(title, details, notes);
 CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);
 "#;
@@ -137,7 +140,7 @@ impl Index {
         if version != Some(SCHEMA_VERSION) {
             conn.execute_batch(
                 "DROP TABLE IF EXISTS tickets; DROP TABLE IF EXISTS tags; \
-                 DROP TABLE IF EXISTS assignees; \
+                 DROP TABLE IF EXISTS assignees; DROP TABLE IF EXISTS reviews; \
                  DROP TABLE IF EXISTS tickets_fts; DROP TABLE IF EXISTS index_meta;",
             )?;
             conn.execute_batch(SCHEMA)?;
@@ -258,6 +261,18 @@ impl Index {
             )?;
         }
 
+        // reviews facet (HS2-T84F9F) — the review-requested filter joins on the person `who`.
+        self.conn.execute(
+            "DELETE FROM reviews WHERE store_id=?1 AND ticket_id=?2",
+            params![self.store_id, id],
+        )?;
+        for r in &t.review_requests {
+            self.conn.execute(
+                "INSERT INTO reviews(store_id,ticket_id,who) VALUES(?1,?2,?3)",
+                params![self.store_id, id, r.who],
+            )?;
+        }
+
         // FTS
         let notes = t
             .notes
@@ -301,6 +316,10 @@ impl Index {
             "DELETE FROM assignees WHERE store_id=?1 AND ticket_id=?2",
             params![self.store_id, id],
         )?;
+        self.conn.execute(
+            "DELETE FROM reviews WHERE store_id=?1 AND ticket_id=?2",
+            params![self.store_id, id],
+        )?;
         Ok(())
     }
 
@@ -308,7 +327,7 @@ impl Index {
     pub fn rebuild_from_store(&self, store: &FsStore) -> Result<usize, IndexError> {
         self.conn
             .execute_batch(
-                "DELETE FROM tickets; DELETE FROM tags; DELETE FROM assignees; DELETE FROM tickets_fts;",
+                "DELETE FROM tickets; DELETE FROM tags; DELETE FROM assignees; DELETE FROM reviews; DELETE FROM tickets_fts;",
             )?;
         let mut count = 0;
         for path in ticket_files(store)? {
@@ -454,6 +473,11 @@ impl Index {
                 "t.status NOT IN ('completed','verified','deleted','archive','moved')".into(),
             );
         }
+        // Moved tombstones are hidden from lists unless the caller explicitly asks for them
+        // via `status = moved` (docs/03 §3.5, HS2-T84F9F).
+        if q.status.map(|s| enum_str(&s)).as_deref() != Some("moved") {
+            wheres.push("t.status IS NOT 'moved'".into());
+        }
         if let Some(r) = q.close_reason {
             wheres.push("t.close_reason = ?".into());
             args.push(Box::new(enum_str(&r)));
@@ -475,6 +499,13 @@ impl Index {
             args.push(Box::new(self.store_id.clone()));
             args.push(Box::new(a.clone()));
         }
+        // Review-requested — via the reviews facet table (HS2-T84F9F), mirroring assignees.
+        if let Some(who) = &q.review_requested {
+            wheres
+                .push("t.id IN (SELECT ticket_id FROM reviews WHERE store_id=? AND who=?)".into());
+            args.push(Box::new(self.store_id.clone()));
+            args.push(Box::new(who.clone()));
+        }
         // Claimed / unclaimed — a lease holder is set or not (HS2-89).
         if let Some(want) = q.claimed {
             wheres.push(if want {
@@ -482,6 +513,32 @@ impl Index {
             } else {
                 "t.claimed_by IS NULL".into()
             });
+        }
+        // Blocked / unblocked (HS2-T84F9F): a ticket is blocked if any of its blocked_by ids
+        // (expanded from the JSON array) references a ticket that is NOT done — i.e. not in
+        // the completed/verified/deleted/archive/moved set (matching ops::is_blocked; a
+        // blocker that doesn't exist in the index also counts as still-blocking).
+        if let Some(want) = q.blocked {
+            let is_blocked = "EXISTS (SELECT 1 FROM json_each(t.blocked_by_json) b \
+                 WHERE b.value NOT IN (SELECT id FROM tickets d WHERE d.store_id = t.store_id \
+                 AND d.status IN ('completed','verified','deleted','archive','moved')))";
+            wheres.push(if want {
+                is_blocked.into()
+            } else {
+                format!("NOT {is_blocked}")
+            });
+        }
+        // Date-range filters (HS2-T84F9F) — lexical compare on RFC3339 timestamps.
+        for (col, val, op) in [
+            ("created_at", &q.created_after, ">="),
+            ("created_at", &q.created_before, "<="),
+            ("updated_at", &q.updated_after, ">="),
+            ("updated_at", &q.updated_before, "<="),
+        ] {
+            if let Some(v) = val {
+                wheres.push(format!("t.{col} {op} ?"));
+                args.push(Box::new(v.clone()));
+            }
         }
         if !q.tags.is_empty() {
             let placeholders = vec!["?"; q.tags.len()].join(",");

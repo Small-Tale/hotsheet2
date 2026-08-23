@@ -154,6 +154,134 @@ fn limit_caps_the_sql_result() {
     );
 }
 
+/// A fixture exercising blocked/review/moved/date filters, + the index-vs-file-scan parity.
+#[test]
+fn blocked_review_moved_and_date_filters_match_the_file_scan() {
+    use hotsheet_model::{ReviewKind, ReviewRequest};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let early = Timestamp::new("2026-08-10T00:00:00Z");
+    let late = Timestamp::new("2026-08-20T00:00:00Z");
+    let mk = |id: &str, ts: &Timestamp, blockers: Vec<Ulid>| {
+        ops::create(
+            &store,
+            ulid(id),
+            "HS",
+            ts.clone(),
+            NewTicket {
+                title: format!("t-{id}"),
+                blocked_by: blockers,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    let a = mk("01ARZ3NDEKTSV4RRFFQ69G5FB0", &early, vec![]); // open blocker
+    let _b = mk("01ARZ3NDEKTSV4RRFFQ69G5FB1", &early, vec![a.id]); // blocked (A open)
+    let c = mk("01ARZ3NDEKTSV4RRFFQ69G5FB2", &late, vec![]);
+    let _d = mk("01ARZ3NDEKTSV4RRFFQ69G5FB3", &late, vec![c.id]); // becomes unblocked once C done
+    let m = mk("01ARZ3NDEKTSV4RRFFQ69G5FB4", &late, vec![]);
+    let r = mk("01ARZ3NDEKTSV4RRFFQ69G5FB5", &late, vec![]);
+
+    // C is done (satisfies D's blocker); M is a moved tombstone.
+    ops::update(
+        &store,
+        &c.id,
+        late.clone(),
+        TicketPatch {
+            status: Some(Status::Completed),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ops::update(
+        &store,
+        &m.id,
+        late.clone(),
+        TicketPatch {
+            status: Some(Status::Moved),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // R carries a review request for alice.
+    ops::assign(
+        &store,
+        &r.id,
+        late.clone(),
+        None,
+        vec![ReviewRequest {
+            who: "alice@example.com".into(),
+            kind: ReviewKind::Review,
+            by: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB9"),
+            at: late.clone(),
+        }],
+    )
+    .unwrap();
+
+    let ix = Index::open_in_memory("s1").unwrap();
+    ix.rebuild_from_store(&store).unwrap();
+
+    for q in [
+        TicketQuery {
+            blocked: Some(true),
+            ..Default::default()
+        },
+        TicketQuery {
+            blocked: Some(false),
+            ..Default::default()
+        },
+        TicketQuery {
+            review_requested: Some("alice@example.com".into()),
+            ..Default::default()
+        },
+        // Default list excludes the moved tombstone …
+        TicketQuery::default(),
+        // … but an explicit status=moved surfaces it.
+        TicketQuery {
+            status: Some(Status::Moved),
+            ..Default::default()
+        },
+        TicketQuery {
+            created_after: Some("2026-08-15T00:00:00Z".into()),
+            ..Default::default()
+        },
+        TicketQuery {
+            created_before: Some("2026-08-15T00:00:00Z".into()),
+            ..Default::default()
+        },
+    ] {
+        assert_eq!(
+            index_ids(&ix.query(&q).unwrap()),
+            ops_ids(&store, &q),
+            "index diverged from ops::query for {q:?}"
+        );
+    }
+
+    // Spot-check the semantics (not just parity): B is blocked, D is unblocked, M is hidden.
+    let blocked = ops_ids(
+        &store,
+        &TicketQuery {
+            blocked: Some(true),
+            ..Default::default()
+        },
+    );
+    assert!(
+        blocked.contains("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
+        "B blocked by open A"
+    );
+    assert!(
+        !blocked.contains("01ARZ3NDEKTSV4RRFFQ69G5FB3"),
+        "D unblocked (C done)"
+    );
+    let all = index_ids(&ix.query(&TicketQuery::default()).unwrap());
+    assert!(
+        !all.contains("01ARZ3NDEKTSV4RRFFQ69G5FB4"),
+        "moved tombstone hidden by default"
+    );
+}
+
 #[test]
 fn fts_matches_a_prefix_across_the_body() {
     let (_d, _s, ix) = seeded();
