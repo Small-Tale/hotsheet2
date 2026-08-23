@@ -18,10 +18,14 @@
 //! sequence tests directly.
 
 use std::collections::{HashMap, VecDeque};
+use std::path::Path;
 use std::sync::{Condvar, Mutex};
 
+use serde::{Deserialize, Serialize};
+
 /// An allow/deny decision on a permission request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Decision {
     Allow,
     Deny,
@@ -29,7 +33,8 @@ pub enum Decision {
 
 /// How long an answer is remembered — maps a UI's allow-once / allow-for-session /
 /// always onto persisted allow-rules.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Scope {
     /// This request only — no rule recorded.
     Once,
@@ -40,7 +45,7 @@ pub enum Scope {
 }
 
 /// A pending permission request the host must answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Request {
     /// Stable per-bridge id, used to resolve out of order.
     pub id: u64,
@@ -150,6 +155,11 @@ impl PermissionBridge {
         &self.rules
     }
 
+    /// Replace the allow-rules (seeding durable rules loaded from storage at startup).
+    pub fn set_rules(&mut self, rules: Vec<Rule>) {
+        self.rules = rules;
+    }
+
     /// Answer a pending request by id. Removes it from the queue (position-independent,
     /// so answering the middle of the queue leaves the rest intact), records a
     /// session/always rule per `scope`, and returns who to route the answer back to.
@@ -196,6 +206,11 @@ pub struct SharedPermissionBridge {
     /// Decisions delivered by `resolve`, keyed by request id, awaiting their waiter.
     results: Mutex<HashMap<u64, Decision>>,
     cvar: Condvar,
+    /// Fired when a request is enqueued (goes `Pending`) — the server sets this to push a
+    /// "permission_asked" nudge over its event bus so attached clients fetch + answer it
+    /// (HS2-9R9YZW). `None` = headless / no observer.
+    #[allow(clippy::type_complexity)]
+    on_pending: Mutex<Option<Box<dyn Fn(&Request) + Send + Sync>>>,
 }
 
 impl SharedPermissionBridge {
@@ -204,22 +219,49 @@ impl SharedPermissionBridge {
             inner: Mutex::new(bridge),
             results: Mutex::new(HashMap::new()),
             cvar: Condvar::new(),
+            on_pending: Mutex::new(None),
         }
     }
 
+    /// Register the enqueue observer (the server's WS/event-bus nudge). Replaces any prior.
+    pub fn set_on_pending(&self, f: impl Fn(&Request) + Send + Sync + 'static) {
+        *self.on_pending.lock().unwrap() = Some(Box::new(f));
+    }
+
+    /// Replace the bridge's allow-rules (e.g. seeding durable `Always` rules loaded from
+    /// disk at startup) without disturbing the observer or any in-flight waiters.
+    pub fn reseed_rules(&self, rules: Vec<Rule>) {
+        self.inner.lock().unwrap().set_rules(rules);
+    }
+
     /// Raise a request and **block** until it's decided: an allow-rule answers immediately;
-    /// otherwise it's enqueued and this waits until a [`resolve`](Self::resolve) with its id
-    /// arrives (a human answering over the route-back).
+    /// otherwise it's enqueued (firing the pending observer) and this waits until a
+    /// [`resolve`](Self::resolve) with its id arrives (a human answering over the route-back).
     pub fn request_blocking(
         &self,
         connection: impl Into<String>,
         tool: impl Into<String>,
         action: impl Into<String>,
     ) -> Decision {
-        let id = match self.inner.lock().unwrap().request(connection, tool, action) {
+        // Materialize the fields up front so the pending observer gets the full Request.
+        let (connection, tool, action) = (connection.into(), tool.into(), action.into());
+        let id = match self.inner.lock().unwrap().request(
+            connection.clone(),
+            tool.clone(),
+            action.clone(),
+        ) {
             Outcome::Auto(d) => return d, // a rule answered — no human needed
             Outcome::Pending(id) => id,
         };
+        // Nudge any observer (server → WS "permission_asked") now that it's queued.
+        if let Some(f) = self.on_pending.lock().unwrap().as_ref() {
+            f(&Request {
+                id,
+                connection,
+                tool,
+                action,
+            });
+        }
         // Wait for the answer. If `resolve` already ran (before we started waiting), the
         // result is already present, so there's no lost wakeup.
         let mut results = self.results.lock().unwrap();
@@ -244,6 +286,65 @@ impl SharedPermissionBridge {
         self.cvar.notify_all();
         Some(resolved)
     }
+}
+
+// ---- durable allow-rule storage (HS2-9R9YZW) -------------------------------------
+
+/// The on-disk form of an `Always` allow-rule — enough to auto-answer the same
+/// `(tool, action)` on a later run. The transient `persist` flag isn't stored.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoredRule {
+    pub tool: String,
+    pub action: String,
+    pub decision: Decision,
+}
+
+impl From<&Rule> for StoredRule {
+    fn from(r: &Rule) -> Self {
+        StoredRule {
+            tool: r.tool.clone(),
+            action: r.action.clone(),
+            decision: r.decision,
+        }
+    }
+}
+
+impl StoredRule {
+    /// Rehydrate a durable (persisted) [`Rule`] for seeding a bridge.
+    pub fn into_rule(self) -> Rule {
+        Rule {
+            tool: self.tool,
+            action: self.action,
+            decision: self.decision,
+            persist: true,
+        }
+    }
+}
+
+/// Load durable allow-rules from `path` (a JSON array). A missing or unreadable/malformed
+/// file yields an empty set — a first run just has no remembered answers.
+pub fn load_rules(path: &Path) -> Vec<Rule> {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+    serde_json::from_str::<Vec<StoredRule>>(&text)
+        .unwrap_or_default()
+        .into_iter()
+        .map(StoredRule::into_rule)
+        .collect()
+}
+
+/// Persist an `Always` allow-rule to `path`, replacing any existing rule for the same
+/// `(tool, action)` (a later answer wins) — so remembered answers survive a restart.
+pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
+    let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
+    rules.retain(|r| !(r.tool == rule.tool && r.action == rule.action));
+    rules.push(StoredRule::from(rule));
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(&rules).map_err(std::io::Error::other)?;
+    std::fs::write(path, json)
 }
 
 #[cfg(test)]
@@ -282,6 +383,80 @@ mod tests {
             Decision::Deny,
             "the waiter got the human's answer"
         );
+    }
+
+    #[test]
+    fn on_pending_fires_for_a_queued_request_but_not_an_auto_resolved_one() {
+        use std::sync::Arc;
+        let b = Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
+            vec![Rule {
+                tool: "Bash".into(),
+                action: "ls".into(),
+                decision: Decision::Allow,
+                persist: true,
+            }],
+        )));
+        let seen = Arc::new(Mutex::new(Vec::<(u64, String, String)>::new()));
+        let s2 = seen.clone();
+        b.set_on_pending(move |r| {
+            s2.lock()
+                .unwrap()
+                .push((r.id, r.tool.clone(), r.action.clone()));
+        });
+
+        // A rule-answered request never enqueues → no notification.
+        assert_eq!(b.request_blocking("c", "Bash", "ls"), Decision::Allow);
+        assert!(seen.lock().unwrap().is_empty(), "auto-resolved: no nudge");
+
+        // An unruled request enqueues → the observer fires with the full request.
+        let bt = b.clone();
+        let handle = std::thread::spawn(move || bt.request_blocking("conn-x", "Bash", "rm y"));
+        let id = loop {
+            if let Some(r) = b.pending().into_iter().next() {
+                break r.id;
+            }
+            std::thread::yield_now();
+        };
+        b.resolve(id, Decision::Allow, Scope::Once).unwrap();
+        handle.join().unwrap();
+        let got = seen.lock().unwrap().clone();
+        assert_eq!(got, vec![(id, "Bash".to_string(), "rm y".to_string())]);
+    }
+
+    #[test]
+    fn durable_rules_round_trip_and_dedupe_by_tool_action() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("permissions.json");
+        assert!(load_rules(&path).is_empty(), "missing file → no rules");
+
+        let allow = Rule {
+            tool: "Bash".into(),
+            action: "ls".into(),
+            decision: Decision::Allow,
+            persist: true,
+        };
+        append_rule(&path, &allow).unwrap();
+        // A later answer for the SAME (tool, action) replaces the earlier one.
+        let deny = Rule {
+            decision: Decision::Deny,
+            ..allow.clone()
+        };
+        append_rule(&path, &deny).unwrap();
+        // A different action is kept alongside.
+        append_rule(
+            &path,
+            &Rule {
+                action: "rm".into(),
+                ..allow.clone()
+            },
+        )
+        .unwrap();
+
+        let loaded = load_rules(&path);
+        assert_eq!(loaded.len(), 2, "deduped by (tool, action)");
+        let ls = loaded.iter().find(|r| r.action == "ls").unwrap();
+        assert_eq!(ls.decision, Decision::Deny, "the later answer won");
+        assert!(loaded.iter().all(|r| r.persist), "loaded rules are durable");
     }
 
     #[test]

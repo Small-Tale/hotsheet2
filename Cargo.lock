@@ -610,6 +610,7 @@ version = "0.0.0"
 dependencies = [
  "futures-util",
  "hotsheet-plugins",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",
@@ -699,6 +700,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "hotsheet-aitools",
  "hotsheet-index",
  "hotsheet-model",
  "hotsheet-plugins",

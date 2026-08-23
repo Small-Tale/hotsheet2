@@ -868,6 +868,134 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 }
 
 #[tokio::test]
+async fn permission_round_trip_lists_answers_and_unblocks_the_tool() {
+    let (_d, st) = state();
+    let bridge = st.permission_bridge();
+    let app = app(st);
+
+    // A driven "tool" thread blocks on an unruled request (real blocking round-trip).
+    let bt = bridge.clone();
+    let waiter = std::thread::spawn(move || bt.request_blocking("conn-1", "Bash", "rm -rf build"));
+
+    // It shows up on GET /permissions once queued.
+    let id = loop {
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        let list = body_json(resp).await;
+        if let Some(first) = list.as_array().unwrap().first() {
+            assert_eq!(first["connection"], "conn-1");
+            assert_eq!(first["tool"], "Bash");
+            assert_eq!(first["action"], "rm -rf build");
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+
+    // Answer it — allow, once (no rule persisted).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"once"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let ack = body_json(resp).await;
+    assert_eq!(ack["connection"], "conn-1");
+    assert_eq!(ack["decision"], "allow");
+    assert_eq!(ack["persisted"], false);
+
+    // The blocked tool received the human's answer.
+    assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
+
+    // The queue is now empty, and answering an unknown id is a 404.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/permissions/999",
+            Some(r#"{"decision":"deny"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn permissions_require_the_secret() {
+    let (_d, st) = state();
+    let resp = app(st)
+        .oneshot(
+            Request::builder()
+                .uri("/permissions")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let rules = dir.path().join("permissions.json");
+    let st = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules);
+    let bridge = st.permission_bridge();
+    let app = app(st);
+
+    // Block on a request, then answer it with scope=always.
+    let bt = bridge.clone();
+    let waiter = std::thread::spawn(move || bt.request_blocking("c", "Bash", "ls"));
+    let id = loop {
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", "/permissions", None))
+            .await
+            .unwrap();
+        if let Some(first) = body_json(resp).await.as_array().unwrap().first() {
+            break first["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    let ack = body_json(resp).await;
+    assert_eq!(ack["persisted"], true, "an always rule was written to disk");
+    assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");
+    assert!(rules.exists(), "the rule file was created");
+
+    // The same (tool, action) now auto-resolves — no human, nothing pending.
+    let bt = bridge.clone();
+    let auto = std::thread::spawn(move || bt.request_blocking("c", "Bash", "ls"));
+    assert_eq!(format!("{:?}", auto.join().unwrap()), "Allow");
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/permissions", None))
+        .await
+        .unwrap();
+    assert!(
+        body_json(resp).await.as_array().unwrap().is_empty(),
+        "auto-resolved: nothing queued"
+    );
+}
+
+#[tokio::test]
 async fn long_poll_hands_back_a_cursor_then_replays_events_since_it() {
     let (_d, st) = state();
     let app = app(st);

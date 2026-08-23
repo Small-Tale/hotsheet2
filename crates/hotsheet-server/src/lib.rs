@@ -68,6 +68,13 @@ pub struct AppState {
     /// changes push promptly rather than waiting for the next interval. `None` until the
     /// loop is spawned (tests don't run it).
     sync_kick: Arc<Mutex<Option<std::sync::mpsc::Sender<()>>>>,
+    /// The live permission bridge (HS2-9R9YZW): a driven tool blocks on it; a client answers
+    /// over `GET/POST /permissions`. A `permission_asked` nudge rides the event bus so
+    /// clients know to fetch + answer. Empty (headless auto-nothing) until seeded.
+    permissions: Arc<hotsheet_aitools::SharedPermissionBridge>,
+    /// Where `Always` allow-rules persist (a store-local JSON file), so remembered answers
+    /// survive a restart. `None` in tests (they don't touch disk for rules).
+    permission_rules_path: Option<std::path::PathBuf>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -91,19 +98,59 @@ impl AppState {
             store: store.clone(),
             index: index.clone(),
         });
+        let event_log = Arc::new(Mutex::new(EventLog::default()));
+        // A permission request enqueued by a driven tool pushes a `permission_asked` nudge
+        // over the event bus (WS + long-poll ring), so clients fetch + answer it.
+        let permissions = Arc::new(hotsheet_aitools::SharedPermissionBridge::default());
+        {
+            let events = events.clone();
+            let log = event_log.clone();
+            permissions.set_on_pending(move |req| {
+                let ev = ChangeEvent {
+                    store: String::new(),
+                    kind: "permission_asked".to_string(),
+                    id: req.id.to_string(),
+                    slug: req.tool.clone(),
+                };
+                if let Ok(mut l) = log.lock() {
+                    l.push(ev.clone());
+                }
+                let _ = events.send(ev);
+            });
+        }
         Self {
             store,
             secret,
             events,
             index,
-            event_log: Arc::new(Mutex::new(EventLog::default())),
+            event_log,
             host,
             watchers: Arc::new(Mutex::new(Vec::new())),
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
             instance_guards: Arc::new(Mutex::new(Vec::new())),
             sync_kick: Arc::new(Mutex::new(None)),
+            permissions,
+            permission_rules_path: None,
         }
+    }
+
+    /// Seed the permission bridge with the durable `Always` allow-rules stored at `path`,
+    /// and persist future `Always` answers there (call this in a real run; leave off in
+    /// tests so they never touch disk). Builder-style.
+    pub fn with_permission_rules(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        let path = path.into();
+        let rules = hotsheet_aitools::load_permission_rules(&path);
+        // Re-seed the bridge with the loaded rules (keeping the on_pending observer).
+        self.permissions.reseed_rules(rules);
+        self.permission_rules_path = Some(path);
+        self
+    }
+
+    /// The shared permission bridge — the drive/tool side blocks on it via
+    /// `request_blocking`; the server answers it over `POST /permissions/{id}`.
+    pub fn permission_bridge(&self) -> Arc<hotsheet_aitools::SharedPermissionBridge> {
+        self.permissions.clone()
     }
 
     /// The `(url-id, root-path)` of every hosted store — the set the background sync loop
@@ -442,6 +489,10 @@ pub fn app(state: AppState) -> Router {
         // Cross-store resolve: a global ULID → its live instance in whichever store hosts
         // it (follows moved tombstones). HS2-87 / HS2-S4H2AM.
         .route("/resolve/{id}", get(resolve_ticket))
+        // Permission round-trip (HS2-9R9YZW): list what a driven tool is blocked on, and
+        // answer one (allow/deny + once/session/always).
+        .route("/permissions", get(list_permissions))
+        .route("/permissions/{id}", post(resolve_permission))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             require_secret,
@@ -763,6 +814,65 @@ async fn renew_ticket(
     let renewed = ops::renew(&entry.store, &ticket.id, now, lease, &worker)?;
     state.changed_in(&entry, "renewed", &renewed);
     Ok(Json((&renewed).into()))
+}
+
+// ---- permission round-trip (HS2-9R9YZW) ------------------------------------------
+
+/// `GET /permissions` — the requests a driven tool is currently blocked on, for a client
+/// to render + answer. Each carries the raising connection + the `(tool, action)` asked.
+async fn list_permissions(
+    State(state): State<AppState>,
+) -> Json<Vec<hotsheet_aitools::PermissionRequest>> {
+    Json(state.permissions.pending())
+}
+
+/// Body for `POST /permissions/{id}`: the human's answer.
+#[derive(Deserialize)]
+struct PermissionAnswer {
+    decision: hotsheet_aitools::PermissionDecision,
+    /// `once` | `session` | `always` (default `once`).
+    #[serde(default = "default_scope")]
+    scope: hotsheet_aitools::PermissionScope,
+}
+
+fn default_scope() -> hotsheet_aitools::PermissionScope {
+    hotsheet_aitools::PermissionScope::Once
+}
+
+/// The ack a resolve returns: who it was routed back to + the decision applied.
+#[derive(Serialize)]
+struct PermissionResolved {
+    connection: String,
+    decision: hotsheet_aitools::PermissionDecision,
+    /// Whether an `Always` rule was persisted durably.
+    persisted: bool,
+}
+
+/// `POST /permissions/{id}` `{decision, scope}` — answer a pending request. Wakes the
+/// blocked tool, and on `always` persists the rule so the answer survives a restart. 404
+/// if the id isn't pending (already answered / never existed).
+async fn resolve_permission(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+    Json(body): Json<PermissionAnswer>,
+) -> Result<Json<PermissionResolved>, ApiError> {
+    let resolved = state
+        .permissions
+        .resolve(id, body.decision, body.scope)
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}")))?;
+    // Persist an `Always` rule so the remembered answer survives a restart.
+    let mut persisted = false;
+    if let (Some(rule), Some(path)) = (&resolved.persisted_rule, &state.permission_rules_path) {
+        match hotsheet_aitools::append_permission_rule(path, rule) {
+            Ok(()) => persisted = true,
+            Err(e) => eprintln!("failed to persist permission rule: {e}"),
+        }
+    }
+    Ok(Json(PermissionResolved {
+        connection: resolved.connection,
+        decision: resolved.decision,
+        persisted,
+    }))
 }
 
 // ---- cross-store copy / move (HS2-60 / HS2-S4H2AM) -------------------------------

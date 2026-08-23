@@ -17,6 +17,7 @@ hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
 hotsheet-index.workspace = true
 hotsheet-plugins.workspace = true
+hotsheet-aitools.workspace = true
 axum.workspace = true
 tokio.workspace = true
 serde = { workspace = true }

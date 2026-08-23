@@ -11,6 +11,7 @@ rust-version.workspace = true
 [dependencies]
 hotsheet-plugins.workspace = true
 thiserror.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 # The shared-daemon transport (UdsWsTransport): the codex app-server control socket
 # speaks a plain WebSocket carrying text-frame JSON-RPC, so we frame over a Unix socket.
