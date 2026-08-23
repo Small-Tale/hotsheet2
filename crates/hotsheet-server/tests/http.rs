@@ -933,6 +933,49 @@ async fn store_scoped_writes_are_isolated_to_their_store() {
 }
 
 #[tokio::test]
+async fn a_registered_store_is_index_write_locked_and_the_primary_is_skipped() {
+    use hotsheet_server::lifecycle;
+
+    // Isolate the machine home so the lock files land in a temp dir (nextest runs each test
+    // in its own process, so this env write is safe).
+    let home = tempfile::tempdir().unwrap();
+    unsafe { std::env::set_var("HOTSHEET_HOME", home.path()) };
+
+    let dir1 = tempfile::tempdir().unwrap();
+    let store1 = FsStore::init(dir1.path(), &StoreMetadata::new("AA")).unwrap();
+    let st = AppState::new(store1, SECRET.into()).unwrap();
+    let app = app(st.clone());
+
+    // Register a second store.
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("BB")).unwrap();
+    let body = format!(r#"{{"path":"{}"}}"#, dir2.path().display());
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/stores", Some(&body)))
+        .await
+        .unwrap();
+    assert!(resp.status().is_success());
+
+    // Before publishing (not a "real" run), no writer locks are taken — tests stay hermetic.
+    assert!(!lifecycle::is_writer_locked(dir2.path()));
+
+    // Publishing marks this as a real machine server; every *additional* hosted store then
+    // gets its own index-writer lock, but the primary is skipped (the binary locks that).
+    st.publish_instances("http://127.0.0.1:0".into(), "2026-08-23T00:00:00Z".into());
+    assert!(
+        lifecycle::is_writer_locked(dir2.path()),
+        "the registered store should be index-write-locked"
+    );
+    assert!(
+        !lifecycle::is_writer_locked(dir1.path()),
+        "the primary store is locked by the binary, not the server state"
+    );
+
+    unsafe { std::env::remove_var("HOTSHEET_HOME") };
+}
+
+#[tokio::test]
 async fn a_registered_store_gets_its_own_watcher() {
     use hotsheet_model::{Timestamp, Ulid};
     use hotsheet_ticketing::{NewTicket, ops};

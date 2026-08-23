@@ -64,6 +64,11 @@ pub struct AppState {
     instance: Arc<Mutex<Option<InstanceMeta>>>,
     /// Keeps the per-store instance-file guards alive; they remove their files on shutdown.
     instance_guards: Arc<Mutex<Vec<lifecycle::InstanceGuard>>>,
+    /// Per-hosted-store index-writer locks (HS2-AYCA1W). The primary `store`'s lock is held
+    /// by the server binary (main.rs); this holds one for every *additional* hosted store, so
+    /// no second machine server double-writes a registered store's index. Real-run only (a
+    /// held lock touches the machine home) — acquired in `register_store_instance`.
+    writer_locks: Arc<Mutex<Vec<lifecycle::WriterLock>>>,
     /// A "kick" to the background sync loop (HS2-731C2X): a server write signals it so local
     /// changes push promptly rather than waiting for the next interval. `None` until the
     /// loop is spawned (tests don't run it).
@@ -136,6 +141,7 @@ impl AppState {
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
             instance_guards: Arc::new(Mutex::new(Vec::new())),
+            writer_locks: Arc::new(Mutex::new(Vec::new())),
             sync_kick: Arc::new(Mutex::new(None)),
             permissions,
             permission_rules_path: None,
@@ -287,6 +293,27 @@ impl AppState {
             index_path,
             started_at: meta.started_at,
         };
+        // Hold this store's index-writer lock too, so a second machine server can't
+        // double-write its index (HS2-AYCA1W). The primary store's lock is already held by
+        // the server binary (main.rs), so skip it here. A lock held by another *live* server
+        // is logged, not fatal — the discovery instance file (above) already steers clients
+        // to a single server; this is belt-and-suspenders against a stray duplicate.
+        let is_primary = same_path(store_path, self.store.root());
+        if !is_primary {
+            match lifecycle::acquire_writer_lock(store_path) {
+                Ok(lock) => {
+                    if let Ok(mut w) = self.writer_locks.lock() {
+                        w.push(lock);
+                    }
+                }
+                Err(lifecycle::LockError::Held(pid)) => eprintln!(
+                    "warning: store {} is also index-write-locked by live server pid {pid} \
+                     — index writes may collide",
+                    store_path.display()
+                ),
+                Err(e) => eprintln!("writer lock for {} failed: {e}", store_path.display()),
+            }
+        }
         match lifecycle::register_instance(&info, store_path) {
             Ok(guard) => {
                 if let Ok(mut g) = self.instance_guards.lock() {
@@ -1740,6 +1767,12 @@ pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
         events: state.events.clone(),
     };
     spawn_watcher_for(target)
+}
+
+/// Whether two paths point at the same store root (canonicalized; lexical fallback).
+fn same_path(a: &FsPath, b: &FsPath) -> bool {
+    let canon = |p: &FsPath| p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    canon(a) == canon(b)
 }
 
 /// Watch one store (any hosted store). The returned [`WatchHandle`] must be kept alive

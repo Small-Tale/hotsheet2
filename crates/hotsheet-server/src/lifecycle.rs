@@ -142,6 +142,17 @@ impl Drop for WriterLock {
     }
 }
 
+/// Whether a **live** server currently holds this store's index-writer lock. A stale lock
+/// (its holder pid no longer alive) reads as not-locked, matching what
+/// [`acquire_writer_lock`] would reclaim.
+pub fn is_writer_locked(store_path: &Path) -> bool {
+    let path = instances_dir().join(format!("{}.lock", project_id(store_path)));
+    std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .is_some_and(pid_alive)
+}
+
 /// Take the exclusive index-writer lock for a store. Fails with [`LockError::Held`] when a
 /// **live** server already holds it (the second server should attach, not duplicate); a
 /// stale lock left by a dead server is reclaimed.
