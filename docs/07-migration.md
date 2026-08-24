@@ -11,6 +11,9 @@
 > as the CLI's file writer and eliminates format drift. Proven end-to-end against a
 > real HS1 cluster (this project's own snapshot): **81 tickets** exported + imported
 > with notes, `legacy_number`, and close outcomes intact.
+> Headless `init`/`doctor` detect the exact `.hotsheet/db/PG_VERSION` marker and
+> print the close-HS1 warning plus the explicit migrator command without running it
+> (HS2-MNHGT3); the interactive prompt/progress experience remains client-owned.
 >
 > **Version coverage:** targets the **5 most recent production releases + the current
 > beta** (v0.17.2 … v0.20.0 + v0.21.0-beta). These use PGLite **0.3.x** (v0.17.x) and

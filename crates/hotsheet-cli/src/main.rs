@@ -199,8 +199,12 @@ enum Cmd {
     /// the semantic merge driver (rebase), and push local commits. Normally automatic — this
     /// is the explicit "sync now" (docs/02 §2.12).
     Sync,
-    /// Check store health (metadata, parse errors, duplicate slugs, orphans).
-    Doctor,
+    /// Check store health and print read-only first-run/setup/migration guidance.
+    Doctor {
+        /// Code-project directory to inspect for installed-tool setup and HS1 data.
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+    },
     /// Rebuild the on-disk index (SQLite/FTS) from a full store walk. The index is a
     /// disposable cache, so this is always safe — use it after an external edit or if the
     /// index looks stale. Writes to the same path the server reads (docs/03 §3.4).
@@ -592,7 +596,7 @@ fn main() -> Result<()> {
         Cmd::People { cmd } => cmd_people(&cli.path, cmd),
         Cmd::Read { id } => cmd_read(&cli.path, &id),
         Cmd::Sync => cmd_sync(&cli.path),
-        Cmd::Doctor => cmd_doctor(&cli.path),
+        Cmd::Doctor { project } => cmd_doctor(&cli.path, &project),
         Cmd::Reindex { index } => cmd_reindex(&cli.path, index),
         Cmd::Worklist => cmd_worklist(&cli.path),
         Cmd::Metrics {
@@ -875,6 +879,7 @@ fn cmd_init(
             project.display(),
             hotsheet_cli::STORE_LINK
         );
+        print_onboarding_report(&destination, &project);
         return Ok(());
     }
 
@@ -883,6 +888,7 @@ fn cmd_init(
     git_init(path);
     hotsheet_cli::register_merge_driver(path);
     println!("Initialized Hot Sheet store at {}", path.display());
+    print_onboarding_report(path, path);
     Ok(())
 }
 
@@ -1190,7 +1196,7 @@ fn cmd_sync(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn cmd_doctor(path: &PathBuf) -> Result<()> {
+fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
     let store = FsStore::open(path)?;
     let meta = store.metadata()?;
     // list_tickets parses every file, so a parse error surfaces here.
@@ -1255,12 +1261,92 @@ fn cmd_doctor(path: &PathBuf) -> Result<()> {
         issues += 1;
     }
 
+    print_onboarding_report(path, project);
     if issues == 0 {
         println!("No issues found.");
         Ok(())
     } else {
         bail!("{issues} issue(s) found")
     }
+}
+
+/// Read-only first-run guidance. Detection never writes tool configuration and never
+/// opens/migrates HS1's database; the printed commands are explicit trust gates.
+fn print_onboarding_report(store: &Path, project: &Path) {
+    let detected: Vec<_> = hotsheet_plugins::all_plugins(&hotsheet_plugins::default_dirs())
+        .into_iter()
+        .filter(|plugin| {
+            plugin
+                .manifest
+                .detection
+                .binaries
+                .iter()
+                .any(|binary| binary_on_path(binary))
+        })
+        .map(|plugin| {
+            (
+                plugin.manifest.product_name.clone(),
+                plugin.id().to_string(),
+            )
+        })
+        .collect();
+    print!("{}", render_onboarding_report(store, project, &detected));
+}
+
+fn render_onboarding_report(store: &Path, project: &Path, detected: &[(String, String)]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::from("\nOnboarding (read-only):\n");
+    if detected.is_empty() {
+        writeln!(out, "  AI tools: none detected on PATH; no setup was run").unwrap();
+    } else {
+        writeln!(
+            out,
+            "  AI tools detected (setup is explicit and idempotent):"
+        )
+        .unwrap();
+        for (product, id) in detected {
+            writeln!(
+                out,
+                "    - {}: hotsheet-cli -C \"{}\" setup {} --project \"{}\"",
+                product,
+                store.display(),
+                id,
+                project.display()
+            )
+            .unwrap();
+        }
+        writeln!(out, "  No tool configuration was changed.").unwrap();
+    }
+
+    let hs1 = project.join(".hotsheet/db/PG_VERSION");
+    if hs1.is_file() {
+        writeln!(
+            out,
+            "  ! Hot Sheet 1 PGlite data detected at {}",
+            hs1.display()
+        )
+        .unwrap();
+        writeln!(out, "    Close the Hot Sheet 1 project before migrating.").unwrap();
+        writeln!(
+            out,
+            "    Review and run explicitly: hotsheet-migrate \"{}\" -C \"{}\"",
+            project.join(".hotsheet").display(),
+            store.display()
+        )
+        .unwrap();
+        writeln!(
+            out,
+            "    Migration was not started; the HS1 source remains untouched."
+        )
+        .unwrap();
+    } else {
+        writeln!(
+            out,
+            "  Hot Sheet 1 data: not detected (looked for .hotsheet/db/PG_VERSION)"
+        )
+        .unwrap();
+    }
+    out
 }
 
 /// Default index DB path for a store — mirrors the server's `default_index_path` so the
@@ -2065,5 +2151,27 @@ mod server_wrapper_tests {
         let error = resolve_server_binary(&cli, None).unwrap_err().to_string();
         assert!(error.contains("hotsheet-server is not installed"));
         assert!(error.contains("beside hotsheet-cli"));
+    }
+
+    #[test]
+    fn onboarding_is_read_only_and_distinguishes_hs1_by_its_database_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("project");
+        let store = dir.path().join("store");
+        std::fs::create_dir_all(project.join(".hotsheet/db")).unwrap();
+        std::fs::write(project.join(".hotsheet/db/PG_VERSION"), "17").unwrap();
+        let report =
+            render_onboarding_report(&store, &project, &[("Claude Code".into(), "claude".into())]);
+
+        assert!(report.contains("AI tools detected"));
+        assert!(report.contains("setup claude --project"));
+        assert!(report.contains("Hot Sheet 1 PGlite data detected"));
+        assert!(report.contains("Close the Hot Sheet 1 project before migrating"));
+        assert!(report.contains("hotsheet-migrate"));
+        assert!(report.contains("Migration was not started"));
+        assert_eq!(
+            std::fs::read_to_string(project.join(".hotsheet/db/PG_VERSION")).unwrap(),
+            "17"
+        );
     }
 }

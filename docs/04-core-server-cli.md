@@ -211,7 +211,7 @@ hotsheet init --standalone [--at <path>] [--remote <url>]
                        # create a separate git store + link this code repo in one shot
 hotsheet serve         # run the server
 hotsheet reindex       # drop + rebuild the index from disk
-hotsheet doctor        # diagnose: store health, merge-driver registration, index drift, plugin detection
+hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
 hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-ticket-storage.md §2.7)
 ```
 
@@ -233,6 +233,14 @@ entry registering the serverless `hotsheet-mcp --path <store>` (an **absolute**
 `hotsheet-mcp` path when one sits next to the CLI, so it works without PATH munging —
 HS2-117); re-running refreshes the managed pieces in place. The permission-bridge
 install + the `hotsheet plugin` management commands are still to come.
+
+**Headless first run (HS2-MNHGT3):** `init` prints the same read-only onboarding
+report available from `doctor --project <code-repo>`. It detects installed plugin
+tools and recommends explicit, idempotent `setup` commands. It recognizes HS1 only
+when `<project>/.hotsheet/db/PG_VERSION` exists, warns the user to close HS1, and
+prints the exact one-project `hotsheet-migrate` command. Neither command silently
+changes tool configuration or starts migration; interactive prompting and optional
+continuous config sync remain client work (HS2-8B0YZX).
 
 **Drive a tool (the headless "play") + the work loop:**
 ```
