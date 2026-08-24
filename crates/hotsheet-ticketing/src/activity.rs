@@ -169,8 +169,11 @@ pub fn record(store: &FsStore, event: &ActivityEvent) -> io::Result<()> {
     Ok(())
 }
 
-/// Read every stored activity event (all days), sorted by `id` (ULID → chronological),
-/// skipping unparseable lines. The bounded recent window a digest reads.
+/// Read every stored activity event in **recording order** — day-files ascending, each file's
+/// lines in append order — skipping unparseable lines. Append order *is* chronological for a
+/// live stream, and (unlike sorting by `id`) it's deterministic for events recorded in the
+/// same millisecond, since `Ulid::new()` isn't monotonic within a ms. The bounded recent
+/// window a digest reads.
 pub fn read_recent(store: &FsStore) -> io::Result<Vec<ActivityEvent>> {
     let dir = store.root().join("activity").join("recent");
     let mut events = Vec::new();
@@ -182,7 +185,7 @@ pub fn read_recent(store: &FsStore) -> io::Result<Vec<ActivityEvent>> {
         .map(|e| e.path())
         .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("jsonl"))
         .collect();
-    files.sort();
+    files.sort(); // `YYYY-MM-DD.jsonl` names sort chronologically by day
     for path in files {
         let text = fs::read_to_string(&path)?;
         for line in text.lines().filter(|l| !l.trim().is_empty()) {
@@ -191,7 +194,6 @@ pub fn read_recent(store: &FsStore) -> io::Result<Vec<ActivityEvent>> {
             }
         }
     }
-    events.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(events)
 }
 
@@ -236,7 +238,7 @@ pub fn timeline(store: &FsStore, filter: &TimelineFilter) -> io::Result<Vec<Acti
                 .is_none_or(|m| rank(e.importance) >= rank(m))
         })
         .collect();
-    // Already sorted by id (chronological) from read_recent; cap keeps the most RECENT N.
+    // Already in recording order from read_recent; cap keeps the most RECENT N (the tail).
     if let Some(n) = filter.limit {
         if events.len() > n {
             events.drain(..events.len() - n);
@@ -389,9 +391,26 @@ mod tests {
     }
 
     #[test]
-    fn record_read_round_trips_sorted_and_gitignores() {
+    fn record_read_round_trips_in_append_order_and_gitignores() {
         let (_d, store) = store();
-        // Write out of order across two days; read comes back id-sorted (chronological).
+        // Append same-day events whose ids DESCEND (01Z then 01A) plus a later day. Read must
+        // come back in APPEND order (01Z, 01A, then the next day) — NOT id-sorted — since
+        // append order is the true chronological order for a live stream.
+        record(
+            &store,
+            &ev("01Z", "2026-08-19", ActivityKind::TurnStart, Value::Null),
+        )
+        .unwrap();
+        record(
+            &store,
+            &ev(
+                "01A",
+                "2026-08-19",
+                ActivityKind::Edit,
+                json!({"path": "a"}),
+            ),
+        )
+        .unwrap();
         record(
             &store,
             &ev(
@@ -402,26 +421,12 @@ mod tests {
             ),
         )
         .unwrap();
-        record(
-            &store,
-            &ev("01A", "2026-08-19", ActivityKind::TurnStart, Value::Null),
-        )
-        .unwrap();
-        record(
-            &store,
-            &ev(
-                "01B",
-                "2026-08-19",
-                ActivityKind::Edit,
-                json!({"path": "a"}),
-            ),
-        )
-        .unwrap();
 
         let all = read_recent(&store).unwrap();
         assert_eq!(
             all.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
-            ["01A", "01B", "01C"]
+            ["01Z", "01A", "01C"],
+            "events come back in append (recording) order, not sorted by id"
         );
         // Both day files exist and the dir is gitignored.
         assert!(
