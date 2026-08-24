@@ -1278,8 +1278,55 @@ async fn attach_terminal(
     ws.on_upgrade(move |socket| terminal_attach_loop(socket, term))
 }
 
-/// Drive one attached viewer: replay scrollback, then interleave live output → socket and
-/// socket input → PTY on one task via `select!` (no socket split needed).
+fn default_true() -> bool {
+    true
+}
+
+/// An inbound control message on the terminal WS (a Text frame). Today: a **size claim**
+/// (HS2-BD7Q74). A Text frame that doesn't parse as control is treated as raw PTY input, so a
+/// simple client can type over the same socket (Binary is always input).
+#[derive(Deserialize)]
+struct TermControl {
+    #[serde(default)]
+    resize: Option<ResizeClaim>,
+}
+
+/// A viewport's leased size claim (HS2-BD7Q74).
+#[derive(Deserialize)]
+struct ResizeClaim {
+    viewer_id: String,
+    cols: u16,
+    rows: u16,
+    #[serde(default)]
+    focus: bool,
+    #[serde(default = "default_true")]
+    visible: bool,
+}
+
+/// The size the server chose, pushed to every viewer when it changes.
+#[derive(Serialize)]
+struct SizeMsg<'a> {
+    pty_size: PtySizeMsg,
+    driven_by: Option<&'a str>,
+}
+#[derive(Serialize)]
+struct PtySizeMsg {
+    cols: u16,
+    rows: u16,
+}
+
+/// Monotonic-ish wall clock in ms for the size arbiter (real millis; the arbiter is
+/// deterministic given it).
+fn term_now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Drive one attached viewer: replay scrollback, then interleave live output → socket, the
+/// arbiter's size decisions → socket, and socket input/claims → PTY, on one task via
+/// `select!`. On disconnect the viewport's size claim is dropped so the size self-heals.
 async fn terminal_attach_loop(
     mut socket: WebSocket,
     term: std::sync::Arc<hotsheet_terminals::Terminal>,
@@ -1289,6 +1336,9 @@ async fn terminal_attach_loop(
     // Subscribe BEFORE snapshotting so no chunk is lost between the snapshot and the stream
     // (a small overlap of already-seen bytes is harmless — the terminal renders it fine).
     let mut rx = term.subscribe();
+    let mut size_rx = term.subscribe_size();
+    let mut my_viewer: Option<String> = None;
+
     let snapshot = term.scrollback();
     if !snapshot.is_empty() && socket.send(Message::Binary(snapshot.into())).await.is_err() {
         return;
@@ -1311,14 +1361,55 @@ async fn terminal_attach_loop(
                 }
                 Err(RecvError::Closed) => break, // terminal ended
             },
+            size = size_rx.recv() => match size {
+                Ok(d) => {
+                    let msg = SizeMsg {
+                        pty_size: PtySizeMsg { cols: d.cols, rows: d.rows },
+                        driven_by: d.driven_by.as_deref(),
+                    };
+                    if let Ok(txt) = serde_json::to_string(&msg) {
+                        if socket.send(Message::Text(txt.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+                Err(RecvError::Lagged(_)) => {} // a missed size update self-corrects on the next claim
+                Err(RecvError::Closed) => break,
+            },
             inbound = socket.recv() => match inbound {
                 Some(Ok(Message::Binary(b))) => { let _ = term.write(&b); }
-                Some(Ok(Message::Text(t))) => { let _ = term.write(t.as_bytes()); }
+                Some(Ok(Message::Text(t))) => {
+                    match serde_json::from_str::<TermControl>(&t) {
+                        // A size claim: feed the arbiter (it resizes + broadcasts if the size changed).
+                        Ok(TermControl { resize: Some(r) }) => {
+                            my_viewer = Some(r.viewer_id.clone());
+                            let now = term_now_ms();
+                            term.claim_size(
+                                hotsheet_terminals::ViewportClaim {
+                                    viewer_id: r.viewer_id,
+                                    cols: r.cols,
+                                    rows: r.rows,
+                                    focus: r.focus,
+                                    visible: r.visible,
+                                    activity_at_ms: now,
+                                },
+                                now,
+                            );
+                        }
+                        // Not a control message → raw PTY input.
+                        _ => { let _ = term.write(t.as_bytes()); }
+                    }
+                }
                 Some(Ok(Message::Close(_))) | None => break,
                 Some(Ok(_)) => {} // ping/pong handled by axum
                 Some(Err(_)) => break,
             },
         }
+    }
+
+    // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
+    if let Some(v) = my_viewer {
+        term.drop_viewer(&v, term_now_ms());
     }
 }
 

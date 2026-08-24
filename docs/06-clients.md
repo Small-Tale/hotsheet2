@@ -107,9 +107,14 @@ the floor lands.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 
-> **Status: design — thinking it through before building** (maintainer, 2026-08-19).
-> Build: **HS2-62**. This is the cross-device generalization of HS1's terminal
-> "borrow-stack" (docs/54), which worked locally but was never designed for remotes.
+> **Status: the server-side arbiter is built (HS2-BD7Q74).** The cross-device
+> generalization of HS1's terminal "borrow-stack" (docs/54), which worked locally but was
+> never designed for remotes. `hotsheet-terminals::SizeArbiter` implements the model below —
+> leased viewport claims, focus-follows (default) + smallest/largest/pinned, the
+> `SIZE_FOCUS_HOLD`/`MIN_DELTA`/`RESIZE_MIN_INTERVAL` guards, and disconnect self-heal — wired
+> into the WS attach (Text `{resize}` claims in, `{pty_size, driven_by}` decisions out). The
+> **client-side** viewport rendering (§6.7.4 letterbox/scale-to-fit, "tap to resize") lands
+> with the client work.
 
 ### 6.7.1 The fundamental constraint
 

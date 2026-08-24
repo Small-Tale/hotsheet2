@@ -17,6 +17,7 @@ use tokio::sync::broadcast;
 use crate::busy::{Activity, BusyDetector};
 use crate::env::scrub_env;
 use crate::osc::{OscScanner, TermState};
+use crate::sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
 
 /// How much recent PTY output to retain for a re-attaching viewer.
 pub const SCROLLBACK_BYTES: usize = 256 * 1024;
@@ -102,6 +103,11 @@ pub struct Terminal {
     /// Live output fan-out: every drained chunk is broadcast so a WS viewer streams new bytes
     /// as they arrive (after replaying the scrollback snapshot). HS2-XTTTMV.
     output_tx: broadcast::Sender<Vec<u8>>,
+    /// Multi-viewer size arbiter — reconciles every attached viewport's size claim into one
+    /// PTY size (HS2-BD7Q74). Shared across all viewers of this terminal.
+    sizer: Arc<Mutex<SizeArbiter>>,
+    /// Broadcasts the arbiter's chosen size to every attached viewer when it changes.
+    size_tx: broadcast::Sender<Decision>,
 }
 
 impl Terminal {
@@ -171,6 +177,9 @@ impl Terminal {
             }
         });
 
+        // Seed the arbiter with the spawn size so a lone viewer's first claim has a baseline.
+        let mut sizer = SizeArbiter::default();
+        sizer.set_applied(spec.cols, spec.rows);
         Ok(Terminal {
             master: Mutex::new(pair.master),
             child: Mutex::new(child),
@@ -179,7 +188,51 @@ impl Terminal {
             busy,
             osc,
             output_tx,
+            sizer: Arc::new(Mutex::new(sizer)),
+            size_tx: broadcast::channel(OUTPUT_CHANNEL_CAP).0,
         })
+    }
+
+    /// A viewport's size claim (HS2-BD7Q74): update the arbiter and, if the reconciled size
+    /// changed, resize the PTY and broadcast the decision to all viewers. Returns the decision
+    /// when a resize happened. `now_ms` is the injected clock (real millis from the caller).
+    pub fn claim_size(&self, claim: ViewportClaim, now_ms: u64) -> Option<Decision> {
+        let decision = {
+            let mut s = self.sizer.lock().ok()?;
+            s.upsert(claim, now_ms);
+            s.decide(now_ms)
+        };
+        self.apply_size(decision)
+    }
+
+    /// A viewport disconnected: drop its claim and recompute (self-heal).
+    pub fn drop_viewer(&self, viewer_id: &str, now_ms: u64) -> Option<Decision> {
+        let decision = {
+            let mut s = self.sizer.lock().ok()?;
+            s.remove(viewer_id);
+            s.decide(now_ms)
+        };
+        self.apply_size(decision)
+    }
+
+    /// Set the per-terminal sizing policy (focus-follows | smallest | largest | pinned).
+    pub fn set_size_policy(&self, policy: SizePolicy) {
+        if let Ok(mut s) = self.sizer.lock() {
+            s.set_policy(policy);
+        }
+    }
+
+    /// Subscribe to reconciled-size changes (each viewer forwards these to its client).
+    pub fn subscribe_size(&self) -> broadcast::Receiver<Decision> {
+        self.size_tx.subscribe()
+    }
+
+    fn apply_size(&self, decision: Option<Decision>) -> Option<Decision> {
+        if let Some(d) = &decision {
+            let _ = self.resize(d.rows, d.cols);
+            let _ = self.size_tx.send(d.clone());
+        }
+        decision
     }
 
     /// Subscribe to the live output stream — each drained PTY chunk, as it arrives. A viewer

@@ -6,20 +6,23 @@
 //! Built here: [`Terminal`] (one PTY session, with a live output fan-out via
 //! [`Terminal::subscribe`]), [`TerminalManager`] (lazy per-project terminals),
 //! [`BusyDetector`] + [`contains_spinner`], the [`OscScanner`] (OSC 7/8/9 cwd/hyperlink/
-//! progress → [`TermState`]), and env [`scrub_env`]. The server wires the HTTP routes
-//! (`/terminals` open/list, `/terminals/{id}` read/kill, `/terminals/{id}/input`) + the live
-//! WS attach (`/terminals/{id}/attach`) — HS2-A6R5QV/HS2-XTTTMV. Follow-ons: the **detached
-//! broker** (survive server restart), server-arbitrated **PTY sizing** (HS2-62), and feeding
-//! busy → the connection registry (HS2-4M67VN).
+//! progress → [`TermState`]), the multi-viewer [`SizeArbiter`] (server-arbitrated,
+//! focus-follows, leased — HS2-BD7Q74), and env [`scrub_env`]. The server wires the HTTP
+//! routes (`/terminals` open/list, `/terminals/{id}` read/kill, `/terminals/{id}/input`) + the
+//! live WS attach (`/terminals/{id}/attach`, which carries size claims + streams size
+//! decisions) — HS2-A6R5QV/HS2-XTTTMV/HS2-BD7Q74. Follow-ons: the **detached broker** (survive
+//! server restart), and feeding busy → the connection registry (HS2-4M67VN).
 
 pub mod busy;
 pub mod env;
 pub mod manager;
 pub mod osc;
+pub mod sizing;
 pub mod terminal;
 
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;
 pub use manager::{TermKey, TerminalManager};
 pub use osc::{OscScanner, TermState};
+pub use sizing::{Decision, SizeArbiter, SizePolicy, ViewportClaim};
 pub use terminal::{SCROLLBACK_BYTES, TermError, TermSpec, Terminal};
