@@ -12,6 +12,11 @@ rust-version.workspace = true
 name = "hotsheet-terminal-broker"
 path = "src/bin/broker.rs"
 
+# A deterministic PTY-byte emulator for terminal E2E tests (HS2-1GJY50).
+[[bin]]
+name = "hs-fake-agent"
+path = "src/bin/fake_agent.rs"
+
 [dependencies]
 portable-pty.workspace = true
 thiserror.workspace = true
