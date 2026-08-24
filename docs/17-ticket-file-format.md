@@ -73,17 +73,34 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 
 ## 17.3 Notes (the `## Notes` section)
 
-Each note is a block preceded by an HTML comment carrying its id + kind:
+Canonical files explicitly bound the Markdown body, the Notes container, and every
+note. This makes headings inside notes unambiguous and leaves a safe boundary for
+future top-level sections:
 
 ```markdown
+<!-- hotsheet:body:begin -->
+Ticket details can contain arbitrary Markdown, including a `## Notes` heading.
+<!-- hotsheet:body:end -->
+
+<!-- hotsheet:notes:begin -->
 ## Notes
 
-<!-- note: 01J9ZK4A0R… kind: regular -->
+<!-- hotsheet:note:begin 01J9ZK4A0R… kind: regular -->
 2026-08-19T15:20:44Z — Reproduced on macOS; root cause is the pre-theme paint.
+<!-- hotsheet:note:end -->
 
-<!-- note: 01J9ZK5B1S… kind: feedback_needed -->
+<!-- hotsheet:note:begin 01J9ZK5B1S… kind: feedback_needed -->
 2026-08-19T15:31:02Z — should the fix also cover the dashboard dedicated view?
+<!-- hotsheet:note:end -->
+<!-- hotsheet:notes:end -->
 ```
+
+The reader remains backward-compatible with schema-1 files that use `## Notes`
+followed by one-sided `<!-- note: … -->` markers through EOF. Every canonical write
+upgrades that layout to bounded blocks. A line of user-authored Markdown that looks
+like a reserved `<!-- hotsheet:… -->` marker is backslash-escaped on disk and restored
+on read. Content after `hotsheet:notes:end` is rejected by current readers rather
+than swallowed or discarded; a future schema can define such a section explicitly.
 
 | Note field | Type | Notes |
 |---|---|---|
@@ -100,6 +117,10 @@ Each note is a block preceded by an HTML comment carrying its id + kind:
   writes a key an older reader doesn't know — don't drop it).
 - **Field ordering** is canonical (stable key order) so diffs are clean and merges
   are predictable.
+- **Markdown boundaries are explicit and collision-safe:** details and shared note
+  text round-trip arbitrary Markdown; all other ticket strings are YAML scalars.
+  JSON API/MCP representations use normal JSON string escaping. Renderers must escape
+  raw HTML; the derived `worklist.md` also escapes Markdown syntax in ticket titles.
 - **Enums validated**; an invalid value degrades (kept as-is + a `status`-kind note)
   rather than panicking (fuzz target, [12](12-code-organization-and-testing.md) §12.7.2).
 - **`duplicate_of` presence** is tied to `close_reason == duplicate` (validation).

@@ -81,7 +81,7 @@ and don't imply reading order — read by group.
 |---|---|---|
 | [02-ticket-storage.md](02-ticket-storage.md) | Git-repo ticket format, multi-store projects, IDs, auto-merge, copy/move | Confirmed |
 | [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex, query surface | Confirmed |
-| [17-ticket-file-format.md](17-ticket-file-format.md) | Canonical frontmatter/notes field schema (parser SSOT) | Decided |
+| [17-ticket-file-format.md](17-ticket-file-format.md) | Canonical frontmatter plus bounded, collision-safe Markdown body/notes schema (parser SSOT; legacy reader retained) | Decided |
 
 **D · Services & clients**
 | Doc | Topic | Status |

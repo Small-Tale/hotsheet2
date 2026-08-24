@@ -67,23 +67,38 @@ pub enum ParseError {
     /// The frontmatter is not valid YAML, or a required field is missing/mistyped.
     #[error("invalid frontmatter: {0}")]
     Yaml(#[from] serde_yaml::Error),
+    /// A bounded canonical ticket has content after its notes container. A newer
+    /// schema may define such sections; this reader refuses to silently discard it.
+    #[error("unsupported content follows the bounded Notes section")]
+    TrailingContent,
 }
+
+const BODY_BEGIN: &str = "<!-- hotsheet:body:begin -->";
+const BODY_END: &str = "<!-- hotsheet:body:end -->";
+const NOTES_BEGIN: &str = "<!-- hotsheet:notes:begin -->";
+const NOTES_END: &str = "<!-- hotsheet:notes:end -->";
+const NOTE_BEGIN_PREFIX: &str = "<!-- hotsheet:note:begin ";
+const NOTE_END: &str = "<!-- hotsheet:note:end -->";
 
 /// Serialize a ticket to its canonical on-disk form.
 pub fn to_file_string(t: &Ticket) -> String {
     let frontmatter = frontmatter_to_string(t);
 
-    let mut out = String::with_capacity(frontmatter.len() + t.details.len() + 64);
+    let mut out = String::with_capacity(frontmatter.len() + t.details.len() + 160);
     out.push_str("---\n");
     out.push_str(&frontmatter); // serde_yaml output ends in '\n'
     out.push_str("---\n");
 
+    out.push('\n');
+    out.push_str(BODY_BEGIN);
+    out.push('\n');
     let details = t.details.trim();
     if !details.is_empty() {
-        out.push('\n');
-        out.push_str(details);
+        out.push_str(&escape_content(details));
         out.push('\n');
     }
+    out.push_str(BODY_END);
+    out.push('\n');
 
     // Skip local-only feedback drafts and content-less notes: an empty-text note
     // can't be distinguished from its own timestamp on re-parse, so it isn't a
@@ -136,9 +151,15 @@ pub fn parse_file(text: &str) -> Result<Ticket, ParseError> {
         }
     }
 
-    let (body, notes_section) = split_body_and_notes(after);
-    ticket.details = body;
-    ticket.notes = notes_section.map(parse_notes).unwrap_or_default();
+    if after.trim_start().starts_with(BODY_BEGIN) {
+        let (body, notes) = parse_bounded_content(after)?;
+        ticket.details = body;
+        ticket.notes = notes;
+    } else {
+        let (body, notes_section) = split_legacy_body_and_notes(after);
+        ticket.details = body;
+        ticket.notes = notes_section.map(parse_legacy_notes).unwrap_or_default();
+    }
 
     Ok(ticket)
 }
@@ -162,7 +183,7 @@ fn frontmatter_to_string(t: &Ticket) -> String {
 
 /// Split the post-frontmatter region into the trimmed body and an optional notes
 /// section (everything from a line that is exactly `## Notes`).
-fn split_body_and_notes(after: &str) -> (String, Option<&str>) {
+fn split_legacy_body_and_notes(after: &str) -> (String, Option<&str>) {
     match find_notes_header(after) {
         Some(idx) => (after[..idx].trim().to_string(), Some(&after[idx..])),
         None => (after.trim().to_string(), None),
@@ -180,7 +201,7 @@ fn find_notes_header(s: &str) -> Option<usize> {
     None
 }
 
-fn parse_notes(section: &str) -> Vec<Note> {
+fn parse_legacy_notes(section: &str) -> Vec<Note> {
     let body = section.strip_prefix("## Notes").unwrap_or(section);
     let lines: Vec<&str> = body.lines().collect();
 
@@ -240,9 +261,10 @@ fn build_note(id: Ulid, kind: NoteKind, block: &str) -> Option<Note> {
 }
 
 fn notes_to_string(notes: &[&Note]) -> String {
-    let mut out = String::from("## Notes\n");
+    let mut out = format!("{NOTES_BEGIN}\n## Notes\n");
     for n in notes {
-        out.push_str("\n<!-- note: ");
+        out.push('\n');
+        out.push_str(NOTE_BEGIN_PREFIX);
         out.push_str(&n.id.to_string());
         if n.kind != NoteKind::Regular {
             out.push_str(" kind: ");
@@ -250,15 +272,146 @@ fn notes_to_string(notes: &[&Note]) -> String {
         }
         out.push_str(" -->\n");
         if n.at.is_empty() {
-            out.push_str(&n.text);
+            out.push_str(&escape_content(&n.text));
         } else {
             out.push_str(n.at.as_str());
             out.push_str(" — ");
-            out.push_str(&n.text);
+            out.push_str(&escape_content(&n.text));
         }
         out.push('\n');
+        out.push_str(NOTE_END);
+        out.push('\n');
     }
+    out.push_str(NOTES_END);
+    out.push('\n');
     out
+}
+
+fn parse_bounded_content(after: &str) -> Result<(String, Vec<Note>), ParseError> {
+    let Some((_, body_and_rest)) = split_once_marker_line(after, BODY_BEGIN) else {
+        unreachable!("caller checked for the body marker")
+    };
+    let Some((body, rest)) = split_once_marker_line(body_and_rest, BODY_END) else {
+        return Err(ParseError::TrailingContent);
+    };
+    let details = unescape_content(body.trim());
+    let rest = rest.trim();
+    if rest.is_empty() {
+        return Ok((details, Vec::new()));
+    }
+    let Some((before_notes, notes_and_rest)) = split_once_marker_line(rest, NOTES_BEGIN) else {
+        return Err(ParseError::TrailingContent);
+    };
+    if !before_notes.trim().is_empty() {
+        return Err(ParseError::TrailingContent);
+    }
+    let Some((notes, trailing)) = split_once_marker_line(notes_and_rest, NOTES_END) else {
+        return Err(ParseError::TrailingContent);
+    };
+    if !trailing.trim().is_empty() {
+        return Err(ParseError::TrailingContent);
+    }
+    Ok((details, parse_bounded_notes(notes)))
+}
+
+fn parse_bounded_notes(section: &str) -> Vec<Note> {
+    let section = section.trim().strip_prefix("## Notes").unwrap_or(section);
+    let mut notes = Vec::new();
+    let mut rest = section;
+    while let Some((_, marker, content)) = split_once_prefixed_marker_line(rest, NOTE_BEGIN_PREFIX)
+    {
+        let Some(metadata) = marker
+            .strip_prefix(NOTE_BEGIN_PREFIX)
+            .and_then(|value| value.strip_suffix("-->"))
+        else {
+            break;
+        };
+        let Some((block, after_end)) = split_once_marker_line(content, NOTE_END) else {
+            break;
+        };
+        if let Some((id, kind)) = parse_bounded_note_metadata(metadata.trim()) {
+            if let Some(mut note) = build_note(id, kind, block.trim()) {
+                note.text = unescape_content(&note.text);
+                notes.push(note);
+            }
+        }
+        rest = after_end;
+    }
+    notes
+}
+
+fn split_once_marker_line<'a>(text: &'a str, marker: &str) -> Option<(&'a str, &'a str)> {
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        let bare = line.strip_suffix('\n').unwrap_or(line);
+        if bare == marker {
+            return Some((&text[..offset], &text[offset + line.len()..]));
+        }
+        offset += line.len();
+    }
+    None
+}
+
+fn split_once_prefixed_marker_line<'a>(
+    text: &'a str,
+    prefix: &str,
+) -> Option<(&'a str, &'a str, &'a str)> {
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        let bare = line.strip_suffix('\n').unwrap_or(line);
+        if bare.starts_with(prefix) {
+            return Some((&text[..offset], bare, &text[offset + line.len()..]));
+        }
+        offset += line.len();
+    }
+    None
+}
+
+fn parse_bounded_note_metadata(metadata: &str) -> Option<(Ulid, NoteKind)> {
+    let mut tokens = metadata.split_whitespace();
+    let id = Ulid::from_string(tokens.next()?).ok()?;
+    let rest: Vec<&str> = tokens.collect();
+    let kind = rest
+        .iter()
+        .position(|token| *token == "kind:")
+        .and_then(|pos| rest.get(pos + 1))
+        .map_or(NoteKind::Regular, |kind| parse_note_kind(kind));
+    Some((id, kind))
+}
+
+/// Prefix structural-looking user lines with one backslash. Existing leading
+/// backslashes are doubled, making the transform exact and reversible.
+fn escape_content(content: &str) -> String {
+    content
+        .lines()
+        .map(|line| {
+            let bare = line.trim_start_matches('\\');
+            if bare.starts_with("<!-- hotsheet:") {
+                format!("\\{line}")
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn unescape_content(content: &str) -> String {
+    content
+        .lines()
+        .map(|line| {
+            let without_one = line.strip_prefix('\\').unwrap_or(line);
+            if without_one
+                .trim_start_matches('\\')
+                .starts_with("<!-- hotsheet:")
+            {
+                without_one
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn note_kind_str(kind: NoteKind) -> &'static str {
@@ -337,10 +490,18 @@ mod tests {
     fn serialized_form_is_shaped_as_expected() {
         let text = to_file_string(&sample());
         assert!(text.starts_with("---\nid: 01ARZ3NDEKTSV4RRFFQ69G5FAV\n"));
-        assert!(text.contains("\n---\n\nThe dashboard flashes white"));
+        assert!(text.contains(&format!(
+            "\n---\n\n{BODY_BEGIN}\nThe dashboard flashes white"
+        )));
+        assert!(text.contains(BODY_END));
+        assert!(text.contains(NOTES_BEGIN));
         assert!(text.contains("\n## Notes\n"));
-        assert!(text.contains("<!-- note: 01ARZ3NDEKTSV4RRFFQ69G5FB0 -->"));
-        assert!(text.contains("<!-- note: 01ARZ3NDEKTSV4RRFFQ69G5FB1 kind: feedback_needed -->"));
+        assert!(text.contains("<!-- hotsheet:note:begin 01ARZ3NDEKTSV4RRFFQ69G5FB0 -->"));
+        assert!(text.contains(
+            "<!-- hotsheet:note:begin 01ARZ3NDEKTSV4RRFFQ69G5FB1 kind: feedback_needed -->"
+        ));
+        assert!(text.contains(NOTE_END));
+        assert!(text.contains(NOTES_END));
         // Regular notes omit the kind marker.
         assert!(!text.contains("kind: regular"));
     }
@@ -454,6 +615,46 @@ mod tests {
         ));
         assert!(parse_file("---\n[]\n---\n").is_err()); // sequence, not a mapping
         assert!(parse_file("---\ntitle: t\n---\n").is_err()); // missing required id
+    }
+
+    #[test]
+    fn arbitrary_markdown_and_structural_lookalikes_round_trip() {
+        let mut t = sample();
+        t.details = format!(
+            "# Details\n\n## Notes\n\n{BODY_END}\n\\{NOTES_BEGIN}\n<script>alert('x')</script>"
+        );
+        t.notes[0].text = format!(
+            "this is my note\n\n# What about this\n\n{NOTE_END}\n{NOTES_END}\n\\{BODY_END}"
+        );
+
+        let encoded = to_file_string(&t);
+        assert!(encoded.contains(&format!("\\{BODY_END}")));
+        assert!(encoded.contains(&format!("\\{NOTE_END}")));
+        assert_eq!(parse_file(&encoded).unwrap(), t);
+    }
+
+    #[test]
+    fn bounded_notes_reject_a_later_unknown_section_instead_of_swallowing_it() {
+        let mut encoded = to_file_string(&sample());
+        encoded.push_str("\n## Future section\nkeep me\n");
+        assert!(matches!(
+            parse_file(&encoded),
+            Err(ParseError::TrailingContent)
+        ));
+    }
+
+    #[test]
+    fn legacy_one_sided_notes_remain_readable() {
+        let encoded = to_file_string(&sample());
+        let frontmatter_end = encoded.find("\n---\n").unwrap() + 5;
+        let legacy = format!(
+            "{}\nlegacy details\n\n## Notes\n\n<!-- note: 01ARZ3NDEKTSV4RRFFQ69G5FB0 -->\n2026-08-19T15:20:44Z — legacy note\n",
+            &encoded[..frontmatter_end]
+        );
+        let parsed = parse_file(&legacy).unwrap();
+        assert_eq!(parsed.details, "legacy details");
+        assert_eq!(parsed.notes[0].text, "legacy note");
+        assert!(to_file_string(&parsed).contains(NOTES_END));
     }
 
     #[test]

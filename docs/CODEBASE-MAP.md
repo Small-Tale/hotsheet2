@@ -31,7 +31,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/ids.rs             #   Ulid re-export + derive_slug (FNV-1a -> Crockford)
       src/ticket.rs          #   Ticket/Note/ReviewRequest/ExternalLink; Ticket::new
       src/timestamp.rs       #   Timestamp: lenient RFC3339 (raw text + parsed instant)
-      src/format.rs          #   parse_file / to_file_string (YAML frontmatter + body + notes)
+      src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + notes; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
       src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
@@ -164,8 +164,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 
 ## Data / formats
 
-- **Ticket file:** `tickets/<2-char shard>/<ULID>.md` — YAML frontmatter + Markdown
-  body (`details`) + optional `## Notes`. Schema: [17](17-ticket-file-format.md).
+- **Ticket file:** `tickets/<2-char shard>/<ULID>.md` — YAML frontmatter + explicitly
+  bounded, collision-escaped Markdown body (`details`) and notes; legacy one-sided
+  note files remain readable. Schema: [17](17-ticket-file-format.md).
 - **Store metadata:** `hotsheet-store.json` (camelCase: `schemaVersion`,
   `ticketPrefix`, `idStrategy`, `shard`). See `store.rs::StoreMetadata`.
 - **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`

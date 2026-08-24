@@ -64,10 +64,31 @@ fn line(t: &Ticket) -> String {
     format!(
         "- [{}] {} · {} · {}\n",
         t.slug,
-        t.title,
+        escape_inline_markdown(&t.title),
         priority_label(t.priority),
         status_label(t.status),
     )
+}
+
+/// Render user-authored text as one inert Markdown line. The ticket itself retains
+/// the exact title; only this derived Markdown projection is escaped.
+fn escape_inline_markdown(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '\n' | '\r' => out.push(' '),
+            '\\' | '`' | '*' | '_' | '{' | '}' | '[' | ']' | '(' | ')' | '#' | '+' | '-' | '.'
+            | '!' | '|' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
 }
 
 fn priority_label(p: Priority) -> &'static str {
@@ -247,5 +268,22 @@ mod tests {
         regenerate(&store).unwrap();
         let gi2 = std::fs::read_to_string(store.root().join(".gitignore")).unwrap();
         assert_eq!(gi2.lines().filter(|l| l.trim() == WORKLIST_FILE).count(), 1);
+    }
+
+    #[test]
+    fn render_escapes_user_authored_titles() {
+        let mut ticket = Ticket::new(
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5EEF").unwrap(),
+            "HS-SAFE",
+            "[link](javascript:x) <script>\n# heading",
+            "bug",
+            ts("0"),
+            ts("0"),
+        );
+        ticket.up_next = true;
+        let rendered = render(&[ticket]);
+        assert!(rendered.contains("\\[link\\]\\(javascript:x\\) &lt;script&gt; \\# heading"));
+        assert!(!rendered.contains("<script>"));
+        assert!(!rendered.contains("[link](javascript:x)"));
     }
 }

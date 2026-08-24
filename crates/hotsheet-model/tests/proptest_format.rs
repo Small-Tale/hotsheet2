@@ -4,11 +4,9 @@
 //!  2. **byte-idempotent** re-serialize
 //!  3. **never panics** on arbitrary input.
 //!
-//! Generation stays inside the format's canonical domain (the documented
-//! invariants): timestamps are valid RFC3339; the Markdown body has no `## Notes`
-//! line; note markers/text don't collide with the `<!-- note: … -->` syntax; and
-//! `feedback_draft` notes (which are intentionally *not* written to the shared file)
-//! are excluded. The no-panic test covers everything outside that domain.
+//! Generation includes multiline Markdown and structural-looking lines. Canonical
+//! writers escape those lines before placing them inside explicit bounded blocks.
+//! `feedback_draft` notes remain excluded because they are intentionally local-only.
 
 use hotsheet_model::{
     CloseReason, ExternalLink, Note, NoteKind, Priority, ReviewKind, ReviewRequest, Status, Ticket,
@@ -24,10 +22,12 @@ fn scalar() -> impl Strategy<Value = String> {
     "[a-zA-Z0-9 ._/@:-]{0,24}".prop_map(|s| s.trim().to_string())
 }
 
-/// The Markdown body: multi-line allowed, but no `#` (so it can't contain a
-/// `## Notes` line) and trimmed (the format trims the body).
+/// Multiline Markdown, including headings and HTML-ish punctuation.
 fn body() -> impl Strategy<Value = String> {
-    "[a-zA-Z0-9 ._/@:\n-]{0,60}".prop_map(|s| s.trim().to_string())
+    prop_oneof![
+        "[ -~\n]{0,100}".prop_map(|s| s.trim().to_string()),
+        Just("## Notes\n<!-- hotsheet:body:end -->".to_string()),
+    ]
 }
 
 fn arb_ts() -> impl Strategy<Value = Timestamp> {
@@ -103,16 +103,18 @@ fn arb_shared_note_kind() -> impl Strategy<Value = NoteKind> {
 }
 
 fn arb_note() -> impl Strategy<Value = Note> {
-    // Note text is a note's *content*, so it's non-empty (guaranteed even after trim
-    // by a non-space first char), single-line, and free of the `—`/`<` characters
-    // that would collide with the `<timestamp> — text` / `<!-- note: … -->` syntax.
+    // Note text is non-empty after trimming, but otherwise permits multiline Markdown
+    // and canonical marker lookalikes.
     // An empty-text note has no round-trip meaning and isn't written to the file
     // (see `format::tests::empty_text_notes_are_omitted`).
     (
         arb_ulid(),
         arb_shared_note_kind(),
         arb_ts(),
-        "[a-zA-Z0-9._/@:-][a-zA-Z0-9 ._/@:-]{0,39}",
+        prop_oneof![
+            "[!-~][ -~\n]{0,80}".prop_map(|s| s.trim().to_string()),
+            Just("# heading\n<!-- hotsheet:note:end -->\n## later".to_string()),
+        ],
     )
         .prop_map(|(id, kind, at, text)| Note {
             id,
