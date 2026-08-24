@@ -12,7 +12,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::{Plugin, all_plugins, default_dirs, find};
+use crate::{Plugin, all_plugins, default_dirs};
 
 /// What one tool's setup wrote (project-relative paths), for reporting.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -54,9 +54,32 @@ pub fn run_setup(
     detect: bool,
     enabled: Option<&HashSet<String>>,
 ) -> Result<Vec<SetupReport>, SetupError> {
+    run_setup_in(
+        store_path,
+        project_dir,
+        tool,
+        detect,
+        enabled,
+        &default_dirs(),
+    )
+}
+
+/// [`run_setup`] with an explicit plugin search path, used by hosts that keep a stable
+/// registry and by hermetic integration tests.
+pub fn run_setup_in(
+    store_path: &Path,
+    project_dir: &Path,
+    tool: Option<&str>,
+    detect: bool,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[std::path::PathBuf],
+) -> Result<Vec<SetupReport>, SetupError> {
     let plugins: Vec<Plugin> = match (tool, detect) {
-        (Some(id), _) => vec![find(id).ok_or_else(|| SetupError::UnknownTool(id.to_string()))?],
-        (None, true) => all_plugins(&default_dirs())
+        (Some(id), _) => vec![
+            crate::find_in(id, plugin_dirs)
+                .ok_or_else(|| SetupError::UnknownTool(id.to_string()))?,
+        ],
+        (None, true) => all_plugins(plugin_dirs)
             .into_iter()
             .filter(is_detected)
             .filter(|p| enabled.is_none_or(|set| set.contains(p.id())))

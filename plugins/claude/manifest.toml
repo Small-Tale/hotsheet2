@@ -43,6 +43,11 @@ args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]
 content = "stdin"
 interrupt = false
 
+[launch]
+# Interactive REPL; intentionally not the headless stream-json drive command above.
+program = "claude"
+args = []
+
 [metrics]
 # Claude reports token usage on its stream-json `result` event; the host maps it to a
 # UsageEvent (docs/14, HS2-TJ8FGR). `source` selects the `claude_result_usage` parser.

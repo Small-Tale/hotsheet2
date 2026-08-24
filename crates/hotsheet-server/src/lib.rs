@@ -93,6 +93,8 @@ pub struct AppState {
     /// When set (opt-in), terminals live in a **detached broker** process so they survive a
     /// server restart (HS2-ERT00F); the `/terminals` request/response ops route through it.
     terminal_broker: Option<terminal_broker::TerminalBroker>,
+    /// Search roots for third-party plugins; embedded first-party plugins are always present.
+    plugin_dirs: Arc<Vec<std::path::PathBuf>>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -159,6 +161,7 @@ impl AppState {
             ))),
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
+            plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
         }
     }
 
@@ -236,6 +239,12 @@ impl AppState {
     /// Point terminal ops at an explicit already-running broker (tests).
     pub fn with_terminal_broker_at(mut self, broker: terminal_broker::TerminalBroker) -> Self {
         self.terminal_broker = Some(broker);
+        self
+    }
+
+    /// Override plugin search roots (for hermetic hosts and integration tests).
+    pub fn with_plugin_dirs(mut self, dirs: Vec<std::path::PathBuf>) -> Self {
+        self.plugin_dirs = Arc::new(dirs);
         self
     }
 
@@ -1150,7 +1159,7 @@ fn now_ms() -> u64 {
 #[derive(Deserialize)]
 struct OpenTerminalReq {
     /// The program to spawn (e.g. `bash`, `codex`).
-    command: String,
+    command: Option<String>,
     #[serde(default)]
     args: Vec<String>,
     /// Working directory (defaults to the served store root).
@@ -1230,6 +1239,7 @@ async fn open_terminal(
     State(state): State<AppState>,
     Json(req): Json<OpenTerminalReq>,
 ) -> Result<Json<TerminalInfo>, ApiError> {
+    let launch = terminal_launch(&state, &req)?;
     let id = req.id.unwrap_or_else(|| Ulid::new().to_string());
 
     // Broker mode: the PTY lives in the detached broker (survives a server restart).
@@ -1244,9 +1254,10 @@ async fn open_terminal(
         let resp = tb
             .call(hotsheet_terminals::BrokerRequest::Open {
                 id: id.clone(),
-                command: req.command,
-                args: req.args,
+                command: launch.command,
+                args: launch.args,
                 cwd: req.cwd,
+                env: launch.env,
             })
             .await
             .map_err(|e| {
@@ -1266,14 +1277,14 @@ async fn open_terminal(
 
     let newly_spawned = state.terminals.get(&term_key(&state, &id)).is_none();
     let spec = hotsheet_terminals::TermSpec {
-        command: req.command,
-        args: req.args,
+        command: launch.command,
+        args: launch.args,
         cwd: Some(
             req.cwd
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| state.store.root().to_path_buf()),
         ),
-        env: Vec::new(),
+        env: launch.env,
         rows: 24,
         cols: 80,
     };
@@ -1288,6 +1299,60 @@ async fn open_terminal(
         register_terminal_connection(&state, &id, tool, term.clone());
     }
     Ok(Json(term_info(&term, &id)))
+}
+
+/// Compose either the caller's explicit command or a plugin-declared interactive launch.
+/// Connect-only launch performs setup first so MCP/instructions/hooks exist before the tool
+/// starts, resolves the program without a shell, and injects this server's permission route.
+struct PreparedTerminalLaunch {
+    command: String,
+    args: Vec<String>,
+    env: Vec<(String, String)>,
+}
+
+fn terminal_launch(
+    state: &AppState,
+    req: &OpenTerminalReq,
+) -> Result<PreparedTerminalLaunch, ApiError> {
+    if let Some(command) = &req.command {
+        return Ok(PreparedTerminalLaunch {
+            command: command.clone(),
+            args: req.args.clone(),
+            env: Vec::new(),
+        });
+    }
+    let tool = req.connect.as_deref().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "command is required unless connect names a plugin with an interactive launch",
+        )
+    })?;
+    let root = state.store.root();
+    hotsheet_aitools::launch_safety::assert_no_hs1(root)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    hotsheet_plugins::run_setup_in(root, root, Some(tool), false, None, &state.plugin_dirs)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let plugin = hotsheet_plugins::find_in(tool, &state.plugin_dirs)
+        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, format!("unknown tool '{tool}'")))?;
+    let launch = plugin.manifest.launch.as_ref().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("plugin '{tool}' does not declare an interactive launch"),
+        )
+    })?;
+    let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let mut env = vec![("HOTSHEET_SECRET".to_string(), state.secret.clone())];
+    if let Ok(instance) = state.instance.lock()
+        && let Some(instance) = instance.as_ref()
+    {
+        env.push(("HOTSHEET_SERVER".to_string(), instance.url.clone()));
+    }
+    Ok(PreparedTerminalLaunch {
+        command: program.to_string_lossy().into_owned(),
+        args: launch.args.clone(),
+        env,
+    })
 }
 
 /// Register a launched-in-terminal tool as a `Pty` connection on the shared registry and
@@ -1998,8 +2063,15 @@ async fn setup_tool(
     Path(tool): Path<String>,
 ) -> Result<Json<Vec<hotsheet_plugins::SetupReport>>, ApiError> {
     let store = state.store.root().to_path_buf();
-    let reports = hotsheet_plugins::run_setup(&store, &store, Some(&tool), false, None)
-        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    let reports = hotsheet_plugins::run_setup_in(
+        &store,
+        &store,
+        Some(&tool),
+        false,
+        None,
+        &state.plugin_dirs,
+    )
+    .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     Ok(Json(reports))
 }
 

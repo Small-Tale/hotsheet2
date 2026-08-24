@@ -35,3 +35,7 @@ args = ["--print"]
 content = "arg"
 interrupt = true
 resume_flag = "--conversation"
+
+[launch]
+program = "agy"
+args = []

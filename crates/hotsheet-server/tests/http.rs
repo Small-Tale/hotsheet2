@@ -1519,6 +1519,90 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
     );
 }
 
+#[tokio::test]
+async fn terminal_requires_a_command_or_a_connect_only_plugin_launch() {
+    let (_d, st) = state();
+    let resp = app(st)
+        .oneshot(authed("POST", "/terminals", Some(r#"{"id":"empty"}"#)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body = String::from_utf8(
+        resp.into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(body.contains("command is required"), "{body}");
+}
+
+#[tokio::test]
+async fn connect_only_terminal_runs_setup_and_the_interactive_manifest_launch() {
+    let (store_dir, st) = state();
+    let plugins = tempfile::tempdir().unwrap();
+    let fake = plugins.path().join("fake-interactive");
+    std::fs::create_dir(&fake).unwrap();
+    std::fs::write(fake.join("instructions.md"), "Fake setup marker\n").unwrap();
+    std::fs::write(
+        fake.join("manifest.toml"),
+        r#"
+id = "fake-interactive"
+display_name = "Fake"
+product_name = "Fake Interactive"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+[launch]
+program = "/bin/sh"
+args = ["-c", "printf 'auto-launched:%s' \"$HOTSHEET_SECRET\""]
+"#,
+    )
+    .unwrap();
+    let app = app(st.with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"connect":"fake-interactive","id":"auto"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(store_dir.path().join("AGENTS.md").is_file());
+    assert!(store_dir.path().join(".mcp.json").is_file());
+
+    let mut output = String::new();
+    for _ in 0..30 {
+        let terminal = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/terminals/auto", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        output = terminal["scrollback"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        if output.contains("auto-launched:test-secret") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(output.contains("auto-launched:test-secret"), "{output}");
+}
+
 /// The `connect` busy feed must also work when the terminal lives in the **detached broker**
 /// (HS2-ERT00F item 5): the server can't read an in-process `Terminal`, so it polls the broker
 /// over the socket for busy/idle and mirrors it into the connection registry.

@@ -39,6 +39,11 @@ args = ["app-server"]
 content = "arg"
 interrupt = true
 
+[launch]
+# Interactive REPL; intentionally not the headless app-server drive command above.
+program = "codex"
+args = []
+
 [metrics]
 # Codex reports token usage on its `turn/completed` notification; the host maps it to a
 # UsageEvent (docs/14, HS2-8PSAFE). `source` selects the `codex_turn_usage` parser.

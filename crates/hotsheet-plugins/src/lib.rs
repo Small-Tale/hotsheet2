@@ -22,7 +22,7 @@ use include_dir::{Dir, include_dir};
 use serde::Deserialize;
 
 pub mod setup;
-pub use setup::{SetupError, SetupReport, mcp_command, run_setup};
+pub use setup::{SetupError, SetupReport, mcp_command, run_setup, run_setup_in};
 
 /// The bundled first-party plugins, embedded from the repo's `plugins/` tree at build
 /// time. Adding a first-party tool = adding a directory here.
@@ -78,6 +78,10 @@ pub struct Manifest {
     /// behavioral host (`hotsheet-aitools`) maps it to a `Drive`.
     #[serde(default)]
     pub drive: Option<DriveSpec>,
+    /// Optional interactive terminal launch. This is deliberately distinct from `drive`:
+    /// headless protocol arguments such as `app-server` or stream-json are not a user's REPL.
+    #[serde(default)]
+    pub launch: Option<LaunchSpec>,
     /// Optional: the tool emits usage/cost **telemetry** the host maps to `UsageEvent`s
     /// (`docs/14`, HS2-8PSAFE). Absent = no metrics captured for this tool (absence is the
     /// signal). Names the tool's native telemetry `source` so the host picks the right mapper.
@@ -94,6 +98,14 @@ pub struct Manifest {
     /// the native `source` so the host picks the right activity mapper.
     #[serde(default)]
     pub activity: Option<ActivitySpec>,
+}
+
+/// How to start the tool for a human-facing interactive terminal.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LaunchSpec {
+    pub program: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 /// A tool's activity-capability declaration (`docs/15` §15.3). Declarative — the behavioral

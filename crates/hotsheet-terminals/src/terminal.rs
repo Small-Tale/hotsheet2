@@ -128,14 +128,16 @@ impl Terminal {
         if let Some(cwd) = &spec.cwd {
             cmd.cwd(cwd);
         }
-        // Inherit the parent env, apply the spec's overrides, then scrub tool-marker vars —
-        // so the child gets PATH etc. but never Hot Sheet's own leak-prone markers.
-        let mut merged: std::collections::BTreeMap<String, String> = std::env::vars().collect();
+        // Scrub ambient tool markers first, then apply explicit spec variables. This prevents
+        // accidental parent leakage while allowing the server to deliberately route a
+        // launched tool back to its permission API with HOTSHEET_SERVER/HOTSHEET_SECRET.
+        let mut merged: std::collections::BTreeMap<String, String> =
+            scrub_env(std::env::vars()).into_iter().collect();
         for (k, v) in &spec.env {
             merged.insert(k.clone(), v.clone());
         }
         cmd.env_clear();
-        for (k, v) in scrub_env(merged) {
+        for (k, v) in merged {
             cmd.env(k, v);
         }
 

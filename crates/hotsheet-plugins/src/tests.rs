@@ -49,6 +49,9 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert_eq!(drive.program, "codex");
     assert_eq!(drive.args, vec!["app-server".to_string()]);
     assert!(drive.interrupt);
+    let launch = p.manifest.launch.as_ref().expect("codex declares a launch");
+    assert_eq!(launch.program, "codex");
+    assert!(launch.args.is_empty());
 
     // Codex opts into the metrics capability (docs/14, HS2-8PSAFE): it reports usage the
     // host maps via the `codex-usage` source.
@@ -73,6 +76,15 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
         .expect("claude declares a channel drive");
     assert_eq!(cd.transport, "claude-channel");
     assert!(!cd.interrupt, "no channel interrupt in phase 1");
+    assert_eq!(
+        find_in("claude", &[])
+            .unwrap()
+            .manifest
+            .launch
+            .expect("claude declares a launch")
+            .program,
+        "claude"
+    );
 }
 
 #[test]

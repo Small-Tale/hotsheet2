@@ -280,6 +280,26 @@ fn first_dir_with_executable(path: &str, name: &str) -> Option<PathBuf> {
         .find(|dir| is_executable_file(&dir.join(name)))
 }
 
+/// Resolve a manifest-declared program to an executable absolute path without invoking a
+/// shell. Absolute paths are accepted directly; relative paths containing separators are
+/// rejected so a project cannot substitute its own executable implicitly.
+pub fn resolve_program(program: &str) -> Result<PathBuf> {
+    let candidate = Path::new(program);
+    if candidate.is_absolute() {
+        if is_executable_file(candidate) {
+            return Ok(candidate.to_path_buf());
+        }
+        bail!("launch program is not executable: {}", candidate.display());
+    }
+    if candidate.components().count() != 1 {
+        bail!("launch program must be a binary name or absolute path: {program}");
+    }
+    let path = std::env::var("PATH").unwrap_or_default();
+    first_dir_with_executable(&path, program)
+        .map(|dir| dir.join(program))
+        .with_context(|| format!("launch program '{program}' was not found on PATH"))
+}
+
 #[cfg(unix)]
 fn is_executable_file(p: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
@@ -363,6 +383,12 @@ mod tests {
     fn assert_hotsheet_resolves_errors_when_absent() {
         let shim = tempfile::tempdir().unwrap();
         assert!(assert_hotsheet_resolves("/usr/bin:/bin", shim.path()).is_err());
+    }
+
+    #[test]
+    fn resolve_program_finds_path_binary_and_rejects_relative_paths() {
+        assert!(resolve_program("sh").unwrap().is_absolute());
+        assert!(resolve_program("./tool").is_err());
     }
 
     #[test]

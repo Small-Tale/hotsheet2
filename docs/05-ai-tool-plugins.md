@@ -162,7 +162,11 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
 **Initializing a tool** in a terminal = the plugin's `setup` composed from host
 helpers: write the tool's MCP config (so `hotsheet_*` is available), write its
 instruction file + skills, install its permission bridge if opted in, and resolve
-its launch command. Launching then spawns that command in a PTY. This is exactly
+its `[launch]` command. `[launch]` is explicitly separate from `[drive]`: the former
+starts the interactive REPL, while the latter may start a headless protocol such as
+Codex app-server or Claude stream-json. `POST /terminals` with `connect:<tool>` and no
+`command` runs setup, safely resolves `[launch].program`, injects the server permission
+route, and spawns it in the PTY. Launching then spawns that command in a PTY. This is exactly
 the ticket's "initializing AI tools in terminals including setting up MCP and
 similar connections."
 

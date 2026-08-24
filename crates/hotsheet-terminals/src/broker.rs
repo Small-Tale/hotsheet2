@@ -41,6 +41,8 @@ pub enum Request {
         args: Vec<String>,
         #[serde(default)]
         cwd: Option<String>,
+        #[serde(default)]
+        env: Vec<(String, String)>,
     },
     /// List all hosted terminals.
     List,
@@ -293,12 +295,13 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
             command,
             args,
             cwd,
+            env,
         } => {
             let spec = TermSpec {
                 command,
                 args,
                 cwd: cwd.map(std::path::PathBuf::from),
-                env: Vec::new(),
+                env,
                 rows: 24,
                 cols: 80,
             };
@@ -468,6 +471,7 @@ mod tests {
                 command: "cat".into(),
                 args: vec![],
                 cwd: None,
+                env: vec![],
             })
             .await
             .unwrap();
@@ -545,6 +549,7 @@ mod tests {
                 command: "cat".into(),
                 args: vec![],
                 cwd: None,
+                env: vec![],
             })
             .await
             .unwrap();
@@ -637,6 +642,7 @@ mod tests {
                     command: "cat".into(),
                     args: vec![],
                     cwd: None,
+                    env: vec![],
                 })
                 .await
                 .unwrap();
