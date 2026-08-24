@@ -1221,10 +1221,15 @@ async fn open_terminal(
 ) -> Result<Json<TerminalInfo>, ApiError> {
     let id = req.id.unwrap_or_else(|| Ulid::new().to_string());
 
-    // Broker mode: the PTY lives in the detached broker (survives a server restart). The
-    // `connect` tool-in-terminal busy feed is in-process-only for now (a follow-up), so it's
-    // not applied here.
+    // Broker mode: the PTY lives in the detached broker (survives a server restart).
     if let Some(tb) = &state.terminal_broker {
+        // Newly-spawned vs reattach: a pre-check keeps the `connect` busy feed one-per-terminal
+        // (no duplicate poll task on a reattach), mirroring the in-process path.
+        let newly_spawned = !matches!(
+            tb.call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
+                .await,
+            Ok(hotsheet_terminals::BrokerResponse::Read { .. })
+        );
         let resp = tb
             .call(hotsheet_terminals::BrokerRequest::Open {
                 id: id.clone(),
@@ -1236,10 +1241,16 @@ async fn open_terminal(
             .map_err(|e| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))
             })?;
-        return match resp {
-            hotsheet_terminals::BrokerResponse::Terminal { info } => Ok(Json(broker_info(info))),
-            other => Err(broker_err(other)),
+        let info = match resp {
+            hotsheet_terminals::BrokerResponse::Terminal { info } => info,
+            other => return Err(broker_err(other)),
         };
+        // Tool-in-terminal (HS2-4M67VN): register a live connection + feed its busy from the
+        // broker-hosted terminal's inference (polled over the socket), once per fresh terminal.
+        if let (Some(tool), true) = (&req.connect, newly_spawned) {
+            register_broker_terminal_connection(&state, &id, tool, tb.clone());
+        }
+        return Ok(Json(broker_info(info)));
     }
 
     let newly_spawned = state.terminals.get(&term_key(&state, &id)).is_none();
@@ -1306,6 +1317,62 @@ fn register_terminal_connection(
                 }
             } else {
                 break;
+            }
+        }
+    });
+}
+
+/// The broker-mode counterpart of [`register_terminal_connection`] (HS2-ERT00F item 5): the
+/// PTY lives in the broker, so the busy feed **polls the broker over the socket** (a `Read`
+/// every 500ms) for the terminal's busy/idle instead of reading an in-process `Terminal`. Ends
+/// (and unregisters) when the terminal is gone (NotFound / not alive) or the broker is
+/// unreachable.
+fn register_broker_terminal_connection(
+    state: &AppState,
+    id: &str,
+    tool: &str,
+    broker: terminal_broker::TerminalBroker,
+) {
+    let registry = state.drive_registry();
+    if let Ok(mut r) = registry.lock() {
+        r.register(hotsheet_aitools::Connection {
+            id: id.to_string(),
+            project: state.store.root().display().to_string(),
+            tool: tool.to_string(),
+            role: hotsheet_aitools::Role::Main,
+            transport: hotsheet_aitools::Transport::Pty,
+            pid: None,
+            started_at_ms: now_ms(),
+        });
+    }
+    let conn_id = id.to_string();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            match broker
+                .call(hotsheet_terminals::BrokerRequest::Read {
+                    id: conn_id.clone(),
+                })
+                .await
+            {
+                Ok(hotsheet_terminals::BrokerResponse::Read { info, .. }) if info.alive => {
+                    if let Ok(mut r) = registry.lock() {
+                        if info.busy {
+                            r.note_activity(&conn_id, now_ms());
+                        } else {
+                            r.set_idle(&conn_id);
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                // Terminal gone (NotFound / exited) or broker unreachable → stop + unregister.
+                _ => {
+                    if let Ok(mut r) = registry.lock() {
+                        r.unregister(&conn_id);
+                    }
+                    break;
+                }
             }
         }
     });
@@ -1446,14 +1513,25 @@ async fn attach_terminal(
     if params.secret.as_deref() != Some(state.secret.as_str()) {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }
-    // In broker mode the PTY lives in the broker; streaming its output over the broker socket
-    // is a follow-up (HS2-ERT00F item 4). Until then, a client polls `GET /terminals/{id}`.
-    if state.terminal_broker.is_some() {
-        return (
-            StatusCode::NOT_IMPLEMENTED,
-            "live attach is not yet available in broker mode; poll GET /terminals/{id}",
-        )
-            .into_response();
+    // Broker mode: the PTY lives in the detached broker. Confirm the terminal exists (clean
+    // 404) before upgrading, then bridge the WebSocket to a streaming broker connection
+    // (HS2-ERT00F item 4). The size self-heal on disconnect happens broker-side.
+    if let Some(tb) = &state.terminal_broker {
+        match tb
+            .call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
+            .await
+        {
+            Ok(hotsheet_terminals::BrokerResponse::Read { .. }) => {}
+            Ok(hotsheet_terminals::BrokerResponse::NotFound) => {
+                return (StatusCode::NOT_FOUND, "no such terminal").into_response();
+            }
+            Ok(other) => return broker_err(other).into_response(),
+            Err(e) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}")).into_response();
+            }
+        }
+        let socket_path = tb.socket.clone();
+        return ws.on_upgrade(move |socket| broker_attach_loop(socket, socket_path, id));
     }
     let Some(term) = state.terminals.get(&term_key(&state, &id)) else {
         return (StatusCode::NOT_FOUND, "no such terminal").into_response();
@@ -1594,6 +1672,94 @@ async fn terminal_attach_loop(
     if let Some(v) = my_viewer {
         term.drop_viewer(&v, term_now_ms());
     }
+}
+
+/// Bridge one attached viewer to a terminal that lives in the **detached broker** (HS2-ERT00F
+/// item 4): open a streaming broker connection, then forward broker output/size frames → the
+/// WebSocket and the viewer's input/size claims → the broker, on one task via `select!`. The
+/// broker replays the scrollback as its first frame(s) and drops the size claim when this
+/// connection closes, so the size self-heal holds even across a server restart.
+async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::PathBuf, id: String) {
+    let mut stream = match hotsheet_terminals::BrokerStream::open(&broker_socket, &id).await {
+        Ok(s) => s,
+        Err(_) => return, // dropping the socket closes it
+    };
+
+    loop {
+        tokio::select! {
+            frame = stream.next() => match frame {
+                Ok(Some(f)) => {
+                    use hotsheet_terminals::StreamOut as S;
+                    match f {
+                        // Scrollback replay + live output both render as binary output frames.
+                        S::Scrollback { data } | S::Output { data } => {
+                            if socket.send(Message::Binary(data.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                        S::Size { cols, rows, driven_by } => {
+                            let msg = SizeMsg {
+                                pty_size: PtySizeMsg { cols, rows },
+                                driven_by: driven_by.as_deref(),
+                            };
+                            if let Ok(txt) = serde_json::to_string(&msg) {
+                                if socket.send(Message::Text(txt.into())).await.is_err() {
+                                    break;
+                                }
+                            }
+                        }
+                        // The terminal's gone (or the attach failed) — end the viewer session.
+                        S::NotFound | S::Err { .. } => break,
+                    }
+                }
+                Ok(None) | Err(_) => break, // broker closed (terminal ended / broker gone)
+            },
+            inbound = socket.recv() => match inbound {
+                Some(Ok(Message::Binary(b))) => {
+                    if stream
+                        .send(&hotsheet_terminals::StreamIn::Input { data: b.to_vec() })
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                Some(Ok(Message::Text(t))) => {
+                    let sent = match serde_json::from_str::<TermControl>(&t) {
+                        // A size claim forwards as a Resize frame the broker feeds to its arbiter.
+                        Ok(TermControl { resize: Some(r) }) => {
+                            stream
+                                .send(&hotsheet_terminals::StreamIn::Resize {
+                                    viewer_id: r.viewer_id,
+                                    cols: r.cols,
+                                    rows: r.rows,
+                                    focus: r.focus,
+                                    visible: r.visible,
+                                })
+                                .await
+                        }
+                        // Not a control message → raw PTY input.
+                        _ => {
+                            stream
+                                .send(&hotsheet_terminals::StreamIn::Input {
+                                    data: t.as_bytes().to_vec(),
+                                })
+                                .await
+                        }
+                    };
+                    if sent.is_err() {
+                        break;
+                    }
+                }
+                Some(Ok(Message::Close(_))) | None => break,
+                Some(Ok(_)) => {} // ping/pong handled by axum
+                Some(Err(_)) => break,
+            },
+        }
+    }
+
+    // Dropping `stream` closes the broker connection, so the broker self-heals the size claim;
+    // dropping `socket` closes the WebSocket to the viewer.
 }
 
 /// Body for `POST /permissions/{id}`: the human's answer.

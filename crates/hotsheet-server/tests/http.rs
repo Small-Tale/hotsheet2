@@ -1255,8 +1255,9 @@ async fn broker_mode_routes_terminals_and_survives_a_server_restart() {
     assert_eq!(resp.status(), StatusCode::OK);
     assert_eq!(body_json(resp).await["id"], "tb");
 
-    // (Live WS attach is gated to 501 in broker mode — asserted at the handler level, since a
-    // plain `oneshot` GET is rejected 400 by the WebSocketUpgrade extractor before the handler.)
+    // (The live WS attach now streams through the broker too — covered by the real-socket E2E
+    // `broker_mode_attach_streams_through_the_broker` in tests/terminal_ws.rs, which needs a
+    // bound server + WS client rather than a `oneshot` GET.)
 
     // "Server 2": a FRESH server (the restart) pointing at the SAME broker — the terminal is
     // still there and usable. This is the survive-a-restart property.
@@ -1510,6 +1511,116 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
     assert!(
         saw_idle,
         "an OSC-133 command-finish should mark the connection idle"
+    );
+}
+
+/// The `connect` busy feed must also work when the terminal lives in the **detached broker**
+/// (HS2-ERT00F item 5): the server can't read an in-process `Terminal`, so it polls the broker
+/// over the socket for busy/idle and mirrors it into the connection registry.
+#[tokio::test]
+async fn a_broker_connected_terminal_feeds_its_busy_through_the_broker() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+
+    let app = app(state()
+        .1
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
+
+    // A `cat` terminal in the broker, registered as a claude connection.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","connect":"claude","id":"btc"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let conns = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        conns
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == "btc" && c["tool"] == "claude"),
+        "the broker-connected terminal is registered: {conns}"
+    );
+
+    let is_busy = |app: axum::Router| async move {
+        let conns = body_json(
+            app.oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        conns
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == "btc")
+            .and_then(|c| c["busy"].as_bool())
+            .unwrap_or(false)
+    };
+
+    // OSC-133 C (command output begins → busy); the feed polls the broker every 500ms.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals/btc/input",
+            Some("{\"data\":\"\\u001b]133;C\\u0007\\n\"}"),
+        ))
+        .await
+        .unwrap();
+    let mut saw_busy = false;
+    for _ in 0..40 {
+        if is_busy(app.clone()).await {
+            saw_busy = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        saw_busy,
+        "OSC-133 command-start marks the broker-connected terminal busy"
+    );
+
+    // OSC-133 D (command finished → idle).
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals/btc/input",
+            Some("{\"data\":\"\\u001b]133;D\\u0007\\n\"}"),
+        ))
+        .await
+        .unwrap();
+    let mut saw_idle = false;
+    for _ in 0..40 {
+        if !is_busy(app.clone()).await {
+            saw_idle = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        saw_idle,
+        "OSC-133 command-finish marks the broker-connected terminal idle"
     );
 }
 

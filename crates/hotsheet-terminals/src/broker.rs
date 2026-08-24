@@ -13,10 +13,21 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
 
 use crate::manager::TerminalManager;
+use crate::sizing::ViewportClaim;
 use crate::terminal::TermSpec;
+
+/// A real millis clock for the broker process (the size arbiter is deterministic given it).
+/// Distinct from the terminal's injected test clock — the broker runs as its own process.
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
 
 /// A request the server/CLI sends the broker (one JSON line).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,6 +50,56 @@ pub enum Request {
     Input { id: String, data: Vec<u8> },
     /// Kill + forget the terminal.
     Kill { id: String },
+    /// **Switch this connection into streaming mode** for terminal `id` (HS2-ERT00F item 4):
+    /// the broker replays the scrollback then streams live output + size decisions as
+    /// [`StreamOut`] frames, and reads [`StreamIn`] frames (input + size claims) until the
+    /// connection closes. No further request/response ops happen on this connection.
+    Attach { id: String },
+}
+
+/// A frame the broker streams to an attached client (one JSON line each), after an
+/// [`Request::Attach`]. The stream ends when the connection closes (terminal exited or the
+/// viewer went away).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "frame", rename_all = "snake_case")]
+pub enum StreamOut {
+    /// The initial scrollback replay (and a re-sync snapshot after a lag).
+    Scrollback { data: Vec<u8> },
+    /// A live PTY output chunk as it arrives.
+    Output { data: Vec<u8> },
+    /// The size arbiter's chosen PTY size changed.
+    Size {
+        cols: u16,
+        rows: u16,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        driven_by: Option<String>,
+    },
+    /// No terminal with that id (attach failed).
+    NotFound,
+    /// The attach failed.
+    Err { message: String },
+}
+
+/// A frame an attached client streams to the broker (one JSON line each).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "frame", rename_all = "snake_case")]
+pub enum StreamIn {
+    /// Raw bytes to write to the PTY (keystrokes / a command).
+    Input { data: Vec<u8> },
+    /// This viewport's leased size claim (fed to the arbiter, HS2-BD7Q74).
+    Resize {
+        viewer_id: String,
+        cols: u16,
+        rows: u16,
+        #[serde(default)]
+        focus: bool,
+        #[serde(default = "stream_default_true")]
+        visible: bool,
+    },
+}
+
+fn stream_default_true() -> bool {
+    true
 }
 
 /// The broker's reply (one JSON line).
@@ -114,18 +175,111 @@ async fn handle_connection(
         if line.trim().is_empty() {
             continue;
         }
-        let resp = match serde_json::from_str::<Request>(&line) {
-            Ok(req) => handle_request(project, manager, req),
-            Err(e) => Response::Err {
-                message: format!("bad request: {e}"),
+        match serde_json::from_str::<Request>(&line) {
+            // Attach switches this connection into streaming mode for the rest of its life.
+            Ok(Request::Attach { id }) => {
+                return stream_terminal(lines, write, project, manager, id).await;
+            }
+            Ok(req) => {
+                let resp = handle_request(project, manager, req);
+                write_line(&mut write, &resp).await?;
+            }
+            Err(e) => {
+                write_line(
+                    &mut write,
+                    &Response::Err {
+                        message: format!("bad request: {e}"),
+                    },
+                )
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Serialize `frame` as one JSON line and flush it.
+async fn write_line<T: Serialize>(write: &mut OwnedWriteHalf, frame: &T) -> std::io::Result<()> {
+    let mut out = serde_json::to_string(frame).map_err(std::io::Error::other)?;
+    out.push('\n');
+    write.write_all(out.as_bytes()).await?;
+    write.flush().await
+}
+
+/// Stream a terminal's live output + size decisions to an attached client, and apply the
+/// input + size claims it sends back, until the connection closes (HS2-ERT00F item 4). On
+/// disconnect the viewport's size claim is dropped so the PTY size self-heals for the rest —
+/// broker-side, so it holds even across a server restart.
+async fn stream_terminal(
+    mut lines: tokio::io::Lines<BufReader<OwnedReadHalf>>,
+    mut write: OwnedWriteHalf,
+    project: &str,
+    manager: &Arc<TerminalManager>,
+    id: String,
+) -> std::io::Result<()> {
+    use tokio::sync::broadcast::error::RecvError;
+
+    let Some(term) = manager.get(&(project.to_string(), id.clone())) else {
+        return write_line(&mut write, &StreamOut::NotFound).await;
+    };
+
+    // Subscribe BEFORE snapshotting so no chunk is lost between the snapshot and the stream.
+    let mut out_rx = term.subscribe();
+    let mut size_rx = term.subscribe_size();
+    let mut my_viewer: Option<String> = None;
+
+    write_line(
+        &mut write,
+        &StreamOut::Scrollback {
+            data: term.scrollback(),
+        },
+    )
+    .await?;
+
+    loop {
+        tokio::select! {
+            output = out_rx.recv() => match output {
+                Ok(data) => write_line(&mut write, &StreamOut::Output { data }).await?,
+                // Fell behind the fan-out — re-sync from a fresh snapshot.
+                Err(RecvError::Lagged(_)) => {
+                    write_line(&mut write, &StreamOut::Scrollback { data: term.scrollback() }).await?;
+                }
+                Err(RecvError::Closed) => break, // terminal ended
             },
-        };
-        let mut out = serde_json::to_string(&resp).unwrap_or_else(|_| {
-            "{\"result\":\"err\",\"message\":\"serialize failed\"}".to_string()
-        });
-        out.push('\n');
-        write.write_all(out.as_bytes()).await?;
-        write.flush().await?;
+            size = size_rx.recv() => match size {
+                Ok(d) => {
+                    write_line(&mut write, &StreamOut::Size {
+                        cols: d.cols, rows: d.rows, driven_by: d.driven_by,
+                    }).await?;
+                }
+                Err(RecvError::Lagged(_)) => {} // a missed size update self-corrects on the next claim
+                Err(RecvError::Closed) => break,
+            },
+            line = lines.next_line() => match line {
+                Ok(Some(l)) if !l.trim().is_empty() => {
+                    if let Ok(inbound) = serde_json::from_str::<StreamIn>(&l) {
+                        match inbound {
+                            StreamIn::Input { data } => { let _ = term.write(&data); }
+                            StreamIn::Resize { viewer_id, cols, rows, focus, visible } => {
+                                my_viewer = Some(viewer_id.clone());
+                                let now = now_ms();
+                                term.claim_size(
+                                    ViewportClaim { viewer_id, cols, rows, focus, visible, activity_at_ms: now },
+                                    now,
+                                );
+                            }
+                        }
+                    }
+                }
+                Ok(Some(_)) => {} // empty keep-alive line
+                Ok(None) | Err(_) => break, // client (server viewer) closed
+            },
+        }
+    }
+
+    // Self-heal: drop this viewport's claim so the PTY size recomputes for the rest.
+    if let Some(v) = my_viewer {
+        term.drop_viewer(&v, now_ms());
     }
     Ok(())
 }
@@ -188,6 +342,11 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
                 message: e.to_string(),
             },
         },
+        // Attach is intercepted in `handle_connection` (it switches the connection into
+        // streaming mode); it never reaches the request/response dispatch.
+        Request::Attach { .. } => Response::Err {
+            message: "attach is a streaming op, not a request/response op".into(),
+        },
     }
 }
 
@@ -221,6 +380,57 @@ impl BrokerClient {
                 "broker closed the connection",
             )),
         }
+    }
+}
+
+/// A **streaming** attach connection to a running broker (HS2-ERT00F item 4): after
+/// [`open`](Self::open) sends the attach request, the broker streams [`StreamOut`] frames
+/// (scrollback replay, then live output + size decisions), and [`send`](Self::send) forwards
+/// [`StreamIn`] frames (input + size claims). The server bridges this to a WebSocket viewer.
+pub struct BrokerStream {
+    reader: tokio::io::Lines<BufReader<OwnedReadHalf>>,
+    writer: OwnedWriteHalf,
+}
+
+impl BrokerStream {
+    /// Connect to the broker at `socket_path` and attach to terminal `id`. The first
+    /// [`next`](Self::next) frame is the scrollback replay (or [`StreamOut::NotFound`]).
+    pub async fn open(socket_path: &Path, id: &str) -> std::io::Result<Self> {
+        let stream = UnixStream::connect(socket_path).await?;
+        let (read, mut writer) = stream.into_split();
+        let mut line = serde_json::to_string(&Request::Attach { id: id.to_string() })
+            .map_err(std::io::Error::other)?;
+        line.push('\n');
+        writer.write_all(line.as_bytes()).await?;
+        writer.flush().await?;
+        Ok(Self {
+            reader: BufReader::new(read).lines(),
+            writer,
+        })
+    }
+
+    /// The next streamed frame, or `None` when the broker closed the stream (terminal ended /
+    /// broker gone).
+    pub async fn next(&mut self) -> std::io::Result<Option<StreamOut>> {
+        loop {
+            match self.reader.next_line().await? {
+                Some(l) if l.trim().is_empty() => continue,
+                Some(l) => {
+                    return serde_json::from_str(&l)
+                        .map(Some)
+                        .map_err(std::io::Error::other);
+                }
+                None => return Ok(None),
+            }
+        }
+    }
+
+    /// Forward one input / size-claim frame to the broker.
+    pub async fn send(&mut self, frame: &StreamIn) -> std::io::Result<()> {
+        let mut line = serde_json::to_string(frame).map_err(std::io::Error::other)?;
+        line.push('\n');
+        self.writer.write_all(line.as_bytes()).await?;
+        self.writer.flush().await
     }
 }
 
@@ -317,6 +527,97 @@ mod tests {
                 .unwrap(),
             Response::NotFound
         ));
+    }
+
+    #[tokio::test]
+    async fn attach_streams_scrollback_then_live_output_and_forwards_input() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let manager = Arc::new(TerminalManager::new());
+        tokio::spawn(serve_broker(listener, "proj".into(), manager));
+
+        // Open a `cat` terminal via the request/response client, and seed some scrollback.
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        client
+            .request(&Request::Open {
+                id: "s1".into(),
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+            })
+            .await
+            .unwrap();
+        client
+            .request(&Request::Input {
+                id: "s1".into(),
+                data: b"seed-line\n".to_vec(),
+            })
+            .await
+            .unwrap();
+
+        // Attach a streaming client. The first frame(s) replay the scrollback.
+        let mut stream = BrokerStream::open(&sock, "s1").await.unwrap();
+        let mut seen = Vec::new();
+        // Drain frames for up to a few seconds, collecting output, until we've seen the seed.
+        let saw_seed = wait_until_stream(&mut stream, &mut seen, "seed-line", 5).await;
+        assert!(saw_seed, "the attach replays the scrollback (seed-line)");
+
+        // Now stream NEW input through the attach connection; `cat` echoes it back as live output.
+        stream
+            .send(&StreamIn::Input {
+                data: b"live-echo\n".to_vec(),
+            })
+            .await
+            .unwrap();
+        let saw_live = wait_until_stream(&mut stream, &mut seen, "live-echo", 5).await;
+        assert!(
+            saw_live,
+            "input sent over the attach reaches the PTY and streams back as live output"
+        );
+    }
+
+    #[tokio::test]
+    async fn attach_to_a_missing_terminal_yields_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+
+        let mut stream = BrokerStream::open(&sock, "ghost").await.unwrap();
+        let first = stream.next().await.unwrap();
+        assert!(
+            matches!(first, Some(StreamOut::NotFound)),
+            "attaching to a missing terminal streams NotFound, got {first:?}"
+        );
+    }
+
+    /// Poll a stream for frames, accumulating output text, until `needle` appears or `secs`
+    /// elapse. Reads with a short timeout so it doesn't block forever on a quiet stream.
+    async fn wait_until_stream(
+        stream: &mut BrokerStream,
+        acc: &mut Vec<u8>,
+        needle: &str,
+        secs: u64,
+    ) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        while Instant::now() < deadline {
+            if String::from_utf8_lossy(acc).contains(needle) {
+                return true;
+            }
+            match tokio::time::timeout(Duration::from_millis(200), stream.next()).await {
+                Ok(Ok(Some(StreamOut::Scrollback { data })))
+                | Ok(Ok(Some(StreamOut::Output { data }))) => acc.extend_from_slice(&data),
+                Ok(Ok(Some(_))) => {} // size/other frames — ignore
+                Ok(Ok(None)) | Ok(Err(_)) => return false, // stream closed
+                Err(_) => {}          // read timeout — loop and re-check
+            }
+        }
+        String::from_utf8_lossy(acc).contains(needle)
     }
 
     #[tokio::test]

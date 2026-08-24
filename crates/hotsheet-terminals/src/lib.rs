@@ -22,8 +22,8 @@ pub mod sizing;
 pub mod terminal;
 
 pub use broker::{
-    BrokerClient, BrokerTermInfo, Request as BrokerRequest, Response as BrokerResponse,
-    serve_broker,
+    BrokerClient, BrokerStream, BrokerTermInfo, Request as BrokerRequest,
+    Response as BrokerResponse, StreamIn, StreamOut, serve_broker,
 };
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;
