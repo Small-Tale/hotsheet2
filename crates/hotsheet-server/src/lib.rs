@@ -134,6 +134,7 @@ impl AppState {
                     id: req.id.to_string(),
                     slug: req.tool.clone(),
                     message: None,
+                    activity: None,
                 };
                 if let Ok(mut l) = log.lock() {
                     l.push(ev.clone());
@@ -438,6 +439,7 @@ impl AppState {
             id: t.id.to_string(),
             slug: t.slug.clone(),
             message: None,
+            activity: None,
         });
         // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
         self.kick_sync();
@@ -455,7 +457,28 @@ impl AppState {
             id: String::new(),
             slug: String::new(),
             message: Some(message),
+            activity: None,
         });
+    }
+
+    /// Persist one activity event and publish that exact event on the shared live bus.
+    /// Unlike announcements this is also placed in the long-poll ring; the rolling
+    /// activity store remains the authoritative reconnect/digest source.
+    pub fn record_activity(
+        &self,
+        store: &FsStore,
+        event: hotsheet_ticketing::ActivityEvent,
+    ) -> std::io::Result<()> {
+        hotsheet_ticketing::activity::record(store, &event)?;
+        self.emit(ChangeEvent {
+            store: multistore::store_url_id(store),
+            kind: "activity".to_string(),
+            id: event.id.clone(),
+            slug: String::new(),
+            message: None,
+            activity: Some(event),
+        });
+        Ok(())
     }
 }
 
@@ -471,6 +494,9 @@ pub struct ChangeEvent {
     /// ticket-change events (omitted on the wire).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    /// For `kind == "activity"`: the complete event persisted to the rolling timeline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<hotsheet_ticketing::ActivityEvent>,
 }
 
 /// How many recent events the long-poll ring retains. A poller whose cursor falls behind
@@ -527,6 +553,7 @@ mod event_log_tests {
             id: format!("id-{n}"),
             slug: format!("HS-{n}"),
             message: None,
+            activity: None,
         }
     }
 
@@ -755,7 +782,8 @@ async fn ingest_activity(
     if let Some(i) = body.importance {
         ev.importance = i;
     }
-    hotsheet_ticketing::activity::record(&state.store, &ev)
+    state
+        .record_activity(&state.store, ev.clone())
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(ev))
 }
@@ -2624,6 +2652,7 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
             id,
             slug,
             message: None,
+            activity: None,
         });
     };
 

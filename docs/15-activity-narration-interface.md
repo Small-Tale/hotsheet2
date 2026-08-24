@@ -1,6 +1,6 @@
 # 15. Cross-Tool Activity / Narration Interface
 
-> **Status: Design (HS2-70).** A **tool-agnostic activity event stream** — the common
+> **Status: Core stream built (HS2-KP31ZE/HS2-4C68Y8).** A **tool-agnostic activity event stream** — the common
 > interface the **Announcer** (narration + TTS) and a **timeline** consume, so
 > narration isn't Claude-only like HS1's (which rode Claude's OTLP stream). Part of
 > the "generalize a concern across every tool via a capability" theme (with `drive`
@@ -114,10 +114,14 @@ The `activity` capability turns native signals → events; the host owns the str
     hook JSON — the real shape the permission hook already receives) and `codex_activity`
     (from transcript items, lenient — the exact codex item vocabulary wants live
     confirmation, like the usage mappers). Both sample-tested.
-- **Remaining (follow-up):** wiring the mappers into the **live drive** so real turns emit
-  activity as they run (call the mappers on each native hook/transcript event + record +
-  broadcast over the WS bus for the *live* consumer mode, §15.4), and the full **Announcer**
-  (post-floor, HS2-17) that consumes the stream.
+- **Shipped (HS2-4C68Y8) — core live stream:** every recorded event is published as
+  `ChangeEvent { kind: "activity", activity: <full event> }` over `/ws/sync` and the
+  long-poll fallback. The server-hosted drive emits coarse `turn_start`, `permission`,
+  and `turn_end` events attributed to the active store, ticket, tool, and session; the
+  same event is persisted before broadcast, so live and digest consumers cannot drift.
+- **Deferred:** richer native Codex transcript / Claude hook wiring and deliberate live
+  vocabulary verification are HS2-SW655F. The full Announcer UI/TTS remains the
+  post-floor HS2-17 consumer; neither is required for the standalone core stream.
 
 ## 15.9 Cross-references
 - The `activity` plugin capability: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.3

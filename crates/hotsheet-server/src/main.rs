@@ -204,6 +204,14 @@ async fn main() -> Result<()> {
             permission_bridge: Some(state.permission_bridge()),
             drive_registry: Some(state.drive_registry()),
             server_env: Some((url.clone(), secret.clone())),
+            activity_sink: Some({
+                let state = state.clone();
+                std::sync::Arc::new(move |store, event| {
+                    if let Err(error) = state.record_activity(store, event) {
+                        eprintln!("activity record failed: {error}");
+                    }
+                })
+            }),
         };
         let drive = live_drive(cfg.tool.clone(), cfg.prompt.clone(), ctx);
         Some(spawn_dist_work_loop(

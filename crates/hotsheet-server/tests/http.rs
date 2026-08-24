@@ -337,6 +337,7 @@ async fn announce_broadcasts_live_but_is_not_persisted_in_the_poll_ring() {
 #[tokio::test]
 async fn activity_ingest_then_timeline_filters_by_ticket_and_importance() {
     let (_d, st) = state();
+    let mut live = st.subscribe();
     let app = app(st);
 
     // Ingest three events: two on ticket T1 (an edit + a turn_end), one on T2.
@@ -354,7 +355,27 @@ async fn activity_ingest_then_timeline_filters_by_ticket_and_importance() {
         // The server composes a default summary from the kind.
         let ev = body_json(resp).await;
         assert!(ev["summary"].as_str().unwrap().len() > 3);
+        let pushed = live
+            .try_recv()
+            .expect("recorded activity is pushed on the live bus");
+        assert_eq!(pushed.kind, "activity");
+        assert_eq!(pushed.activity.as_ref().unwrap().id, ev["id"]);
     }
+
+    // Activity also participates in the long-poll fallback rather than becoming a
+    // WebSocket-only parallel protocol.
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/ws/poll?secret={SECRET}&since=0&timeout_ms=0"),
+            None,
+        ))
+        .await
+        .unwrap();
+    let poll = body_json(resp).await;
+    assert_eq!(poll["events"][0]["kind"], "activity");
+    assert!(poll["events"][0]["activity"]["summary"].is_string());
 
     // Timeline for T1 → the two T1 events, chronological.
     let resp = app

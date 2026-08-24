@@ -199,7 +199,12 @@ pub struct LiveDriveCtx {
         Option<std::sync::Arc<std::sync::Mutex<hotsheet_aitools::ConnectionRegistry>>>,
     /// `(url, secret)` set as `HOTSHEET_SERVER`/`HOTSHEET_SECRET` in a driven tool's env.
     pub server_env: Option<(String, String)>,
+    /// Best-effort activity persistence + live broadcast supplied by the server host.
+    pub activity_sink: Option<ActivitySink>,
 }
+
+pub type ActivitySink =
+    std::sync::Arc<dyn Fn(&FsStore, hotsheet_ticketing::ActivityEvent) + Send + Sync + 'static>;
 
 pub fn live_drive(
     tool: String,
@@ -273,15 +278,63 @@ fn drive_one_ticket(
             id: conn.clone(),
         }
     });
+    emit_coarse_activity(
+        ctx,
+        store,
+        id,
+        tool,
+        &conn,
+        hotsheet_ticketing::ActivityKind::TurnStart,
+        serde_json::Value::Null,
+    );
     // Capture any usage the turn reports so it can be recorded against this ticket
     // (HS2-0WCRZY). Output is otherwise streamed to a quiet sink (logged elsewhere).
     let mut usage: Option<hotsheet_aitools::Usage> = None;
-    let done = safe.run_turn(prompt, None, true, conn.clone(), &mut registry, &mut |ev| {
-        if let hotsheet_aitools::TurnEvent::Usage(u) = ev {
-            usage = Some(u.clone());
+    let turn = safe.run_turn(
+        prompt,
+        None,
+        true,
+        conn.clone(),
+        &mut registry,
+        &mut |ev| match ev {
+            hotsheet_aitools::TurnEvent::Usage(u) => usage = Some(u.clone()),
+            hotsheet_aitools::TurnEvent::PermissionAsked(req) => emit_coarse_activity(
+                ctx,
+                store,
+                id,
+                tool,
+                &conn,
+                hotsheet_ticketing::ActivityKind::Permission,
+                serde_json::json!({ "name": req.tool, "text": req.summary }),
+            ),
+            _ => {}
+        },
+    );
+    let done = match turn {
+        Ok(done) => done,
+        Err(error) => {
+            emit_coarse_activity(
+                ctx,
+                store,
+                id,
+                tool,
+                &conn,
+                hotsheet_ticketing::ActivityKind::TurnEnd,
+                serde_json::json!({ "reason": "failed", "error": error.to_string() }),
+            );
+            return Err(error);
         }
-    })?;
+    };
     let done = done.reason;
+    emit_coarse_activity(
+        ctx,
+        store,
+        id,
+        tool,
+        &conn,
+        hotsheet_ticketing::ActivityKind::TurnEnd,
+        serde_json::json!({ "reason": format!("{done:?}") }),
+    );
     // Record the turn's usage attributed to this ticket (cost filled from the price table
     // when the tool didn't report one). Best-effort — never fail the drive over metrics.
     if let Some(u) = usage {
@@ -305,6 +358,31 @@ fn drive_one_ticket(
         hotsheet_ticketing::ops::is_open(&after),
         progressed,
     ))
+}
+
+fn emit_coarse_activity(
+    ctx: &LiveDriveCtx,
+    store: &FsStore,
+    ticket: &hotsheet_model::Ulid,
+    tool: &str,
+    session: &str,
+    kind: hotsheet_ticketing::ActivityKind,
+    detail: serde_json::Value,
+) {
+    let Some(sink) = &ctx.activity_sink else {
+        return;
+    };
+    let mut event = hotsheet_ticketing::ActivityEvent::new(
+        hotsheet_model::Ulid::new().to_string(),
+        crate::now().as_str().to_string(),
+        tool,
+        kind,
+        detail,
+    );
+    event.project = Some(crate::multistore::store_url_id(store));
+    event.ticket = Some(ticket.to_string());
+    event.session = Some(session.to_string());
+    sink(store, event);
 }
 
 /// Keeps the driving-loop thread alive; **dropping it stops the loop** after its current
@@ -585,5 +663,39 @@ mod tests {
         );
         // Nothing to assert beyond "it returned without spawning work"; the type-level
         // guarantee is that a disabled loop takes the early return before std::thread::spawn.
+    }
+
+    #[test]
+    fn coarse_activity_is_attributed_and_sent_without_a_live_tool() {
+        let dir = tempfile::tempdir().unwrap();
+        let store =
+            FsStore::init(dir.path(), &hotsheet_ticketing::StoreMetadata::new("HS")).unwrap();
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink_events = captured.clone();
+        let ctx = LiveDriveCtx {
+            activity_sink: Some(std::sync::Arc::new(move |_store, event| {
+                sink_events.lock().unwrap().push(event);
+            })),
+            ..Default::default()
+        };
+        let ticket = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+
+        emit_coarse_activity(
+            &ctx,
+            &store,
+            &ticket,
+            "codex",
+            "srv-test",
+            hotsheet_ticketing::ActivityKind::Permission,
+            serde_json::json!({"name": "shell"}),
+        );
+
+        let events = captured.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].tool, "codex");
+        assert_eq!(events[0].ticket, Some(ticket.to_string()));
+        assert_eq!(events[0].session.as_deref(), Some("srv-test"));
+        assert_eq!(events[0].kind, hotsheet_ticketing::ActivityKind::Permission);
+        assert_eq!(events[0].detail["name"], "shell");
     }
 }
