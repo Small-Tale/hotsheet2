@@ -71,6 +71,8 @@ pub struct BrokerTermInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<u8>,
 }
 
@@ -81,6 +83,7 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
         alive: term.is_alive(),
         busy: term.activity() == crate::busy::Activity::Busy,
         cwd: osc.cwd,
+        link: osc.link,
         progress: osc.progress,
     }
 }

@@ -1225,6 +1225,68 @@ async fn resolve_finds_a_ulid_in_whichever_hosted_store_holds_it() {
 }
 
 #[tokio::test]
+async fn broker_mode_routes_terminals_and_survives_a_server_restart() {
+    use hotsheet_server::terminal_broker::TerminalBroker;
+    use std::sync::Arc;
+
+    // A broker (stand-in for the separate `hotsheet-terminal-broker` process) on a temp socket.
+    let dir = tempfile::tempdir().unwrap();
+    let sock = dir.path().join("b.sock");
+    let listener = tokio::net::UnixListener::bind(&sock).unwrap();
+    tokio::spawn(hotsheet_terminals::serve_broker(
+        listener,
+        "proj".into(),
+        Arc::new(hotsheet_terminals::TerminalManager::new()),
+    ));
+
+    // "Server 1": open a terminal — it lives in the broker, not this server.
+    let app1 = app(state()
+        .1
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
+    let resp = app1
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"tb"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(body_json(resp).await["id"], "tb");
+
+    // (Live WS attach is gated to 501 in broker mode — asserted at the handler level, since a
+    // plain `oneshot` GET is rejected 400 by the WebSocketUpgrade extractor before the handler.)
+
+    // "Server 2": a FRESH server (the restart) pointing at the SAME broker — the terminal is
+    // still there and usable. This is the survive-a-restart property.
+    let app2 = app(state()
+        .1
+        .with_terminal_broker_at(TerminalBroker::at(&sock, "proj")));
+    let list = body_json(
+        app2.clone()
+            .oneshot(authed("GET", "/terminals", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        list.as_array().unwrap().iter().any(|t| t["id"] == "tb"),
+        "the terminal survived the server restart: {list}"
+    );
+    let read = body_json(
+        app2.oneshot(authed("GET", "/terminals/tb", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        read["alive"], true,
+        "the reattached terminal is still alive"
+    );
+}
+
+#[tokio::test]
 async fn terminal_surfaces_osc7_cwd_in_its_state() {
     let (_d, st) = state();
     let app = app(st);

@@ -9,6 +9,7 @@ pub mod dist_work_loop;
 pub mod lifecycle;
 pub mod multistore;
 pub mod sync_loop;
+pub mod terminal_broker;
 pub mod tls;
 
 use std::path::Path as FsPath;
@@ -86,8 +87,12 @@ pub struct AppState {
     /// live and (once driving is concurrent) the in-flight bound can consult busy state.
     drive_registry: Arc<Mutex<hotsheet_aitools::ConnectionRegistry>>,
     /// The in-process PTY manager (HS2-10) exposed over HTTP (HS2-A6R5QV): open/list/input/
-    /// read/kill terminals. Lazy — a terminal spawns on first `POST /terminals`.
+    /// read/kill terminals. Lazy — a terminal spawns on first `POST /terminals`. Used unless
+    /// the detached broker is enabled.
     terminals: Arc<hotsheet_terminals::TerminalManager>,
+    /// When set (opt-in), terminals live in a **detached broker** process so they survive a
+    /// server restart (HS2-ERT00F); the `/terminals` request/response ops route through it.
+    terminal_broker: Option<terminal_broker::TerminalBroker>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -153,6 +158,7 @@ impl AppState {
                 60_000,
             ))),
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
+            terminal_broker: None,
         }
     }
 
@@ -216,6 +222,20 @@ impl AppState {
     /// they never write under the machine home). Builder-style.
     pub fn with_persistent_registered_indexes(mut self) -> Self {
         self.persist_indexes = true;
+        self
+    }
+
+    /// Enable the **detached terminal broker** (HS2-ERT00F): terminals live in a separate
+    /// `hotsheet-terminal-broker` process (spawned/discovered for the primary store), so they
+    /// survive a server restart. Opt-in — without it, terminals are in-process.
+    pub fn with_terminal_broker(mut self) -> anyhow::Result<Self> {
+        self.terminal_broker = Some(terminal_broker::TerminalBroker::ensure(self.store.root())?);
+        Ok(self)
+    }
+
+    /// Point terminal ops at an explicit already-running broker (tests).
+    pub fn with_terminal_broker_at(mut self, broker: terminal_broker::TerminalBroker) -> Self {
+        self.terminal_broker = Some(broker);
         self
     }
 
@@ -1169,12 +1189,59 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
     }
 }
 
+/// Map a broker terminal-info onto the HTTP `TerminalInfo`.
+fn broker_info(bi: hotsheet_terminals::BrokerTermInfo) -> TerminalInfo {
+    TerminalInfo {
+        id: bi.id,
+        alive: bi.alive,
+        busy: bi.busy,
+        cwd: bi.cwd,
+        link: bi.link,
+        progress: bi.progress,
+    }
+}
+
+/// Map a non-success broker response to an `ApiError`.
+fn broker_err(resp: hotsheet_terminals::BrokerResponse) -> ApiError {
+    use hotsheet_terminals::BrokerResponse as R;
+    match resp {
+        R::Err { message } => ApiError::new(StatusCode::BAD_REQUEST, message),
+        R::NotFound => ApiError::new(StatusCode::NOT_FOUND, "no such terminal"),
+        other => ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("unexpected broker response: {other:?}"),
+        ),
+    }
+}
+
 /// `POST /terminals` `{command, args?, cwd?, id?, connect?}` — open (or reattach to) a PTY.
 async fn open_terminal(
     State(state): State<AppState>,
     Json(req): Json<OpenTerminalReq>,
 ) -> Result<Json<TerminalInfo>, ApiError> {
     let id = req.id.unwrap_or_else(|| Ulid::new().to_string());
+
+    // Broker mode: the PTY lives in the detached broker (survives a server restart). The
+    // `connect` tool-in-terminal busy feed is in-process-only for now (a follow-up), so it's
+    // not applied here.
+    if let Some(tb) = &state.terminal_broker {
+        let resp = tb
+            .call(hotsheet_terminals::BrokerRequest::Open {
+                id: id.clone(),
+                command: req.command,
+                args: req.args,
+                cwd: req.cwd,
+            })
+            .await
+            .map_err(|e| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))
+            })?;
+        return match resp {
+            hotsheet_terminals::BrokerResponse::Terminal { info } => Ok(Json(broker_info(info))),
+            other => Err(broker_err(other)),
+        };
+    }
+
     let newly_spawned = state.terminals.get(&term_key(&state, &id)).is_none();
     let spec = hotsheet_terminals::TermSpec {
         command: req.command,
@@ -1246,6 +1313,14 @@ fn register_terminal_connection(
 
 /// `GET /terminals` — the live terminals (id, alive, busy).
 async fn list_terminals(State(state): State<AppState>) -> Json<Vec<TerminalInfo>> {
+    if let Some(tb) = &state.terminal_broker {
+        if let Ok(hotsheet_terminals::BrokerResponse::List { terminals }) =
+            tb.call(hotsheet_terminals::BrokerRequest::List).await
+        {
+            return Json(terminals.into_iter().map(broker_info).collect());
+        }
+        return Json(Vec::new());
+    }
     let infos = state
         .terminals
         .list()
@@ -1268,6 +1343,23 @@ async fn read_terminal(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<TerminalRead>, ApiError> {
+    if let Some(tb) = &state.terminal_broker {
+        let resp = tb
+            .call(hotsheet_terminals::BrokerRequest::Read { id: id.clone() })
+            .await
+            .map_err(|e| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))
+            })?;
+        return match resp {
+            hotsheet_terminals::BrokerResponse::Read { info, scrollback } => {
+                Ok(Json(TerminalRead {
+                    info: broker_info(info),
+                    scrollback: String::from_utf8_lossy(&scrollback).into_owned(),
+                }))
+            }
+            other => Err(broker_err(other)),
+        };
+    }
     let term = state
         .terminals
         .get(&term_key(&state, &id))
@@ -1290,6 +1382,21 @@ async fn write_terminal(
     Path(id): Path<String>,
     Json(body): Json<TerminalInput>,
 ) -> Result<StatusCode, ApiError> {
+    if let Some(tb) = &state.terminal_broker {
+        let resp = tb
+            .call(hotsheet_terminals::BrokerRequest::Input {
+                id: id.clone(),
+                data: body.data.into_bytes(),
+            })
+            .await
+            .map_err(|e| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))
+            })?;
+        return match resp {
+            hotsheet_terminals::BrokerResponse::Ok => Ok(StatusCode::NO_CONTENT),
+            other => Err(broker_err(other)),
+        };
+    }
     let term = state
         .terminals
         .get(&term_key(&state, &id))
@@ -1303,6 +1410,18 @@ async fn kill_terminal(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    if let Some(tb) = &state.terminal_broker {
+        let resp = tb
+            .call(hotsheet_terminals::BrokerRequest::Kill { id: id.clone() })
+            .await
+            .map_err(|e| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("broker: {e}"))
+            })?;
+        return match resp {
+            hotsheet_terminals::BrokerResponse::Ok => Ok(StatusCode::NO_CONTENT),
+            other => Err(broker_err(other)),
+        };
+    }
     let killed = state
         .terminals
         .kill(&term_key(&state, &id))
@@ -1326,6 +1445,15 @@ async fn attach_terminal(
 ) -> Response {
     if params.secret.as_deref() != Some(state.secret.as_str()) {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
+    }
+    // In broker mode the PTY lives in the broker; streaming its output over the broker socket
+    // is a follow-up (HS2-ERT00F item 4). Until then, a client polls `GET /terminals/{id}`.
+    if state.terminal_broker.is_some() {
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            "live attach is not yet available in broker mode; poll GET /terminals/{id}",
+        )
+            .into_response();
     }
     let Some(term) = state.terminals.get(&term_key(&state, &id)) else {
         return (StatusCode::NOT_FOUND, "no such terminal").into_response();

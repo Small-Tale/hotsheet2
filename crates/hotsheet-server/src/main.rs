@@ -38,6 +38,12 @@ struct Cli {
     #[arg(long)]
     stop: bool,
 
+    /// **Opt-in** detached terminal broker (HS2-ERT00F): host terminals in a separate
+    /// `hotsheet-terminal-broker` process so they survive a server restart. Off by default
+    /// (terminals are in-process).
+    #[arg(long)]
+    terminal_broker: bool,
+
     /// **Opt-in** distributed driving loop (HS2-1TY7GC): spawn this AI tool (plugin id,
     /// e.g. `codex`) on each self-claimed ticket across hosted stores that have a git
     /// remote. Omitted → the loop is off (the default; the server never drives a tool
@@ -120,8 +126,15 @@ async fn main() -> Result<()> {
     let index = Index::open_reconciled(&index_path, &store)?;
     println!("index: {}", index_path.display());
     // A real run persists the indexes of any POST /stores-registered store too.
-    let state =
+    let mut state =
         AppState::with_index(store, secret.clone(), index).with_persistent_registered_indexes();
+
+    // Opt-in detached terminal broker (HS2-ERT00F): host terminals in a separate process so
+    // they survive a server restart. Spawns/discovers the broker for the primary store.
+    if cli.terminal_broker {
+        state = state.with_terminal_broker()?;
+        println!("terminals: detached broker (survives restart)");
+    }
 
     // Auto-host any stores configured in ${HOTSHEET_HOME}/stores.json (HS2-87 discovery).
     let extra = state.host_configured_stores();
