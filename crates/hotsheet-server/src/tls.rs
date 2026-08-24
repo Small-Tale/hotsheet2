@@ -63,6 +63,18 @@ pub async fn serve_tls(
     config: rustls::ServerConfig,
     shutdown: impl std::future::Future<Output = ()> + Send,
 ) -> anyhow::Result<()> {
+    serve_tls_with_acl(listener, app, config, None, shutdown).await
+}
+
+/// Serve mTLS with optional per-certificate authorization. When `acl_file` exists, unknown
+/// fingerprints are denied and read-only identities may use only safe HTTP methods.
+pub async fn serve_tls_with_acl(
+    listener: tokio::net::TcpListener,
+    app: axum::Router,
+    config: rustls::ServerConfig,
+    acl_file: Option<std::path::PathBuf>,
+    shutdown: impl std::future::Future<Output = ()> + Send,
+) -> anyhow::Result<()> {
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use hyper_util::server::conn::auto::Builder;
     use hyper_util::service::TowerToHyperService;
@@ -76,9 +88,20 @@ pub async fn serve_tls(
                 let Ok((stream, _peer)) = accepted else { continue };
                 let acceptor = acceptor.clone();
                 let app = app.clone();
+                let acl_file = acl_file.clone();
                 tokio::spawn(async move {
                     // A failed TLS handshake (no/for bad client cert) just drops the connection.
                     let Ok(tls) = acceptor.accept(stream).await else { return };
+                    let fingerprint = tls
+                        .get_ref()
+                        .1
+                        .peer_certificates()
+                        .and_then(|certs| certs.first())
+                        .map(|cert| hotsheet_tls::fingerprint_of_der(cert.as_ref()));
+                    let access = client_access(acl_file.as_deref(), fingerprint.as_deref());
+                    let app = app
+                        .layer(axum::middleware::from_fn(enforce_client_access))
+                        .layer(axum::Extension(access));
                     let io = TokioIo::new(tls);
                     let svc = TowerToHyperService::new(app);
                     let _ = Builder::new(TokioExecutor::new())
@@ -90,6 +113,53 @@ pub async fn serve_tls(
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct ClientAccess(hotsheet_tls::DeviceRole);
+
+fn client_access(acl_file: Option<&std::path::Path>, fingerprint: Option<&str>) -> ClientAccess {
+    let role = match acl_file {
+        None => hotsheet_tls::DeviceRole::ReadWrite,
+        Some(path) => match hotsheet_tls::load_acl_file(path) {
+            Ok(None) => hotsheet_tls::DeviceRole::ReadWrite,
+            Ok(Some(acl)) => fingerprint
+                .and_then(|fpr| acl.devices.get(fpr).copied())
+                .unwrap_or(hotsheet_tls::DeviceRole::Deny),
+            Err(_) => hotsheet_tls::DeviceRole::Deny,
+        },
+    };
+    ClientAccess(role)
+}
+
+async fn enforce_client_access(
+    axum::Extension(access): axum::Extension<ClientAccess>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let safe = read_only_request_allowed(request.method(), request.uri().path());
+    match access.0 {
+        hotsheet_tls::DeviceRole::ReadWrite => next.run(request).await,
+        hotsheet_tls::DeviceRole::ReadOnly if safe => next.run(request).await,
+        hotsheet_tls::DeviceRole::ReadOnly => (
+            axum::http::StatusCode::FORBIDDEN,
+            "client certificate is read-only",
+        )
+            .into_response(),
+        hotsheet_tls::DeviceRole::Deny => (
+            axum::http::StatusCode::FORBIDDEN,
+            "client certificate is not authorized",
+        )
+            .into_response(),
+    }
+}
+
+fn read_only_request_allowed(method: &axum::http::Method, path: &str) -> bool {
+    matches!(
+        *method,
+        axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+    ) && !(path.starts_with("/terminals/") && path.ends_with("/attach"))
 }
 
 /// Wraps rustls's WebPKI client verifier with a revocation check. Chain validation is the
@@ -224,5 +294,21 @@ mod tests {
             verifier.verify_client_cert(&good_der, &[], now).is_err(),
             "a revoked cert must be rejected live, without rebuilding the verifier"
         );
+    }
+
+    #[test]
+    fn read_only_http_excludes_bidirectional_terminal_attach() {
+        assert!(read_only_request_allowed(
+            &axum::http::Method::GET,
+            "/tickets"
+        ));
+        assert!(!read_only_request_allowed(
+            &axum::http::Method::POST,
+            "/tickets"
+        ));
+        assert!(!read_only_request_allowed(
+            &axum::http::Method::GET,
+            "/terminals/t1/attach"
+        ));
     }
 }

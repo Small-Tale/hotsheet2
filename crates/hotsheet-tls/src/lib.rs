@@ -15,7 +15,7 @@
 //! and instance files — a CA private key is a secret, never committed):
 //! `ca.crt` `ca.key` `server.crt` `server.key` `devices/<name>.crt` `revoked`.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
@@ -38,6 +38,10 @@ pub enum TlsError {
     AlreadyInitialized(PathBuf),
     #[error("no issued device named {0}")]
     NoSuchDevice(String),
+    #[error("device {0} already has a certificate; use cert renew to rotate it")]
+    DeviceExists(String),
+    #[error("ACL: {0}")]
+    Acl(#[from] serde_json::Error),
 }
 
 /// The on-disk layout of a project's TLS material.
@@ -75,6 +79,9 @@ impl Paths {
     pub fn revoked(&self) -> PathBuf {
         self.dir.join("revoked")
     }
+    pub fn acl(&self) -> PathBuf {
+        self.dir.join("acl.json")
+    }
     fn device_cert(&self, name: &str) -> PathBuf {
         self.dir.join("devices").join(format!("{name}.crt"))
     }
@@ -108,6 +115,9 @@ pub fn init_ca(paths: &Paths, hosts: &[String]) -> Result<(), TlsError> {
     // The CA: self-signed, marked as a CA, allowed to sign certs.
     let ca_key = KeyPair::generate()?;
     let mut ca_params = CertificateParams::new(Vec::<String>::new())?;
+    let now = time::OffsetDateTime::now_utc();
+    ca_params.not_before = now - time::Duration::days(1);
+    ca_params.not_after = now + time::Duration::days(3650);
     ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     ca_params
         .distinguished_name
@@ -118,6 +128,8 @@ pub fn init_ca(paths: &Paths, hosts: &[String]) -> Result<(), TlsError> {
     // The server leaf: SAN-covered, server-auth, signed by the CA.
     let server_key = KeyPair::generate()?;
     let mut server_params = CertificateParams::new(Vec::<String>::new())?;
+    server_params.not_before = now - time::Duration::days(1);
+    server_params.not_after = now + time::Duration::days(397);
     server_params
         .distinguished_name
         .push(DnType::CommonName, "hotsheet-server");
@@ -151,6 +163,9 @@ pub fn issue_device(paths: &Paths, name: &str) -> Result<DeviceCert, TlsError> {
     if !paths.is_initialized() {
         return Err(TlsError::NotInitialized);
     }
+    if paths.device_cert(name).exists() {
+        return Err(TlsError::DeviceExists(name.to_string()));
+    }
     let ca_pem = std::fs::read_to_string(paths.ca_cert())?;
     let ca_key = KeyPair::from_pem(&std::fs::read_to_string(paths.ca_key())?)?;
     // Reconstruct the CA as an issuer: same subject DN + key ⇒ what it signs chains to the
@@ -159,6 +174,9 @@ pub fn issue_device(paths: &Paths, name: &str) -> Result<DeviceCert, TlsError> {
 
     let dev_key = KeyPair::generate()?;
     let mut dev_params = CertificateParams::new(Vec::<String>::new())?;
+    let now = time::OffsetDateTime::now_utc();
+    dev_params.not_before = now - time::Duration::hours(1);
+    dev_params.not_after = now + time::Duration::days(90);
     dev_params.distinguished_name.push(DnType::CommonName, name);
     dev_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
     dev_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
@@ -177,6 +195,67 @@ pub fn issue_device(paths: &Paths, name: &str) -> Result<DeviceCert, TlsError> {
         ca_pem,
         fingerprint,
     })
+}
+
+/// Rotate a device certificate: revoke the recorded leaf, then issue a fresh 90-day leaf
+/// with the same device name. The old certificate stops working immediately on live servers.
+pub fn renew_device(paths: &Paths, name: &str) -> Result<DeviceCert, TlsError> {
+    let old_pem = std::fs::read_to_string(paths.device_cert(name))
+        .map_err(|_| TlsError::NoSuchDevice(name.to_string()))?;
+    let old_der = pem_to_der(&old_pem).ok_or_else(|| TlsError::NoSuchDevice(name.to_string()))?;
+    let old_fingerprint = fingerprint_of_der(&old_der);
+    let carried_role = load_acl(paths)?.and_then(|acl| acl.devices.get(&old_fingerprint).copied());
+    revoke_device(paths, name)?;
+    std::fs::remove_file(paths.device_cert(name))?;
+    let renewed = issue_device(paths, name)?;
+    if let Some(role) = carried_role {
+        set_device_role(paths, name, role)?;
+    }
+    Ok(renewed)
+}
+
+/// Optional authorization role layered on top of CA membership.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceRole {
+    ReadOnly,
+    ReadWrite,
+    Deny,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct DeviceAcl {
+    #[serde(default)]
+    pub devices: BTreeMap<String, DeviceRole>,
+}
+
+/// Assign a role to the currently recorded certificate for `name`, keyed by fingerprint.
+/// Creating `acl.json` switches the server from legacy CA-membership access to explicit ACLs:
+/// fingerprints not present in the file are denied.
+pub fn set_device_role(paths: &Paths, name: &str, role: DeviceRole) -> Result<String, TlsError> {
+    let pem = std::fs::read_to_string(paths.device_cert(name))
+        .map_err(|_| TlsError::NoSuchDevice(name.to_string()))?;
+    let der = pem_to_der(&pem).ok_or_else(|| TlsError::NoSuchDevice(name.to_string()))?;
+    let fingerprint = fingerprint_of_der(&der);
+    let mut acl = load_acl(paths)?.unwrap_or_default();
+    acl.devices.insert(fingerprint.clone(), role);
+    std::fs::create_dir_all(&paths.dir)?;
+    write_private(&paths.acl(), &serde_json::to_string_pretty(&acl)?)?;
+    Ok(fingerprint)
+}
+
+/// Load the optional ACL. `None` means legacy CA-membership authorization; a present file
+/// means explicit mode and unknown fingerprints are denied.
+pub fn load_acl(paths: &Paths) -> Result<Option<DeviceAcl>, TlsError> {
+    load_acl_file(&paths.acl())
+}
+
+pub fn load_acl_file(path: &Path) -> Result<Option<DeviceAcl>, TlsError> {
+    match std::fs::read_to_string(path) {
+        Ok(json) => Ok(Some(serde_json::from_str(&json)?)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
 }
 
 /// Revoke a device by name (looks up its recorded cert, computes its fingerprint, appends it
@@ -374,6 +453,40 @@ mod tests {
         // Revoking an unknown device errors.
         assert!(matches!(
             revoke_device(&p, "ghost"),
+            Err(TlsError::NoSuchDevice(_))
+        ));
+    }
+
+    #[test]
+    fn renew_revokes_the_old_leaf_and_duplicate_issue_requires_explicit_rotation() {
+        let (_d, p) = paths();
+        init_ca(&p, &[]).unwrap();
+        let old = issue_device(&p, "laptop").unwrap();
+        assert!(matches!(
+            issue_device(&p, "laptop"),
+            Err(TlsError::DeviceExists(_))
+        ));
+        let renewed = renew_device(&p, "laptop").unwrap();
+        assert_ne!(renewed.fingerprint, old.fingerprint);
+        assert!(load_revoked(&p).contains(&old.fingerprint));
+        assert!(!load_revoked(&p).contains(&renewed.fingerprint));
+    }
+
+    #[test]
+    fn acl_switches_on_explicitly_and_is_keyed_by_device_fingerprint() {
+        let (_d, p) = paths();
+        init_ca(&p, &[]).unwrap();
+        let reader = issue_device(&p, "reader").unwrap();
+        assert!(load_acl(&p).unwrap().is_none(), "ACL is opt-in");
+        let fingerprint = set_device_role(&p, "reader", DeviceRole::ReadOnly).unwrap();
+        assert_eq!(fingerprint, reader.fingerprint);
+        let acl = load_acl(&p).unwrap().unwrap();
+        assert_eq!(
+            acl.devices.get(&reader.fingerprint),
+            Some(&DeviceRole::ReadOnly)
+        );
+        assert!(matches!(
+            set_device_role(&p, "ghost", DeviceRole::Deny),
             Err(TlsError::NoSuchDevice(_))
         ));
     }

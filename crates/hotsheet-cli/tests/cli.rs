@@ -1200,3 +1200,42 @@ fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
         .success()
         .stdout(predicate::str::contains("vim"));
 }
+
+#[test]
+fn cert_issue_role_renew_and_revoke_flow() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let cert = |args: &[&str]| {
+        let mut command = hs(dir.path());
+        command
+            .env("HOTSHEET_HOME", home.path())
+            .arg("cert")
+            .args(args);
+        command
+    };
+    cert(&["init"]).assert().success();
+    cert(&["issue", "laptop"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("BEGIN CERTIFICATE"));
+    cert(&["issue", "laptop"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cert renew"));
+    cert(&["role", "laptop", "read-only"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ReadOnly"));
+    cert(&["renew", "laptop"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("BEGIN CERTIFICATE"));
+    cert(&["revoke", "laptop"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("next TLS connection"));
+}

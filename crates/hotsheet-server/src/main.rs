@@ -101,14 +101,15 @@ async fn main() -> Result<()> {
         None
     } else {
         let paths = hotsheet_tls::Paths::for_store(&cli.path);
-        Some(
+        Some((
             hotsheet_server::tls::build_server_config(&paths).map_err(|e| {
                 anyhow::anyhow!(
                     "off-loopback bind {addr} needs mTLS: {e}\n\
                  run `hotsheet-cli cert init` (optionally --host <ip/dns>) first"
                 )
             })?,
-        )
+            paths.acl(),
+        ))
     };
     let scheme = if tls_config.is_some() {
         "https"
@@ -228,9 +229,15 @@ async fn main() -> Result<()> {
     // separate process a client can't kill by closing.
     match tls_config {
         // Tier 1: serve over mutual TLS (manual acceptor; graceful stop-accepting on signal).
-        Some(config) => {
-            hotsheet_server::tls::serve_tls(listener, app(state), config, shutdown_signal())
-                .await?;
+        Some((config, acl_file)) => {
+            hotsheet_server::tls::serve_tls_with_acl(
+                listener,
+                app(state),
+                config,
+                Some(acl_file),
+                shutdown_signal(),
+            )
+            .await?;
         }
         // Tier 0: plaintext loopback, with axum's per-connection graceful shutdown.
         None => {

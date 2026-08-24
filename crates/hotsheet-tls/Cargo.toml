@@ -13,6 +13,9 @@ rcgen = { workspace = true, features = ["pem", "x509-parser"] }
 sha2.workspace = true
 thiserror.workspace = true
 hotsheet-plugins.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+time.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

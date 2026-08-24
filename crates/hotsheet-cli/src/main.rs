@@ -362,7 +362,11 @@ enum CertCmd {
     /// Issue a client (device) cert signed by the project CA, printing the cert + key + CA
     /// PEMs to copy to the device. `name` identifies it for later revocation.
     Issue { name: String },
-    /// Revoke a previously-issued device by name (takes effect on the server's next start).
+    /// Rotate a device certificate, revoking the old leaf and printing a fresh 90-day leaf.
+    Renew { name: String },
+    /// Set an issued device's explicit ACL role: read-only, read-write, or deny.
+    Role { name: String, role: String },
+    /// Revoke a previously-issued device by name (takes effect on the next TLS connection).
     Revoke { name: String },
 }
 
@@ -1465,9 +1469,32 @@ fn cmd_cert(store_path: &Path, cmd: &CertCmd) -> Result<()> {
             println!("# ===== project CA (ca.crt — to verify the server) =====");
             print!("{}", dev.ca_pem);
         }
+        CertCmd::Renew { name } => {
+            let dev = hotsheet_tls::renew_device(&paths, name)?;
+            eprintln!(
+                "Renewed '{}' with a fresh 90-day certificate (fingerprint {}). The old certificate is revoked:",
+                dev.name, dev.fingerprint
+            );
+            println!("# ===== client certificate ({}.crt) =====", dev.name);
+            print!("{}", dev.cert_pem);
+            println!("# ===== client private key ({}.key) =====", dev.name);
+            print!("{}", dev.key_pem);
+            println!("# ===== project CA (ca.crt — to verify the server) =====");
+            print!("{}", dev.ca_pem);
+        }
+        CertCmd::Role { name, role } => {
+            let role = match role.as_str() {
+                "read-only" | "read_only" => hotsheet_tls::DeviceRole::ReadOnly,
+                "read-write" | "read_write" => hotsheet_tls::DeviceRole::ReadWrite,
+                "deny" => hotsheet_tls::DeviceRole::Deny,
+                _ => bail!("role must be read-only, read-write, or deny"),
+            };
+            let fpr = hotsheet_tls::set_device_role(&paths, name, role)?;
+            println!("Set '{name}' ({fpr}) to {role:?}. This applies on the next request.");
+        }
         CertCmd::Revoke { name } => {
             let fpr = hotsheet_tls::revoke_device(&paths, name)?;
-            println!("Revoked '{name}' ({fpr}). Restart the server to apply.");
+            println!("Revoked '{name}' ({fpr}). This applies on the next TLS connection.");
         }
     }
     Ok(())

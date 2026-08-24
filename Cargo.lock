@@ -873,9 +873,12 @@ version = "0.0.0"
 dependencies = [
  "hotsheet-plugins",
  "rcgen",
+ "serde",
+ "serde_json",
  "sha2",
  "tempfile",
  "thiserror 2.0.20",
+ "time",
 ]
 
 [[package]]
