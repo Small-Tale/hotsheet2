@@ -931,7 +931,7 @@ impl Backend for HttpBackend {
         for (k, v) in query {
             req = req.query(k, v);
         }
-        exec(req.call())
+        self.exec(req.call())
     }
 
     fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
@@ -941,31 +941,68 @@ impl Backend for HttpBackend {
             .set("X-Hotsheet-Secret", &self.secret)
             .set("Content-Type", "application/json");
         let payload = serde_json::to_string(body).unwrap_or_else(|_| "{}".to_string());
-        exec(req.send_string(&payload))
+        self.exec(req.send_string(&payload))
     }
 }
 
-fn exec(res: Result<ureq::Response, ureq::Error>) -> Result<Value, BackendError> {
-    match res {
-        Ok(resp) => {
-            let text = resp.into_string().unwrap_or_default();
-            Ok(serde_json::from_str(&text).unwrap_or(Value::Null))
+impl HttpBackend {
+    fn exec(&self, res: Result<ureq::Response, ureq::Error>) -> Result<Value, BackendError> {
+        match res {
+            Ok(resp) => {
+                let text = resp.into_string().unwrap_or_default();
+                Ok(serde_json::from_str(&text).unwrap_or(Value::Null))
+            }
+            Err(ureq::Error::Status(code, resp)) => {
+                let text = resp.into_string().unwrap_or_default();
+                let fallback = serde_json::from_str::<Value>(&text)
+                    .ok()
+                    .and_then(|v| v.get("error").and_then(Value::as_str).map(String::from))
+                    .unwrap_or(text);
+                let message = if matches!(code, 401 | 403) {
+                    let health = self
+                        .agent
+                        .get(&format!("{}/health", self.base))
+                        .call()
+                        .ok()
+                        .and_then(|r| r.into_string().ok())
+                        .and_then(|text| serde_json::from_str::<Value>(&text).ok());
+                    auth_mismatch_message(&self.base, health.as_ref(), &fallback)
+                } else {
+                    fallback
+                };
+                Err(BackendError {
+                    status: Some(code),
+                    message,
+                })
+            }
+            Err(e) => Err(BackendError {
+                status: None,
+                message: e.to_string(),
+            }),
         }
-        Err(ureq::Error::Status(code, resp)) => {
-            let text = resp.into_string().unwrap_or_default();
-            let message = serde_json::from_str::<Value>(&text)
-                .ok()
-                .and_then(|v| v.get("error").and_then(Value::as_str).map(String::from))
-                .unwrap_or(text);
-            Err(BackendError {
-                status: Some(code),
-                message,
-            })
+    }
+}
+
+fn auth_mismatch_message(base: &str, health: Option<&Value>, fallback: &str) -> String {
+    match health {
+        Some(h) if h.get("generation").and_then(Value::as_str) == Some("hs2") => {
+            let prefix = h
+                .get("ticket_prefix")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            let schema = h
+                .get("store_schema")
+                .and_then(Value::as_u64)
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            format!(
+                "Hot Sheet 2 server at {base} rejected the configured secret (store prefix {prefix}, schema {schema}); update --secret for this HS2 instance"
+            )
         }
-        Err(e) => Err(BackendError {
-            status: None,
-            message: e.to_string(),
-        }),
+        Some(_) => format!(
+            "endpoint {base} does not identify as Hot Sheet 2; it may be an HS1 or unrelated instance. Configure hotsheet-mcp with --path <HS2-store> or the correct HS2 --server. Original response: {fallback}"
+        ),
+        None => fallback.to_string(),
     }
 }
 
@@ -1003,6 +1040,70 @@ mod tests {
         assert_eq!(r["result"]["protocolVersion"], PROTOCOL_VERSION);
         assert_eq!(r["result"]["serverInfo"]["name"], "hotsheet-mcp");
         assert!(r["result"]["capabilities"]["tools"].is_object());
+    }
+
+    #[test]
+    fn auth_feedback_distinguishes_hs2_secret_from_wrong_generation() {
+        let hs2 = json!({
+            "status": "ok",
+            "generation": "hs2",
+            "api_version": 1,
+            "ticket_prefix": "ACME",
+            "store_schema": 1
+        });
+        let wrong_secret = auth_mismatch_message("http://localhost:8787", Some(&hs2), "denied");
+        assert!(wrong_secret.contains("Hot Sheet 2 server"));
+        assert!(wrong_secret.contains("store prefix ACME, schema 1"));
+        assert!(wrong_secret.contains("update --secret"));
+
+        let hs1 = json!({ "status": "ok", "app": "Hot Sheet" });
+        let wrong_generation =
+            auth_mismatch_message("http://localhost:4174", Some(&hs1), "Secret mismatch");
+        assert!(wrong_generation.contains("does not identify as Hot Sheet 2"));
+        assert!(wrong_generation.contains("HS1 or unrelated instance"));
+        assert!(wrong_generation.contains("--path <HS2-store>"));
+
+        assert_eq!(
+            auth_mismatch_message("http://offline", None, "original error"),
+            "original error",
+            "an unreachable health endpoint preserves the original diagnosis"
+        );
+    }
+
+    #[test]
+    fn http_backend_probes_health_after_an_auth_failure() {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let responses = [
+                (403, r#"{"error":"Secret mismatch"}"#),
+                (
+                    200,
+                    r#"{"status":"ok","generation":"hs2","api_version":1,"ticket_prefix":"ACME","store_schema":1}"#,
+                ),
+            ];
+            for (status, body) in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = [0_u8; 2048];
+                let _ = stream.read(&mut request).unwrap();
+                let reason = if status == 200 { "OK" } else { "Forbidden" };
+                write!(
+                    stream,
+                    "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .unwrap();
+            }
+        });
+
+        let backend = HttpBackend::new(format!("http://{addr}"), "wrong-secret");
+        let err = backend.get("/tickets", &[]).unwrap_err();
+        assert_eq!(err.status, Some(403));
+        assert!(err.message.contains("Hot Sheet 2 server"));
+        assert!(err.message.contains("store prefix ACME, schema 1"));
+        server.join().unwrap();
     }
 
     #[test]

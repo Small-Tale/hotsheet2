@@ -79,9 +79,15 @@ git + a rebuildable index ([02-ticket-storage.md](02-ticket-storage.md) §2.9).
 > (per-project CA + per-device client certs, HS2-VT3JMF) on off-loopback binds — see
 > §4.6. It serves reads from the **SQLite/FTS index** (HS2-5)
 > and owns the **filesystem watcher** (HS2-6) that reindexes changed files + emits
-> change events, so a CLI/git edit shows up live. It does **not** yet own terminals
-> (HS2-10), the detached lifecycle/auto-start (HS2-59), or the long-poll fallback.
-> MCP is a separate shim, not served here (§5.8).
+> change events, so a CLI/git edit shows up live. Terminal hosting, detached broker
+> integration, lifecycle/discovery, and the long-poll fallback are also built. MCP is a
+> separate shim, not served here (§5.8).
+
+`GET /health` is intentionally unauthenticated and carries a non-secret protocol identity:
+`generation: "hs2"`, `api_version`, ticket prefix, and store schema. An HS2 MCP HTTP
+backend that receives 401/403 probes this marker so it can distinguish a bad HS2 secret
+from an HS1/wrong-service endpoint instead of giving generic credential advice
+(HS2-8H8BQM).
 
 A thin binary that wraps the core and is the **always-on service** every GUI talks
 to — **local use included**. It runs completely independently of any client (a

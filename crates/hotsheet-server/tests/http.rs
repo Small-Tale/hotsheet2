@@ -45,7 +45,12 @@ async fn health_needs_no_secret() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(body_json(resp).await["status"], "ok");
+    let health = body_json(resp).await;
+    assert_eq!(health["status"], "ok");
+    assert_eq!(health["generation"], "hs2");
+    assert_eq!(health["api_version"], 1);
+    assert_eq!(health["ticket_prefix"], "HS");
+    assert_eq!(health["store_schema"], 1);
 }
 
 #[tokio::test]

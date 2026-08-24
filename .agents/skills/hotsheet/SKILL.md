@@ -15,7 +15,13 @@ Work through them in order of priority, where reasonable.
 
 If the worklist says "Auto-Prioritize", follow those instructions to choose and mark tickets as Up Next before working on them.
 
-If API calls fail (connection refused or 403), re-read `.hotsheet/settings.json` for the current `port` and `secret` values — you may be connecting to the wrong Hot Sheet instance.
+Before using a connected MCP, confirm the generation. `hotsheet-store.json` (directly or
+through `.hotsheet/store`) identifies an HS2 git store; `.hotsheet/db/PG_VERSION` identifies
+an HS1 PGLite project. If both generations are relevant, the connected MCP may still belong
+to HS1; use `target/debug/hotsheet-cli -C <HS2-store>` until the endpoint identifies as HS2.
+A 401/403 alone does not prove the secret is stale. If the endpoint identifies as HS2, then
+re-read its machine-local configuration; otherwise report the wrong-generation/project
+mismatch explicitly.
 
 **MCP tools (`hotsheet_*`) are preferred over curl when the channel is connected** — see the worklist for per-operation guidance. The 14-tool surface covers ticket lifecycle (`hotsheet_update_ticket`, `hotsheet_create_ticket`, `hotsheet_get_ticket`, `hotsheet_delete_ticket`, `hotsheet_restore_ticket`, `hotsheet_toggle_up_next`, `hotsheet_duplicate_tickets`), bulk operations (`hotsheet_batch`), notes (`hotsheet_edit_note`, `hotsheet_delete_note`), attachments (`hotsheet_add_attachment`), channel signaling (`hotsheet_signal_done`), feedback sugar (`hotsheet_request_feedback`), and query (`hotsheet_query_tickets`). Curl stays supported as the universal fallback for non-Claude AI agents and human terminal callers.
 

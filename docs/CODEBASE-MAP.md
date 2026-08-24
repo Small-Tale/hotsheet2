@@ -151,7 +151,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 - **Server:** `hotsheet-server -C <store> [--bind 127.0.0.1:8787] [--secret …]` — HTTP
   REST (`/health`, `/tickets`…) + `/ws/sync`, `X-Hotsheet-Secret` auth (Tier 0,
   loopback only). Queries go through the file-backed SQLite index (restored + reconciled
-  on launch), with `ops` as the write path.
+  on launch), with `ops` as the write path. Unauthenticated `/health` returns the HS2
+  generation/API marker plus non-secret store prefix/schema so MCP clients can diagnose
+  wrong-secret vs. HS1/wrong-endpoint failures (HS2-8H8BQM).
 - **MCP shim:** `hotsheet-mcp --path <store>` (serverless, direct-to-disk — the
   headless default) **or** `--server <url> --secret <s>` (proxy a running server).
   Stdio JSON-RPC exposing the `hotsheet_*` tools. An AI tool spawns it per project.

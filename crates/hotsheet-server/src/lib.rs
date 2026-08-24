@@ -653,9 +653,15 @@ async fn require_secret(
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
     let count = state.store.list_tickets()?.len();
-    Ok(Json(
-        serde_json::json!({ "status": "ok", "tickets": count }),
-    ))
+    let metadata = state.store.metadata()?;
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "generation": "hs2",
+        "api_version": 1,
+        "ticket_prefix": metadata.ticket_prefix,
+        "store_schema": metadata.schema_version,
+        "tickets": count
+    })))
 }
 
 async fn list_tickets(

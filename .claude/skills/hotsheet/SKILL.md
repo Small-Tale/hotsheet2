@@ -23,5 +23,11 @@ Work the project's Hot Sheet ticket queue in priority order.
 Notes:
 - The CLI (`hotsheet-cli …`) and the `hotsheet_*` MCP tools run the same engine — use
   whichever is convenient. Both work with no server running.
+- **Confirm the generation before using a connected MCP.** `hotsheet-store.json` (directly
+  or through a `.hotsheet/store` link) identifies an HS2 git store; `.hotsheet/db/PG_VERSION`
+  identifies an HS1 PGLite project. If the repo has HS1 data but its tickets live in a
+  separate HS2 store, an already-connected `hotsheet_*` MCP may still belong to HS1. Use
+  `hotsheet-cli -C <HS2-store>` until the MCP endpoint identifies itself as HS2. A 401/403
+  alone does not prove the secret is stale; it may be the wrong generation or project.
 - If a ticket is unclear or blocked, file a follow-up ticket describing the blocker
   (`hotsheet-cli new` / `hotsheet_create`) and move on rather than guessing.

@@ -28,6 +28,9 @@ export HOTSHEET_PORT=$(node -p "require('./.hotsheet/settings.local.json').port 
 export HOTSHEET_SECRET=$(node -p "require('./.hotsheet/secret.json').secret")
 ```
 
-If the request fails (connection refused or 403), re-read those two files — you may be connecting to the wrong Hot Sheet instance. (Older projects keep `port` and `secret` in `.hotsheet/settings.json` instead.)
+If the request fails, distinguish generations before retrying credentials: `hotsheet-store.json`
+(directly or via `.hotsheet/store`) is HS2; `.hotsheet/db/PG_VERSION` is HS1. A 401/403 from
+an endpoint that does not identify as HS2 may be an HS1/wrong-project connector; use the
+explicit HS2 CLI store instead. Only re-read secrets after confirming the endpoint is HS2.
 
 Report the created ticket number and title to the user.
