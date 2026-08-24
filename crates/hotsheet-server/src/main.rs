@@ -160,6 +160,7 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     let local = listener.local_addr()?;
     let url = format!("{scheme}://{local}");
+    state.set_terminal_server_url(url.clone());
     println!(
         "hotsheet-server listening on {url} (store: {}){}",
         cli.path.display(),

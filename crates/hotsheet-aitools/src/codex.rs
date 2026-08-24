@@ -462,7 +462,17 @@ fn token_usage_updated(
     {
         return None;
     }
-    let usage = params.get("tokenUsage")?.get("last")?;
+    notification_usage(notification)
+}
+
+/// Parse the usage payload from a recorded/live Codex token-usage notification without
+/// applying turn routing. Useful for protocol-contract replay; live turns use the routed
+/// wrapper above so another thread's usage cannot bleed across connections.
+pub fn notification_usage(notification: &Value) -> Option<crate::drive::Usage> {
+    if notification.get("method").and_then(Value::as_str) != Some("thread/tokenUsage/updated") {
+        return None;
+    }
+    let usage = notification.get("params")?.get("tokenUsage")?.get("last")?;
     Some(crate::drive::Usage {
         model: None,
         tokens_in: usage.get("inputTokens")?.as_u64()?,

@@ -266,6 +266,11 @@ that makes adding a tool boring instead of painful.
   (creds-gated, nightly / pre-release) for the end-to-end sanity a recording can't
   give.
 
+> **Built:** sanitized, version-pinned Codex 0.148 and Claude 2.1.241 usage cassettes
+> captured by the deliberate HS2-CQ6B96 live verification replay through the production
+> parsers in fast CI. The ignored, credentials-gated live tests remain the drift oracle.
+> ACP joins this gate when its first plugin/mapper lands (HS2-96BZEF).
+
 **Payoff:** adding a tool = write the plugin module + record its real protocol once;
 everything else is inherited and automated.
 

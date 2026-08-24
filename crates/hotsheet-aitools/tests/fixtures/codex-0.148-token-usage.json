@@ -1,0 +1,16 @@
+{
+  "method": "thread/tokenUsage/updated",
+  "params": {
+    "threadId": "thread-redacted",
+    "turnId": "turn-redacted",
+    "tokenUsage": {
+      "last": {
+        "inputTokens": 1314,
+        "cachedInputTokens": 768,
+        "outputTokens": 42,
+        "reasoningOutputTokens": 8,
+        "totalTokens": 1356
+      }
+    }
+  }
+}

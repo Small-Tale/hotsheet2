@@ -95,6 +95,8 @@ pub struct AppState {
     terminal_broker: Option<terminal_broker::TerminalBroker>,
     /// Search roots for third-party plugins; embedded first-party plugins are always present.
     plugin_dirs: Arc<Vec<std::path::PathBuf>>,
+    /// Public URL injected into manifest-launched terminal tools for permission route-back.
+    terminal_server_url: Arc<Mutex<Option<String>>>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -162,6 +164,7 @@ impl AppState {
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
+            terminal_server_url: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -246,6 +249,14 @@ impl AppState {
     pub fn with_plugin_dirs(mut self, dirs: Vec<std::path::PathBuf>) -> Self {
         self.plugin_dirs = Arc::new(dirs);
         self
+    }
+
+    /// Set the URL injected into interactively launched tools. The real server calls this
+    /// after binding; tests may use it without publishing machine discovery files.
+    pub fn set_terminal_server_url(&self, url: String) {
+        if let Ok(mut slot) = self.terminal_server_url.lock() {
+            *slot = Some(url);
+        }
     }
 
     /// Host a store: build its index (file-backed when persisting, else in-memory),
@@ -1343,10 +1354,10 @@ fn terminal_launch(
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     let mut env = vec![("HOTSHEET_SECRET".to_string(), state.secret.clone())];
-    if let Ok(instance) = state.instance.lock()
-        && let Some(instance) = instance.as_ref()
+    if let Ok(url) = state.terminal_server_url.lock()
+        && let Some(url) = url.as_ref()
     {
-        env.push(("HOTSHEET_SERVER".to_string(), instance.url.clone()));
+        env.push(("HOTSHEET_SERVER".to_string(), url.clone()));
     }
     Ok(PreparedTerminalLaunch {
         command: program.to_string_lossy().into_owned(),

@@ -1,0 +1,13 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "session_id": "session-redacted",
+  "usage": {
+    "input_tokens": 120,
+    "cache_read_input_tokens": 800,
+    "cache_creation_input_tokens": 40,
+    "output_tokens": 55
+  },
+  "total_cost_usd": 0.0125
+}

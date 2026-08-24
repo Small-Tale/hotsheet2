@@ -16,6 +16,7 @@
 //!   --hold-ms 500         # stay alive (still "busy") this long
 //!   --idle                # OSC 133;D (finished → idle)
 //!   --exit 0              # exit with this status
+//!   --permission Bash "rm x" # ask HOTSHEET_SERVER and print its allow/deny decision
 //! ```
 
 use std::io::Write;
@@ -62,6 +63,20 @@ fn main() {
                 }
                 i += 1;
             }
+            "--permission" => {
+                let tool = val(i).to_string();
+                let action = args.get(i + 2).cloned().unwrap_or_default();
+                match ask_permission(&tool, &action) {
+                    Ok(decision) => {
+                        let _ = writeln!(w, "permission:{decision}");
+                    }
+                    Err(e) => {
+                        eprintln!("hs-fake-agent: permission request failed: {e}");
+                        exit_code = 2;
+                    }
+                }
+                i += 2;
+            }
             "--exit" => {
                 exit_code = val(i).parse::<i32>().unwrap_or(0);
                 i += 1;
@@ -75,4 +90,27 @@ fn main() {
     }
     let _ = w.flush();
     std::process::exit(exit_code);
+}
+
+fn ask_permission(tool: &str, action: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let url = std::env::var("HOTSHEET_SERVER")?;
+    let secret = std::env::var("HOTSHEET_SECRET")?;
+    let connection =
+        std::env::var("HOTSHEET_CONNECTION").unwrap_or_else(|_| "hs-fake-agent".to_string());
+    let body = serde_json::json!({
+        "connection": connection,
+        "tool": tool,
+        "action": action,
+    })
+    .to_string();
+    let text = ureq::post(&format!("{}/permissions/ask", url.trim_end_matches('/')))
+        .set("X-Hotsheet-Secret", &secret)
+        .set("Content-Type", "application/json")
+        .send_string(&body)?
+        .into_string()?;
+    let response: serde_json::Value = serde_json::from_str(&text)?;
+    response["decision"]
+        .as_str()
+        .map(str::to_string)
+        .ok_or_else(|| "permission response has no decision".into())
 }

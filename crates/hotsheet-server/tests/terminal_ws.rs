@@ -10,6 +10,127 @@ use tokio_tungstenite::tungstenite::Message as WsMessage;
 
 const SECRET: &str = "test-secret";
 
+fn workspace_binary(name: &str) -> std::path::PathBuf {
+    if let Some(path) = std::env::var_os(format!("CARGO_BIN_EXE_{name}")) {
+        return path.into();
+    }
+    let exe = std::env::current_exe().expect("current test executable");
+    let profile = exe
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("target profile directory");
+    profile.join(format!("{name}{}", std::env::consts::EXE_SUFFIX))
+}
+
+#[tokio::test]
+async fn fake_agent_permission_round_trip_in_a_terminal_persists_always_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    let rules = dir.path().join("permission-rules.json");
+    let plugin_root = tempfile::tempdir().unwrap();
+    let plugin = plugin_root.path().join("fake-permission");
+    std::fs::create_dir(&plugin).unwrap();
+    std::fs::write(plugin.join("instructions.md"), "Fake permission agent\n").unwrap();
+    let fake_agent = workspace_binary("hs-fake-agent");
+    assert!(
+        fake_agent.is_file(),
+        "build the workspace hs-fake-agent binary at {}",
+        fake_agent.display()
+    );
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        format!(
+            r#"
+id = "fake-permission"
+display_name = "Fake Permission"
+product_name = "Fake Permission Agent"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[launch]
+program = {fake_agent:?}
+args = ["--permission", "Bash", "rm important"]
+"#
+        ),
+    )
+    .unwrap();
+
+    let state = AppState::new(store, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&rules)
+        .with_plugin_dirs(vec![plugin_root.path().to_path_buf()]);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let base = format!("http://{addr}");
+    state.set_terminal_server_url(base.clone());
+    tokio::spawn(async move { axum::serve(listener, app(state)).await.unwrap() });
+
+    let output = tokio::task::spawn_blocking(move || {
+        let opened = ureq::post(&format!("{base}/terminals"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"connect":"fake-permission","id":"perm-agent"}"#)
+            .unwrap();
+        assert_eq!(opened.status(), 200);
+
+        let pending_id = loop {
+            let value: serde_json::Value = serde_json::from_str(
+                &ureq::get(&format!("{base}/permissions"))
+                    .set("x-hotsheet-secret", SECRET)
+                    .call()
+                    .unwrap()
+                    .into_string()
+                    .unwrap(),
+            )
+            .unwrap();
+            if let Some(id) = value
+                .as_array()
+                .and_then(|a| a.first())
+                .and_then(|p| p["id"].as_u64())
+            {
+                break id;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        let answer = ureq::post(&format!("{base}/permissions/{pending_id}"))
+            .set("x-hotsheet-secret", SECRET)
+            .set("content-type", "application/json")
+            .send_string(r#"{"decision":"allow","scope":"always"}"#)
+            .unwrap();
+        assert_eq!(answer.status(), 200);
+
+        for _ in 0..100 {
+            let value: serde_json::Value = serde_json::from_str(
+                &ureq::get(&format!("{base}/terminals/perm-agent"))
+                    .set("x-hotsheet-secret", SECRET)
+                    .call()
+                    .unwrap()
+                    .into_string()
+                    .unwrap(),
+            )
+            .unwrap();
+            let output = value["scrollback"].as_str().unwrap_or_default().to_string();
+            if output.contains("permission:allow") {
+                return output;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        String::new()
+    })
+    .await
+    .unwrap();
+    assert!(output.contains("permission:allow"), "{output}");
+    let saved = std::fs::read_to_string(rules).unwrap();
+    assert!(saved.contains("rm important"), "{saved}");
+}
+
 #[tokio::test]
 async fn attach_replays_scrollback_streams_output_and_forwards_input() {
     let dir = tempfile::tempdir().unwrap();
