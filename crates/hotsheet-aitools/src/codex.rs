@@ -408,12 +408,11 @@ fn completed_outcome(
     })
 }
 
-/// Extract token usage from a codex `turn/completed` notification's `turn` object
-/// (`docs/14`, the `codex-usage` mapper for HS2-8PSAFE). Lenient about field names
+/// Backward-compatible extraction for Codex versions that embedded usage in a
+/// `turn/completed` notification's `turn` object. Current Codex reports the separate
+/// camelCase event handled by [`token_usage_updated`]. This fallback is lenient about field names
 /// (`input_tokens`/`prompt_tokens`, `output_tokens`/`completion_tokens`) so a protocol
-/// tweak degrades to `None` rather than crashing; `None` when the turn reports no usage.
-/// **Note:** the exact codex field names should be confirmed against a live codex — a
-/// mismatch yields `None` (no metrics), never an error.
+/// tweak degrades to `None` rather than crashing.
 pub fn turn_usage(turn: &Value) -> Option<crate::drive::Usage> {
     let usage = turn.get("usage")?;
     let pick = |keys: &[&str]| {
@@ -442,6 +441,39 @@ pub fn turn_usage(turn: &Value) -> Option<crate::drive::Usage> {
     })
 }
 
+/// Extract this turn's usage from Codex 0.148+'s separate
+/// `thread/tokenUsage/updated` notification. `inputTokens` already includes the cached
+/// subset (`totalTokens == inputTokens + outputTokens`), so do not add
+/// `cachedInputTokens` again.
+fn token_usage_updated(
+    notification: &Value,
+    thread_id: &str,
+    turn_id: Option<&str>,
+) -> Option<crate::drive::Usage> {
+    if notification.get("method").and_then(Value::as_str) != Some("thread/tokenUsage/updated") {
+        return None;
+    }
+    let params = notification.get("params")?;
+    if params.get("threadId").and_then(Value::as_str) != Some(thread_id) {
+        return None;
+    }
+    if let Some(want) = turn_id
+        && params.get("turnId").and_then(Value::as_str) != Some(want)
+    {
+        return None;
+    }
+    let usage = params.get("tokenUsage")?.get("last")?;
+    Some(crate::drive::Usage {
+        model: None,
+        tokens_in: usage.get("inputTokens")?.as_u64()?,
+        tokens_out: usage
+            .get("outputTokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        cost_usd: None,
+    })
+}
+
 impl CodexTurn {
     /// Non-blocking scan of newly-arrived notifications for this turn's completion.
     fn poll(&mut self) {
@@ -452,11 +484,15 @@ impl CodexTurn {
         while self.cursor < notes.len() {
             let n = &notes[self.cursor];
             self.cursor += 1;
+            if let Some(usage) = token_usage_updated(n, &self.thread_id, self.turn_id.as_deref()) {
+                self.usage = Some(usage);
+            }
             if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
-                self.usage = n
-                    .get("params")
-                    .and_then(|p| p.get("turn"))
-                    .and_then(turn_usage);
+                self.usage = self.usage.clone().or_else(|| {
+                    n.get("params")
+                        .and_then(|p| p.get("turn"))
+                        .and_then(turn_usage)
+                });
                 self.done = Some(o);
                 return;
             }
@@ -483,11 +519,17 @@ impl AppServerTurn for CodexTurn {
             while self.cursor < notes.len() {
                 let n = &notes[self.cursor];
                 self.cursor += 1;
+                if let Some(usage) =
+                    token_usage_updated(n, &self.thread_id, self.turn_id.as_deref())
+                {
+                    self.usage = Some(usage);
+                }
                 if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
-                    self.usage = n
-                        .get("params")
-                        .and_then(|p| p.get("turn"))
-                        .and_then(turn_usage);
+                    self.usage = self.usage.clone().or_else(|| {
+                        n.get("params")
+                            .and_then(|p| p.get("turn"))
+                            .and_then(turn_usage)
+                    });
                     self.done = Some(o.clone());
                     return o;
                 }
@@ -959,9 +1001,15 @@ pub(crate) mod scripted {
                             json!({ "id": "turn-1", "status": "failed",
                                     "error": { "message": "boom" } })
                         } else {
-                            // A completed turn reports token usage (docs/14, HS2-0WCRZY).
-                            json!({ "id": "turn-1", "status": status, "model": "gpt-5-codex",
-                                    "usage": { "input_tokens": 1200, "output_tokens": 340 } })
+                            // Codex 0.148 reports usage immediately before completion in a
+                            // separate notification (live-verified by HS2-CQ6B96).
+                            self.push(json!({ "jsonrpc": "2.0",
+                                "method": "thread/tokenUsage/updated",
+                                "params": { "threadId": thread_id, "turnId": "turn-1",
+                                    "tokenUsage": { "last": { "inputTokens": 1200,
+                                        "cachedInputTokens": 250, "outputTokens": 340,
+                                        "totalTokens": 1540 } } } }));
+                            json!({ "id": "turn-1", "status": status })
                         };
                         self.push(json!({ "jsonrpc": "2.0", "method": "turn/completed",
                             "params": { "threadId": thread_id, "turn": turn } }));
@@ -1172,5 +1220,33 @@ mod usage_tests {
         let u = turn_usage(&json!({ "usage": { "input_tokens": 7 } })).unwrap();
         assert_eq!(u.tokens_in, 7);
         assert_eq!(u.cost_usd, None);
+    }
+
+    #[test]
+    fn token_usage_notification_uses_last_without_double_counting_cache() {
+        let notification = json!({
+            "method": "thread/tokenUsage/updated",
+            "params": {
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "tokenUsage": {
+                    "last": {
+                        "inputTokens": 14752,
+                        "cachedInputTokens": 11008,
+                        "outputTokens": 5,
+                        "totalTokens": 14757
+                    },
+                    "total": { "inputTokens": 99999, "outputTokens": 99999 }
+                }
+            }
+        });
+        let u = token_usage_updated(&notification, "thread-1", Some("turn-1")).unwrap();
+        assert_eq!(u.tokens_in, 14752, "cached input is already included");
+        assert_eq!(u.tokens_out, 5);
+        assert_eq!(u.model, None);
+        assert_eq!(u.cost_usd, None);
+
+        assert!(token_usage_updated(&notification, "other-thread", Some("turn-1")).is_none());
+        assert!(token_usage_updated(&notification, "thread-1", Some("other-turn")).is_none());
     }
 }

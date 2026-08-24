@@ -153,7 +153,8 @@ struct ClaudeTurn {
 /// Extract token usage from a Claude stream-json `result` event (`docs/14`, the
 /// `claude-usage` mapper for HS2-TJ8FGR — reads the in-band stream result rather than a
 /// separate OTLP collector). Lenient: `None` when the event reports no usage, so a schema
-/// tweak degrades quietly. The exact field names should be confirmed against a live claude.
+/// tweak degrades quietly. Field names and cost were live-verified in HS2-CQ6B96; the
+/// result may omit `model`, so model attribution remains optional.
 pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
     let usage = result.get("usage")?;
     let u64_at = |keys: &[&str]| {
@@ -167,7 +168,7 @@ pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
     let cache_creation = u64_at(&["cache_creation_input_tokens"]).unwrap_or(0);
     let tokens_in = base_in + cache_read + cache_creation;
     let tokens_out = u64_at(&["output_tokens", "completion_tokens"]).unwrap_or(0);
-    // Claude Code's stream-json result reports the model + a total cost at the top level.
+    // Claude Code's stream-json result may report a model and reports total cost at the top level.
     let model = result
         .get("model")
         .or_else(|| usage.get("model"))

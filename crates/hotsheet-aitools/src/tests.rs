@@ -354,9 +354,9 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
         AppServerOutcome::Completed,
         "wait is idempotent"
     );
-    // The completed turn's token usage is captured from turn/completed (HS2-0WCRZY).
+    // The turn's token usage is captured from the notification immediately before completion.
     let usage = turn.usage().expect("completed turn reports usage");
-    assert_eq!(usage.model.as_deref(), Some("gpt-5-codex"));
+    assert_eq!(usage.model, None, "Codex 0.148's usage event has no model");
     assert_eq!((usage.tokens_in, usage.tokens_out), (1200, 340));
 }
 
@@ -433,8 +433,20 @@ fn codex_live_turn_against_the_daemon() {
     let cwd = std::env::var("CODEX_LIVE_CWD")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::temp_dir());
+    let source_home = crate::launch_safety::default_codex_home();
+    let isolated = crate::launch_safety::IsolatedCodexHome::create(
+        &source_home,
+        "hotsheet-disabled",
+        "/usr/bin/false",
+        &[],
+    )
+    .expect("isolated MCP-free CODEX_HOME");
+    let env = vec![(
+        "CODEX_HOME".to_string(),
+        isolated.path().display().to_string(),
+    )];
     let transport =
-        crate::codex::StdioTransport::spawn(&program, &cwd, &[]).expect("app-server spawn");
+        crate::codex::StdioTransport::spawn(&program, &cwd, &env).expect("app-server spawn");
     let cx = CodexAppServer::connect(transport).expect("initialize handshake");
     let thread = cx.open_thread(None, &cwd).expect("thread/start");
     eprintln!("live: opened thread {thread}");
@@ -448,6 +460,12 @@ fn codex_live_turn_against_the_daemon() {
         AppServerOutcome::Completed,
         "live turn should complete"
     );
+    let usage = turn
+        .usage()
+        .expect("live turn/completed must expose parseable token usage");
+    eprintln!("live: usage {usage:?}");
+    assert!(usage.tokens_in > 0, "live turn reports input tokens");
+    assert!(usage.tokens_out > 0, "live turn reports output tokens");
 }
 
 // ---- the shared-daemon WebSocket transport over a scripted WS daemon (HS2-115) ----
@@ -742,18 +760,20 @@ fn claude_live_turn_over_the_channel() {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::temp_dir());
     // Only the given (empty) MCP config, so nothing else is reachable.
-    let mcp = std::env::var("CLAUDE_LIVE_MCP")
+    let configured_mcp = std::env::var("CLAUDE_LIVE_MCP")
         .ok()
         .map(std::path::PathBuf::from);
-    let transport = crate::claude::ClaudeStreamTransport::spawn(
-        &program,
-        &cwd,
-        None,
-        mcp.as_deref(),
-        None,
-        &[],
-    )
-    .expect("claude spawn");
+    let isolated_mcp = configured_mcp.is_none().then(|| {
+        let file = tempfile::NamedTempFile::new().expect("temporary empty MCP config");
+        std::fs::write(file.path(), r#"{"mcpServers":{}}"#).expect("write empty MCP config");
+        file
+    });
+    let mcp = configured_mcp
+        .as_deref()
+        .or_else(|| isolated_mcp.as_ref().map(|f| f.path()));
+    let transport =
+        crate::claude::ClaudeStreamTransport::spawn(&program, &cwd, None, mcp, None, &[])
+            .expect("claude spawn");
     let ch = ClaudeChannel::connect(transport);
     let mut turn = ch
         .start_turn("Reply with only the word: pong")
@@ -767,13 +787,19 @@ fn claude_live_turn_over_the_channel() {
                 saw_output = true;
             }
             Some(TurnEvent::PermissionAsked(p)) => eprintln!("live: permission {p:?}"),
-            Some(TurnEvent::Usage(u)) => eprintln!("live: usage {u:?}"),
+            Some(TurnEvent::Usage(u)) => eprintln!("live: nested usage {u:?}"),
             Some(TurnEvent::Done(r)) => break r,
             None => break turn.wait(),
         }
     };
     eprintln!("live: done {reason:?}, session={:?}", ch.session_id());
     assert!(saw_output, "streamed at least one assistant output");
+    let usage = turn
+        .usage()
+        .expect("live result must expose parseable token usage");
+    eprintln!("live: usage {usage:?}");
+    assert!(usage.tokens_in > 0, "live result reports input tokens");
+    assert!(usage.tokens_out > 0, "live result reports output tokens");
     assert_eq!(reason, DoneReason::Completed, "live turn should complete");
 }
 

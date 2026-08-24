@@ -119,22 +119,24 @@ Metrics can be shared across a team **through git** — no server sync needed:
   `hotsheet-cli metrics --roll-up/--prune-before/--team`, HS2-8BCRHS).
 - **Shipped (HS2-8PSAFE / HS2-0WCRZY):** the `metrics` plugin capability
   (`Manifest.metrics` = `MetricsSpec{source}`; codex opts in with `source="codex-usage"`);
-  the codex mapper (`codex_turn_usage` → `drive::Usage`, lenient); and the **end-to-end
-  codex path** — `CodexTurn` captures usage from `turn/completed`, the drive surfaces it as
-  `TurnEvent::Usage`, and the server driving loop records it per turn via `record_priced`
+  the codex mapper (`codex_turn_usage` → `drive::Usage`, lenient fallback); and the
+  **end-to-end codex path** — `CodexTurn` captures usage from
+  `thread/tokenUsage/updated`, the drive surfaces it as `TurnEvent::Usage`, and the server
+  driving loop records it per turn via `record_priced`
   attributed to the claimed ticket + session. **Claude** (HS2-TJ8FGR) is now mapped the
   same way — `claude_result_usage` reads the in-band stream-json `result` event's `usage`
   (declared `[metrics] source="claude-usage"`), `ClaudeTurn::usage()` surfaces it, and it
   flows through `TurnEvent::Usage` + the driving-loop recorder unchanged.
-- **Hardened (HS2-CQ6B96):** both mappers now **fold cached-prompt tokens into the input
-  total** (claude: `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens`;
-  codex: `input_tokens` + `cached_input_tokens`) so the count is complete, and carry a
-  **tool-reported cost** through `drive::Usage.cost_usd` (claude's top-level
-  `total_cost_usd`) into the recorded `UsageEvent` (else `record_priced` prices from the
-  table). Sample-tested. **Still remaining (needs a live run):** confirming the exact codex
-  `turn/completed` + claude stream-json field names against real tools — the parsers stay
-  lenient (`None` on a total mismatch), so a wrong guess silently records nothing; and an
-  **ACP counters mapper** (`source="acp"`) when an ACP tool (OpenCode/Goose) lands.
+- **Live-verified + hardened (HS2-CQ6B96):** Codex 0.148 emits per-turn camelCase counts
+  under `thread/tokenUsage/updated.params.tokenUsage.last`; `inputTokens` already includes
+  its `cachedInputTokens` subset (`totalTokens == inputTokens + outputTokens`), so cached
+  tokens must **not** be added again. That event currently omits model and cost. Claude
+  2.1.241 emits `input_tokens`, `cache_read_input_tokens`,
+  `cache_creation_input_tokens`, and `output_tokens` in the stream-json result; those three
+  input classes are summed, and top-level `total_cost_usd` is carried through
+  `drive::Usage.cost_usd` (the live result omitted model). Both live tests require positive
+  parsed input/output counts, so future silent schema drift fails the gated tier. Remaining:
+  an **ACP counters mapper** (`source="acp"`) when an ACP tool (OpenCode/Goose) lands.
 - **Remaining:** wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references
