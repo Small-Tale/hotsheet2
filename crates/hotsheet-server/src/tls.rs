@@ -8,7 +8,6 @@
 //! hand-roll certificate-path validation. We only add a revocation gate on top: reject early
 //! if the end-entity cert's SHA-256 fingerprint is revoked, else defer to WebPKI.
 
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
@@ -41,7 +40,9 @@ pub fn build_server_config(paths: &Paths) -> anyhow::Result<rustls::ServerConfig
         .map_err(|e| anyhow::anyhow!("client verifier: {e}"))?;
     let verifier = Arc::new(RevocationCheckingVerifier {
         inner: webpki,
-        revoked: hotsheet_tls::load_revoked(paths),
+        // Hold the file path (not a snapshot) and re-read it per handshake, so `cert revoke`
+        // takes effect on the next connection without a server restart (HS2-MPC0QF).
+        revoked_file: paths.revoked(),
     });
 
     let server_certs = load_certs(&paths.server_cert())?;
@@ -92,11 +93,12 @@ pub async fn serve_tls(
 }
 
 /// Wraps rustls's WebPKI client verifier with a revocation check. Chain validation is the
-/// inner verifier's job; we reject a revoked end-entity fingerprint before delegating.
+/// inner verifier's job; we reject a revoked end-entity fingerprint before delegating. The
+/// revocation list is re-read from disk on each handshake so a revoke applies live.
 #[derive(Debug)]
 struct RevocationCheckingVerifier {
     inner: Arc<dyn ClientCertVerifier>,
-    revoked: HashSet<String>,
+    revoked_file: std::path::PathBuf,
 }
 
 impl ClientCertVerifier for RevocationCheckingVerifier {
@@ -110,9 +112,10 @@ impl ClientCertVerifier for RevocationCheckingVerifier {
         intermediates: &[CertificateDer<'_>],
         now: UnixTime,
     ) -> Result<ClientCertVerified, rustls::Error> {
-        // Cheap reject first: a revoked device never gets in, even with a valid chain.
+        // Cheap reject first: a revoked device never gets in, even with a valid chain. The
+        // list is re-read per handshake (handshakes are infrequent), so `cert revoke` is live.
         let fpr = hotsheet_tls::fingerprint_of_der(end_entity.as_ref());
-        if self.revoked.contains(&fpr) {
+        if hotsheet_tls::load_revoked_file(&self.revoked_file).contains(&fpr) {
             return Err(rustls::Error::General(
                 "client certificate has been revoked".into(),
             ));
@@ -192,9 +195,11 @@ mod tests {
         // A device cert this CA issued verifies.
         let good = issue_device(&paths, "laptop").unwrap();
         let good_der = pem_first_der(&good.cert_pem);
+        // One verifier over the live revoked-file path — reused across the revoke to prove
+        // hot-reload (HS2-MPC0QF): no rebuild between the accept and the reject.
         let verifier = RevocationCheckingVerifier {
-            inner: webpki.clone(),
-            revoked: HashSet::new(),
+            inner: webpki,
+            revoked_file: paths.revoked(),
         };
         assert!(
             verifier.verify_client_cert(&good_der, &[], now).is_ok(),
@@ -212,17 +217,12 @@ mod tests {
             "a cert from an unrelated CA must be rejected"
         );
 
-        // Revoking the good device makes its (still CA-valid) cert fail.
+        // Revoking the good device makes its (still CA-valid) cert fail on the SAME verifier —
+        // it re-reads the revocation file per check, no restart/rebuild.
         revoke_device(&paths, "laptop").unwrap();
-        let revoked_verifier = RevocationCheckingVerifier {
-            inner: webpki,
-            revoked: hotsheet_tls::load_revoked(&paths),
-        };
         assert!(
-            revoked_verifier
-                .verify_client_cert(&good_der, &[], now)
-                .is_err(),
-            "a revoked cert must be rejected even though it still chains to the CA"
+            verifier.verify_client_cert(&good_der, &[], now).is_err(),
+            "a revoked cert must be rejected live, without rebuilding the verifier"
         );
     }
 }

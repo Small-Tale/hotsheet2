@@ -103,29 +103,17 @@ async fn a_ca_issued_client_cert_gets_in_and_no_cert_or_revoked_is_rejected() {
         "a client with no certificate must be rejected"
     );
 
-    // (3) A revoked device is rejected even though its cert still chains to the CA. Revoke it,
-    // then boot a fresh server (reusing the same CA dir) that loads the updated revocation list.
+    // (3) Revocation is LIVE (HS2-MPC0QF): revoke the device, then reconnect to the SAME
+    // already-running server — no restart, no config rebuild — and it's rejected because the
+    // verifier re-reads the revocation file per handshake.
     revoke_device(&paths, "laptop").unwrap();
-    let store2_dir = tempfile::tempdir().unwrap();
-    let store2 = FsStore::init(store2_dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let state2 = AppState::new(store2, SECRET.into()).unwrap();
-    let config2 = hotsheet_server::tls::build_server_config(&paths).unwrap();
-    let listener2 = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr2 = listener2.local_addr().unwrap();
-    tokio::spawn(async move {
-        hotsheet_server::tls::serve_tls(listener2, app(state2), config2, std::future::pending())
-            .await
-            .unwrap();
-    });
-
     let (chain, key) = client_identity(&dev.cert_pem, &dev.key_pem);
     let revoked_client = rustls::ClientConfig::builder()
         .with_root_certificates(roots)
         .with_client_auth_cert(chain, key)
         .unwrap();
     assert!(
-        get_health(addr2, revoked_client).await.is_err(),
-        "a revoked device must be rejected on a server that loaded the revocation list"
+        get_health(addr, revoked_client).await.is_err(),
+        "a revoked device must be rejected live, without restarting the server"
     );
-    drop(store2_dir);
 }

@@ -201,7 +201,13 @@ pub fn revoke_device(paths: &Paths, name: &str) -> Result<String, TlsError> {
 
 /// The set of revoked device-cert fingerprints (hex sha256), or empty if none.
 pub fn load_revoked(paths: &Paths) -> HashSet<String> {
-    std::fs::read_to_string(paths.revoked())
+    load_revoked_file(&paths.revoked())
+}
+
+/// The revoked-fingerprint set read directly from a `revoked` file path — so a live verifier
+/// can re-read it per handshake for hot-reload (HS2-MPC0QF), without holding a `Paths`.
+pub fn load_revoked_file(path: &Path) -> HashSet<String> {
+    std::fs::read_to_string(path)
         .map(|s| {
             s.lines()
                 .map(str::trim)

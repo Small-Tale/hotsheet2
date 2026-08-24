@@ -296,10 +296,11 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
   > has no built-in TLS), **requiring** a client cert that chains to the CA and isn't
   > on the `revoked` fingerprint list; loopback stays Tier-0 plaintext. Chain
   > validation is delegated to rustls's `WebPkiClientVerifier` (not hand-rolled), with
-  > a revocation gate layered on. A full mTLS-handshake E2E proves valid-in /
-  > no-cert-out / revoked-out. **Deferred:** revocation **hot-reload** (a running
-  > server snapshots the list at start — revoke then restart), `.p12` bundling + QR
-  > enrollment (client work), and richer per-identity **ACLs** beyond CA membership.
+  > a revocation gate layered on. The verifier **re-reads the revocation list per
+  > handshake** (HS2-MPC0QF), so `cert revoke` applies **live** — no server restart. A
+  > full mTLS-handshake E2E proves valid-in / no-cert-out / revoked-out-live.
+  > **Deferred:** `.p12` bundling + QR enrollment (client work), and richer
+  > per-identity **ACLs** beyond CA membership.
 
 ## 4.7 Project settings (shared / local / client) — core-owned
 
