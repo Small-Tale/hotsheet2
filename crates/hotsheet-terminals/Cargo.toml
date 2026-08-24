@@ -8,11 +8,20 @@ authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[[bin]]
+name = "hotsheet-terminal-broker"
+path = "src/bin/broker.rs"
+
 [dependencies]
 portable-pty.workspace = true
 thiserror.workspace = true
 # A live output fan-out so a WS viewer streams new bytes as they arrive (HS2-XTTTMV).
-# `sync` only — the drain thread (a std thread) sends; async subscribers await.
-tokio = { workspace = true }
+# tokio also drives the detached broker's Unix-socket server (HS2-8HHFHN); `io-util` for the
+# line-delimited framing.
+tokio = { workspace = true, features = ["io-util", "time"] }
+# The detached-broker IPC protocol (HS2-8HHFHN).
+serde = { workspace = true }
+serde_json.workspace = true
 
 [dev-dependencies]
+tempfile.workspace = true

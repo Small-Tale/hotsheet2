@@ -84,6 +84,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/busy.rs            #   BusyDetector: streaming OSC-133 busy/idle inference + contains_spinner hint (feeds HS2-107)
       src/osc.rs             #   OscScanner: streaming OSC 7/8/9 parser → TermState{cwd,link,progress,notify}; surfaced on the terminal read/list state (HS2-RCKEJ9)
       src/sizing.rs          #   SizeArbiter: server-arbitrated multi-viewer PTY sizing (focus-follows default + smallest/largest/pinned; leased ViewportClaims + heartbeat/expire; SIZE_FOCUS_HOLD/MIN_DELTA/RESIZE_MIN_INTERVAL guards; self-heal on disconnect) — pure, injected-clock, transition+adversarial tested (HS2-BD7Q74)
+      src/broker.rs          #   detached broker (HS2-8HHFHN): line-delimited JSON Request/Response over a Unix socket, serve_broker (hosts a TerminalManager) + BrokerClient — PTYs live in a separate process so terminals survive a server restart
+      src/bin/broker.rs      #   `hotsheet-terminal-broker <socket> <project>` binary: bind the UDS + serve_broker until killed
       src/env.rs             #   scrub_env: drop TSX_/npm_/NODE_/HOTSHEET_ markers before a child inherits
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index (SCHEMA_VERSION 3): open_reconciled/reconcile (git-diff fast path)/rebuild/upsert/delete/query + hash_bytes; facets: tags + assignees + reviews tables; filters incl. assignee/review_requested (facet joins) + claimed + blocked/unblocked (json_each over blocked_by vs done set) + created/updated date-range + moved-tombstones-hidden-by-default (HS2-89/HS2-T84F9F); keyset paging = follow-up

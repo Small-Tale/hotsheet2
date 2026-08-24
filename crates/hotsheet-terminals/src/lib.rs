@@ -13,6 +13,7 @@
 //! decisions) — HS2-A6R5QV/HS2-XTTTMV/HS2-BD7Q74. Follow-ons: the **detached broker** (survive
 //! server restart), and feeding busy → the connection registry (HS2-4M67VN).
 
+pub mod broker;
 pub mod busy;
 pub mod env;
 pub mod manager;
@@ -20,6 +21,10 @@ pub mod osc;
 pub mod sizing;
 pub mod terminal;
 
+pub use broker::{
+    BrokerClient, BrokerTermInfo, Request as BrokerRequest, Response as BrokerResponse,
+    serve_broker,
+};
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;
 pub use manager::{TermKey, TerminalManager};
