@@ -3,7 +3,7 @@ name: hs-task
 description: Create a new task ticket in Hot Sheet
 allowed-tools: Bash
 ---
-<!-- hotsheet-skill-version: 28 -->
+<!-- hotsheet-skill-version: 29 -->
 
 Create a new Hot Sheet **task** ticket. General tasks to complete.
 
@@ -12,25 +12,11 @@ Create a new Hot Sheet **task** ticket. General tasks to complete.
 - Otherwise, use the entire input as the title
 
 **Create the ticket — MCP tool (preferred when the channel is connected):**
-Call the `hotsheet_create_ticket` tool with `{ "title": "<TITLE>", "category": "task", "up_next": <true|false> }`. The tool is schema-validated and routes to the channel server's `--data-dir` so there's no chance of cross-project misrouting.
+Call the `hotsheet_create` tool with `{ "title": "<TITLE>", "category": "task", "up_next": <true|false> }`. The HS2 shim is schema-validated and works serverless against the configured git store.
 
-**Fallback (curl):**
-```bash
-curl -s -X POST "http://localhost:$HOTSHEET_PORT/api/tickets" \
-  -H "Content-Type: application/json" \
-  -H "X-Hotsheet-Secret: $HOTSHEET_SECRET" \
-  -d '{"title": "<TITLE>", "defaults": {"category": "task", "up_next": <true|false>}}'
-```
+**Fallback (HS2 CLI):**
+Use `hotsheet-cli new --title "<TITLE>" --category <CATEGORY>` and add `--up-next` when requested. The CLI resolves `-C`, `HOTSHEET_STORE`, or the project's `.hotsheet/store` link and writes through the same HS2 engine; it does not need a server or secret. Replace `<CATEGORY>` with the category named above.
 
-Set these first. Both are machine-specific and deliberately not stored in this file (which is committed and shared with everyone on the repo):
-```bash
-export HOTSHEET_PORT=$(node -p "require('./.hotsheet/settings.local.json').port ?? 4174")
-export HOTSHEET_SECRET=$(node -p "require('./.hotsheet/secret.json').secret")
-```
-
-If the request fails, distinguish generations before retrying credentials: `hotsheet-store.json`
-(directly or via `.hotsheet/store`) is HS2; `.hotsheet/db/PG_VERSION` is HS1. A 401/403 from
-an endpoint that does not identify as HS2 may be an HS1/wrong-project connector; use the
-explicit HS2 CLI store instead. Only re-read secrets after confirming the endpoint is HS2.
+If a connected MCP does not identify itself as HS2, do not retry HS1 `.hotsheet` credentials. A direct `hotsheet-store.json` or `.hotsheet/store` link identifies HS2; `.hotsheet/db/PG_VERSION` identifies HS1. Use the explicit HS2 CLI store until the connector is corrected.
 
 Report the created ticket number and title to the user.

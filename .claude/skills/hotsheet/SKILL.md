@@ -3,6 +3,7 @@ name: hotsheet
 description: Work the Hot Sheet ticket queue for this project — find Up Next tickets, implement them in priority order, and record progress. Works headless (no app), with or without a server.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
+<!-- hotsheet-skill-version: 29 -->
 
 Work the project's Hot Sheet ticket queue in priority order.
 
