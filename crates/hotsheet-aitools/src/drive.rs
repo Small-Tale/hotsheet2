@@ -23,6 +23,9 @@ pub enum Transport {
     AppServer,
     /// The Agent Client Protocol (OpenCode, Goose).
     Acp,
+    /// An interactive session running in a hosted PTY (a tool launched in a terminal,
+    /// HS2-4M67VN) — busy is fed from the terminal's OSC-133 / spinner inference.
+    Pty,
 }
 
 /// A drive's declarative identity.

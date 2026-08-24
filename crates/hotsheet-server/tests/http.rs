@@ -1353,6 +1353,105 @@ async fn terminals_open_read_input_and_kill() {
 }
 
 #[tokio::test]
+async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
+    let (_d, st) = state();
+    let app = app(st);
+
+    // A `cat` terminal registered as a claude connection. `cat` echoes its input, so writing
+    // OSC-133 markers drives the terminal's BusyDetector, which the feed task mirrors into the
+    // connection registry (GET /connections).
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","connect":"claude","id":"tc1"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // It appears as a connection: tool=claude, role=main.
+    let conns = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let c = conns
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == "tc1")
+        .expect("the connected terminal is listed");
+    assert_eq!(c["tool"], "claude");
+    assert_eq!(c["role"], "main");
+
+    // Helper: is connection tc1 currently busy per GET /connections?
+    let is_busy = |app: axum::Router| async move {
+        let conns = body_json(
+            app.oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        conns
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["id"] == "tc1")
+            .and_then(|c| c["busy"].as_bool())
+            .unwrap_or(false)
+    };
+
+    // Write OSC-133 C (command output begins → busy). The trailing newline flushes the tty
+    // line so `cat` echoes the raw sequence; the feed task polls every 500ms.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals/tc1/input",
+            Some("{\"data\":\"\\u001b]133;C\\u0007\\n\"}"),
+        ))
+        .await
+        .unwrap();
+    let mut saw_busy = false;
+    for _ in 0..40 {
+        if is_busy(app.clone()).await {
+            saw_busy = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        saw_busy,
+        "an OSC-133 command-start should mark the connection busy"
+    );
+
+    // Write OSC-133 D (command finished → idle) — the feed set_idles the connection.
+    app.clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals/tc1/input",
+            Some("{\"data\":\"\\u001b]133;D\\u0007\\n\"}"),
+        ))
+        .await
+        .unwrap();
+    let mut saw_idle = false;
+    for _ in 0..40 {
+        if !is_busy(app.clone()).await {
+            saw_idle = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        saw_idle,
+        "an OSC-133 command-finish should mark the connection idle"
+    );
+}
+
+#[tokio::test]
 async fn connections_lists_what_the_driving_loop_is_running() {
     let (_d, st) = state();
     let reg = st.drive_registry();

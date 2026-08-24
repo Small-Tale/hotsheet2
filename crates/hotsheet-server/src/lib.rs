@@ -1126,6 +1126,11 @@ struct OpenTerminalReq {
     cwd: Option<String>,
     /// Client-chosen terminal id; a ULID is minted when omitted.
     id: Option<String>,
+    /// When set, register this terminal as a live AI-tool **connection** for that plugin id
+    /// (e.g. `claude`), so `GET /connections` shows it and its busy is fed from the terminal's
+    /// OSC-133 / spinner inference (HS2-4M67VN). Omit for a plain shell terminal.
+    #[serde(default)]
+    connect: Option<String>,
 }
 
 /// One terminal as reported by `GET /terminals`.
@@ -1164,12 +1169,13 @@ fn term_info(term: &hotsheet_terminals::Terminal, id: &str) -> TerminalInfo {
     }
 }
 
-/// `POST /terminals` `{command, args?, cwd?, id?}` — open (or reattach to) a PTY.
+/// `POST /terminals` `{command, args?, cwd?, id?, connect?}` — open (or reattach to) a PTY.
 async fn open_terminal(
     State(state): State<AppState>,
     Json(req): Json<OpenTerminalReq>,
 ) -> Result<Json<TerminalInfo>, ApiError> {
     let id = req.id.unwrap_or_else(|| Ulid::new().to_string());
+    let newly_spawned = state.terminals.get(&term_key(&state, &id)).is_none();
     let spec = hotsheet_terminals::TermSpec {
         command: req.command,
         args: req.args,
@@ -1186,7 +1192,56 @@ async fn open_terminal(
         .terminals
         .get_or_spawn(term_key(&state, &id), spec)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+
+    // Tool-in-terminal (HS2-4M67VN): register a live connection + feed its busy from the
+    // terminal's inference, once per fresh terminal (not on a reattach).
+    if let (Some(tool), true) = (&req.connect, newly_spawned) {
+        register_terminal_connection(&state, &id, tool, term.clone());
+    }
     Ok(Json(term_info(&term, &id)))
+}
+
+/// Register a launched-in-terminal tool as a `Pty` connection on the shared registry and
+/// spawn a background task that feeds the terminal's busy/idle into it until the child exits
+/// (HS2-4M67VN). The connection id is the terminal id, so `GET /connections` and the terminal
+/// surfaces line up.
+fn register_terminal_connection(
+    state: &AppState,
+    id: &str,
+    tool: &str,
+    term: std::sync::Arc<hotsheet_terminals::Terminal>,
+) {
+    let registry = state.drive_registry();
+    if let Ok(mut r) = registry.lock() {
+        r.register(hotsheet_aitools::Connection {
+            id: id.to_string(),
+            project: state.store.root().display().to_string(),
+            tool: tool.to_string(),
+            role: hotsheet_aitools::Role::Main,
+            transport: hotsheet_aitools::Transport::Pty,
+            pid: None,
+            started_at_ms: now_ms(),
+        });
+    }
+    let conn_id = id.to_string();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let alive = term.is_alive();
+            if let Ok(mut r) = registry.lock() {
+                if !alive {
+                    r.unregister(&conn_id);
+                    break;
+                }
+                match term.activity() {
+                    hotsheet_terminals::Activity::Busy => r.note_activity(&conn_id, now_ms()),
+                    hotsheet_terminals::Activity::Idle => r.set_idle(&conn_id),
+                }
+            } else {
+                break;
+            }
+        }
+    });
 }
 
 /// `GET /terminals` — the live terminals (id, alive, busy).
