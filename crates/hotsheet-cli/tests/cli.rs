@@ -85,6 +85,113 @@ fn init_new_ls_show_edit_close_flow() {
 }
 
 #[test]
+fn init_standalone_creates_git_store_links_project_and_sets_remote() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("code-project");
+    let store = root.path().join("tickets-project");
+    let remote = root.path().join("tickets-remote.git");
+    std::fs::create_dir(&project).unwrap();
+    Command::new("git")
+        .args(["init", "--bare", remote.to_str().unwrap()])
+        .assert()
+        .success();
+
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&project)
+        .args([
+            "init",
+            "--standalone",
+            "--at",
+            store.to_str().unwrap(),
+            "--remote",
+            remote.to_str().unwrap(),
+            "--prefix",
+            "ACME",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Initialized standalone"));
+
+    let opened = hotsheet_ticketing::FsStore::open(&store).unwrap();
+    assert_eq!(opened.metadata().unwrap().ticket_prefix, "ACME");
+    assert!(
+        store.join(".git").is_dir(),
+        "standalone store is a git repo"
+    );
+    assert!(hotsheet_cli::merge_driver_registered(&store));
+
+    let linked = std::fs::read_to_string(project.join(hotsheet_cli::STORE_LINK)).unwrap();
+    assert_eq!(
+        linked.trim(),
+        store.canonicalize().unwrap().to_str().unwrap()
+    );
+    let ignore = std::fs::read_to_string(project.join(".gitignore")).unwrap();
+    assert!(ignore.lines().any(|line| line == hotsheet_cli::STORE_LINK));
+
+    let origin = Command::new("git")
+        .current_dir(&store)
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .unwrap();
+    assert!(origin.status.success());
+    assert_eq!(
+        String::from_utf8(origin.stdout).unwrap().trim(),
+        remote.to_str().unwrap()
+    );
+
+    // The link is immediately useful: a command from the code repo needs no -C.
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&project)
+        .arg("ls")
+        .assert()
+        .success();
+
+    // Creating a "new" standalone store never overwrites an existing destination.
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&project)
+        .args(["init", "--standalone", "--at", store.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("destination already exists"));
+}
+
+#[test]
+fn init_standalone_defaults_under_hs2_home_not_hs1_home() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("named-project");
+    let home = root.path().join("hs2-home");
+    std::fs::create_dir(&project).unwrap();
+
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .current_dir(&project)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--standalone", "--prefix", "NP"])
+        .assert()
+        .success();
+
+    let store = home.join("stores").join("named-project");
+    assert_eq!(
+        hotsheet_ticketing::FsStore::open(&store)
+            .unwrap()
+            .metadata()
+            .unwrap()
+            .ticket_prefix,
+        "NP"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join(hotsheet_cli::STORE_LINK))
+            .unwrap()
+            .trim(),
+        store.canonicalize().unwrap().to_str().unwrap()
+    );
+    assert!(!root.path().join(".hotsheet").join("stores").exists());
+}
+
+#[test]
 fn edit_rejects_an_invalid_status() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

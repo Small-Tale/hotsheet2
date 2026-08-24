@@ -52,7 +52,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/copy/move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor/reindex/worklist/metrics/serve/cert/claim-next/release/renew/trigger/work/permission-hook; resolve_store_path finds a standalone store without -C (-C > $HOTSHEET_STORE > .hotsheet/store link, HS2-5CXKZ0); `cert init/issue/revoke` manages Tier-1 mTLS material (HS2-VT3JMF)
+      src/main.rs            #   `hotsheet-cli`: init (incl. --standalone [--at/--remote] one-shot create+link, HS2-77YTS1)/link/new/ls/show/edit/close/copy/move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor/reindex/worklist/metrics/serve/cert/claim-next/release/renew/trigger/work/permission-hook; resolve_store_path finds a standalone store without -C (-C > $HOTSHEET_STORE > .hotsheet/store link, HS2-5CXKZ0); `cert init/issue/revoke` manages Tier-1 mTLS material (HS2-VT3JMF)
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
@@ -134,7 +134,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 ## Entry points
 
 - **CLI:** `crates/hotsheet-cli/src/main.rs` → binary `hotsheet-cli` (live ticket ops).
-  Global `-C/--path` selects the store dir. Subcommands: `init`, `new`
+  Global `-C/--path` selects the store dir. `init --standalone [--at/--remote]` creates a
+  separate git store and links the current code project in one shot. Subcommands: `init`, `link`, `new`
   (incl. `--blocked-by`), `ls` (filters/sort/text/`--limit`), `show`, `edit`
   (incl. `--blocked-by`/`--clear-blocked-by`), `close`, `setup` (AI-tool setup, headless),
   `plugin` (list/install/remove external plugins), `settings` (get/set/list, shared|local),

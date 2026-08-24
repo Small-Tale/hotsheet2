@@ -29,11 +29,20 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Initialize a new git-backed store here.
+    /// Initialize a git-backed store here, or create and link a standalone one.
     Init {
         /// Display prefix for ticket slugs (e.g. HS → HS-7F3K9Q).
         #[arg(long, default_value = "HS")]
         prefix: String,
+        /// Create a separate git-backed ticket store and link the current project to it.
+        #[arg(long)]
+        standalone: bool,
+        /// Standalone store destination (default: ${HOTSHEET_HOME}/stores/<project>).
+        #[arg(long, value_name = "PATH", requires = "standalone")]
+        at: Option<PathBuf>,
+        /// Configure this URL/path as the standalone store's origin remote.
+        #[arg(long, value_name = "URL", requires = "standalone")]
+        remote: Option<String>,
     },
     /// Link this directory (a code repo) to its **standalone** ticket store, so later
     /// `hotsheet-cli` calls here find it without `-C` (docs/02 §2.8, HS2-5CXKZ0). Writes a
@@ -493,7 +502,18 @@ fn main() -> Result<()> {
         cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
     }
     match cli.command {
-        Cmd::Init { prefix } => cmd_init(&cli.path, &prefix),
+        Cmd::Init {
+            prefix,
+            standalone,
+            at,
+            remote,
+        } => cmd_init(
+            &cli.path,
+            &prefix,
+            standalone,
+            at.as_deref(),
+            remote.as_deref(),
+        ),
         Cmd::Link { store } => cmd_link(&store),
         Cmd::New {
             title,
@@ -807,7 +827,53 @@ or `hotsheet-cli ls --up-next`) and take ONLY the single highest-priority ticket
 started, implement it, and mark it completed with a note on what you did. Do just that one \
 ticket this turn, then stop. If nothing is Up Next, say so and stop.";
 
-fn cmd_init(path: &PathBuf, prefix: &str) -> Result<()> {
+fn cmd_init(
+    path: &PathBuf,
+    prefix: &str,
+    standalone: bool,
+    at: Option<&Path>,
+    remote: Option<&str>,
+) -> Result<()> {
+    if standalone {
+        let project = std::env::current_dir()?;
+        let name = project
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|n| !n.is_empty())
+            .context("current project directory has no usable name; pass --at <path>")?;
+        let destination = at
+            .map(PathBuf::from)
+            .unwrap_or_else(|| hotsheet_plugins::hotsheet_home().join("stores").join(name));
+        if destination.exists() {
+            bail!(
+                "standalone store destination already exists: {}; choose a new --at path or link the existing store",
+                destination.display()
+            );
+        }
+        FsStore::init(&destination, &StoreMetadata::new(prefix))
+            .with_context(|| format!("initializing store at {}", destination.display()))?;
+        git_init(&destination);
+        hotsheet_cli::register_merge_driver(&destination);
+        if let Some(url) = remote {
+            let status = std::process::Command::new("git")
+                .current_dir(&destination)
+                .args(["remote", "add", "origin", url])
+                .status()
+                .context("running git remote add origin")?;
+            if !status.success() {
+                bail!("git remote add origin exited with {status}");
+            }
+        }
+        let linked = hotsheet_cli::link_store(&destination, &project)?;
+        println!(
+            "Initialized standalone Hot Sheet store at {} and linked {} via {}",
+            linked.display(),
+            project.display(),
+            hotsheet_cli::STORE_LINK
+        );
+        return Ok(());
+    }
+
     FsStore::init(path, &StoreMetadata::new(prefix))
         .with_context(|| format!("initializing store at {}", path.display()))?;
     git_init(path);

@@ -409,11 +409,15 @@ Two supported shapes — **both are git repos** (§2.1):
    path. Good for a tickets-only repo shared across several code repos, or a
    private tickets repo separate from public code.
 
-`hotsheet init` offers both; default is in-repo when the cwd is a git repo, else a
-standalone store under `~/.hotsheet/stores/<project>/`. When it creates a standalone
-store (or any store that isn't already inside a repo) it **runs `git init`** and
-installs the merge driver (§2.7) — a local-only store is a perfectly normal repo
-that simply has no remote added.
+`hotsheet init` initializes the path selected by `-C` (the current directory by default).
+`hotsheet init --standalone [--at <path>] [--remote <url>]` is the one-shot recommended
+flow for an active code project: it creates a new store (by default under
+`${HOTSHEET_HOME:-~/.hotsheet2}/stores/<project>/`), **runs `git init`**, installs the
+merge driver (§2.7), optionally adds `origin`, then writes the project's gitignored
+`.hotsheet/store` link. It refuses to overwrite an existing destination; use `hotsheet
+link <store>` to adopt one. A local-only store is a perfectly normal repo that simply has
+no remote added. Plain `init` stays non-interactive and backward-compatible; onboarding
+clients may present the two shapes as a choice.
 
 **Recommended default — standalone for actively-developed projects** (maintainer,
 2026-08-21, HS2-5CXKZ0): for a project under active development, the **standalone**
@@ -426,7 +430,7 @@ Because a standalone store lives at a machine-specific path, the code↔ticket l
 recorded **by commit SHA on the tickets** (not by co-location), and the tool config
 that references the store path (`.mcp.json`, the hooks command) is per-machine.
 
-**Finding the store without `-C`** (HS2-5CXKZ0): a code repo can point at its
+**Finding the store without `-C`** (HS2-5CXKZ0/HS2-77YTS1): a code repo can point at its
 standalone store with `hotsheet-cli link <store>`, which writes a **gitignored**
 `.hotsheet/store` file holding the store's absolute path. Any later `hotsheet-cli`
 run inside that repo resolves the store automatically: an explicit `-C` wins, else

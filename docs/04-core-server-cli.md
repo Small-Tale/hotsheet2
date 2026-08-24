@@ -197,6 +197,8 @@ recreates it — so the CLI needs no SQLite dependency of its own.
 **Ops / lifecycle:**
 ```
 hotsheet init          # create/register a project + default store (+ install the merge driver)
+hotsheet init --standalone [--at <path>] [--remote <url>]
+                       # create a separate git store + link this code repo in one shot
 hotsheet serve         # run the server
 hotsheet reindex       # drop + rebuild the index from disk
 hotsheet doctor        # diagnose: store health, merge-driver registration, index drift, plugin detection
