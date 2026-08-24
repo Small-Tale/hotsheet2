@@ -149,6 +149,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Capability | Where | Status |
 |---|---|---|
 | Git-repo file-per-ticket storage | 02, 17 | Confirmed; **parser + FsStore built** (`hotsheet-model::format`, `hotsheet-ticketing::store`) |
+| Standalone foreground server launch | 04 §4.3 | Shipped: `hotsheet-cli serve` resolves a sibling/PATH server, rejects version drift, and forwards start/stop; detached supervision remains client-owned |
 | Multiple ticket stores per project (mixed permissions/locality) | 02 | Confirmed |
 | Every store is a git repo (local-only = no remote) | 02 §2.1 | Confirmed |
 | Store identity/naming (id + name + per-store prefix); positional membership | 02 §2.2.1 | Confirmed (design) |

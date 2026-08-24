@@ -1409,20 +1409,12 @@ fn cmd_worklist(path: &Path) -> Result<()> {
 /// `hotsheet-server` binary (the CLI stays free of a server dependency). Detached +
 /// supervised start is client-owned (HS2-59 / HS2-4072GM).
 fn cmd_serve(path: &Path, bind: &str, secret: Option<String>, stop: bool) -> Result<()> {
-    let exe = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("hotsheet-server")))
-        .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("hotsheet-server"));
+    let current = std::env::current_exe().context("could not locate hotsheet-cli")?;
+    let exe = resolve_server_binary(&current, std::env::var_os("PATH").as_deref())?;
+    verify_server_version(&exe)?;
 
     let mut cmd = std::process::Command::new(&exe);
-    cmd.arg("-C").arg(path).arg("--bind").arg(bind);
-    if let Some(s) = secret {
-        cmd.arg("--secret").arg(s);
-    }
-    if stop {
-        cmd.arg("--stop");
-    }
+    cmd.args(server_args(path, bind, secret.as_deref(), stop));
     let status = cmd.status().map_err(|e| {
         anyhow::anyhow!(
             "could not launch `{}`: {e} — is hotsheet-server installed alongside hotsheet-cli?",
@@ -1433,6 +1425,73 @@ fn cmd_serve(path: &Path, bind: &str, secret: Option<String>, stop: bool) -> Res
         bail!("hotsheet-server exited with {status}");
     }
     Ok(())
+}
+
+fn resolve_server_binary(current_exe: &Path, path: Option<&std::ffi::OsStr>) -> Result<PathBuf> {
+    let sibling = current_exe
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+    if sibling.is_file() {
+        return Ok(sibling);
+    }
+    if let Some(found) = path.and_then(|paths| {
+        std::env::split_paths(paths)
+            .map(|dir| dir.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX)))
+            .find(|candidate| candidate.is_file())
+    }) {
+        return Ok(found);
+    }
+    bail!(
+        "hotsheet-server is not installed: expected it beside hotsheet-cli at {} or on PATH",
+        sibling.display()
+    )
+}
+
+fn verify_server_version(exe: &Path) -> Result<()> {
+    let output = std::process::Command::new(exe)
+        .arg("--version")
+        .output()
+        .with_context(|| format!("could not run {} --version", exe.display()))?;
+    if !output.status.success() {
+        bail!("{} --version exited with {}", exe.display(), output.status);
+    }
+    let reported = String::from_utf8_lossy(&output.stdout);
+    let version = reported.split_whitespace().next_back().unwrap_or_default();
+    if version != env!("CARGO_PKG_VERSION") {
+        bail!(
+            "hotsheet-cli {} cannot launch hotsheet-server {} at {}; install matching binaries",
+            env!("CARGO_PKG_VERSION"),
+            if version.is_empty() {
+                "(unknown)"
+            } else {
+                version
+            },
+            exe.display()
+        );
+    }
+    Ok(())
+}
+
+fn server_args(
+    path: &Path,
+    bind: &str,
+    secret: Option<&str>,
+    stop: bool,
+) -> Vec<std::ffi::OsString> {
+    let mut args = vec![
+        "-C".into(),
+        path.as_os_str().to_owned(),
+        "--bind".into(),
+        bind.into(),
+    ];
+    if let Some(secret) = secret {
+        args.extend(["--secret".into(), secret.into()]);
+    }
+    if stop {
+        args.push("--stop".into());
+    }
+    args
 }
 
 /// Manage the project's Tier-1 mTLS material (HS2-VT3JMF): a per-project CA, per-device
@@ -1948,4 +2007,63 @@ fn now_ts() -> Timestamp {
 
 fn lease_until(now: OffsetDateTime, minutes: i64) -> Timestamp {
     Timestamp::from_datetime(now + Duration::minutes(minutes))
+}
+
+#[cfg(test)]
+mod server_wrapper_tests {
+    use super::*;
+
+    #[test]
+    fn sibling_server_wins_over_path_and_arguments_are_forwarded_exactly() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let cli = bin.join(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
+        let sibling = bin.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        let path_server =
+            elsewhere.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(&sibling, "").unwrap();
+        std::fs::write(&path_server, "").unwrap();
+
+        assert_eq!(
+            resolve_server_binary(&cli, Some(elsewhere.as_os_str())).unwrap(),
+            sibling
+        );
+        assert_eq!(
+            server_args(Path::new("store path"), "127.0.0.1:0", Some("secret"), true),
+            [
+                "-C",
+                "store path",
+                "--bind",
+                "127.0.0.1:0",
+                "--secret",
+                "secret",
+                "--stop"
+            ]
+            .map(std::ffi::OsString::from)
+        );
+    }
+
+    #[test]
+    fn path_fallback_and_missing_binary_are_explicit() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        let elsewhere = dir.path().join("elsewhere");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let cli = bin.join("hotsheet-cli");
+        let path_server =
+            elsewhere.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(&path_server, "").unwrap();
+        assert_eq!(
+            resolve_server_binary(&cli, Some(elsewhere.as_os_str())).unwrap(),
+            path_server
+        );
+
+        let error = resolve_server_binary(&cli, None).unwrap_err().to_string();
+        assert!(error.contains("hotsheet-server is not installed"));
+        assert!(error.contains("beside hotsheet-cli"));
+    }
 }
