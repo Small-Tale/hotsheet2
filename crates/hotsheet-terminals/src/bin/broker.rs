@@ -10,7 +10,9 @@
 
 use std::sync::Arc;
 
-use hotsheet_terminals::{TerminalManager, serve_broker};
+use hotsheet_terminals::{
+    DEFAULT_IDLE_GRACE, SocketCleanup, TerminalManager, serve_broker_with_idle,
+};
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -25,8 +27,15 @@ async fn main() -> std::io::Result<()> {
     // server's discovery only spawns a broker when no live one answers the socket.)
     let _ = std::fs::remove_file(&socket);
     let listener = tokio::net::UnixListener::bind(&socket)?;
+    let _socket_cleanup = SocketCleanup::new(&socket);
     eprintln!("hotsheet-terminal-broker: serving project '{project}' on {socket}");
 
-    serve_broker(listener, project, Arc::new(TerminalManager::new())).await;
+    serve_broker_with_idle(
+        listener,
+        project,
+        Arc::new(TerminalManager::new()),
+        Some(DEFAULT_IDLE_GRACE),
+    )
+    .await;
     Ok(())
 }

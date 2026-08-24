@@ -71,7 +71,31 @@ impl TerminalBroker {
 
 /// Whether a broker is accepting on `socket` right now (a blocking connect probe).
 fn is_live(socket: &Path) -> bool {
-    std::os::unix::net::UnixStream::connect(socket).is_ok()
+    use std::io::{BufRead, Write};
+    let Ok(mut stream) = std::os::unix::net::UnixStream::connect(socket) else {
+        return false;
+    };
+    let timeout = Some(std::time::Duration::from_millis(500));
+    let _ = stream.set_read_timeout(timeout);
+    let _ = stream.set_write_timeout(timeout);
+    let Ok(mut line) = serde_json::to_string(&BrokerRequest::Ping) else {
+        return false;
+    };
+    line.push('\n');
+    if stream.write_all(line.as_bytes()).is_err() {
+        return false;
+    }
+    let mut reply = String::new();
+    if std::io::BufReader::new(stream)
+        .read_line(&mut reply)
+        .is_err()
+    {
+        return false;
+    }
+    matches!(
+        serde_json::from_str::<BrokerResponse>(&reply),
+        Ok(BrokerResponse::Pong)
+    )
 }
 
 /// Spawn `hotsheet-terminal-broker <socket> <project>` detached, with its stdio to null so it

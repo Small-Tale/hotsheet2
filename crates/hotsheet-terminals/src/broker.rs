@@ -10,6 +10,8 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -19,6 +21,9 @@ use tokio::net::{UnixListener, UnixStream};
 use crate::manager::TerminalManager;
 use crate::sizing::ViewportClaim;
 use crate::terminal::TermSpec;
+
+/// Detached brokers exit after this long with no terminals and no connected clients.
+pub const DEFAULT_IDLE_GRACE: Duration = Duration::from_secs(5 * 60);
 
 /// A real millis clock for the broker process (the size arbiter is deterministic given it).
 /// Distinct from the terminal's injected test clock — the broker runs as its own process.
@@ -33,6 +38,8 @@ fn now_ms() -> u64 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Request {
+    /// Protocol-level liveness check (stronger than merely accepting a socket connection).
+    Ping,
     /// Open (or reattach to) a terminal `id` running `command`.
     Open {
         id: String,
@@ -108,6 +115,8 @@ fn stream_default_true() -> bool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum Response {
+    /// Reply to [`Request::Ping`].
+    Pong,
     /// One terminal's state (for `open`).
     Terminal { info: BrokerTermInfo },
     /// All terminals (for `list`).
@@ -155,14 +164,46 @@ fn info_of(term: &crate::terminal::Terminal, id: &str) -> BrokerTermInfo {
 /// lifetime. Each connection is handled concurrently; the shared `manager` (and its PTYs)
 /// outlive any one connection — the whole point of the broker.
 pub async fn serve_broker(listener: UnixListener, project: String, manager: Arc<TerminalManager>) {
+    serve_broker_with_idle(listener, project, manager, None).await;
+}
+
+/// Serve with an optional shutdown-when-empty grace period. `None` keeps the historical
+/// run-until-killed behavior used by embedded callers; the detached binary supplies a grace.
+pub async fn serve_broker_with_idle(
+    listener: UnixListener,
+    project: String,
+    manager: Arc<TerminalManager>,
+    idle_grace: Option<Duration>,
+) {
+    let clients = Arc::new(AtomicUsize::new(0));
+    let mut empty_since = tokio::time::Instant::now();
+    let tick = idle_grace
+        .map(|grace| grace.min(Duration::from_millis(250)))
+        .unwrap_or(Duration::from_millis(250));
+    let mut housekeeping = tokio::time::interval(tick);
     loop {
-        let Ok((stream, _addr)) = listener.accept().await else {
-            continue;
-        };
-        let (manager, project) = (manager.clone(), project.clone());
-        tokio::spawn(async move {
-            let _ = handle_connection(stream, &project, &manager).await;
-        });
+        tokio::select! {
+            accepted = listener.accept() => {
+                let Ok((stream, _addr)) = accepted else { continue };
+                clients.fetch_add(1, Ordering::SeqCst);
+                let (manager, project, clients) =
+                    (manager.clone(), project.clone(), clients.clone());
+                tokio::spawn(async move {
+                    let _ = handle_connection(stream, &project, &manager).await;
+                    clients.fetch_sub(1, Ordering::SeqCst);
+                });
+            }
+            _ = housekeeping.tick(), if idle_grace.is_some() => {
+                manager.reap();
+                if manager.count() == 0 && clients.load(Ordering::SeqCst) == 0 {
+                    if empty_since.elapsed() >= idle_grace.unwrap() {
+                        break;
+                    }
+                } else {
+                    empty_since = tokio::time::Instant::now();
+                }
+            }
+        }
     }
 }
 
@@ -290,6 +331,7 @@ async fn stream_terminal(
 fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -> Response {
     let key = |id: &str| (project.to_string(), id.to_string());
     match req {
+        Request::Ping => Response::Pong,
         Request::Open {
             id,
             command,
@@ -350,6 +392,24 @@ fn handle_request(project: &str, manager: &Arc<TerminalManager>, req: Request) -
         Request::Attach { .. } => Response::Err {
             message: "attach is a streaming op, not a request/response op".into(),
         },
+    }
+}
+
+/// Removes a broker socket on clean shutdown. Binding still removes stale sockets first;
+/// this guard covers the orderly idle-GC/process-exit path.
+pub struct SocketCleanup {
+    path: std::path::PathBuf,
+}
+
+impl SocketCleanup {
+    pub fn new(path: impl Into<std::path::PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
+impl Drop for SocketCleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 
@@ -660,5 +720,98 @@ mod tests {
             }
             other => panic!("expected List, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn ping_pong_is_a_real_protocol_health_check() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        assert!(matches!(
+            client.request(&Request::Ping).await.unwrap(),
+            Response::Pong
+        ));
+    }
+
+    #[tokio::test]
+    async fn idle_gc_waits_for_clients_then_exits_when_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let task = tokio::spawn(serve_broker_with_idle(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+            Some(Duration::from_millis(80)),
+        ));
+        let client = BrokerClient::connect(&sock).await.unwrap();
+        tokio::time::sleep(Duration::from_millis(180)).await;
+        assert!(
+            !task.is_finished(),
+            "a connected client keeps the broker alive"
+        );
+        drop(client);
+        tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("empty broker exits after the grace")
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn idle_gc_resets_while_a_terminal_exists_then_exits_after_kill() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("broker.sock");
+        let listener = UnixListener::bind(&sock).unwrap();
+        let task = tokio::spawn(serve_broker_with_idle(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+            Some(Duration::from_millis(80)),
+        ));
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        client
+            .request(&Request::Open {
+                id: "keeps-alive".into(),
+                command: "cat".into(),
+                args: vec![],
+                cwd: None,
+                env: vec![],
+            })
+            .await
+            .unwrap();
+        drop(client);
+        tokio::time::sleep(Duration::from_millis(180)).await;
+        assert!(!task.is_finished(), "a hosted terminal resets idle GC");
+
+        let mut client = BrokerClient::connect(&sock).await.unwrap();
+        assert!(matches!(
+            client
+                .request(&Request::Kill {
+                    id: "keeps-alive".into()
+                })
+                .await
+                .unwrap(),
+            Response::Ok
+        ));
+        drop(client);
+        tokio::time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("broker exits after its final terminal is killed")
+            .unwrap();
+    }
+
+    #[test]
+    fn socket_cleanup_removes_the_socket_path_on_drop() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        std::fs::write(&socket, "placeholder").unwrap();
+        drop(SocketCleanup::new(&socket));
+        assert!(!socket.exists());
     }
 }

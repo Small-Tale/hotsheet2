@@ -149,7 +149,9 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   stream, tmux-style).
 - Survival across server restarts via a **detached PTY broker process** (carried
   from HS1 `src/terminals/broker/`) — terminals aren't killed when the server
-  recycles.
+  recycles. The broker answers a protocol-level Ping/Pong health probe and exits
+  cleanly (removing its socket) after a five-minute grace with no terminals and no
+  connected clients; any activity resets the grace.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*` that leak into
   child shells — HS1 §22.13.1).
 - **Server-arbitrated PTY sizing.** A PTY has exactly one size, but many viewers
