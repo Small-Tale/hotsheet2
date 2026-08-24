@@ -202,4 +202,29 @@ mod tests {
         assert!(!r.is_busy("ghost", 10_000));
         assert_eq!(r.count(), 0);
     }
+
+    #[test]
+    fn unregister_then_reregister_starts_a_fresh_idle_lifecycle() {
+        let mut r = ConnectionRegistry::new(5_000);
+        r.register(conn("a"));
+        r.note_activity("a", 10_000);
+        assert!(r.is_busy("a", 10_001));
+
+        assert!(r.unregister("a"));
+        assert_eq!(r.busy_count(10_001), 0, "removed entries cannot stay busy");
+
+        let mut replacement = conn("a");
+        replacement.pid = Some(99);
+        r.register(replacement);
+        assert_eq!(r.get("a").unwrap().pid, Some(99));
+        assert!(
+            !r.is_busy("a", 10_001),
+            "a replacement connection must not inherit the old heartbeat"
+        );
+
+        r.note_activity("a", 10_002);
+        assert!(r.is_busy("a", 10_003));
+        r.set_idle("a");
+        assert!(!r.is_busy("a", 10_003));
+    }
 }

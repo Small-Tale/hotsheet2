@@ -485,7 +485,7 @@ impl EventLog {
         let oldest = self.ring.front().map(|(s, _)| *s);
         // Overflow only when we've dropped events the caller hadn't seen: they ask for
         // `since` strictly before our oldest retained event, and we have emitted past it.
-        let overflow = matches!(oldest, Some(o) if since + 1 < o);
+        let overflow = matches!(oldest, Some(o) if since.saturating_add(1) < o);
         let events = self
             .ring
             .iter()
@@ -526,6 +526,11 @@ mod event_log_tests {
         // A future/equal cursor is not an overflow.
         assert!(!log.since(3).1);
         assert!(!log.since(99).1);
+        assert!(
+            log.since(u64::MAX).0.is_empty(),
+            "the largest possible future cursor is safe and caught up"
+        );
+        assert!(!log.since(u64::MAX).1);
     }
 
     #[test]

@@ -96,9 +96,9 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
   Keep it in sync in the same change that adds a file/dir, command, schema field, or
   setting.
 - The project is now in **early implementation**: the Rust core model + ticket file
-  format, a filesystem store, the `hotsheet` CLI (init/new/ls/show/import), and the
-  Node HS1 exporter exist; server/index/sync/clients/plugins remain design-only. See
-  [`docs/README.md`](docs/README.md) for the index + core bets and
+  format, filesystem stores, CLI, server, SQLite/FTS index, automatic sync, MCP shim,
+  AI-tool plugins, and terminal/permission infrastructure exist; clients remain
+  design-only. See [`docs/README.md`](docs/README.md) for the index + core bets and
   [`docs/CODEBASE-MAP.md`](docs/CODEBASE-MAP.md) for what's built.
 <!-- hotsheet:end specifics=requirements-documentation -->
 <!-- hotsheet:end section=requirements-documentation -->

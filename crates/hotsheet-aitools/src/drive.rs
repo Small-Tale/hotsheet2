@@ -83,8 +83,8 @@ pub struct PermReq {
 pub enum TurnEvent {
     /// Assistant output text produced during the turn.
     Output(String),
-    /// A permission request the host must answer (unwired for now — the drive runs a
-    /// non-blocking permission mode, so this is informational).
+    /// A permission request the host must answer. Live hosts can route it through the shared
+    /// permission bridge; transports without that integration may treat it as informational.
     PermissionAsked(PermReq),
     /// Token usage the turn reported (`docs/14`, HS2-0WCRZY) — emitted just before `Done`
     /// when the tool exposes it, so the host can record a `UsageEvent`.
@@ -94,8 +94,8 @@ pub enum TurnEvent {
 }
 
 /// A handle to observe one running turn, **uniform across transports** (`docs/13`
-/// §13.4). v1 exposes busy + a terminal wait + interrupt; the streaming `TurnEvent`
-/// view (Output/PermissionAsked/…) lands with the async persistent-channel drive.
+/// §13.4). Exposes busy + a terminal wait + interrupt, with an optional streaming
+/// `TurnEvent` view for persistent-channel drives.
 pub trait TurnHandle {
     /// Whether the turn is still working (derived from the transport's native signal).
     fn is_busy(&mut self) -> bool;

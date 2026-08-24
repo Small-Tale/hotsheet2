@@ -5,8 +5,8 @@
 //!
 //! Indexes the queryable ticket fields + `tags`/`assignees`/`reviews` facet tables + an
 //! FTS5 table over title/details/notes, plus blocked/unblocked (via `json_each` over
-//! `blocked_by_json` against the done set) and created/updated date-range filters
-//! (HS2-89/HS2-T84F9F). Keyset pagination for very large stores is the remaining follow-up.
+//! `blocked_by_json` against the done set), created/updated date-range filters, and keyset
+//! pagination through `TicketQuery::page_after` (HS2-89/HS2-T84F9F/HS2-TCDTCH).
 
 use std::path::{Path, PathBuf};
 

@@ -4,9 +4,9 @@
 //! a server restart**: on restart the server just reconnects to the still-running broker (or
 //! spawns one if none is live) and its terminals are still there.
 //!
-//! This module owns discovery + detached spawn + a per-request call helper. The live WS attach
-//! streaming through the broker is a follow-up; today broker mode serves open/list/read/input/
-//! kill (a client polls `GET /terminals/{id}` for output).
+//! This module owns discovery + detached spawn + a per-request call helper. Broker mode serves
+//! open/list/read/input/kill and the live WebSocket attach; the server bridges the broker stream
+//! so output, input, viewport-size arbitration, and the busy feed survive a server restart.
 
 use std::path::{Path, PathBuf};
 
