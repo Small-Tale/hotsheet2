@@ -20,6 +20,63 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn import_normalizes_close_state_without_persisting_hs1_identity() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let export = root.path().join("hotsheet-export.json");
+    std::fs::write(
+        &export,
+        r#"{
+          "exportVersion": 1,
+          "project": {"name":"Demo","ticketPrefix":"HS"},
+          "tickets": [
+            {"ticket_number":"HS-1","title":"done","status":"completed","up_next":true,
+             "created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-02T00:00:00Z",
+             "completed_at":"2026-01-02T00:00:00Z"},
+            {"ticket_number":"HS-2","title":"removed","status":"deleted","up_next":true,
+             "created_at":"2026-01-03T00:00:00Z","updated_at":"2026-01-04T00:00:00Z",
+             "deleted_at":"2026-01-05T00:00:00Z"}
+          ]
+        }"#,
+    )
+    .unwrap();
+
+    hs(&store)
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported 2 ticket(s)"));
+    hs(&store)
+        .args(["import", export.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("skipped 2 already present"));
+
+    let files = std::fs::read_dir(store.join("tickets"))
+        .unwrap()
+        .flat_map(|shard| std::fs::read_dir(shard.unwrap().path()).unwrap())
+        .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(files.len(), 2);
+    assert!(files.iter().all(|text| !text.contains("legacy_number")));
+    let done = files
+        .iter()
+        .find(|text| text.contains("title: done"))
+        .unwrap();
+    assert!(done.contains("status: completed"));
+    assert!(done.contains("close_reason: completed"));
+    assert!(!done.contains("up_next: true"));
+    let removed = files
+        .iter()
+        .find(|text| text.contains("title: removed"))
+        .unwrap();
+    assert!(removed.contains("status: deleted"));
+    assert!(removed.contains("close_reason: obsolete"));
+    assert!(removed.contains("closed_at: 2026-01-05T00:00:00Z"));
+    assert!(!removed.contains("up_next: true"));
+}
+
+#[test]
 fn checkout_register_list_and_resolve_are_store_independent() {
     let checkout = tempfile::tempdir().unwrap();
     let store = tempfile::tempdir().unwrap();

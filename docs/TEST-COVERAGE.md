@@ -45,7 +45,7 @@ Status meanings:
 | terminal-sizing | docs/06-clients.md | Multi-viewer sizing arbitration | `crates/hotsheet-terminals/src/sizing.rs` | `crates/hotsheet-server/tests/terminal_ws.rs` | `docs/manual-test-plan.md` | double-covered |
 | server-multistore | docs/04-core-server-cli.md | Hosted-store discovery, routing, and isolation | `crates/hotsheet-server/src/multistore.rs` | `crates/hotsheet-server/tests/http.rs` | — | double-covered |
 | mtls | docs/04-core-server-cli.md | Device certificates, ACLs, renewal, and revocation | `crates/hotsheet-tls/src/lib.rs` | `crates/hotsheet-server/tests/mtls.rs` | `docs/manual-test-plan.md` | double-covered |
-| hs1-migration | docs/07-migration.md | HS1 export and HS2 import conformance | `migrator/test/export.test.mjs` | `crates/hotsheet-cli/tests/migrate.rs` | — | double-covered |
+| hs1-migration | docs/07-migration.md | HS1 export, deterministic/idempotent HS2 identity, normalized close state, retired legacy fields, and import conformance | `crates/hotsheet-cli/src/import.rs`; `crates/hotsheet-model/src/format.rs`; `migrator/test/export.test.mjs` | `crates/hotsheet-cli/tests/migrate.rs`; `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
 | web-client | docs/06-clients.md | Browser client workflows | — | — | — | planned |
 | native-clients | docs/06-clients.md | macOS/iOS client workflows | — | — | `docs/manual-test-plan.md` | planned |
 | github-roster-seed | docs/10-assignment-and-collaboration.md | Seed people roster from GitHub collaborators | — | — | — | planned |

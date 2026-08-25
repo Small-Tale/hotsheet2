@@ -126,6 +126,7 @@ export async function exportFromDb(db, project = {}) {
     updated_at: iso(r.updated_at),
     completed_at: iso(r.completed_at),
     verified_at: iso(r.verified_at),
+    deleted_at: iso(r.deleted_at),
   }));
 
   return {

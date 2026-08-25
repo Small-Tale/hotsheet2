@@ -2,7 +2,8 @@
 //! `docs/07-migration.md` §7.2.1 shape B) into a git store, writing ticket files
 //! through the core's own writer so the format never drifts.
 //!
-//! Idempotent: tickets whose `legacy_number` is already present are skipped.
+//! Idempotent without retaining HS1 fields: source identity deterministically mints
+//! each destination ULID, so a repeat import recognizes the same ticket by its HS2 id.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -61,6 +62,7 @@ pub struct ExportTicket {
     pub updated_at: Option<String>,
     pub completed_at: Option<String>,
     pub verified_at: Option<String>,
+    pub deleted_at: Option<String>,
     #[serde(default)]
     pub attachments: Vec<ExportAttachment>,
 }
@@ -99,14 +101,16 @@ pub struct ImportSummary {
 pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<ImportSummary> {
     let prefix = store.metadata()?.ticket_prefix;
 
-    let already: HashSet<String> = store
-        .list_tickets()?
-        .into_iter()
-        .filter_map(|t| t.legacy_number)
-        .collect();
+    let already: HashSet<Ulid> = store.list_tickets()?.into_iter().map(|t| t.id).collect();
 
-    // Pass 1 — one new ULID per source ticket, keyed by its old number for edges.
-    let ids: Vec<Ulid> = export.tickets.iter().map(|_| Ulid::new()).collect();
+    // Pass 1 — one stable HS2 ULID per source ticket, keyed by its old number only
+    // while this in-memory conversion runs. The HS1 number is not persisted.
+    let ids: Vec<Ulid> = export
+        .tickets
+        .iter()
+        .enumerate()
+        .map(|(i, t)| import_id(&export.project, t, i))
+        .collect();
     let id_by_number: HashMap<&str, Ulid> = export
         .tickets
         .iter()
@@ -117,17 +121,46 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
     // Pass 2 — build + write.
     let mut summary = ImportSummary::default();
     for (src, id) in export.tickets.iter().zip(&ids) {
-        if let Some(num) = &src.ticket_number {
-            if already.contains(num) {
-                summary.skipped += 1;
-                continue;
-            }
+        if already.contains(id) {
+            summary.skipped += 1;
+            continue;
         }
         store.write_ticket(&build_ticket(src, *id, &prefix, &id_by_number))?;
         summary.written += 1;
         summary.attachments += copy_attachments(store, base_dir, id, &src.attachments)?;
     }
     Ok(summary)
+}
+
+/// Stable, time-sortable import identity: the timestamp comes from the HS1 creation
+/// time and the random portion is a deterministic hash of project + source ticket.
+/// This provides repeat-import safety without leaking an HS1 identifier into HS2.
+fn import_id(project: &ProjectInfo, ticket: &ExportTicket, index: usize) -> Ulid {
+    let source = format!(
+        "hotsheet1\0{}\0{}\0{}",
+        project.name.as_deref().unwrap_or(""),
+        project.ticket_prefix.as_deref().unwrap_or("HS"),
+        ticket
+            .ticket_number
+            .as_deref()
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("index:{index}"))
+    );
+    let hash = |seed: u64| {
+        source.bytes().fold(seed, |value, byte| {
+            (value ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+        })
+    };
+    let random = ((u128::from(hash(0xcbf2_9ce4_8422_2325)) << 64)
+        | u128::from(hash(0x8422_2325_cbf2_9ce4)))
+        & ((1_u128 << 80) - 1);
+    let timestamp_ms = ticket
+        .created_at
+        .as_deref()
+        .and_then(|v| Timestamp::new(v).instant())
+        .and_then(|v| u64::try_from(v.unix_timestamp_nanos() / 1_000_000).ok())
+        .unwrap_or(0);
+    Ulid::from_parts(timestamp_ms, random)
 }
 
 /// Copy a ticket's staged attachment files into `attachments/<new-ulid>/`.
@@ -177,12 +210,27 @@ fn build_ticket(
     t.details = src.details.clone().unwrap_or_default();
     t.completed_at = src.completed_at.clone().map(Timestamp::from);
     t.verified_at = src.verified_at.clone().map(Timestamp::from);
-    t.legacy_number = src.ticket_number.clone();
-
-    // A completed/verified HS1 ticket carries a `completed` close outcome (docs/07).
-    if matches!(t.status, Status::Completed | Status::Verified) {
-        t.closed_at = t.completed_at.clone().or_else(|| t.verified_at.clone());
-        t.close_reason = Some(CloseReason::Completed);
+    // Normalize HS1 terminal states into a coherent HS2 status + close outcome.
+    // Backlog is inactive but not closed; deleted/archive are no longer actionable.
+    t.up_next &= t.status.is_active();
+    match t.status {
+        Status::Completed | Status::Verified => {
+            t.closed_at = t
+                .verified_at
+                .clone()
+                .or_else(|| t.completed_at.clone())
+                .or_else(|| Some(t.updated_at.clone()));
+            t.close_reason = Some(CloseReason::Completed);
+        }
+        Status::Deleted | Status::Archive => {
+            t.closed_at = src
+                .deleted_at
+                .clone()
+                .map(Timestamp::from)
+                .or_else(|| Some(t.updated_at.clone()));
+            t.close_reason = Some(CloseReason::Obsolete);
+        }
+        _ => {}
     }
 
     // Remap dependency edges; drop refs to tickets outside this export.
@@ -288,17 +336,18 @@ mod tests {
         let tickets = store.list_tickets().unwrap();
         assert_eq!(tickets.len(), 2);
 
-        let by_legacy = |num: &str| {
-            tickets
-                .iter()
-                .find(|t| t.legacy_number.as_deref() == Some(num))
-                .cloned()
-                .unwrap()
-        };
-        let root = by_legacy("HS-1200");
-        let dep = by_legacy("HS-1234");
+        let root = tickets
+            .iter()
+            .find(|t| t.title == "Root cause")
+            .cloned()
+            .unwrap();
+        let dep = tickets
+            .iter()
+            .find(|t| t.title == "Depends on 1200")
+            .cloned()
+            .unwrap();
 
-        // Legacy number preserved; a fresh ULID slug is the live handle.
+        // The deterministic HS2 identity is the only retained handle.
         assert!(root.slug.starts_with("HS-"));
         assert_ne!(root.slug, "HS-1200");
 
@@ -320,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn import_is_idempotent_by_legacy_number() {
+    fn import_is_idempotent_by_deterministic_hs2_identity() {
         let (_dir, store) = temp_store();
         import(&store, &export_json(), Path::new(".")).unwrap();
         let again = import(&store, &export_json(), Path::new(".")).unwrap();

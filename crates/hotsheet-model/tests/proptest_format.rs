@@ -169,7 +169,6 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
         option::of(scalar()),
         any::<u32>(),
         option::of(scalar()),
-        option::of(scalar()),
         option::of(arb_ulid()),
     );
     let collections = (
@@ -194,7 +193,6 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
                 worker_label,
                 claim_count,
                 moved_to_store,
-                legacy_number,
                 copied_from,
             ),
             (tags, blocked_by, blocked_reason, assignees, review_requests, external, notes),
@@ -214,7 +212,6 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
             t.worker_label = worker_label;
             t.claim_count = claim_count;
             t.moved_to_store = moved_to_store;
-            t.legacy_number = legacy_number;
             t.copied_from = copied_from;
             t.tags = tags;
             t.blocked_by = blocked_by;

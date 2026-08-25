@@ -54,14 +54,15 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `external` | list<{ system:`github\|gitlab\|jira`, repo:string, id:string, url:string, synced_at:RFC3339, remote_hash:string }> | no | shared | One entry per linked tracker |
 | **Move tombstone** ([02](02-ticket-storage.md) §2.13) — only on a `status: moved` record | | | | |
 | `moved_to_store` | store-id string | cond. | shared | Redirect target |
-| **Migration** ([07](07-migration.md)) | | | | |
-| `legacy_number` | string (`HS-1234`) | no | shared | Preserved HS1 number |
 | **Provenance** | | | | |
 | `copied_from` | ULID | no | shared | Set by a cross-store copy (§2.13) |
 | **Schema** | | | | |
 | `schema` | int | yes | shared | Frontmatter format version (forward migration) |
 
 **Not in the file (Local / Derived):**
+
+- HS1 ticket numbers are migration inputs only. A legacy `legacy_number` key from an
+  earlier importer is accepted but discarded on canonical rewrite.
 
 | Field | Tier | Where |
 |---|---|---|

@@ -119,7 +119,7 @@ and don't imply reading order — read by group.
 | Doc | Topic | Status |
 |---|---|---|
 | [12-code-organization-and-testing.md](12-code-organization-and-testing.md) | Cargo workspace/crate map, conventions, test strategy | Decided |
-| [07-migration.md](07-migration.md) | PGLite → git-repo migration (standalone bundled tool) | Partial (exporter + importer built and validated against real PG16/PG17 clusters plus the project snapshot; UI flow pending) |
+| [07-migration.md](07-migration.md) | PGLite → git-repo migration (standalone bundled tool) | Partial (exporter + importer built and validated against real clusters/project snapshot; deterministic HS2 ids, normalized close state, no retained HS1 fields; UI flow pending) |
 
 > **Core decisions confirmed by the maintainer 2026-08-19:** Rust core · git-file
 > storage · ULID + **all-caps** slug · SQLite+FTS5 · **automatic conflict
@@ -199,7 +199,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Native SwiftUI macOS (2nd) → iOS (3rd) | 06 | Confirmed |
 | Android client (4th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |
 | Code organization (Cargo workspace/crates) + test strategy | 12 | Decided |
-| PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; UI flow deferred) |
+| PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; deterministic/idempotent HS2 identity and normalized close state shipped; UI flow deferred) |
 | Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |
 | Git-native multi-machine claim/lease (ref/tag CAS, no coordinator) | 08 §8.5 | Shipped (`ticketing::distclaim`: `refs/hotsheet/claims/<ulid>` push-CAS claim [first-wins], `--force-with-lease` renew/steal, `ls-remote` enumerate, expiry sweep — bare-remote E2E; HS2-84. `distwork::select_and_claim`/`work_once` self-claim cycle [HS2-E7RXXR]; `server::dist_work_loop` drives a real AI tool per claimed ticket [`--drive-tool`, off by default, HS2-DTPX2V/HS2-1TY7GC]) |
 | Mobile ↔ server configuration/pairing (mTLS + QR) | 08 §8.3 | Partial (the mTLS core is built — per-project CA + expiring/renewable device certs + live revocation + per-device ACLs + off-loopback serving, HS2-VT3JMF/MPC0QF; `.p12`/QR enrollment for pairing stays with client work) |

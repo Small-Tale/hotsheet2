@@ -48,7 +48,6 @@ pub struct ApiTicket {
     pub claim_count: u32,
     pub assignees: Vec<String>,
     pub review_requests: Vec<ReviewRequest>,
-    pub legacy_number: Option<String>,
     pub schema: u32,
     pub notes: Vec<ApiNote>,
     /// Computed standing guidance; never persisted in the ticket file.
@@ -94,7 +93,6 @@ impl From<&Ticket> for ApiTicket {
             claim_count: t.claim_count,
             assignees: t.assignees.clone(),
             review_requests: t.review_requests.clone(),
-            legacy_number: t.legacy_number.clone(),
             schema: t.schema,
             notes: t
                 .notes
@@ -151,7 +149,6 @@ pub struct TicketRow {
     pub claimed_by: Option<String>,
     pub worker_label: Option<String>,
     pub claim_count: u32,
-    pub legacy_number: Option<String>,
     /// Computed standing guidance; never persisted in the index or ticket file.
     pub auto_context: Vec<TicketAutoContext>,
 }
@@ -180,7 +177,6 @@ impl From<&Ticket> for TicketRow {
             claimed_by: t.claimed_by.clone(),
             worker_label: t.worker_label.clone(),
             claim_count: t.claim_count,
-            legacy_number: t.legacy_number.clone(),
             auto_context: Vec::new(),
         }
     }

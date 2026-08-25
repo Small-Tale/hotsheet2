@@ -110,9 +110,7 @@ pub struct Ticket {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moved_at: Option<Timestamp>,
 
-    // Migration / provenance.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legacy_number: Option<String>,
+    // Provenance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copied_from: Option<Ulid>,
 

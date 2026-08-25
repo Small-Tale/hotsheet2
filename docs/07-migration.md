@@ -10,7 +10,8 @@
 > We chose **shape (B)** over the shape-(A) default because the Rust importer doubles
 > as the CLI's file writer and eliminates format drift. Proven end-to-end against a
 > real HS1 cluster (this project's own snapshot): **81 tickets** exported + imported
-> with notes, `legacy_number`, and close outcomes intact.
+> with notes, dependency edges, and normalized close outcomes intact. HS1 ticket
+> numbers are conversion-only inputs and are not retained in HS2.
 > Headless `init`/`doctor` detect the exact `.hotsheet/db/PG_VERSION` marker and
 > print the close-HS1 warning plus the explicit migrator command without running it
 > (HS2-MNHGT3); the interactive prompt/progress experience remains client-owned.
@@ -113,12 +114,13 @@ exported).
 ### What the write step does (either shape)
 
 For each ticket:
-- **Mint a fresh ULID** and derive an all-caps slug ([02](02-ticket-storage.md)
-  §2.4). Preserve the old **`HS-1234`** number in frontmatter as `legacy_number` so
-  history and external references stay resolvable and searchable.
+- **Derive a stable ULID** from the source project/ticket identity and creation time,
+  then derive an all-caps slug ([02](02-ticket-storage.md) §2.4). The stable identity
+  makes retries idempotent without retaining the HS1 number in HS2.
 - Map fields → HS2 frontmatter; body ← `details`; notes → the `## Notes` section
-  (each note gets a ULID id, §2.6); map an HS1 `completed`/`verified` outcome to the
-  new close fields where sensible ([02](02-ticket-storage.md) §2.6a).
+  (each note gets a ULID id, §2.6); map HS1 `completed`/`verified` to a `completed`
+  close outcome and `archive`/soft-delete to `obsolete`, carrying the best available
+  close timestamp and clearing `up_next` for every inactive status ([02](02-ticket-storage.md) §2.6a).
 - Write the file into the target store; copy attachments to `attachments/<id>/`.
 - Rewrite `blocked_by` old-number refs to new ULIDs (**two-pass**: assign all IDs
   first, then resolve edges — including `duplicate_of` if present).
@@ -126,9 +128,8 @@ For each ticket:
   commit ("Import N tickets from Hot Sheet 1"). The HS2 server (re)builds the index
   from the files afterward.
 
-**Idempotent & safe:** re-running detects already-imported tickets by
-`legacy_number` and skips them (never duplicates); the source cluster is opened
-**read-only** and never modified.
+**Idempotent & safe:** re-running derives the same HS2 ULIDs and skips them (never
+duplicates); the source cluster is opened **read-only** and never modified.
 
 ## 7.3 The UI-prompted flow (per project, on demand)
 
@@ -161,9 +162,9 @@ migrator/src/export.mjs …` + `hotsheet import …`, which remain available sep
   (rebuilt), generated `worklist.md`/`open-tickets.md` (regenerated), telemetry
   rollups and the Announcer history (HS1-specific; a later, optional export if
   wanted), backups/snapshots (obsolete — git is the new history).
-- **Ticket numbers:** the linear `HS-N` becomes `legacy_number`; the live handle
-  is the new slug. This is the one visible discontinuity, and it's inherent to
-  dropping the central sequence.
+- **Ticket numbers:** the linear `HS-N` is used only while remapping references and
+  deriving stable HS2 identities. It is not persisted; the new slug is the sole live
+  handle. This discontinuity is inherent to dropping the central sequence.
 
 ## 7.5 Bidirectional / rollback
 

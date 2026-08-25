@@ -167,8 +167,9 @@ merge (§9.1a).
 increasing." ULID beats plain UUIDv4 by being time-sortable (good default order,
 even sharding) while staying coordination-free. The slug keeps a human handle.
 
-**Cost.** We lose HS1's friendly monotonic `HS-1234`; migration preserves it as
-`legacy_number`. Detail: [02](02-ticket-storage.md) §2.4.
+**Cost.** We lose HS1's friendly monotonic `HS-1234`. Migration uses it transiently
+to derive a stable HS2 ULID and remap references, but does not retain an HS1 identity
+field. Detail: [02](02-ticket-storage.md) §2.4.
 
 ---
 

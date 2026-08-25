@@ -144,12 +144,6 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
         ours_wins,
     );
     m.moved_at = pick3(&base.moved_at, &ours.moved_at, &theirs.moved_at, ours_wins);
-    m.legacy_number = pick3(
-        &base.legacy_number,
-        &ours.legacy_number,
-        &theirs.legacy_number,
-        ours_wins,
-    );
     m.copied_from = pick3(
         &base.copied_from,
         &ours.copied_from,

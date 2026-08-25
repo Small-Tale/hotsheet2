@@ -47,7 +47,6 @@ const KNOWN_KEYS: &[&str] = &[
     "external",
     "moved_to_store",
     "moved_at",
-    "legacy_number",
     "copied_from",
     "schema",
 ];
@@ -145,6 +144,11 @@ pub fn parse_file(text: &str) -> Result<Ticket, ParseError> {
     // Retain keys the current schema doesn't know (forward-compat, docs/17 §17.4).
     for (k, v) in &mapping {
         if let Some(key) = k.as_str() {
+            // HS1 identifiers were briefly persisted by the importer. They are not
+            // an HS2 identity and deliberately disappear on the next canonical write.
+            if key == "legacy_number" {
+                continue;
+            }
             if !KNOWN_KEYS.contains(&key) {
                 ticket.extra.insert(key.to_string(), v.clone());
             }
@@ -518,6 +522,15 @@ mod tests {
     }
 
     #[test]
+    fn retired_hs1_number_is_read_but_not_retained() {
+        let canonical = to_file_string(&sample());
+        let old = canonical.replacen("schema: 1", "legacy_number: HS-1234\nschema: 1", 1);
+        let parsed = parse_file(&old).unwrap();
+        assert!(!parsed.extra.contains_key("legacy_number"));
+        assert!(!to_file_string(&parsed).contains("legacy_number"));
+    }
+
+    #[test]
     fn full_close_and_provenance_fields_round_trip() {
         let mut t = sample();
         t.status = Status::Completed;
@@ -531,7 +544,6 @@ mod tests {
         t.claim_lease_expires_at = Some("2026-08-20T09:30:00Z".into());
         t.worker_label = Some("worktree-2".into());
         t.claim_count = 2;
-        t.legacy_number = Some("HS-1234".into());
         t.copied_from = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC2"));
         t.review_requests = vec![ReviewRequest {
             who: "dana@example.com".into(),
@@ -714,7 +726,6 @@ mod tests {
             remote_hash: "h".into(),
         }];
         t.moved_to_store = Some("other".into());
-        t.legacy_number = Some("HS-1".into());
         t.copied_from = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC2"));
         t
     }
