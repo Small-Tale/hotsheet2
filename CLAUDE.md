@@ -16,6 +16,24 @@ A checkout id is a readable Hot Sheet path identity (`folder-shortpathhash`), no
 id, ticket-store id, or secret. Keep checkout↔store links many-to-many. Only server
 instance data carries bearer credentials.
 
+## Client UI stack
+
+Use **Kerf (`kerfjs`) + Web Awesome Core** for the Tauri web UI. Kerf owns
+application state, routing, lists, API resources, rendering/morphing, and delegated
+event handling. Web Awesome owns reusable accessible UI primitives such as form
+controls, dialogs, drawers, and menus. Build custom components only for Hot
+Sheet-specific interactions that those primitives do not cover; Web Awesome Pro is
+optional and requires a separate decision/license.
+
+Import only the Web Awesome components the client uses, style them primarily through
+their documented theme tokens and parts, and keep application state outside custom
+elements. Form controls such as `<wa-input>` emit standard host-level `input` and
+`change` events—not `wa-input` or `wa-change`. Web Awesome-specific lifecycle events
+remain prefixed (for example `wa-show`, `wa-hide`, `wa-after-show`, and
+`wa-after-hide`) and can be handled through Kerf delegation. The validated integration
+and executable browser tests live in [`spikes/kerf-webawesome/`](spikes/kerf-webawesome/);
+the durable rationale is in [`docs/09-technology-decisions.md`](docs/09-technology-decisions.md).
+
 <!-- hotsheet:begin section=testing-philosophy v=2 -->
 ## Testing Philosophy
 
