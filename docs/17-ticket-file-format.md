@@ -49,7 +49,7 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `claim_count` | int (def 0) | no | shared | Poison-retry counter |
 | **Assignment** ([10](10-assignment-and-collaboration.md) §10.2) | | | | |
 | `assignees` | list<email> | no (def `[]`) | shared | git identities; roster maps to names |
-| `review_requests` | list<{ who:email, kind:`work\|feedback\|review\|fyi`, by:ULID, at:RFC3339 }> | no (def `[]`) | shared | Merge by set-union on `by` |
+| `review_requests` | list<{ who:email, kind:`work\|feedback\|review\|fyi`, by:ULID, at:RFC3339, requested_by:email? }> | no (def `[]`) | shared | Merge by set-union on `by`; new writes identify the requester |
 | **External sync** ([16](16-external-sync-interface.md) §16.2) | | | | |
 | `external` | list<{ system:`github\|gitlab\|jira`, repo:string, id:string, url:string, synced_at:RFC3339, remote_hash:string }> | no | shared | One entry per linked tracker |
 | **Move tombstone** ([02](02-ticket-storage.md) §2.13) — only on a `status: moved` record | | | | |

@@ -385,6 +385,7 @@ mod tests {
             kind: ReviewKind::Review,
             by: ulid(uid),
             at: ts(at),
+            requested_by: None,
         };
         let base = base_ticket();
         let mut ours = base.clone();

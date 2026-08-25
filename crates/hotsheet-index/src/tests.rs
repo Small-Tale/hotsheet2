@@ -258,6 +258,7 @@ fn blocked_review_moved_and_date_filters_match_the_file_scan() {
             kind: ReviewKind::Review,
             by: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB9"),
             at: late.clone(),
+            requested_by: Some("requester@example.com".into()),
         }],
     )
     .unwrap();
@@ -276,6 +277,10 @@ fn blocked_review_moved_and_date_filters_match_the_file_scan() {
         },
         TicketQuery {
             review_requested: Some("alice@example.com".into()),
+            ..Default::default()
+        },
+        TicketQuery {
+            review_by: Some("requester@example.com".into()),
             ..Default::default()
         },
         // Default list excludes the moved tombstone …

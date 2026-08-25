@@ -31,6 +31,10 @@ pub struct ReviewRequest {
     pub kind: ReviewKind,
     pub by: Ulid,
     pub at: Timestamp,
+    /// Git email of the person who requested the review. Optional for files written
+    /// before HS2-NZT80R; new writes populate it from the store's git identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_by: Option<String>,
 }
 
 /// A link to a ticket's counterpart in an external tracker (`docs/16` §16.2).

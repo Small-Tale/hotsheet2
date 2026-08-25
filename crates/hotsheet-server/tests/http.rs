@@ -570,6 +570,7 @@ async fn me_views_resolve_assigned_to_me_and_needs_my_review() {
             kind: hotsheet_model::ReviewKind::Feedback,
             by: Ulid::new(),
             at: now,
+            requested_by: Some("me@hs.test".into()),
         }],
     )
     .unwrap();
@@ -593,6 +594,17 @@ async fn me_views_resolve_assigned_to_me_and_needs_my_review() {
     let resp = app
         .clone()
         .oneshot(authed("GET", "/tickets?review_requested=me", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let rows = body_json(resp).await;
+    let rows = rows.as_array().unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["title"], "theirs");
+
+    // "I requested": review_by=me resolves through the same git identity.
+    let resp = app
+        .oneshot(authed("GET", "/tickets?review_by=me", None))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);

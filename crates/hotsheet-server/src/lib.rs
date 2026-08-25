@@ -2243,6 +2243,8 @@ struct ListParams {
     assignee: Option<String>,
     /// Only tickets with a review request for this person (git email).
     review_requested: Option<String>,
+    /// Only tickets whose review was requested by this person (git email).
+    review_by: Option<String>,
     /// `true` = only claimed tickets; `false` = only unclaimed.
     claimed: Option<bool>,
     /// `true` = only blocked tickets; `false` = only unblocked (HS2-T84F9F).
@@ -2343,6 +2345,7 @@ impl ListParams {
             closed: self.closed,
             assignee: resolve_person(self.assignee)?,
             review_requested: resolve_person(self.review_requested)?,
+            review_by: resolve_person(self.review_by)?,
             claimed: self.claimed,
             blocked: self.blocked,
             created_after: self.created_after,

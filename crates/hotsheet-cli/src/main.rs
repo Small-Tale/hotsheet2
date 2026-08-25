@@ -468,6 +468,9 @@ struct LsFilters {
     /// Only tickets with a review request for this person (git email, or `me`).
     #[arg(long = "review-requested")]
     review_requested: Option<String>,
+    /// Only tickets whose review was requested by this person (git email, or `me`).
+    #[arg(long = "review-by")]
+    review_by: Option<String>,
     /// Only tickets with a worker claim (a held lease).
     #[arg(long)]
     claimed: bool,
@@ -983,6 +986,7 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         closed: f.closed.then_some(true),
         assignee: resolve_person(&f.assignee)?,
         review_requested: resolve_person(&f.review_requested)?,
+        review_by: resolve_person(&f.review_by)?,
         claimed: f.claimed.then_some(true),
         blocked: f.blocked_filter(),
         sort: f.sort.parse().map_err(|e: String| anyhow::anyhow!(e))?,
@@ -1098,6 +1102,7 @@ fn cmd_assign(
                 kind: parse_review_kind(kind)?,
                 by: Ulid::new(),
                 at: now.clone(),
+                requested_by: None,
             })
         })
         .collect::<Result<Vec<_>>>()?;

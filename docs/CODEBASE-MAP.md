@@ -92,7 +92,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/fake_agent.rs    #   integrated terminal E2E: hs-fake-agent drives busy/cwd/progress/output→idle→exit + spinner detection, in one realistic sequence
       src/env.rs             #   scrub_env: drop TSX_/npm_/NODE_/HOTSHEET_ markers before a child inherits
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
-      src/lib.rs             #   Index (SCHEMA_VERSION 3): open_reconciled/reconcile (git-diff fast path)/rebuild/upsert/delete/query + hash_bytes; facets: tags + assignees + reviews tables; filters incl. assignee/review_requested (facet joins) + claimed + blocked/unblocked (json_each over blocked_by vs done set) + created/updated date-range + moved-tombstones-hidden-by-default; keyset page_after paging (HS2-89/HS2-T84F9F/HS2-TCDTCH)
+      src/lib.rs             #   Index (SCHEMA_VERSION 4): open_reconciled/reconcile (git-diff fast path)/rebuild/upsert/delete/query + hash_bytes; facets: tags + assignees + reviews(who/requested_by) tables; filters incl. assignee/review_requested/review_by (facet joins) + claimed + blocked/unblocked (json_each over blocked_by vs done set) + created/updated date-range + moved-tombstones-hidden-by-default; keyset page_after paging
     hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
       src/drive.rs           #   Drive trait (+ service() -> BackingService accessor) + BackingService trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue

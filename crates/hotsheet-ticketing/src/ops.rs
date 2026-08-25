@@ -91,6 +91,8 @@ pub struct TicketQuery {
     pub assignee: Option<String>,
     /// Only tickets this person (git email) has a review request on (HS2-T84F9F).
     pub review_requested: Option<String>,
+    /// Only tickets whose review was requested by this person (HS2-NZT80R).
+    pub review_by: Option<String>,
     /// `Some(true)` = only claimed tickets (a `claimed_by` is set); `Some(false)` = only
     /// unclaimed. `None` doesn't constrain (HS2-89).
     pub claimed: Option<bool>,
@@ -140,6 +142,11 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && q.review_requested
                 .as_deref()
                 .is_none_or(|who| t.review_requests.iter().any(|r| r.who == who))
+            && q.review_by.as_deref().is_none_or(|who| {
+                t.review_requests
+                    .iter()
+                    .any(|r| r.requested_by.as_deref() == Some(who))
+            })
             && q.claimed.is_none_or(|want| t.claimed_by.is_some() == want)
             && q.blocked.is_none_or(|want| is_blocked(t, &done) == want)
             && q.created_after
@@ -575,7 +582,7 @@ pub fn assign(
     id: &Ulid,
     now: Timestamp,
     set_assignees: Option<Vec<String>>,
-    add_reviews: Vec<ReviewRequest>,
+    mut add_reviews: Vec<ReviewRequest>,
 ) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
     if let Some(assignees) = set_assignees {
@@ -584,6 +591,12 @@ pub fn assign(
             .into_iter()
             .filter(|e| seen.insert(e.clone()))
             .collect();
+    }
+    let requester = crate::current_user_email(store.root());
+    for r in &mut add_reviews {
+        if r.requested_by.is_none() {
+            r.requested_by.clone_from(&requester);
+        }
     }
     for r in add_reviews {
         if !t.review_requests.iter().any(|x| x.by == r.by) {
@@ -1186,6 +1199,18 @@ mod tests {
     fn assign_sets_people_and_unions_review_requests() {
         use hotsheet_model::{ReviewKind, ReviewRequest};
         let (_d, store) = store();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(store.root())
+            .arg("init")
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(store.root())
+            .args(["config", "user.email", "requester@x.co"])
+            .output()
+            .unwrap();
         let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
         create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
 
@@ -1194,6 +1219,7 @@ mod tests {
             kind: ReviewKind::Feedback,
             by: Ulid::from_string(uid).unwrap(),
             at: ts("t1"),
+            requested_by: None,
         };
         // Assign two people + one review request.
         let t = assign(
@@ -1206,6 +1232,7 @@ mod tests {
         .unwrap();
         assert_eq!(t.assignees, vec!["alex@x.co", "sam@x.co"]);
         assert_eq!(t.review_requests.len(), 1);
+        assert!(t.review_requests[0].requested_by.is_some());
 
         // Re-assign replaces assignees but ADDS a new review (deduped by `by`).
         let t = assign(
@@ -1221,6 +1248,16 @@ mod tests {
         .unwrap();
         assert_eq!(t.assignees, vec!["alex@x.co"], "assignees replaced");
         assert_eq!(t.review_requests.len(), 2, "review requests union by `by`");
+
+        let requested = query(
+            &store,
+            &TicketQuery {
+                review_by: t.review_requests[0].requested_by.clone(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(requested.len(), 1, "requester facet is queryable");
 
         // Filter by assignee.
         let mine = query(

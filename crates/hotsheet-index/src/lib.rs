@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -49,8 +49,9 @@ CREATE TABLE tags (store_id TEXT, ticket_id TEXT, tag TEXT);
 CREATE INDEX idx_tags ON tags(store_id, tag);
 CREATE TABLE assignees (store_id TEXT, ticket_id TEXT, assignee TEXT);
 CREATE INDEX idx_assignees ON assignees(store_id, assignee);
-CREATE TABLE reviews (store_id TEXT, ticket_id TEXT, who TEXT);
+CREATE TABLE reviews (store_id TEXT, ticket_id TEXT, who TEXT, requested_by TEXT);
 CREATE INDEX idx_reviews ON reviews(store_id, who);
+CREATE INDEX idx_reviews_requested_by ON reviews(store_id, requested_by);
 CREATE VIRTUAL TABLE tickets_fts USING fts5(title, details, notes);
 CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);
 "#;
@@ -268,8 +269,8 @@ impl Index {
         )?;
         for r in &t.review_requests {
             self.conn.execute(
-                "INSERT INTO reviews(store_id,ticket_id,who) VALUES(?1,?2,?3)",
-                params![self.store_id, id, r.who],
+                "INSERT INTO reviews(store_id,ticket_id,who,requested_by) VALUES(?1,?2,?3,?4)",
+                params![self.store_id, id, r.who, r.requested_by],
             )?;
         }
 
@@ -503,6 +504,14 @@ impl Index {
         if let Some(who) = &q.review_requested {
             wheres
                 .push("t.id IN (SELECT ticket_id FROM reviews WHERE store_id=? AND who=?)".into());
+            args.push(Box::new(self.store_id.clone()));
+            args.push(Box::new(who.clone()));
+        }
+        if let Some(who) = &q.review_by {
+            wheres.push(
+                "t.id IN (SELECT ticket_id FROM reviews WHERE store_id=? AND requested_by=?)"
+                    .into(),
+            );
             args.push(Box::new(self.store_id.clone()));
             args.push(Box::new(who.clone()));
         }

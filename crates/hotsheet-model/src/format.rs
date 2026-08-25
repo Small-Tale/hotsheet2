@@ -538,6 +538,7 @@ mod tests {
             kind: ReviewKind::Feedback,
             by: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC3"),
             at: "2026-08-20T08:00:00Z".into(),
+            requested_by: Some("requester@example.com".into()),
         }];
         t.external = vec![ExternalLink {
             system: "github".into(),
@@ -702,6 +703,7 @@ mod tests {
             kind: ReviewKind::Fyi,
             by: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC3"),
             at: "x".into(),
+            requested_by: None,
         }];
         t.external = vec![ExternalLink {
             system: "github".into(),

@@ -94,6 +94,7 @@ fn tools_list() -> Value {
                 "closed": { "type": "boolean", "description": "true = only closed tickets (a close_reason is set); false = only tickets with none" },
                 "assignee": str_prop("filter to tickets assigned to this person (git email, or 'me' for your git identity)"),
                 "review_requested": str_prop("filter to tickets with a review request for this person (git email, or 'me')"),
+                "review_by": str_prop("filter to tickets whose review was requested by this person (git email, or 'me')"),
                 "claimed": { "type": "boolean", "description": "true = only claimed tickets; false = only unclaimed" },
                 "blocked": { "type": "boolean", "description": "true = only blocked tickets (a blocker isn't done); false = only unblocked" },
                 "created_after": str_prop("only tickets created at/after this ISO-8601 time"),
@@ -321,6 +322,7 @@ fn query_pairs(args: &Value) -> Vec<(String, String)> {
         "closed",
         "assignee",
         "review_requested",
+        "review_by",
         "claimed",
         "blocked",
         "created_after",
@@ -774,6 +776,7 @@ mod core_backend {
             assignee: resolve_person(get("assignee"))?,
             claimed: get("claimed").map(|v| v == "true"),
             review_requested: resolve_person(get("review_requested"))?,
+            review_by: resolve_person(get("review_by"))?,
             blocked: get("blocked").map(|v| v == "true"),
             sort,
             limit: match get("limit") {

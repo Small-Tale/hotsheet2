@@ -125,8 +125,15 @@ fn arb_note() -> impl Strategy<Value = Note> {
 }
 
 fn arb_review() -> impl Strategy<Value = ReviewRequest> {
-    (scalar(), arb_review_kind(), arb_ulid(), arb_ts())
-        .prop_map(|(who, kind, by, at)| ReviewRequest { who, kind, by, at })
+    (scalar(), arb_review_kind(), arb_ulid(), arb_ts()).prop_map(|(who, kind, by, at)| {
+        ReviewRequest {
+            who,
+            kind,
+            by,
+            at,
+            requested_by: None,
+        }
+    })
 }
 
 fn arb_external() -> impl Strategy<Value = ExternalLink> {

@@ -17,11 +17,11 @@
 >
 > **Now also built:** the index `assignees`/`reviews` **facet tables** so
 > `assignee` + `review_requested` filter index-side too (HS2-89/HS2-T84F9F), and the
-> **"assigned to me" / "needs my review" derived views** via the `me` sentinel —
-> `assignee=me` / `review_requested=me` resolve to the store's git `user.email` in the
-> CLI, server, and MCP (HS2-TCDTCH). **Still not built (follow-ups):** the **"I
-> requested" view** (needs a requester identity on `ReviewRequest`, which today
-> carries only `who`), the **live/on-sync attention delivery** of §10.3, and the
+> **"assigned to me" / "needs my review" / "I requested" derived views** via the
+> `me` sentinel — `assignee=me`, `review_requested=me`, and `review_by=me` resolve to
+> the store's git `user.email` in the CLI, server, and MCP. New review requests record
+> `requested_by`; older files remain readable without it (HS2-TCDTCH/HS2-NZT80R).
+> **Still not built (follow-ups):** the **live/on-sync attention delivery** of §10.3 and the
 > GitHub-seed of `people.json` (§10.5).
 
 ## 10.1 Two different "who's on this?" concepts — keep them separate
@@ -49,14 +49,15 @@ so every teammate sees them and they sync + merge automatically:
 ```yaml
 assignees: [dana@example.com, alex@example.com]    # people expected to do the work
 review_requests:                                   # people whose input is wanted
-  - { who: dana@example.com, kind: feedback, by: 01J9ZK…req-ulid, at: 2026-08-19T… }
-  - { who: sam@example.com,  kind: review,   by: 01J9ZK…req-ulid, at: 2026-08-19T… }
+  - { who: dana@example.com, kind: feedback, by: 01J9ZK…req-ulid, at: 2026-08-19T…, requested_by: alex@example.com }
+  - { who: sam@example.com,  kind: review,   by: 01J9ZK…req-ulid, at: 2026-08-19T…, requested_by: alex@example.com }
 ```
 
 - **`assignees`** — a set of person identities expected to *do* the ticket.
 - **`review_requests`** — a set of "I need this person in the loop" asks, each with
   a **kind**: `feedback` (weigh in), `review` (approve/verify), or `fyi` (awareness).
-  Each request carries its own ULID `by`, so requests **merge by set-union** exactly
+  `requested_by` is the requesting person's git email. Each request carries its own
+  ULID `by`, so requests **merge by set-union** exactly
   like notes — two people adding a reviewer never conflict.
 - **Person identity = the git identity (email)** (decided, 2026-08-19), mapped to a
   friendly name via a **committed `people.json` in the store** — so `dana@example.com`
