@@ -4,6 +4,7 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
@@ -13,8 +14,9 @@ use hotsheet_model::{
     parse_file, to_file_string,
 };
 use hotsheet_ticketing::{
-    FsStore, GitProvider, NewTicket, Person, Roster, SortKey, StoreMetadata, TicketPatch,
-    TicketProvider, TicketQuery, git_connection_id, ops,
+    FsStore, GitProvider, NewTicket, Person, ProviderRegistry, Roster, SortKey, StoreMetadata,
+    TicketPatch, TicketProvider, TicketQuery, TicketRef, copy_between, git_connection_id,
+    move_between, ops,
 };
 use time::{Duration, OffsetDateTime};
 
@@ -178,6 +180,15 @@ enum Cmd {
         #[arg(long = "to")]
         to: PathBuf,
     },
+    /// Idempotently copy a ticket between provider connections (git stores initially).
+    ProviderCopy {
+        id: String,
+        #[arg(long = "to")]
+        to: PathBuf,
+        /// Stable caller-generated id; retries with the same id resolve one destination.
+        #[arg(long = "operation-id")]
+        operation_id: String,
+    },
     /// Move a ticket to another store, keeping its ULID (leaves a tombstone in the source).
     /// git never forgets — this does NOT purge it from the source's history/remote.
     Move {
@@ -187,6 +198,16 @@ enum Cmd {
         #[arg(long = "to")]
         to: PathBuf,
         /// Confirm the move despite the retention/exposure caveat (required).
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Idempotently copy then close a ticket across provider connections.
+    ProviderMove {
+        id: String,
+        #[arg(long = "to")]
+        to: PathBuf,
+        #[arg(long = "operation-id")]
+        operation_id: String,
         #[arg(long)]
         yes: bool,
     },
@@ -651,7 +672,23 @@ fn main() -> Result<()> {
         Cmd::Checkout { cmd } => cmd_checkout(cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
+        Cmd::ProviderCopy {
+            id,
+            to,
+            operation_id,
+        } => cmd_provider_transfer(&cli.path, &id, &to, &operation_id, false),
         Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
+        Cmd::ProviderMove {
+            id,
+            to,
+            operation_id,
+            yes,
+        } => {
+            if !yes {
+                bail!("provider-move requires --yes");
+            }
+            cmd_provider_transfer(&cli.path, &id, &to, &operation_id, true)
+        }
         Cmd::Assign {
             id,
             to,
@@ -1113,6 +1150,45 @@ fn cmd_copy(src_path: &Path, id: &str, to: &Path) -> Result<()> {
         copied.slug,
         to.display(),
         ticket.slug
+    );
+    Ok(())
+}
+
+fn cmd_provider_transfer(
+    src_path: &Path,
+    id: &str,
+    to: &Path,
+    operation_id: &str,
+    move_source: bool,
+) -> Result<()> {
+    let source_store = FsStore::open(src_path)?;
+    let destination_store =
+        FsStore::open(to).with_context(|| format!("opening destination store {}", to.display()))?;
+    let source_id = git_connection_id(&source_store);
+    let destination_id = git_connection_id(&destination_store);
+    let source_ticket = ops::resolve(&source_store, id)?
+        .ok_or_else(|| anyhow::anyhow!("no ticket matching '{id}'"))?;
+    let registry = ProviderRegistry::default();
+    registry.register(Arc::new(GitProvider::new(source_id.clone(), source_store)))?;
+    registry.register(Arc::new(GitProvider::new(
+        destination_id.clone(),
+        destination_store,
+    )))?;
+    let source = TicketRef {
+        connection_id: source_id,
+        native_id: source_ticket.id.to_string(),
+    };
+    let outcome = if move_source {
+        move_between(&registry, source, &destination_id, operation_id, now_ts())?
+    } else {
+        copy_between(&registry, source, &destination_id, operation_id, now_ts())?
+    };
+    println!(
+        "{} {} -> {} (operation {})",
+        if move_source { "Moved" } else { "Copied" },
+        outcome.source.qualified(),
+        outcome.destination.qualified(),
+        outcome.operation_id
     );
     Ok(())
 }
@@ -2336,6 +2412,42 @@ fn lease_until(now: OffsetDateTime, minutes: i64) -> Timestamp {
 #[cfg(test)]
 mod server_wrapper_tests {
     use super::*;
+
+    #[test]
+    fn provider_copy_command_is_idempotent() {
+        let source_dir = tempfile::tempdir().unwrap();
+        let destination_dir = tempfile::tempdir().unwrap();
+        let source = FsStore::init(source_dir.path(), &StoreMetadata::new("SRC")).unwrap();
+        let destination =
+            FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+        let ticket = ops::create(
+            &source,
+            Ulid::new(),
+            "SRC",
+            Timestamp::new("2026-08-26T02:00:00Z"),
+            NewTicket {
+                title: "copy from cli".into(),
+                category: "task".into(),
+                priority: Priority::Default,
+                details: String::new(),
+                tags: vec![],
+                up_next: false,
+                blocked_by: vec![],
+            },
+        )
+        .unwrap();
+        for _ in 0..2 {
+            cmd_provider_transfer(
+                source_dir.path(),
+                &ticket.slug,
+                destination_dir.path(),
+                "cli-provider-op-1",
+                false,
+            )
+            .unwrap();
+        }
+        assert_eq!(destination.list_tickets().unwrap().len(), 1);
+    }
 
     #[test]
     fn sibling_server_wins_over_path_and_arguments_are_forwarded_exactly() {

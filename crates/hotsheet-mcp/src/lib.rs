@@ -238,6 +238,29 @@ fn tools_list() -> Value {
                 "to": str_prop("destination store: its URL id (server) or path (serverless)"),
                 "confirm": { "type": "boolean", "description": "must be true — acknowledges the source git-retention caveat" }
             }, "required": ["id", "to", "confirm"] }
+        },
+        {
+            "name": "hotsheet_provider_copy",
+            "description": "Idempotently copy a ticket between provider connections. Reusing operation_id resolves the same destination.",
+            "inputSchema": { "type": "object", "properties": {
+                "source_connection": str_prop("source provider connection id"),
+                "source_id": str_prop("provider-native source ticket id"),
+                "destination_connection": str_prop("destination provider connection id"),
+                "destination_locator": str_prop("serverless-only destination git store path"),
+                "operation_id": str_prop("stable caller-generated idempotency key")
+            }, "required": ["source_connection", "source_id", "destination_connection", "operation_id"] }
+        },
+        {
+            "name": "hotsheet_provider_move",
+            "description": "Idempotently copy across providers, then close the source only after destination creation succeeds.",
+            "inputSchema": { "type": "object", "properties": {
+                "source_connection": str_prop("source provider connection id"),
+                "source_id": str_prop("provider-native source ticket id"),
+                "destination_connection": str_prop("destination provider connection id"),
+                "destination_locator": str_prop("serverless-only destination git store path"),
+                "operation_id": str_prop("stable caller-generated idempotency key"),
+                "confirm": { "type": "boolean" }
+            }, "required": ["source_connection", "source_id", "destination_connection", "operation_id", "confirm"] }
         }
     ] })
 }
@@ -377,6 +400,26 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 .send("POST", &format!("/tickets/{id}/move"), &without(args, "id"))
                 .map_err(be_msg)
         }
+        "hotsheet_provider_copy" | "hotsheet_provider_move" => {
+            let body = json!({
+                "source": {
+                    "connection_id": arg_str(args, "source_connection")?,
+                    "native_id": arg_str(args, "source_id")?,
+                },
+                "destination_connection": arg_str(args, "destination_connection")?,
+                "destination_locator": args.get("destination_locator").cloned().unwrap_or(Value::Null),
+                "operation_id": arg_str(args, "operation_id")?,
+                "confirm": args.get("confirm").cloned().unwrap_or(Value::Bool(false)),
+            });
+            let action = if name == "hotsheet_provider_copy" {
+                "copy"
+            } else {
+                "move"
+            };
+            backend
+                .send("POST", &format!("/provider-transfers/{action}"), &body)
+                .map_err(be_msg)
+        }
         other => Err(format!("unknown tool: {other}")),
     }
 }
@@ -478,11 +521,13 @@ mod core_backend {
     use super::{Backend, BackendError};
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
-        ApiTicket, FsStore, NewTicket, OpError, Settings, SortKey, StoreError, StoreRegistry,
-        TicketPatch, TicketProvider, TicketQuery, TicketRow, auto_context, ops,
+        ApiTicket, FsStore, GitProvider, NewTicket, OpError, ProviderRegistry, Settings, SortKey,
+        StoreError, StoreRegistry, TicketPatch, TicketProvider, TicketQuery, TicketRef, TicketRow,
+        auto_context, copy_between, move_between, ops,
     };
     use serde_json::Value;
     use std::path::Path;
+    use std::sync::Arc;
     use time::OffsetDateTime;
 
     /// Serves the `hotsheet_*` tools straight from the store on disk — no server, no
@@ -861,6 +906,73 @@ mod core_backend {
                         Some(t) => self.api(&t)?,
                         None => Value::Null,
                     })
+                }
+                "POST"
+                    if matches!(
+                        path,
+                        "/provider-transfers/copy" | "/provider-transfers/move"
+                    ) =>
+                {
+                    if path.ends_with("/move")
+                        && !body
+                            .get("confirm")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false)
+                    {
+                        return Err(bad_request("provider move requires confirm=true"));
+                    }
+                    let source = body
+                        .get("source")
+                        .ok_or_else(|| bad_request("source is required"))?;
+                    let source_connection = str_field(source, "connection_id")
+                        .ok_or_else(|| bad_request("source.connection_id is required"))?;
+                    let source_id = str_field(source, "native_id")
+                        .ok_or_else(|| bad_request("source.native_id is required"))?;
+                    let destination_connection = str_field(body, "destination_connection")
+                        .ok_or_else(|| bad_request("destination_connection is required"))?;
+                    let operation_id = str_field(body, "operation_id")
+                        .ok_or_else(|| bad_request("operation_id is required"))?;
+                    let locator = str_field(body, "destination_locator").ok_or_else(|| {
+                        bad_request("destination_locator is required in serverless mode")
+                    })?;
+                    let destination_store =
+                        FsStore::open(Path::new(&locator)).map_err(store_err)?;
+                    let registry = ProviderRegistry::default();
+                    registry
+                        .register(Arc::new(GitProvider::new(
+                            source_connection.clone(),
+                            self.store.clone(),
+                        )))
+                        .map_err(|e| bad_request(e.to_string()))?;
+                    registry
+                        .register(Arc::new(GitProvider::new(
+                            destination_connection.clone(),
+                            destination_store,
+                        )))
+                        .map_err(|e| bad_request(e.to_string()))?;
+                    let source = TicketRef {
+                        connection_id: source_connection,
+                        native_id: source_id,
+                    };
+                    let outcome = if path.ends_with("/move") {
+                        move_between(
+                            &registry,
+                            source,
+                            &destination_connection,
+                            &operation_id,
+                            (self.now)(),
+                        )
+                    } else {
+                        copy_between(
+                            &registry,
+                            source,
+                            &destination_connection,
+                            &operation_id,
+                            (self.now)(),
+                        )
+                    }
+                    .map_err(|e| bad_request(e.to_string()))?;
+                    Ok(to_value(&outcome))
                 }
                 "POST" if release_id(path).is_some() => {
                     let t = self.resolve(release_id(path).unwrap())?;
@@ -1819,6 +1931,34 @@ mod tests {
         // The live instance is really in the destination store.
         let live = ops::resolve(&dest, &id).unwrap().expect("live in dest");
         assert_eq!(live.status, hotsheet_model::Status::NotStarted);
+    }
+
+    #[test]
+    fn corebackend_provider_copy_retries_resolve_one_destination_over_mcp() {
+        let (_srcd, backend) = core();
+        let destd = tempfile::tempdir().unwrap();
+        let dest = FsStore::init(destd.path(), &StoreMetadata::new("DS")).unwrap();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({"title":"provider copy"}),
+        );
+        let source_connection = call(&backend, "hotsheet_providers", json!({}))[0]["connection_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let destination_connection = hotsheet_ticketing::git_connection_id(&dest);
+        let args = json!({
+            "source_connection": source_connection,
+            "source_id": created["id"],
+            "destination_connection": destination_connection,
+            "destination_locator": destd.path().display().to_string(),
+            "operation_id": "mcp-provider-op-1"
+        });
+        let first = call(&backend, "hotsheet_provider_copy", args.clone());
+        let retry = call(&backend, "hotsheet_provider_copy", args);
+        assert_eq!(first["destination"], retry["destination"]);
+        assert_eq!(dest.list_tickets().unwrap().len(), 1);
     }
 
     #[test]

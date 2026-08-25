@@ -2618,6 +2618,84 @@ async fn cross_store_copy_and_move_between_hosted_stores() {
 }
 
 #[tokio::test]
+async fn provider_transfer_is_idempotent_and_move_closes_source_after_copy() {
+    let (_d, st) = state();
+    let app = app(st);
+    let created = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"portable provider ticket"}"#),
+        ))
+        .await
+        .unwrap();
+    let source_id = body_json(created).await["id"].as_str().unwrap().to_string();
+    let providers = app
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let source_connection = body_json(providers).await[0]["connection_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let dir2 = tempfile::tempdir().unwrap();
+    FsStore::init(dir2.path(), &StoreMetadata::new("DS")).unwrap();
+    let registered = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/stores",
+            Some(&format!(r#"{{"path":"{}"}}"#, dir2.path().display())),
+        ))
+        .await
+        .unwrap();
+    let destination = body_json(registered).await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let transfer = format!(
+        r#"{{"source":{{"connection_id":"{source_connection}","native_id":"{source_id}"}},"destination_connection":"{destination}","operation_id":"server-op-1"}}"#
+    );
+    let first = app
+        .clone()
+        .oneshot(authed("POST", "/provider-transfers/copy", Some(&transfer)))
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let first_destination = body_json(first).await["destination"].clone();
+    let retry = app
+        .clone()
+        .oneshot(authed("POST", "/provider-transfers/copy", Some(&transfer)))
+        .await
+        .unwrap();
+    assert_eq!(body_json(retry).await["destination"], first_destination);
+    assert_eq!(
+        FsStore::open(dir2.path())
+            .unwrap()
+            .list_tickets()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let moving = transfer.trim_end_matches('}').to_string() + r#", "confirm":true}"#;
+    let moved = app
+        .clone()
+        .oneshot(authed("POST", "/provider-transfers/move", Some(&moving)))
+        .await
+        .unwrap();
+    assert_eq!(moved.status(), StatusCode::OK);
+    let source = app
+        .oneshot(authed("GET", &format!("/tickets/{source_id}"), None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(source).await["close_reason"], "obsolete");
+}
+
+#[tokio::test]
 async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
     // Hermetic: point HOTSHEET_HOME at a tempdir (nextest isolates each test process).
     let home = tempfile::tempdir().unwrap();

@@ -42,6 +42,49 @@ fn providers_reports_default_git_connection_and_capabilities() {
 }
 
 #[test]
+fn provider_copy_retries_use_one_destination_ticket() {
+    let source = tempfile::tempdir().unwrap();
+    let destination = tempfile::tempdir().unwrap();
+    hs(source.path())
+        .args(["init", "--prefix", "SRC"])
+        .assert()
+        .success();
+    hs(destination.path())
+        .args(["init", "--prefix", "DST"])
+        .assert()
+        .success();
+    let slug = new_ticket(source.path(), "copy through real cli");
+    for _ in 0..2 {
+        hs(source.path())
+            .args([
+                "provider-copy",
+                &slug,
+                "--to",
+                destination.path().to_str().unwrap(),
+                "--operation-id",
+                "cli-e2e-operation",
+            ])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("cli-e2e-operation"));
+    }
+    let tickets = hotsheet_ticketing::FsStore::open(destination.path())
+        .unwrap()
+        .list_tickets()
+        .unwrap();
+    assert_eq!(tickets.len(), 1);
+    assert_eq!(
+        tickets[0]
+            .transferred_from
+            .as_deref()
+            .unwrap()
+            .split(':')
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn import_normalizes_close_state_without_persisting_hs1_identity() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("store");

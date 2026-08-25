@@ -40,7 +40,8 @@ pub use ports::{Clock, Rng};
 pub use provider::{
     GitProvider, MutationContext, ProviderCapabilities, ProviderConfigRegistry, ProviderConnection,
     ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderRegistry,
-    TicketProvider, TicketRef, git_connection_id,
+    TicketProvider, TicketRef, TransferError, TransferOutcome, TransferProvenance, copy_between,
+    git_connection_id, move_between,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};

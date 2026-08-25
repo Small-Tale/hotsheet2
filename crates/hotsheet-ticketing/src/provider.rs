@@ -217,6 +217,13 @@ pub struct ProviderDraft {
     pub tags: Vec<String>,
     pub up_next: bool,
     pub blocked_by: Vec<String>,
+    pub transfer: Option<TransferProvenance>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransferProvenance {
+    pub operation_id: String,
+    pub source: TicketRef,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -276,6 +283,7 @@ pub enum ProviderError {
 pub trait TicketProvider: Send + Sync {
     fn descriptor(&self) -> ProviderDescriptor;
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError>;
+    fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError>;
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError>;
     fn create(
         &self,
@@ -338,6 +346,11 @@ pub struct GitProvider {
     display_name: String,
     store: FsStore,
     is_default: bool,
+    transfer_lock: Arc<Mutex<()>>,
+    #[cfg(test)]
+    fail_close_once: Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(test)]
+    test_capabilities: Option<ProviderCapabilities>,
 }
 
 impl GitProvider {
@@ -347,6 +360,11 @@ impl GitProvider {
             display_name: "Git tickets".into(),
             store,
             is_default: false,
+            transfer_lock: Arc::new(Mutex::new(())),
+            #[cfg(test)]
+            fail_close_once: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            #[cfg(test)]
+            test_capabilities: None,
         }
     }
 
@@ -359,6 +377,19 @@ impl GitProvider {
         &self.store
     }
 
+    #[cfg(test)]
+    fn with_close_failure_once(self) -> Self {
+        self.fail_close_once
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self
+    }
+
+    #[cfg(test)]
+    fn with_test_capabilities(mut self, capabilities: ProviderCapabilities) -> Self {
+        self.test_capabilities = Some(capabilities);
+        self
+    }
+
     fn ticket(&self, native_id: &str) -> Result<hotsheet_model::Ticket, ProviderError> {
         ops::resolve(&self.store, native_id)?.ok_or_else(|| ProviderError::NotFound {
             connection_id: self.connection_id.clone(),
@@ -368,6 +399,14 @@ impl GitProvider {
 
     fn blockers(&self, values: &[String]) -> Result<Vec<Ulid>, ProviderError> {
         Ok(ops::resolve_blockers(&self.store, None, values)?)
+    }
+
+    fn capabilities(&self) -> ProviderCapabilities {
+        #[cfg(test)]
+        if let Some(capabilities) = &self.test_capabilities {
+            return capabilities.clone();
+        }
+        ProviderCapabilities::git()
     }
 }
 
@@ -379,7 +418,7 @@ impl TicketProvider for GitProvider {
             display_name: self.display_name.clone(),
             locator: self.store.root().display().to_string(),
             default: self.is_default,
-            capabilities: ProviderCapabilities::git(),
+            capabilities: self.capabilities(),
         }
     }
 
@@ -388,6 +427,16 @@ impl TicketProvider for GitProvider {
             .iter()
             .map(|ticket| ApiTicket::from_provider(ticket, &self.connection_id, None))
             .collect())
+    }
+
+    fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError> {
+        Ok(self
+            .store
+            .list_tickets()?
+            .into_iter()
+            .find(|ticket| ticket.transfer_operation_id.as_deref() == Some(operation_id))
+            .as_ref()
+            .map(|ticket| ApiTicket::from_provider(ticket, &self.connection_id, None)))
     }
 
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError> {
@@ -402,7 +451,30 @@ impl TicketProvider for GitProvider {
     ) -> Result<ApiTicket, ProviderError> {
         let prefix = self.store.metadata()?.ticket_prefix;
         let blocked_by = self.blockers(&draft.blocked_by)?;
-        let ticket = ops::create(
+        let _transfer_guard = if draft.transfer.is_some() {
+            Some(
+                self.transfer_lock
+                    .lock()
+                    .map_err(|_| ProviderError::Conflict {
+                        ticket: self.connection_id.clone(),
+                        message: "transfer lock poisoned".into(),
+                    })?,
+            )
+        } else {
+            None
+        };
+        if let Some(transfer) = &draft.transfer
+            && let Some(existing) = self.find_transfer(&transfer.operation_id)?
+        {
+            if existing.transferred_from.as_deref() == Some(&transfer.source.qualified()) {
+                return Ok(existing);
+            }
+            return Err(ProviderError::Conflict {
+                ticket: transfer.operation_id.clone(),
+                message: "transfer operation id is already associated with another source".into(),
+            });
+        }
+        let mut ticket = ops::create(
             &self.store,
             ctx.generated_id,
             &prefix,
@@ -417,6 +489,11 @@ impl TicketProvider for GitProvider {
                 blocked_by,
             },
         )?;
+        if let Some(transfer) = draft.transfer {
+            ticket.transfer_operation_id = Some(transfer.operation_id);
+            ticket.transferred_from = Some(transfer.source.qualified());
+            self.store.write_ticket_committing(&ticket)?;
+        }
         Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None))
     }
 
@@ -462,6 +539,9 @@ impl TicketProvider for GitProvider {
         text: String,
     ) -> Result<ApiTicket, ProviderError> {
         let ticket = self.ticket(native_id)?;
+        if ticket.notes.iter().any(|note| note.id == ctx.generated_id) {
+            return Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None));
+        }
         let updated = ops::add_note(
             &self.store,
             &ticket.id,
@@ -484,6 +564,16 @@ impl TicketProvider for GitProvider {
         reason: CloseReason,
         duplicate_of: Option<String>,
     ) -> Result<ApiTicket, ProviderError> {
+        #[cfg(test)]
+        if self
+            .fail_close_once
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(ProviderError::Conflict {
+                ticket: native_id.into(),
+                message: "injected close failure".into(),
+            });
+        }
         let ticket = self.ticket(native_id)?;
         let duplicate = duplicate_of
             .as_deref()
@@ -564,6 +654,7 @@ impl TicketProvider for GitProvider {
 #[derive(Clone, Default)]
 pub struct ProviderRegistry {
     providers: Arc<Mutex<HashMap<String, Arc<dyn TicketProvider>>>>,
+    transfer_locks: Arc<Mutex<HashMap<String, Arc<Mutex<()>>>>>,
 }
 
 impl ProviderRegistry {
@@ -606,11 +697,179 @@ impl ProviderRegistry {
             })
             .collect()
     }
+
+    fn transfer_lock(&self, operation_id: &str) -> Result<Arc<Mutex<()>>, ProviderError> {
+        let mut locks = self
+            .transfer_locks
+            .lock()
+            .map_err(|_| ProviderError::Conflict {
+                ticket: operation_id.into(),
+                message: "transfer lock registry poisoned".into(),
+            })?;
+        Ok(locks
+            .entry(operation_id.into())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone())
+    }
 }
 
 pub struct ProviderQueryResult {
     pub descriptor: ProviderDescriptor,
     pub result: Result<Vec<ApiTicket>, ProviderError>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TransferOutcome {
+    pub operation_id: String,
+    pub source: TicketRef,
+    pub destination: TicketRef,
+    pub moved: bool,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TransferError {
+    #[error(transparent)]
+    Provider(#[from] ProviderError),
+    #[error("transfer operation id must not be empty")]
+    EmptyOperationId,
+    #[error("cross-provider dependencies require an explicit remap")]
+    DependenciesNeedMapping,
+    #[error("destination provider '{connection_id}' cannot represent source field '{field}'")]
+    UnsupportedField {
+        connection_id: String,
+        field: &'static str,
+    },
+    #[error("destination ticket {destination} was created, but source close failed: {message}")]
+    SourceCloseFailed {
+        destination: String,
+        message: String,
+    },
+}
+
+fn transfer_ulid(operation_id: &str, suffix: &str) -> Ulid {
+    let mut hash = Sha256::new();
+    hash.update(operation_id.as_bytes());
+    hash.update([0]);
+    hash.update(suffix.as_bytes());
+    let bytes: [u8; 16] = hash.finalize()[..16].try_into().expect("sha prefix");
+    Ulid::from(u128::from_be_bytes(bytes))
+}
+
+pub fn copy_between(
+    registry: &ProviderRegistry,
+    source: TicketRef,
+    destination_connection: &str,
+    operation_id: &str,
+    now: Timestamp,
+) -> Result<TransferOutcome, TransferError> {
+    if operation_id.trim().is_empty() {
+        return Err(TransferError::EmptyOperationId);
+    }
+    let transfer_lock = registry.transfer_lock(operation_id)?;
+    let _guard = transfer_lock.lock().map_err(|_| ProviderError::Conflict {
+        ticket: operation_id.into(),
+        message: "transfer operation lock poisoned".into(),
+    })?;
+    let source_provider = registry.get(&source.connection_id)?;
+    let destination = registry.get(destination_connection)?;
+    let ticket = source_provider.get(&source.native_id)?;
+    let capabilities = destination.descriptor().capabilities;
+    if !ticket.blocked_by.is_empty() {
+        return Err(TransferError::DependenciesNeedMapping);
+    }
+    for (present, supported, field) in [
+        (!ticket.notes.is_empty(), capabilities.notes, "notes"),
+        (
+            !ticket.assignees.is_empty(),
+            capabilities.assignment,
+            "assignees",
+        ),
+        (
+            !ticket.review_requests.is_empty(),
+            capabilities.review_requests,
+            "review_requests",
+        ),
+    ] {
+        if present && !supported {
+            return Err(TransferError::UnsupportedField {
+                connection_id: destination_connection.into(),
+                field,
+            });
+        }
+    }
+    let draft = ProviderDraft {
+        title: ticket.title,
+        category: ticket.category,
+        priority: ticket.priority,
+        details: ticket.details,
+        tags: ticket.tags,
+        up_next: ticket.up_next && capabilities.up_next,
+        blocked_by: vec![],
+        transfer: Some(TransferProvenance {
+            operation_id: operation_id.into(),
+            source: source.clone(),
+        }),
+    };
+    let created = destination.create(
+        MutationContext {
+            now: now.clone(),
+            generated_id: transfer_ulid(operation_id, destination_connection),
+        },
+        draft,
+    )?;
+    for note in ticket.notes {
+        destination.add_note(
+            &created.native_id,
+            MutationContext {
+                now: Timestamp::new(note.at),
+                generated_id: transfer_ulid(operation_id, &format!("note:{}", note.id)),
+            },
+            note.kind,
+            note.text,
+        )?;
+    }
+    if !ticket.assignees.is_empty() || !ticket.review_requests.is_empty() {
+        destination.assign(
+            &created.native_id,
+            now,
+            Some(ticket.assignees),
+            ticket.review_requests,
+        )?;
+    }
+    Ok(TransferOutcome {
+        operation_id: operation_id.into(),
+        source,
+        destination: TicketRef {
+            connection_id: destination_connection.into(),
+            native_id: created.native_id,
+        },
+        moved: false,
+    })
+}
+
+pub fn move_between(
+    registry: &ProviderRegistry,
+    source: TicketRef,
+    destination_connection: &str,
+    operation_id: &str,
+    now: Timestamp,
+) -> Result<TransferOutcome, TransferError> {
+    let mut outcome = copy_between(
+        registry,
+        source.clone(),
+        destination_connection,
+        operation_id,
+        now.clone(),
+    )?;
+    registry
+        .get(&source.connection_id)?
+        .close(&source.native_id, now, CloseReason::Obsolete, None)
+        .map_err(|error| TransferError::SourceCloseFailed {
+            destination: outcome.destination.qualified(),
+            message: error.to_string(),
+        })?;
+    outcome.moved = true;
+    Ok(outcome)
 }
 
 #[cfg(test)]
@@ -646,6 +905,7 @@ mod tests {
                     tags: vec!["provider".into()],
                     up_next: true,
                     blocked_by: vec![],
+                    transfer: None,
                 },
             )
             .unwrap();
@@ -698,6 +958,7 @@ mod tests {
                     tags: vec![],
                     up_next: true,
                     blocked_by: vec![],
+                    transfer: None,
                 },
             )
             .unwrap();
@@ -752,6 +1013,9 @@ mod tests {
                     connection_id: "down".into(),
                     message: "denied".into(),
                 })
+            }
+            fn find_transfer(&self, _: &str) -> Result<Option<ApiTicket>, ProviderError> {
+                unreachable!()
             }
             fn get(&self, _: &str) -> Result<ApiTicket, ProviderError> {
                 unreachable!()
@@ -872,5 +1136,277 @@ mod tests {
             settings: serde_json::Value::Null,
         });
         assert!(registry.save(&duplicate_default).is_err());
+    }
+
+    #[test]
+    fn concurrent_transfer_retries_create_one_destination_and_move_closes_source() {
+        let (_source_dir, source) = git_provider();
+        let destination_dir = tempfile::tempdir().unwrap();
+        let destination_store =
+            FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+        let destination = GitProvider::new("destination", destination_store.clone());
+        let source_id = Ulid::new();
+        source
+            .create(
+                ctx(source_id, "2026-08-26T01:00:00Z"),
+                ProviderDraft {
+                    title: "transfer me".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    details: "body".into(),
+                    tags: vec!["cross-provider".into()],
+                    up_next: true,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        source
+            .add_note(
+                &source_id.to_string(),
+                ctx(Ulid::new(), "2026-08-26T01:00:10Z"),
+                NoteKind::Regular,
+                "preserve this note".into(),
+            )
+            .unwrap();
+        source
+            .assign(
+                &source_id.to_string(),
+                Timestamp::new("2026-08-26T01:00:20Z"),
+                Some(vec!["dev@example.com".into()]),
+                vec![],
+            )
+            .unwrap();
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source.clone())).unwrap();
+        registry.register(Arc::new(destination)).unwrap();
+        let source_ref = TicketRef {
+            connection_id: "local".into(),
+            native_id: source_id.to_string(),
+        };
+        let (a, b) = std::thread::scope(|scope| {
+            let first = scope.spawn(|| {
+                copy_between(
+                    &registry,
+                    source_ref.clone(),
+                    "destination",
+                    "operation-1",
+                    Timestamp::new("2026-08-26T01:01:00Z"),
+                )
+                .unwrap()
+            });
+            let second = scope.spawn(|| {
+                copy_between(
+                    &registry,
+                    source_ref.clone(),
+                    "destination",
+                    "operation-1",
+                    Timestamp::new("2026-08-26T01:02:00Z"),
+                )
+                .unwrap()
+            });
+            (first.join().unwrap(), second.join().unwrap())
+        });
+        assert_eq!(a.destination, b.destination);
+        assert_eq!(destination_store.list_tickets().unwrap().len(), 1);
+        let copied = registry
+            .get("destination")
+            .unwrap()
+            .get(&a.destination.native_id)
+            .unwrap();
+        assert_eq!(copied.notes.len(), 1);
+        assert_eq!(copied.assignees, ["dev@example.com"]);
+        let moved = move_between(
+            &registry,
+            source_ref.clone(),
+            "destination",
+            "operation-1",
+            Timestamp::new("2026-08-26T01:03:00Z"),
+        )
+        .unwrap();
+        assert!(moved.moved);
+        assert_eq!(
+            source.get(&source_id.to_string()).unwrap().close_reason,
+            Some(CloseReason::Obsolete)
+        );
+    }
+
+    #[test]
+    fn move_reports_created_destination_and_retry_recovers_after_source_close_failure() {
+        let (_source_dir, source) = git_provider();
+        let source = source.with_close_failure_once();
+        let destination_dir = tempfile::tempdir().unwrap();
+        let destination_store =
+            FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+        let source_id = Ulid::new();
+        source
+            .create(
+                ctx(source_id, "2026-08-26T02:00:00Z"),
+                ProviderDraft {
+                    title: "recoverable move".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source.clone())).unwrap();
+        registry
+            .register(Arc::new(GitProvider::new(
+                "destination",
+                destination_store.clone(),
+            )))
+            .unwrap();
+        let source_ref = TicketRef {
+            connection_id: "local".into(),
+            native_id: source_id.to_string(),
+        };
+        let error = move_between(
+            &registry,
+            source_ref.clone(),
+            "destination",
+            "recover-op",
+            Timestamp::new("2026-08-26T02:01:00Z"),
+        )
+        .unwrap_err();
+        let TransferError::SourceCloseFailed { destination, .. } = error else {
+            panic!("expected partial failure")
+        };
+        assert!(destination.starts_with("destination:"));
+        assert_eq!(destination_store.list_tickets().unwrap().len(), 1);
+
+        let recovered = move_between(
+            &registry,
+            source_ref,
+            "destination",
+            "recover-op",
+            Timestamp::new("2026-08-26T02:02:00Z"),
+        )
+        .unwrap();
+        assert_eq!(recovered.destination.qualified(), destination);
+        assert_eq!(destination_store.list_tickets().unwrap().len(), 1);
+        assert_eq!(
+            source.get(&source_id.to_string()).unwrap().close_reason,
+            Some(CloseReason::Obsolete)
+        );
+    }
+
+    #[test]
+    fn transfer_rejects_source_fields_the_destination_cannot_represent() {
+        let (_source_dir, source) = git_provider();
+        let destination_dir = tempfile::tempdir().unwrap();
+        let destination_store =
+            FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+        let mut capabilities = ProviderCapabilities::git();
+        capabilities.notes = false;
+        let destination = GitProvider::new("destination", destination_store.clone())
+            .with_test_capabilities(capabilities);
+        let source_id = Ulid::new();
+        source
+            .create(
+                ctx(source_id, "2026-08-26T03:00:00Z"),
+                ProviderDraft {
+                    title: "has unsupported note".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        source
+            .add_note(
+                &source_id.to_string(),
+                ctx(Ulid::new(), "2026-08-26T03:01:00Z"),
+                NoteKind::Regular,
+                "must not disappear".into(),
+            )
+            .unwrap();
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source)).unwrap();
+        registry.register(Arc::new(destination)).unwrap();
+        let error = copy_between(
+            &registry,
+            TicketRef {
+                connection_id: "local".into(),
+                native_id: source_id.to_string(),
+            },
+            "destination",
+            "unsupported-op",
+            Timestamp::new("2026-08-26T03:02:00Z"),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            TransferError::UnsupportedField { field: "notes", .. }
+        ));
+        assert!(destination_store.list_tickets().unwrap().is_empty());
+    }
+
+    #[test]
+    fn transfer_operation_id_cannot_collide_across_sources() {
+        let (_source_dir, source) = git_provider();
+        let destination_dir = tempfile::tempdir().unwrap();
+        let destination_store =
+            FsStore::init(destination_dir.path(), &StoreMetadata::new("DST")).unwrap();
+        let ids = [Ulid::new(), Ulid::new()];
+        for (index, id) in ids.iter().enumerate() {
+            source
+                .create(
+                    ctx(*id, &format!("2026-08-26T04:0{index}:00Z")),
+                    ProviderDraft {
+                        title: format!("source {index}"),
+                        category: "task".into(),
+                        priority: Priority::Default,
+                        details: String::new(),
+                        tags: vec![],
+                        up_next: false,
+                        blocked_by: vec![],
+                        transfer: None,
+                    },
+                )
+                .unwrap();
+        }
+        let registry = ProviderRegistry::default();
+        registry.register(Arc::new(source)).unwrap();
+        registry
+            .register(Arc::new(GitProvider::new(
+                "destination",
+                destination_store.clone(),
+            )))
+            .unwrap();
+        let source_ref = |id: Ulid| TicketRef {
+            connection_id: "local".into(),
+            native_id: id.to_string(),
+        };
+        copy_between(
+            &registry,
+            source_ref(ids[0]),
+            "destination",
+            "shared-op",
+            Timestamp::new("2026-08-26T04:03:00Z"),
+        )
+        .unwrap();
+        let error = copy_between(
+            &registry,
+            source_ref(ids[1]),
+            "destination",
+            "shared-op",
+            Timestamp::new("2026-08-26T04:04:00Z"),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            TransferError::Provider(ProviderError::Conflict { .. })
+        ));
+        assert_eq!(destination_store.list_tickets().unwrap().len(), 1);
     }
 }

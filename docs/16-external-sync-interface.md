@@ -208,8 +208,19 @@ structured capabilities and typed provider errors; deterministic git connection 
 `TicketProvider` plus the default `GitProvider` adapter; project connection config
 validation (non-secret settings only); partial-failure aggregation; provider identity
 on ticket wire rows; `hotsheet-cli providers`, `hotsheet_providers` MCP, `GET
-/providers`, and provider-scoped git REST routes. Direct external providers and
-cross-provider transfer remain in their tickets above.
+/providers`, and provider-scoped git REST routes. Direct external providers remain in
+their tickets above.
+
+Built in the transfer increment: `copy_between`/`move_between` preserve normalized
+content, notes, assignment, and review requests; reject dependencies that lack an
+explicit mapping and fields unsupported by the destination; and store
+`transfer_operation_id` plus the qualified `transferred_from` reference. Deterministic
+destination and note ids make retries converge, while an operation lock prevents
+same-process collaborators from racing file updates. Move reports the already-created
+destination if closing the source fails, so retry can recover without duplication.
+The provider-neutral routes are `POST /provider-transfers/copy|move`; CLI and MCP expose
+`provider-copy|move` equivalents. The older git-store copy/move surfaces retain their
+same-ULID/tombstone compatibility semantics.
 
 ## 16.12 Cross-references
 

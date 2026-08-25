@@ -150,6 +150,18 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
         &theirs.copied_from,
         ours_wins,
     );
+    m.transfer_operation_id = pick3(
+        &base.transfer_operation_id,
+        &ours.transfer_operation_id,
+        &theirs.transfer_operation_id,
+        ours_wins,
+    );
+    m.transferred_from = pick3(
+        &base.transferred_from,
+        &ours.transferred_from,
+        &theirs.transferred_from,
+        ours_wins,
+    );
 
     // Timestamps: the merged ticket is as fresh as the newest input.
     m.created_at = pick3(

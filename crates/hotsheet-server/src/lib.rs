@@ -33,8 +33,9 @@ use hotsheet_model::{
     to_file_string,
 };
 use hotsheet_ticketing::{
-    FsStore, NewTicket, OpError, Settings, SortKey, StoreError, StoreRegistry, TicketPatch,
-    TicketQuery, auto_context, ops,
+    FsStore, GitProvider, NewTicket, OpError, ProviderRegistry, Settings, SortKey, StoreError,
+    StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between, move_between,
+    ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -679,6 +680,8 @@ pub fn app(state: AppState) -> Router {
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
         .route("/stores", get(list_stores).post(add_store))
         .route("/providers", get(list_providers))
+        .route("/provider-transfers/copy", post(provider_copy_route))
+        .route("/provider-transfers/move", post(provider_move_route))
         .route("/checkouts", get(list_checkouts).post(register_checkout))
         .route("/checkouts/{reference}", get(resolve_checkout))
         .route(
@@ -1011,6 +1014,72 @@ async fn list_providers(
             })
             .collect(),
     )
+}
+
+#[derive(Debug, Deserialize)]
+struct ProviderTransferBody {
+    source: TicketRef,
+    destination_connection: String,
+    operation_id: String,
+    #[serde(default)]
+    confirm: bool,
+}
+
+fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiError> {
+    let registry = ProviderRegistry::default();
+    let default_id = multistore::store_url_id(&state.store);
+    for info in state.host.list() {
+        let entry = state
+            .host
+            .get(&info.id)
+            .ok_or_else(|| ApiError::not_found(&info.id))?;
+        registry
+            .register(Arc::new(
+                GitProvider::new(info.id.clone(), entry.store).with_default(info.id == default_id),
+            ))
+            .map_err(provider_transfer_error)?;
+    }
+    Ok(registry)
+}
+
+fn provider_transfer_error(error: impl std::fmt::Display) -> ApiError {
+    ApiError::new(StatusCode::CONFLICT, error.to_string())
+}
+
+async fn provider_copy_route(
+    State(state): State<AppState>,
+    Json(body): Json<ProviderTransferBody>,
+) -> Result<(StatusCode, Json<hotsheet_ticketing::TransferOutcome>), ApiError> {
+    let outcome = copy_between(
+        &hosted_provider_registry(&state)?,
+        body.source,
+        &body.destination_connection,
+        &body.operation_id,
+        now(),
+    )
+    .map_err(provider_transfer_error)?;
+    Ok((StatusCode::CREATED, Json(outcome)))
+}
+
+async fn provider_move_route(
+    State(state): State<AppState>,
+    Json(body): Json<ProviderTransferBody>,
+) -> Result<Json<hotsheet_ticketing::TransferOutcome>, ApiError> {
+    if !body.confirm {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "provider move requires confirm=true",
+        ));
+    }
+    let outcome = move_between(
+        &hosted_provider_registry(&state)?,
+        body.source,
+        &body.destination_connection,
+        &body.operation_id,
+        now(),
+    )
+    .map_err(provider_transfer_error)?;
+    Ok(Json(outcome))
 }
 
 #[derive(Debug, Deserialize)]

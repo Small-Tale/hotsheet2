@@ -47,6 +47,8 @@ pub struct ApiTicket {
     pub duplicate_of: Option<String>,
     /// Provenance of a cross-store copy: the source ticket's ULID (HS2-60).
     pub copied_from: Option<String>,
+    pub transfer_operation_id: Option<String>,
+    pub transferred_from: Option<String>,
     /// A `moved` tombstone's redirect: the destination store this ULID now lives in (HS2-60).
     pub moved_to_store: Option<String>,
     /// When the move happened (tombstones only).
@@ -105,6 +107,8 @@ impl ApiTicket {
             close_reason: t.close_reason,
             duplicate_of: t.duplicate_of.map(|u| u.to_string()),
             copied_from: t.copied_from.map(|u| u.to_string()),
+            transfer_operation_id: t.transfer_operation_id.clone(),
+            transferred_from: t.transferred_from.clone(),
             moved_to_store: t.moved_to_store.clone(),
             moved_at: ts(&t.moved_at),
             claimed_by: t.claimed_by.clone(),

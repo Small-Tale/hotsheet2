@@ -56,6 +56,8 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `moved_to_store` | store-id string | cond. | shared | Redirect target |
 | **Provenance** | | | | |
 | `copied_from` | ULID | no | shared | Set by a cross-store copy (§2.13) |
+| `transfer_operation_id` | string | no | shared | Stable idempotency key for an explicit provider transfer ([16](16-external-sync-interface.md) §16.7) |
+| `transferred_from` | qualified ticket ref | no | shared | Source connection + native id (`connection:native-id`) for that transfer |
 | **Schema** | | | | |
 | `schema` | int | yes | shared | Frontmatter format version (forward migration) |
 

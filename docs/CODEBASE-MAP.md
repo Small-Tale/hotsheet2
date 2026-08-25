@@ -38,7 +38,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
       src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
-      src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; ProviderRegistry aggregation; non-secret ProviderConfigRegistry; built-in GitProvider adapter (HS2-ZVZP80)
+      src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; registry + GitProvider; idempotent cross-provider copy/move coordinator and provenance (HS2-ZVZP80/HS2-A90JRH)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8): ActivityEvent/Kind/Importance + bounded rolling store/timeline + mappers; server persists then broadcasts full payloads on WS/poll and live drive emits coarse attributed events
       src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)
@@ -62,7 +62,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow incl. connection_id/native_id/qualified_id + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/providers/copy/move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor/reindex/worklist/metrics/serve/cert/claim-next/release/renew/trigger/work/permission-hook; `providers --json` exposes the default git connection + capabilities (HS2-ZVZP80)
+      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/providers/copy/move/provider-copy/provider-move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor/reindex/worklist/metrics/serve/cert/claim-next/release/renew/trigger/work/permission-hook
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
@@ -74,7 +74,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
-      src/lib.rs             #   app() router + ticket/terminal/permission/activity APIs; GET /providers exposes capabilities and /providers/{connection}/tickets aliases route the built-in git provider while /stores stays compatible (HS2-ZVZP80)
+      src/lib.rs             #   app() router + ticket/terminal/permission/activity APIs; provider discovery/scoped routes plus idempotent /provider-transfers/copy|move; /stores remains compatible
       src/main.rs            #   bind + serve (loopback = Tier-0 plaintext; off-loopback = Tier-1 mTLS via tls::build_server_config + serve_tls, HS2-VT3JMF); instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/tls.rs             #   Tier-1 mTLS (HS2-VT3JMF/MPC0QF): required client cert + live revocation verifier; serve_tls_with_acl fingerprints each peer and applies live optional read-only/read-write/deny authorization before routing HTTP
       src/dist_work_loop.rs  #   server-hosted distributed driving loop (HS2-DTPX2V/HS2-1TY7GC): DistWorkConfig + work_pass + spawn_dist_work_loop + live_drive (SafeTrigger per claimed ticket, permission bridge, attributed usage, and coarse turn_start/permission/turn_end activity sink, HS2-0WCRZY/4C68Y8) + outcome_from_turn; wired into main.rs via --drive-tool

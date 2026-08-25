@@ -48,6 +48,8 @@ const KNOWN_KEYS: &[&str] = &[
     "moved_to_store",
     "moved_at",
     "copied_from",
+    "transfer_operation_id",
+    "transferred_from",
     "schema",
 ];
 

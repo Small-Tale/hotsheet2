@@ -113,6 +113,10 @@ pub struct Ticket {
     // Provenance.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub copied_from: Option<Ulid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer_operation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transferred_from: Option<String>,
 
     pub schema: u32,
 
