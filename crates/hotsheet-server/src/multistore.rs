@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use hotsheet_index::{Index, hash_bytes};
+use hotsheet_index::Index;
 use hotsheet_model::{Ticket, Ulid};
 use hotsheet_ticketing::{FsStore, StoreError, StoreRegistry};
 use serde::Serialize;
@@ -26,11 +26,7 @@ pub struct StoreEntry {
 /// The stable, URL-safe id for a store: the first 16 hex of the canonical-root hash — the
 /// same id the index uses for its db file, so a store's URL id and its index file agree.
 pub fn store_url_id(store: &FsStore) -> String {
-    let root = store
-        .root()
-        .canonicalize()
-        .unwrap_or_else(|_| store.root().to_path_buf());
-    hash_bytes(root.to_string_lossy().as_bytes())[..16].to_string()
+    hotsheet_ticketing::git_connection_id(store)
 }
 
 /// The store paths a machine server should auto-host at startup, read from
@@ -71,6 +67,23 @@ pub struct StoreInfo {
     pub root: String,
     pub prefix: String,
     pub tickets: usize,
+}
+
+impl StoreInfo {
+    pub fn provider_descriptor(&self, is_default: bool) -> hotsheet_ticketing::ProviderDescriptor {
+        hotsheet_ticketing::ProviderDescriptor {
+            connection_id: self.id.clone(),
+            provider: "git".into(),
+            display_name: if self.prefix.is_empty() {
+                "Git tickets".into()
+            } else {
+                format!("{} git tickets", self.prefix)
+            },
+            locator: self.root.clone(),
+            default: is_default,
+            capabilities: hotsheet_ticketing::ProviderCapabilities::git(),
+        }
+    }
 }
 
 /// The registry of stores this machine server hosts, keyed by [`store_url_id`].

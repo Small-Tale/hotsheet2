@@ -13,7 +13,8 @@ use hotsheet_model::{
     parse_file, to_file_string,
 };
 use hotsheet_ticketing::{
-    FsStore, NewTicket, Person, Roster, SortKey, StoreMetadata, TicketPatch, TicketQuery, ops,
+    FsStore, GitProvider, NewTicket, Person, Roster, SortKey, StoreMetadata, TicketPatch,
+    TicketProvider, TicketQuery, git_connection_id, ops,
 };
 use time::{Duration, OffsetDateTime};
 
@@ -78,6 +79,12 @@ enum Cmd {
     Ls {
         #[command(flatten)]
         filters: LsFilters,
+    },
+    /// Show the current ticket-provider connection and its capabilities.
+    Providers {
+        /// Emit the full provider descriptor as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
@@ -598,6 +605,7 @@ fn main() -> Result<()> {
             blocked_by,
         ),
         Cmd::Ls { filters } => cmd_ls(&cli.path, &filters),
+        Cmd::Providers { json } => cmd_providers(&cli.path, json),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
         Cmd::Edit {
             id,
@@ -1068,6 +1076,25 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
             t.slug,
             status_str(t.status),
             t.title
+        );
+    }
+    Ok(())
+}
+
+fn cmd_providers(path: &Path, json: bool) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let descriptor = GitProvider::new(git_connection_id(&store), store)
+        .with_default(true)
+        .descriptor();
+    if json {
+        println!("{}", serde_json::to_string_pretty(&vec![descriptor])?);
+    } else {
+        println!(
+            "{}  {}  {}  {}",
+            descriptor.connection_id,
+            descriptor.provider,
+            if descriptor.default { "default" } else { "" },
+            descriptor.locator
         );
     }
     Ok(())

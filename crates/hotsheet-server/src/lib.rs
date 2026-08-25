@@ -678,6 +678,7 @@ pub fn app(state: AppState) -> Router {
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
         .route("/stores", get(list_stores).post(add_store))
+        .route("/providers", get(list_providers))
         .route("/checkouts", get(list_checkouts).post(register_checkout))
         .route("/checkouts/{reference}", get(resolve_checkout))
         .route(
@@ -714,6 +715,24 @@ pub fn app(state: AppState) -> Router {
         )
         .route(
             "/stores/{store_id}/tickets/{id}/assign",
+            post(assign_store_ticket),
+        )
+        // Provider-neutral aliases. Store routes remain compatibility shorthands for the
+        // built-in git provider while clients migrate to `/providers/{connection_id}`.
+        .route(
+            "/providers/{store_id}/tickets",
+            get(list_store_tickets).post(create_store_ticket),
+        )
+        .route(
+            "/providers/{store_id}/tickets/{id}",
+            get(get_store_ticket).patch(update_store_ticket),
+        )
+        .route(
+            "/providers/{store_id}/tickets/{id}/close",
+            post(close_store_ticket),
+        )
+        .route(
+            "/providers/{store_id}/tickets/{id}/assign",
             post(assign_store_ticket),
         )
         // Cross-store resolve: a global ULID → its live instance in whichever store hosts
@@ -820,6 +839,10 @@ async fn list_tickets(
         .lock()
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
         .query(&query)?;
+    let connection_id = multistore::store_url_id(&state.store);
+    for row in &mut rows {
+        row.set_connection(&connection_id);
+    }
     if compact {
         for row in &mut rows {
             row.make_compact();
@@ -844,7 +867,12 @@ async fn get_ticket(
 fn api_ticket(entry: &StoreEntry, ticket: &Ticket) -> Result<ApiTicket, ApiError> {
     let contexts = auto_context::effective(&Settings::new(entry.store.root()))
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    Ok(ApiTicket::with_auto_context(ticket, &contexts))
+    Ok(ApiTicket::with_provider_auto_context(
+        ticket,
+        &multistore::store_url_id(&entry.store),
+        None,
+        &contexts,
+    ))
 }
 
 // ---- activity timeline (HS2-KP31ZE) ----------------------------------------------
@@ -964,6 +992,25 @@ async fn post_announce(
 /// `GET /stores` — the stores this machine server hosts.
 async fn list_stores(State(state): State<AppState>) -> Json<Vec<StoreInfo>> {
     Json(state.host.list())
+}
+
+/// `GET /providers` — capability-bearing ticket-provider connections. The current
+/// implementation registers every hosted store as a built-in git provider.
+async fn list_providers(
+    State(state): State<AppState>,
+) -> Json<Vec<hotsheet_ticketing::ProviderDescriptor>> {
+    let default_id = multistore::store_url_id(&state.store);
+    Json(
+        state
+            .host
+            .list()
+            .into_iter()
+            .map(|info| {
+                let is_default = info.id == default_id;
+                info.provider_descriptor(is_default)
+            })
+            .collect(),
+    )
 }
 
 #[derive(Debug, Deserialize)]
@@ -1087,6 +1134,9 @@ async fn list_checkout_tickets(
             .lock()
             .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
             .query(&query)?;
+        for row in &mut rows {
+            row.set_connection(&store_id);
+        }
         if compact {
             for row in &mut rows {
                 row.make_compact();
@@ -1389,6 +1439,9 @@ async fn list_store_tickets(
         .lock()
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
         .query(&query)?;
+    for row in &mut rows {
+        row.set_connection(&store_id);
+    }
     if compact {
         for row in &mut rows {
             row.make_compact();

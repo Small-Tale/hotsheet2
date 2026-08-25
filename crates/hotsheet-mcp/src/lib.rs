@@ -81,6 +81,11 @@ fn tools_list() -> Value {
     let str_prop = |desc: &str| json!({ "type": "string", "description": desc });
     json!({ "tools": [
         {
+            "name": "hotsheet_providers",
+            "description": "List configured ticket-provider connections and their structured capabilities.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
             "name": "hotsheet_query",
             "description": "List/filter tickets (status, priority, category, tags, text, up_next, open, close_reason, closed, sort). Returns compact rows (no Markdown body) by default — pass compact=false for bodies, or use hotsheet_get for one ticket. Use limit to cap results.",
             "inputSchema": { "type": "object", "properties": {
@@ -273,6 +278,7 @@ fn render_result(value: &Value) -> String {
 
 fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     match name {
+        "hotsheet_providers" => backend.get("/providers", &[]).map_err(be_msg),
         "hotsheet_query" => backend
             .get(&checkout_route(args, "/tickets"), &query_pairs(args))
             .map_err(be_msg),
@@ -473,7 +479,7 @@ mod core_backend {
     use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
         ApiTicket, FsStore, NewTicket, OpError, Settings, SortKey, StoreError, StoreRegistry,
-        TicketPatch, TicketQuery, TicketRow, auto_context, ops,
+        TicketPatch, TicketProvider, TicketQuery, TicketRow, auto_context, ops,
     };
     use serde_json::Value;
     use std::path::Path;
@@ -548,6 +554,15 @@ mod core_backend {
 
     impl Backend for CoreBackend {
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
+            if path == "/providers" {
+                let descriptor = hotsheet_ticketing::GitProvider::new(
+                    hotsheet_ticketing::git_connection_id(&self.store),
+                    self.store.clone(),
+                )
+                .with_default(true)
+                .descriptor();
+                return Ok(to_value(&vec![descriptor]));
+            }
             if path == "/checkouts" {
                 return checkout_registry()
                     .list()
@@ -613,6 +628,7 @@ mod core_backend {
                             TicketRow::from(t)
                         };
                         row.add_auto_context(&contexts);
+                        row.set_connection(&hotsheet_ticketing::git_connection_id(&self.store));
                         row
                     })
                     .collect();
@@ -1097,7 +1113,12 @@ mod core_backend {
     fn api_for(store: &FsStore, ticket: &Ticket) -> Result<Value, BackendError> {
         let contexts = auto_context::effective(&Settings::new(store.root()))
             .map_err(|e| bad_request(e.to_string()))?;
-        Ok(to_value(&ApiTicket::with_auto_context(ticket, &contexts)))
+        Ok(to_value(&ApiTicket::with_provider_auto_context(
+            ticket,
+            &hotsheet_ticketing::git_connection_id(store),
+            None,
+            &contexts,
+        )))
     }
 
     fn str_field(body: &Value, key: &str) -> Option<String> {
@@ -1399,6 +1420,7 @@ mod tests {
             .map(|t| t["name"].as_str().unwrap())
             .collect();
         for want in [
+            "hotsheet_providers",
             "hotsheet_query",
             "hotsheet_get",
             "hotsheet_create",
@@ -1407,6 +1429,29 @@ mod tests {
         ] {
             assert!(names.contains(&want), "missing {want}");
         }
+    }
+
+    #[test]
+    fn corebackend_reports_default_git_provider_and_qualified_ticket_identity() {
+        let (_d, backend) = core();
+        let providers = call(&backend, "hotsheet_providers", json!({}));
+        assert_eq!(providers.as_array().unwrap().len(), 1);
+        assert_eq!(providers[0]["provider"], "git");
+        assert_eq!(providers[0]["default"], true);
+        assert_eq!(providers[0]["capabilities"]["offline_mutation"], true);
+        let connection = providers[0]["connection_id"].as_str().unwrap();
+
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({"title":"provider-aware"}),
+        );
+        assert_eq!(created["connection_id"], connection);
+        assert_eq!(created["native_id"], created["id"]);
+        assert_eq!(
+            created["qualified_id"],
+            format!("{connection}:{}", created["id"].as_str().unwrap())
+        );
     }
 
     #[test]

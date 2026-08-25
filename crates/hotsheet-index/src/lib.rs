@@ -604,8 +604,12 @@ impl Index {
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt
             .query_map(params_from_iter(args.iter().map(|b| b.as_ref())), |r| {
+                let id: String = r.get(0)?;
                 Ok(TicketRow {
-                    id: r.get(0)?,
+                    connection_id: "git".into(),
+                    native_id: id.clone(),
+                    qualified_id: format!("git:{id}"),
+                    id,
                     slug: r.get(1)?,
                     title: r.get(2)?,
                     details: r.get(3)?,

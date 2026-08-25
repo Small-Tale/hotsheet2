@@ -1,6 +1,6 @@
 # 16. Pluggable Ticket-Provider Interface
 
-> **Status: Revised design (HS2-QJ5TCT, 2026-08-26).** This supersedes the
+> **Status: Partial implementation (HS2-QJ5TCT/HS2-ZVZP80, 2026-08-26).** This supersedes the
 > sync-first design from HS2-CARMDM. Hot Sheet's git-backed files remain the
 > default and fullest-featured ticket provider, but they are no longer required.
 > GitHub Issues, GitLab Issues, Jira, and future trackers may be authoritative
@@ -202,6 +202,14 @@ git ticket schema; an importer may consume it as migration provenance.
 - **HS2-A90JRH:** implement explicit idempotent cross-provider copy/move.
 - **HS2-VFXFFP:** add provider-connection and capability-aware client UX. All
   core/CLI/server/provider behavior must be independently testable first.
+
+Built in the foundation: provider-neutral string identities and qualified references;
+structured capabilities and typed provider errors; deterministic git connection ids;
+`TicketProvider` plus the default `GitProvider` adapter; project connection config
+validation (non-secret settings only); partial-failure aggregation; provider identity
+on ticket wire rows; `hotsheet-cli providers`, `hotsheet_providers` MCP, `GET
+/providers`, and provider-scoped git REST routes. Direct external providers and
+cross-provider transfer remain in their tickets above.
 
 ## 16.12 Cross-references
 

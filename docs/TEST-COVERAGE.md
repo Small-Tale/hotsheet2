@@ -46,7 +46,8 @@ Status meanings:
 | server-multistore | docs/04-core-server-cli.md | Hosted-store discovery, routing, and isolation | `crates/hotsheet-server/src/multistore.rs` | `crates/hotsheet-server/tests/http.rs` | — | double-covered |
 | mtls | docs/04-core-server-cli.md | Device certificates, ACLs, renewal, and revocation | `crates/hotsheet-tls/src/lib.rs` | `crates/hotsheet-server/tests/mtls.rs` | `docs/manual-test-plan.md` | double-covered |
 | hs1-migration | docs/07-migration.md | HS1 export, deterministic/idempotent HS2 identity, normalized close state, retired legacy fields, and import conformance | `crates/hotsheet-cli/src/import.rs`; `crates/hotsheet-model/src/format.rs`; `migrator/test/export.test.mjs` | `crates/hotsheet-cli/tests/migrate.rs`; `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
-| ticket-providers | docs/16-external-sync-interface.md | Provider-neutral routing/capabilities, default git adapter, direct external providers, aggregation, and idempotent copy/move | — | — | — | planned |
+| ticket-provider-foundation | docs/16-external-sync-interface.md | Provider identity/capabilities/config/aggregation and default git adapter across CLI/server/MCP | `crates/hotsheet-ticketing/src/provider.rs` | `crates/hotsheet-cli/tests/cli.rs`; `crates/hotsheet-server/tests/http.rs`; `crates/hotsheet-mcp/src/lib.rs` | — | double-covered |
+| external-ticket-providers | docs/16-external-sync-interface.md | Direct external providers and idempotent cross-provider copy/move | — | — | — | planned |
 | client-ui-stack | docs/06-clients.md | Kerf morph/custom-element integration, Web Awesome events/focus/theme, and offline bundle | — | `spikes/kerf-webawesome/tests/integration.spec.ts` | — | e2e-only |
 | web-client | docs/06-clients.md | Browser client workflows | — | — | — | planned |
 | native-clients | docs/06-clients.md | macOS/iOS client workflows | — | — | `docs/manual-test-plan.md` | planned |

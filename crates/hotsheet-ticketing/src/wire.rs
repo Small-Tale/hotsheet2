@@ -19,6 +19,14 @@ use crate::auto_context::{self, AutoContextEntry, TicketAutoContext};
 /// this carries the Markdown body and the notes).
 #[derive(Debug, Clone, Serialize)]
 pub struct ApiTicket {
+    /// Project-scoped provider connection that owns this ticket.
+    pub connection_id: String,
+    /// Provider-native id (ULID for the default git provider).
+    pub native_id: String,
+    /// Unambiguous identity across every connected ticket system.
+    pub qualified_id: String,
+    /// Native browser URL when the provider has one.
+    pub native_url: Option<String>,
     pub id: String,
     pub slug: String,
     pub title: String,
@@ -65,9 +73,20 @@ pub struct ApiNote {
 
 impl From<&Ticket> for ApiTicket {
     fn from(t: &Ticket) -> Self {
+        Self::from_provider(t, "git", None)
+    }
+}
+
+impl ApiTicket {
+    pub fn from_provider(t: &Ticket, connection_id: &str, native_url: Option<String>) -> Self {
         let ts = |o: &Option<Timestamp>| o.as_ref().map(|x| x.as_str().to_string());
+        let native_id = t.id.to_string();
         ApiTicket {
-            id: t.id.to_string(),
+            connection_id: connection_id.to_string(),
+            native_id: native_id.clone(),
+            qualified_id: format!("{connection_id}:{native_id}"),
+            native_url,
+            id: native_id,
             slug: t.slug.clone(),
             title: t.title.clone(),
             details: t.details.clone(),
@@ -107,11 +126,20 @@ impl From<&Ticket> for ApiTicket {
             auto_context: Vec::new(),
         }
     }
-}
 
-impl ApiTicket {
     pub fn with_auto_context(ticket: &Ticket, entries: &[AutoContextEntry]) -> Self {
         let mut wire = Self::from(ticket);
+        wire.auto_context = auto_context::resolve(ticket, entries);
+        wire
+    }
+
+    pub fn with_provider_auto_context(
+        ticket: &Ticket,
+        connection_id: &str,
+        native_url: Option<String>,
+        entries: &[AutoContextEntry],
+    ) -> Self {
+        let mut wire = Self::from_provider(ticket, connection_id, native_url);
         wire.auto_context = auto_context::resolve(ticket, entries);
         wire
     }
@@ -127,6 +155,9 @@ impl ApiTicket {
 /// per-ticket via get, or with a non-compact list.
 #[derive(Debug, Clone, Serialize)]
 pub struct TicketRow {
+    pub connection_id: String,
+    pub native_id: String,
+    pub qualified_id: String,
     pub id: String,
     pub slug: String,
     pub title: String,
@@ -157,6 +188,9 @@ impl From<&Ticket> for TicketRow {
     fn from(t: &Ticket) -> Self {
         let ts = |o: &Option<Timestamp>| o.as_ref().map(|x| x.as_str().to_string());
         TicketRow {
+            connection_id: "git".into(),
+            native_id: t.id.to_string(),
+            qualified_id: format!("git:{}", t.id),
             id: t.id.to_string(),
             slug: t.slug.clone(),
             title: t.title.clone(),
@@ -183,6 +217,12 @@ impl From<&Ticket> for TicketRow {
 }
 
 impl TicketRow {
+    pub fn set_connection(&mut self, connection_id: &str) {
+        self.connection_id = connection_id.to_string();
+        self.native_id.clone_from(&self.id);
+        self.qualified_id = format!("{connection_id}:{}", self.native_id);
+    }
+
     /// A list row without the Markdown `details` body — the compact projection used
     /// for browsing (the body is the one large field; fetch it per-ticket via get).
     pub fn compact(t: &Ticket) -> Self {

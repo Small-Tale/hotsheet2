@@ -69,6 +69,55 @@ async fn tickets_require_the_secret() {
 }
 
 #[tokio::test]
+async fn providers_expose_capabilities_and_route_the_default_git_provider() {
+    let (_d, st) = state();
+    let app = app(st);
+    let providers = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(providers.as_array().unwrap().len(), 1);
+    assert_eq!(providers[0]["provider"], "git");
+    assert_eq!(providers[0]["default"], true);
+    assert_eq!(providers[0]["capabilities"]["claims"], true);
+    let connection = providers[0]["connection_id"].as_str().unwrap();
+
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/providers/{connection}/tickets"),
+                Some(r#"{"title":"provider route"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(created["connection_id"], connection);
+    assert_eq!(created["native_id"], created["id"]);
+    assert_eq!(
+        created["qualified_id"],
+        format!("{connection}:{}", created["id"].as_str().unwrap())
+    );
+
+    let listed = body_json(
+        app.oneshot(authed(
+            "GET",
+            &format!("/providers/{connection}/tickets"),
+            None,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["connection_id"], connection);
+    assert_eq!(listed[0]["qualified_id"], created["qualified_id"]);
+}
+
+#[tokio::test]
 async fn checkout_registry_is_authenticated_and_resolvable() {
     let (_d, st) = state();
     let checkout = tempfile::tempdir().unwrap();

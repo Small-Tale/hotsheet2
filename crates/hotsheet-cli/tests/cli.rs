@@ -20,6 +20,28 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn providers_reports_default_git_connection_and_capabilities() {
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let output = hs(dir.path())
+        .args(["providers", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(value.as_array().unwrap().len(), 1);
+    assert_eq!(value[0]["provider"], "git");
+    assert_eq!(value[0]["default"], true);
+    assert_eq!(value[0]["capabilities"]["offline_mutation"], true);
+    assert_eq!(value[0]["connection_id"].as_str().unwrap().len(), 16);
+}
+
+#[test]
 fn import_normalizes_close_state_without_persisting_hs1_identity() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("store");

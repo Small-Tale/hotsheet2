@@ -38,6 +38,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
       src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
+      src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; ProviderRegistry aggregation; non-secret ProviderConfigRegistry; built-in GitProvider adapter (HS2-ZVZP80)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8): ActivityEvent/Kind/Importance + bounded rolling store/timeline + mappers; server persists then broadcasts full payloads on WS/poll and live drive emits coarse attributed events
       src/roster.rs          #   Roster/Person: committed people.json (git email → name/github); display_name; docs/10 §10.2 (HS2-20)
@@ -58,10 +59,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
       src/commands.rs        #   typed safe argv command settings schema (HS2-JN3X4W)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
-      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
+      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow incl. connection_id/native_id/qualified_id + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init (incl. --standalone [--at/--remote] one-shot create+link + read-only onboarding, HS2-77YTS1/MNHGT3)/link/new/ls/show/edit/close/copy/move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor (health + installed-tool/HS1 guidance)/reindex/worklist/metrics/serve/cert/claim-next/release/renew/trigger/work/permission-hook; `serve` resolves a sibling/PATH server, enforces matching versions, and forwards foreground/stop (HS2-5A01DC); resolve_store_path finds a standalone store without -C (-C > $HOTSHEET_STORE > .hotsheet/store link, HS2-5CXKZ0); `cert init/issue/renew/role/revoke` manages Tier-1 mTLS material + per-device ACLs (HS2-VT3JMF/MPC0QF)
+      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/providers/copy/move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor/reindex/worklist/metrics/serve/cert/claim-next/release/renew/trigger/work/permission-hook; `providers --json` exposes the default git connection + capabilities (HS2-ZVZP80)
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
@@ -73,7 +74,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
-      src/lib.rs             #   app() router, handlers over ops (store-generic do_create/update/close), ApiTicket DTO (incl. copied_from/moved_to_store/moved_at provenance), auth, /ws/sync (ChangeEvent tagged by store) + /ws/poll long-poll fallback (sequenced EventLog ring + cursor, HS2-P3P3CC), GET/POST /permissions live human round-trip (SharedPermissionBridge in AppState + permission_asked event nudge + durable Always-rules via with_permission_rules, HS2-9R9YZW), GET /connections (what the driving loop is running, via a shared drive_registry, HS2-TCV3BF), POST /permissions/ask (raise a blocking request — the Claude-hook asking side, HS2-YMR9HE), GET/POST /terminals + /terminals/{id}[/input] (open/list/read-scrollback/input/kill PTYs over the TerminalManager, HS2-A6R5QV; connect-only POST runs plugin setup + its distinct interactive `[launch]`, then registers the Pty connection and feeds busy→drive_registry, HS2-4M67VN/G0ETNQ) + WS /terminals/{id}/attach (live: replay scrollback then stream new output + forward input; Text frames carry {resize} viewport size claims → the SizeArbiter and stream {pty_size,driven_by} decisions; query-secret auth, HS2-XTTTMV/HS2-BD7Q74) — with `serve --terminal-broker` the terminal ops AND live WS attach route through the detached broker so terminals survive restart; Ping/Pong validates health and a five-minute empty grace performs idle-GC + clean socket removal (HS2-ERT00F/SV3XS8), GET/POST /activity (ingest an activity event + read the per-ticket/session timeline over ticketing::activity, HS2-KP31ZE), POST /announce (ephemeral store-level WS broadcast — ChangeEvent{kind:"announce",message}; not persisted in the poll ring, HS2-HHDNTH), POST /setup/{tool} (HS2-91), POST /batch (bulk update), GET/POST /stores + scoped /stores/{id}/tickets[/{id}[/close]] read+write + GET /resolve/{ulid} cross-store + POST /tickets/{id}/copy|move {to,confirm} cross-store copy/move (multi-store, HS2-87/HS2-S4H2AM)
+      src/lib.rs             #   app() router + ticket/terminal/permission/activity APIs; GET /providers exposes capabilities and /providers/{connection}/tickets aliases route the built-in git provider while /stores stays compatible (HS2-ZVZP80)
       src/main.rs            #   bind + serve (loopback = Tier-0 plaintext; off-loopback = Tier-1 mTLS via tls::build_server_config + serve_tls, HS2-VT3JMF); instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/tls.rs             #   Tier-1 mTLS (HS2-VT3JMF/MPC0QF): required client cert + live revocation verifier; serve_tls_with_acl fingerprints each peer and applies live optional read-only/read-write/deny authorization before routing HTTP
       src/dist_work_loop.rs  #   server-hosted distributed driving loop (HS2-DTPX2V/HS2-1TY7GC): DistWorkConfig + work_pass + spawn_dist_work_loop + live_drive (SafeTrigger per claimed ticket, permission bridge, attributed usage, and coarse turn_start/permission/turn_end activity sink, HS2-0WCRZY/4C68Y8) + outcome_from_turn; wired into main.rs via --drive-tool
@@ -87,7 +88,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend
-                             #     (query/get/create/update/close/batch/claim_next/release/renew/copy/move):
+                             #     (providers/query/get/create/update/close/batch/claim_next/release/renew/copy/move):
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF
@@ -151,7 +152,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Global `-C/--path` selects the store dir. `init --standalone [--at/--remote]` creates a
   separate git store and links the current code project in one shot. Subcommands: `init`, `link`, `new`
   (incl. `--blocked-by`), `ls` (filters/sort/text/`--limit`), `show`, `edit`
-  (incl. `--blocked-by`/`--clear-blocked-by`), `close`, `setup` (AI-tool setup, headless),
+  (incl. `--blocked-by`/`--clear-blocked-by`), `close`, `providers`, `setup` (AI-tool setup, headless),
   `plugin` (list/install/remove external plugins), `settings` (get/set/list,
   global|shared|local), `key` (OS-keychain-backed set/get/list/delete),
   `import`, `doctor`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":

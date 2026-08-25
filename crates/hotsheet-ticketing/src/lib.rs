@@ -19,6 +19,7 @@ pub mod ops;
 pub mod overlay;
 pub mod ports;
 pub mod pricing;
+pub mod provider;
 pub mod registry;
 pub mod roster;
 pub mod secrets;
@@ -36,6 +37,11 @@ pub use metrics::{Rollup, UsageEvent};
 pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use overlay::LocalOverlay;
 pub use ports::{Clock, Rng};
+pub use provider::{
+    GitProvider, MutationContext, ProviderCapabilities, ProviderConfigRegistry, ProviderConnection,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderRegistry,
+    TicketProvider, TicketRef, git_connection_id,
+};
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};
 pub use secrets::{
