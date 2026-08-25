@@ -9,11 +9,13 @@ what it is.
 
 ---
 
-## 9.1 Storage: git repos, file-per-ticket — **Proposed → strong recommendation**
+## 9.1 Default provider storage: git repos, file-per-ticket — **Decided**
 
-**Decision.** Tickets are Markdown-with-YAML-frontmatter files in git
-repositories; git is the source of truth. One file per ticket; a project
-references one or more stores; stores carry their own visibility + sync policy.
+**Decision.** The default `git` provider stores tickets as
+Markdown-with-YAML-frontmatter files in git repositories; git is authoritative for
+that provider. One file per ticket; a project references one or more stores with
+their own visibility and sync policy. This is not required for external authoritative
+providers; see the superseding provider-level decision in §9.15.
 
 **Why.** Inspectable, diffable, selectively shareable with real (GitHub) ACLs,
 versioned with the project, distribution-native, and it deletes an entire class of
@@ -310,6 +312,23 @@ needs are concrete.
 The crate boundary keeps that split a later, cheap change. Detail:
 [12](12-code-organization-and-testing.md) §12.5.
 
+## 9.15 Ticketing: **pluggable authoritative providers; no mirroring** — **Decided** (maintainer, 2026-08-26)
+
+**Decision.** Every Hot Sheet surface uses a normalized `TicketProvider` contract.
+The existing Markdown/git engine is the default and fullest-featured provider, not a
+required parallel store. GitHub Issues, Jira, GitLab, and future trackers are accessed
+directly and remain authoritative. One code project may connect multiple provider
+instances. Cross-provider copy/move is explicit and idempotent; Hot Sheet does not
+continuously mirror tickets between providers.
+
+**Why.** Requiring a second tracker is adoption friction for established teams. More
+importantly, multiple collaborators asynchronously mirroring the same remote records
+through git creates duplicate imports, ordering races, replayed comments, partial
+failure, and split-brain ownership. External ids can assist deduplication but cannot
+make that distributed mirror simple or reliable. Direct access removes the duplicate
+authority; capability negotiation honestly handles tracker differences. Detail:
+[16](16-external-sync-interface.md).
+
 ---
 
 ## 9.11 Decision status
@@ -319,7 +338,7 @@ The crate boundary keeps that split a later, cheap change. Detail:
 | # | Decision | Resolution |
 |---|---|---|
 | L1 | Server/CLI/core language | **Rust core** — §9.2 |
-| — | Storage / ID / index direction | Approved as designed (git files, ULID + all-caps slug, SQLite+FTS5) |
+| — | Default-provider storage / ID / index | Git files, ULID + all-caps slug, SQLite+FTS5; external providers retain native ids — §9.1/§9.15 |
 | — | Automatic conflict resolution | Required; semantic merge driver — §9.1a / [02](02-ticket-storage.md) §2.7 |
 | S1 | Notes storage | **Inline**, each note a timestamp-ordered UUID — [02](02-ticket-storage.md) §2.6 |
 | C1 | Client sequencing | **Tauri+web → SwiftUI macOS → SwiftUI iOS → Android** — §9.5 |
@@ -336,7 +355,8 @@ The crate boundary keeps that split a later, cheap change. Detail:
 | — | Async model | **Sync core + async facade**; WAL read-pool + single writer — §9.12 |
 | — | Git access | **gix local, git CLI network** — §9.13 |
 | — | Terminal topology | **Separable crate, one server + broker; split deferred** — §9.14 |
-| — | Plugin crates | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-extsync`) — [12](12-code-organization-and-testing.md) §12.2.1 |
+| — | Ticket providers | **Normalized provider contract; git default; external trackers direct; no continuous mirroring** — §9.15 / [16](16-external-sync-interface.md) |
+| — | Plugin crates | **One crate per plugin type** (`hotsheet-aitools`, `hotsheet-providers`) — [12](12-code-organization-and-testing.md) §12.2.1 |
 | — | Deferred past v1 | cross-server views (O2), iOS push (O5), remote terminals over wss (O6), iOS local stores (O4) |
 
 **Still open:**

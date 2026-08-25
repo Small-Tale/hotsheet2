@@ -19,8 +19,9 @@ fakes. Nothing in the core decides *where* to bind a port or *whether* to open a
 browser — those are host policy.
 
 Core modules (mirrors [01-architecture.md](01-architecture.md) §1.2):
-`model`, `store` (git-backed ticket files), `index` (SQLite/FTS5), `watch`,
-`query`, `plugins` (AI-tool **plugin loader + registry**, setup/instruction/skill/
+`model`, `providers` (normalized contract, routing/capabilities, default git-backed
+implementation), `index` (SQLite/FTS5), `watch`, `query`, `plugins` (AI-tool
+**plugin loader + registry**, setup/instruction/skill/
 MCP writers, terminal manager, permission bridge — [05](05-ai-tool-plugins.md) §5.1a,
 §5.11), `settings` (shared/local project settings — §4.9), `coord` (claim/lease).
 

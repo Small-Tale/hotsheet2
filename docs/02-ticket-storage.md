@@ -1,16 +1,23 @@
-# 02. Ticket Storage — Git Repos
+# 02. Default Git Ticket Provider
 
-> **Status: Confirmed** (maintainer, 2026-08-19). Git-repo file-per-ticket storage,
+> **Status: Confirmed default provider; no longer universal** (revised by
+> HS2-QJ5TCT, 2026-08-26). Git-repo file-per-ticket storage,
 > ULID IDs with an **all-caps** slug, **inline notes with timestamp-ordered UUID
 > ids**, and **attachments support** are approved. The load-bearing addition from
 > that review: conflict resolution must be **almost entirely automatic** — see the
 > semantic merge driver in §2.7.
 
-## 2.1 The bet
+## 2.1 The default-provider bet
 
-Tickets are **plain files in git repositories**. Git is the single source of
-truth. Everything else — the SQLite index, the worklist markdown, the UI — is
-derived and rebuildable.
+For the built-in **`git` ticket provider**, tickets are plain files in git
+repositories. Git is that provider's single source of truth. Everything else—the
+SQLite index, worklist Markdown, and UI—is derived and rebuildable.
+
+Git storage is not required for every project. The provider-neutral architecture in
+[16](16-external-sync-interface.md) lets GitHub Issues, Jira, and other trackers be
+authoritative directly, and one code project can connect multiple ticket providers.
+There is no automatic cross-provider mirroring; explicit idempotent copy/move handles
+intentional transfer.
 
 **Every store is a git repo — always, even local-only ones** (maintainer,
 2026-08-19). There is no "plain files, not a repo" mode. A store that isn't shared

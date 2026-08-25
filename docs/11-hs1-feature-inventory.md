@@ -230,16 +230,15 @@ clients** (routing an alert to the right device/client, cross-device attention).
 human-assignment attention (docs/10 §10.3); the off-server/iOS-push transport is the
 deferred piece (docs/08 O5).
 
-## 31. Plugins & External Sync — **formalize a dedicated external-sync interface** (DECIDED, HS2-53, 2026-08-19)
-**DECIDED (maintainer):** drop HS1's *broad general* plugin system (docs/18 — generic
-plugins that happen to do ticket sync) in favor of a **purpose-built external-sync
-plugin interface** — a first-class concept specifically for syncing HS2 git-tickets
-with external ticketing systems. **GitHub Issues is especially important** (a lot of
-user-facing tickets arrive through it). Note this is **separate from git-native store
-sharing** (HS2 stores can live on GitHub as *repos*; this is syncing with GitHub's
-*Issues* tracker). Formalize the interface (field/status/priority mapping,
-bidirectional pull/push, incremental cursor, comments↔notes, conflict handling,
-scheduled sync) — design HS2-71.
+## 31. Pluggable Ticket Providers — **direct authoritative access** (REVISED, HS2-QJ5TCT, 2026-08-26)
+**REVISED (maintainer):** the current git-file ticket engine is the default provider,
+not a mandatory second tracker. GitHub Issues, Jira, GitLab, and future systems can be
+authoritative directly behind one normalized provider contract. A code project may
+connect multiple ticket systems. Do **not** continuously mirror external tickets into
+a git store: concurrent collaborators plus asynchronous git make deduplication,
+ordering, comments, partial failure, and split-brain ownership unnecessarily fragile.
+Users can explicitly copy or move a ticket between providers; transfers are
+idempotent and retain source provenance for deduplication. See [16](16-external-sync-interface.md).
 
 ## 32. Secure Storage, Keychain & API Keys — **core-keep**
 OS-keychain secure storage w/ fallback, global API-key registry, transparent setting

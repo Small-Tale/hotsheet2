@@ -16,6 +16,20 @@ A checkout id is a readable Hot Sheet path identity (`folder-shortpathhash`), no
 id, ticket-store id, or secret. Keep checkout↔store links many-to-many. Only server
 instance data carries bearer credentials.
 
+## Ticket-provider architecture
+
+Ticketing is provider-neutral. The existing Markdown/git implementation is the
+default and fullest-featured `git` provider, not a mandatory store for every project.
+GitHub Issues, Jira, GitLab, and future providers are accessed directly as their own
+authoritative systems; do not build automatic bidirectional mirrors into git. One
+code project may connect multiple ticket-provider instances. Route every ticket by
+its qualified `(connection_id, native_id)` identity and expose provider capabilities
+so unsupported fields or operations fail explicitly.
+
+Cross-provider ticket transfer is user-initiated `copy`/`move`, not synchronization.
+Make transfers idempotent using a stable operation id plus source provenance so
+concurrent collaborators and retries resolve the same destination ticket.
+
 ## Client UI stack
 
 Use **Kerf (`kerfjs`) + Web Awesome Core** for the Tauri web UI. Kerf owns

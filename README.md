@@ -4,18 +4,19 @@
 ticket-driven worklist that drives AI coding tools — a from-scratch rewrite of the
 original [Hot Sheet](https://github.com/brianwestphal/hotsheet).
 
-> **Status: design phase.** There is no implementation code yet. This repository
-> currently holds the **design** for Hot Sheet 2.
+> **Status: early implementation.** The Rust core, CLI, server, git ticket provider,
+> indexing, automation, and integration foundations exist; client work is beginning.
 
 ## The core bets
 
-- **Tickets live in git repos as plain files** — one Markdown+YAML file per ticket,
-  diffable, selectively shareable, versioned; merges are almost entirely automatic
-  via a semantic merge driver.
+- **Ticketing is pluggable** — the default provider uses Markdown+YAML files in git;
+  teams can instead connect existing GitHub Issues/Jira/etc. directly, and one project
+  can use multiple providers without continuous mirroring.
 - **A shared Rust core** used by two thin binaries — the **server** and the **CLI**.
 - **The server is always a separate, always-on process** (local included); every
   client is a pure API consumer that auto-starts the server and outlives it.
-- **SQLite + FTS5 as a rebuildable index** — never the source of truth.
+- **SQLite + FTS5 as a rebuildable index** — never the source of truth; the selected
+  ticket provider is authoritative.
 - **AI-tool integration is entirely plugin-based** — no first-class tool.
 - **Clients:** Tauri + web first, then native SwiftUI (macOS → iOS), then Android.
 

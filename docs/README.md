@@ -34,11 +34,13 @@ drives AI coding tools) and rebuilds the *foundation*.
 
 ## The core bets
 
-1. **Tickets live in git repos as plain files** — one file per ticket,
-   human-readable, diffable, selectively shareable, and versioned by the same
-   git the user already trusts. Git is the source of truth, and merges are
-   **almost entirely automatic** via a format-aware merge driver. See
-   [02-ticket-storage.md](02-ticket-storage.md).
+1. **Ticketing is pluggable; git files are the default provider** — the shipped
+   file-per-ticket engine remains human-readable, diffable, and versioned, while
+   teams can connect GitHub Issues, Jira, or another authoritative tracker directly
+   without a parallel ticket repo. One project can aggregate multiple providers;
+   transfers are explicit copy/move, not continuous mirroring. See
+   [02-ticket-storage.md](02-ticket-storage.md) and
+   [16](16-external-sync-interface.md).
 2. **A shared Rust core** — one engine (parse, store, index, query, watch,
    AI-tool host) used by the two Rust binaries, the server and the CLI. Clients
    don't embed it. See [09-technology-decisions.md](09-technology-decisions.md).
@@ -79,7 +81,7 @@ and don't imply reading order — read by group.
 **C · Data & storage**
 | Doc | Topic | Status |
 |---|---|---|
-| [02-ticket-storage.md](02-ticket-storage.md) | Git-repo ticket format, multi-store projects, IDs, auto-merge, copy/move | Confirmed |
+| [02-ticket-storage.md](02-ticket-storage.md) | Default git-provider format, multi-store projects, IDs, auto-merge, copy/move | Confirmed default provider |
 | [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex, query surface | Confirmed |
 | [17-ticket-file-format.md](17-ticket-file-format.md) | Canonical frontmatter plus bounded, collision-safe Markdown body/notes schema (parser SSOT; legacy reader retained) | Decided |
 
@@ -106,7 +108,7 @@ and don't imply reading order — read by group.
 **G · Integrations**
 | Doc | Topic | Status |
 |---|---|---|
-| [16-external-sync-interface.md](16-external-sync-interface.md) | External-sync plugin interface (GitHub/GitLab/Jira) | Design |
+| [16-external-sync-interface.md](16-external-sync-interface.md) | Pluggable authoritative ticket providers (git default; GitHub/GitLab/Jira direct) | Revised design (HS2-QJ5TCT) |
 
 **H · Test evidence**
 
@@ -122,7 +124,7 @@ and don't imply reading order — read by group.
 | [07-migration.md](07-migration.md) | PGLite → git-repo migration (standalone bundled tool) | Partial (exporter + importer built and validated against real clusters/project snapshot; deterministic HS2 ids, normalized close state, no retained HS1 fields; UI flow pending) |
 
 > **Core decisions confirmed by the maintainer 2026-08-19:** Rust core · git-file
-> storage · ULID + **all-caps** slug · SQLite+FTS5 · **automatic conflict
+> default provider · ULID + **all-caps** slug · SQLite+FTS5 · **automatic conflict
 > resolution** (semantic merge driver) · **aggressive automatic repo sync** ·
 > **shared-vs-local data on-disk (gitignored), index is only a cache** · inline
 > notes with timestamp-ordered UUIDs · attachments · **server always a separate
@@ -147,6 +149,12 @@ and don't imply reading order — read by group.
 > Settings split **shared (committed) / local (gitignored, machine) / client-only
 > (device)** — core owns the first two. See [04](04-core-server-cli.md) §4.1/§4.7,
 > [05](05-ai-tool-plugins.md) §5.1a/§5.11.
+>
+> **Ticket-provider revision (2026-08-26, HS2-QJ5TCT):** ticketing is pluggable;
+> the git-file engine is the default provider, while GitHub Issues/Jira/GitLab are
+> accessed directly as authoritative systems. A code project may connect multiple
+> providers. There is no continuous cross-provider mirroring; explicit copy/move is
+> idempotent and retains source provenance.
 
 ## Requirements summary (synthesized status view)
 
@@ -156,9 +164,10 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Capability | Where | Status |
 |---|---|---|
 | Git-repo file-per-ticket storage | 02, 17 | Confirmed; **parser + FsStore built** (`hotsheet-model::format`, `hotsheet-ticketing::store`) |
+| Pluggable authoritative ticket providers (git default; direct GitHub/Jira/GitLab) | 16 | Revised design; foundation HS2-ZVZP80, GitHub HS2-JAXS4Z, GitLab/Jira HS2-0RK4YC, transfer HS2-A90JRH, client connections HS2-VFXFFP |
 | Standalone foreground server launch | 04 §4.3 | Shipped: `hotsheet-cli serve` resolves a sibling/PATH server, rejects version drift, and forwards start/stop; detached supervision remains client-owned |
 | Multiple ticket stores per project (mixed permissions/locality) | 02 | Confirmed |
-| Every store is a git repo (local-only = no remote) | 02 §2.1 | Confirmed |
+| Every **git-provider store** is a git repo (local-only = no remote) | 02 §2.1 | Confirmed |
 | Store identity/naming (id + name + per-store prefix); positional membership | 02 §2.2.1 | Confirmed (design) |
 | Copy/move tickets between stores (move = copy + source tombstone) | 02 §2.13 | Shipped, minus UI (core `ops::copy_ticket`/`move_ticket` + `hotsheet copy`/`move` CLI — HS2-60; `hotsheet_copy`/`hotsheet_move` MCP tools + `POST /tickets/{id}/copy\|move` server endpoints + `copied_from`/`moved_to_store` on the wire + cross-store index resolve via `StoreHost::resolve`/`open_only` — HS2-S4H2AM. Remaining: the drag-onto-store / "Move to store…" **client** affordance) |
 | ULID-based ticket IDs, all-caps slug (no central sequence) | 02 §2.4 | Confirmed |

@@ -38,8 +38,9 @@ hotsheet2/
     hotsheet-aitools/             # AI-tool plugin host: drive / instructions / skills / command /
                                   #   permissions / mcp / metrics / activity + permission bridge.
                                   #   Deps: ticketing + terminals.
-    hotsheet-extsync/             # External-sync plugin host + providers (GitHub/GitLab/Jira).
-                                  #   Deps: ticketing + HTTP.  NO terminals.  (docs/16)
+    hotsheet-providers/           # External authoritative ticket providers
+                                  #   (GitHub/GitLab/Jira). Deps: ticketing + HTTP;
+                                  #   NO terminals. (docs/16)
     hotsheet-terminals/           # PTY manager + broker client + busy inference. Nearly standalone
                                   #   (needs project cwd/config, not the ticket index).
     hotsheet-types/               # wire/API types (serde) + client codegen (ts-rs → Kerf/TS; later Swift)
@@ -68,9 +69,10 @@ hotsheet2/
   not share a mega-crate, so each pulls only its own deps:
   - **`hotsheet-aitools`** (AI-tool plugins) depends on `ticketing` **+ `terminals`**
     (it drives agents in PTYs). Holds the drive/metrics/activity/permission/mcp/… host.
-  - **`hotsheet-extsync`** (external-sync plugins) depends on `ticketing` **+ HTTP
-    clients**, **not** `terminals` — so a `hotsheet sync` path never drags in the
-    terminal/agent machinery.
+  - **`hotsheet-providers`** (external authoritative ticket providers) depends on
+    `ticketing` **+ HTTP clients**, **not** `terminals`. The provider-neutral contract
+    and default git adapter remain in `hotsheet-ticketing`; network providers live
+    here so the server/CLI can opt into them without terminal/agent machinery.
   - Future plugin types get their own `hotsheet-<type>` crate the same way.
   - The **pattern** is shared across all of them (declarative identity + behavioral
     half, injected adapters for testability §12.7, a conformance gate) even though the

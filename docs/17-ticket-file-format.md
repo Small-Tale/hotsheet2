@@ -2,8 +2,8 @@
 
 > **Status: Decided (the reference the parser is built against).** This consolidates
 > the ticket-file schema previously scattered across [02](02-ticket-storage.md)
-> (§2.5/§2.6a/§2.11/§2.13), [10](10-assignment-and-collaboration.md), and
-> [16](16-external-sync-interface.md) into **one source of truth** for
+> (§2.5/§2.6a/§2.11/§2.13) and [10](10-assignment-and-collaboration.md) into
+> **one source of truth** for the default git provider's
 > `hotsheet-model`. When a field's semantics need prose, this links back to the
 > owning doc; the *field list + types + tiering* live here.
 
@@ -50,8 +50,8 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | **Assignment** ([10](10-assignment-and-collaboration.md) §10.2) | | | | |
 | `assignees` | list<email> | no (def `[]`) | shared | git identities; roster maps to names |
 | `review_requests` | list<{ who:email, kind:`work\|feedback\|review\|fyi`, by:ULID, at:RFC3339, requested_by:email? }> | no (def `[]`) | shared | Merge by set-union on `by`; new writes identify the requester |
-| **External sync** ([16](16-external-sync-interface.md) §16.2) | | | | |
-| `external` | list<{ system:`github\|gitlab\|jira`, repo:string, id:string, url:string, synced_at:RFC3339, remote_hash:string }> | no | shared | One entry per linked tracker |
+| **Superseded mirror provenance** ([16](16-external-sync-interface.md) §16.9) | | | | |
+| `external` | list<{ system:`github\|gitlab\|jira`, repo:string, id:string, url:string, synced_at:RFC3339, remote_hash:string }> | no | shared | Accepted for compatibility/migration provenance; new direct-provider tickets do not use git files and new git tickets do not need this field |
 | **Move tombstone** ([02](02-ticket-storage.md) §2.13) — only on a `status: moved` record | | | | |
 | `moved_to_store` | store-id string | cond. | shared | Redirect target |
 | **Provenance** | | | | |
@@ -130,5 +130,5 @@ than swallowed or discarded; a future schema can define such a section explicitl
 - Storage narrative + tiering: [02-ticket-storage.md](02-ticket-storage.md)
 - Index columns derived from these: [03-indexing-and-query.md](03-indexing-and-query.md) §3.3
 - Assignment fields: [10-assignment-and-collaboration.md](10-assignment-and-collaboration.md)
-- External block: [16-external-sync-interface.md](16-external-sync-interface.md) §16.2
+- Legacy external provenance: [16-external-sync-interface.md](16-external-sync-interface.md) §16.9
 - Implemented by `hotsheet-model`: [12-code-organization-and-testing.md](12-code-organization-and-testing.md) §12.2

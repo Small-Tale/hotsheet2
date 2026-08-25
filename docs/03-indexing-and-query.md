@@ -20,14 +20,16 @@ The ticket calls it out directly: we must *"search the text of tickets
 efficiently"* and *"draw tickets and their information efficiently, so we can't
 necessarily be loading from disk in real time for every UI operation."*
 
-So there is a **derived index** between the git-backed files (source of truth) and
-every read the UI/CLI/API performs. The UI never walks the store directory to draw
-a list; it queries the index.
+So there is a **derived index** between authoritative provider records and every read
+the UI/CLI/API performs. Today those records are git-backed files; direct external
+providers will refresh the same normalized cache through their query/watch contracts.
+The UI never walks a store directory or calls a provider directly to draw a list; it
+queries the host.
 
 **The invariant (repeated because it's load-bearing): the index is a disposable
-cache.** It can be deleted and rebuilt from the ticket files at any time. If the
-index and the files disagree, the files win and the index is corrected on the next
-reconcile. Nothing is ever *only* in the index.
+cache.** It can be deleted and rebuilt from configured providers. For the git
+provider, files win; for an external provider, its native tracker wins. Nothing
+durable is ever *only* in the index.
 
 ## 3.2 The choice: SQLite + FTS5
 

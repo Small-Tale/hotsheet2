@@ -27,8 +27,11 @@ are not hosts; they use the server's API). See
 Key modules:
 - **model** — `Ticket`, `Note`, `Attachment`, `Category`, `Store`, `Project`,
   status/priority enums, the claim/lease fields.
-- **store** — read/write/commit ticket files in a git-backed store; multi-store
-  resolution. [02-ticket-storage.md](02-ticket-storage.md).
+- **ticket providers** — a normalized contract plus capability-aware routing and
+  aggregation. The current file/git engine is the default provider; GitHub/Jira/etc.
+  may be authoritative directly. [16](16-external-sync-interface.md).
+- **git provider/store** — read/write/commit ticket files in a git-backed store;
+  multi-store resolution. [02-ticket-storage.md](02-ticket-storage.md).
 - **index** — SQLite schema, upsert-from-file, query, FTS.
   [03-indexing-and-query.md](03-indexing-and-query.md).
 - **watch** — filesystem notifications → debounced incremental reindex.
@@ -74,7 +77,9 @@ leaves the server running. See [06-clients.md](06-clients.md) and
 
 ## 1.3 Data flow
 
-**Write path (create/edit a ticket):**
+**Write path (create/edit a ticket):** the server routes to the selected provider.
+The diagram shows the default git-provider path; remote providers call their native
+API and then refresh the same normalized index/event stream.
 
 ```mermaid
 flowchart LR

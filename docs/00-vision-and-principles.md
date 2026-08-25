@@ -14,8 +14,9 @@ construction** instead of by accretion.
 
 ## 0.2 Goals of the rewrite
 
-1. **Storage you can read, diff, and version.** Tickets are plain files in git
-   repos. No opaque database as the source of truth.
+1. **Use the team's source of truth.** Hot Sheet's default provider stores plain,
+   diffable files in git; teams already using GitHub Issues, Jira, or another
+   tracker can use it directly without maintaining a parallel ticket repository.
 2. **A clean client/service split.** The service (indexing, storage, AI-tool
    orchestration) runs independently. Clients are interchangeable consumers of a
    stable API.
@@ -47,9 +48,9 @@ construction** instead of by accretion.
 
 ## 0.4 Principles
 
-- **Git is the source of truth. The index is a cache.** Anything in the index can
-  be thrown away and rebuilt from the ticket files. If they disagree, the files
-  win. This is the single most important invariant in the system.
+- **The configured ticket provider is the source of truth. The index is a cache.**
+  For the default provider, git files are authoritative. For GitHub/Jira/etc., the
+  remote tracker is authoritative. Anything in SQLite can be discarded and rebuilt.
 - **Conflict resolution is almost entirely automatic.** A git-backed store that
   spills `<<<<<<<` markers onto users is a failed design. File-per-ticket, a
   single-writer claim/lease rule, and a format-aware semantic merge driver
@@ -68,6 +69,9 @@ construction** instead of by accretion.
   bridge, hooks files) lives in the host so two plugins never re-implement the
   same logic. (This is the hard-won lesson of HS1 docs/132 — start there instead
   of arriving there.)
+- **Ticketing is provider-neutral.** Clients, the server, CLI, MCP tools, and AI
+  workflows use one normalized contract. A project can connect multiple providers;
+  external trackers are accessed directly, never continuously mirrored into git.
 - **No tool is privileged.** Claude, Codex, Gemini, OpenCode, Antigravity,
   Goose, and editor tools are all just plugins. The interface must fit the tool it
   was *not* designed around, or it isn't an interface.
@@ -83,22 +87,21 @@ construction** instead of by accretion.
 
 ## 0.5 The end-to-end story (what "done" looks like for v1)
 
-1. `hotsheet init` in a project creates a default **local** ticket store (a git
-   repo, or a `.hotsheet/` store inside the project's existing repo) and registers
-   the project.
+1. `hotsheet init` registers a project and either creates the default local git
+   provider or connects an existing ticket system. More providers can be attached.
 2. The user opens the desktop app; it finds no server running and **auto-starts one
    in the background**, then connects to it. (The server will keep running even
    after the app is closed.)
-3. The user (or an AI tool) creates tickets — files land in the store, the index
-   updates, the UI redraws instantly.
+3. The user (or an AI tool) creates tickets through the selected provider; the
+   rebuildable index updates and the UI redraws instantly.
 4. The user marks a few **Up Next**, opens an embedded terminal, and launches an
    AI tool (via its plugin). The tool receives the worklist over its channel,
    claims tickets, does the work, and reports back — all watched live in the UI.
 5. Permission prompts from the tool surface in the UI; the user approves/denies.
 6. The user closes the app; **the server keeps running**, so the AI tool's work and
    terminals continue. Reopening the app (or another client) re-attaches to it.
-7. Finished tickets are committed to the store's git repo like any other change;
-   a store backed by a GitHub remote can be pushed and shared with the right ACLs.
+7. Finished tickets persist in their authoritative provider. Git-provider tickets
+   are committed normally; GitHub/Jira tickets update those systems directly.
 8. The same project is reachable from a second device (Mac, iPhone) either by
    pointing that device's client at the running server over mTLS, or by cloning
    the store repo and running a local server there.

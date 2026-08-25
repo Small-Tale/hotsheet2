@@ -82,7 +82,7 @@
 <body>
   <div class="wrap">
     <div class="title">Hot Sheet 2 — Architecture</div>
-    <div class="subtitle">One core library. The server is an independent, always-on service; every client is a pure API consumer. Git is the source of truth; the SQLite index is a rebuildable cache.</div>
+    <div class="subtitle">One core library. The server is an independent, always-on service; every client is a pure API consumer. Ticket providers are authoritative; SQLite is a rebuildable cache.</div>
 
     <!-- CORE -->
     <div class="core">
@@ -92,7 +92,7 @@
       </div>
       <div class="chips">
         <div class="chip"><b class="mono">model</b><span>tickets, notes, stores, projects</span></div>
-        <div class="chip"><b class="mono">store</b><span>git-backed ticket files</span></div>
+        <div class="chip"><b class="mono">providers</b><span>git default + direct external trackers</span></div>
         <div class="chip"><b class="mono">index</b><span>SQLite + FTS5</span></div>
         <div class="chip"><b class="mono">watch</b><span>fs notify → reindex</span></div>
         <div class="chip"><b class="mono">query</b><span>filter · sort · search</span></div>
