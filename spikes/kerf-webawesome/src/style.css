@@ -1,0 +1,17 @@
+:root {
+  font-family: system-ui, sans-serif;
+}
+
+.app {
+  --wa-color-brand-fill-loud: rgb(35 95 180);
+  display: grid;
+  gap: var(--wa-space-m);
+  max-width: 32rem;
+  padding: var(--wa-space-l);
+  color: var(--wa-color-text-normal);
+  background: var(--wa-color-surface-default);
+}
+
+.wa-dark {
+  --wa-color-brand-fill-loud: rgb(115 170 255);
+}

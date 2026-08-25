@@ -26,6 +26,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
+  spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   crates/
     hotsheet-model/          # pure domain model + ticket file format (no I/O)
       src/lib.rs             #   re-exports; SCHEMA_VERSION
@@ -218,6 +219,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 | Slug derivation | `hotsheet-model/src/ids.rs` |
 | Store layout / sharding | `hotsheet-ticketing/src/store.rs`, [02](02-ticket-storage.md) §2.3 |
 | HS1 → git migration | `migrator/` + `hotsheet-cli/src/import.rs` (stable HS2 ids, close-state normalization; no retained HS1 fields), [07](07-migration.md) |
+| Web client UI foundation | `spikes/kerf-webawesome/` (Kerf morph/events + Web Awesome components/offline bundle), [06](06-clients.md) |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
 | Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |

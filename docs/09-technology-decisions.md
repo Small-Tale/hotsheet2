@@ -206,6 +206,16 @@ owns and has already taught them — kerf ships an AI skill + `llms.txt`. Standi
 caveat: single-maintainer bus factor, mitigated here because it's dogfooded by that
 same maintainer. Client-local and revisitable.
 
+**Sub-decision (component library) — Web Awesome Core** (validated 2026-08-25).
+Use its standards-based custom elements for accessible UI primitives while Kerf
+remains the application framework. Pin and self-host npm assets in Tauri, import only
+used components, and style primarily through Web Awesome tokens/parts. A real-browser
+spike (`spikes/kerf-webawesome/`) validates morph identity/focus/value preservation,
+standard host `input`/`change` events (there are no `wa-input`/`wa-change` aliases in
+3.11), delegated `wa-show`/`wa-hide` lifecycle events, theme switching, keyboard
+dismissal, and an offline production bundle. Pro-only components remain optional and
+require a separate license decision if adopted.
+
 ---
 
 ## 9.6 Transport & API: **JSON REST + WebSocket + MCP** — **Decided**

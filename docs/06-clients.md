@@ -62,6 +62,16 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   tooling the maintainer owns. Client-local, revisitable, and it does not affect the
   service. (Standing caveat: single-maintainer bus factor, mitigated by it being
   dogfooded by that same maintainer.)
+- **Component library: Web Awesome Core on top of Kerf** (validated 2026-08-25).
+  Kerf owns state, routing, lists, API resources, and delegation; framework-neutral
+  Web Awesome custom elements own accessible controls, dialogs, drawers, menus, and
+  related UI primitives. Components are pinned npm dependencies, cherry-picked, and
+  bundled locally for offline Tauri use. The executable spike in
+  `spikes/kerf-webawesome/` proves custom-element identity, value, and focus survive
+  Kerf morphs; theme tokens work; lifecycle events delegate; and the production
+  bundle makes no external requests. Web Awesome 3.11 form controls emit host-level
+  standard `input` / `change` events—not `wa-input` / `wa-change`; component lifecycle
+  events retain names such as `wa-show` / `wa-hide`.
 - **Platforms:** macOS primary; Linux/Windows via the same Tauri pipeline as HS1
   (best-effort, community-tested).
 
