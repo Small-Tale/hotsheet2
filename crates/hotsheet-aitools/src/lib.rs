@@ -25,7 +25,7 @@ pub mod safe_trigger;
 pub mod spawn;
 pub mod system;
 
-pub use acp::{AcpDrive, usage as acp_usage};
+pub use acp::{AcpDrive, AcpSession, AcpStdio, usage as acp_usage, validate_opencode_transcript};
 pub use appserver::AppServerDrive;
 pub use claude::{ClaudeChannel, ClaudeChannelDrive, ClaudeStreamTransport, claude_result_usage};
 pub use codex::{

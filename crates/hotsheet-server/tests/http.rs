@@ -390,6 +390,60 @@ async fn notifications_route_dedupe_ack_and_emit_live_events() {
     assert_eq!(ack["acknowledged"], true);
 }
 
+#[tokio::test]
+async fn assign_endpoint_emits_recipient_payloads_and_targeted_notifications() {
+    let (_d, st) = state();
+    let mut events = st.subscribe();
+    let app = app(st);
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/tickets",
+                Some(r#"{"title":"Review this"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let slug = created["slug"].as_str().unwrap();
+    let body = r#"{"assignees":["dev@example.com"],"reviews":[{"who":"reviewer@example.com","kind":"review"}]}"#;
+    let assigned = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/tickets/{slug}/assign"),
+                Some(body),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(assigned["assignees"][0], "dev@example.com");
+    let event = loop {
+        let event = events.recv().await.unwrap();
+        if event.kind == "assignment" {
+            break event;
+        }
+    };
+    assert_eq!(event.kind, "assignment");
+    let payload = event.assignment.unwrap();
+    assert_eq!(payload.newly_assigned, ["dev@example.com"]);
+    assert_eq!(payload.review_requested, ["reviewer@example.com"]);
+    let notices = body_json(
+        app.oneshot(authed(
+            "GET",
+            "/notifications?recipient=reviewer%40example.com",
+            None,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(notices.as_array().unwrap().len(), 1);
+    assert_eq!(notices[0]["ticket"], slug);
+}
+
 struct FakeTts;
 impl hotsheet_server::tts::TtsProvider for FakeTts {
     fn id(&self) -> &str {

@@ -24,3 +24,12 @@ fn recorded_claude_21241_result_matches_the_production_parser() {
     assert_eq!(usage.model, None);
     assert_eq!(usage.cost_usd, Some(0.0125));
 }
+
+#[test]
+fn opencode_acp_v1_contract_matches_the_live_client() {
+    let messages: Vec<serde_json::Value> =
+        serde_json::from_str(include_str!("fixtures/opencode-acp-v1-contract.json")).unwrap();
+    hotsheet_aitools::validate_opencode_transcript(&messages).unwrap();
+    let usage = hotsheet_aitools::acp_usage(messages.last().unwrap()).unwrap();
+    assert_eq!((usage.tokens_in, usage.tokens_out), (4, 1));
+}

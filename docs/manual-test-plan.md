@@ -32,8 +32,17 @@ When automation lands, remove the manual-only step and record it below.
 Exercise platform accessibility, background/resume, notification presentation, and
 credential storage once the native clients exist.
 
+### OpenCode ACP live compatibility
+
+Run `HOTSHEET_OPENCODE_LIVE=1 cargo test -p hotsheet-aitools
+opencode_live_acp_turn -- --ignored --nocapture` with a configured OpenCode provider.
+This verifies initialization, session creation, a streamed prompt, and completion against
+the installed executable. Last verified successfully on 2026-08-25 with OpenCode 1.17.18.
+
 ## Automated Coverage Summary
 
 - Terminal sizing policy transitions and disconnect healing are automated in Rust and
   server WebSocket tests; only the real multi-device presentation remains manual.
 - mTLS certificate/ACL behavior is automated; only physical-device enrollment UX remains.
+- ACP wire parsing has scripted unit and contract-fixture coverage; the provider-backed
+  OpenCode smoke above guards executable/provider integration drift.

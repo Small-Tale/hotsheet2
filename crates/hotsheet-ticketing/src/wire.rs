@@ -10,7 +10,7 @@
 //!   builds the same struct from its SQL columns, and a serverless scan builds it via
 //!   [`TicketRow::from`], so a list looks identical whichever path produced it.
 
-use hotsheet_model::{CloseReason, NoteKind, Priority, Status, Ticket, Timestamp};
+use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Ticket, Timestamp};
 use serde::Serialize;
 
 use crate::auto_context::{self, AutoContextEntry, TicketAutoContext};
@@ -47,6 +47,7 @@ pub struct ApiTicket {
     pub worker_label: Option<String>,
     pub claim_count: u32,
     pub assignees: Vec<String>,
+    pub review_requests: Vec<ReviewRequest>,
     pub legacy_number: Option<String>,
     pub schema: u32,
     pub notes: Vec<ApiNote>,
@@ -92,6 +93,7 @@ impl From<&Ticket> for ApiTicket {
             worker_label: t.worker_label.clone(),
             claim_count: t.claim_count,
             assignees: t.assignees.clone(),
+            review_requests: t.review_requests.clone(),
             legacy_number: t.legacy_number.clone(),
             schema: t.schema,
             notes: t

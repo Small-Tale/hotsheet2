@@ -140,8 +140,8 @@ Metrics can be shared across a team **through git** — no server sync needed:
   `PromptResponse.usage` input/output counters (snake_case protocol or camelCase SDK
   spelling) into `drive::Usage`; OpenCode declares `[metrics] source="acp"`. ACP does
   not guarantee model, cache, or cost attribution, so those fields remain absent rather
-  than inferred. A live OpenCode cassette/drift oracle remains pending with the stdio
-  ACP session client.
+  than inferred. The live stdio client, fast ACP contract cassette, and gated OpenCode
+  smoke test now provide the drift oracle (HS2-PEQ6Q8).
 - **Remaining:** wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references

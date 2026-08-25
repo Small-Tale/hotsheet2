@@ -105,7 +105,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index (SCHEMA_VERSION 4): open_reconciled/reconcile (git-diff fast path)/rebuild/upsert/delete/query + hash_bytes; facets: tags + assignees + reviews(who/requested_by) tables; filters incl. assignee/review_requested/review_by (facet joins) + claimed + blocked/unblocked (json_each over blocked_by vs done set) + created/updated date-range + moved-tombstones-hidden-by-default; keyset page_after paging
     hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
-      src/acp.rs             #   AcpDrive over an injected AcpClient session + standard PromptResponse usage-counter mapper (no fabricated model/cache/cost attribution)
+      src/acp.rs             #   live ACP v1 stdio JSON-RPC client/session + AcpDrive, streaming/cancel, safe permission fallback, usage mapper, OpenCode drift oracle (HS2-PEQ6Q8)
       src/drive.rs           #   Drive trait (+ service() -> BackingService accessor) + BackingService trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue
       src/appserver.rs       #   AppServerDrive (Codex persistent daemon: turn on a resumed thread; with_daemon() exposes its CodexDaemonService via Drive::service) + AppServerClient port

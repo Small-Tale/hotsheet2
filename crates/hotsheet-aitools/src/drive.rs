@@ -153,6 +153,9 @@ pub enum DriveError {
     /// The app-server (persistent daemon) transport failed.
     #[error("app-server: {0}")]
     AppServer(String),
+    /// A connected protocol peer returned an invalid response or timed out.
+    #[error("protocol: {0}")]
+    Protocol(String),
 }
 
 /// A live, persistent `claude` session driven by the channel transport — a turn is one

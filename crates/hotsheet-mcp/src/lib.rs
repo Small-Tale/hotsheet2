@@ -151,6 +151,16 @@ fn tools_list() -> Value {
             }, "required": ["id", "reason"] }
         },
         {
+            "name": "hotsheet_assign",
+            "description": "Replace assignees and/or add review requests. Emits targeted assignment notifications when using a server.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("slug or ULID"),
+                "assignees": { "type": "array", "items": { "type": "string" } },
+                "reviews": { "type": "array", "items": { "type": "object", "properties": { "who": str_prop("git email"), "kind": str_prop("feedback|review|fyi|work") }, "required": ["who","kind"] } },
+                "checkout": str_prop("optional checkout id/alias/path")
+            }, "required": ["id"] }
+        },
+        {
             "name": "hotsheet_batch",
             "description": "Apply the same field update (status/priority/tags/up_next/category) to many tickets at once. Returns {updated:[slugs], errors:[{id,message}]} — one bad id never aborts the rest.",
             "inputSchema": { "type": "object", "properties": {
@@ -310,6 +320,16 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 )
                 .map_err(be_msg)
         }
+        "hotsheet_assign" => {
+            let id = arg_str(args, "id")?;
+            backend
+                .send(
+                    "POST",
+                    &checkout_route(args, &format!("/tickets/{id}/assign")),
+                    &without_many(args, &["id", "checkout"]),
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_batch" => backend.send("POST", "/batch", args).map_err(be_msg),
         "hotsheet_announce" => backend.send("POST", "/announce", args).map_err(be_msg),
         "hotsheet_checkouts" => backend.get("/checkouts", &[]).map_err(be_msg),
@@ -450,7 +470,7 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 
 mod core_backend {
     use super::{Backend, BackendError};
-    use hotsheet_model::{NoteKind, Ticket, Timestamp, Ulid};
+    use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
         ApiTicket, FsStore, NewTicket, OpError, Settings, SortKey, StoreError, StoreRegistry,
         TicketPatch, TicketQuery, TicketRow, auto_context, ops,
@@ -613,9 +633,7 @@ mod core_backend {
             if let Some(rest) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = rest.split_once("/tickets") {
                     let stores = self.checkout_stores(checkout)?;
-                    if method == "POST" && suffix.is_empty()
-                        || method == "POST" && suffix.starts_with('?')
-                    {
+                    if method == "POST" && (suffix.is_empty() || suffix.starts_with('?')) {
                         let requested = suffix.split_once("store=").map(|(_, v)| v);
                         let store = match requested {
                             Some(v) => stores
@@ -635,9 +653,11 @@ mod core_backend {
                         return CoreBackend::new(store).send("POST", "/tickets", body);
                     }
                     let tail = suffix.trim_start_matches('/');
-                    let (id, close) = tail
+                    let (id, action) = tail
                         .strip_suffix("/close")
-                        .map_or((tail, false), |v| (v, true));
+                        .map(|v| (v, "close"))
+                        .or_else(|| tail.strip_suffix("/assign").map(|v| (v, "assign")))
+                        .unwrap_or((tail, "update"));
                     let mut matched = Vec::new();
                     for store in stores {
                         if ops::resolve(&store, id).map_err(store_err)?.is_some() {
@@ -654,10 +674,10 @@ mod core_backend {
                             });
                         }
                     };
-                    let target = if close {
-                        format!("/tickets/{id}/close")
-                    } else {
-                        format!("/tickets/{id}")
+                    let target = match action {
+                        "close" => format!("/tickets/{id}/close"),
+                        "assign" => format!("/tickets/{id}/assign"),
+                        _ => format!("/tickets/{id}"),
                     };
                     return CoreBackend::new(store).send(method, &target, body);
                 }
@@ -700,6 +720,43 @@ mod core_backend {
                     let closed = ops::close(&self.store, &t.id, (self.now)(), reason, dup)
                         .map_err(op_err)?;
                     self.api(&closed)
+                }
+                "POST" if assign_id(path).is_some() => {
+                    let t = self.resolve(assign_id(path).unwrap())?;
+                    let now = (self.now)();
+                    let assignees = body
+                        .get("assignees")
+                        .filter(|v| !v.is_null())
+                        .map(|_| str_vec(body, "assignees"));
+                    let reviews = body
+                        .get("reviews")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .map(|v| {
+                            let who = v
+                                .get("who")
+                                .and_then(Value::as_str)
+                                .ok_or_else(|| bad_request("review who is required"))?
+                                .to_owned();
+                            let kind: ReviewKind = serde_json::from_value(
+                                v.get("kind")
+                                    .cloned()
+                                    .ok_or_else(|| bad_request("review kind is required"))?,
+                            )
+                            .map_err(|_| bad_request("invalid review kind"))?;
+                            Ok(ReviewRequest {
+                                who,
+                                kind,
+                                by: (self.mint)(),
+                                at: now.clone(),
+                                requested_by: None,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, BackendError>>()?;
+                    let assigned = ops::assign(&self.store, &t.id, now, assignees, reviews)
+                        .map_err(store_err)?;
+                    self.api(&assigned)
                 }
                 "PATCH" if ticket_id(path).is_some() => {
                     let t = self.resolve(ticket_id(path).unwrap())?;
@@ -878,6 +935,10 @@ mod core_backend {
     /// `/tickets/{id}/close` → the id.
     fn close_id(path: &str) -> Option<&str> {
         path.strip_prefix("/tickets/")?.strip_suffix("/close")
+    }
+
+    fn assign_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?.strip_suffix("/assign")
     }
 
     /// `/tickets/{id}/release` → the id.
@@ -1510,12 +1571,38 @@ mod tests {
             "hotsheet_update",
             json!({"checkout":"web","id":"HS-X","title":"y"}),
         );
+        call(
+            &backend,
+            "hotsheet_assign",
+            json!({"checkout":"web","id":"HS-X","assignees":["dev@example.com"]}),
+        );
         let calls = backend.calls.borrow();
         assert!(calls[0].starts_with("GET /checkouts/web/tickets"));
         assert!(calls[1].starts_with("GET /checkouts/web/tickets/HS-X"));
         assert!(calls[2].starts_with("POST /checkouts/web/tickets?store=abc"));
         assert!(!calls[2].contains("\"checkout\""));
         assert!(calls[3].starts_with("PATCH /checkouts/web/tickets/HS-X"));
+        assert!(calls[4].starts_with("POST /checkouts/web/tickets/HS-X/assign"));
+    }
+
+    #[test]
+    fn assign_tool_mutates_the_store_without_a_server() {
+        let (_d, backend) = core();
+        let created = call(&backend, "hotsheet_create", json!({"title":"Review me"}));
+        let assigned = call(
+            &backend,
+            "hotsheet_assign",
+            json!({
+                "id": created["slug"],
+                "assignees": ["dev@example.com"],
+                "reviews": [{"who":"reviewer@example.com","kind":"review"}]
+            }),
+        );
+        assert_eq!(assigned["assignees"][0], "dev@example.com");
+        assert_eq!(
+            assigned["review_requests"][0]["who"],
+            "reviewer@example.com"
+        );
     }
 
     #[test]

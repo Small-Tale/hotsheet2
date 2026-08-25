@@ -28,7 +28,10 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
-use hotsheet_model::{CloseReason, NoteKind, Ticket, Timestamp, Ulid, parse_file, to_file_string};
+use hotsheet_model::{
+    CloseReason, NoteKind, ReviewKind, ReviewRequest, Ticket, Timestamp, Ulid, parse_file,
+    to_file_string,
+};
 use hotsheet_ticketing::{
     FsStore, NewTicket, OpError, Settings, SortKey, StoreError, StoreRegistry, TicketPatch,
     TicketQuery, auto_context, ops,
@@ -145,6 +148,7 @@ impl AppState {
                     slug: req.tool.clone(),
                     message: None,
                     activity: None,
+                    assignment: None,
                 };
                 if let Ok(mut l) = log.lock() {
                     l.push(ev.clone());
@@ -479,6 +483,7 @@ impl AppState {
             slug: t.slug.clone(),
             message: None,
             activity: None,
+            assignment: None,
         });
         // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
         self.kick_sync();
@@ -497,6 +502,7 @@ impl AppState {
             slug: String::new(),
             message: Some(message),
             activity: None,
+            assignment: None,
         });
     }
 
@@ -516,6 +522,7 @@ impl AppState {
             slug: String::new(),
             message: None,
             activity: Some(event),
+            assignment: None,
         });
         Ok(())
     }
@@ -536,6 +543,16 @@ pub struct ChangeEvent {
     /// For `kind == "activity"`: the complete event persisted to the rolling timeline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub activity: Option<hotsheet_ticketing::ActivityEvent>,
+    /// For `kind == "assignment"`: newly assigned/requested recipients.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assignment: Option<AssignmentEvent>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct AssignmentEvent {
+    pub newly_assigned: Vec<String>,
+    pub review_requested: Vec<String>,
+    pub requested_by: Option<String>,
 }
 
 /// How many recent events the long-poll ring retains. A poller whose cursor falls behind
@@ -593,6 +610,7 @@ mod event_log_tests {
             slug: format!("HS-{n}"),
             message: None,
             activity: None,
+            assignment: None,
         }
     }
 
@@ -646,6 +664,7 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/close", post(close_ticket))
+        .route("/tickets/{id}/assign", post(assign_ticket))
         // Coordination: claim the next available ticket, release, renew a lease (HS2-86).
         .route("/claim-next", post(claim_next_ticket))
         .route("/tickets/{id}/release", post(release_ticket))
@@ -678,6 +697,10 @@ pub fn app(state: AppState) -> Router {
             post(close_checkout_ticket),
         )
         .route(
+            "/checkouts/{reference}/tickets/{id}/assign",
+            post(assign_checkout_ticket),
+        )
+        .route(
             "/stores/{store_id}/tickets",
             get(list_store_tickets).post(create_store_ticket),
         )
@@ -688,6 +711,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/stores/{store_id}/tickets/{id}/close",
             post(close_store_ticket),
+        )
+        .route(
+            "/stores/{store_id}/tickets/{id}/assign",
+            post(assign_store_ticket),
         )
         // Cross-store resolve: a global ULID → its live instance in whichever store hosts
         // it (follows moved tombstones). HS2-87 / HS2-S4H2AM.
@@ -1176,6 +1203,17 @@ async fn close_checkout_ticket(
         ticket: do_close(&state, &entry, &id, req)?,
     }))
 }
+async fn assign_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(req): Json<AssignReq>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: do_assign(&state, &entry, &id, req)?,
+    }))
+}
 
 async fn ticket_flow_summary(
     State(state): State<AppState>,
@@ -1248,6 +1286,7 @@ struct NotificationQuery {
     checkout: Option<String>,
     store: Option<String>,
     ticket: Option<String>,
+    recipient: Option<String>,
 }
 async fn list_notifications(
     State(state): State<AppState>,
@@ -1257,6 +1296,7 @@ async fn list_notifications(
         q.checkout.as_deref(),
         q.store.as_deref(),
         q.ticket.as_deref(),
+        q.recipient.as_deref(),
     ))
 }
 async fn publish_notification(
@@ -1271,6 +1311,7 @@ async fn publish_notification(
         slug: n.ticket.clone().unwrap_or_default(),
         message: Some(n.message.clone()),
         activity: None,
+        assignment: None,
     });
     (StatusCode::CREATED, Json(n))
 }
@@ -1423,6 +1464,92 @@ fn do_update(
     };
     state.changed_in(entry, "updated", &latest);
     api_ticket(entry, &latest)
+}
+
+#[derive(Debug, Deserialize)]
+struct AssignReq {
+    /// Present replaces the assignee set; absent leaves it unchanged.
+    assignees: Option<Vec<String>>,
+    #[serde(default)]
+    reviews: Vec<ReviewInput>,
+}
+#[derive(Debug, Deserialize)]
+struct ReviewInput {
+    who: String,
+    kind: ReviewKind,
+}
+
+fn do_assign(
+    state: &AppState,
+    entry: &StoreEntry,
+    id: &str,
+    req: AssignReq,
+) -> Result<ApiTicket, ApiError> {
+    let before = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let at = now();
+    let reviews = req
+        .reviews
+        .into_iter()
+        .map(|r| ReviewRequest {
+            who: r.who,
+            kind: r.kind,
+            by: Ulid::new(),
+            at: at.clone(),
+            requested_by: None,
+        })
+        .collect();
+    let ticket = ops::assign(&entry.store, &before.id, at, req.assignees, reviews)?;
+    let newly_assigned = ticket
+        .assignees
+        .iter()
+        .filter(|who| !before.assignees.contains(who))
+        .cloned()
+        .collect::<Vec<_>>();
+    let review_requested = ticket
+        .review_requests
+        .iter()
+        .filter(|r| !before.review_requests.iter().any(|old| old.by == r.by))
+        .map(|r| r.who.clone())
+        .collect::<Vec<_>>();
+    state.changed_in(entry, "assigned", &ticket);
+    let requested_by = hotsheet_ticketing::current_user_email(entry.store.root());
+    state.emit(ChangeEvent {
+        store: multistore::store_url_id(&entry.store),
+        kind: "assignment".into(),
+        id: ticket.id.to_string(),
+        slug: ticket.slug.clone(),
+        message: None,
+        activity: None,
+        assignment: Some(AssignmentEvent {
+            newly_assigned: newly_assigned.clone(),
+            review_requested: review_requested.clone(),
+            requested_by: requested_by.clone(),
+        }),
+    });
+    for (recipient, action) in newly_assigned
+        .iter()
+        .map(|v| (v, "assigned"))
+        .chain(review_requested.iter().map(|v| (v, "review-requested")))
+    {
+        state.notifications.publish(notifications::NewNotification {
+            message: format!("{action}: {} — {}", ticket.slug, ticket.title),
+            severity: "info".into(),
+            checkout: None,
+            store: Some(multistore::store_url_id(&entry.store)),
+            ticket: Some(ticket.slug.clone()),
+            recipient: Some(recipient.clone()),
+            dedupe_key: Some(format!("{action}:{}:{recipient}", ticket.id)),
+        });
+    }
+    api_ticket(entry, &ticket)
+}
+
+async fn assign_ticket(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<AssignReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    Ok(Json(do_assign(&state, &state.default_entry(), &id, req)?))
 }
 
 fn do_close(
@@ -2508,6 +2635,15 @@ async fn close_store_ticket(
     Ok(Json(do_close(&state, &entry, &id, req)?))
 }
 
+async fn assign_store_ticket(
+    State(state): State<AppState>,
+    Path((store_id, id)): Path<(String, String)>,
+    Json(req): Json<AssignReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = scoped_entry(&state, &store_id)?;
+    Ok(Json(do_assign(&state, &entry, &id, req)?))
+}
+
 async fn get_store_ticket(
     State(state): State<AppState>,
     Path((store_id, id)): Path<(String, String)>,
@@ -3108,6 +3244,7 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
             slug,
             message: None,
             activity: None,
+            assignment: None,
         });
     };
 

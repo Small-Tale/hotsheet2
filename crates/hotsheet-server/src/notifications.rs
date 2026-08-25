@@ -13,6 +13,8 @@ pub struct Notification {
     #[serde(default)]
     pub ticket: Option<String>,
     #[serde(default)]
+    pub recipient: Option<String>,
+    #[serde(default)]
     pub dedupe_key: Option<String>,
     pub acknowledged: bool,
 }
@@ -28,6 +30,8 @@ pub struct NewNotification {
     pub store: Option<String>,
     #[serde(default)]
     pub ticket: Option<String>,
+    #[serde(default)]
+    pub recipient: Option<String>,
     #[serde(default)]
     pub dedupe_key: Option<String>,
 }
@@ -58,6 +62,7 @@ impl NotificationHub {
             checkout: n.checkout,
             store: n.store,
             ticket: n.ticket,
+            recipient: n.recipient,
             dedupe_key: n.dedupe_key,
             acknowledged: false,
         };
@@ -69,6 +74,7 @@ impl NotificationHub {
         checkout: Option<&str>,
         store: Option<&str>,
         ticket: Option<&str>,
+        recipient: Option<&str>,
     ) -> Vec<Notification> {
         self.items
             .lock()
@@ -78,6 +84,7 @@ impl NotificationHub {
                 checkout.is_none_or(|v| n.checkout.as_deref() == Some(v))
                     && store.is_none_or(|v| n.store.as_deref() == Some(v))
                     && ticket.is_none_or(|v| n.ticket.as_deref() == Some(v))
+                    && recipient.is_none_or(|v| n.recipient.as_deref() == Some(v))
             })
             .cloned()
             .collect()
@@ -102,13 +109,14 @@ mod tests {
             checkout: Some("a".into()),
             store: None,
             ticket: None,
+            recipient: None,
             dedupe_key: Some("x".into()),
         };
         let a = h.publish(n.clone());
         let b = h.publish(n);
         assert_eq!(a.id, b.id);
-        assert_eq!(h.list(Some("a"), None, None).len(), 1);
+        assert_eq!(h.list(Some("a"), None, None, None).len(), 1);
         h.acknowledge(&a.id).unwrap();
-        assert!(h.list(Some("a"), None, None)[0].acknowledged);
+        assert!(h.list(Some("a"), None, None, None)[0].acknowledged);
     }
 }

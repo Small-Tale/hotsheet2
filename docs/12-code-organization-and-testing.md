@@ -274,7 +274,8 @@ that makes adding a tool boring instead of painful.
 > **Built:** sanitized, version-pinned Codex 0.148 and Claude 2.1.241 usage cassettes
 > captured by the deliberate HS2-CQ6B96 live verification replay through the production
 > parsers in fast CI. The ignored, credentials-gated live tests remain the drift oracle.
-> ACP joins this gate when its first plugin/mapper lands (HS2-96BZEF).
+> ACP/OpenCode now joins this gate via the ACP v1 contract cassette and the ignored,
+> credentials-gated `HOTSHEET_OPENCODE_LIVE=1` smoke test (HS2-PEQ6Q8).
 
 **Payoff:** adding a tool = write the plugin module + record its real protocol once;
 everything else is inherited and automated.

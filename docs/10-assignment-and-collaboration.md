@@ -21,8 +21,11 @@
 > `me` sentinel — `assignee=me`, `review_requested=me`, and `review_by=me` resolve to
 > the store's git `user.email` in the CLI, server, and MCP. New review requests record
 > `requested_by`; older files remain readable without it (HS2-TCDTCH/HS2-NZT80R).
-> **Still not built (follow-ups):** the **live/on-sync attention delivery** of §10.3 and the
-> GitHub-seed of `people.json` (§10.5).
+> **Now also built (HS2-NZT80R):** authenticated default/store/checkout-scoped assignment
+> endpoints, assignment-specific live events, recipient-addressed notification records,
+> and `people seed-github` using the server-side/keychain GitHub token. GitHub profiles
+> without a public email are reported and skipped rather than fabricating git identities.
+> Native display and next-sync desktop presentation remain client work.
 
 ## 10.1 Two different "who's on this?" concepts — keep them separate
 

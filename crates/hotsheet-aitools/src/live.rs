@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 use hotsheet_plugins::Plugin;
 
+use crate::acp::{AcpSession, AcpStdio};
 use crate::claude::{ClaudeChannel, ClaudeStreamTransport};
 use crate::codex::{
     CodexAppServer, StdioTransport, UdsWsTransport, codex_control_socket_path,
@@ -156,6 +157,23 @@ pub fn run_trigger(
                 app_server: Some(&app),
                 channel: None,
                 acp: None,
+            };
+            drive_and_stream(plugin, t, &ctx, registry, on_event)
+        }
+        "acp" => {
+            let transport =
+                AcpStdio::spawn(&program, &t.cwd, &t.env).map_err(|source| LiveError::Launch {
+                    program: program.clone(),
+                    source,
+                })?;
+            let acp = AcpSession::connect(transport).map_err(LiveError::Drive)?;
+            let ctx = DriveCtx {
+                cwd: t.cwd.clone(),
+                spawner: &spawner,
+                env: t.env.clone(),
+                app_server: None,
+                channel: None,
+                acp: Some(&acp),
             };
             drive_and_stream(plugin, t, &ctx, registry, on_event)
         }

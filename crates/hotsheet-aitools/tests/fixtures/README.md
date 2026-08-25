@@ -7,3 +7,6 @@ prompts, credentials, user paths, or real session identifiers.
 Fast CI replays these messages through the production usage parsers. Updating a fixture
 requires a deliberate live run and a note explaining the observed protocol change; live
 tests remain ignored and credentials-gated.
+
+The OpenCode cassette pins ACP v1 initialize/session/update/prompt landmarks; its opt-in
+live test exercises the same contract against `opencode acp`.

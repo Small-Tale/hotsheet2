@@ -59,6 +59,49 @@ fn checkout_register_list_and_resolve_are_store_independent() {
 }
 
 #[test]
+fn people_seed_github_uses_public_emails_and_reports_private_ones() {
+    use std::io::{Read, Write};
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path()).arg("init").assert().success();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        for _ in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0; 2048];
+            let n = stream.read(&mut buf).unwrap();
+            let request = String::from_utf8_lossy(&buf[..n]);
+            let body = if request.contains("/collaborators") {
+                r#"[{"login":"dana"},{"login":"private"}]"#
+            } else if request.contains("/users/dana") {
+                r#"{"login":"dana","name":"Dana","email":"dana@example.com"}"#
+            } else {
+                r#"{"login":"private","name":"Private","email":null}"#
+            };
+            write!(stream,"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+        }
+    });
+    hs(dir.path())
+        .env("HOTSHEET_API_KEY_GITHUB", "test")
+        .args([
+            "people",
+            "seed-github",
+            "--repo",
+            "acme/app",
+            "--api-base",
+            &format!("http://{addr}"),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Seeded 1 people"))
+        .stdout(predicate::str::contains("private"));
+    server.join().unwrap();
+    let roster = std::fs::read_to_string(dir.path().join("people.json")).unwrap();
+    assert!(roster.contains("dana@example.com"));
+    assert!(!roster.contains("\"email\": \"private"));
+}
+
+#[test]
 fn init_new_ls_show_edit_close_flow() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

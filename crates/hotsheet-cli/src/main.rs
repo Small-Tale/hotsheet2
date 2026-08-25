@@ -416,6 +416,15 @@ enum PeopleCmd {
         #[arg(long)]
         github: Option<String>,
     },
+    /// Seed people.json from GitHub collaborators that expose a public email.
+    SeedGithub {
+        /// Repository as owner/name.
+        #[arg(long)]
+        repo: String,
+        /// GitHub API root (override for GitHub Enterprise/testing).
+        #[arg(long, default_value = "https://api.github.com")]
+        api_base: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1205,6 +1214,66 @@ fn cmd_people(path: &Path, cmd: PeopleCmd) -> Result<()> {
             });
             roster.save(path)?;
             println!("Added {email} to people.json (commit to share it with the team)");
+        }
+        PeopleCmd::SeedGithub { repo, api_base } => {
+            if !repo
+                .split_once('/')
+                .is_some_and(|(a, b)| !a.is_empty() && !b.is_empty() && !b.contains('/'))
+            {
+                bail!("--repo expects owner/name");
+            }
+            let token = hotsheet_ticketing::KeyRegistry::new(
+                hotsheet_plugins::hotsheet_home(),
+                hotsheet_ticketing::OsKeychain,
+            )
+            .get("github")?;
+            let agent = ureq::AgentBuilder::new().user_agent("hotsheet2").build();
+            let get = |url: &str| -> Result<serde_json::Value> {
+                let response = agent
+                    .get(url)
+                    .set("Authorization", &format!("Bearer {token}"))
+                    .set("Accept", "application/vnd.github+json")
+                    .call()
+                    .map_err(|e| anyhow::anyhow!("GitHub API: {e}"))?;
+                Ok(serde_json::from_str(&response.into_string()?)?)
+            };
+            let collaborators = get(&format!(
+                "{}/repos/{repo}/collaborators?per_page=100",
+                api_base.trim_end_matches('/')
+            ))?;
+            let mut profiles = Vec::new();
+            for login in collaborators
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|v| v.get("login").and_then(serde_json::Value::as_str))
+            {
+                let v = get(&format!("{}/users/{login}", api_base.trim_end_matches('/')))?;
+                profiles.push(hotsheet_ticketing::roster::GitHubProfile {
+                    login: login.to_owned(),
+                    name: v
+                        .get("name")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
+                    email: v
+                        .get("email")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned),
+                });
+            }
+            let mut roster = Roster::load(path)?;
+            let (changed, skipped) =
+                hotsheet_ticketing::roster::seed_github_profiles(&mut roster, profiles);
+            roster.save(path)?;
+            println!(
+                "Seeded {changed} people from GitHub; skipped {} without public email{}",
+                skipped.len(),
+                if skipped.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", skipped.join(", "))
+                }
+            );
         }
     }
     Ok(())

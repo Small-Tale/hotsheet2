@@ -26,6 +26,36 @@ pub struct Roster {
     pub people: Vec<Person>,
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct GitHubProfile {
+    pub login: String,
+    pub name: Option<String>,
+    pub email: Option<String>,
+}
+
+/// Seed email-keyed roster entries from GitHub profiles. Profiles with no public email
+/// are reported/skipped because a login must never be fabricated into a git identity.
+pub fn seed_github_profiles(
+    roster: &mut Roster,
+    profiles: Vec<GitHubProfile>,
+) -> (usize, Vec<String>) {
+    let mut changed = 0;
+    let mut skipped = Vec::new();
+    for p in profiles {
+        match p.email.filter(|v| !v.trim().is_empty()) {
+            Some(email) => {
+                changed += usize::from(roster.upsert(Person {
+                    email,
+                    name: p.name,
+                    github: Some(p.login),
+                }));
+            }
+            None => skipped.push(p.login),
+        }
+    }
+    (changed, skipped)
+}
+
 impl Roster {
     /// Load the store's `people.json`, or an empty roster if absent (a fresh store has none).
     pub fn load(store_root: &Path) -> io::Result<Roster> {
@@ -111,5 +141,28 @@ mod tests {
         assert!(changed);
         assert_eq!(r.people.len(), 1, "same email updates, not duplicates");
         assert_eq!(r.display_name("a@x.co"), "Alex");
+    }
+
+    #[test]
+    fn github_seed_never_invents_an_email() {
+        let mut r = Roster::default();
+        let (changed, skipped) = seed_github_profiles(
+            &mut r,
+            vec![
+                GitHubProfile {
+                    login: "dana".into(),
+                    name: Some("Dana".into()),
+                    email: Some("dana@x.co".into()),
+                },
+                GitHubProfile {
+                    login: "private".into(),
+                    name: None,
+                    email: None,
+                },
+            ],
+        );
+        assert_eq!(changed, 1);
+        assert_eq!(skipped, ["private"]);
+        assert_eq!(r.people[0].github.as_deref(), Some("dana"));
     }
 }

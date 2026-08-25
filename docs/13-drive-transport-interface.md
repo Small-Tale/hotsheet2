@@ -67,7 +67,7 @@ CLIs** + official docs, not HS1's notes:
 |---|---|---|---|---|
 | **Codex** 0.148 | **Yes (daemon)** | `app-server daemon` (JSON-RPC/control socket; `thread/start\|resume` + `turn/start\|interrupt`; `remote-control`+pairing); `exec-server`; `exec resume <id> "<prompt>"` no-daemon | `AppServer` | 1 |
 | **Claude** 2.1.238 | **Yes (channel)** | MCP-channel injection into a running session; `-p --input-format stream-json`; `--resume`/`--continue` | `ClaudeChannel` | 2 |
-| **OpenCode** 1.17.18 | **Yes (ACP/HTTP)** | `opencode acp` (ACP server); `opencode serve` + `attach`; session mgmt | `Acp` | 3 |
+| **OpenCode** 1.17.18 | **Yes (ACP/HTTP)** | `opencode acp` (live stdio client: initialize, new/load, prompt/update/cancel); `opencode serve` + `attach`; session mgmt | `Acp` | 3 |
 | **Antigravity (agy)** 1.1.7 | **No daemon** | `agy --conversation <id> --print "…"` (spawn-per-turn, resumed thread). `agy-mcp` community bridges wrap this for *delegation*; Antigravity only **consumes** MCP (`.agents/mcp_config.json`), it is not exposed as a driveable server | `Spawn`+resume | 4 |
 
 MCP-config setup targets differ per tool: Claude `.mcp.json`, Codex `.codex/config.toml`,
@@ -153,6 +153,13 @@ one stream:
 - **Codex spawn:** process alive → Busy; exit code → Done. **App-server:** turn-start/
   turn-end messages → Busy/Done.
 - **ACP:** `session/update` → Busy/Output; `stopReason` → Done.
+
+> **Built (HS2-PEQ6Q8):** `AcpSession` speaks ACP v1 newline-delimited JSON-RPC over
+> an injected transport; `AcpStdio` launches `opencode acp`. It negotiates initialize,
+> creates/loads sessions, streams message/usage/tool updates, maps prompt stop reasons,
+> and sends cancellation. Unknown client requests receive an empty response and permission
+> requests select a reject option by default. A fast version-pinned contract cassette plus
+> the gated `HOTSHEET_OPENCODE_LIVE=1` smoke test form the OpenCode drift oracle.
 
 **Busy is thus a derived view, not a per-tool API** — matching HS1's dual
 hook+spinner model, generalized. The connection registry's `isBusy` reads the latest
