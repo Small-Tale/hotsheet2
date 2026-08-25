@@ -3,7 +3,8 @@
 The AI-read orientation doc: where things are, how to build/test, and where to look
 for X. Keep in sync in the same change that adds a file/dir, a command, a schema
 field, or a setting. Requirements status lives in [README.md](README.md); the field
-schema in [17-ticket-file-format.md](17-ticket-file-format.md).
+schema in [17-ticket-file-format.md](17-ticket-file-format.md); feature-level unit/E2E
+evidence in [TEST-COVERAGE.md](TEST-COVERAGE.md).
 
 > **Status:** early implementation. Built: the Rust core model + file format, a
 > filesystem store, the shared engine `ops`, the SQLite/FTS **index** + the server's
@@ -23,6 +24,7 @@ schema in [17-ticket-file-format.md](17-ticket-file-format.md).
 ```
 hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE store (below)
   Cargo.toml                 # Rust workspace (edition 2024, resolver 3)
+  scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   crates/
     hotsheet-model/          # pure domain model + ticket file format (no I/O)

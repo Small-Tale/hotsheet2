@@ -171,7 +171,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 
 - **Per-surface gates in CI:** `cargo-llvm-cov` (Rust), Playwright/istanbul (web),
   `vitest` (migrator) — each with its own high threshold.
-- **An aggregate summary dashboard** rolls them up; there is **no fake merged lcov**.
+- **A feature-layer report** in [`TEST-COVERAGE.md`](TEST-COVERAGE.md) records unit,
+  E2E, and manual evidence for each shipped surface; CI validates its statuses and
+  evidence paths with `scripts/check-test-coverage.mjs`. There is **no fake merged lcov**.
 - The property / transition-matrix / behavior tests are the real bar — a green
   coverage number is necessary, not sufficient.
 
@@ -194,6 +196,9 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   (HS2-8WR8XF):** raising the coverage floors as measured runs settle, **web
   coverage + the web E2E (Playwright)** — blocked on the Kerf client existing — and a
   macOS matrix leg for the terminal/SwiftUI surfaces.
+- The `check` job also validates the feature double-coverage matrix. Repository guidance
+  requires the matrix to change with feature/requirement status or test-layer changes,
+  making missing unit/E2E evidence visible even when line coverage remains green.
 - **Manual test plan** (`docs/manual-test-plan.md`, created with the first code):
   real multi-device terminal-sizing focus handoff (iOS↔macOS), mTLS enrollment / QR
   pairing across devices, native-client UX, long-term GitHub custom-ref behavior —

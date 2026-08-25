@@ -108,6 +108,13 @@ and don't imply reading order — read by group.
 |---|---|---|
 | [16-external-sync-interface.md](16-external-sync-interface.md) | External-sync plugin interface (GitHub/GitLab/Jira) | Design |
 
+**H · Test evidence**
+
+| Doc | Topic | Status |
+|---|---|---|
+| [TEST-COVERAGE.md](TEST-COVERAGE.md) | CI-validated feature matrix pairing unit, E2E, and manual evidence | Active |
+| [manual-test-plan.md](manual-test-plan.md) | Checks that still require real devices or unbuilt client surfaces | Active |
+
 **H · Engineering**
 | Doc | Topic | Status |
 |---|---|---|

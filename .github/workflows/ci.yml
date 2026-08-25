@@ -55,6 +55,9 @@ jobs:
           cache: npm
           cache-dependency-path: migrator/package-lock.json
 
+      - name: Validate feature double-coverage matrix
+        run: node --test scripts/check-test-coverage.test.mjs && node scripts/check-test-coverage.mjs
+
       - name: Build the CLI (the conformance test drives target/debug/hotsheet-cli)
         run: cargo build --bin hotsheet-cli
 

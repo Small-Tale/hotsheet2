@@ -21,6 +21,11 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 - **Transition-matrix testing for stateful modules**: for anything with modes / multiple code paths / a cache / a state machine, enumerate the states AND the transitions between them, then write tests that walk realistic multi-step sequences crossing state boundaries — not just each operation from a clean initial state.
 - **Adversarial pass on stateful changes**: when adding or altering a stateful code path, deliberately try to break it with out-of-order / interleaved / repeated / empty-then-refill sequences; pin any that would have failed as permanent regression tests.
 - **Manual test plan**: keep a manual test plan doc (e.g. `docs/manual-test-plan.md`) for features that can't be reliably automated. **Keep it up to date** — add such features there; when you add automated coverage for a previously-manual item, remove it and note it in an "Automated Coverage Summary".
+- **Feature coverage matrix**: update [`docs/TEST-COVERAGE.md`](docs/TEST-COVERAGE.md)
+  in the same change whenever a feature is added, shipped, changed, deferred, or gains
+  or loses unit, E2E, or manual coverage. `node scripts/check-test-coverage.mjs` is the
+  CI gate for valid statuses and live evidence paths; line coverage is not a substitute
+  for recording both behavioral layers.
 - **Always fix lint and type errors before finishing**: Fix as you go, don't batch.
 
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
@@ -62,7 +67,8 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 - **Stateful modules** (claim/lease, index reconcile, terminal-sizing arbiter, sync
   engine) get **transition-matrix + adversarial-sequence** tests; pin every stateful
   bug as a regression test.
-- **Coverage:** per-language gates + an aggregate summary (NOT one merged lcov):
+- **Coverage:** per-language gates + the feature-layer matrix in
+  `docs/TEST-COVERAGE.md` (NOT one merged lcov):
   `cargo llvm-cov` (Rust) · Playwright/istanbul (web) · `vitest` coverage (migrator).
 - **Commands** (once code exists): unit `cargo nextest run` · web E2E
   `pnpm -C clients/web test:e2e` · migrator `pnpm -C migrator test` · coverage

@@ -1,0 +1,58 @@
+# Feature Coverage Matrix
+
+This is the durable report for Hot Sheet 2's **double coverage** goal: every shipped
+feature should have both focused unit/logic coverage and a realistic E2E user-flow test.
+Line/branch reports remain useful floors, but they cannot prove this behavioral pairing.
+
+Update this matrix in the same change that ships, changes, defers, or adds automated
+coverage for a feature. Evidence entries are semicolon-separated repository paths; an
+optional `# test_name` suffix documents the most relevant test. `scripts/check-test-coverage.mjs`
+validates the rows and evidence paths in CI.
+
+Status meanings:
+
+- `double-covered`: both unit and E2E evidence exist.
+- `unit-only` / `e2e-only`: one automated layer is missing; this is visible debt.
+- `manual`: automation is not currently practical and the manual plan covers it.
+- `planned`: the product surface itself is not shipped yet.
+
+<!-- coverage-matrix:begin -->
+| ID | Requirement | Feature | Unit evidence | E2E evidence | Manual evidence | Status |
+|---|---|---|---|---|---|---|
+| storage-format | docs/17-ticket-file-format.md | Ticket Markdown parse/render and forward compatibility | `crates/hotsheet-model/src/format.rs`; `crates/hotsheet-model/tests/proptest_format.rs` | `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
+| filesystem-store | docs/02-ticket-storage.md | File-backed create/read/update/list | `crates/hotsheet-ticketing/src/store.rs`; `crates/hotsheet-ticketing/src/ops.rs` | `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
+| semantic-merge | docs/02-ticket-storage.md | Three-way semantic ticket merge | `crates/hotsheet-ticketing/src/merge.rs`; `crates/hotsheet-ticketing/tests/merge_proptest.rs` | `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
+| claims-leases | docs/05-ai-tool-plugins.md | Claim, renew, release, blockers, and expiry | `crates/hotsheet-ticketing/src/ops.rs` | `crates/hotsheet-cli/tests/cli.rs`; `crates/hotsheet-mcp/src/lib.rs` | — | double-covered |
+| assignment | docs/10-assignment-and-collaboration.md | Assignees, review requests, and “me” views | `crates/hotsheet-ticketing/src/ops.rs`; `crates/hotsheet-index/src/tests.rs` | `crates/hotsheet-server/tests/http.rs`; `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
+| close-outcomes | docs/02-ticket-storage.md | Structured close/reopen outcomes | `crates/hotsheet-ticketing/src/ops.rs`; `crates/hotsheet-model/src/format.rs` | `crates/hotsheet-cli/tests/cli.rs`; `crates/hotsheet-mcp/src/lib.rs` | — | double-covered |
+| sqlite-index | docs/03-indexing-and-query.md | Rebuildable SQLite/FTS index and structured filters | `crates/hotsheet-index/src/tests.rs` | `crates/hotsheet-server/tests/http.rs`; `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
+| filesystem-watch | docs/03-indexing-and-query.md | External ticket changes trigger reindex/events | `crates/hotsheet-server/src/lib.rs` | `crates/hotsheet-server/tests/http.rs` | — | double-covered |
+| automatic-sync | docs/02-ticket-storage.md | Fetch/rebase/push synchronization | `crates/hotsheet-ticketing/src/sync.rs` | `crates/hotsheet-cli/tests/cli.rs` | — | double-covered |
+| mcp-serverless | docs/05-ai-tool-plugins.md | Serverless MCP ticket lifecycle | `crates/hotsheet-mcp/src/lib.rs` | `crates/hotsheet-mcp/src/lib.rs` | — | double-covered |
+| plugin-registry | docs/05-ai-tool-plugins.md | Built-in/external plugin loading and setup | `crates/hotsheet-plugins/src/tests.rs`; `crates/hotsheet-plugins/tests/no_tool_id_branches.rs` | `crates/hotsheet-cli/tests/plugin_conformance.rs` | — | double-covered |
+| drive-transports | docs/13-drive-transport-interface.md | Spawn, channel, app-server, and ACP drive abstractions | `crates/hotsheet-aitools/src/tests.rs`; `crates/hotsheet-aitools/src/acp.rs` | `crates/hotsheet-aitools/tests/protocol_cassettes.rs` | — | double-covered |
+| usage-metrics | docs/14-metrics-interface.md | Usage mapping, storage, pricing, and rollups | `crates/hotsheet-ticketing/src/metrics.rs`; `crates/hotsheet-aitools/src/acp.rs` | `crates/hotsheet-aitools/tests/protocol_cassettes.rs` | — | double-covered |
+| activity-stream | docs/15-activity-narration-interface.md | Attributed activity event storage and delivery | `crates/hotsheet-server/src/dist_work_loop.rs` | `crates/hotsheet-server/tests/http.rs` | — | double-covered |
+| terminal-hosting | docs/06-clients.md | PTY lifecycle, stream, input, and busy inference | `crates/hotsheet-terminals/src/lib.rs` | `crates/hotsheet-terminals/tests/fake_agent.rs`; `crates/hotsheet-server/tests/terminal_ws.rs` | — | double-covered |
+| terminal-sizing | docs/06-clients.md | Multi-viewer sizing arbitration | `crates/hotsheet-terminals/src/sizing.rs` | `crates/hotsheet-server/tests/terminal_ws.rs` | `docs/manual-test-plan.md` | double-covered |
+| server-multistore | docs/04-core-server-cli.md | Hosted-store discovery, routing, and isolation | `crates/hotsheet-server/src/multistore.rs` | `crates/hotsheet-server/tests/http.rs` | — | double-covered |
+| mtls | docs/04-core-server-cli.md | Device certificates, ACLs, renewal, and revocation | `crates/hotsheet-tls/src/lib.rs` | `crates/hotsheet-server/tests/mtls.rs` | `docs/manual-test-plan.md` | double-covered |
+| hs1-migration | docs/07-migration.md | HS1 export and HS2 import conformance | `migrator/test/export.test.mjs` | `crates/hotsheet-cli/tests/migrate.rs` | — | double-covered |
+| web-client | docs/06-clients.md | Browser client workflows | — | — | — | planned |
+| native-clients | docs/06-clients.md | macOS/iOS client workflows | — | — | `docs/manual-test-plan.md` | planned |
+| github-roster-seed | docs/10-assignment-and-collaboration.md | Seed people roster from GitHub collaborators | — | — | — | planned |
+<!-- coverage-matrix:end -->
+
+## Coverage report layers
+
+- Rust line coverage: `cargo llvm-cov`; CI uploads `rust-coverage-lcov` and enforces
+  the current line floor.
+- Migrator line/branch/function coverage: `npm run test:coverage` in `migrator/`; CI
+  uploads `migrator-coverage-lcov` and enforces Vitest thresholds.
+- Feature double coverage: this matrix, gated by `npm run`-free
+  `node scripts/check-test-coverage.mjs` in CI.
+- Manual-only behavior: [manual-test-plan.md](manual-test-plan.md).
+
+The matrix reports whether both behavioral layers exist; it does not claim every
+requirement is fully asserted merely because a file is listed. Reviews should still
+inspect the named tests and add transition/adversarial cases for stateful changes.
