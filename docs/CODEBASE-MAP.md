@@ -94,6 +94,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-index/          # disposable SQLite + FTS5 index (cache over the store)
       src/lib.rs             #   Index (SCHEMA_VERSION 4): open_reconciled/reconcile (git-diff fast path)/rebuild/upsert/delete/query + hash_bytes; facets: tags + assignees + reviews(who/requested_by) tables; filters incl. assignee/review_requested/review_by (facet joins) + claimed + blocked/unblocked (json_each over blocked_by vs done set) + created/updated date-range + moved-tombstones-hidden-by-default; keyset page_after paging
     hotsheet-aitools/        # AI-tool host (behavioral half): the drive/transport interface
+      src/acp.rs             #   AcpDrive over an injected AcpClient session + standard PromptResponse usage-counter mapper (no fabricated model/cache/cost attribution)
       src/drive.rs           #   Drive trait (+ service() -> BackingService accessor) + BackingService trait + Transport/Target/DriveCtx/TurnHandle/DoneReason
       src/host.rs            #   drive_for(plugin) + trigger(): plugins[drive] -> Drive -> registry glue
       src/appserver.rs       #   AppServerDrive (Codex persistent daemon: turn on a resumed thread; with_daemon() exposes its CodexDaemonService via Drive::service) + AppServerClient port
@@ -105,7 +106,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/fixtures/       #   sanitized, version-pinned real Codex/Claude protocol cassettes replayed in fast CI (live drift oracle remains ignored/creds-gated)
       src/safe_trigger.rs    #   SafeTrigger + prepare_trigger: resolve a tool + assemble launch safety once, run_turn(on_event sink, conn_id) per turn; shared by `hotsheet-cli trigger`/`work` and the server driving loop (HS2-1TY7GC)
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
-      src/ports.rs           #   ProcessSpawner/SpawnedProcess + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
+      src/ports.rs           #   ProcessSpawner/SpawnedProcess + AcpClient + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
       src/registry.rs        #   ConnectionRegistry: live connections + sliding-window busy tracking
       src/permission.rs      #   PermissionBridge: FIFO request queue (concurrent-preserving, fixes HS1 overwrite) + allow-rules (once/session/always) + route-back (docs/05 §5.7, HS2-11)

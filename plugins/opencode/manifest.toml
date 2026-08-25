@@ -1,0 +1,38 @@
+id = "opencode"
+display_name = "OpenCode"
+product_name = "OpenCode"
+tier = "cli-agent"
+
+[detection]
+binaries = ["opencode"]
+
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+
+[mcp]
+target = "opencode.json"
+format = "opencode-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+
+[drive]
+# OpenCode's official ACP server is JSON-RPC over stdio (`opencode acp`).
+transport = "acp"
+program = "opencode"
+args = ["acp"]
+content = "arg"
+interrupt = true
+
+[launch]
+program = "opencode"
+args = []
+
+[metrics]
+# ACP exposes aggregate prompt/session usage counters only; the host must not invent
+# model, cache, or cost attribution when those fields are absent.
+source = "acp"
+
+[activity]
+source = "acp"

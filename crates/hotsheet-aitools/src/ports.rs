@@ -34,6 +34,17 @@ pub trait ProcessSpawner {
     fn spawn(&self, spec: &SpawnSpec) -> std::io::Result<Box<dyn SpawnedProcess>>;
 }
 
+/// A connected Agent Client Protocol session. The real stdio JSON-RPC client owns
+/// initialize/session lifecycle; drives depend only on this injected turn boundary.
+pub trait AcpClient {
+    fn start_turn(
+        &self,
+        resume: Option<&str>,
+        cwd: &Path,
+        content: &str,
+    ) -> Result<Box<dyn crate::drive::TurnHandle>, crate::drive::DriveError>;
+}
+
 // ---- codex app-server (persistent daemon) ----------------------------------------
 
 /// A connection to a running **codex app-server** daemon (JSON-RPC over its control

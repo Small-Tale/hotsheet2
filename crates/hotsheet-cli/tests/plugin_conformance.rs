@@ -245,6 +245,14 @@ fn assert_valid_mcp(id: &str, format: &str, server_name: &str, text: &str) {
                 "[{id}] MCP TOML missing mcp_servers.{server_name}"
             );
         }
+        "opencode-json" => {
+            let v: serde_json::Value = serde_json::from_str(text)
+                .unwrap_or_else(|e| panic!("[{id}] OpenCode MCP JSON invalid: {e}"));
+            assert!(
+                v["mcp"][server_name]["command"].is_array(),
+                "[{id}] OpenCode config missing mcp.{server_name}.command"
+            );
+        }
         other => panic!("[{id}] conformance can't validate MCP format '{other}'"),
     }
 }

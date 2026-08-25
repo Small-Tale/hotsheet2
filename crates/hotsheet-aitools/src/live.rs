@@ -116,6 +116,7 @@ pub fn run_trigger(
                 env: t.env.clone(),
                 app_server: None,
                 channel: Some(&channel),
+                acp: None,
             };
             drive_and_stream(plugin, t, &ctx, registry, on_event)
         }
@@ -154,6 +155,7 @@ pub fn run_trigger(
                 env: t.env.clone(),
                 app_server: Some(&app),
                 channel: None,
+                acp: None,
             };
             drive_and_stream(plugin, t, &ctx, registry, on_event)
         }
@@ -164,6 +166,7 @@ pub fn run_trigger(
                 env: t.env.clone(),
                 app_server: None,
                 channel: None,
+                acp: None,
             };
             drive_and_stream(plugin, t, &ctx, registry, on_event)
         }

@@ -7,6 +7,7 @@
 
 use hotsheet_plugins::Plugin;
 
+use crate::acp::AcpDrive;
 use crate::appserver::AppServerDrive;
 use crate::claude::ClaudeChannelDrive;
 use crate::drive::{Drive, DriveCtx, DriveError, Target, TurnHandle};
@@ -36,7 +37,7 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
             interrupt: spec.interrupt,
             resume_flag: spec.resume_flag.clone(),
         }))),
-        // acp (OpenCode/Goose) lands with its drive later.
+        "acp" => Some(Box::new(AcpDrive)),
         _ => None,
     }
 }

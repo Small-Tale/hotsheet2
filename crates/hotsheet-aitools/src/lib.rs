@@ -9,6 +9,7 @@
 //! persistent-channel (Claude) drive, permission bridge, connection registry, and the
 //! async `TurnEvent` stream land next.
 
+pub mod acp;
 pub mod appserver;
 pub mod claude;
 pub mod codex;
@@ -24,6 +25,7 @@ pub mod safe_trigger;
 pub mod spawn;
 pub mod system;
 
+pub use acp::{AcpDrive, usage as acp_usage};
 pub use appserver::AppServerDrive;
 pub use claude::{ClaudeChannel, ClaudeChannelDrive, ClaudeStreamTransport, claude_result_usage};
 pub use codex::{
@@ -45,8 +47,8 @@ pub use permission::{
     append_rule as append_permission_rule, load_rules as load_permission_rules,
 };
 pub use ports::{
-    AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner, RpcReader,
-    RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
+    AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner,
+    RpcReader, RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
 };
 pub use registry::{Connection, ConnectionRegistry, Role};
 pub use safe_trigger::{SafeTrigger, prepare_trigger};

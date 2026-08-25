@@ -29,6 +29,7 @@ pub use setup::{SetupError, SetupReport, mcp_command, run_setup, run_setup_in};
 static CLAUDE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/claude");
 static CODEX: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/codex");
 static ANTIGRAVITY: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/antigravity");
+static OPENCODE: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../plugins/opencode");
 
 /// A failure loading a plugin.
 #[derive(Debug, thiserror::Error)]
@@ -350,7 +351,7 @@ impl Plugin {
 }
 
 /// The MCP config formats the setup writer understands.
-pub const KNOWN_MCP_FORMATS: &[&str] = &["claude-json", "codex-toml"];
+pub const KNOWN_MCP_FORMATS: &[&str] = &["claude-json", "codex-toml", "opencode-json"];
 
 /// Whether `p` is a project-relative path that stays inside the project — no absolute
 /// path, no `..`, no drive prefix. This is the guardrail against a plugin declaring a
@@ -368,7 +369,7 @@ pub fn is_safe_rel_path(p: &str) -> bool {
 /// Every bundled first-party plugin, loaded through the same path a third-party
 /// plugin uses. Panics only on a build-time-embedded malformed plugin (a bug).
 pub fn builtin_plugins() -> Vec<Plugin> {
-    [&CLAUDE, &CODEX, &ANTIGRAVITY]
+    [&CLAUDE, &CODEX, &ANTIGRAVITY, &OPENCODE]
         .into_iter()
         .map(|d| Plugin::from_dir(d).expect("bundled first-party plugin must load"))
         .collect()

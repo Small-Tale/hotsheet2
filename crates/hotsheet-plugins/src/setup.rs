@@ -212,6 +212,7 @@ fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String, Set
     match p.manifest.mcp.format.as_str() {
         "claude-json" => write_mcp_json(&target, name, &command, &args)?,
         "codex-toml" => write_mcp_toml(&target, name, &command, &args)?,
+        "opencode-json" => write_mcp_opencode_json(&target, name, &command, &args)?,
         other => {
             return Err(SetupError::UnknownMcpFormat {
                 id: p.id().to_string(),
@@ -334,6 +335,38 @@ fn write_mcp_json(
     servers.as_object_mut().unwrap().insert(
         name.to_string(),
         serde_json::json!({ "command": command, "args": args }),
+    );
+    write_file(
+        target,
+        &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
+    )
+}
+
+/// OpenCode project config: `{ "mcp": { "<name>": { type: "local", command: [...] } } }`.
+fn write_mcp_opencode_json(
+    target: &Path,
+    name: &str,
+    command: &str,
+    args: &[String],
+) -> Result<(), SetupError> {
+    let mut root: serde_json::Value = std::fs::read_to_string(target)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({ "$schema": "https://opencode.ai/config.json" }));
+    let mcp = root
+        .as_object_mut()
+        .unwrap()
+        .entry("mcp")
+        .or_insert_with(|| serde_json::json!({}));
+    if !mcp.is_object() {
+        *mcp = serde_json::json!({});
+    }
+    let mut command_line = vec![command.to_string()];
+    command_line.extend_from_slice(args);
+    mcp.as_object_mut().unwrap().insert(
+        name.to_string(),
+        serde_json::json!({ "type": "local", "command": command_line }),
     );
     write_file(
         target,

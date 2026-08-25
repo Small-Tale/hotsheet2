@@ -135,8 +135,13 @@ Metrics can be shared across a team **through git** — no server sync needed:
   `cache_creation_input_tokens`, and `output_tokens` in the stream-json result; those three
   input classes are summed, and top-level `total_cost_usd` is carried through
   `drive::Usage.cost_usd` (the live result omitted model). Both live tests require positive
-  parsed input/output counts, so future silent schema drift fails the gated tier. Remaining:
-  an **ACP counters mapper** (`source="acp"`) when an ACP tool (OpenCode/Goose) lands.
+  parsed input/output counts, so future silent schema drift fails the gated tier.
+- **ACP/OpenCode (HS2-96BZEF):** `acp_usage` maps only the standard
+  `PromptResponse.usage` input/output counters (snake_case protocol or camelCase SDK
+  spelling) into `drive::Usage`; OpenCode declares `[metrics] source="acp"`. ACP does
+  not guarantee model, cache, or cost attribution, so those fields remain absent rather
+  than inferred. A live OpenCode cassette/drift oracle remains pending with the stdio
+  ACP session client.
 - **Remaining:** wiring the dashboards / cost widget (HS2-47, client).
 
 ## 14.8 Cross-references

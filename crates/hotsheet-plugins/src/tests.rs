@@ -88,6 +88,23 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
 }
 
 #[test]
+fn opencode_declares_acp_setup_drive_and_metrics() {
+    let p = find_in("opencode", &[]).expect("OpenCode plugin present");
+    assert!(
+        p.manifest
+            .detection
+            .binaries
+            .iter()
+            .any(|b| b == "opencode")
+    );
+    assert!(p.skill().is_none());
+    assert_eq!(p.manifest.mcp.format, "opencode-json");
+    assert_eq!(p.manifest.mcp.target, "opencode.json");
+    assert_eq!(p.manifest.drive.as_ref().unwrap().transport, "acp");
+    assert_eq!(p.manifest.metrics.as_ref().unwrap().source, "acp");
+}
+
+#[test]
 fn antigravity_is_a_spawn_resume_plugin() {
     let p = find_in("antigravity", &[]).expect("antigravity plugin");
     assert_eq!(p.manifest.product_name, "Antigravity");

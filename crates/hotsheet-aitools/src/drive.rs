@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use crate::ports::{AppServerClient, ProcessSpawner};
+use crate::ports::{AcpClient, AppServerClient, ProcessSpawner};
 
 /// The transport a tool speaks — a **declarative data tag** (identity, not behavior),
 /// so a client and the server agree without a mirror (`docs/13` §13.3). It routes `run`
@@ -55,6 +55,8 @@ pub struct DriveCtx<'a> {
     /// Present for the Claude channel drive (a turn on a running `claude` stream-json
     /// session); other transports ignore it.
     pub channel: Option<&'a dyn ClaudeChannelClient>,
+    /// Present for an ACP subprocess/session (OpenCode); other transports ignore it.
+    pub acp: Option<&'a dyn AcpClient>,
 }
 
 /// Why a turn finished.

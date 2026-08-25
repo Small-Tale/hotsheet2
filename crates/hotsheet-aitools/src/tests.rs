@@ -64,6 +64,7 @@ fn ctx<'a>(spawner: &'a FakeSpawner, cwd: &str) -> DriveCtx<'a> {
         env: Vec::new(),
         app_server: None,
         channel: None,
+        acp: None,
     }
 }
 
@@ -130,6 +131,7 @@ fn appctx<'a>(spawner: &'a FakeSpawner, app: &'a FakeAppServer, cwd: &str) -> Dr
         env: Vec::new(),
         app_server: Some(app),
         channel: None,
+        acp: None,
     }
 }
 
@@ -406,6 +408,7 @@ fn codex_client_drives_the_appserver_drive_end_to_end() {
         env: Vec::new(),
         app_server: Some(&cx),
         channel: None,
+        acp: None,
     };
     let mut turn = AppServerDrive::new()
         .run(&Target::default(), "work the top ticket", &ctx)
@@ -637,6 +640,7 @@ fn chanctx<'a>(spawner: &'a FakeSpawner, ch: &'a ClaudeChannel, cwd: &str) -> Dr
         env: Vec::new(),
         app_server: None,
         channel: Some(ch),
+        acp: None,
     }
 }
 
