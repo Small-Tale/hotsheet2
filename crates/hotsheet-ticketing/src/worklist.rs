@@ -12,7 +12,9 @@ use std::path::Path;
 
 use hotsheet_model::{Priority, Status, Ticket};
 
+use crate::auto_context::{self, AutoContextEntry};
 use crate::ops::{is_open, priority_rank};
+use crate::settings::Settings;
 use crate::store::{FsStore, StoreError};
 
 /// The derived file's name at the store root.
@@ -22,6 +24,11 @@ pub const WORKLIST_FILE: &str = "worklist.md";
 /// statuses are excluded), ordered the way a worker reads them: **Up Next first, then by
 /// priority, then newest-first** within a priority. Deterministic — same input, same bytes.
 pub fn render(tickets: &[Ticket]) -> String {
+    render_with_auto_context(tickets, &auto_context::defaults())
+}
+
+/// Render with an already-resolved effective auto-context list.
+pub fn render_with_auto_context(tickets: &[Ticket], entries: &[AutoContextEntry]) -> String {
     let mut open: Vec<&Ticket> = tickets.iter().filter(|t| is_open(t)).collect();
     // Sort key: up_next (true first), then priority rank (highest first), then created
     // recency (newest first — ULIDs/timestamps sort chronologically).
@@ -42,7 +49,7 @@ pub fn render(tickets: &[Ticket]) -> String {
         out.push_str("_(nothing queued)_\n\n");
     } else {
         for t in &up_next {
-            out.push_str(&line(t));
+            out.push_str(&entry(t, entries));
         }
         out.push('\n');
     }
@@ -53,7 +60,19 @@ pub fn render(tickets: &[Ticket]) -> String {
         out.push_str("_(no other open tickets)_\n");
     } else {
         for t in &rest {
-            out.push_str(&line(t));
+            out.push_str(&entry(t, entries));
+        }
+    }
+    out
+}
+
+fn entry(ticket: &Ticket, entries: &[AutoContextEntry]) -> String {
+    let mut out = line(ticket);
+    for context in auto_context::resolve(ticket, entries) {
+        for line in context.text.lines() {
+            out.push_str("  > ");
+            out.push_str(line);
+            out.push('\n');
         }
     }
     out
@@ -120,7 +139,9 @@ fn status_label(s: Status) -> &'static str {
 pub fn regenerate(store: &FsStore) -> Result<usize, StoreError> {
     let tickets = store.list_tickets()?;
     let n = tickets.iter().filter(|t| is_open(t)).count();
-    let body = render(&tickets);
+    let entries = auto_context::effective(&Settings::new(store.root()))
+        .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
+    let body = render_with_auto_context(&tickets, &entries);
     let path = store.root().join(WORKLIST_FILE);
     std::fs::write(&path, body)?;
     ensure_gitignored(store.root(), WORKLIST_FILE)?;
@@ -285,5 +306,27 @@ mod tests {
         assert!(rendered.contains("\\[link\\]\\(javascript:x\\) &lt;script&gt; \\# heading"));
         assert!(!rendered.contains("<script>"));
         assert!(!rendered.contains("[link](javascript:x)"));
+    }
+
+    #[test]
+    fn render_injects_default_and_tag_context_under_each_ticket() {
+        let mut ticket = Ticket::new(
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5EFG").unwrap(),
+            "HS-CONTEXT",
+            "fix it",
+            "bug",
+            ts("0"),
+            ts("0"),
+        );
+        ticket.tags = vec!["Security".into()];
+        let mut entries = auto_context::defaults();
+        entries.push(AutoContextEntry {
+            source: crate::auto_context::AutoContextSource::Tag,
+            key: "security".into(),
+            text: "Threat model first.".into(),
+        });
+        let rendered = render_with_auto_context(&[ticket], &entries);
+        assert!(rendered.contains("  > Reproduce the bug first"));
+        assert!(rendered.contains("  > Threat model first."));
     }
 }

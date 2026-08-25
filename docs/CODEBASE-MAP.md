@@ -50,6 +50,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
+      src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
+      src/secrets.rs         #   injected SecretStore + OS keychain adapters + metadata-only provider registry (HS2-M1XMSX)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
@@ -142,7 +144,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   separate git store and links the current code project in one shot. Subcommands: `init`, `link`, `new`
   (incl. `--blocked-by`), `ls` (filters/sort/text/`--limit`), `show`, `edit`
   (incl. `--blocked-by`/`--clear-blocked-by`), `close`, `setup` (AI-tool setup, headless),
-  `plugin` (list/install/remove external plugins), `settings` (get/set/list, shared|local),
+  `plugin` (list/install/remove external plugins), `settings` (get/set/list,
+  global|shared|local), `key` (OS-keychain-backed set/get/list/delete),
   `import`, `doctor`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":
   drive a real AI tool for the project and stream one turn — HS2-109; HS2-103 launch
   safety baked in — HS2-117), `work` (the headless loop: `trigger` one turn at a time
@@ -175,6 +178,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 - **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`
   (local, gitignored), plus **global** `${HOTSHEET_HOME}/settings.json` (machine-wide) —
   flat key→JSON maps, effective precedence global<shared<local. See `settings.rs::Settings`.
+- **Provider keys:** `${HOTSHEET_HOME}/keys.json` contains non-secret provider metadata;
+  values live in the OS credential store. Settings carry only `{ "secret": "provider" }`.
+  See `secrets.rs::{SecretStore,KeyRegistry,resolve_setting_secret}`.
 - **People roster:** `people.json` (shared, committed) — `{people:[{email,name?,github?}]}`
   mapping git identity → display name for assignment. See `roster.rs::Roster` (HS2-20).
 - **Multi-store discovery:** `${HOTSHEET_HOME}/stores.json` — `{"stores":["/path/a",…]}`,

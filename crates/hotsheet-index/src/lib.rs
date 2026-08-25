@@ -627,6 +627,7 @@ impl Index {
                     worker_label: r.get(18)?,
                     claim_count: r.get::<_, i64>(19)? as u32,
                     legacy_number: r.get(20)?,
+                    auto_context: Vec::new(),
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

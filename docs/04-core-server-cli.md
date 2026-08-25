@@ -180,6 +180,8 @@ hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
 hotsheet claim-next --worker worker-1     # coordination primitive
+printf '%s' "$PROVIDER_KEY" | hotsheet key set openai  # stdin only; never argv/settings
+hotsheet key list                         # provider names only, never values
 ```
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
@@ -361,6 +363,22 @@ Shared settings are versioned by the same git as tickets (diffable, mergeable vi
 the same driver where sensible); local settings are disposable machine state. The
 `plugins` module reads the enabled-plugin set from settings to decide what `hotsheet
 setup` writes ([05](05-ai-tool-plugins.md) §5.1a).
+
+### 4.7.1 Secure provider keys
+
+> **Built (HS2-M1XMSX):** `hotsheet_ticketing::secrets` provides an injected
+> `SecretStore` port, native macOS Keychain (`security`) and Linux Secret Service
+> (`secret-tool`) adapters, and a global provider registry. `hotsheet key
+> set|get|list|delete` is the headless CLI surface; `set` accepts the value only on
+> stdin. `${HOTSHEET_HOME}/keys.json` contains provider names and fallback environment
+> variable names only, is mode `0600` on Unix, and never contains secret values.
+
+Settings refer to a secret as `{ "secret": "provider-id" }`; consumers call the
+shared resolver, which fetches the value from the OS credential store. If no credential
+exists, the only fallback is the explicit read-only environment variable
+`HOTSHEET_API_KEY_<NORMALIZED_PROVIDER>`. There is deliberately no plaintext file
+fallback: an unavailable keychain makes writes fail closed. Secret values must not be
+placed in project/global settings, ticket files, logs, diagnostics, or command arguments.
 
 ## 4.8 Open items
 - **Language confirmation** (Rust vs Go) — [09-technology-decisions.md](09-technology-decisions.md) §9.2.

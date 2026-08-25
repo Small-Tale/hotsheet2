@@ -13,6 +13,8 @@
 use hotsheet_model::{CloseReason, NoteKind, Priority, Status, Ticket, Timestamp};
 use serde::Serialize;
 
+use crate::auto_context::{self, AutoContextEntry, TicketAutoContext};
+
 /// The full ticket on the wire (unlike the frontmatter-only serde on [`Ticket`],
 /// this carries the Markdown body and the notes).
 #[derive(Debug, Clone, Serialize)]
@@ -48,6 +50,8 @@ pub struct ApiTicket {
     pub legacy_number: Option<String>,
     pub schema: u32,
     pub notes: Vec<ApiNote>,
+    /// Computed standing guidance; never persisted in the ticket file.
+    pub auto_context: Vec<TicketAutoContext>,
 }
 
 /// One note entry on the wire.
@@ -100,7 +104,16 @@ impl From<&Ticket> for ApiTicket {
                     text: n.text.clone(),
                 })
                 .collect(),
+            auto_context: Vec::new(),
         }
+    }
+}
+
+impl ApiTicket {
+    pub fn with_auto_context(ticket: &Ticket, entries: &[AutoContextEntry]) -> Self {
+        let mut wire = Self::from(ticket);
+        wire.auto_context = auto_context::resolve(ticket, entries);
+        wire
     }
 }
 
@@ -137,6 +150,8 @@ pub struct TicketRow {
     pub worker_label: Option<String>,
     pub claim_count: u32,
     pub legacy_number: Option<String>,
+    /// Computed standing guidance; never persisted in the index or ticket file.
+    pub auto_context: Vec<TicketAutoContext>,
 }
 
 impl From<&Ticket> for TicketRow {
@@ -164,6 +179,7 @@ impl From<&Ticket> for TicketRow {
             worker_label: t.worker_label.clone(),
             claim_count: t.claim_count,
             legacy_number: t.legacy_number.clone(),
+            auto_context: Vec::new(),
         }
     }
 }
@@ -181,6 +197,14 @@ impl TicketRow {
     /// e.g. one produced by the index's SQL).
     pub fn make_compact(&mut self) {
         self.details.clear();
+    }
+
+    pub fn add_auto_context(&mut self, entries: &[AutoContextEntry]) {
+        self.auto_context = auto_context::resolve_fields(
+            self.category.as_deref().unwrap_or_default(),
+            &self.tags,
+            entries,
+        );
     }
 }
 

@@ -343,7 +343,13 @@ Per the ticket's "evaluate other AI-tool interface concepts to carry over":
   so the AI tool gets the right context automatically for each ticket. It rides the
   worklist-as-file contract (the guidance is composed into `worklist.md` during
   generation — [03](03-indexing-and-query.md) §3.6), so it works for every tool with
-  no per-tool code.
+  no per-tool code. **Built (HS2-BZBVAS):** HS1-compatible read-time category
+  defaults plus global/shared/local overrides are resolved once in
+  `hotsheet_ticketing::auto_context`; an explicit empty entry suppresses a default,
+  category matching is exact, and tag matching is case-insensitive with matched tags
+  sorted by key. The computed structured `{source,key,text}` blocks are returned by
+  REST and both MCP modes for get/query/claim and rendered beneath each generated
+  worklist row. They are never persisted in a ticket or the index.
 - **Skills/instructions generation** for editor tools (Cursor/Copilot/Windsurf) —
   keep; it's the whole Tier-B story and already tool-agnostic in HS1.
 - **Self-claim worker loop + worktrees** (the `/hotsheet-worker` skill) — keep the

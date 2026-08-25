@@ -20,12 +20,14 @@ pub mod ports;
 pub mod pricing;
 pub mod registry;
 pub mod roster;
+pub mod secrets;
 pub mod settings;
 pub mod store;
 pub mod sync;
 pub mod wire;
 pub mod worklist;
 pub use activity::{ActivityEvent, ActivityKind, Importance, TimelineFilter};
+pub use auto_context::{AutoContextEntry, AutoContextSource, TicketAutoContext};
 pub use distclaim::{ClaimMarker, ClaimResult, DistError};
 pub use identity::{ME, current_user_email, resolve_me};
 pub use merge::{BodyMerge, MergeOutcome, merge_tickets};
@@ -35,6 +37,9 @@ pub use overlay::LocalOverlay;
 pub use ports::{Clock, Rng};
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};
+pub use secrets::{
+    KeyMetadata, KeyRegistry, OsKeychain, SecretError, SecretStore, resolve_setting_secret,
+};
 pub use settings::{Scope, Settings, SettingsError};
 pub use store::{FsStore, StoreError, StoreMetadata};
 pub use sync::{SyncReport, sync_once};
@@ -86,3 +91,4 @@ mod tests {
         );
     }
 }
+pub mod auto_context;

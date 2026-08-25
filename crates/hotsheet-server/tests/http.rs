@@ -90,6 +90,8 @@ async fn create_get_update_close_and_query() {
     assert_eq!(created["title"], "Fix flicker");
     assert_eq!(created["priority"], "high");
     assert_eq!(created["up_next"], true);
+    assert_eq!(created["auto_context"][0]["source"], "category");
+    assert_eq!(created["auto_context"][0]["key"], "bug");
 
     // get (by slug)
     let resp = app
@@ -98,7 +100,9 @@ async fn create_get_update_close_and_query() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    assert_eq!(body_json(resp).await["slug"], slug);
+    let fetched = body_json(resp).await;
+    assert_eq!(fetched["auto_context"][0]["key"], "bug");
+    assert_eq!(fetched["slug"], slug);
 
     // update status -> stamps completed_at
     let resp = app

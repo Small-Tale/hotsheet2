@@ -27,7 +27,8 @@ use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
 use hotsheet_model::{CloseReason, NoteKind, Ticket, Timestamp, Ulid, parse_file, to_file_string};
 use hotsheet_ticketing::{
-    FsStore, NewTicket, OpError, SortKey, StoreError, StoreRegistry, TicketPatch, TicketQuery, ops,
+    FsStore, NewTicket, OpError, Settings, SortKey, StoreError, StoreRegistry, TicketPatch,
+    TicketQuery, auto_context, ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -728,6 +729,11 @@ async fn list_tickets(
             row.make_compact();
         }
     }
+    let contexts = auto_context::effective(&Settings::new(state.store.root()))
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    for row in &mut rows {
+        row.add_auto_context(&contexts);
+    }
     Ok(Json(rows_to_json(rows, &fields)))
 }
 
@@ -736,7 +742,13 @@ async fn get_ticket(
     Path(id): Path<String>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let ticket = ops::resolve(&state.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    Ok(Json((&ticket).into()))
+    Ok(Json(api_ticket(&state.default_entry(), &ticket)?))
+}
+
+fn api_ticket(entry: &StoreEntry, ticket: &Ticket) -> Result<ApiTicket, ApiError> {
+    let contexts = auto_context::effective(&Settings::new(entry.store.root()))
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(ApiTicket::with_auto_context(ticket, &contexts))
 }
 
 // ---- activity timeline (HS2-KP31ZE) ----------------------------------------------
@@ -912,6 +924,11 @@ async fn list_store_tickets(
             row.make_compact();
         }
     }
+    let contexts = auto_context::effective(&Settings::new(entry.store.root()))
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    for row in &mut rows {
+        row.add_auto_context(&contexts);
+    }
     Ok(Json(rows_to_json(rows, &fields)))
 }
 
@@ -933,7 +950,7 @@ fn do_create(state: &AppState, entry: &StoreEntry, req: CreateReq) -> Result<Api
     };
     let ticket = ops::create(&entry.store, Ulid::new(), &prefix, now(), new)?;
     state.changed_in(entry, "created", &ticket);
-    Ok((&ticket).into())
+    api_ticket(entry, &ticket)
 }
 
 fn do_update(
@@ -976,7 +993,7 @@ fn do_update(
         None => updated,
     };
     state.changed_in(entry, "updated", &latest);
-    Ok((&latest).into())
+    api_ticket(entry, &latest)
 }
 
 fn do_close(
@@ -997,7 +1014,7 @@ fn do_close(
     };
     let closed = ops::close(&entry.store, &ticket.id, now(), reason, dup)?;
     state.changed_in(entry, "closed", &closed);
-    Ok((&closed).into())
+    api_ticket(entry, &closed)
 }
 
 async fn create_ticket(
@@ -1063,7 +1080,12 @@ async fn claim_next_ticket(
     if let Some(t) = &claimed {
         state.changed_in(&entry, "claimed", t);
     }
-    Ok(Json(claimed.as_ref().map(ApiTicket::from)))
+    Ok(Json(
+        claimed
+            .as_ref()
+            .map(|ticket| api_ticket(&entry, ticket))
+            .transpose()?,
+    ))
 }
 
 /// `POST /tickets/{id}/release` — release a claim (holder-only unless `force`).
@@ -1083,7 +1105,7 @@ async fn release_ticket(
         req.force.unwrap_or(false),
     )?;
     state.changed_in(&entry, "released", &released);
-    Ok(Json((&released).into()))
+    Ok(Json(api_ticket(&entry, &released)?))
 }
 
 /// `POST /tickets/{id}/renew` — extend a claim's lease (holder-only).
@@ -1099,7 +1121,7 @@ async fn renew_ticket(
     let worker = req.worker.unwrap_or_else(|| "worker".into());
     let renewed = ops::renew(&entry.store, &ticket.id, now, lease, &worker)?;
     state.changed_in(&entry, "renewed", &renewed);
-    Ok(Json((&renewed).into()))
+    Ok(Json(api_ticket(&entry, &renewed)?))
 }
 
 // ---- permission round-trip (HS2-9R9YZW) ------------------------------------------
@@ -1982,7 +2004,7 @@ async fn copy_ticket_route(
         StatusCode::CREATED,
         Json(CopyResult {
             store: multistore::store_url_id(&dest.store),
-            ticket: (&new).into(),
+            ticket: api_ticket(&dest, &new)?,
         }),
     ))
 }
@@ -2015,7 +2037,7 @@ async fn move_ticket_route(
         store: multistore::store_url_id(&dest.store),
         source_store: multistore::store_url_id(&src.store),
         tombstone: outcome.tombstone.slug.clone(),
-        ticket: (&outcome.moved).into(),
+        ticket: api_ticket(&dest, &outcome.moved)?,
     }))
 }
 
@@ -2063,7 +2085,7 @@ async fn get_store_ticket(
 ) -> Result<Json<ApiTicket>, ApiError> {
     let entry = scoped_entry(&state, &store_id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    Ok(Json((&ticket).into()))
+    Ok(Json(api_ticket(&entry, &ticket)?))
 }
 
 /// A cross-store resolve result: the ticket + which hosted store it lives in.
@@ -2088,9 +2110,10 @@ async fn resolve_ticket(
         .host
         .resolve(&ulid)?
         .ok_or_else(|| ApiError::not_found(&id))?;
+    let entry = scoped_entry(&state, &store)?;
     Ok(Json(ResolvedTicket {
         store,
-        ticket: (&ticket).into(),
+        ticket: api_ticket(&entry, &ticket)?,
     }))
 }
 

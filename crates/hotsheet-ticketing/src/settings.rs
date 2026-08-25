@@ -28,6 +28,11 @@ pub enum SettingsError {
         path: String,
         source: serde_json::Error,
     },
+    #[error("invalid setting {key}: {source}")]
+    Invalid {
+        key: String,
+        source: serde_json::Error,
+    },
 }
 
 /// Which settings file a read/write targets.

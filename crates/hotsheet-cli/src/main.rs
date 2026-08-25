@@ -146,6 +146,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: SettingsCmd,
     },
+    /// Manage global provider API keys in the OS credential store (values never enter settings).
+    Key {
+        #[command(subcommand)]
+        cmd: KeyCmd,
+    },
     /// Import an HS1 `hotsheet-export.json` into the store (creates it if needed).
     Import {
         file: PathBuf,
@@ -432,6 +437,18 @@ enum SettingsCmd {
     },
 }
 
+#[derive(Subcommand)]
+enum KeyCmd {
+    /// Store/replace a provider key. Reads the value from stdin, never an argv argument.
+    Set { provider: String },
+    /// Print a provider key to stdout (explicit secret-reveal operation).
+    Get { provider: String },
+    /// List registered provider names and their read-only environment fallbacks.
+    List,
+    /// Delete a provider key from the OS credential store and registry.
+    Delete { provider: String },
+}
+
 /// Filters + sort for `ls` (an in-memory scan; the SQLite/FTS index arrives with HS2-5).
 #[derive(Args)]
 struct LsFilters {
@@ -587,6 +604,7 @@ fn main() -> Result<()> {
         } => cmd_setup(&cli.path, tool, detect, project),
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
+        Cmd::Key { cmd } => cmd_key(cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
         Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
@@ -2021,6 +2039,44 @@ fn cmd_settings(store: &Path, cmd: SettingsCmd) -> Result<()> {
             }
             for (k, v) in &map {
                 println!("{k} = {}", render_value(v));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_key(cmd: KeyCmd) -> Result<()> {
+    use std::io::Read;
+
+    use hotsheet_ticketing::{KeyRegistry, OsKeychain};
+
+    let registry = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
+    match cmd {
+        KeyCmd::Set { provider } => {
+            let mut secret = String::new();
+            std::io::stdin().read_to_string(&mut secret)?;
+            let secret = secret.trim_end_matches(['\r', '\n']);
+            if secret.is_empty() {
+                bail!("refusing to store an empty key; pipe the value on stdin")
+            }
+            registry.set(&provider, secret)?;
+            println!("Stored key for {provider} in the OS credential store");
+        }
+        KeyCmd::Get { provider } => println!("{}", registry.get(&provider)?),
+        KeyCmd::List => {
+            let keys = registry.list()?;
+            if keys.is_empty() {
+                println!("(no registered keys)");
+            }
+            for key in keys {
+                println!("{} (fallback: {})", key.provider, key.env);
+            }
+        }
+        KeyCmd::Delete { provider } => {
+            if registry.delete(&provider)? {
+                println!("Deleted key for {provider}");
+            } else {
+                println!("No registered key for {provider}");
             }
         }
     }

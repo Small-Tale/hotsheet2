@@ -5,6 +5,15 @@ When automation lands, remove the manual-only step and record it below.
 
 ## Current manual checks
 
+### OS credential stores
+
+1. On macOS, pipe a disposable value into `hotsheet-cli key set test-provider` and
+   confirm Keychain Access shows a `com.smalltale.hotsheet2` generic password.
+2. Verify `key get`, `key list`, and `key delete`, and confirm neither
+   `${HOTSHEET_HOME}/keys.json` nor any settings file contains the value.
+3. Repeat on Linux with a live Secret Service session. An unavailable service must fail
+   closed; `HOTSHEET_API_KEY_TEST_PROVIDER` is the explicit read-only fallback.
+
 ### Cross-device terminal sizing
 
 1. Attach macOS and iOS-sized viewers to the same remote terminal.

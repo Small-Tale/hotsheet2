@@ -385,8 +385,8 @@ mod core_backend {
     use super::{Backend, BackendError};
     use hotsheet_model::{NoteKind, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
-        ApiTicket, FsStore, NewTicket, OpError, SortKey, StoreError, StoreRegistry, TicketPatch,
-        TicketQuery, TicketRow, ops,
+        ApiTicket, FsStore, NewTicket, OpError, Settings, SortKey, StoreError, StoreRegistry,
+        TicketPatch, TicketQuery, TicketRow, auto_context, ops,
     };
     use serde_json::Value;
     use std::path::Path;
@@ -439,6 +439,10 @@ mod core_backend {
             let to = str_field(body, "to").ok_or_else(|| bad_request("'to' is required"))?;
             FsStore::open(Path::new(&to)).map_err(store_err)
         }
+
+        fn api(&self, ticket: &Ticket) -> Result<Value, BackendError> {
+            api_for(&self.store, ticket)
+        }
     }
 
     impl Backend for CoreBackend {
@@ -446,15 +450,19 @@ mod core_backend {
             if path == "/tickets" {
                 let q = build_query(query, self.store.root())?;
                 let compact = wants_compact(query);
+                let contexts = auto_context::effective(&Settings::new(self.store.root()))
+                    .map_err(|e| bad_request(e.to_string()))?;
                 let rows: Vec<TicketRow> = ops::query(&self.store, &q)
                     .map_err(store_err)?
                     .iter()
                     .map(|t| {
-                        if compact {
+                        let mut row = if compact {
                             TicketRow::compact(t)
                         } else {
                             TicketRow::from(t)
-                        }
+                        };
+                        row.add_auto_context(&contexts);
+                        row
                     })
                     .collect();
                 // Optional leaner projection (fields=slug,status,…) — HS2-GY3GWT.
@@ -465,7 +473,7 @@ mod core_backend {
             }
             if let Some(id) = ticket_id(path) {
                 let t = self.resolve(id)?;
-                return Ok(to_value(&ApiTicket::from(&t)));
+                return self.api(&t);
             }
             Err(bad_request(format!("unsupported GET {path}")))
         }
@@ -492,7 +500,7 @@ mod core_backend {
                     };
                     let t = ops::create(&self.store, (self.mint)(), &prefix, (self.now)(), new)
                         .map_err(store_err)?;
-                    Ok(to_value(&ApiTicket::from(&t)))
+                    self.api(&t)
                 }
                 "POST" if close_id(path).is_some() => {
                     let t = self.resolve(close_id(path).unwrap())?;
@@ -508,7 +516,7 @@ mod core_backend {
                     };
                     let closed = ops::close(&self.store, &t.id, (self.now)(), reason, dup)
                         .map_err(op_err)?;
-                    Ok(to_value(&ApiTicket::from(&closed)))
+                    self.api(&closed)
                 }
                 "PATCH" if ticket_id(path).is_some() => {
                     let t = self.resolve(ticket_id(path).unwrap())?;
@@ -551,7 +559,7 @@ mod core_backend {
                         .map_err(store_err)?,
                         None => updated,
                     };
-                    Ok(to_value(&ApiTicket::from(&latest)))
+                    self.api(&latest)
                 }
                 // Batch (HS2-86): apply the same update to many tickets, reusing PATCH so the
                 // per-ticket behavior is identical. One bad id doesn't abort the rest.
@@ -594,7 +602,7 @@ mod core_backend {
                     let claimed = ops::claim_next(&self.store, &now, lease, &worker, label)
                         .map_err(store_err)?;
                     Ok(match claimed {
-                        Some(t) => to_value(&ApiTicket::from(&t)),
+                        Some(t) => self.api(&t)?,
                         None => Value::Null,
                     })
                 }
@@ -604,7 +612,7 @@ mod core_backend {
                     let force = body.get("force").and_then(Value::as_bool).unwrap_or(false);
                     let released = ops::release(&self.store, &t.id, (self.now)(), &worker, force)
                         .map_err(op_err)?;
-                    Ok(to_value(&ApiTicket::from(&released)))
+                    self.api(&released)
                 }
                 "POST" if renew_id(path).is_some() => {
                     let t = self.resolve(renew_id(path).unwrap())?;
@@ -613,7 +621,7 @@ mod core_backend {
                     let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
                     let renewed =
                         ops::renew(&self.store, &t.id, now, lease, &worker).map_err(op_err)?;
-                    Ok(to_value(&ApiTicket::from(&renewed)))
+                    self.api(&renewed)
                 }
                 // Cross-store copy (HS2-60 / HS2-S4H2AM): serverless, `to` is the
                 // destination store's path. New ULID + `copied_from`; source untouched.
@@ -624,7 +632,7 @@ mod core_backend {
                         ops::copy_ticket(&self.store, &dest, &t.id, (self.mint)(), (self.now)())
                             .map_err(op_err)?;
                     Ok(with_store(
-                        to_value(&ApiTicket::from(&new)),
+                        api_for(&dest, &new)?,
                         &[("store", StoreRegistry::store_id(&dest))],
                     ))
                 }
@@ -648,7 +656,7 @@ mod core_backend {
                         ops::move_ticket(&self.store, &dest, &t.id, &dest_id, (self.now)())
                             .map_err(op_err)?;
                     Ok(with_store(
-                        to_value(&ApiTicket::from(&outcome.moved)),
+                        api_for(&dest, &outcome.moved)?,
                         &[
                             ("store", dest_id),
                             ("source_store", StoreRegistry::store_id(&self.store)),
@@ -818,6 +826,12 @@ mod core_backend {
 
     fn to_value<T: serde::Serialize>(v: &T) -> Value {
         serde_json::to_value(v).unwrap_or(Value::Null)
+    }
+
+    fn api_for(store: &FsStore, ticket: &Ticket) -> Result<Value, BackendError> {
+        let contexts = auto_context::effective(&Settings::new(store.root()))
+            .map_err(|e| bad_request(e.to_string()))?;
+        Ok(to_value(&ApiTicket::with_auto_context(ticket, &contexts)))
     }
 
     fn str_field(body: &Value, key: &str) -> Option<String> {
@@ -1457,6 +1471,7 @@ mod tests {
         );
         assert_eq!(claimed["slug"], slug);
         assert_eq!(claimed["claimed_by"], "agent-1");
+        assert_eq!(claimed["auto_context"][0]["key"], "issue");
 
         // Renew extends the lease (holder only).
         let renewed = call(

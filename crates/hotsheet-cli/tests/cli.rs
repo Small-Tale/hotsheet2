@@ -1135,6 +1135,10 @@ fn worklist_regenerates_a_derived_file() {
     let body = std::fs::read_to_string(p.join("worklist.md")).unwrap();
     assert!(body.contains("## Up Next"));
     assert!(body.contains("draft the readme"));
+    assert!(
+        body.contains("Clarify the problem and its impact before acting"),
+        "default issue auto-context is injected"
+    );
 
     // It's gitignored (derived output, not committed).
     let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
@@ -1199,6 +1203,62 @@ fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
         .assert()
         .success()
         .stdout(predicate::str::contains("vim"));
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let project = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let value_file = home.path().join("fake-value");
+    let program = if cfg!(target_os = "macos") {
+        "security"
+    } else {
+        "secret-tool"
+    };
+    let script = if cfg!(target_os = "macos") {
+        "#!/bin/sh\ncase \"$1\" in\nadd-generic-password) IFS= read -r value; printf %s \"$value\" > \"$FAKE_KEYCHAIN_FILE\";;\nfind-generic-password) test -f \"$FAKE_KEYCHAIN_FILE\" && cat \"$FAKE_KEYCHAIN_FILE\";;\ndelete-generic-password) test -f \"$FAKE_KEYCHAIN_FILE\" && rm \"$FAKE_KEYCHAIN_FILE\";;\nesac\n"
+    } else {
+        "#!/bin/sh\ncase \"$1\" in\nstore) IFS= read -r value; printf %s \"$value\" > \"$FAKE_KEYCHAIN_FILE\";;\nlookup) test -f \"$FAKE_KEYCHAIN_FILE\" && cat \"$FAKE_KEYCHAIN_FILE\";;\nclear) test -f \"$FAKE_KEYCHAIN_FILE\" && rm \"$FAKE_KEYCHAIN_FILE\";;\nesac\n"
+    };
+    let executable = bin.path().join(program);
+    std::fs::write(&executable, script).unwrap();
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}:{}",
+        bin.path().display(),
+        std::env::var("PATH").unwrap()
+    );
+
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_FILE", &value_file)
+        .env("PATH", &path)
+        .args(["key", "set", "openai"])
+        .write_stdin("do-not-write-me\n")
+        .assert()
+        .success();
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_FILE", &value_file)
+        .env("PATH", &path)
+        .args(["key", "get", "openai"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("do-not-write-me"));
+    let metadata = std::fs::read_to_string(home.path().join("keys.json")).unwrap();
+    assert!(metadata.contains("openai"));
+    assert!(!metadata.contains("do-not-write-me"));
+    hs(project.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("FAKE_KEYCHAIN_FILE", &value_file)
+        .env("PATH", &path)
+        .args(["key", "delete", "openai"])
+        .assert()
+        .success();
 }
 
 #[test]
