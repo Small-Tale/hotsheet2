@@ -52,7 +52,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
       src/secrets.rs         #   injected SecretStore + OS keychain adapters + metadata-only provider registry (HS2-M1XMSX)
-      src/checkouts.rs       #   readable path-derived checkout ids + machine registry; many-to-many checkout/store discovery (HS2-NGC8AE)
+      src/checkouts.rs       #   readable path-derived checkout ids + machine registry; many-to-many checkout/store discovery and scoped routing (HS2-NGC8AE/VSPFD9)
       src/repository_status.rs # git porcelain-v2 repository snapshot parser/runner (HS2-RPVFA4)
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
       src/commands.rs        #   typed safe argv command settings schema (HS2-JN3X4W)

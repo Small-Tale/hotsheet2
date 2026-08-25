@@ -118,6 +118,88 @@ async fn checkout_registry_is_authenticated_and_resolvable() {
 }
 
 #[tokio::test]
+async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
+    let (primary, st) = state();
+    let extra = tempfile::tempdir().unwrap();
+    FsStore::init(extra.path(), &StoreMetadata::new("EX")).unwrap();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let added = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/stores",
+                Some(&serde_json::json!({"path":extra.path()}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let store_id = added["id"].as_str().unwrap();
+    let registration=serde_json::json!({"root":checkout.path(),"alias":"combo","stores":[primary.path(),extra.path()] }).to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/combo/tickets",
+                Some(r#"{"title":"Scoped"}"#)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/combo/tickets?store={store_id}"),
+                Some(r#"{"title":"Scoped"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let slug = created["slug"].as_str().unwrap();
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/checkouts/combo/tickets", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["store"], store_id);
+    let got = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/combo/tickets/{slug}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(got["title"], "Scoped");
+    let updated = body_json(
+        app.oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/combo/tickets/{slug}"),
+            Some(r#"{"title":"Updated"}"#),
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(updated["title"], "Updated");
+}
+
+#[tokio::test]
 async fn repository_status_endpoint_reports_real_git_state() {
     let (_d, st) = state();
     let checkout = tempfile::tempdir().unwrap();

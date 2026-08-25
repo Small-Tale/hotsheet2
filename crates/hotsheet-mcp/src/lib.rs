@@ -107,12 +107,13 @@ fn tools_list() -> Value {
                 "page_after": str_prop("keyset cursor: a ULID; return only rows strictly after it in sort order (page a large store without OFFSET)"),
                 "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept"),
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
+                ,"checkout": str_prop("optional checkout id/alias/path; aggregates all linked stores")
             } }
         },
         {
             "name": "hotsheet_get",
             "description": "Fetch one ticket by slug or ULID.",
-            "inputSchema": { "type": "object", "properties": { "id": str_prop("slug or ULID") }, "required": ["id"] }
+            "inputSchema": { "type": "object", "properties": { "id": str_prop("slug or ULID"), "checkout": str_prop("optional checkout id/alias/path") }, "required": ["id"] }
         },
         {
             "name": "hotsheet_create",
@@ -123,6 +124,7 @@ fn tools_list() -> Value {
                 "details": str_prop(""), "tags": { "type": "array", "items": { "type": "string" } },
                 "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "blocker tickets (slug or ULID)" }
+                ,"checkout": str_prop("optional checkout id/alias/path"), "store": str_prop("linked store id; required when checkout has multiple stores")
             }, "required": ["title"] }
         },
         {
@@ -135,6 +137,7 @@ fn tools_list() -> Value {
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
                 "note": str_prop("append a progress note")
+                ,"checkout": str_prop("optional checkout id/alias/path")
             }, "required": ["id"] }
         },
         {
@@ -144,6 +147,7 @@ fn tools_list() -> Value {
                 "id": str_prop("slug or ULID"),
                 "reason": str_prop("completed|not_planned|duplicate|obsolete"),
                 "duplicate_of": str_prop("required when reason=duplicate")
+                ,"checkout": str_prop("optional checkout id/alias/path")
             }, "required": ["id", "reason"] }
         },
         {
@@ -259,15 +263,37 @@ fn render_result(value: &Value) -> String {
 
 fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, String> {
     match name {
-        "hotsheet_query" => backend.get("/tickets", &query_pairs(args)).map_err(be_msg),
-        "hotsheet_get" => backend
-            .get(&format!("/tickets/{}", arg_str(args, "id")?), &[])
+        "hotsheet_query" => backend
+            .get(&checkout_route(args, "/tickets"), &query_pairs(args))
             .map_err(be_msg),
-        "hotsheet_create" => backend.send("POST", "/tickets", args).map_err(be_msg),
+        "hotsheet_get" => backend
+            .get(
+                &checkout_route(args, &format!("/tickets/{}", arg_str(args, "id")?)),
+                &[],
+            )
+            .map_err(be_msg),
+        "hotsheet_create" => {
+            let query = args
+                .get("store")
+                .and_then(Value::as_str)
+                .map(|v| format!("?store={v}"))
+                .unwrap_or_default();
+            backend
+                .send(
+                    "POST",
+                    &format!("{}{}", checkout_route(args, "/tickets"), query),
+                    &without_many(args, &["checkout", "store"]),
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_update" => {
             let id = arg_str(args, "id")?;
             backend
-                .send("PATCH", &format!("/tickets/{id}"), &without(args, "id"))
+                .send(
+                    "PATCH",
+                    &checkout_route(args, &format!("/tickets/{id}")),
+                    &without_many(args, &["id", "checkout"]),
+                )
                 .map_err(be_msg)
         }
         "hotsheet_close" => {
@@ -277,7 +303,11 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 "duplicate_of": args.get("duplicate_of").cloned().unwrap_or(Value::Null),
             });
             backend
-                .send("POST", &format!("/tickets/{id}/close"), &body)
+                .send(
+                    "POST",
+                    &checkout_route(args, &format!("/tickets/{id}/close")),
+                    &body,
+                )
                 .map_err(be_msg)
         }
         "hotsheet_batch" => backend.send("POST", "/batch", args).map_err(be_msg),
@@ -383,6 +413,26 @@ fn without(args: &Value, key: &str) -> Value {
     v
 }
 
+fn without_many(args: &Value, keys: &[&str]) -> Value {
+    let mut v = args.clone();
+    if let Some(obj) = v.as_object_mut() {
+        for key in keys {
+            obj.remove(*key);
+        }
+    }
+    v
+}
+
+fn checkout_route(args: &Value, suffix: &str) -> String {
+    args.get("checkout")
+        .and_then(Value::as_str)
+        .filter(|v| !v.is_empty())
+        .map_or_else(
+            || suffix.to_owned(),
+            |checkout| format!("/checkouts/{checkout}{suffix}"),
+        )
+}
+
 fn be_msg(e: BackendError) -> String {
     // Backend-neutral: a CoreBackend has no server, and an HttpBackend's transport
     // error already reads as a connection problem.
@@ -460,6 +510,20 @@ mod core_backend {
         fn api(&self, ticket: &Ticket) -> Result<Value, BackendError> {
             api_for(&self.store, ticket)
         }
+
+        fn checkout_stores(&self, reference: &str) -> Result<Vec<FsStore>, BackendError> {
+            let checkout = checkout_registry()
+                .resolve(reference)
+                .map_err(checkout_err)?;
+            if checkout.stores.is_empty() {
+                return Err(bad_request("checkout has no linked ticket stores"));
+            }
+            checkout
+                .stores
+                .iter()
+                .map(|p| FsStore::open(Path::new(p)).map_err(store_err))
+                .collect()
+        }
     }
 
     impl Backend for CoreBackend {
@@ -471,6 +535,44 @@ mod core_backend {
                     .map_err(checkout_err);
             }
             if let Some(reference) = path.strip_prefix("/checkouts/") {
+                if let Some((checkout, suffix)) = reference.split_once("/tickets") {
+                    let stores = self.checkout_stores(checkout)?;
+                    if suffix.is_empty() {
+                        let mut all = Vec::new();
+                        for store in stores {
+                            let backend = CoreBackend::new(store.clone());
+                            if let Value::Array(rows) = backend.get("/tickets", query)? {
+                                for mut row in rows {
+                                    if let Some(obj) = row.as_object_mut() {
+                                        obj.insert(
+                                            "store".into(),
+                                            Value::String(
+                                                store.root().to_string_lossy().into_owned(),
+                                            ),
+                                        );
+                                    }
+                                    all.push(row);
+                                }
+                            }
+                        }
+                        return Ok(Value::Array(all));
+                    }
+                    let id = suffix.trim_start_matches('/');
+                    let mut found = Vec::new();
+                    for store in stores {
+                        if let Some(ticket) = ops::resolve(&store, id).map_err(store_err)? {
+                            found.push(api_for(&store, &ticket)?);
+                        }
+                    }
+                    return match found.as_slice() {
+                        [one] => Ok(one.clone()),
+                        [] => Err(not_found(id)),
+                        _ => Err(BackendError {
+                            status: Some(409),
+                            message: format!("ticket {id} is ambiguous across checkout stores"),
+                        }),
+                    };
+                }
                 return checkout_registry()
                     .resolve(reference)
                     .map(|v| to_value(&v))
@@ -508,6 +610,58 @@ mod core_backend {
         }
 
         fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+            if let Some(rest) = path.strip_prefix("/checkouts/") {
+                if let Some((checkout, suffix)) = rest.split_once("/tickets") {
+                    let stores = self.checkout_stores(checkout)?;
+                    if method == "POST" && suffix.is_empty()
+                        || method == "POST" && suffix.starts_with('?')
+                    {
+                        let requested = suffix.split_once("store=").map(|(_, v)| v);
+                        let store = match requested {
+                            Some(v) => stores
+                                .into_iter()
+                                .find(|s| s.root().to_string_lossy() == v)
+                                .ok_or_else(|| {
+                                    bad_request("requested store is not linked to checkout")
+                                })?,
+                            None if stores.len() == 1 => stores.into_iter().next().unwrap(),
+                            None => {
+                                return Err(BackendError {
+                                    status: Some(409),
+                                    message: "checkout has multiple stores; specify store".into(),
+                                });
+                            }
+                        };
+                        return CoreBackend::new(store).send("POST", "/tickets", body);
+                    }
+                    let tail = suffix.trim_start_matches('/');
+                    let (id, close) = tail
+                        .strip_suffix("/close")
+                        .map_or((tail, false), |v| (v, true));
+                    let mut matched = Vec::new();
+                    for store in stores {
+                        if ops::resolve(&store, id).map_err(store_err)?.is_some() {
+                            matched.push(store);
+                        }
+                    }
+                    let store = match matched.as_slice() {
+                        [s] => s.clone(),
+                        [] => return Err(not_found(id)),
+                        _ => {
+                            return Err(BackendError {
+                                status: Some(409),
+                                message: format!("ticket {id} is ambiguous across checkout stores"),
+                            });
+                        }
+                    };
+                    let target = if close {
+                        format!("/tickets/{id}/close")
+                    } else {
+                        format!("/tickets/{id}")
+                    };
+                    return CoreBackend::new(store).send(method, &target, body);
+                }
+            }
             match method {
                 "POST" if path == "/tickets" => {
                     let prefix = self.store.metadata().map_err(store_err)?.ticket_prefix;
@@ -1331,6 +1485,37 @@ mod tests {
                 .contains("needs a running server"),
             "expected a needs-a-server error, got {r}"
         );
+    }
+
+    #[test]
+    fn checkout_targeting_routes_query_get_create_and_update() {
+        let backend = FakeBackend::default();
+        call(
+            &backend,
+            "hotsheet_query",
+            json!({"checkout":"web","status":"started"}),
+        );
+        call(
+            &backend,
+            "hotsheet_get",
+            json!({"checkout":"web","id":"HS-X"}),
+        );
+        call(
+            &backend,
+            "hotsheet_create",
+            json!({"checkout":"web","store":"abc","title":"x"}),
+        );
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({"checkout":"web","id":"HS-X","title":"y"}),
+        );
+        let calls = backend.calls.borrow();
+        assert!(calls[0].starts_with("GET /checkouts/web/tickets"));
+        assert!(calls[1].starts_with("GET /checkouts/web/tickets/HS-X"));
+        assert!(calls[2].starts_with("POST /checkouts/web/tickets?store=abc"));
+        assert!(!calls[2].contains("\"checkout\""));
+        assert!(calls[3].starts_with("PATCH /checkouts/web/tickets/HS-X"));
     }
 
     #[test]

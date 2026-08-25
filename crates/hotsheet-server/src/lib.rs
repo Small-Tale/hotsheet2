@@ -666,6 +666,18 @@ pub fn app(state: AppState) -> Router {
             get(checkout_repository_status),
         )
         .route(
+            "/checkouts/{reference}/tickets",
+            get(list_checkout_tickets).post(create_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}",
+            get(get_checkout_ticket).patch(update_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/close",
+            post(close_checkout_ticket),
+        )
+        .route(
             "/stores/{store_id}/tickets",
             get(list_store_tickets).post(create_store_ticket),
         )
@@ -994,6 +1006,175 @@ async fn checkout_repository_status(
     hotsheet_ticketing::repository_status::snapshot(FsPath::new(&checkout.root))
         .map(Json)
         .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))
+}
+
+fn checkout_entries(
+    state: &AppState,
+    reference: &str,
+) -> Result<Vec<(String, StoreEntry)>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let mut entries = Vec::new();
+    for store_path in checkout.stores {
+        let canonical = FsPath::new(&store_path)
+            .canonicalize()
+            .unwrap_or_else(|_| store_path.clone().into());
+        let Some(info) = state.host.list().into_iter().find(|info| {
+            FsPath::new(&info.root)
+                .canonicalize()
+                .unwrap_or_else(|_| info.root.clone().into())
+                == canonical
+        }) else {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                format!("checkout {reference} links an unhosted store: {store_path}"),
+            ));
+        };
+        if let Some(entry) = state.host.get(&info.id) {
+            entries.push((info.id, entry));
+        }
+    }
+    if entries.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("checkout {reference} has no linked ticket stores"),
+        ));
+    }
+    Ok(entries)
+}
+
+async fn list_checkout_tickets(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(params): Query<ListParams>,
+) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+    let mut result = Vec::new();
+    for (store_id, entry) in checkout_entries(&state, &reference)? {
+        let compact = params.compact.unwrap_or(true);
+        let fields = parse_fields(&params.fields);
+        let query = params.clone().into_query(entry.store.root())?;
+        let mut rows = entry
+            .index
+            .lock()
+            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
+            .query(&query)?;
+        if compact {
+            for row in &mut rows {
+                row.make_compact();
+            }
+        }
+        let contexts = auto_context::effective(&Settings::new(entry.store.root()))
+            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        for row in &mut rows {
+            row.add_auto_context(&contexts);
+        }
+        let values = rows_to_json(rows, &fields)
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for mut value in values {
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("store".into(), serde_json::Value::String(store_id.clone()));
+            }
+            result.push(value);
+        }
+    }
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+struct CheckoutStoreQuery {
+    store: Option<String>,
+}
+fn checkout_entry_for_create(
+    state: &AppState,
+    reference: &str,
+    requested: Option<&str>,
+) -> Result<StoreEntry, ApiError> {
+    let entries = checkout_entries(state, reference)?;
+    if let Some(id) = requested {
+        return entries
+            .into_iter()
+            .find(|(store_id, entry)| store_id == id || entry.store.root().to_string_lossy() == id)
+            .map(|(_, e)| e)
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "requested store is not linked to checkout",
+                )
+            });
+    }
+    match entries.as_slice() {
+        [(_, entry)] => Ok(entry.clone()),
+        _ => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "checkout has multiple stores; specify ?store=<store-id>",
+        )),
+    }
+}
+fn checkout_entry_for_ticket(
+    state: &AppState,
+    reference: &str,
+    id: &str,
+) -> Result<StoreEntry, ApiError> {
+    let mut found = Vec::new();
+    for (_, entry) in checkout_entries(state, reference)? {
+        if ops::resolve(&entry.store, id)?.is_some() {
+            found.push(entry);
+        }
+    }
+    match found.as_slice() {
+        [entry] => Ok(entry.clone()),
+        [] => Err(ApiError::not_found(id)),
+        _ => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("ticket {id} is ambiguous across checkout stores"),
+        )),
+    }
+}
+async fn create_checkout_ticket(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(q): Query<CheckoutStoreQuery>,
+    Json(req): Json<CreateReq>,
+) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    let entry = checkout_entry_for_create(&state, &reference, q.store.as_deref())?;
+    Ok((StatusCode::CREATED, Json(do_create(&state, &entry, req)?)))
+}
+async fn get_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket(&entry, &ticket)?,
+    }))
+}
+async fn update_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(req): Json<UpdateReq>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: do_update(&state, &entry, &id, req)?,
+    }))
+}
+async fn close_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(req): Json<CloseReq>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: do_close(&state, &entry, &id, req)?,
+    }))
 }
 
 async fn ticket_flow_summary(
@@ -2496,7 +2677,7 @@ async fn poll_events(State(state): State<AppState>, Query(params): Query<PollPar
 
 // ---- request / response DTOs -----------------------------------------------------
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 struct ListParams {
     status: Option<String>,
     priority: Option<String>,

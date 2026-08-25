@@ -83,6 +83,12 @@ register|list|resolve`, authenticated server `/checkouts` routes, MCP list/resol
 and `setup` registration share this registry. Only server instance records contain a
 bearer token; those files are user-readable only on Unix.
 
+Checkout-qualified `/checkouts/{id}/tickets` routes aggregate reads across every linked
+hosted store. Get/update/close require the ticket to resolve uniquely; create selects the
+only linked store or requires an explicit store id when several are linked. MCP ticket
+tools accept the same optional `checkout` target (and `store` for ambiguous creates) in
+both HTTP and serverless modes.
+
 ### Headless platform APIs
 
 The authenticated server exposes checkout-scoped repository snapshots at
