@@ -72,6 +72,33 @@ git + a rebuildable index ([02-ticket-storage.md](02-ticket-storage.md) §2.9).
 
 ## 4.3 The server (`hotsheet-server`)
 
+### Checkout identity and discovery
+
+A checkout is Hot Sheet's machine-local identity for one canonical working-directory
+path; it is not a git object, ticket-store identity, or credential. Its readable id is
+`<folder>-<12 path-hash hex>`, so nearby projects can discover it without receiving a
+secret. `${HOTSHEET_HOME}/checkouts.json` records optional repository identity and zero or
+more ticket stores, permitting many-to-many mappings. CLI `checkout
+register|list|resolve`, authenticated server `/checkouts` routes, MCP list/resolve tools,
+and `setup` registration share this registry. Only server instance records contain a
+bearer token; those files are user-readable only on Unix.
+
+### Headless platform APIs
+
+The authenticated server exposes checkout-scoped repository snapshots at
+`/checkouts/{id}/repository/status`, current ticket-flow aggregates at
+`/analytics/tickets`, and settled-plus-live usage totals at `/analytics/usage`.
+Historical cumulative-flow data is explicitly reported unavailable because current ticket
+files do not preserve status transitions.
+
+Project command settings use exact `program` + `args` arrays. `/commands` only starts a
+configured id; requests cannot supply arbitrary shell text. Bounded run history includes
+cursor-addressable stdout/stderr lines and cancellation. `/notifications` persists a
+bounded server-process routing feed with checkout/store/ticket targets, deduplication, and
+acknowledgement while also publishing live events. `/tts/synthesize` accepts text,
+provider id, and voice only; provider adapters and their credential resolution remain in
+the server process.
+
 > **Status: v1 built (HS2-7).** `crates/hotsheet-server` — axum HTTP REST
 > (`/health`, `/tickets` list/create, `/tickets/{id}` get/patch,
 > `/tickets/{id}/close`) + `/ws/sync` live push, over the shared engine

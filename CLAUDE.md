@@ -10,6 +10,12 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 - **Use FEEDBACK NEEDED before deferring or asking about follow-ups.** When about to (a) defer a ticket needing more work, (b) ask whether to file follow-ups, or (c) close with a question buried in notes — DON'T. Leave the ticket `started`, add a `FEEDBACK NEEDED:` note (per `.hotsheet/worklist.md`), signal channel done, and wait. It's the only reliable way to surface a question.
 <!-- hotsheet:end section=ticket-driven-work -->
 
+## Identity terminology
+
+A checkout id is a readable Hot Sheet path identity (`folder-shortpathhash`), not a git
+id, ticket-store id, or secret. Keep checkout↔store links many-to-many. Only server
+instance data carries bearer credentials.
+
 <!-- hotsheet:begin section=testing-philosophy v=2 -->
 ## Testing Philosophy
 

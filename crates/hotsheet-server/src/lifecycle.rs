@@ -68,6 +68,12 @@ pub fn register_instance(info: &InstanceInfo, store_path: &Path) -> std::io::Res
     std::fs::create_dir_all(instances_dir())?;
     let path = instance_path(store_path);
     std::fs::write(&path, serde_json::to_string_pretty(info)? + "\n")?;
+    // Unlike checkout/store ids, this file contains an actual bearer credential.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+    }
     Ok(InstanceGuard { path })
 }
 

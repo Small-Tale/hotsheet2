@@ -20,6 +20,45 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn checkout_register_list_and_resolve_are_store_independent() {
+    let checkout = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let mut register = Command::cargo_bin("hotsheet-cli").unwrap();
+    register
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "checkout",
+            "register",
+            checkout.path().to_str().unwrap(),
+            "--alias",
+            "web",
+            "--store",
+            store.path().to_str().unwrap(),
+            "--repository",
+            "github.com/acme/web",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"alias\": \"web\""));
+
+    let mut list = Command::cargo_bin("hotsheet-cli").unwrap();
+    list.env("HOTSHEET_HOME", home.path())
+        .args(["checkout", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github.com/acme/web"));
+
+    let mut resolve = Command::cargo_bin("hotsheet-cli").unwrap();
+    resolve
+        .env("HOTSHEET_HOME", home.path())
+        .args(["checkout", "resolve", "web"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(checkout.path().to_str().unwrap()));
+}
+
+#[test]
 fn init_new_ls_show_edit_close_flow() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

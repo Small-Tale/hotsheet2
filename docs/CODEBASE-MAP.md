@@ -52,6 +52,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
       src/secrets.rs         #   injected SecretStore + OS keychain adapters + metadata-only provider registry (HS2-M1XMSX)
+      src/checkouts.rs       #   readable path-derived checkout ids + machine registry; many-to-many checkout/store discovery (HS2-NGC8AE)
+      src/repository_status.rs # git porcelain-v2 repository snapshot parser/runner (HS2-RPVFA4)
+      src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
+      src/commands.rs        #   typed safe argv command settings schema (HS2-JN3X4W)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow (compact list row, body-optional) + From<&Ticket> (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
@@ -73,6 +77,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/tls.rs             #   Tier-1 mTLS (HS2-VT3JMF/MPC0QF): required client cert + live revocation verifier; serve_tls_with_acl fingerprints each peer and applies live optional read-only/read-write/deny authorization before routing HTTP
       src/dist_work_loop.rs  #   server-hosted distributed driving loop (HS2-DTPX2V/HS2-1TY7GC): DistWorkConfig + work_pass + spawn_dist_work_loop + live_drive (SafeTrigger per claimed ticket, permission bridge, attributed usage, and coarse turn_start/permission/turn_end activity sink, HS2-0WCRZY/4C68Y8) + outcome_from_turn; wired into main.rs via --drive-tool
       src/lifecycle.rs       #   server lifecycle: InstanceInfo registry + discovery (one machine server writes a discovery file per hosted store, HS2-87 topology A), per-store index-writer lock, stop_instance (HS2-59)
+      src/commands.rs        #   configured argv execution, cursor output, cancellation, bounded history (HS2-JN3X4W)
+      src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
+      src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
       src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up)
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F): TerminalBroker::ensure (discover/spawn the broker per project under ${HOTSHEET_HOME}/broker) + call (per-request BrokerClient round-trip); `serve --terminal-broker` routes /terminals ops + the live WS attach (bridged to a BrokerStream — broker_attach_loop in lib.rs) + the connect busy feed (polls the broker's Read) through it so terminals survive a server restart; idle-GC/health is a follow-up (HS2-SV3XS8)
@@ -181,6 +188,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 - **Provider keys:** `${HOTSHEET_HOME}/keys.json` contains non-secret provider metadata;
   values live in the OS credential store. Settings carry only `{ "secret": "provider" }`.
   See `secrets.rs::{SecretStore,KeyRegistry,resolve_setting_secret}`.
+- **Checkout discovery:** `${HOTSHEET_HOME}/checkouts.json` maps readable path-derived
+  checkout ids to optional repository identities and any number of ticket stores. It
+  never contains authentication material; use `checkout register|list|resolve`.
 - **People roster:** `people.json` (shared, committed) — `{people:[{email,name?,github?}]}`
   mapping git identity → display name for assignment. See `roster.rs::Roster` (HS2-20).
 - **Multi-store discovery:** `${HOTSHEET_HOME}/stores.json` — `{"stores":["/path/a",…]}`,

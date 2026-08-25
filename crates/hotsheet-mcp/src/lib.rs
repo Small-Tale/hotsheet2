@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 //! MCP shim: a stdio JSON-RPC 2.0 server exposing the `hotsheet_*` tools
 //! (`docs/05-ai-tool-plugins.md` §5.8). Per-project — an AI tool spawns it from its
 //! own config so the tool config owns which project it reaches.
@@ -164,6 +165,18 @@ fn tools_list() -> Value {
             }, "required": ["message"] }
         },
         {
+            "name": "hotsheet_checkouts",
+            "description": "List machine-registered code checkouts. Checkout ids are readable path identities, not ticket-store ids or secrets.",
+            "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "hotsheet_resolve_checkout",
+            "description": "Resolve a checkout by full/id-prefix, alias, or canonical path.",
+            "inputSchema": { "type": "object", "properties": {
+                "reference": str_prop("checkout id, id prefix, alias, or path")
+            }, "required": ["reference"] }
+        },
+        {
             "name": "hotsheet_claim_next",
             "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next). Returns the claimed ticket, or null if nothing is claimable.",
             "inputSchema": { "type": "object", "properties": {
@@ -269,6 +282,10 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
         }
         "hotsheet_batch" => backend.send("POST", "/batch", args).map_err(be_msg),
         "hotsheet_announce" => backend.send("POST", "/announce", args).map_err(be_msg),
+        "hotsheet_checkouts" => backend.get("/checkouts", &[]).map_err(be_msg),
+        "hotsheet_resolve_checkout" => backend
+            .get(&format!("/checkouts/{}", arg_str(args, "reference")?), &[])
+            .map_err(be_msg),
         "hotsheet_claim_next" => backend.send("POST", "/claim-next", args).map_err(be_msg),
         "hotsheet_release" => {
             let id = arg_str(args, "id")?;
@@ -447,6 +464,18 @@ mod core_backend {
 
     impl Backend for CoreBackend {
         fn get(&self, path: &str, query: &[(String, String)]) -> Result<Value, BackendError> {
+            if path == "/checkouts" {
+                return checkout_registry()
+                    .list()
+                    .map(|v| to_value(&v))
+                    .map_err(checkout_err);
+            }
+            if let Some(reference) = path.strip_prefix("/checkouts/") {
+                return checkout_registry()
+                    .resolve(reference)
+                    .map(|v| to_value(&v))
+                    .map_err(checkout_err);
+            }
             if path == "/tickets" {
                 let q = build_query(query, self.store.root())?;
                 let compact = wants_compact(query);
@@ -826,6 +855,28 @@ mod core_backend {
 
     fn to_value<T: serde::Serialize>(v: &T) -> Value {
         serde_json::to_value(v).unwrap_or(Value::Null)
+    }
+
+    fn checkout_registry() -> hotsheet_ticketing::checkouts::CheckoutRegistry {
+        let home = std::env::var_os("HOTSHEET_HOME")
+            .map(std::path::PathBuf::from)
+            .or_else(|| {
+                std::env::var_os("HOME").map(|v| std::path::PathBuf::from(v).join(".hotsheet2"))
+            })
+            .unwrap_or_else(std::env::temp_dir);
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"))
+    }
+
+    fn checkout_err(e: hotsheet_ticketing::checkouts::CheckoutError) -> BackendError {
+        use hotsheet_ticketing::checkouts::CheckoutError;
+        BackendError {
+            status: Some(match e {
+                CheckoutError::NotFound(_) => 404,
+                CheckoutError::Ambiguous(_) => 409,
+                _ => 400,
+            }),
+            message: e.to_string(),
+        }
     }
 
     fn api_for(store: &FsStore, ticket: &Ticket) -> Result<Value, BackendError> {

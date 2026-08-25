@@ -9,6 +9,7 @@
 use hotsheet_model::Ulid;
 
 pub mod activity;
+pub mod analytics;
 pub mod distclaim;
 pub mod distwork;
 pub mod identity;
@@ -92,3 +93,6 @@ mod tests {
     }
 }
 pub mod auto_context;
+pub mod checkouts;
+pub mod commands;
+pub mod repository_status;

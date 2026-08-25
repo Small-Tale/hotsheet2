@@ -5,12 +5,15 @@
 //! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
+pub mod commands;
 pub mod dist_work_loop;
 pub mod lifecycle;
 pub mod multistore;
+pub mod notifications;
 pub mod sync_loop;
 pub mod terminal_broker;
 pub mod tls;
+pub mod tts;
 
 use std::path::Path as FsPath;
 use std::sync::{Arc, Mutex};
@@ -98,6 +101,12 @@ pub struct AppState {
     plugin_dirs: Arc<Vec<std::path::PathBuf>>,
     /// Public URL injected into manifest-launched terminal tools for permission route-back.
     terminal_server_url: Arc<Mutex<Option<String>>>,
+    /// Machine-local checkout discovery. Checkout ids identify working directories and
+    /// are intentionally separate from store ids and server authentication tokens.
+    checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
+    commands: commands::CommandManager,
+    notifications: notifications::NotificationHub,
+    tts: tts::TtsProviders,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -143,6 +152,10 @@ impl AppState {
                 let _ = events.send(ev);
             });
         }
+        let command_defs =
+            hotsheet_ticketing::commands::from_settings(&Settings::new(store.root()))
+                .unwrap_or_default();
+        let commands = commands::CommandManager::new(store.root().to_path_buf(), command_defs);
         Self {
             store,
             secret,
@@ -167,7 +180,32 @@ impl AppState {
             terminal_broker: None,
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
             terminal_server_url: Arc::new(Mutex::new(None)),
+            checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+                hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+            ),
+            commands,
+            notifications: Default::default(),
+            tts: Default::default(),
         }
+    }
+
+    /// Override checkout-registry storage (primarily for hermetic tests).
+    pub fn with_checkout_registry(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+        self.checkout_registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(path);
+        self
+    }
+
+    pub fn with_commands(
+        mut self,
+        definitions: Vec<hotsheet_ticketing::commands::CommandDefinition>,
+    ) -> Self {
+        self.commands = commands::CommandManager::new(self.store.root().to_path_buf(), definitions);
+        self
+    }
+
+    pub fn with_tts_providers(mut self, providers: Vec<Arc<dyn tts::TtsProvider>>) -> Self {
+        self.tts = tts::TtsProviders::new(providers);
+        self
     }
 
     /// The shared driving-loop connection registry — the loop registers each ticket it
@@ -621,6 +659,12 @@ pub fn app(state: AppState) -> Router {
         // Multi-store (HS2-87): list/register hosted stores + store-scoped ticket routes
         // (path-prefix scheme, maintainer's pick), sharing the default routes' logic.
         .route("/stores", get(list_stores).post(add_store))
+        .route("/checkouts", get(list_checkouts).post(register_checkout))
+        .route("/checkouts/{reference}", get(resolve_checkout))
+        .route(
+            "/checkouts/{reference}/repository/status",
+            get(checkout_repository_status),
+        )
         .route(
             "/stores/{store_id}/tickets",
             get(list_store_tickets).post(create_store_ticket),
@@ -645,6 +689,19 @@ pub fn app(state: AppState) -> Router {
         .route("/permissions/ask", post(ask_permission))
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
+        .route("/analytics/tickets", get(ticket_flow_summary))
+        .route("/analytics/usage", get(usage_metrics_summary))
+        .route("/commands", get(list_commands))
+        .route("/commands/{id}/run", post(run_command))
+        .route("/command-runs", get(list_command_runs))
+        .route("/command-runs/{id}", get(get_command_run))
+        .route("/command-runs/{id}/cancel", post(cancel_command_run))
+        .route(
+            "/notifications",
+            get(list_notifications).post(publish_notification),
+        )
+        .route("/notifications/{id}/ack", post(acknowledge_notification))
+        .route("/tts/synthesize", post(synthesize_speech))
         // Terminals (HS2-A6R5QV): open a PTY, list them, feed input, read the scrollback,
         // kill one — the HTTP attach surface over the in-process TerminalManager.
         .route("/terminals", get(list_terminals).post(open_terminal))
@@ -868,6 +925,197 @@ async fn post_announce(
 /// `GET /stores` — the stores this machine server hosts.
 async fn list_stores(State(state): State<AppState>) -> Json<Vec<StoreInfo>> {
     Json(state.host.list())
+}
+
+#[derive(Debug, Deserialize)]
+struct RegisterCheckoutBody {
+    root: String,
+    alias: Option<String>,
+    repository: Option<String>,
+    #[serde(default)]
+    stores: Vec<String>,
+}
+
+async fn list_checkouts(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<hotsheet_ticketing::checkouts::Checkout>>, ApiError> {
+    state
+        .checkout_registry
+        .list()
+        .map(Json)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+async fn register_checkout(
+    State(state): State<AppState>,
+    Json(body): Json<RegisterCheckoutBody>,
+) -> Result<(StatusCode, Json<hotsheet_ticketing::checkouts::Checkout>), ApiError> {
+    let entry = state
+        .checkout_registry
+        .register(
+            FsPath::new(&body.root),
+            body.alias.as_deref(),
+            body.repository,
+            body.stores
+                .into_iter()
+                .map(std::path::PathBuf::from)
+                .collect(),
+        )
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok((StatusCode::CREATED, Json(entry)))
+}
+
+async fn resolve_checkout(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
+    state
+        .checkout_registry
+        .resolve(&reference)
+        .map(Json)
+        .map_err(|e| {
+            let status = match e {
+                hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => StatusCode::NOT_FOUND,
+                hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => StatusCode::CONFLICT,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            ApiError::new(status, e.to_string())
+        })
+}
+
+async fn checkout_repository_status(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<hotsheet_ticketing::repository_status::RepositoryStatus>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    hotsheet_ticketing::repository_status::snapshot(FsPath::new(&checkout.root))
+        .map(Json)
+        .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))
+}
+
+async fn ticket_flow_summary(
+    State(state): State<AppState>,
+) -> Result<Json<hotsheet_ticketing::analytics::TicketFlowSummary>, ApiError> {
+    let tickets = ops::query(&state.store, &TicketQuery::default())
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(hotsheet_ticketing::analytics::ticket_flow(&tickets)))
+}
+
+async fn usage_metrics_summary(
+    State(state): State<AppState>,
+) -> Result<Json<hotsheet_ticketing::metrics::Rollup>, ApiError> {
+    hotsheet_ticketing::metrics::summary_settled(&state.store)
+        .map(Json)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+async fn list_commands(
+    State(state): State<AppState>,
+) -> Json<Vec<hotsheet_ticketing::commands::CommandDefinition>> {
+    Json(state.commands.definitions())
+}
+
+async fn run_command(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<commands::CommandRun>), ApiError> {
+    state
+        .commands
+        .start(&id)
+        .map(|r| (StatusCode::ACCEPTED, Json(r)))
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e))
+}
+
+async fn list_command_runs(State(state): State<AppState>) -> Json<Vec<commands::CommandRun>> {
+    Json(state.commands.list())
+}
+
+#[derive(Deserialize)]
+struct RunOutputQuery {
+    #[serde(default)]
+    after: u64,
+}
+
+async fn get_command_run(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<RunOutputQuery>,
+) -> Result<Json<commands::CommandRun>, ApiError> {
+    state
+        .commands
+        .get(&id, query.after)
+        .map(Json)
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "unknown command run"))
+}
+
+async fn cancel_command_run(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<commands::CommandRun>, ApiError> {
+    state
+        .commands
+        .cancel(&id)
+        .map(Json)
+        .map_err(|e| ApiError::new(StatusCode::CONFLICT, e))
+}
+
+#[derive(Deserialize)]
+struct NotificationQuery {
+    checkout: Option<String>,
+    store: Option<String>,
+    ticket: Option<String>,
+}
+async fn list_notifications(
+    State(state): State<AppState>,
+    Query(q): Query<NotificationQuery>,
+) -> Json<Vec<notifications::Notification>> {
+    Json(state.notifications.list(
+        q.checkout.as_deref(),
+        q.store.as_deref(),
+        q.ticket.as_deref(),
+    ))
+}
+async fn publish_notification(
+    State(state): State<AppState>,
+    Json(body): Json<notifications::NewNotification>,
+) -> (StatusCode, Json<notifications::Notification>) {
+    let n = state.notifications.publish(body);
+    state.emit(ChangeEvent {
+        store: n.store.clone().unwrap_or_default(),
+        kind: "notification".into(),
+        id: n.id.clone(),
+        slug: n.ticket.clone().unwrap_or_default(),
+        message: Some(n.message.clone()),
+        activity: None,
+    });
+    (StatusCode::CREATED, Json(n))
+}
+async fn acknowledge_notification(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<notifications::Notification>, ApiError> {
+    state
+        .notifications
+        .acknowledge(&id)
+        .map(Json)
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "unknown notification"))
+}
+async fn synthesize_speech(
+    State(state): State<AppState>,
+    Json(body): Json<tts::TtsRequest>,
+) -> Result<Response, ApiError> {
+    let audio = state
+        .tts
+        .synthesize(&body)
+        .map_err(|e| ApiError::new(StatusCode::SERVICE_UNAVAILABLE, e))?;
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("content-type", audio.content_type)
+        .body(axum::body::Body::from(audio.bytes))
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 /// Body for `POST /stores`: register another local store by its path.

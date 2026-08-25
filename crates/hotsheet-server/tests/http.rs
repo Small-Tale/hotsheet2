@@ -69,6 +69,282 @@ async fn tickets_require_the_secret() {
 }
 
 #[tokio::test]
+async fn checkout_registry_is_authenticated_and_resolvable() {
+    let (_d, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let body = serde_json::json!({
+        "root": checkout.path(), "alias": "worktree-a", "repository": "github.com/acme/app",
+        "stores": []
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(authed("POST", "/checkouts", Some(&body)))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let created = body_json(resp).await;
+    let checkout_id = created["id"].as_str().unwrap();
+    assert_eq!(checkout_id.rsplit('-').next().unwrap().len(), 12);
+
+    let resp = app
+        .clone()
+        .oneshot(authed("GET", "/checkouts/worktree-a", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(resp).await["root"],
+        checkout
+            .path()
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/checkouts")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn repository_status_endpoint_reports_real_git_state() {
+    let (_d, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(checkout.path())
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    };
+    run(&["init", "-q"]);
+    std::fs::write(checkout.path().join("tracked.txt"), "one\n").unwrap();
+    run(&["add", "tracked.txt"]);
+    run(&[
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "initial",
+    ]);
+    std::fs::write(checkout.path().join("tracked.txt"), "two\n").unwrap();
+    std::fs::write(checkout.path().join("new.txt"), "new\n").unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let registry = registry_home.path().join("checkouts.json");
+    let app = app(st.with_checkout_registry(&registry));
+    let body =
+        serde_json::json!({"root": checkout.path(), "alias": "repo", "stores": []}).to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&body)))
+        .await
+        .unwrap();
+    let resp = app
+        .oneshot(authed("GET", "/checkouts/repo/repository/status", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let status = body_json(resp).await;
+    assert_eq!(status["unstaged"], 1);
+    assert_eq!(status["untracked"], 1);
+    assert_eq!(status["clean"], false);
+}
+
+#[tokio::test]
+async fn analytics_endpoints_return_ticket_flow_and_usage_contracts() {
+    let (_d, st) = state();
+    let app = app(st);
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"Measure me","category":"task"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let flow = app
+        .clone()
+        .oneshot(authed("GET", "/analytics/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(flow.status(), StatusCode::OK);
+    let flow = body_json(flow).await;
+    assert_eq!(flow["total"], 1);
+    assert_eq!(flow["open"], 1);
+    assert_eq!(flow["historical_cumulative_flow_available"], false);
+    let usage = app
+        .oneshot(authed("GET", "/analytics/usage", None))
+        .await
+        .unwrap();
+    assert_eq!(usage.status(), StatusCode::OK);
+    assert_eq!(body_json(usage).await["events"], 0);
+}
+
+#[tokio::test]
+async fn configured_commands_stream_output_keep_history_and_cancel() {
+    use hotsheet_ticketing::commands::CommandDefinition;
+    let (_d, st) = state();
+    let defs = vec![
+        CommandDefinition {
+            id: "echo".into(),
+            title: "Echo".into(),
+            program: "/bin/echo".into(),
+            args: vec!["hello".into()],
+            group: None,
+            confirmation: None,
+        },
+        CommandDefinition {
+            id: "sleep".into(),
+            title: "Sleep".into(),
+            program: "/bin/sleep".into(),
+            args: vec!["10".into()],
+            group: None,
+            confirmation: None,
+        },
+    ];
+    let app = app(st.with_commands(defs));
+    let run = app
+        .clone()
+        .oneshot(authed("POST", "/commands/echo/run", None))
+        .await
+        .unwrap();
+    assert_eq!(run.status(), StatusCode::ACCEPTED);
+    let id = body_json(run).await["id"].as_str().unwrap().to_owned();
+    let mut completed = None;
+    for _ in 0..50 {
+        let resp = app
+            .clone()
+            .oneshot(authed("GET", &format!("/command-runs/{id}?after=0"), None))
+            .await
+            .unwrap();
+        let v = body_json(resp).await;
+        if v["state"] == "completed" {
+            completed = Some(v);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let completed = completed.expect("command completed");
+    assert_eq!(completed["output"][0]["text"], "hello");
+    let run = app
+        .clone()
+        .oneshot(authed("POST", "/commands/sleep/run", None))
+        .await
+        .unwrap();
+    let sleep_id = body_json(run).await["id"].as_str().unwrap().to_owned();
+    let cancelled = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/command-runs/{sleep_id}/cancel"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(cancelled).await["state"], "cancelled");
+    assert_eq!(
+        app.oneshot(authed("POST", "/commands/not-configured/run", None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+}
+
+#[tokio::test]
+async fn notifications_route_dedupe_ack_and_emit_live_events() {
+    let (_d, st) = state();
+    let mut events = st.subscribe();
+    let app = app(st);
+    let body = r#"{"message":"Build done","checkout":"web","dedupe_key":"build-1"}"#;
+    let first = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/notifications", Some(body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let second = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/notifications", Some(body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(first["id"], second["id"]);
+    let event = events.recv().await.unwrap();
+    assert_eq!(event.kind, "notification");
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/notifications?checkout=web", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    let id = first["id"].as_str().unwrap();
+    let ack = body_json(
+        app.oneshot(authed("POST", &format!("/notifications/{id}/ack"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(ack["acknowledged"], true);
+}
+
+struct FakeTts;
+impl hotsheet_server::tts::TtsProvider for FakeTts {
+    fn id(&self) -> &str {
+        "fake"
+    }
+    fn synthesize(
+        &self,
+        text: &str,
+        _: Option<&str>,
+    ) -> Result<hotsheet_server::tts::TtsAudio, String> {
+        Ok(hotsheet_server::tts::TtsAudio {
+            content_type: "audio/test".into(),
+            bytes: text.as_bytes().to_vec(),
+        })
+    }
+}
+#[tokio::test]
+async fn tts_runs_behind_server_provider_boundary_without_client_secrets() {
+    let (_d, st) = state();
+    let app = app(st.with_tts_providers(vec![std::sync::Arc::new(FakeTts)]));
+    let resp = app
+        .oneshot(authed(
+            "POST",
+            "/tts/synthesize",
+            Some(r#"{"text":"hello","provider":"fake"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers()["content-type"], "audio/test");
+    assert_eq!(
+        resp.into_body().collect().await.unwrap().to_bytes(),
+        "hello"
+    );
+}
+
+#[tokio::test]
 async fn create_get_update_close_and_query() {
     let (_d, st) = state();
     let app = app(st);

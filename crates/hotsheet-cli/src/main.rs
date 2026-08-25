@@ -151,6 +151,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: KeyCmd,
     },
+    /// Register and discover code checkouts independently of ticket stores.
+    Checkout {
+        #[command(subcommand)]
+        cmd: CheckoutCmd,
+    },
     /// Import an HS1 `hotsheet-export.json` into the store (creates it if needed).
     Import {
         file: PathBuf,
@@ -438,6 +443,24 @@ enum SettingsCmd {
 }
 
 #[derive(Subcommand)]
+enum CheckoutCmd {
+    /// Register or update a checkout. Repeating --store records all ticket stores it uses.
+    Register {
+        root: PathBuf,
+        #[arg(long)]
+        alias: Option<String>,
+        #[arg(long = "store")]
+        stores: Vec<PathBuf>,
+        #[arg(long)]
+        repository: Option<String>,
+    },
+    /// List registered checkouts as JSON.
+    List,
+    /// Resolve an id, id prefix, alias, or path and print its JSON record.
+    Resolve { reference: String },
+}
+
+#[derive(Subcommand)]
 enum KeyCmd {
     /// Store/replace a provider key. Reads the value from stdin, never an argv argument.
     Set { provider: String },
@@ -525,7 +548,10 @@ fn main() -> Result<()> {
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
     // `.hotsheet/store` link walked up from cwd — so a standalone store is found without -C
     // (HS2-5CXKZ0). `init`/`link` operate on the literal path, not a resolved one.
-    if !matches!(cli.command, Cmd::Init { .. } | Cmd::Link { .. }) {
+    if !matches!(
+        cli.command,
+        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. }
+    ) {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
     }
@@ -605,6 +631,7 @@ fn main() -> Result<()> {
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
+        Cmd::Checkout { cmd } => cmd_checkout(cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
         Cmd::Copy { id, to } => cmd_copy(&cli.path, &id, &to),
         Cmd::Move { id, to, yes } => cmd_move(&cli.path, &id, &to, yes),
@@ -1896,6 +1923,26 @@ fn cmd_setup(
     project: Option<PathBuf>,
 ) -> Result<()> {
     let project_dir = project.unwrap_or_else(|| store.to_path_buf());
+    // Setup also makes the checkout discoverable to server/MCP consumers. This records
+    // context; generated MCP config still points directly at the store for headless use.
+    let repository = std::process::Command::new("git")
+        .args([
+            "-C",
+            project_dir.to_str().unwrap_or("."),
+            "config",
+            "--get",
+            "remote.origin.url",
+        ])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|v| v.trim().to_owned())
+        .filter(|v| !v.is_empty());
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    )
+    .register(&project_dir, None, repository, vec![store.to_path_buf()])?;
     let reports = hotsheet_cli::run_setup(store, &project_dir, tool.as_deref(), detect)?;
     for r in &reports {
         println!("Set up {} in {}:", r.tool, project_dir.display());
@@ -2078,6 +2125,40 @@ fn cmd_key(cmd: KeyCmd) -> Result<()> {
             } else {
                 println!("No registered key for {provider}");
             }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_checkout(cmd: CheckoutCmd) -> Result<()> {
+    use hotsheet_ticketing::checkouts::CheckoutRegistry;
+    let registry = CheckoutRegistry::new(hotsheet_plugins::hotsheet_home().join("checkouts.json"));
+    match cmd {
+        CheckoutCmd::Register {
+            root,
+            alias,
+            stores,
+            repository,
+        } => {
+            let repository = repository.or_else(|| {
+                std::process::Command::new("git")
+                    .args(["-C", root.to_str()?, "config", "--get", "remote.origin.url"])
+                    .output()
+                    .ok()
+                    .filter(|o| o.status.success())
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|v| v.trim().to_owned())
+                    .filter(|v| !v.is_empty())
+            });
+            let entry = registry.register(&root, alias.as_deref(), repository, stores)?;
+            println!("{}", serde_json::to_string_pretty(&entry)?);
+        }
+        CheckoutCmd::List => println!("{}", serde_json::to_string_pretty(&registry.list()?)?),
+        CheckoutCmd::Resolve { reference } => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&registry.resolve(&reference)?)?
+            );
         }
     }
     Ok(())
