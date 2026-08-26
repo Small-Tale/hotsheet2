@@ -85,7 +85,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('regression');
   await expect(row.locator('[data-lucide="star"]')).toHaveCount(1);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).not.toHaveClass(/active/);
-  await expect(row).not.toContainText('Codex working');
+  await expect(row).toContainText('Codex');
   await expect(row).toContainText('Now');
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);
@@ -114,7 +114,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Started');
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/up-next/);
-  await expect(row).toContainText('Claude working');
+  await expect(row).toContainText('Claude');
   await expect(row).toContainText('1h ago');
   await expect(page.getByText('No actions yet')).toBeVisible();
   await title.fill('Post-reset edit works');
@@ -148,12 +148,13 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await title.fill('A deliberately long ticket title that must wrap across no more than two lines while the AI working indicator remains entirely visible');
   await tags.fill('client, regression, server, ux');
   await row.evaluate((node: HTMLElement) => { node.style.width = '320px'; });
-  const [rowBox, busyBox, titleBox] = await Promise.all([row.boundingBox(), row.locator('.ticket-list-row__busy').boundingBox(), row.locator('strong').boundingBox()]);
-  expect(rowBox).not.toBeNull(); expect(busyBox).not.toBeNull(); expect(titleBox).not.toBeNull();
-  expect(busyBox!.x + busyBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
+  const [rowBox, timeBox, slugBox, titleBox] = await Promise.all([row.boundingBox(), row.locator('.ticket-list-row__updated').boundingBox(), row.locator('.ticket-list-row__slug').boundingBox(), row.locator('strong').boundingBox()]);
+  expect(rowBox).not.toBeNull(); expect(timeBox).not.toBeNull(); expect(slugBox).not.toBeNull(); expect(titleBox).not.toBeNull();
+  expect(timeBox!.x + timeBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
+  expect(Math.abs(timeBox!.y + timeBox!.height - (slugBox!.y + slugBox!.height))).toBeLessThanOrEqual(3);
   expect(titleBox!.height).toBeLessThanOrEqual(43);
-  await expect(row.locator('.ticket-list-row__tag-overflow')).toBeVisible();
-  await expect(row.locator('.ticket-list-row__tag-overflow')).toHaveText('+2');
+  await expect(row.locator('[data-component="tag-chip"]')).toHaveCount(4);
+  for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
 });
 
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {

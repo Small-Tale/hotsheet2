@@ -150,10 +150,11 @@ selection where sensible.
   boundary for list and narrow column use. The comfortable list presentation is a
   flat, separator-led row; the same component becomes a lightly elevated card at
   narrow column widths. Its primary line treats qualified slug and two-line-clamped
-  title as one identity, with a stable trailing priority/activity/updated cluster.
-  A quieter secondary line holds status, tags, and a persistent independently
-  operable outline/filled Up Next star. Narrow tag overflow becomes a `+N` count
-  instead of clipping an arbitrary chip. It also includes blue selection, keyboard
+  title as one wrapping identity flow together with priority, while updated time is
+  pinned right and baseline-aligned with the first line. A quieter, vertically
+  centered secondary flow holds the persistent independently operable outline/filled
+  Up Next star, status, short owner name, and all tags; it wraps without hiding or
+  collapsing metadata at narrow widths. It also includes blue selection, keyboard
   selection, and a representative right-click context menu.
   The left rail is reserved for special-state attention in HS1 precedence order:
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
