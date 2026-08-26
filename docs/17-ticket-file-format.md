@@ -117,6 +117,15 @@ Legacy note blocks with a leading `timestamp — text` map that timestamp to bot
 fields. Timestamp-less legacy blocks deterministically derive both values from their
 ULID; migration never consults filesystem modification time.
 
+## 17.3a Attachments
+
+Shared frontmatter contains an `attachments` sequence. Each item has a stable ULID
+`id`, display/storage `filename`, and immutable RFC3339 `created_at`. Its payload is
+`attachments/<ticket-id>/<attachment-id>/<filename>`. Renames change only `filename`;
+copy/move/sync/Git preserve all three metadata values. For legacy direct-child payloads,
+the store deterministically derives the id from ticket id + filename and uses the
+ticket's own `created_at`; filesystem modification time is never authoritative.
+
 ## 17.4 Rules the parser/serializer enforce
 
 - **Round-trip stable:** parse → serialize is byte-idempotent for a canonical file

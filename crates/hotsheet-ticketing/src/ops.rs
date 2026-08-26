@@ -582,17 +582,29 @@ fn copy_attachments(
     dest_id: &Ulid,
 ) -> Result<(), OpError> {
     let from = src.attachment_dir(src_id);
+    let to = dest.attachment_dir(dest_id);
     let entries = match std::fs::read_dir(&from) {
-        Ok(e) => e,
+        Ok(entries) => entries,
         Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(StoreError::Io(e).into()),
     };
-    for entry in entries.flatten() {
-        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-            let name = entry.file_name();
-            let bytes = std::fs::read(entry.path()).map_err(StoreError::Io)?;
-            dest.write_attachment(dest_id, &name.to_string_lossy(), &bytes)?;
+    std::fs::create_dir_all(&to).map_err(StoreError::Io)?;
+    for entry in entries {
+        let entry = entry.map_err(StoreError::Io)?;
+        copy_attachment_entry(&entry.path(), &to.join(entry.file_name()))?;
+    }
+    Ok(())
+}
+
+fn copy_attachment_entry(from: &std::path::Path, to: &std::path::Path) -> Result<(), OpError> {
+    if from.is_dir() {
+        std::fs::create_dir_all(to).map_err(StoreError::Io)?;
+        for entry in std::fs::read_dir(from).map_err(StoreError::Io)? {
+            let entry = entry.map_err(StoreError::Io)?;
+            copy_attachment_entry(&entry.path(), &to.join(entry.file_name()))?;
         }
+    } else {
+        std::fs::copy(from, to).map_err(StoreError::Io)?;
     }
     Ok(())
 }
@@ -1183,6 +1195,15 @@ mod tests {
             },
         )
         .unwrap();
+        let attachment_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        src.write_attachment(
+            &id,
+            attachment_id,
+            ts("2026-08-26T00:00:00Z"),
+            "proof.txt",
+            b"proof",
+        )
+        .unwrap();
 
         let new_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB7").unwrap();
         let copy = copy_ticket(&src, &dest, &id, new_id, ts("t2")).unwrap();
@@ -1201,6 +1222,20 @@ mod tests {
         assert_eq!(src.read_ticket(&id).unwrap().status, Status::Started);
         // The copy is a real ticket in the destination.
         assert_eq!(dest.read_ticket(&new_id).unwrap().slug, copy.slug);
+        assert_eq!(copy.attachments[0].id, attachment_id);
+        assert_eq!(
+            copy.attachments[0].created_at.as_str(),
+            "2026-08-26T00:00:00Z"
+        );
+        assert_eq!(
+            std::fs::read(
+                dest.attachment_dir(&new_id)
+                    .join(attachment_id.to_string())
+                    .join("proof.txt")
+            )
+            .unwrap(),
+            b"proof"
+        );
     }
 
     #[test]
@@ -1219,6 +1254,15 @@ mod tests {
             },
         )
         .unwrap();
+        let attachment_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        src.write_attachment(
+            &id,
+            attachment_id,
+            ts("2026-08-26T00:00:00Z"),
+            "move.txt",
+            b"move",
+        )
+        .unwrap();
 
         let out = move_ticket(&src, &dest, &id, "/stores/sec", ts("t3")).unwrap();
 
@@ -1227,6 +1271,17 @@ mod tests {
         assert!(out.moved.slug.starts_with("SEC-"));
         assert_eq!(out.moved.status, Status::NotStarted);
         assert_eq!(dest.read_ticket(&id).unwrap().title, "portable");
+        assert_eq!(out.moved.attachments[0].id, attachment_id);
+        assert_eq!(
+            out.moved.attachments[0].created_at.as_str(),
+            "2026-08-26T00:00:00Z"
+        );
+        assert!(
+            dest.attachment_dir(&id)
+                .join(attachment_id.to_string())
+                .join("move.txt")
+                .is_file()
+        );
         // Source: a moved tombstone pointing at the destination.
         let tomb = src.read_ticket(&id).unwrap();
         assert_eq!(tomb.status, Status::Moved);

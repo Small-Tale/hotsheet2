@@ -67,7 +67,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
       src/commands.rs        #   typed safe argv command settings schema (HS2-JN3X4W)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
-      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote (created_at/edited_at)/TicketRow incl. provider identity + compact body-optional lists (shared by server + MCP)
+      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/ApiAttachment timestamp metadata/TicketRow incl. provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
@@ -160,7 +160,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Global `-C/--path` selects the store dir. `init --standalone [--at/--remote]` creates a
   separate git store and links the current code project in one shot. Subcommands: `init`, `link`, `new`
   (incl. `--blocked-by`), `ls` (filters/sort/text/`--limit`), `show`, `edit`
-  (incl. `--blocked-by`/`--clear-blocked-by`), `close`, `providers`, `setup` (AI-tool setup, headless),
+  (incl. `--blocked-by`/`--clear-blocked-by`), `attach`, `close`, `providers`, `setup` (AI-tool setup, headless),
   `plugin` (list/install/remove external plugins), `settings` (get/set/list,
   global|shared|local), `key` (OS-keychain-backed set/get/list/delete),
   `import`, `doctor`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":
@@ -191,6 +191,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   bounded, collision-escaped Markdown body (`details`) and notes. Notes have stable
   ULIDs, five kinds, and `created_at`/`edited_at`; legacy one-sided note files remain
   readable and migrate deterministically. Schema: [17](17-ticket-file-format.md).
+- **Attachment payload:** `attachments/<ticket-ULID>/<attachment-ULID>/<filename>`;
+  `{id, filename, created_at}` lives in ticket frontmatter. Legacy direct children use
+  deterministic metadata based on ticket identity, never filesystem mtime.
 - **Store metadata:** `hotsheet-store.json` (camelCase: `schemaVersion`,
   `ticketPrefix`, `idStrategy`, `shard`). See `store.rs::StoreMetadata`.
 - **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`

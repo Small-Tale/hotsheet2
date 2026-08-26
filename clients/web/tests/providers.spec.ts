@@ -23,3 +23,19 @@ test('manages connections, filters providers, and honors capabilities',async({pa
   await posted;
   await expect(page.getByText(/gitlab · team\/project/)).toBeVisible();
 });
+
+test('renders attachment identity and creation time',async({page})=>{
+  const capabilities={create:true,update:true,close:true,notes:true,attachments:true,assignment:true,review_requests:false,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]};
+  await page.route('**/*',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    if(path==='/providers')return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Local',locator:'store',default:true,capabilities}]});
+    if(path==='/provider-connections')return route.fulfill({json:[]});
+    if(path==='/providers/git-local/tickets')return route.fulfill({json:[{qualified_id:'git-local:01',native_id:'01',title:'Evidence',status:'started',connection_id:'git-local',attachments:[{id:'01ATTACHMENT',filename:'proof.txt',created_at:'2026-08-26T05:00:00Z'}]}]});
+    return route.continue();
+  });
+  await page.goto('/');
+  const attachments=page.getByRole('region',{name:'Attachments for Evidence'});
+  await expect(attachments).toContainText('proof.txt');
+  await expect(attachments).toContainText('2026-08-26T05:00:00Z');
+  await expect(attachments.locator('li')).toHaveAttribute('data-attachment-id','01ATTACHMENT');
+});

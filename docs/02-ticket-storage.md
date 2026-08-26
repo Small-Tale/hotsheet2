@@ -252,9 +252,12 @@ should the fix also cover the dashboard dedicated view?
     transitions. Repeated and reversed transitions remain separate entries. **Shared**.
   The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
   get the reader) — [06-clients.md](06-clients.md) §6.8.
-- **Attachments** are files under `attachments/<id>/`, referenced by relative path.
-  They merge trivially — a new attachment is a new file, so two branches adding
-  attachments to the same ticket never conflict.
+- **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store
+  payloads under `attachments/<ticket-id>/<attachment-id>/<filename>`. The attachment
+  ULID remains stable across rename/copy/move; `created_at` is immutable. Concurrent
+  additions union by attachment id. Legacy payloads directly under the ticket directory
+  derive a deterministic id from ticket id + filename and use the ticket's `created_at`
+  (never filesystem mtime) until the next canonical ticket write persists metadata.
 
 Why Markdown + YAML: it renders natively in every editor and on GitHub, is
 trivially diffable, and separates machine fields (frontmatter) from human prose

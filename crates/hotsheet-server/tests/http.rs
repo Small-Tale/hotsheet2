@@ -1312,6 +1312,41 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
 }
 
 #[tokio::test]
+async fn attachment_upload_returns_and_persists_durable_metadata() {
+    let (_dir, state) = state();
+    let app = app(state);
+    let created = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"evidence"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!("/tickets/{id}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "../proof.txt")
+        .body(Body::from("evidence bytes"))
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let attached = body_json(response).await;
+    assert_eq!(attached["attachments"][0]["filename"], "proof.txt");
+    assert!(attached["attachments"][0]["id"].is_string());
+    assert!(attached["attachments"][0]["created_at"].is_string());
+
+    let reread = body_json(
+        app.oneshot(authed("GET", &format!("/tickets/{id}"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reread["attachments"], attached["attachments"]);
+}
+
+#[tokio::test]
 async fn setup_endpoint_prepares_the_project_like_the_cli() {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();

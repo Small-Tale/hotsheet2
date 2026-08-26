@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::ops::{self, NewTicket, TicketPatch, TicketQuery};
-use crate::wire::ApiTicket;
+use crate::wire::{ApiAttachment, ApiTicket};
 use crate::{FsStore, OpError, StoreError};
 
 /// A ticket's durable identity. Native ids are meaningful only within a connection.
@@ -319,6 +319,27 @@ pub trait TicketProvider: Send + Sync {
             capability: "note_edit",
         })
     }
+    fn attachment_bytes(
+        &self,
+        _native_id: &str,
+        _attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "attachments",
+        })
+    }
+    fn add_attachment(
+        &self,
+        _native_id: &str,
+        _attachment: ApiAttachment,
+        _bytes: Vec<u8>,
+    ) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "attachments",
+        })
+    }
     fn close(
         &self,
         native_id: &str,
@@ -605,6 +626,54 @@ impl TicketProvider for GitProvider {
         ))
     }
 
+    fn attachment_bytes(
+        &self,
+        native_id: &str,
+        attachment_id: &str,
+    ) -> Result<Vec<u8>, ProviderError> {
+        let ticket = self.ticket(native_id)?;
+        let attachment_id = Ulid::from_string(attachment_id)
+            .map_err(|_| ProviderError::InvalidNativeId(attachment_id.into()))?;
+        let attachment = ticket
+            .attachments
+            .iter()
+            .find(|item| item.id == attachment_id)
+            .ok_or_else(|| ProviderError::NotFound {
+                connection_id: self.connection_id.clone(),
+                native_id: attachment_id.to_string(),
+            })?;
+        Ok(std::fs::read(
+            self.store
+                .attachment_dir(&ticket.id)
+                .join(attachment.id.to_string())
+                .join(&attachment.filename),
+        )
+        .map_err(StoreError::Io)?)
+    }
+
+    fn add_attachment(
+        &self,
+        native_id: &str,
+        attachment: ApiAttachment,
+        bytes: Vec<u8>,
+    ) -> Result<ApiTicket, ProviderError> {
+        let ticket = self.ticket(native_id)?;
+        let attachment_id = Ulid::from_string(&attachment.id)
+            .map_err(|_| ProviderError::InvalidNativeId(attachment.id))?;
+        let (updated, _) = self.store.write_attachment(
+            &ticket.id,
+            attachment_id,
+            Timestamp::new(attachment.created_at),
+            &attachment.filename,
+            &bytes,
+        )?;
+        Ok(ApiTicket::from_provider(
+            &updated,
+            &self.connection_id,
+            None,
+        ))
+    }
+
     fn close(
         &self,
         native_id: &str,
@@ -822,6 +891,7 @@ pub fn copy_between(
     let destination = registry.get(destination_connection)?;
     let ticket = source_provider.get(&source.native_id)?;
     let capabilities = destination.descriptor().capabilities;
+    let attachments = ticket.attachments.clone();
     if !ticket.blocked_by.is_empty() {
         return Err(TransferError::DependenciesNeedMapping);
     }
@@ -895,6 +965,10 @@ pub fn copy_between(
                 note.text,
             )?;
         }
+    }
+    for attachment in attachments {
+        let bytes = source_provider.attachment_bytes(&source.native_id, &attachment.id)?;
+        destination.add_attachment(&created.native_id, attachment, bytes)?;
     }
     if !ticket.assignees.is_empty() || !ticket.review_requests.is_empty() {
         destination.assign(
@@ -1230,6 +1304,17 @@ mod tests {
             )
             .unwrap();
         let source_note_id = Ulid::new();
+        let source_attachment_id = Ulid::new();
+        source
+            .store
+            .write_attachment(
+                &source_id,
+                source_attachment_id,
+                Timestamp::new("2026-08-26T01:00:05Z"),
+                "provider-proof.txt",
+                b"provider proof",
+            )
+            .unwrap();
         source
             .add_note(
                 &source_id.to_string(),
@@ -1292,6 +1377,9 @@ mod tests {
             .get(&a.destination.native_id)
             .unwrap();
         assert_eq!(copied.notes.len(), 1);
+        assert_eq!(copied.attachments.len(), 1);
+        assert_eq!(copied.attachments[0].id, source_attachment_id.to_string());
+        assert_eq!(copied.attachments[0].created_at, "2026-08-26T01:00:05Z");
         assert_eq!(copied.notes[0].kind, NoteKind::Activity);
         assert_eq!(copied.notes[0].text, "preserve this edited note");
         assert_eq!(copied.notes[0].created_at, "2026-08-26T01:00:10Z");

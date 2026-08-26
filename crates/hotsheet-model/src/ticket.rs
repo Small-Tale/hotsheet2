@@ -25,6 +25,14 @@ pub struct Note {
     pub text: String,
 }
 
+/// Durable metadata for one attachment payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Attachment {
+    pub id: Ulid,
+    pub filename: String,
+    pub created_at: Timestamp,
+}
+
 /// A request for a specific person's involvement (`docs/10` §10.2).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReviewRequest {
@@ -104,6 +112,9 @@ pub struct Ticket {
     // External sync (`docs/16` §16.2).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub external: Vec<ExternalLink>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
 
     // Move tombstone (`docs/02` §2.13) — only on a `Status::Moved` record.
     #[serde(default, skip_serializing_if = "Option::is_none")]

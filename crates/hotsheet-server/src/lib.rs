@@ -20,9 +20,10 @@ use std::sync::{Arc, Mutex};
 
 use multistore::{StoreEntry, StoreHost, StoreInfo};
 
+use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, Request, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, patch, post};
@@ -679,6 +680,7 @@ pub fn app(state: AppState) -> Router {
     let protected = Router::new()
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
+        .route("/tickets/{id}/attachments", post(add_ticket_attachment))
         .route("/tickets/{id}/close", post(close_ticket))
         .route("/tickets/{id}/assign", post(assign_ticket))
         // Coordination: claim the next available ticket, release, renew a lease (HS2-86).
@@ -2076,6 +2078,27 @@ async fn update_ticket(
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     Ok(Json(do_update(&state, &state.default_entry(), &id, req)?))
+}
+
+async fn add_ticket_attachment(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    let entry = state.default_entry();
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let filename = headers
+        .get("x-hotsheet-filename")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "missing x-hotsheet-filename"))?;
+    let (updated, _) =
+        entry
+            .store
+            .write_attachment(&ticket.id, Ulid::new(), now(), filename, &body)?;
+    state.changed_in(&entry, "attachment_added", &updated);
+    Ok((StatusCode::CREATED, Json(api_ticket(&entry, &updated)?)))
 }
 
 async fn close_ticket(

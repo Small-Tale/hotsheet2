@@ -80,8 +80,12 @@ pub struct ExportNote {
 /// to the export JSON's directory, written by the migrator's staging pass).
 #[derive(Debug, Deserialize)]
 pub struct ExportAttachment {
+    #[serde(default)]
+    pub id: Option<String>,
     pub original_filename: Option<String>,
     pub stored_path: String,
+    #[serde(default)]
+    pub created_at: Option<String>,
 }
 
 /// Result of an import run.
@@ -180,7 +184,18 @@ fn copy_attachments(
             .as_deref()
             .filter(|s| !s.is_empty())
             .unwrap_or(&att.stored_path);
-        store.write_attachment(id, filename, &bytes)?;
+        let attachment_id = att
+            .id
+            .as_deref()
+            .and_then(|value| Ulid::from_string(value).ok())
+            .unwrap_or_else(|| FsStore::legacy_attachment_id(id, &att.stored_path));
+        let ticket = store.read_ticket(id)?;
+        let created_at = att
+            .created_at
+            .clone()
+            .map(Timestamp::new)
+            .unwrap_or(ticket.created_at);
+        store.write_attachment(id, attachment_id, created_at, filename, &bytes)?;
         n += 1;
     }
     Ok(n)
@@ -420,7 +435,12 @@ mod tests {
         assert_eq!(summary.attachments, 1);
 
         let ticket = &store.list_tickets().unwrap()[0];
-        let file = store.attachment_dir(&ticket.id).join("shot.png");
+        assert_eq!(ticket.attachments.len(), 1);
+        assert_eq!(ticket.attachments[0].created_at, ticket.created_at);
+        let file = store
+            .attachment_dir(&ticket.id)
+            .join(ticket.attachments[0].id.to_string())
+            .join("shot.png");
         assert_eq!(std::fs::read(file).unwrap(), b"PNGDATA");
     }
 }

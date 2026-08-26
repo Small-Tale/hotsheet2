@@ -887,6 +887,33 @@ fn edit_can_append_and_edit_an_activity_note() {
 }
 
 #[test]
+fn attach_adds_stable_metadata_and_nested_payload() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(source.path(), b"proof").unwrap();
+    hs(dir.path()).args(["init"]).assert().success();
+    let slug = new_ticket(dir.path(), "Attachment metadata");
+    hs(dir.path())
+        .arg("attach")
+        .arg(&slug)
+        .arg(source.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Attached "));
+    let store = hotsheet_ticketing::FsStore::open(dir.path()).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ticket.attachments.len(), 1);
+    assert!(ticket.attachments[0].created_at.is_valid());
+    let payload = store
+        .attachment_dir(&ticket.id)
+        .join(ticket.attachments[0].id.to_string())
+        .join(source.path().file_name().unwrap());
+    assert_eq!(std::fs::read(payload).unwrap(), b"proof");
+}
+
+#[test]
 fn settings_shared_and_local_scopes() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

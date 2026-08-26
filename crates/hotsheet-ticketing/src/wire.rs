@@ -62,6 +62,7 @@ pub struct ApiTicket {
     pub review_requests: Vec<ReviewRequest>,
     pub schema: u32,
     pub notes: Vec<ApiNote>,
+    pub attachments: Vec<ApiAttachment>,
     /// Computed standing guidance; never persisted in the ticket file.
     pub auto_context: Vec<TicketAutoContext>,
 }
@@ -74,6 +75,13 @@ pub struct ApiNote {
     pub created_at: String,
     pub edited_at: String,
     pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ApiAttachment {
+    pub id: String,
+    pub filename: String,
+    pub created_at: String,
 }
 
 impl From<&Ticket> for ApiTicket {
@@ -130,6 +138,15 @@ impl ApiTicket {
                     created_at: n.created_at.as_str().to_string(),
                     edited_at: n.edited_at.as_str().to_string(),
                     text: n.text.clone(),
+                })
+                .collect(),
+            attachments: t
+                .attachments
+                .iter()
+                .map(|attachment| ApiAttachment {
+                    id: attachment.id.to_string(),
+                    filename: attachment.filename.clone(),
+                    created_at: attachment.created_at.as_str().to_string(),
                 })
                 .collect(),
             auto_context: Vec::new(),

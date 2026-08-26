@@ -81,7 +81,7 @@ and don't imply reading order — read by group.
 **C · Data & storage**
 | Doc | Topic | Status |
 |---|---|---|
-| [02-ticket-storage.md](02-ticket-storage.md) | Default git-provider format, five note kinds/activity history, multi-store projects, IDs, auto-merge, copy/move | Shipped core/server/web |
+| [02-ticket-storage.md](02-ticket-storage.md) | Default git-provider format, activity history, durable attachment metadata, multi-store IDs, auto-merge, copy/move | Shipped core/server/web |
 | [03-indexing-and-query.md](03-indexing-and-query.md) | SQLite+FTS5 index, file watching, reindex, query surface | Confirmed |
 | [17-ticket-file-format.md](17-ticket-file-format.md) | Canonical frontmatter plus bounded notes with created/edited timestamps (parser SSOT; legacy reader retained) | Shipped |
 

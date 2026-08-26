@@ -20,7 +20,7 @@
 
 use std::collections::BTreeMap;
 
-use hotsheet_model::{Note, Ticket};
+use hotsheet_model::{Attachment, Note, Ticket};
 
 /// How the `details` body resolved.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -185,6 +185,7 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
     // two people adding a reviewer never conflict (docs/10 §10.2, HS2-20).
     m.review_requests = merge_reviews(&ours.review_requests, &theirs.review_requests);
     m.external = pick3(&base.external, &ours.external, &theirs.external, ours_wins);
+    m.attachments = merge_attachments(&ours.attachments, &theirs.attachments, ours_wins);
     m.extra = pick3(&base.extra, &ours.extra, &theirs.extra, ours_wins);
 
     // Notes — union by id, newest-timestamp wins per id, sorted by id (chronological).
@@ -197,6 +198,33 @@ pub fn merge_tickets(base: &Ticket, ours: &Ticket, theirs: &Ticket) -> MergeOutc
     }
 
     MergeOutcome { ticket: m, body }
+}
+
+fn merge_attachments(
+    ours: &[Attachment],
+    theirs: &[Attachment],
+    ours_wins: bool,
+) -> Vec<Attachment> {
+    let mut by_id: BTreeMap<hotsheet_model::Ulid, Attachment> = BTreeMap::new();
+    for attachment in ours.iter().chain(theirs.iter()) {
+        by_id
+            .entry(attachment.id)
+            .and_modify(|current| {
+                let candidate_is_ours = ours.iter().any(|item| item == attachment);
+                if candidate_is_ours == ours_wins {
+                    *current = attachment.clone();
+                }
+            })
+            .or_insert_with(|| attachment.clone());
+    }
+    let mut attachments: Vec<_> = by_id.into_values().collect();
+    attachments.sort_by(|a, b| {
+        a.created_at
+            .chronological_cmp(&b.created_at)
+            .unwrap_or_else(|| a.created_at.as_str().cmp(b.created_at.as_str()))
+            .then(a.id.cmp(&b.id))
+    });
+    attachments
 }
 
 /// 3-way pick for a single scalar: unchanged side wins; both-changed → last-writer-wins.
@@ -397,6 +425,40 @@ mod tests {
         assert_eq!(merged.notes[0].text, "theirs");
         assert_eq!(merged.notes[0].created_at.as_str(), "2026-08-19T01:00:00Z");
         assert_eq!(merged.notes[0].edited_at.as_str(), "2026-08-19T03:00:00Z");
+    }
+
+    #[test]
+    fn concurrent_attachment_additions_union_and_same_id_rename_uses_newer_side() {
+        let base = base_ticket();
+        let shared_id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+        let mut ours = base.clone();
+        ours.updated_at = ts("2026-08-19T02:00:00Z");
+        ours.attachments = vec![Attachment {
+            id: shared_id,
+            filename: "ours.png".into(),
+            created_at: ts("2026-08-19T01:00:00Z"),
+        }];
+        let mut theirs = base.clone();
+        theirs.updated_at = ts("2026-08-19T03:00:00Z");
+        theirs.attachments = vec![
+            Attachment {
+                id: shared_id,
+                filename: "renamed.png".into(),
+                created_at: ts("2026-08-19T01:00:00Z"),
+            },
+            Attachment {
+                id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
+                filename: "theirs.txt".into(),
+                created_at: ts("2026-08-19T02:00:00Z"),
+            },
+        ];
+        let merged = merge_tickets(&base, &ours, &theirs).ticket;
+        assert_eq!(merged.attachments.len(), 2);
+        assert_eq!(merged.attachments[0].filename, "renamed.png");
+        assert_eq!(
+            merged.attachments[0].created_at.as_str(),
+            "2026-08-19T01:00:00Z"
+        );
     }
 
     #[test]

@@ -136,6 +136,8 @@ enum Cmd {
     },
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
+    /// Attach a file to a ticket with durable identity and creation time.
+    Attach { id: String, file: PathBuf },
     /// Edit a ticket's fields (by slug or ULID).
     Edit {
         id: String,
@@ -727,6 +729,7 @@ fn main() -> Result<()> {
             reason,
         } => cmd_provider_close(&cli.path, &connection, &id, &reason),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
+        Cmd::Attach { id, file } => cmd_attach(&cli.path, &id, &file),
         Cmd::Edit {
             id,
             title,
@@ -2211,6 +2214,21 @@ fn cmd_show(path: &PathBuf, needle: &str) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, needle)?;
     print!("{}", to_file_string(&ticket));
+    Ok(())
+}
+
+fn cmd_attach(path: &PathBuf, needle: &str, file: &Path) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, needle)?;
+    let filename = file
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| anyhow::anyhow!("attachment path has no UTF-8 filename"))?;
+    let bytes = std::fs::read(file)?;
+    let attachment_id = Ulid::new();
+    let (_, written) =
+        store.write_attachment(&ticket.id, attachment_id, now_ts(), filename, &bytes)?;
+    println!("Attached {attachment_id} ({})", written.display());
     Ok(())
 }
 

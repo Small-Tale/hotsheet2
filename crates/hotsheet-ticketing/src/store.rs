@@ -14,8 +14,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use hotsheet_model::{ParseError, Ticket, Ulid, parse_file, to_file_string};
+use hotsheet_model::{Attachment, ParseError, Ticket, Timestamp, Ulid, parse_file, to_file_string};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// The store metadata file at a store root.
 pub const STORE_METADATA_FILE: &str = "hotsheet-store.json";
@@ -179,10 +180,12 @@ impl FsStore {
     /// Read and parse a ticket file at an explicit path.
     pub fn read_ticket_at(&self, path: &Path) -> Result<Ticket, StoreError> {
         let text = fs::read_to_string(path)?;
-        parse_file(&text).map_err(|source| StoreError::Parse {
+        let mut ticket = parse_file(&text).map_err(|source| StoreError::Parse {
             path: path.to_path_buf(),
             source,
-        })
+        })?;
+        self.add_legacy_attachment_metadata(&mut ticket)?;
+        Ok(ticket)
     }
 
     /// The attachments directory for a ticket: `attachments/<ULID>/`.
@@ -190,24 +193,131 @@ impl FsStore {
         self.root.join("attachments").join(id.to_string())
     }
 
-    /// Write an attachment file under `attachments/<ULID>/<filename>` (the filename is
-    /// reduced to its basename to prevent path traversal). Returns the written path.
+    /// Deterministic identity for a pre-metadata attachment.
+    pub fn legacy_attachment_id(ticket_id: &Ulid, filename: &str) -> Ulid {
+        let mut hash = Sha256::new();
+        hash.update(ticket_id.to_string().as_bytes());
+        hash.update([0]);
+        hash.update(filename.as_bytes());
+        let bytes: [u8; 16] = hash.finalize()[..16].try_into().expect("sha prefix");
+        Ulid::from(u128::from_be_bytes(bytes))
+    }
+
+    /// Add an attachment payload and its durable metadata.
     pub fn write_attachment(
         &self,
-        id: &Ulid,
+        ticket_id: &Ulid,
+        attachment_id: Ulid,
+        created_at: Timestamp,
         filename: &str,
         bytes: &[u8],
-    ) -> Result<PathBuf, StoreError> {
+    ) -> Result<(Ticket, PathBuf), StoreError> {
+        let mut ticket = self.read_ticket(ticket_id)?;
         let name = Path::new(filename)
             .file_name()
             .and_then(|n| n.to_str())
             .filter(|n| !n.is_empty())
             .unwrap_or("attachment");
-        let dir = self.attachment_dir(id);
+        if let Some(existing) = ticket
+            .attachments
+            .iter()
+            .find(|item| item.id == attachment_id)
+        {
+            if existing.filename != name || existing.created_at != created_at {
+                return Err(StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!("attachment id {attachment_id} has different metadata"),
+                )));
+            }
+        }
+        let dir = self
+            .attachment_dir(ticket_id)
+            .join(attachment_id.to_string());
         fs::create_dir_all(&dir)?;
         let path = dir.join(name);
         fs::write(&path, bytes)?;
-        Ok(path)
+        if !ticket.attachments.iter().any(|item| item.id == attachment_id) {
+            ticket.attachments.push(Attachment {
+                id: attachment_id,
+                filename: name.to_string(),
+                created_at: created_at.clone(),
+            });
+            ticket.attachments.sort_by(|a, b| {
+                a.created_at
+                    .chronological_cmp(&b.created_at)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(a.id.cmp(&b.id))
+            });
+        }
+        ticket.updated_at = created_at;
+        self.write_ticket_committing(&ticket)?;
+        Ok((ticket, path))
+    }
+
+    pub fn rename_attachment(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: &Ulid,
+        now: Timestamp,
+        filename: &str,
+    ) -> Result<Ticket, StoreError> {
+        let mut ticket = self.read_ticket(ticket_id)?;
+        let attachment = ticket
+            .attachments
+            .iter_mut()
+            .find(|item| &item.id == attachment_id)
+            .ok_or_else(|| {
+                StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("attachment {attachment_id}"),
+                ))
+            })?;
+        let name = Path::new(filename)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("attachment");
+        let dir = self
+            .attachment_dir(ticket_id)
+            .join(attachment_id.to_string());
+        fs::create_dir_all(&dir)?;
+        let nested_source = dir.join(&attachment.filename);
+        let source = if nested_source.is_file() {
+            nested_source
+        } else {
+            self.attachment_dir(ticket_id).join(&attachment.filename)
+        };
+        fs::rename(source, dir.join(name))?;
+        attachment.filename = name.into();
+        ticket.updated_at = now;
+        self.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    }
+
+    fn add_legacy_attachment_metadata(&self, ticket: &mut Ticket) -> Result<(), StoreError> {
+        let dir = self.attachment_dir(&ticket.id);
+        let entries = match fs::read_dir(dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            if !entry.file_type()?.is_file() {
+                continue;
+            }
+            let filename = entry.file_name().to_string_lossy().to_string();
+            let id = Self::legacy_attachment_id(&ticket.id, &filename);
+            if !ticket.attachments.iter().any(|item| item.id == id) {
+                ticket.attachments.push(Attachment {
+                    id,
+                    filename,
+                    created_at: ticket.created_at.clone(),
+                });
+            }
+        }
+        ticket.attachments.sort_by_key(|item| item.id);
+        Ok(())
     }
 
     /// Read every ticket in the store, sorted by id (≈ creation order).
@@ -392,12 +502,65 @@ mod tests {
     fn write_attachment_stores_under_the_ticket_and_strips_paths() {
         let (_dir, store) = temp_store();
         let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
-        // A traversal-y filename is reduced to its basename.
-        let path = store
-            .write_attachment(&id, "../../evil/shot.png", b"PNGDATA")
+        store
+            .write_ticket(&Ticket::new(id, "HS-TEST", "test", "task", "t0", "t0"))
             .unwrap();
-        assert!(path.ends_with("attachments/01ARZ3NDEKTSV4RRFFQ69G5FAV/shot.png"));
+        let attachment_id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+        // A traversal-y filename is reduced to its basename.
+        let (ticket, path) = store
+            .write_attachment(
+                &id,
+                attachment_id,
+                Timestamp::new("2026-08-26T00:00:00Z"),
+                "../../evil/shot.png",
+                b"PNGDATA",
+            )
+            .unwrap();
+        assert!(path.ends_with(
+            "attachments/01ARZ3NDEKTSV4RRFFQ69G5FAV/01ARZ3NDEKTSV4RRFFQ69G5FB0/shot.png"
+        ));
         assert_eq!(fs::read(&path).unwrap(), b"PNGDATA");
+        assert_eq!(ticket.attachments[0].id, attachment_id);
+        assert_eq!(ticket.attachments[0].filename, "shot.png");
+        assert_eq!(
+            ticket.attachments[0].created_at.as_str(),
+            "2026-08-26T00:00:00Z"
+        );
+        let renamed = store
+            .rename_attachment(
+                &id,
+                &attachment_id,
+                Timestamp::new("2026-08-26T01:00:00Z"),
+                "renamed.png",
+            )
+            .unwrap();
+        assert_eq!(renamed.attachments[0].id, attachment_id);
+        assert_eq!(renamed.attachments[0].filename, "renamed.png");
+        assert_eq!(
+            renamed.attachments[0].created_at,
+            ticket.attachments[0].created_at
+        );
+        assert!(path.with_file_name("renamed.png").is_file());
+    }
+
+    #[test]
+    fn legacy_attachment_gets_deterministic_metadata_without_using_mtime() {
+        let (_dir, store) = temp_store();
+        let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        store.write_ticket(&ticket).unwrap();
+        let dir = store.attachment_dir(&ticket.id);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("legacy.txt"), b"old").unwrap();
+
+        let first = store.read_ticket(&ticket.id).unwrap();
+        let second = store.read_ticket(&ticket.id).unwrap();
+        assert_eq!(first.attachments, second.attachments);
+        assert_eq!(first.attachments[0].filename, "legacy.txt");
+        assert_eq!(first.attachments[0].created_at, ticket.created_at);
+        assert_eq!(
+            first.attachments[0].id,
+            FsStore::legacy_attachment_id(&ticket.id, "legacy.txt")
+        );
     }
 
     #[test]

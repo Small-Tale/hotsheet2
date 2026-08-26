@@ -345,6 +345,7 @@ impl GitHubProvider {
                     text: strip_note_marker(comment.body),
                 })
                 .collect(),
+            attachments: vec![],
             auto_context: vec![],
         }
     }

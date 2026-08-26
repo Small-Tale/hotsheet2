@@ -251,6 +251,7 @@ impl GitLabProvider {
                     text: strip_note(&note.body),
                 })
                 .collect(),
+            attachments: vec![],
             auto_context: vec![],
         }
     }

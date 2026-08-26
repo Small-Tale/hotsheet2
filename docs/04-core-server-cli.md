@@ -210,6 +210,7 @@ hotsheet new "Fix dashboard flicker" --category bug --priority high --up-next
 hotsheet ls --up-next --status started
 hotsheet search "flicker"                 # FTS via the local index
 hotsheet show HS-7f3k9q
+hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at
 hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
@@ -224,6 +225,9 @@ hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-close github-main 42 --reason completed
 ```
+The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
+an `x-hotsheet-filename` header; the returned `ApiTicket.attachments` carries the
+stable id, sanitized filename, and creation timestamp.
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
 `--blocked-by` **replaces** the set and `--clear-blocked-by` empties it. The same edge

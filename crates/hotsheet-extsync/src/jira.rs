@@ -235,6 +235,7 @@ impl JiraProvider {
                     text: strip_note(&adf_to_text(Some(&comment.body))),
                 })
                 .collect(),
+            attachments: vec![],
             auto_context: vec![],
         }
     }

@@ -45,6 +45,7 @@ const KNOWN_KEYS: &[&str] = &[
     "assignees",
     "review_requests",
     "external",
+    "attachments",
     "moved_to_store",
     "moved_at",
     "copied_from",
@@ -594,6 +595,11 @@ mod tests {
             url: "https://github.com/Small-Tale/hotsheet2/issues/42".into(),
             synced_at: "2026-08-20T07:00:00Z".into(),
             remote_hash: "abc123".into(),
+        }];
+        t.attachments = vec![crate::ticket::Attachment {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
+            filename: "proof.png".into(),
+            created_at: "2026-08-20T06:00:00Z".into(),
         }];
 
         let text = to_file_string(&t);
