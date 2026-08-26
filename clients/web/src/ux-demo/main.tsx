@@ -33,7 +33,7 @@ function demoContent(item: DemoDefinition) {
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
   return (
-    <main class="demo-shell">
+    <main class={settingsOpen.value ? 'demo-shell demo-shell--settings-open' : 'demo-shell'}>
       <aside class="demo-master" aria-label="Component catalog">
         <header><p class="eyebrow">Hot Sheet</p><h1>UX components</h1><p>Production components with deterministic development support.</p></header>
         <nav>{demoCatalog.map(demoNavigation)}</nav>

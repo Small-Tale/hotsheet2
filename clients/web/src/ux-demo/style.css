@@ -31,4 +31,8 @@ body { margin: 0; min-width: 52rem; }
 .settings-inspector > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
 .settings-inspector h2 { margin: .15rem 0 0; }
 wa-tag[data-disabled="true"] { opacity: .48; pointer-events: none; }
+@media (min-width: 78rem) {
+  .demo-shell--settings-open { grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr) minmax(23rem, 27rem); }
+  .settings-inspector { position: sticky; grid-column: 3; grid-row: 1; inset: auto; width: auto; height: 100vh; z-index: auto; box-shadow: none; }
+}
 @media (max-width: 60rem) { body { min-width: 0; } .demo-shell { grid-template-columns: minmax(14rem, 18rem) minmax(28rem, 1fr); } .demo-detail { padding: 2rem; } }

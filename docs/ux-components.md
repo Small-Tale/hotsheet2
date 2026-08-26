@@ -402,7 +402,9 @@ component implementation. Its Hono route is registered only for Vite `serve`, wh
 host is fixed to loopback; it is absent from the production build. The initial shell
 provides the categorized master/detail catalog, URL-addressable selection, planned
 component states, and an optional non-modal, manually closed settings inspector that
-keeps the demo visible during live adjustment. It should grow to provide:
+keeps the demo visible during live adjustment. At wide desktop widths the inspector
+occupies a dedicated grid column and shrinks the detail surface; at narrower widths it
+overlays the content to preserve usable demo space. It should grow to provide:
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios

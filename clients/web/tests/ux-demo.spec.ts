@@ -13,12 +13,20 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
 });
 
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=tag-chip');
   const chip = page.locator('[data-component="tag-chip"]');
   await expect(chip).toContainText('needs-design');
   await page.getByRole('button', { name: 'Settings' }).click();
   const inspector = page.getByRole('complementary', { name: 'TagChip settings' });
   await expect(inspector).toBeVisible();
+  const [detailBox, inspectorBox] = await Promise.all([
+    page.locator('.demo-detail').boundingBox(),
+    inspector.boundingBox(),
+  ]);
+  expect(detailBox).not.toBeNull();
+  expect(inspectorBox).not.toBeNull();
+  expect(detailBox!.x + detailBox!.width).toBeLessThanOrEqual(inspectorBox!.x + 1);
   const label = page.getByRole('textbox', { name: 'Label' });
   await label.fill('server');
   await expect(chip).toContainText('server');
