@@ -2,6 +2,7 @@ import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import '@awesome.me/webawesome/dist/styles/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
+import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
@@ -11,6 +12,8 @@ import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadge
 import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
+import { LucideIcon } from '../components/lucide-icon';
+import { Network } from 'lucide';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -39,11 +42,22 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
   const uses = (item.uses ?? []).map(findDemo).filter((demo): demo is DemoDefinition => Boolean(demo));
   const usedBy = demosUsing(item.id);
   if (uses.length === 0 && usedBy.length === 0) return null;
-  const links = (items: DemoDefinition[]) => <ul>{items.map(demoLink)}</ul>;
-  return <footer class="demo-relationships" aria-label="Component relationships">
-    {uses.length > 0 && <section><h2>Uses</h2>{links(uses)}</section>}
-    {usedBy.length > 0 && <section><h2>Used by</h2>{links(usedBy)}</section>}
-  </footer>;
+  const items = (demos: DemoDefinition[]) => demos.map(demo =>
+    <wa-dropdown-item data-demo-id={demo.id} value={demo.id}>
+      {demo.name}<small slot="details">{demo.implemented ? 'Demo' : demo.phase.replace('-', ' ')}</small>
+    </wa-dropdown-item>
+  );
+  return <wa-dropdown class="demo-relationships" placement="top-start">
+    <wa-button slot="trigger" appearance="outlined" with-caret>
+      <span slot="start" class="demo-relationships__icon"><LucideIcon icon={Network} name="network" /></span>
+      Related components
+    </wa-button>
+    {uses.length > 0 && <h2>Uses</h2>}
+    {items(uses)}
+    {uses.length > 0 && usedBy.length > 0 && <wa-divider></wa-divider>}
+    {usedBy.length > 0 && <h2>Used by</h2>}
+    {items(usedBy)}
+  </wa-dropdown>;
 }
 
 function DemoApp() {
@@ -53,11 +67,11 @@ function DemoApp() {
       <aside class="demo-master" aria-label="Component catalog">
         <header><p class="eyebrow">Hot Sheet</p><h1>UX components</h1><p>Production components with deterministic development support.</p></header>
         <nav>{demoCatalog.map(demoNavigation)}</nav>
-        <DemoRelationships item={selected} />
       </aside>
       <article class="demo-detail">
         <header class="demo-detail__header"><div><p class="eyebrow">{selected.phase.replace('-', ' ')}</p><h1>{selected.name}</h1><p>{selected.description}</p></div></header>
         {demoContent(selected)}
+        <footer class="demo-detail__footer"><DemoRelationships item={selected} /></footer>
       </article>
       {settingsOpen.value && <aside class="settings-inspector" aria-label={`${selected.name} settings`}>
         <header><div><p class="eyebrow">Demo settings</p><h2>{selected.name}</h2></div></header>

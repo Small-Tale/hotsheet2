@@ -15,7 +15,7 @@ body { margin: 0; min-width: 52rem; }
 .catalog-group a:hover { background: #eff6ff; }
 .catalog-group a[aria-current="page"] { color: #1d4ed8; background: #dbeafe; font-weight: 650; }
 .catalog-group small { color: #92929c; font-size: .68rem; font-weight: 500; text-transform: capitalize; }
-.demo-detail { min-width: 0; padding: clamp(2rem, 5vw, 5rem); }
+.demo-detail { display: flex; min-width: 0; min-height: 100vh; padding: clamp(2rem, 5vw, 5rem); flex-direction: column; }
 .demo-detail__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; max-width: 70rem; margin: 0 auto 2rem; }
 .demo-detail__header p:last-child { max-width: 42rem; margin: .25rem 0 0; }
 .component-stage, .planned-demo { max-width: 70rem; min-height: 28rem; margin: auto; padding: clamp(2rem, 5vw, 5rem); border: 1px solid #dddde3; border-radius: 1rem; background: white; box-shadow: 0 1.25rem 3rem rgba(35, 32, 48, .07); }
@@ -33,13 +33,11 @@ body { margin: 0; min-width: 52rem; }
 .settings-toggle { position: fixed; z-index: 20; top: 1.5rem; right: 1.5rem; width: 8.5rem; }
 .component-stage--row { justify-items: stretch; }
 .component-stage__canvas--row { width: 100%; min-width: 0; }
-.demo-relationships { margin: 2rem .6rem 0; padding-top: 1rem; border-top: 1px solid #dddde3; }
-.demo-relationships section + section { margin-top: 1rem; }
-.demo-relationships h2 { margin: 0 0 .35rem; color: #777781; font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; }
-.demo-relationships ul { display: grid; gap: .15rem; margin: 0; padding: 0; list-style: none; }
-.demo-relationships a { display: flex; justify-content: space-between; padding: .45rem .55rem; border-radius: .4rem; color: inherit; text-decoration: none; }
-.demo-relationships a:hover { background: #eff6ff; }
-.demo-relationships small { color: #92929c; font-size: .68rem; }
+.demo-detail__footer { display: flex; width: 100%; max-width: 70rem; min-height: 2.5rem; margin: auto auto 0; padding-top: 1.5rem; align-items: flex-end; }
+.demo-relationships h2 { margin: 0; padding: .45rem .75rem .25rem; color: #777781; font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; }
+.demo-relationships small { color: #92929c; font-size: .68rem; text-transform: capitalize; }
+.demo-relationships__icon { display: inline-flex; width: 1rem; height: 1rem; }
+.demo-relationships__icon svg { width: 100%; height: 100%; }
 @media (min-width: 78rem) {
   .demo-shell--settings-open { grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr) minmax(23rem, 27rem); }
   .settings-inspector { position: sticky; grid-column: 3; grid-row: 1; inset: auto; width: auto; height: 100vh; z-index: auto; box-shadow: none; }

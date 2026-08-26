@@ -253,9 +253,9 @@ The trailing inspector shown in the wireframe.
   filled, non-pill default presentation plus optional variants, disabled/removable behavior, unit tests, and interactive
   `/ux-demo` coverage. Tag padding uses a compact 2:1 horizontal-to-vertical ratio.
 
-The component catalog records composition relationships. Its sidebar shows clickable
-“Uses” and “Used by” links for the selected demo so composed components can be reviewed
-in either direction.
+The component catalog records composition relationships. A “Related components” menu
+in the main demo footer groups clickable “Uses” and “Used by” destinations so composed
+components can be reviewed in either direction without crowding the catalog sidebar.
 
 Production web component CSS is colocated in `clients/web/src/components/` and imported
 by its component module. The `/ux-demo` stylesheet owns only catalog shell, inspector,
