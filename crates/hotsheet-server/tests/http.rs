@@ -2878,6 +2878,99 @@ async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract()
 }
 
 #[tokio::test]
+async fn provider_connections_crud_keeps_only_references_and_one_default() {
+    let (_dir, st) = state();
+    let app = app(st);
+    let github = serde_json::json!({
+        "id":"github-main","provider":"github","locator":"acme/repo",
+        "name":"Public bugs","default":true,
+        "settings":{"credential":{"secret":"github-work"}}
+    });
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/provider-connections",
+            Some(&github.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert!(!body_json(response).await.to_string().contains("token"));
+
+    let gitlab = serde_json::json!({
+        "id":"gitlab-team","provider":"gitlab","locator":"team/project",
+        "name":null,"default":true,
+        "settings":{"credential":{"secret":"gitlab-work"}}
+    });
+    assert_eq!(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/provider-connections",
+                Some(&gitlab.to_string())
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CREATED
+    );
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/provider-connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed.as_array().unwrap().len(), 2);
+    assert_eq!(
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|connection| connection["default"] == true)
+            .count(),
+        1
+    );
+    assert_eq!(listed[1]["id"], "gitlab-team");
+
+    let update = serde_json::json!({
+        "id":"ignored-by-path","provider":"github","locator":"acme/renamed",
+        "name":"Renamed","default":true,
+        "settings":{"credential":{"secret":"github-work"}}
+    });
+    let updated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                "/provider-connections/github-main",
+                Some(&update.to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(updated["id"], "github-main");
+    assert_eq!(updated["locator"], "acme/renamed");
+
+    assert_eq!(
+        app.clone()
+            .oneshot(authed("DELETE", "/provider-connections/gitlab-team", None,))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let listed = body_json(
+        app.oneshot(authed("GET", "/provider-connections", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn persistent_mode_writes_a_file_backed_index_for_registered_stores() {
     // Hermetic: point HOTSHEET_HOME at a tempdir (nextest isolates each test process).
     let home = tempfile::tempdir().unwrap();

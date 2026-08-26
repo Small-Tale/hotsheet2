@@ -25,7 +25,7 @@ use axum::extract::{Path, Query, Request, State};
 use axum::http::StatusCode;
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
 use hotsheet_model::{
@@ -34,9 +34,9 @@ use hotsheet_model::{
 };
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OpError, OsKeychain,
-    ProviderConfigRegistry, ProviderDraft, ProviderPatch, ProviderRegistry, Settings, SortKey,
-    StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between,
-    move_between, ops,
+    ProviderConfigRegistry, ProviderConnection, ProviderDraft, ProviderPatch, ProviderRegistry,
+    Settings, SortKey, StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef,
+    auto_context, copy_between, move_between, ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -753,6 +753,14 @@ pub fn app(state: AppState) -> Router {
             "/providers/{connection_id}/tickets/{id}/assign",
             post(assign_provider_ticket),
         )
+        .route(
+            "/provider-connections",
+            get(list_provider_connections).post(create_provider_connection),
+        )
+        .route(
+            "/provider-connections/{connection_id}",
+            patch(update_provider_connection).delete(delete_provider_connection),
+        )
         // Cross-store resolve: a global ULID → its live instance in whichever store hosts
         // it (follows moved tombstones). HS2-87 / HS2-S4H2AM.
         .route("/resolve/{id}", get(resolve_ticket))
@@ -1045,6 +1053,114 @@ async fn list_providers(
     descriptors.extend(state.injected_providers.descriptors());
     descriptors.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
     Ok(Json(descriptors))
+}
+
+/// Project-scoped, non-secret provider configuration. Credential values stay in the
+/// server's key registry; this surface only carries a credential reference.
+async fn list_provider_connections(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ProviderConnection>>, ApiError> {
+    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
+fn validate_external_connection(connection: &ProviderConnection) -> Result<(), ApiError> {
+    if connection.provider == "git" {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "git connections are managed through the store registry",
+        ));
+    }
+    hotsheet_extsync::descriptor(connection)
+        .map(|_| ())
+        .map_err(provider_transfer_error)
+}
+
+fn save_provider_connections(
+    state: &AppState,
+    mut connections: Vec<ProviderConnection>,
+    connection: ProviderConnection,
+    replacing: Option<&str>,
+) -> Result<(), ApiError> {
+    validate_external_connection(&connection)?;
+    if connection.default {
+        for existing in &mut connections {
+            existing.default = false;
+        }
+    }
+    match replacing {
+        Some(id) => {
+            let slot = connections
+                .iter_mut()
+                .find(|candidate| candidate.id == id)
+                .ok_or_else(|| ApiError::not_found(id))?;
+            *slot = connection;
+        }
+        None => {
+            if connections
+                .iter()
+                .any(|candidate| candidate.id == connection.id)
+            {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    "provider connection id already exists",
+                ));
+            }
+            connections.push(connection);
+        }
+    }
+    connections.sort_by(|a, b| a.id.cmp(&b.id));
+    ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .save(&connections)
+        .map_err(provider_transfer_error)
+}
+
+async fn create_provider_connection(
+    State(state): State<AppState>,
+    Json(connection): Json<ProviderConnection>,
+) -> Result<(StatusCode, Json<ProviderConnection>), ApiError> {
+    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?;
+    save_provider_connections(&state, connections, connection.clone(), None)?;
+    Ok((StatusCode::CREATED, Json(connection)))
+}
+
+async fn update_provider_connection(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+    Json(mut connection): Json<ProviderConnection>,
+) -> Result<Json<ProviderConnection>, ApiError> {
+    connection.id = connection_id.clone();
+    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?;
+    save_provider_connections(
+        &state,
+        connections,
+        connection.clone(),
+        Some(&connection_id),
+    )?;
+    Ok(Json(connection))
+}
+
+async fn delete_provider_connection(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let registry = ProviderConfigRegistry::new(state.store.root().join("providers.json"));
+    let mut connections = registry.load().map_err(provider_transfer_error)?;
+    let before = connections.len();
+    connections.retain(|connection| connection.id != connection_id);
+    if connections.len() == before {
+        return Err(ApiError::not_found(&connection_id));
+    }
+    registry
+        .save(&connections)
+        .map_err(provider_transfer_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Deserialize)]

@@ -251,6 +251,13 @@ authentication/rate-limit failures, local date-bound filtering, server-owned
 credential references, deterministic fake-transport coverage, and opt-in live drift
 tests.
 
+The first Kerf/Web Awesome client surface manages those non-secret connection
+records through authenticated server CRUD routes, selects the default creation
+target, aggregates or filters tickets by provider, links native qualified identity
+to its provider URL, and derives enabled operations and copy/move destinations from
+advertised capabilities. Provider secrets never appear in connection responses;
+the UI names only a server-owned credential reference.
+
 ## 16.12 Cross-references
 
 - Git provider format and guarantees: [02-ticket-storage.md](02-ticket-storage.md)

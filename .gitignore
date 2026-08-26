@@ -35,10 +35,13 @@ pnpm-debug.log*
 
 # --- Common build/test/coverage output ---
 /dist/
+**/dist/
 /coverage/
 coverage/
 /test-results/
+**/test-results/
 /playwright-report/
+**/playwright-report/
 .nyc_output/
 
 # --- Diagram scratch (committed SVGs stay; local PNG previews don't) ---

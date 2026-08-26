@@ -1,0 +1,20 @@
+{
+  "name": "hotsheet-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "@awesome.me/webawesome": "3.11.0",
+    "kerfjs": "4.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "22.17.2",
+    "typescript": "5.9.2",
+    "vite": "7.3.6"
+  }
+}

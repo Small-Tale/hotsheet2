@@ -27,6 +27,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   scripts/check-test-coverage.mjs # CI validator for docs/TEST-COVERAGE.md evidence
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
+  clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
+    src/api.ts               #   Typed server client for providers, connections, tickets, and copy/move
+    src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
+    tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
   crates/
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)
