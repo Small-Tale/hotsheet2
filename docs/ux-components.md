@@ -101,8 +101,11 @@ The left region in the wireframe, scoped to the selected project/store connectio
 
 ### 2.3 `WorkspaceHeader` — feature floor
 
+- `WorkspaceHeader` — **demo built**: responsive project/view identity, compact
+  all-Lucide actions, expandable live search, and a connected list/column workspace
 - `ProjectHeading`
-- `ViewModeSwitcher` — list, columns, and later dashboard/analytics modes
+- `ViewModeSwitcher` — **built for list and columns** with accessible pressed state;
+  later dashboard/analytics modes join the same control
 - `SettingsButton`
 - `SortControl`
 - `SavedOrCommandMenu`
@@ -137,7 +140,9 @@ selection where sensible.
 ### 3.2 `ListWorkspace` — feature floor and current wireframe focus
 
 - `ViewHeading`
-- `QuickTicketComposer`
+- `QuickTicketComposer` — **demo built**: compact launcher expands to title/category,
+  provider destination, required-title validation, create, and cancel states; creation
+  inserts a selected mock ticket into the shared collection
   - compact “New ticket…” entry
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities
@@ -214,7 +219,9 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 
 ### 4.1 `TicketInspector` — feature floor
 
-The trailing inspector shown in the wireframe.
+The trailing inspector shown in the wireframe. `TicketInspector` is **demo built**
+with the shared status/tag components, metadata controls, Up Next toggle, close/reopen,
+and interactive Info, Timeline, and Attachments tabs.
 
 - `InspectorHeader`
   - ticket identifier

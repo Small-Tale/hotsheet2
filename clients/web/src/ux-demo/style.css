@@ -35,6 +35,9 @@ body { margin: 0; min-width: 52rem; }
 .component-stage__canvas--row { width: 100%; min-width: 0; }
 .collection-demo { display: grid; width: 100%; max-width: 70rem; margin: auto; gap: 1.25rem; justify-items: center; }
 .collection-demo--board { max-width: none; }
+.workspace-component-demo { display: grid; width: 100%; max-width: 70rem; margin: auto; gap: 1.25rem; }
+.workspace-component-demo__content { min-height: 24rem; padding: 1rem; overflow: hidden; border: 1px solid #dddde3; border-radius: .85rem; background: #f4f5f7; }
+.inspector-demo { display: grid; min-height: 36rem; place-items: center; gap: 1rem; }
 .demo-detail__footer { display: flex; width: 100%; max-width: 70rem; min-height: 2.5rem; margin: auto auto 0; padding-top: 1.5rem; align-items: flex-end; }
 .demo-relationships h2 { margin: 0; padding: .45rem .75rem .25rem; color: #777781; font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; }
 .demo-relationships small { color: #92929c; font-size: .68rem; text-transform: capitalize; }

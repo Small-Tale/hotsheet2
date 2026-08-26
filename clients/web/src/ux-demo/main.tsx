@@ -14,7 +14,8 @@ import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
 import { Network } from 'lucide';
-import { recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
+import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, inspectorOpen, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, WorkspaceHeaderDemo } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -22,6 +23,7 @@ const fromUrl = () => new URL(location.href).searchParams.get('component') ?? de
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
+const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer'].includes(selectedId.value);
 
 function demoLink(item: DemoDefinition) {
   const selected = item.id === selectedId.value;
@@ -38,6 +40,9 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-row') return <TicketRowDemo />;
   if (item.id === 'ticket-list') return <TicketListDemo />;
   if (item.id === 'ticket-board') return <TicketBoardDemo />;
+  if (item.id === 'workspace-header') return <WorkspaceHeaderDemo />;
+  if (item.id === 'quick-ticket-composer') return <QuickTicketComposerDemo />;
+  if (item.id === 'ticket-inspector') return <TicketInspectorDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 
@@ -127,6 +132,32 @@ delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, targe
   if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
   if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
 });
+delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
+  workspaceMode.value = (target as HTMLElement).dataset.viewMode as typeof workspaceMode.value;
+  recordCollectionEvent(`${workspaceMode.value === 'list' ? 'List' : 'Columns'} view selected`);
+});
+delegate(root, 'click', '[data-action="toggle-workspace-search"]', () => {
+  workspaceSearchOpen.value = !workspaceSearchOpen.value;
+  if (!workspaceSearchOpen.value) workspaceSearchQuery.value = '';
+});
+delegate(root, 'input', '[name="workspace-search"]', (_event, target) => { workspaceSearchQuery.value = (target as FormControl).value; });
+delegate(root, 'click', '[data-action="sort-tickets"]', () => { recordCollectionEvent('Sort menu requested'); });
+delegate(root, 'click', '[data-action="toggle-favorite"]', () => { recordCollectionEvent('View favorite toggled'); });
+delegate(root, 'click', '[data-action="more-workspace-actions"]', () => { recordCollectionEvent('Workspace actions requested'); });
+delegate(root, 'click', '[data-action="open-workspace-settings"]', () => { recordCollectionEvent('Workspace settings requested'); });
+delegate(root, 'click', '[data-action="expand-ticket-composer"]', () => { composerExpanded.value = true; });
+delegate(root, 'click', '[data-action="cancel-ticket-composer"]', () => { composerExpanded.value = false; composerTitle.value = ''; recordCollectionEvent('Ticket creation cancelled'); });
+delegate(root, 'input', '[name="new-ticket-title"]', (_event, target) => { composerTitle.value = (target as FormControl).value; });
+delegate(root, 'change', '[name="new-ticket-category"]', (_event, target) => { composerCategory.value = (target as FormControl).value; });
+delegate(root, 'submit', '[data-action="create-ticket-form"]', (event) => { event.preventDefault(); if (!createDemoTicket()) recordCollectionEvent('Enter a ticket title'); });
+delegate(root, 'click', '[data-action="set-inspector-tab"]', (_event, target) => { inspectorTab.value = (target as HTMLElement).dataset.inspectorTab as typeof inspectorTab.value; });
+delegate(root, 'click', '[data-action="close-ticket-inspector"]', () => { inspectorOpen.value = false; recordCollectionEvent('Inspector closed'); });
+delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => { inspectorOpen.value = true; recordCollectionEvent('Inspector opened'); });
+delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
+  const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
+  toggleCollectionTicketUpNext(ticket.slug);
+});
+delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { recordCollectionEvent('Ticket reader requested'); });
 delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
   const control = target as FormControl;
   if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;
@@ -152,7 +183,7 @@ delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, ta
 delegate(root, 'click', '[data-action="select-ticket-row"]', (event, target) => {
   if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
   const row = target as HTMLElement;
-  if (selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') {
+  if (usesCollectionState()) {
     selectCollectionTicket(row.dataset.ticketSlug!);
     return;
   }
@@ -162,7 +193,7 @@ delegate(root, 'click', '[data-action="select-ticket-row"]', (event, target) => 
   if (selected) selected.checked = ticketRowSettings.selected.value;
 });
 function toggleRowUpNext(target?: Element): void {
-  if (selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') {
+  if (usesCollectionState()) {
     const row = target?.closest('[data-component="ticket-list-row"]') as HTMLElement | null;
     if (row) toggleCollectionTicketUpNext(row.dataset.ticketSlug!);
     return;
@@ -193,7 +224,7 @@ delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, targe
   event.preventDefault();
   const pointer = event as MouseEvent;
   const row = target as HTMLElement;
-  if (selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') {
+  if (usesCollectionState()) {
     selectCollectionTicket(row.dataset.ticketSlug!, true);
     recordCollectionEvent(`Context menu opened for ${row.dataset.ticketSlug}`);
     contextMenu.value = { x: pointer.clientX, y: pointer.clientY, ticketSlug: row.dataset.ticketSlug };
@@ -207,7 +238,7 @@ delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, targe
 });
 delegate(root, 'click', '[data-context-action]', (_event, target) => {
   const action = (target as HTMLElement).dataset.contextAction!;
-  if ((selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') && contextMenu.value?.ticketSlug) {
+  if (usesCollectionState() && contextMenu.value?.ticketSlug) {
     const slug = contextMenu.value.ticketSlug;
     if (action === 'Toggle Up Next') toggleCollectionTicketUpNext(slug);
     recordCollectionEvent(`${action} selected for ${slug}`);

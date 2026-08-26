@@ -233,6 +233,68 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(page.getByText(/Toggle Up Next selected for HS2-/)).toBeVisible();
 });
 
+test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/ux-demo?component=workspace-header');
+  const header = page.locator('[data-component="workspace-header"]');
+  await expect(header).toContainText('Hot Sheet 2');
+  await expect(header.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="ticket-list-row"]')).toHaveCount(5);
+  await header.getByRole('button', { name: 'Columns view' }).click();
+  await expect(header.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: 'Workspace board' })).toBeVisible();
+  await header.getByRole('button', { name: 'Search tickets' }).click();
+  const search = header.getByRole('textbox', { name: 'Search tickets' });
+  await search.fill('long-tag-example');
+  await expect(page.getByRole('region', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(1);
+  await header.getByRole('button', { name: 'Close search' }).click();
+  await expect(header.getByRole('textbox', { name: 'Search tickets' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(5);
+  await header.getByRole('button', { name: 'Sort tickets' }).click();
+  await expect(page.getByText('Sort menu requested')).toBeVisible();
+});
+
+test('expands, validates, creates, and cancels through QuickTicketComposer', async ({ page }) => {
+  await page.goto('/ux-demo?component=quick-ticket-composer');
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  const form = page.locator('[data-action="create-ticket-form"]');
+  const title = form.getByRole('textbox', { name: 'Ticket title' });
+  await expect(title).toBeFocused();
+  await form.getByRole('button', { name: 'Create ticket' }).click();
+  expect(await title.evaluate((node: HTMLInputElement) => node.checkValidity())).toBe(false);
+  await expect(form).toBeVisible();
+  await title.fill('Created from the UX demo');
+  const category = form.locator('wa-select[name="new-ticket-category"]');
+  await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await form.getByRole('button', { name: 'Create ticket' }).click();
+  await expect(page.getByRole('listbox', { name: 'Recently updated tickets' })).toContainText('Created from the UX demo');
+  await expect(page.getByText(/HS2-DEMO\d created/)).toBeVisible();
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  await page.getByRole('textbox', { name: 'Ticket title' }).fill('Discard this');
+  await page.getByRole('button', { name: /Cancel/ }).click();
+  await expect(page.getByText('Ticket creation cancelled')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveCount(0);
+});
+
+test('navigates, toggles, closes, and reopens TicketInspector', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-inspector');
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await expect(inspector).toContainText('Build TicketList and TicketBoard');
+  await expect(inspector.getByRole('button', { name: 'Info' })).toHaveAttribute('aria-current', 'page');
+  await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
+  await inspector.getByRole('button', { name: 'Timeline' }).click();
+  await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
+  await inspector.getByRole('button', { name: 'Attachments' }).click();
+  await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
+  const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
+  await star.click();
+  await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
+  await inspector.getByRole('button', { name: 'Close inspector' }).click();
+  await expect(inspector).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open ticket inspector' }).click();
+  await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+});
+
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=tag-chip');
