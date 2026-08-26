@@ -7,8 +7,9 @@ When automation lands, remove the manual-only step and record it below.
 
 ### OS credential stores
 
-1. On macOS, pipe a disposable value into `hotsheet-cli key set test-provider` and
-   confirm Keychain Access shows a `com.smalltale.hotsheet2` generic password.
+1. On macOS, run `hotsheet-cli key set test-provider`, confirm it displays one hidden
+   prompt (typed characters are not echoed), and confirm Keychain Access shows a
+   `com.smalltale.hotsheet2` generic password. Repeat with a piped disposable value.
 2. Verify `key get`, `key list`, and `key delete`, and confirm neither
    `${HOTSHEET_HOME}/keys.json` nor any settings file contains the value.
 3. Repeat on Linux with a live Secret Service session. An unavailable service must fail

@@ -214,7 +214,8 @@ hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
 hotsheet claim-next --worker worker-1     # coordination primitive
-printf '%s' "$PROVIDER_KEY" | hotsheet key set openai  # stdin only; never argv/settings
+hotsheet key set openai                    # hidden terminal prompt
+printf '%s' "$PROVIDER_KEY" | hotsheet key set openai  # automation via stdin; never argv/settings
 hotsheet key list                         # provider names only, never values
 hotsheet providers --json                 # git + configured external connections/capabilities
 hotsheet provider-ls github-main
@@ -407,10 +408,10 @@ setup` writes ([05](05-ai-tool-plugins.md) §5.1a).
 ### 4.7.1 Secure provider keys
 
 > **Built (HS2-M1XMSX):** `hotsheet_ticketing::secrets` provides an injected
-> `SecretStore` port, native macOS Keychain (`security`) and Linux Secret Service
+> `SecretStore` port, native macOS Security.framework Keychain and Linux Secret Service
 > (`secret-tool`) adapters, and a global provider registry. `hotsheet key
-> set|get|list|delete` is the headless CLI surface; `set` accepts the value only on
-> stdin. `${HOTSHEET_HOME}/keys.json` contains provider names and fallback environment
+> set|get|list|delete` is the headless CLI surface; `set` uses a hidden prompt when
+> stdin is a terminal and accepts piped stdin for automation. `${HOTSHEET_HOME}/keys.json` contains provider names and fallback environment
 > variable names only, is mode `0600` on Unix, and never contains secret values.
 
 Settings refer to a secret as `{ "secret": "provider-id" }`; consumers call the

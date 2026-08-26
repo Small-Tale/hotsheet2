@@ -42,6 +42,8 @@ futures-util = "0.3"
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 ureq = "2"
+rpassword = "7.5"
+security-framework = "3.7"
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 notify = "6"

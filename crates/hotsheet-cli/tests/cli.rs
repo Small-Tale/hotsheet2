@@ -1474,6 +1474,7 @@ fn settings_global_scope_is_machine_wide_and_lowest_precedence() {
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn key_registry_cli_uses_os_adapter_without_persisting_secret() {
     use std::os::unix::fs::PermissionsExt;

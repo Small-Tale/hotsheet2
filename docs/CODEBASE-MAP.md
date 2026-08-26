@@ -196,7 +196,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   (local, gitignored), plus **global** `${HOTSHEET_HOME}/settings.json` (machine-wide) —
   flat key→JSON maps, effective precedence global<shared<local. See `settings.rs::Settings`.
 - **Provider keys:** `${HOTSHEET_HOME}/keys.json` contains non-secret provider metadata;
-  values live in the OS credential store. Settings carry only `{ "secret": "provider" }`.
+  values live behind native macOS Security.framework or Linux Secret Service adapters.
+  `key set` uses a hidden terminal prompt or piped stdin. Settings carry only `{ "secret": "provider" }`.
   See `secrets.rs::{SecretStore,KeyRegistry,resolve_setting_secret}`.
 - **Checkout discovery:** `${HOTSHEET_HOME}/checkouts.json` maps readable path-derived
   checkout ids to optional repository identities and any number of ticket stores. It

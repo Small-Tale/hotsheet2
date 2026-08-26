@@ -6,9 +6,12 @@
 //! only fallback and is read-only/explicit — there is no plaintext-on-disk fallback.
 
 use std::collections::BTreeMap;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+#[cfg(target_os = "linux")]
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -51,97 +54,109 @@ pub struct OsKeychain;
 
 impl SecretStore for OsKeychain {
     fn set(&self, account: &str, secret: &str) -> Result<(), SecretError> {
-        #[cfg(target_os = "macos")]
-        let mut command = {
-            let mut c = Command::new("security");
-            c.args([
-                "add-generic-password",
-                "-U",
-                "-a",
-                account,
-                "-s",
-                SERVICE,
-                "-w",
-            ]);
-            c
-        };
-        #[cfg(target_os = "linux")]
-        let mut command = {
-            let mut c = Command::new("secret-tool");
-            c.args([
-                "store",
-                "--label",
-                "Hot Sheet 2",
-                "service",
-                SERVICE,
-                "account",
-                account,
-            ]);
-            c
-        };
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        return Err(SecretError::Unavailable(
-            "this platform has no implemented credential-store adapter".into(),
-        ));
-
-        let mut child = command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| SecretError::Unavailable(e.to_string()))?;
-        child
-            .stdin
-            .take()
-            .expect("piped")
-            .write_all(secret.as_bytes())?;
-        let output = child.wait_with_output()?;
-        status(output)
+        platform_set(account, secret)
     }
 
     fn get(&self, account: &str) -> Result<Option<String>, SecretError> {
-        #[cfg(target_os = "macos")]
-        let output = Command::new("security")
-            .args(["find-generic-password", "-a", account, "-s", SERVICE, "-w"])
-            .output();
-        #[cfg(target_os = "linux")]
-        let output = Command::new("secret-tool")
-            .args(["lookup", "service", SERVICE, "account", account])
-            .output();
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        return Err(SecretError::Unavailable(
-            "this platform has no implemented credential-store adapter".into(),
-        ));
-
-        let output = output.map_err(|e| SecretError::Unavailable(e.to_string()))?;
-        if output.status.success() {
-            return Ok(Some(
-                String::from_utf8_lossy(&output.stdout)
-                    .trim_end()
-                    .to_string(),
-            ));
-        }
-        Ok(None)
+        platform_get(account)
     }
 
     fn delete(&self, account: &str) -> Result<bool, SecretError> {
-        #[cfg(target_os = "macos")]
-        let output = Command::new("security")
-            .args(["delete-generic-password", "-a", account, "-s", SERVICE])
-            .output();
-        #[cfg(target_os = "linux")]
-        let output = Command::new("secret-tool")
-            .args(["clear", "service", SERVICE, "account", account])
-            .output();
-        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-        return Err(SecretError::Unavailable(
-            "this platform has no implemented credential-store adapter".into(),
-        ));
-        let output = output.map_err(|e| SecretError::Unavailable(e.to_string()))?;
-        Ok(output.status.success())
+        platform_delete(account)
     }
 }
 
+#[cfg(target_os = "macos")]
+fn platform_set(account: &str, secret: &str) -> Result<(), SecretError> {
+    security_framework::passwords::set_generic_password(SERVICE, account, secret.as_bytes())
+        .map_err(|error| SecretError::Backend(error.to_string()))
+}
+
+#[cfg(target_os = "macos")]
+fn platform_get(account: &str) -> Result<Option<String>, SecretError> {
+    match security_framework::passwords::get_generic_password(SERVICE, account) {
+        Ok(secret) => String::from_utf8(secret)
+            .map(Some)
+            .map_err(|error| SecretError::Backend(error.to_string())),
+        Err(error) if error.code() == -25300 => Ok(None),
+        Err(error) => Err(SecretError::Backend(error.to_string())),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn platform_delete(account: &str) -> Result<bool, SecretError> {
+    match security_framework::passwords::delete_generic_password(SERVICE, account) {
+        Ok(()) => Ok(true),
+        Err(error) if error.code() == -25300 => Ok(false),
+        Err(error) => Err(SecretError::Backend(error.to_string())),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn platform_set(account: &str, secret: &str) -> Result<(), SecretError> {
+    let mut child = Command::new("secret-tool")
+        .args([
+            "store",
+            "--label",
+            "Hot Sheet 2",
+            "service",
+            SERVICE,
+            "account",
+            account,
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| SecretError::Unavailable(e.to_string()))?;
+    child
+        .stdin
+        .take()
+        .expect("piped")
+        .write_all(secret.as_bytes())?;
+    status(child.wait_with_output()?)
+}
+
+#[cfg(target_os = "linux")]
+fn platform_get(account: &str) -> Result<Option<String>, SecretError> {
+    let output = Command::new("secret-tool")
+        .args(["lookup", "service", SERVICE, "account", account])
+        .output()
+        .map_err(|e| SecretError::Unavailable(e.to_string()))?;
+    Ok(output.status.success().then(|| {
+        String::from_utf8_lossy(&output.stdout)
+            .trim_end()
+            .to_string()
+    }))
+}
+
+#[cfg(target_os = "linux")]
+fn platform_delete(account: &str) -> Result<bool, SecretError> {
+    Command::new("secret-tool")
+        .args(["clear", "service", SERVICE, "account", account])
+        .output()
+        .map(|output| output.status.success())
+        .map_err(|e| SecretError::Unavailable(e.to_string()))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn platform_set(_: &str, _: &str) -> Result<(), SecretError> {
+    Err(unsupported_platform())
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn platform_get(_: &str) -> Result<Option<String>, SecretError> {
+    Err(unsupported_platform())
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn platform_delete(_: &str) -> Result<bool, SecretError> {
+    Err(unsupported_platform())
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn unsupported_platform() -> SecretError {
+    SecretError::Unavailable("this platform has no implemented credential-store adapter".into())
+}
+
+#[cfg(target_os = "linux")]
 fn status(output: std::process::Output) -> Result<(), SecretError> {
     if output.status.success() {
         Ok(())

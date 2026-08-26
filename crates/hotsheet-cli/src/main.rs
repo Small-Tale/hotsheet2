@@ -539,7 +539,7 @@ enum CheckoutCmd {
 
 #[derive(Subcommand)]
 enum KeyCmd {
-    /// Store/replace a provider key. Reads the value from stdin, never an argv argument.
+    /// Store/replace a provider key. Prompts securely on a terminal or reads piped stdin.
     Set { provider: String },
     /// Print a provider key to stdout (explicit secret-reveal operation).
     Get { provider: String },
@@ -2466,20 +2466,18 @@ fn cmd_settings(store: &Path, cmd: SettingsCmd) -> Result<()> {
 }
 
 fn cmd_key(cmd: KeyCmd) -> Result<()> {
-    use std::io::Read;
+    use std::io::IsTerminal;
 
     use hotsheet_ticketing::{KeyRegistry, OsKeychain};
 
     let registry = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
     match cmd {
         KeyCmd::Set { provider } => {
-            let mut secret = String::new();
-            std::io::stdin().read_to_string(&mut secret)?;
-            let secret = secret.trim_end_matches(['\r', '\n']);
-            if secret.is_empty() {
-                bail!("refusing to store an empty key; pipe the value on stdin")
-            }
-            registry.set(&provider, secret)?;
+            let stdin = std::io::stdin();
+            let secret = read_key_secret(&provider, stdin.is_terminal(), stdin.lock(), |prompt| {
+                rpassword::prompt_password(prompt).map_err(Into::into)
+            })?;
+            registry.set(&provider, &secret)?;
             println!("Stored key for {provider} in the OS credential store");
         }
         KeyCmd::Get { provider } => println!("{}", registry.get(&provider)?),
@@ -2501,6 +2499,26 @@ fn cmd_key(cmd: KeyCmd) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn read_key_secret(
+    provider: &str,
+    terminal: bool,
+    mut reader: impl std::io::Read,
+    prompt: impl FnOnce(&str) -> Result<String>,
+) -> Result<String> {
+    let value = if terminal {
+        prompt(&format!("Key for {provider}: "))?
+    } else {
+        let mut value = String::new();
+        reader.read_to_string(&mut value)?;
+        value
+    };
+    let value = value.trim_end_matches(['\r', '\n']).to_owned();
+    if value.is_empty() {
+        bail!("refusing to store an empty key")
+    }
+    Ok(value)
 }
 
 fn cmd_checkout(cmd: CheckoutCmd) -> Result<()> {
@@ -2613,6 +2631,28 @@ fn lease_until(now: OffsetDateTime, minutes: i64) -> Timestamp {
 #[cfg(test)]
 mod server_wrapper_tests {
     use super::*;
+
+    #[test]
+    fn key_input_prompts_on_a_terminal_and_reads_pipes_without_prompting() {
+        let prompted = read_key_secret("github-live", true, "ignored".as_bytes(), |prompt| {
+            assert_eq!(prompt, "Key for github-live: ");
+            Ok("terminal-secret".into())
+        })
+        .unwrap();
+        assert_eq!(prompted, "terminal-secret");
+
+        let piped = read_key_secret("github-live", false, "pipe-secret\n".as_bytes(), |_| {
+            panic!("non-terminal input must not prompt")
+        })
+        .unwrap();
+        assert_eq!(piped, "pipe-secret");
+        assert!(
+            read_key_secret("github-live", false, "\n".as_bytes(), |_| unreachable!())
+                .unwrap_err()
+                .to_string()
+                .contains("empty key")
+        );
+    }
 
     #[test]
     fn provider_copy_command_is_idempotent() {
