@@ -134,7 +134,7 @@ fn tools_list() -> Value {
         },
         {
             "name": "hotsheet_update",
-            "description": "Update a ticket's fields (title/details/category/priority/status/tags/up_next/blocked_by) and/or append a note.",
+            "description": "Update ticket fields and/or append or edit a note.",
             "inputSchema": { "type": "object", "properties": {
                 "id": str_prop("slug or ULID"),
                 "title": str_prop(""), "details": str_prop(""), "category": str_prop(""),
@@ -142,7 +142,9 @@ fn tools_list() -> Value {
                 "expected_token": str_prop("opaque optimistic-concurrency token returned by get"),
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
-                "note": str_prop("append a progress note")
+                "note": str_prop("note text to append, or replacement text when note_id is present"),
+                "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
+                "note_id": str_prop("existing note ULID to edit instead of appending")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id"] }
         },
@@ -829,6 +831,18 @@ mod core_backend {
                 }
                 "PATCH" if ticket_id(path).is_some() => {
                     let t = self.resolve(ticket_id(path).unwrap())?;
+                    let edit_note_id = str_field(body, "note_id")
+                        .map(|note_id| {
+                            Ulid::from_string(&note_id)
+                                .map_err(|_| bad_request(format!("invalid note ULID '{note_id}'")))
+                        })
+                        .transpose()?;
+                    if let Some(note_id) = edit_note_id
+                        && !t.notes.iter().any(|note| note.id == note_id)
+                    {
+                        return Err(not_found(&format!("note {note_id}")));
+                    }
+                    let new_note_kind = opt_enum(body, "note_kind")?.unwrap_or(NoteKind::Regular);
                     // A present `blocked_by` (even []) replaces the set; absent leaves it.
                     let blocked_by = match body.get("blocked_by").filter(|v| !v.is_null()) {
                         Some(_) => Some(
@@ -857,15 +871,21 @@ mod core_backend {
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
                     let latest = match str_field(body, "note").filter(|s| !s.is_empty()) {
-                        Some(text) => ops::add_note(
-                            &self.store,
-                            &t.id,
-                            (self.mint)(),
-                            (self.now)(),
-                            NoteKind::Regular,
-                            text,
-                        )
-                        .map_err(store_err)?,
+                        Some(text) => match edit_note_id {
+                            Some(note_id) => {
+                                ops::edit_note(&self.store, &t.id, &note_id, (self.now)(), text)
+                                    .map_err(store_err)?
+                            }
+                            None => ops::add_note(
+                                &self.store,
+                                &t.id,
+                                (self.mint)(),
+                                (self.now)(),
+                                new_note_kind,
+                                text,
+                            )
+                            .map_err(store_err)?,
+                        },
                         None => updated,
                     };
                     self.api(&latest)
@@ -1870,11 +1890,21 @@ mod tests {
         let updated = call(
             &backend,
             "hotsheet_update",
-            json!({ "id": id, "status": "started", "tags": ["ui", "urgent"], "note": "picked this up" }),
+            json!({ "id": id, "status": "started", "tags": ["ui", "urgent"], "note": "picked this up", "note_kind": "activity" }),
         );
         assert_eq!(updated["status"], "started");
         assert_eq!(updated["tags"], json!(["ui", "urgent"]));
         assert_eq!(updated["notes"][0]["text"], "picked this up");
+        assert_eq!(updated["notes"][0]["kind"], "activity");
+        let note_id = updated["notes"][0]["id"].as_str().unwrap();
+        let created_at = updated["notes"][0]["created_at"].clone();
+        let edited = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_id": note_id, "note": "investigation complete" }),
+        );
+        assert_eq!(edited["notes"][0]["created_at"], created_at);
+        assert_eq!(edited["notes"][0]["text"], "investigation complete");
 
         // close → records the outcome AND settles status: a close_reason may never sit on
         // an active status, so closing the `started` ticket moves it to `completed`

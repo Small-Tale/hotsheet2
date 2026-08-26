@@ -120,6 +120,12 @@ enum Cmd {
         expected_token: Option<String>,
         #[arg(long)]
         note: Option<String>,
+        /// Edit this provider-native note id instead of appending a note.
+        #[arg(long, requires = "note", conflicts_with = "note_kind")]
+        edit_note: Option<String>,
+        /// Kind for --note: regular | activity | feedback_needed | status.
+        #[arg(long, requires = "note")]
+        note_kind: Option<String>,
     },
     /// Close a provider-native ticket.
     ProviderClose {
@@ -162,6 +168,12 @@ enum Cmd {
         /// Append a note to the ticket.
         #[arg(long)]
         note: Option<String>,
+        /// Edit this existing note ULID instead of appending a note.
+        #[arg(long, requires = "note", conflicts_with = "note_kind")]
+        edit_note: Option<String>,
+        /// Kind for --note: regular | activity | feedback_needed | status.
+        #[arg(long, requires = "note")]
+        note_kind: Option<String>,
     },
     /// Record why a ticket was closed (close outcome; orthogonal to status).
     Close {
@@ -693,6 +705,8 @@ fn main() -> Result<()> {
             status,
             expected_token,
             note,
+            note_kind,
+            edit_note,
         } => cmd_provider_edit(
             &cli.path,
             &connection,
@@ -703,6 +717,8 @@ fn main() -> Result<()> {
                 status,
                 expected_token,
                 note,
+                note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
+                edit_note,
             },
         ),
         Cmd::ProviderClose {
@@ -724,6 +740,8 @@ fn main() -> Result<()> {
             up_next,
             no_up_next,
             note,
+            note_kind,
+            edit_note,
         } => cmd_edit(
             &cli.path,
             &id,
@@ -738,6 +756,8 @@ fn main() -> Result<()> {
             up_next,
             no_up_next,
             note,
+            parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
+            edit_note,
         ),
         Cmd::Close {
             id,
@@ -1295,6 +1315,8 @@ struct ProviderEditInput {
     status: Option<String>,
     expected_token: Option<String>,
     note: Option<String>,
+    note_kind: NoteKind,
+    edit_note: Option<String>,
 }
 
 fn cmd_provider_edit(
@@ -1304,6 +1326,9 @@ fn cmd_provider_edit(
     input: ProviderEditInput,
 ) -> Result<()> {
     let provider = configured_provider(path, connection)?;
+    if input.edit_note.is_some() && !provider.supports_note_edit() {
+        bail!("provider connection '{connection}' does not support note editing");
+    }
     let now = now_ts();
     let mut ticket = provider.update(
         id,
@@ -1317,15 +1342,18 @@ fn cmd_provider_edit(
         },
     )?;
     if let Some(note) = input.note {
-        ticket = provider.add_note(
-            id,
-            MutationContext {
-                now,
-                generated_id: Ulid::new(),
-            },
-            NoteKind::Regular,
-            note,
-        )?;
+        ticket = match input.edit_note {
+            Some(note_id) => provider.edit_note(id, &note_id, now, note),
+            None => provider.add_note(
+                id,
+                MutationContext {
+                    now,
+                    generated_id: Ulid::new(),
+                },
+                input.note_kind,
+                note,
+            ),
+        }?;
     }
     println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
@@ -2201,9 +2229,22 @@ fn cmd_edit(
     up_next: bool,
     no_up_next: bool,
     note: Option<String>,
+    note_kind: NoteKind,
+    edit_note: Option<String>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
+    let edit_note = edit_note
+        .map(|note_id| {
+            Ulid::from_string(&note_id)
+                .map_err(|_| anyhow::anyhow!("invalid note ULID '{note_id}'"))
+        })
+        .transpose()?;
+    if let Some(note_id) = edit_note
+        && !ticket.notes.iter().any(|note| note.id == note_id)
+    {
+        bail!("note '{note_id}' was not found on ticket '{}'", ticket.slug);
+    }
     let up_next = if up_next {
         Some(true)
     } else if no_up_next {
@@ -2236,14 +2277,11 @@ fn cmd_edit(
     };
     let updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
     if let Some(text) = note.filter(|t| !t.is_empty()) {
-        ops::add_note(
-            &store,
-            &ticket.id,
-            Ulid::new(),
-            now_ts(),
-            NoteKind::Regular,
-            text,
-        )?;
+        if let Some(note_id) = edit_note {
+            ops::edit_note(&store, &ticket.id, &note_id, now_ts(), text)?;
+        } else {
+            ops::add_note(&store, &ticket.id, Ulid::new(), now_ts(), note_kind, text)?;
+        }
     }
     println!("Updated {}", updated.slug);
     Ok(())
@@ -2275,6 +2313,19 @@ fn parse_status_str(s: &str) -> Result<Status> {
         other => bail!(
             "invalid status '{other}' \
              (not_started|started|completed|verified|backlog|archive|deleted|moved)"
+        ),
+    })
+}
+
+fn parse_note_kind(s: &str) -> Result<NoteKind> {
+    Ok(match s {
+        "regular" => NoteKind::Regular,
+        "activity" => NoteKind::Activity,
+        "feedback_needed" => NoteKind::FeedbackNeeded,
+        "status" => NoteKind::Status,
+        other => bail!(
+            "invalid note kind '{other}' \
+             (regular|activity|feedback_needed|status)"
         ),
     })
 }

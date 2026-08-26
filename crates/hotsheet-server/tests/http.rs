@@ -1226,7 +1226,7 @@ async fn close_duplicate_without_target_is_a_400() {
 }
 
 #[tokio::test]
-async fn update_can_append_a_note() {
+async fn update_can_append_edit_and_preserve_repeated_activity() {
     let (_d, st) = state();
     let app = app(st);
 
@@ -1249,14 +1249,54 @@ async fn update_can_append_a_note() {
             .oneshot(authed(
                 "PATCH",
                 &format!("/tickets/{id}"),
-                Some(r#"{"status":"started","note":"kicked it off"}"#),
+                Some(r#"{"status":"started","note":"completed","note_kind":"activity"}"#),
             ))
             .await
             .unwrap(),
     )
     .await;
     assert_eq!(updated["status"], "started");
-    assert_eq!(updated["notes"][0]["text"], "kicked it off");
+    assert_eq!(updated["notes"][0]["kind"], "activity");
+    assert_eq!(updated["notes"][0]["text"], "completed");
+    let note_id = updated["notes"][0]["id"].as_str().unwrap();
+    let created_at = updated["notes"][0]["created_at"].as_str().unwrap();
+    assert_eq!(updated["notes"][0]["edited_at"], created_at);
+
+    let edit = serde_json::json!({"note":"completed initial investigation","note_id":note_id});
+    let edited = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(&edit.to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(edited["notes"][0]["created_at"], created_at);
+    assert_eq!(
+        edited["notes"][0]["text"],
+        "completed initial investigation"
+    );
+
+    for (status, note) in [
+        ("started", "marked not working"),
+        ("completed", "completed again"),
+    ] {
+        let body = serde_json::json!({"status":status,"note":note,"note_kind":"activity"});
+        body_json(
+            app.clone()
+                .oneshot(authed(
+                    "PATCH",
+                    &format!("/tickets/{id}"),
+                    Some(&body.to_string()),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+    }
 
     // The note persisted (a fresh GET sees it).
     let got = body_json(
@@ -1265,7 +1305,10 @@ async fn update_can_append_a_note() {
             .unwrap(),
     )
     .await;
-    assert_eq!(got["notes"][0]["text"], "kicked it off");
+    assert_eq!(got["notes"].as_array().unwrap().len(), 3);
+    assert_eq!(got["notes"][0]["text"], "completed initial investigation");
+    assert_eq!(got["notes"][1]["text"], "marked not working");
+    assert_eq!(got["notes"][2]["text"], "completed again");
 }
 
 #[tokio::test]

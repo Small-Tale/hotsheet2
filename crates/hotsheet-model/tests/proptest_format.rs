@@ -119,7 +119,8 @@ fn arb_note() -> impl Strategy<Value = Note> {
         .prop_map(|(id, kind, at, text)| Note {
             id,
             kind,
-            at,
+            created_at: at.clone(),
+            edited_at: at,
             text: text.trim().to_string(),
         })
 }

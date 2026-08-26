@@ -243,15 +243,26 @@ fn build_ticket(
     t.notes = src
         .notes
         .iter()
-        .map(|n| Note {
-            id: n
-                .id
-                .as_deref()
-                .and_then(|s| Ulid::from_string(s).ok())
-                .unwrap_or_else(Ulid::new),
-            kind: NoteKind::Regular,
-            at: Timestamp::new(n.created_at.clone().unwrap_or_default()),
-            text: n.text.clone(),
+        .map(|n| {
+            let id =
+                n.id.as_deref()
+                    .and_then(|s| Ulid::from_string(s).ok())
+                    .unwrap_or_else(Ulid::new);
+            let created_at = n.created_at.clone().map(Timestamp::new).unwrap_or_else(|| {
+                Timestamp::from_datetime(
+                    time::OffsetDateTime::from_unix_timestamp_nanos(
+                        i128::from(id.timestamp_ms()) * 1_000_000,
+                    )
+                    .unwrap_or(time::OffsetDateTime::UNIX_EPOCH),
+                )
+            });
+            Note {
+                id,
+                kind: NoteKind::Regular,
+                created_at: created_at.clone(),
+                edited_at: created_at,
+                text: n.text.clone(),
+            }
         })
         .collect();
 

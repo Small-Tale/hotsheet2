@@ -30,6 +30,13 @@ Cross-provider ticket transfer is user-initiated `copy`/`move`, not synchronizat
 Make transfers idempotent using a stable operation id plus source provenance so
 concurrent collaborators and retries resolve the same destination ticket.
 
+## Ticket activity notes
+
+Use `activity` notes for meaningful subtask boundaries: record when an investigation
+or other important subtask starts and when it finishes. Keep repeated and reversed
+transitions as separate entries; they are history, not current-state fields. Ordinary
+commentary remains a `regular` note.
+
 ## Client UI stack
 
 Use **Kerf (`kerfjs`) + Web Awesome Core** for the Tauri web UI. Kerf owns

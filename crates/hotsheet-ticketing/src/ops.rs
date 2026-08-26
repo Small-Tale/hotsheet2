@@ -411,12 +411,39 @@ pub fn add_note(
     t.notes.push(Note {
         id: note_id,
         kind,
-        at: now.clone(),
+        created_at: now.clone(),
+        edited_at: now.clone(),
         text,
     });
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
+}
+
+/// Edit an existing note without changing its creation time.
+pub fn edit_note(
+    store: &FsStore,
+    ticket_id: &Ulid,
+    note_id: &Ulid,
+    now: Timestamp,
+    text: String,
+) -> Result<Ticket, StoreError> {
+    let mut ticket = store.read_ticket(ticket_id)?;
+    let note = ticket
+        .notes
+        .iter_mut()
+        .find(|note| &note.id == note_id)
+        .ok_or_else(|| {
+            StoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("note {note_id}"),
+            ))
+        })?;
+    note.text = text;
+    note.edited_at = now.clone();
+    ticket.updated_at = now;
+    store.write_ticket_committing(&ticket)?;
+    Ok(ticket)
 }
 
 /// Record a close outcome (`docs/02` §2.6a). Closing **settles the status**: a
@@ -1017,6 +1044,19 @@ mod tests {
         let reread = store.read_ticket(&id).unwrap();
         assert_eq!(reread.notes.len(), 2);
         assert_eq!(reread.notes[1].text, "and again");
+
+        let original_created = reread.notes[0].created_at.clone();
+        let edited = edit_note(
+            &store,
+            &id,
+            &n1,
+            ts("2026-08-19T03:00:00Z"),
+            "did the corrected thing".into(),
+        )
+        .unwrap();
+        assert_eq!(edited.notes[0].text, "did the corrected thing");
+        assert_eq!(edited.notes[0].created_at, original_created);
+        assert_eq!(edited.notes[0].edited_at.as_str(), "2026-08-19T03:00:00Z");
     }
 
     #[test]

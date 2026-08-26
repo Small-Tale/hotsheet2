@@ -1309,8 +1309,16 @@ async fn update_provider_ticket(
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let provider = provider_for(&state, &connection_id)?;
+    if req.note_id.is_some() && !provider.supports_note_edit() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("provider connection '{connection_id}' does not support note editing"),
+        ));
+    }
     let timestamp = now();
     let note = req.note.clone();
+    let note_id = req.note_id.clone();
+    let note_kind = req.note_kind.unwrap_or(NoteKind::Regular);
     let mut ticket = provider
         .update(
             &id,
@@ -1329,17 +1337,19 @@ async fn update_provider_ticket(
         )
         .map_err(provider_transfer_error)?;
     if let Some(note) = note {
-        ticket = provider
-            .add_note(
+        ticket = match note_id {
+            Some(note_id) => provider.edit_note(&id, &note_id, timestamp, note),
+            None => provider.add_note(
                 &id,
                 MutationContext {
                     now: timestamp,
                     generated_id: Ulid::new(),
                 },
-                NoteKind::Regular,
+                note_kind,
                 note,
-            )
-            .map_err(provider_transfer_error)?;
+            ),
+        }
+        .map_err(provider_transfer_error)?;
     }
     Ok(Json(ticket))
 }
@@ -1889,6 +1899,23 @@ fn do_update(
     req: UpdateReq,
 ) -> Result<ApiTicket, ApiError> {
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let edit_note_id = req
+        .note_id
+        .as_deref()
+        .map(|note_id| {
+            Ulid::from_string(note_id).map_err(|_| {
+                ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("invalid note ULID '{note_id}'"),
+                )
+            })
+        })
+        .transpose()?;
+    if let Some(note_id) = edit_note_id
+        && !ticket.notes.iter().any(|note| note.id == note_id)
+    {
+        return Err(ApiError::not_found(&format!("note {note_id}")));
+    }
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
     let blocked_by = match req.blocked_by {
         Some(needles) => Some(ops::resolve_blockers(
@@ -1909,16 +1936,19 @@ fn do_update(
         blocked_by,
     };
     let updated = ops::update(&entry.store, &ticket.id, now(), patch)?;
-    // An optional note append rides the same update call (parity with the CLI + MCP).
+    // An optional note append/edit rides the same update call (parity with CLI + MCP).
     let latest = match req.note.filter(|t| !t.is_empty()) {
-        Some(text) => ops::add_note(
-            &entry.store,
-            &ticket.id,
-            Ulid::new(),
-            now(),
-            NoteKind::Regular,
-            text,
-        )?,
+        Some(text) => match edit_note_id {
+            Some(note_id) => ops::edit_note(&entry.store, &ticket.id, &note_id, now(), text)?,
+            None => ops::add_note(
+                &entry.store,
+                &ticket.id,
+                Ulid::new(),
+                now(),
+                req.note_kind.unwrap_or(NoteKind::Regular),
+                text,
+            )?,
+        },
         None => updated,
     };
     state.changed_in(entry, "updated", &latest);
@@ -3432,6 +3462,10 @@ struct UpdateReq {
     blocked_by: Option<Vec<String>>,
     /// Optional note to append alongside the field update.
     note: Option<String>,
+    /// Existing note ULID to edit; absent appends a new note.
+    note_id: Option<String>,
+    /// Kind of the appended note; defaults to regular for older clients.
+    note_kind: Option<NoteKind>,
 }
 
 /// `POST /batch` body: apply the same field update to every listed ticket (HS2-86).

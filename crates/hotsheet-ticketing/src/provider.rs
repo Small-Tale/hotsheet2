@@ -283,6 +283,9 @@ pub enum ProviderError {
 /// Synchronous domain boundary; async network adapters are wrapped at the host edge.
 pub trait TicketProvider: Send + Sync {
     fn descriptor(&self) -> ProviderDescriptor;
+    fn supports_note_edit(&self) -> bool {
+        false
+    }
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError>;
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError>;
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError>;
@@ -304,6 +307,18 @@ pub trait TicketProvider: Send + Sync {
         kind: NoteKind,
         text: String,
     ) -> Result<ApiTicket, ProviderError>;
+    fn edit_note(
+        &self,
+        _native_id: &str,
+        _note_id: &str,
+        _now: Timestamp,
+        _text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "note_edit",
+        })
+    }
     fn close(
         &self,
         native_id: &str,
@@ -421,6 +436,10 @@ impl TicketProvider for GitProvider {
             default: self.is_default,
             capabilities: self.capabilities(),
         }
+    }
+
+    fn supports_note_edit(&self) -> bool {
+        true
     }
 
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError> {
@@ -561,6 +580,24 @@ impl TicketProvider for GitProvider {
             kind,
             text,
         )?;
+        Ok(ApiTicket::from_provider(
+            &updated,
+            &self.connection_id,
+            None,
+        ))
+    }
+
+    fn edit_note(
+        &self,
+        native_id: &str,
+        note_id: &str,
+        now: Timestamp,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        let ticket = self.ticket(native_id)?;
+        let note_id = Ulid::from_string(note_id)
+            .map_err(|_| ProviderError::InvalidNativeId(note_id.into()))?;
+        let updated = ops::edit_note(&self.store, &ticket.id, &note_id, now, text)?;
         Ok(ApiTicket::from_provider(
             &updated,
             &self.connection_id,
@@ -808,6 +845,17 @@ pub fn copy_between(
             });
         }
     }
+    if ticket
+        .notes
+        .iter()
+        .any(|note| note.edited_at != note.created_at)
+        && !destination.supports_note_edit()
+    {
+        return Err(TransferError::UnsupportedField {
+            connection_id: destination_connection.into(),
+            field: "edited notes",
+        });
+    }
     let draft = ProviderDraft {
         title: ticket.title,
         category: ticket.category,
@@ -829,15 +877,24 @@ pub fn copy_between(
         draft,
     )?;
     for note in ticket.notes {
+        let generated_id = transfer_ulid(operation_id, &format!("note:{}", note.id));
         destination.add_note(
             &created.native_id,
             MutationContext {
-                now: Timestamp::new(note.at),
-                generated_id: transfer_ulid(operation_id, &format!("note:{}", note.id)),
+                now: Timestamp::new(note.created_at.clone()),
+                generated_id,
             },
             note.kind,
-            note.text,
+            note.text.clone(),
         )?;
+        if note.edited_at != note.created_at {
+            destination.edit_note(
+                &created.native_id,
+                &generated_id.to_string(),
+                Timestamp::new(note.edited_at),
+                note.text,
+            )?;
+        }
     }
     if !ticket.assignees.is_empty() || !ticket.review_requests.is_empty() {
         destination.assign(
@@ -1172,12 +1229,21 @@ mod tests {
                 },
             )
             .unwrap();
+        let source_note_id = Ulid::new();
         source
             .add_note(
                 &source_id.to_string(),
-                ctx(Ulid::new(), "2026-08-26T01:00:10Z"),
-                NoteKind::Regular,
+                ctx(source_note_id, "2026-08-26T01:00:10Z"),
+                NoteKind::Activity,
                 "preserve this note".into(),
+            )
+            .unwrap();
+        source
+            .edit_note(
+                &source_id.to_string(),
+                &source_note_id.to_string(),
+                Timestamp::new("2026-08-26T01:00:15Z"),
+                "preserve this edited note".into(),
             )
             .unwrap();
         source
@@ -1226,6 +1292,10 @@ mod tests {
             .get(&a.destination.native_id)
             .unwrap();
         assert_eq!(copied.notes.len(), 1);
+        assert_eq!(copied.notes[0].kind, NoteKind::Activity);
+        assert_eq!(copied.notes[0].text, "preserve this edited note");
+        assert_eq!(copied.notes[0].created_at, "2026-08-26T01:00:10Z");
+        assert_eq!(copied.notes[0].edited_at, "2026-08-26T01:00:15Z");
         assert_eq!(copied.assignees, ["dev@example.com"]);
         let moved = move_between(
             &registry,

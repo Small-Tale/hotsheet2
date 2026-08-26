@@ -88,12 +88,12 @@ Ticket details can contain arbitrary Markdown, including a `## Notes` heading.
 <!-- hotsheet:notes:begin -->
 ## Notes
 
-<!-- hotsheet:note:begin 01J9ZK4A0R… kind: regular -->
-2026-08-19T15:20:44Z — Reproduced on macOS; root cause is the pre-theme paint.
+<!-- hotsheet:note:begin 01J9ZK4A0R… created_at: 2026-08-19T15:20:44Z edited_at: 2026-08-19T15:20:44Z -->
+Reproduced on macOS; root cause is the pre-theme paint.
 <!-- hotsheet:note:end -->
 
-<!-- hotsheet:note:begin 01J9ZK5B1S… kind: feedback_needed -->
-2026-08-19T15:31:02Z — should the fix also cover the dashboard dedicated view?
+<!-- hotsheet:note:begin 01J9ZK5B1S… kind: feedback_needed created_at: 2026-08-19T15:31:02Z edited_at: 2026-08-19T15:31:02Z -->
+should the fix also cover the dashboard dedicated view?
 <!-- hotsheet:note:end -->
 <!-- hotsheet:notes:end -->
 ```
@@ -107,10 +107,15 @@ than swallowed or discarded; a future schema can define such a section explicitl
 
 | Note field | Type | Notes |
 |---|---|---|
-| `id` | ULID | timestamp-ordered → union-merge + chronological sort (§2.6/§2.7) |
-| `kind` | `regular\|feedback_needed\|feedback_draft\|status` | default `regular`. **`feedback_draft` is LOCAL** (overlay), the others shared. §2.6 |
-| timestamp | RFC3339 | leads the note text |
+| `id` | ULID | stable identity and chronological tie-breaker (§2.6/§2.7) |
+| `kind` | `regular\|activity\|feedback_needed\|feedback_draft\|status` | default `regular`. **`feedback_draft` is LOCAL** (overlay), the others shared. §2.6 |
+| `created_at` | RFC3339 | immutable creation time; primary timeline order |
+| `edited_at` | RFC3339 | last text edit; equals `created_at` when never edited |
 | text | Markdown | rendered; raw HTML escaped |
+
+Legacy note blocks with a leading `timestamp — text` map that timestamp to both
+fields. Timestamp-less legacy blocks deterministically derive both values from their
+ULID; migration never consults filesystem modification time.
 
 ## 17.4 Rules the parser/serializer enforce
 

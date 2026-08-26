@@ -61,6 +61,7 @@ pub enum NoteKind {
     FeedbackNeeded,
     FeedbackDraft,
     Status,
+    Activity,
 }
 
 /// The kind of a human review request (`docs/10` §10.2).

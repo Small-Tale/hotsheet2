@@ -71,7 +71,8 @@ pub struct ApiTicket {
 pub struct ApiNote {
     pub id: String,
     pub kind: NoteKind,
-    pub at: String,
+    pub created_at: String,
+    pub edited_at: String,
     pub text: String,
 }
 
@@ -126,7 +127,8 @@ impl ApiTicket {
                 .map(|n| ApiNote {
                     id: n.id.to_string(),
                     kind: n.kind,
-                    at: n.at.as_str().to_string(),
+                    created_at: n.created_at.as_str().to_string(),
+                    edited_at: n.edited_at.as_str().to_string(),
                     text: n.text.clone(),
                 })
                 .collect(),

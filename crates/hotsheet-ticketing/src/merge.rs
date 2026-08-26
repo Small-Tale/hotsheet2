@@ -229,21 +229,29 @@ fn union3<T: Clone + PartialEq>(base: &[T], ours: &[T], theirs: &[T]) -> Vec<T> 
     out
 }
 
-/// Union notes by ULID; a note on both sides resolves by its own newest timestamp. The
-/// `BTreeMap` key orders the result by ULID (= chronological creation order).
+/// Union notes by ULID; a note on both sides resolves by its newest edit timestamp. The
+/// The final order is explicit creation time then ULID, including imported notes whose
+/// provider-native ids may not encode creation time.
 fn merge_notes(ours: &[Note], theirs: &[Note]) -> Vec<Note> {
     let mut by_id: BTreeMap<hotsheet_model::Ulid, Note> = BTreeMap::new();
     for n in ours.iter().chain(theirs.iter()) {
         by_id
             .entry(n.id)
             .and_modify(|cur| {
-                if n.at.as_str() > cur.at.as_str() {
+                if n.edited_at.as_str() > cur.edited_at.as_str() {
                     *cur = n.clone();
                 }
             })
             .or_insert_with(|| n.clone());
     }
-    by_id.into_values().collect()
+    let mut notes: Vec<_> = by_id.into_values().collect();
+    notes.sort_by(|a, b| {
+        a.created_at
+            .chronological_cmp(&b.created_at)
+            .unwrap_or_else(|| a.created_at.as_str().cmp(b.created_at.as_str()))
+            .then(a.id.cmp(&b.id))
+    });
+    notes
 }
 
 /// Union review requests by their own ULID (`by`), keeping the newer timestamp on a
@@ -351,19 +359,44 @@ mod tests {
         ours.notes = vec![Note {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
             kind: hotsheet_model::NoteKind::Regular,
-            at: ts("2026-08-19T01:00:00Z"),
+            created_at: ts("2026-08-19T01:00:00Z"),
+            edited_at: ts("2026-08-19T01:00:00Z"),
             text: "ours note".into(),
         }];
         let mut theirs = base.clone();
         theirs.notes = vec![Note {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
             kind: hotsheet_model::NoteKind::Regular,
-            at: ts("2026-08-19T02:00:00Z"),
+            created_at: ts("2026-08-19T02:00:00Z"),
+            edited_at: ts("2026-08-19T02:00:00Z"),
             text: "theirs note".into(),
         }];
         let m = merge_tickets(&base, &ours, &theirs).ticket;
         assert_eq!(m.notes.len(), 2, "both appends kept");
         assert!(m.notes[0].id < m.notes[1].id, "sorted by id");
+    }
+
+    #[test]
+    fn concurrent_note_edits_keep_the_latest_edit_and_original_creation() {
+        let mut base = base_ticket();
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+        base.notes = vec![Note {
+            id,
+            kind: hotsheet_model::NoteKind::Activity,
+            created_at: ts("2026-08-19T01:00:00Z"),
+            edited_at: ts("2026-08-19T01:00:00Z"),
+            text: "started".into(),
+        }];
+        let mut ours = base.clone();
+        ours.notes[0].edited_at = ts("2026-08-19T02:00:00Z");
+        ours.notes[0].text = "ours".into();
+        let mut theirs = base.clone();
+        theirs.notes[0].edited_at = ts("2026-08-19T03:00:00Z");
+        theirs.notes[0].text = "theirs".into();
+        let merged = merge_tickets(&base, &ours, &theirs).ticket;
+        assert_eq!(merged.notes[0].text, "theirs");
+        assert_eq!(merged.notes[0].created_at.as_str(), "2026-08-19T01:00:00Z");
+        assert_eq!(merged.notes[0].edited_at.as_str(), "2026-08-19T03:00:00Z");
     }
 
     #[test]

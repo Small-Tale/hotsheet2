@@ -230,7 +230,8 @@ impl JiraProvider {
                 .map(|comment| ApiNote {
                     id: comment.id,
                     kind: NoteKind::Regular,
-                    at: comment.created,
+                    created_at: comment.created.clone(),
+                    edited_at: comment.updated.unwrap_or(comment.created),
                     text: strip_note(&adf_to_text(Some(&comment.body))),
                 })
                 .collect(),
@@ -563,6 +564,8 @@ struct JiraComment {
     id: String,
     body: Value,
     created: String,
+    #[serde(default)]
+    updated: Option<String>,
 }
 #[derive(Debug, Deserialize)]
 struct JiraCreated {

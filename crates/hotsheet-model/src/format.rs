@@ -214,13 +214,13 @@ fn parse_legacy_notes(section: &str) -> Vec<Note> {
     let mut notes = Vec::new();
     let mut i = 0;
     while i < lines.len() {
-        if let Some((id, kind)) = parse_note_marker(lines[i].trim()) {
+        if let Some(metadata) = parse_note_marker(lines[i].trim()) {
             i += 1;
             let start = i;
             while i < lines.len() && parse_note_marker(lines[i].trim()).is_none() {
                 i += 1;
             }
-            if let Some(note) = build_note(id, kind, lines[start..i].join("\n").trim()) {
+            if let Some(note) = build_note(metadata, lines[start..i].join("\n").trim()) {
                 notes.push(note);
             }
         } else {
@@ -232,7 +232,7 @@ fn parse_legacy_notes(section: &str) -> Vec<Note> {
 
 /// Parse `<!-- note: <ulid> [kind: <kind>] -->`. Returns `None` for a non-marker line
 /// or an unparseable id (that block is then skipped — degrade, don't panic).
-fn parse_note_marker(line: &str) -> Option<(Ulid, NoteKind)> {
+fn parse_note_marker(line: &str) -> Option<NoteMetadata> {
     let inner = line
         .strip_prefix("<!--")?
         .strip_suffix("-->")?
@@ -243,27 +243,64 @@ fn parse_note_marker(line: &str) -> Option<(Ulid, NoteKind)> {
     let mut tokens = inner.split_whitespace();
     let id = Ulid::from_string(tokens.next()?).ok()?;
 
-    let mut kind = NoteKind::Regular;
-    let rest: Vec<&str> = tokens.collect();
-    if let Some(pos) = rest.iter().position(|t| *t == "kind:") {
-        if let Some(k) = rest.get(pos + 1) {
-            kind = parse_note_kind(k);
-        }
-    } else if let Some(k) = rest.iter().find_map(|t| t.strip_prefix("kind:")) {
-        kind = parse_note_kind(k);
-    }
-    Some((id, kind))
+    Some(parse_note_metadata(id, tokens.collect()))
 }
 
-fn build_note(id: Ulid, kind: NoteKind, block: &str) -> Option<Note> {
+#[derive(Debug)]
+struct NoteMetadata {
+    id: Ulid,
+    kind: NoteKind,
+    created_at: Option<Timestamp>,
+    edited_at: Option<Timestamp>,
+}
+
+fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
+    let value_after = |key: &str| {
+        tokens
+            .iter()
+            .position(|token| *token == key)
+            .and_then(|position| tokens.get(position + 1))
+            .copied()
+    };
+    NoteMetadata {
+        id,
+        kind: value_after("kind:").map_or(NoteKind::Regular, parse_note_kind),
+        created_at: value_after("created_at:").map(Timestamp::new),
+        edited_at: value_after("edited_at:").map(Timestamp::new),
+    }
+}
+
+fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
     if block.is_empty() {
         return None;
     }
-    let (at, text) = match block.split_once(" — ") {
-        Some((at, text)) => (Timestamp::new(at.trim()), text.trim().to_string()),
-        None => (Timestamp::default(), block.to_string()),
+    let (legacy_at, text) = if metadata.created_at.is_none() {
+        match block.split_once(" — ") {
+            Some((at, text)) => (Some(Timestamp::new(at.trim())), text.trim().to_string()),
+            None => (None, block.to_string()),
+        }
+    } else {
+        (None, block.to_string())
     };
-    Some(Note { id, kind, at, text })
+    let created_at = metadata
+        .created_at
+        .or(legacy_at)
+        .unwrap_or_else(|| note_id_timestamp(metadata.id));
+    let edited_at = metadata.edited_at.unwrap_or_else(|| created_at.clone());
+    Some(Note {
+        id: metadata.id,
+        kind: metadata.kind,
+        created_at,
+        edited_at,
+        text,
+    })
+}
+
+fn note_id_timestamp(id: Ulid) -> Timestamp {
+    let nanos = i128::from(id.timestamp_ms()) * 1_000_000;
+    time::OffsetDateTime::from_unix_timestamp_nanos(nanos)
+        .map(Timestamp::from_datetime)
+        .unwrap_or_default()
 }
 
 fn notes_to_string(notes: &[&Note]) -> String {
@@ -276,14 +313,12 @@ fn notes_to_string(notes: &[&Note]) -> String {
             out.push_str(" kind: ");
             out.push_str(note_kind_str(n.kind));
         }
+        out.push_str(" created_at: ");
+        out.push_str(n.created_at.as_str());
+        out.push_str(" edited_at: ");
+        out.push_str(n.edited_at.as_str());
         out.push_str(" -->\n");
-        if n.at.is_empty() {
-            out.push_str(&escape_content(&n.text));
-        } else {
-            out.push_str(n.at.as_str());
-            out.push_str(" — ");
-            out.push_str(&escape_content(&n.text));
-        }
+        out.push_str(&escape_content(&n.text));
         out.push('\n');
         out.push_str(NOTE_END);
         out.push('\n');
@@ -335,8 +370,8 @@ fn parse_bounded_notes(section: &str) -> Vec<Note> {
         let Some((block, after_end)) = split_once_marker_line(content, NOTE_END) else {
             break;
         };
-        if let Some((id, kind)) = parse_bounded_note_metadata(metadata.trim()) {
-            if let Some(mut note) = build_note(id, kind, block.trim()) {
+        if let Some(metadata) = parse_bounded_note_metadata(metadata.trim()) {
+            if let Some(mut note) = build_note(metadata, block.trim()) {
                 note.text = unescape_content(&note.text);
                 notes.push(note);
             }
@@ -373,16 +408,10 @@ fn split_once_prefixed_marker_line<'a>(
     None
 }
 
-fn parse_bounded_note_metadata(metadata: &str) -> Option<(Ulid, NoteKind)> {
+fn parse_bounded_note_metadata(metadata: &str) -> Option<NoteMetadata> {
     let mut tokens = metadata.split_whitespace();
     let id = Ulid::from_string(tokens.next()?).ok()?;
-    let rest: Vec<&str> = tokens.collect();
-    let kind = rest
-        .iter()
-        .position(|token| *token == "kind:")
-        .and_then(|pos| rest.get(pos + 1))
-        .map_or(NoteKind::Regular, |kind| parse_note_kind(kind));
-    Some((id, kind))
+    Some(parse_note_metadata(id, tokens.collect()))
 }
 
 /// Prefix structural-looking user lines with one backslash. Existing leading
@@ -426,6 +455,7 @@ fn note_kind_str(kind: NoteKind) -> &'static str {
         NoteKind::FeedbackNeeded => "feedback_needed",
         NoteKind::FeedbackDraft => "feedback_draft",
         NoteKind::Status => "status",
+        NoteKind::Activity => "activity",
     }
 }
 
@@ -434,6 +464,7 @@ fn parse_note_kind(s: &str) -> NoteKind {
         "feedback_needed" => NoteKind::FeedbackNeeded,
         "feedback_draft" => NoteKind::FeedbackDraft,
         "status" => NoteKind::Status,
+        "activity" => NoteKind::Activity,
         _ => NoteKind::Regular,
     }
 }
@@ -470,13 +501,15 @@ mod tests {
             Note {
                 id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
                 kind: NoteKind::Regular,
-                at: "2026-08-19T15:20:44Z".into(),
+                created_at: "2026-08-19T15:20:44Z".into(),
+                edited_at: "2026-08-19T15:20:44Z".into(),
                 text: "Reproduced on macOS; root cause is the pre-theme paint.".into(),
             },
             Note {
                 id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
                 kind: NoteKind::FeedbackNeeded,
-                at: "2026-08-19T15:31:02Z".into(),
+                created_at: "2026-08-19T15:31:02Z".into(),
+                edited_at: "2026-08-19T15:31:02Z".into(),
                 text: "should the fix also cover the dashboard dedicated view?".into(),
             },
         ];
@@ -502,9 +535,9 @@ mod tests {
         assert!(text.contains(BODY_END));
         assert!(text.contains(NOTES_BEGIN));
         assert!(text.contains("\n## Notes\n"));
-        assert!(text.contains("<!-- hotsheet:note:begin 01ARZ3NDEKTSV4RRFFQ69G5FB0 -->"));
+        assert!(text.contains("<!-- hotsheet:note:begin 01ARZ3NDEKTSV4RRFFQ69G5FB0 created_at: 2026-08-19T15:20:44Z edited_at: 2026-08-19T15:20:44Z -->"));
         assert!(text.contains(
-            "<!-- hotsheet:note:begin 01ARZ3NDEKTSV4RRFFQ69G5FB1 kind: feedback_needed -->"
+            "<!-- hotsheet:note:begin 01ARZ3NDEKTSV4RRFFQ69G5FB1 kind: feedback_needed created_at: 2026-08-19T15:31:02Z edited_at: 2026-08-19T15:31:02Z -->"
         ));
         assert!(text.contains(NOTE_END));
         assert!(text.contains(NOTES_END));
@@ -593,7 +626,8 @@ mod tests {
         t.notes.push(Note {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB9"),
             kind: NoteKind::FeedbackDraft,
-            at: "2026-08-19T16:00:00Z".into(),
+            created_at: "2026-08-19T16:00:00Z".into(),
+            edited_at: "2026-08-19T16:00:00Z".into(),
             text: "half-written reply".into(),
         });
         let text = to_file_string(&t);
@@ -610,7 +644,8 @@ mod tests {
         t.notes = vec![Note {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FBA"),
             kind: NoteKind::Regular,
-            at: "2026-08-19T15:20:44Z".into(),
+            created_at: "2026-08-19T15:20:44Z".into(),
+            edited_at: "2026-08-19T15:20:44Z".into(),
             text: "   ".into(),
         }];
         let text = to_file_string(&t);
@@ -669,7 +704,24 @@ mod tests {
         let parsed = parse_file(&legacy).unwrap();
         assert_eq!(parsed.details, "legacy details");
         assert_eq!(parsed.notes[0].text, "legacy note");
+        assert_eq!(parsed.notes[0].created_at.as_str(), "2026-08-19T15:20:44Z");
+        assert_eq!(parsed.notes[0].edited_at, parsed.notes[0].created_at);
         assert!(to_file_string(&parsed).contains(NOTES_END));
+    }
+
+    #[test]
+    fn activity_kind_and_distinct_note_timestamps_round_trip() {
+        let mut ticket = sample();
+        ticket.notes = vec![Note {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2"),
+            kind: NoteKind::Activity,
+            created_at: "2026-08-19T15:20:44Z".into(),
+            edited_at: "2026-08-19T16:00:00Z".into(),
+            text: "completed investigation".into(),
+        }];
+        let encoded = to_file_string(&ticket);
+        assert!(encoded.contains("kind: activity"));
+        assert_eq!(parse_file(&encoded).unwrap(), ticket);
     }
 
     #[test]

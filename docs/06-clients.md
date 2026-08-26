@@ -239,8 +239,8 @@ disconnects self-heal, and one arbiter means local and remote behave identically
 > **Design** (maintainer, 2026-08-19, HS2-26). Keep HS1's reader mode + feedback
 > concepts, but unify and enlarge them. Build: **HS2-65**.
 
-**Four note kinds, one rendering rule.** A note's `kind` ([02](02-ticket-storage.md)
-§2.6 — `regular` / `feedback_needed` / `feedback_draft` / `status`) determines how
+**Five note kinds, one rendering rule.** A note's `kind` ([02](02-ticket-storage.md)
+§2.6 — `regular` / `activity` / `feedback_needed` / `feedback_draft` / `status`) determines how
 it's shown, **not how the view was opened** (HS1's inconsistency: the same note
 rendered as an editable feedback form when opened via "Provide feedback" but
 read-only when opened via the reader icon). In HS2 there is **one reader mode**, and:
@@ -249,6 +249,9 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   style** (you can answer the ask / continue your draft) — wherever they appear.
 - **`regular` and `status` notes, and the ticket `details`, render in the reader
   (read-only) style.**
+- **`activity` notes render as a chronological timeline** ordered by `created_at`
+  (ULID tie-breaker). Never collapse duplicate, repeated, or reversed transitions;
+  each entry is historical context. Show `edited_at` when it differs from creation.
 
 **Reader mode is a focus surface with an edit toggle.** Opening reader mode shows the
 ticket's details + notes on one large scrollable surface (per the rule above).

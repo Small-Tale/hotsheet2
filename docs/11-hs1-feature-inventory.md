@@ -48,8 +48,8 @@ AI-facing concept carried over — see docs/05 §5.9.
 ## 4. Notes, Reader Mode & Feedback — **core-keep, with improvements** (DECIDED, HS2-26, 2026-08-19)
 Inline-editable notes (docs/3); **FEEDBACK NEEDED / IMMEDIATE** prefixes + feedback
 dialog w/ draft (docs/21) — core to the AI loop, and generalizes to human assignment
-([10](10-assignment-and-collaboration.md)). **Improvements (maintainer):** four note
-**kinds** (regular / feedback_needed / feedback_draft / status — docs/02 §2.6); **one
+([10](10-assignment-and-collaboration.md)). **Improvements (maintainer):** five note
+**kinds** (regular / activity / feedback_needed / feedback_draft / status — docs/02 §2.6); **one
 reader mode** whose rendering is driven by note kind, not launch point (feedback
 kinds → editor style; regular/status/details → reader style); and an **"Edit" button
 → larger editing surface**, with the reader button reachable *while* editing to jump

@@ -832,7 +832,7 @@ fn new_without_a_title_errors() {
 }
 
 #[test]
-fn edit_can_append_a_note() {
+fn edit_can_append_and_edit_an_activity_note() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
     hs(p).args(["init"]).assert().success();
@@ -846,6 +846,8 @@ fn edit_can_append_a_note() {
             "started",
             "--note",
             "began investigating",
+            "--note-kind",
+            "activity",
         ])
         .assert()
         .success();
@@ -855,7 +857,33 @@ fn edit_can_append_a_note() {
         .assert()
         .success()
         .stdout(predicate::str::contains("## Notes"))
+        .stdout(predicate::str::contains("kind: activity"))
+        .stdout(predicate::str::contains("created_at:"))
+        .stdout(predicate::str::contains("edited_at:"))
         .stdout(predicate::str::contains("began investigating"));
+
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let note_id = ticket.notes[0].id.to_string();
+    let created_at = ticket.notes[0].created_at.clone();
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "investigation complete",
+            "--edit-note",
+            &note_id,
+        ])
+        .assert()
+        .success();
+    let edited = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(edited.notes[0].created_at, created_at);
+    assert_eq!(edited.notes[0].text, "investigation complete");
 }
 
 #[test]

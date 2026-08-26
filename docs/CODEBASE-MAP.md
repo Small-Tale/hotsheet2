@@ -42,7 +42,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/ids.rs             #   Ulid re-export + derive_slug (FNV-1a -> Crockford)
       src/ticket.rs          #   Ticket/Note/ReviewRequest/ExternalLink; Ticket::new
       src/timestamp.rs       #   Timestamp: lenient RFC3339 (raw text + parsed instant)
-      src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + notes; legacy reader)
+      src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
       src/ops.rs             #   query/create/update/close/claim/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
@@ -67,7 +67,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
       src/commands.rs        #   typed safe argv command settings schema (HS2-JN3X4W)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
-      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow incl. connection_id/native_id/qualified_id + compact body-optional lists (shared by server + MCP)
+      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote (created_at/edited_at)/TicketRow incl. provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
@@ -188,8 +188,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 ## Data / formats
 
 - **Ticket file:** `tickets/<2-char shard>/<ULID>.md` — YAML frontmatter + explicitly
-  bounded, collision-escaped Markdown body (`details`) and notes; legacy one-sided
-  note files remain readable. Schema: [17](17-ticket-file-format.md).
+  bounded, collision-escaped Markdown body (`details`) and notes. Notes have stable
+  ULIDs, five kinds, and `created_at`/`edited_at`; legacy one-sided note files remain
+  readable and migrate deterministically. Schema: [17](17-ticket-file-format.md).
 - **Store metadata:** `hotsheet-store.json` (camelCase: `schemaVersion`,
   `ticketPrefix`, `idStrategy`, `shard`). See `store.rs::StoreMetadata`.
 - **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`

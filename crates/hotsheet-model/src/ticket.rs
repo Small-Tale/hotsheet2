@@ -20,7 +20,8 @@ use crate::timestamp::Timestamp;
 pub struct Note {
     pub id: Ulid,
     pub kind: NoteKind,
-    pub at: Timestamp,
+    pub created_at: Timestamp,
+    pub edited_at: Timestamp,
     pub text: String,
 }
 

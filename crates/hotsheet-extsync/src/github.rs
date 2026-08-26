@@ -340,7 +340,8 @@ impl GitHubProvider {
                 .map(|comment| ApiNote {
                     id: comment.id.to_string(),
                     kind: NoteKind::Regular,
-                    at: comment.created_at,
+                    created_at: comment.created_at.clone(),
+                    edited_at: comment.updated_at.unwrap_or(comment.created_at),
                     text: strip_note_marker(comment.body),
                 })
                 .collect(),
@@ -716,6 +717,8 @@ struct GitHubComment {
     id: u64,
     body: String,
     created_at: String,
+    #[serde(default)]
+    updated_at: Option<String>,
 }
 
 fn github_capabilities() -> ProviderCapabilities {

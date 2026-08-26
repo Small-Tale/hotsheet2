@@ -246,7 +246,8 @@ impl GitLabProvider {
                 .map(|note| ApiNote {
                     id: note.id.to_string(),
                     kind: NoteKind::Regular,
-                    at: note.created_at,
+                    created_at: note.created_at.clone(),
+                    edited_at: note.updated_at.unwrap_or(note.created_at),
                     text: strip_note(&note.body),
                 })
                 .collect(),
@@ -545,6 +546,8 @@ struct GitLabNote {
     id: u64,
     body: String,
     created_at: String,
+    #[serde(default)]
+    updated_at: Option<String>,
     #[serde(default)]
     system: bool,
 }

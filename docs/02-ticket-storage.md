@@ -217,11 +217,13 @@ terminal gutter paints `var(--bg)` before the theme is applied.
 
 ## Notes
 
-<!-- note: 01J9ZK4A0R… -->
-2026-08-19T15:20:44Z — Reproduced on macOS; root cause is the pre-theme paint.
+<!-- hotsheet:note:begin 01J9ZK4A0R… created_at: 2026-08-19T15:20:44Z edited_at: 2026-08-19T15:20:44Z -->
+Reproduced on macOS; root cause is the pre-theme paint.
+<!-- hotsheet:note:end -->
 
-<!-- note: 01J9ZK5B1S… kind: feedback_needed -->
-2026-08-19T15:31:02Z — should the fix also cover the dashboard dedicated view?
+<!-- hotsheet:note:begin 01J9ZK5B1S… kind: feedback_needed created_at: 2026-08-19T15:31:02Z edited_at: 2026-08-19T15:31:02Z -->
+should the fix also cover the dashboard dedicated view?
+<!-- hotsheet:note:end -->
 ```
 
 - **Frontmatter = structured fields** (validated by a schema; `schema:` versions
@@ -230,11 +232,14 @@ terminal gutter paints `var(--bg)` before the theme is applied.
 - **Notes** are a `## Notes` section where **each note carries its own
   timestamp-ordered UUID (a ULID)** in a leading HTML comment. The ULID id is what
   makes note merges automatic (§2.7): two branches that each append a note produce
-  two distinct, uniquely-identified blocks that union cleanly and sort by id
-  (= chronologically). The comment keeps the id machine-readable without cluttering
+  two distinct, uniquely-identified blocks that union cleanly and sort by explicit
+  creation time, with ULID as the stable tie-breaker. The comment keeps metadata machine-readable without cluttering
   the rendered Markdown.
+- **Every note has immutable `created_at` and mutable `edited_at` RFC3339 timestamps**
+  in its marker. Editing changes only `edited_at`; legacy one-timestamp notes map that
+  timestamp to both fields.
 - **A note has a `kind`** (default `regular`), carried in the same comment
-  (`kind: …`), one of **four** (HS2-26, maintainer 2026-08-19):
+  (`kind: …`), one of **five**:
   - `regular` — an ordinary note. **Shared** (committed).
   - `feedback_needed` — a request for a human decision (HS1's `FEEDBACK NEEDED:`
     prefix, promoted to a first-class kind). **Shared** (committed).
@@ -243,6 +248,8 @@ terminal gutter paints `var(--bg)` before the theme is applied.
     *not* the committed ticket file; on submit it becomes a `regular` shared note.
   - `status` — a system-generated event note (e.g. "claim expired — reclaimed",
     "QUARANTINED"). **Shared** (committed), informational for the team.
+  - `activity` — a durable chronological account of meaningful work and lifecycle
+    transitions. Repeated and reversed transitions remain separate entries. **Shared**.
   The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
   get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** are files under `attachments/<id>/`, referenced by relative path.
