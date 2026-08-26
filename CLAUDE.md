@@ -62,6 +62,11 @@ Keep production component styles colocated with their component modules and impo
 from those modules; demos may provide stage/shell styles but must not own or duplicate
 the production component CSS being validated.
 
+Treat reusable visual presentations as explicit component API variants, not
+consumer-specific descendant CSS overrides. A component's UX demo must expose every
+supported public variant and state that consumers rely on, including appearance and
+size options, so the catalog is a complete interactive account of the component API.
+
 Use **Lucide icons** for all decorative or symbolic client iconography across web,
 Tauri, SwiftUI, and later clients. Never substitute emoji, Unicode geometric shapes,
 dingbats, or other font characters (for example `◇`, `✓`, or `●`) as icons. Render

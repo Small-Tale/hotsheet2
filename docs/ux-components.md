@@ -227,8 +227,9 @@ The trailing inspector shown in the wireframe.
   - `CategoryPicker`
   - `PriorityPicker`
   - `StatusPicker`
-  - `StatusBadge` — **built**: readable status text with status-specific tone and
-    optional reinforcing Lucide icon; unit and bidirectional `/ux-demo` coverage
+  - `StatusBadge` — **built**: readable status text with status-specific tone,
+    optional reinforcing Lucide icon, filled/plain appearances, and regular/compact
+    sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection`

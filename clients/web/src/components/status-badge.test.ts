@@ -13,9 +13,17 @@ describe('StatusBadge', () => {
     expect(statuses.every(status => statusPresentation(status).icon.length > 0)).toBe(true);
   });
 
-  it('offers a compact row presentation without changing readable status text', () => {
-    const markup = String(StatusBadge({ status: 'started', compact: true }));
+  it('offers independent plain and compact variants without changing readable status text', () => {
+    const markup = String(StatusBadge({ status: 'started', appearance: 'plain', compact: true }));
+    expect(markup).toContain('status-badge--plain');
     expect(markup).toContain('status-badge--compact');
+    expect(markup).toContain('data-appearance="plain"');
     expect(markup).toContain('Started');
+  });
+
+  it('defaults to the filled non-compact presentation', () => {
+    const markup = String(StatusBadge({ status: 'verified' }));
+    expect(markup).toContain('status-badge--filled');
+    expect(markup).not.toContain('status-badge--compact');
   });
 });

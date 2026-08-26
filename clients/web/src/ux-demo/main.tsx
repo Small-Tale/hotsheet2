@@ -118,7 +118,9 @@ delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
 delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, target) => {
   const control = target as FormControl;
   if (control.getAttribute('name') === 'status') statusBadgeSettings.status.value = control.value as typeof statusBadgeSettings.status.value;
+  if (control.getAttribute('name') === 'appearance') statusBadgeSettings.appearance.value = control.value as typeof statusBadgeSettings.appearance.value;
   if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
+  if (control.getAttribute('name') === 'compact') statusBadgeSettings.compact.value = control.checked;
 });
 delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
   const control = target as FormControl;

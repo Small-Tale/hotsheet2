@@ -47,8 +47,10 @@ describe('UX demo catalog', () => {
   it('resets every canonical StatusBadge demo setting', () => {
     statusBadgeSettings.status.value = 'verified';
     statusBadgeSettings.showIcon.value = false;
+    statusBadgeSettings.appearance.value = 'plain';
+    statusBadgeSettings.compact.value = true;
     resetStatusBadgeDemo();
-    expect({ status: statusBadgeSettings.status.value, showIcon: statusBadgeSettings.showIcon.value }).toEqual({ status: 'started', showIcon: true });
+    expect({ status: statusBadgeSettings.status.value, showIcon: statusBadgeSettings.showIcon.value, appearance: statusBadgeSettings.appearance.value, compact: statusBadgeSettings.compact.value }).toEqual({ status: 'started', showIcon: true, appearance: 'filled', compact: false });
   });
 
   it('resets every canonical TicketRow demo setting', () => {
