@@ -82,6 +82,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
   await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(156, 163, 175)');
+  await categoryIcon.evaluate((node: HTMLElement & { value: string }) => { node.value = ''; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(row.locator('.ticket-list-row__category--label')).toHaveText('bug');
+  await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('color', 'rgb(156, 163, 175)');
   await expect(row).toContainText('regression');
   await expect(row.locator('[data-lucide="star"]')).toHaveCount(1);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).not.toHaveClass(/active/);
@@ -146,6 +149,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(page.getByText('Toggle Up Next selected')).toBeVisible();
 
   await title.fill('A deliberately long ticket title that must wrap across no more than two lines while the AI working indicator remains entirely visible');
+  await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'default'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(row.locator('[data-lucide="minus"]')).toHaveCount(1);
   await tags.fill('client, regression, server, ux');
   await row.evaluate((node: HTMLElement) => { node.style.width = '320px'; });
   const [rowBox, timeBox, slugBox, identityBox] = await Promise.all([row.boundingBox(), row.locator('.ticket-list-row__updated').boundingBox(), row.locator('.ticket-list-row__slug').boundingBox(), row.locator('.ticket-list-row__identity').boundingBox()]);

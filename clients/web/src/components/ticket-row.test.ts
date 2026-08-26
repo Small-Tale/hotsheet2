@@ -25,7 +25,7 @@ describe('TicketRow', () => {
       return [priority, [presentation.name, presentation.color]];
     }))).toEqual({
       urgent: ['chevrons-up', '#ef4444'], high: ['chevron-up', '#f97316'],
-      default: ['chevrons-up-down', '#6b7280'], low: ['chevron-down', '#3b82f6'],
+      default: ['minus', '#6b7280'], low: ['chevron-down', '#3b82f6'],
     });
   });
 });

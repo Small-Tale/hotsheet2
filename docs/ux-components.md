@@ -169,8 +169,8 @@ selection where sensible.
   - title
   - up-next/star toggle
   - tag chips
-  - priority uses the HS1 directional Lucide semantics and colors immediately after
-    the title: double-up red, up orange, bidirectional gray, and down blue
+  - priority uses a directional Lucide scale immediately after the slug: double-up
+    red, up orange, neutral minus gray, and down blue
   - assignee, active tool, or connection indicator
   - relative updated time
   - selected, unread, claimed, blocked, busy, review-needed, and provider states

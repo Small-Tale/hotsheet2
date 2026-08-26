@@ -2,7 +2,7 @@ import { StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
 import { resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
-import { ChevronDown, ChevronUp, ChevronsUp, ChevronsUpDown, Star, type IconNode } from 'lucide';
+import { ChevronDown, ChevronUp, ChevronsUp, Minus, Star, type IconNode } from 'lucide';
 
 export type TicketPriority = 'low' | 'default' | 'high' | 'urgent';
 
@@ -29,7 +29,7 @@ export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefi
 const priorityPresentation: Record<TicketPriority, { icon: IconNode; name: string; color: string }> = {
   urgent: { icon: ChevronsUp, name: 'chevrons-up', color: '#ef4444' },
   high: { icon: ChevronUp, name: 'chevron-up', color: '#f97316' },
-  default: { icon: ChevronsUpDown, name: 'chevrons-up-down', color: '#6b7280' },
+  default: { icon: Minus, name: 'minus', color: '#6b7280' },
   low: { icon: ChevronDown, name: 'chevron-down', color: '#3b82f6' },
 };
 
@@ -82,7 +82,7 @@ export function TicketRow(raw: TicketRowProps) {
       <div class="ticket-list-row__body">
         {categoryIcon
           ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
-          : <span class="ticket-list-row__category ticket-list-row__category--label">{props.category}</span>}
+          : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`}>{props.category}</span>}
         <div class="ticket-list-row__content">
           <div class="ticket-list-row__first-line">
             <div class="ticket-list-row__identity">
