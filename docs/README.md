@@ -109,7 +109,7 @@ and don't imply reading order — read by group.
 **G · Integrations**
 | Doc | Topic | Status |
 |---|---|---|
-| [16-external-sync-interface.md](16-external-sync-interface.md) | Pluggable authoritative ticket providers (git default; GitHub/GitLab/Jira direct) | Revised design (HS2-QJ5TCT) |
+| [16-external-sync-interface.md](16-external-sync-interface.md) | Pluggable authoritative ticket providers (git default; GitHub/GitLab/Jira direct) | Shipped (HS2-ZVZP80/A90JRH/JAXS4Z/0RK4YC/VFXFFP; GitHub live CRUD validated) |
 
 **H · Test evidence**
 
@@ -165,7 +165,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Capability | Where | Status |
 |---|---|---|
 | Git-repo file-per-ticket storage | 02, 17 | Confirmed; **parser + FsStore built** (`hotsheet-model::format`, `hotsheet-ticketing::store`) |
-| Pluggable authoritative ticket providers (git default; direct GitHub/Jira/GitLab) | 16 | Shipped except GitHub live credential validation: provider contract/capabilities/qualified wire identity/config registry + git adapter + CLI/server/MCP discovery/routes (HS2-ZVZP80); idempotent transfer (HS2-A90JRH); direct GitHub (HS2-JAXS4Z) and GitLab/Jira (HS2-0RK4YC) adapters; Kerf client connection/default/filter/capability/copy-move UX (HS2-VFXFFP) |
+| Pluggable authoritative ticket providers (git default; direct GitHub/Jira/GitLab) | 16 | Shipped: provider contract/capabilities/qualified wire identity/config registry + git adapter + CLI/server/MCP discovery/routes (HS2-ZVZP80); idempotent transfer (HS2-A90JRH); direct GitHub with real credential-gated CRUD validation (HS2-JAXS4Z); GitLab/Jira adapters (HS2-0RK4YC); Kerf client connection/default/filter/capability/copy-move UX (HS2-VFXFFP) |
 | Standalone foreground server launch | 04 §4.3 | Shipped: `hotsheet-cli serve` resolves a sibling/PATH server, rejects version drift, and forwards start/stop; detached supervision remains client-owned |
 | Multiple ticket stores per project (mixed permissions/locality) | 02 | Confirmed |
 | Every **git-provider store** is a git repo (local-only = no remote) | 02 §2.1 | Confirmed |

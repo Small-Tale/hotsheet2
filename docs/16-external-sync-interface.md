@@ -208,8 +208,8 @@ structured capabilities and typed provider errors; deterministic git connection 
 `TicketProvider` plus the default `GitProvider` adapter; project connection config
 validation (non-secret settings only); partial-failure aggregation; provider identity
 on ticket wire rows; `hotsheet-cli providers`, `hotsheet_providers` MCP, `GET
-/providers`, and provider-scoped git REST routes. Direct external providers remain in
-their tickets above.
+/providers`, and provider-scoped git REST routes. The completed provider increments
+are summarized below.
 
 Built in the transfer increment: `copy_between`/`move_between` preserve normalized
 content, notes, assignment, and review requests; reject dependencies that lack an
@@ -237,6 +237,8 @@ and `provider-ls|get|new|edit|close` CLI commands. No operation writes a mirrore
 ticket. GitHub has no issue-creation idempotency key, so its capability advertises
 `provider_idempotency: false`; transfer provenance is still recorded and retries
 resolve it, while the host coordinator serializes same-process attempts.
+The opt-in live contract was validated against `Small-Tale/hotsheet2` with a
+repository-scoped OS-keychain credential: create, read, comment, and close all passed.
 
 Built in the GitLab/Jira increment: both adapters use the same provider-neutral
 routes and qualified identity contract without creating git-store mirrors. GitLab
