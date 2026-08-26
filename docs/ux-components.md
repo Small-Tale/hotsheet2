@@ -1,8 +1,9 @@
 # UX component catalog
 
 > **Status: initial inventory; implementation started.** The development-only Hono
-> `/ux-demo` catalog shell and the first production component, `TagChip`, are built
-> in `clients/web` (HS2-61XG15). This catalog is derived from the
+> `/ux-demo` catalog shell and production `TagChip`, `StatusBadge`, and initial
+> `TicketRow` components are built in `clients/web` (HS2-61XG15/HS2-H0T0MV). This
+> catalog is derived from the
 > [list-mode wireframe](design/exports/Main%20Interface%20Wireframe%20-%20List%20Mode.png),
 > the structural SVG export beside it, and the client requirements in
 > [06-clients.md](06-clients.md). The wireframe establishes information architecture,
@@ -140,7 +141,9 @@ selection where sensible.
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active
   - `TicketRowDivider`
-- `TicketRow`
+- `TicketRow` — **initial demo built**: title, qualified slug, category, status,
+  priority, tags, Up Next, selection, and AI-busy presentation; the remaining states
+  and actions below grow this same component boundary
   - category/type icon
   - slug/native ticket identifier
   - title
@@ -200,6 +203,8 @@ The trailing inspector shown in the wireframe.
   - `CategoryPicker`
   - `PriorityPicker`
   - `StatusPicker`
+  - `StatusBadge` — **built**: readable status text with status-specific tone and
+    optional reinforcing icon; unit and bidirectional `/ux-demo` coverage
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection`

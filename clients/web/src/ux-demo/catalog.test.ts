@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { createDevApp } from '../dev-server';
 import { demoCatalog, findDemo, flattenCatalog } from './catalog';
+import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
+import { resetTicketRowDemo, ticketRowSettings } from './ticket-row-demo';
 
 describe('UX demo catalog', () => {
-  it('has unique routes and one implemented initial component', () => {
+  it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['tag-chip']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['ticket-row', 'status-badge', 'tag-chip']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
   });
 
@@ -36,6 +38,37 @@ describe('UX demo catalog', () => {
     }).toEqual({
       label: 'needs-design', variant: 'neutral', appearance: 'filled-outlined', size: 'small',
       removable: true, pill: true, disabled: false, event: 'No actions yet',
+    });
+  });
+
+  it('resets every canonical StatusBadge demo setting', () => {
+    statusBadgeSettings.status.value = 'verified';
+    statusBadgeSettings.showIcon.value = false;
+    resetStatusBadgeDemo();
+    expect({ status: statusBadgeSettings.status.value, showIcon: statusBadgeSettings.showIcon.value }).toEqual({ status: 'started', showIcon: true });
+  });
+
+  it('resets every canonical TicketRow demo setting', () => {
+    ticketRowSettings.title.value = 'Changed';
+    ticketRowSettings.status.value = 'verified';
+    ticketRowSettings.priority.value = 'urgent';
+    ticketRowSettings.category.value = 'bug';
+    ticketRowSettings.tags.value = 'one';
+    ticketRowSettings.upNext.value = false;
+    ticketRowSettings.selected.value = true;
+    ticketRowSettings.busy.value = false;
+    ticketRowSettings.event.value = 'Changed';
+    resetTicketRowDemo();
+    expect({
+      title: ticketRowSettings.title.value, status: ticketRowSettings.status.value,
+      priority: ticketRowSettings.priority.value, category: ticketRowSettings.category.value,
+      tags: ticketRowSettings.tags.value, upNext: ticketRowSettings.upNext.value,
+      selected: ticketRowSettings.selected.value, busy: ticketRowSettings.busy.value,
+      event: ticketRowSettings.event.value,
+    }).toEqual({
+      title: 'Build the first client ticket list', status: 'started', priority: 'high',
+      category: 'feature', tags: 'client, ux', upNext: true, selected: false,
+      busy: true, event: 'No actions yet',
     });
   });
 });

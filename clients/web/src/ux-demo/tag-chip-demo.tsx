@@ -1,5 +1,6 @@
 import { signal } from 'kerfjs';
 import { TagChip, type TagChipAppearance, type TagChipSize, type TagChipVariant } from '../components/tag-chip';
+import { syncSettingsControls } from './settings-controls';
 
 export const tagChipSettings = {
   label: signal('needs-design'),
@@ -12,19 +13,11 @@ export const tagChipSettings = {
   event: signal('No actions yet'),
 };
 
-type LiveControl = HTMLElement & { checked: boolean; value: string };
-
 export function syncTagChipSettingsControls(root: ParentNode): void {
-  const control = (name: string) => root.querySelector(`[data-settings="tag-chip"] [name="${name}"]`) as LiveControl | null;
-  const setValue = (name: string, value: string) => { const item = control(name); if (item) item.value = value; };
-  const setChecked = (name: string, checked: boolean) => { const item = control(name); if (item) item.checked = checked; };
-  setValue('label', tagChipSettings.label.value);
-  setValue('variant', tagChipSettings.variant.value);
-  setValue('appearance', tagChipSettings.appearance.value);
-  setValue('size', tagChipSettings.size.value);
-  setChecked('removable', tagChipSettings.removable.value);
-  setChecked('pill', tagChipSettings.pill.value);
-  setChecked('disabled', tagChipSettings.disabled.value);
+  syncSettingsControls(root, 'tag-chip', {
+    values: { label: tagChipSettings.label.value, variant: tagChipSettings.variant.value, appearance: tagChipSettings.appearance.value, size: tagChipSettings.size.value },
+    checked: { removable: tagChipSettings.removable.value, pill: tagChipSettings.pill.value, disabled: tagChipSettings.disabled.value },
+  });
 }
 
 export function resetTagChipDemo(controlRoot?: ParentNode): void {

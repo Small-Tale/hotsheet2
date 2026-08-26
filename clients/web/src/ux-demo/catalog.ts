@@ -16,7 +16,7 @@ export const demoCatalog: DemoCategory[] = [
     { id: 'ticket-list', name: 'List', demos: [
       demo('quick-ticket-composer', 'QuickTicketComposer', 'Compact ticket creation that expands in place.'),
       demo('ticket-list', 'TicketList', 'Virtualized, live, keyboard-navigable ticket collection.'),
-      demo('ticket-row', 'TicketRow', 'Dense ticket summary and actions.'),
+      demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true),
     ]},
     { id: 'ticket-board', name: 'Columns', demos: [
       demo('ticket-board', 'TicketBoard', 'Status/category column workspace.'),
@@ -31,6 +31,7 @@ export const demoCatalog: DemoCategory[] = [
     { id: 'metadata', name: 'Metadata', demos: [
       demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.'),
       demo('metadata-editor', 'TicketMetadataEditor', 'Capability-aware category, priority, and status fields.'),
+      demo('status-badge', 'StatusBadge', 'Readable ticket state with reinforcing iconography.', 'feature-floor', true),
       demo('tag-chip', 'TagChip', 'Compact tag label with optional removal behavior.', 'feature-floor', true),
       demo('tag-picker', 'TagPicker', 'Find, create, and attach ticket tags.'),
     ]},

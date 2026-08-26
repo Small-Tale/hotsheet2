@@ -8,7 +8,9 @@ import '@awesome.me/webawesome/dist/components/select/select.js';
 import '@awesome.me/webawesome/dist/components/tag/tag.js';
 import './style.css';
 import { demoCatalog, findDemo, type DemoCategory, type DemoDefinition } from './catalog';
+import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
+import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -26,7 +28,9 @@ function demoNavigation(category: DemoCategory) {
 }
 
 function demoContent(item: DemoDefinition) {
+  if (item.id === 'status-badge') return <StatusBadgeDemo />;
   if (item.id === 'tag-chip') return <TagChipDemo />;
+  if (item.id === 'ticket-row') return <TicketRowDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 
@@ -44,9 +48,9 @@ function DemoApp() {
       </article>
       {settingsOpen.value && <aside class="settings-inspector" aria-label={`${selected.name} settings`}>
         <header><div><p class="eyebrow">Demo settings</p><h2>{selected.name}</h2></div></header>
-        {selected.id === 'tag-chip' ? <TagChipSettings /> : <p>This demo has no adjustable settings.</p>}
+        {selected.id === 'tag-chip' ? <TagChipSettings /> : selected.id === 'status-badge' ? <StatusBadgeSettings /> : selected.id === 'ticket-row' ? <TicketRowSettings /> : <p>This demo has no adjustable settings.</p>}
       </aside>}
-      {selected.id === 'tag-chip' && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
+      {selected.implemented && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
     </main>
   );
 }
@@ -62,7 +66,11 @@ function selectDemo(id: string, push = true): void {
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefault(); selectDemo((target as HTMLElement).dataset.demoId!); });
 delegate(root, 'click', '[data-action="toggle-settings"]', () => { settingsOpen.value = !settingsOpen.value; });
-delegate(root, 'click', '[data-action="reset-settings"]', () => resetTagChipDemo(root));
+delegate(root, 'click', '[data-action="reset-settings"]', () => {
+  if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
+  if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
+  if (selectedId.value === 'ticket-row') resetTicketRowDemo(root);
+});
 delegate(root, 'input', '[data-settings="tag-chip"] [name="label"]', (_event, target) => { tagChipSettings.label.value = (target as FormControl).value; });
 delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) => {
   const control = target as FormControl;
@@ -77,5 +85,38 @@ delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) =
 });
 delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
   if ((target as HTMLElement).dataset.disabled !== 'true') tagChipSettings.event.value = `Remove requested for ${(target as HTMLElement).dataset.tagId}`;
+});
+delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  if (control.getAttribute('name') === 'status') statusBadgeSettings.status.value = control.value as typeof statusBadgeSettings.status.value;
+  if (control.getAttribute('name') === 'show-icon') statusBadgeSettings.showIcon.value = control.checked;
+});
+delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
+  const control = target as FormControl;
+  if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;
+  if (control.getAttribute('name') === 'category') ticketRowSettings.category.value = control.value;
+  if (control.getAttribute('name') === 'tags') ticketRowSettings.tags.value = control.value;
+});
+delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, target) => {
+  const control = target as FormControl;
+  switch (control.getAttribute('name')) {
+    case 'status': ticketRowSettings.status.value = control.value as typeof ticketRowSettings.status.value; break;
+    case 'priority': ticketRowSettings.priority.value = control.value as typeof ticketRowSettings.priority.value; break;
+    case 'up-next': ticketRowSettings.upNext.value = control.checked; break;
+    case 'selected': ticketRowSettings.selected.value = control.checked; break;
+    case 'busy': ticketRowSettings.busy.value = control.checked; break;
+  }
+});
+delegate(root, 'click', '[data-action="select-ticket-row"]', () => {
+  ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
+  ticketRowSettings.event.value = ticketRowSettings.selected.value ? 'Ticket selected' : 'Ticket deselected';
+  const selected = root.querySelector('[data-settings="ticket-list-row"] [name="selected"]') as FormControl | null;
+  if (selected) selected.checked = ticketRowSettings.selected.value;
+});
+delegate(root, 'keydown', '[data-action="select-ticket-row"]', (event, target) => {
+  const key = (event as KeyboardEvent).key;
+  if (key !== 'Enter' && key !== ' ') return;
+  event.preventDefault();
+  (target as HTMLElement).click();
 });
 addEventListener('popstate', () => selectDemo(fromUrl(), false));
