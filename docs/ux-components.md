@@ -427,7 +427,15 @@ HTTP/WebSocket adapters:
 - live event playback and reconnect behavior
 - provider capability variants
 - optimistic success, server rejection, conflict, and stale-data scenarios
-- a reset action that returns every demo to a deterministic baseline
+- a reset action that returns every demo, rendered output, and live inspector control
+  property to a deterministic baseline without closing the inspector; a subsequent
+  edit must still propagate normally
+
+Every stateful demo's browser contract walks the complete round trip: assert its initial
+controls and output, change every exposed setting, reset or replace state, assert every
+live control property and output, then edit once more. Tests exercise every visible
+action. For Web Awesome elements, `value`, `checked`, focus, and relevant emitted events
+are authoritative test surfaces; matching attributes alone do not prove UI state.
 
 Initial composed demos:
 

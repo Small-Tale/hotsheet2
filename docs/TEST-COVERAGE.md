@@ -73,3 +73,7 @@ Status meanings:
 The matrix reports whether both behavioral layers exist; it does not claim every
 requirement is fully asserted merely because a file is listed. Reviews should still
 inspect the named tests and add transition/adversarial cases for stateful changes.
+For stateful clients, double coverage specifically requires both synchronization
+directions (control → state/output and programmatic state → live control properties),
+all visible actions, reset/replacement round trips, and a post-reset edit. Merely
+rendering or touching a control does not satisfy the behavioral layer.

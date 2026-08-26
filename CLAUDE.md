@@ -65,6 +65,15 @@ the durable rationale is in [`docs/09-technology-decisions.md`](docs/09-technolo
 - **Coverage is a floor, not a ceiling**: 100% line/branch coverage shows every line *ran*, not that every *behavior* — or every *sequence* of behaviors — is *asserted*. It is structurally blind to a **missing state transition**: a bug living in an untested interaction sails through a green 100% report because the individual lines still get hit by isolated, single-operation tests.
 - **Transition-matrix testing for stateful modules**: for anything with modes / multiple code paths / a cache / a state machine, enumerate the states AND the transitions between them, then write tests that walk realistic multi-step sequences crossing state boundaries — not just each operation from a clean initial state.
 - **Adversarial pass on stateful changes**: when adding or altering a stateful code path, deliberately try to break it with out-of-order / interleaved / repeated / empty-then-refill sequences; pin any that would have failed as permanent regression tests.
+- **Client state synchronization is bidirectional**: for every stateful control, test
+  both control → application state/rendered output and programmatic application state
+  → the live control. A stateful client interaction test must establish the initial
+  state, change every exposed setting, verify output, reset/replace state, verify every
+  control and output again, then make another edit after reset. For custom elements,
+  assert live properties such as `value` and `checked` (plus focus and emitted events
+  when relevant), not attributes alone. Exercise every rendered action such as Reset,
+  Save, Cancel, Apply, Remove, and Undo. Prefer one tested binding/synchronization
+  abstraction over per-component repair code.
 - **Manual test plan**: keep a manual test plan doc (e.g. `docs/manual-test-plan.md`) for features that can't be reliably automated. **Keep it up to date** — add such features there; when you add automated coverage for a previously-manual item, remove it and note it in an "Automated Coverage Summary".
 - **Feature coverage matrix**: update [`docs/TEST-COVERAGE.md`](docs/TEST-COVERAGE.md)
   in the same change whenever a feature is added, shipped, changed, deferred, or gains
@@ -112,6 +121,10 @@ the durable rationale is in [`docs/09-technology-decisions.md`](docs/09-technolo
 - **Stateful modules** (claim/lease, index reconcile, terminal-sizing arbiter, sync
   engine) get **transition-matrix + adversarial-sequence** tests; pin every stateful
   bug as a regression test.
+- **Stateful clients** get bidirectional binding contract tests: controls → state and
+  rendered output, then programmatic reset/replacement → live control properties and
+  output, followed by another edit. Browser tests must exercise every user-visible
+  action and inspect custom-element properties rather than relying on attributes.
 - **Coverage:** per-language gates + the feature-layer matrix in
   `docs/TEST-COVERAGE.md` (NOT one merged lcov):
   `cargo llvm-cov` (Rust) · Playwright/istanbul (web) · `vitest` coverage (migrator).

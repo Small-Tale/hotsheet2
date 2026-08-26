@@ -161,6 +161,16 @@ arbiter** (viewport focus/blur/join/leave/disconnect → size decisions —
 [06](06-clients.md) §6.7), and the **sync engine** (offline→online, conflict→resolve).
 Every stateful bug found → a permanent regression test walking the exact bad sequence.
 
+Client controls add a second state boundary: the Kerf signal/resource and the live DOM
+property held by a native or Web Awesome element. Component contracts must therefore
+test both directions. For each exposed setting, drive the control and verify application
+state plus rendered output; then reset or externally replace the application state and
+verify the live control properties plus output. Make one more edit after reset to prove
+the binding remains usable. Playwright assertions for custom elements inspect properties
+such as `value` and `checked`, not attributes alone, and exercise every visible action
+(including Reset, Save, Cancel, Apply, Remove, and Undo). Shared binding helpers receive
+their own exhaustive contract tests; each consuming component retains a focused flow test.
+
 ### 12.7.4 Cross-language conformance (the migrator's guard)
 
 A CI test where the real `hotsheet-model` **parses and round-trips what the Node
