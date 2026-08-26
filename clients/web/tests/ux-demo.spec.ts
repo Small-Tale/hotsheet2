@@ -17,7 +17,19 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await page.goto('/ux-demo?component=tag-chip');
   const chip = page.locator('[data-component="tag-chip"]');
   await expect(chip).toContainText('needs-design');
-  await page.getByRole('button', { name: 'Settings' }).click();
+  const toggle = page.locator('[data-action="toggle-settings"]');
+  await expect(toggle).toHaveCount(1);
+  await expect(toggle).toContainText('Settings');
+  const closedToggleBox = await toggle.boundingBox();
+  await toggle.click();
+  await expect(toggle).toHaveCount(1);
+  await expect(toggle).toContainText('Close settings');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const openToggleBox = await toggle.boundingBox();
+  expect(closedToggleBox).not.toBeNull();
+  expect(openToggleBox).not.toBeNull();
+  expect(Math.abs(openToggleBox!.x - closedToggleBox!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(openToggleBox!.y - closedToggleBox!.y)).toBeLessThanOrEqual(1);
   const inspector = page.getByRole('complementary', { name: 'TagChip settings' });
   await expect(inspector).toBeVisible();
   const [detailBox, inspectorBox] = await Promise.all([
@@ -41,6 +53,8 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await chip.locator('[part~="remove-button"]').click();
   await expect(page.getByText('Remove requested for demo-tag')).toBeVisible();
   await expect(inspector).toBeVisible();
-  await inspector.getByRole('button', { name: 'Close settings' }).click();
+  await toggle.click();
   await expect(inspector).toBeHidden();
+  await expect(toggle).toContainText('Settings');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 });

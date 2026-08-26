@@ -39,13 +39,14 @@ function DemoApp() {
         <nav>{demoCatalog.map(demoNavigation)}</nav>
       </aside>
       <article class="demo-detail">
-        <header class="demo-detail__header"><div><p class="eyebrow">{selected.phase.replace('-', ' ')}</p><h1>{selected.name}</h1><p>{selected.description}</p></div>{selected.id === 'tag-chip' && <wa-button data-action="show-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>Settings</wa-button>}</header>
+        <header class="demo-detail__header"><div><p class="eyebrow">{selected.phase.replace('-', ' ')}</p><h1>{selected.name}</h1><p>{selected.description}</p></div></header>
         {demoContent(selected)}
       </article>
       {settingsOpen.value && <aside class="settings-inspector" aria-label={`${selected.name} settings`}>
-        <header><div><p class="eyebrow">Demo settings</p><h2>{selected.name}</h2></div><wa-button size="small" data-action="close-settings">Close settings</wa-button></header>
+        <header><div><p class="eyebrow">Demo settings</p><h2>{selected.name}</h2></div></header>
         {selected.id === 'tag-chip' ? <TagChipSettings /> : <p>This demo has no adjustable settings.</p>}
       </aside>}
+      {selected.id === 'tag-chip' && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
     </main>
   );
 }
@@ -60,8 +61,7 @@ function selectDemo(id: string, push = true): void {
 }
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefault(); selectDemo((target as HTMLElement).dataset.demoId!); });
-delegate(root, 'click', '[data-action="show-settings"]', () => { settingsOpen.value = true; });
-delegate(root, 'click', '[data-action="close-settings"]', () => { settingsOpen.value = false; });
+delegate(root, 'click', '[data-action="toggle-settings"]', () => { settingsOpen.value = !settingsOpen.value; });
 delegate(root, 'click', '[data-action="reset-settings"]', () => resetTagChipDemo());
 delegate(root, 'input', '[data-settings="tag-chip"] [name="label"]', (_event, target) => { tagChipSettings.label.value = (target as FormControl).value; });
 delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) => {

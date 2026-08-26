@@ -30,6 +30,7 @@ body { margin: 0; min-width: 52rem; }
 .settings-inspector { position: fixed; z-index: 10; inset: 0 0 0 auto; width: min(27rem, calc(100vw - 2rem)); overflow: auto; padding: 1.5rem; border-left: 1px solid #d9d9de; background: #fafafd; box-shadow: -.75rem 0 2.5rem rgba(35, 32, 48, .12); }
 .settings-inspector > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
 .settings-inspector h2 { margin: .15rem 0 0; }
+.settings-toggle { position: fixed; z-index: 20; top: 1.5rem; right: 1.5rem; width: 8.5rem; }
 wa-tag[data-disabled="true"] { opacity: .48; pointer-events: none; }
 @media (min-width: 78rem) {
   .demo-shell--settings-open { grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr) minmax(23rem, 27rem); }
