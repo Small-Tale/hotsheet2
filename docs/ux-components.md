@@ -150,7 +150,8 @@ selection where sensible.
   boundary for list and narrow column use. The comfortable list presentation is a
   flat, separator-led row; the same component becomes a lightly elevated card at
   narrow column widths. Its primary line treats qualified slug and two-line-clamped
-  title as one wrapping identity flow together with priority, while updated time is
+  title as one normal inline formatting flow together with inline priority (the slug
+  is a stable-width inline block), while updated time is
   pinned right and baseline-aligned with the first line. A quieter, vertically
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or

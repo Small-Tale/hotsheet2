@@ -148,11 +148,14 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await title.fill('A deliberately long ticket title that must wrap across no more than two lines while the AI working indicator remains entirely visible');
   await tags.fill('client, regression, server, ux');
   await row.evaluate((node: HTMLElement) => { node.style.width = '320px'; });
-  const [rowBox, timeBox, slugBox, titleBox] = await Promise.all([row.boundingBox(), row.locator('.ticket-list-row__updated').boundingBox(), row.locator('.ticket-list-row__slug').boundingBox(), row.locator('strong').boundingBox()]);
-  expect(rowBox).not.toBeNull(); expect(timeBox).not.toBeNull(); expect(slugBox).not.toBeNull(); expect(titleBox).not.toBeNull();
+  const [rowBox, timeBox, slugBox, identityBox] = await Promise.all([row.boundingBox(), row.locator('.ticket-list-row__updated').boundingBox(), row.locator('.ticket-list-row__slug').boundingBox(), row.locator('.ticket-list-row__identity').boundingBox()]);
+  expect(rowBox).not.toBeNull(); expect(timeBox).not.toBeNull(); expect(slugBox).not.toBeNull(); expect(identityBox).not.toBeNull();
   expect(timeBox!.x + timeBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
   expect(Math.abs(timeBox!.y + timeBox!.height - (slugBox!.y + slugBox!.height))).toBeLessThanOrEqual(3);
-  expect(titleBox!.height).toBeLessThanOrEqual(43);
+  expect(identityBox!.height).toBeLessThanOrEqual(43);
+  await expect(row.locator('.ticket-list-row__identity')).toHaveCSS('display', 'block');
+  await expect(row.locator('.ticket-list-row__slug')).toHaveCSS('display', 'inline-block');
+  await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('display', 'inline');
   await expect(row.locator('[data-component="tag-chip"]')).toHaveCount(4);
   for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
 });
