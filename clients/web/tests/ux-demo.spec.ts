@@ -83,8 +83,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(156, 163, 175)');
   await categoryIcon.evaluate((node: HTMLElement & { value: string }) => { node.value = ''; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(row.locator('.ticket-list-row__category--label')).toHaveText('bug');
+  await expect(row.locator('.ticket-list-row__category--label')).toHaveText('BUG');
   await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('color', 'rgb(156, 163, 175)');
+  await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('width', '32px');
   await expect(row).toContainText('regression');
   await expect(row.locator('[data-lucide="star"]')).toHaveCount(1);
   await expect(row.locator('[data-action="toggle-row-up-next"]')).not.toHaveClass(/active/);
@@ -116,6 +117,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Build the first client ticket list');
   await expect(row).toContainText('Started');
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
+  await expect(row.locator('.ticket-list-row__category')).toHaveCSS('width', '32px');
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/up-next/);
   await expect(row).toContainText('Claude');
   await expect(row).toContainText('1h ago');

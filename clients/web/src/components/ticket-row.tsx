@@ -1,6 +1,6 @@
 import { StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
-import { resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
+import { categoryAbbreviation, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
 import { ChevronDown, ChevronUp, ChevronsUp, Minus, Star, type IconNode } from 'lucide';
 
@@ -20,6 +20,7 @@ export interface TicketRowProps {
   busy?: boolean;
   categoryIcon?: string;
   categoryColor?: string;
+  categoryShortLabel?: string;
   agentName?: string;
   updatedLabel?: string;
 }
@@ -82,7 +83,7 @@ export function TicketRow(raw: TicketRowProps) {
       <div class="ticket-list-row__body">
         {categoryIcon
           ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
-          : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`}>{props.category}</span>}
+          : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`} title={props.category}>{categoryAbbreviation(props.category, props.categoryShortLabel)}</span>}
         <div class="ticket-list-row__content">
           <div class="ticket-list-row__first-line">
             <div class="ticket-list-row__identity">

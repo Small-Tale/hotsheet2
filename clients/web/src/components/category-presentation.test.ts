@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORY_COLORS, resolveCategoryColor, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
+import { CATEGORY_COLORS, categoryAbbreviation, resolveCategoryColor, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 
 describe('category presentation', () => {
   it('retains the HS1 custom-command palette and resolves registered Lucide icons', () => {
@@ -19,5 +19,14 @@ describe('category presentation', () => {
     expect(resolveCategoryIconColor('#e5e7eb')).toBe('#9ca3af');
     expect(resolveCategoryIconColor('#6b7280')).toBe('#6b7280');
     expect(resolveCategoryIconColor('#3b82f6')).toBe('#3b82f6');
+  });
+
+  it('uses HS1 abbreviations and deterministic three-letter custom fallbacks', () => {
+    expect(['issue', 'bug', 'feature', 'requirement_change', 'task', 'investigation'].map(category => categoryAbbreviation(category))).toEqual([
+      'ISS', 'BUG', 'FEA', 'REQ', 'TSK', 'INV',
+    ]);
+    expect(categoryAbbreviation('marketing')).toBe('MAR');
+    expect(categoryAbbreviation('anything', 'xyz')).toBe('XYZ');
+    expect(categoryAbbreviation('x')).toBe('CAT');
   });
 });

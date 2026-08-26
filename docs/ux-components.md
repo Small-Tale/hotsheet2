@@ -164,7 +164,9 @@ selection where sensible.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon
-    stroke for visibility
+    stroke for visibility. Without an icon, the same color applies to a fixed-width,
+    three-letter uppercase category abbreviation (`BUG`, `FEA`, `TSK`, etc.); icon
+    and label variants occupy the same 2rem column so ticket text always aligns
   - slug/native ticket identifier
   - title
   - up-next/star toggle

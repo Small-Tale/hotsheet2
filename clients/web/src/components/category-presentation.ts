@@ -35,3 +35,14 @@ export function resolveCategoryIconColor(color?: string): string {
   const resolved = resolveCategoryColor(color);
   return resolved === '#e5e7eb' ? '#9ca3af' : resolved;
 }
+
+const DEFAULT_CATEGORY_ABBREVIATIONS: Record<string, string> = {
+  issue: 'ISS', bug: 'BUG', feature: 'FEA', requirement_change: 'REQ', task: 'TSK', investigation: 'INV',
+};
+
+export function categoryAbbreviation(category: string, configured?: string): string {
+  const normalizedCategory = category.trim().toLowerCase();
+  const candidate = configured?.trim() || DEFAULT_CATEGORY_ABBREVIATIONS[normalizedCategory] || category;
+  const abbreviation = candidate.replace(/[^a-z0-9]/gi, '').toUpperCase().slice(0, 3);
+  return abbreviation.length === 3 ? abbreviation : 'CAT';
+}
