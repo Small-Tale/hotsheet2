@@ -58,7 +58,7 @@ wa-tag[data-disabled="true"] { opacity: .48; pointer-events: none; }
 .ticket-list-row__category { display: grid; width: 2rem; height: 2rem; place-items: center; }
 .ticket-list-row__category-icon { width: 1.65rem; height: 1.65rem; }
 .ticket-list-row__category--label { width: auto; max-width: 5rem; overflow: hidden; color: #686a73; font-size: .68rem; font-weight: 700; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-.ticket-list-row__priority { display: inline; margin-left: .5em; }
+.ticket-list-row__priority { display: inline; margin-right: .5em; }
 .ticket-list-row__priority-icon { display: inline; width: 1rem; height: 1rem; vertical-align: -.15em; }
 .ticket-list-row__metadata, .ticket-list-row__tags { display: flex; align-items: center; min-width: 0; flex-wrap: wrap; gap: .4rem; color: #73747d; font-size: .74rem; }
 .ticket-list-row__slug { display: inline-block; min-width: 5em; margin-right: .5em; color: #4f5058; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }

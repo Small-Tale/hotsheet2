@@ -87,8 +87,8 @@ export function TicketRow(raw: TicketRowProps) {
           <div class="ticket-list-row__first-line">
             <div class="ticket-list-row__identity">
               <span class="ticket-list-row__slug">{props.slug}</span>
-              <strong title={props.title}>{props.title}</strong>
               <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} class="ticket-list-row__priority-icon" /></span>
+              <strong title={props.title}>{props.title}</strong>
             </div>
             <span class="ticket-list-row__updated">{props.updatedLabel}</span>
           </div>

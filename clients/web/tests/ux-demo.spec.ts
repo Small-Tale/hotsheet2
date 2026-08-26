@@ -156,6 +156,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('.ticket-list-row__identity')).toHaveCSS('display', 'block');
   await expect(row.locator('.ticket-list-row__slug')).toHaveCSS('display', 'inline-block');
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('display', 'inline');
+  expect(await row.locator('.ticket-list-row__identity > *').evaluateAll(elements => elements.map(element => element.className || element.tagName.toLowerCase()))).toEqual([
+    'ticket-list-row__slug', 'ticket-list-row__priority', 'strong',
+  ]);
   await expect(row.locator('[data-component="tag-chip"]')).toHaveCount(4);
   for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
 });
