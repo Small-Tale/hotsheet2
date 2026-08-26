@@ -64,6 +64,8 @@ describe('UX demo catalog', () => {
     ticketRowSettings.busy.value = false;
     ticketRowSettings.categoryIcon.value = 'bug';
     ticketRowSettings.categoryColor.value = '#ef4444';
+    ticketRowSettings.agentName.value = 'Codex';
+    ticketRowSettings.updatedLabel.value = 'Now';
     ticketRowSettings.event.value = 'Changed';
     resetTicketRowDemo();
     expect({
@@ -73,12 +75,14 @@ describe('UX demo catalog', () => {
       blocked: ticketRowSettings.blocked.value, needsReview: ticketRowSettings.needsReview.value,
       selected: ticketRowSettings.selected.value, busy: ticketRowSettings.busy.value,
       categoryIcon: ticketRowSettings.categoryIcon.value, categoryColor: ticketRowSettings.categoryColor.value,
+      agentName: ticketRowSettings.agentName.value, updatedLabel: ticketRowSettings.updatedLabel.value,
       event: ticketRowSettings.event.value,
     }).toEqual({
       title: 'Build the first client ticket list', status: 'started', priority: 'high',
       category: 'feature', tags: 'client, ux', upNext: true, selected: false,
       blocked: false, needsReview: false, busy: true, categoryIcon: 'sparkles',
       categoryColor: '#3b82f6', event: 'No actions yet',
+      agentName: 'Claude', updatedLabel: '1h ago',
     });
   });
 });

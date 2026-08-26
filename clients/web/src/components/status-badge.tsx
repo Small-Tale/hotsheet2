@@ -6,6 +6,7 @@ export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' 
 export interface StatusBadgeProps {
   status: TicketStatus;
   showIcon?: boolean;
+  compact?: boolean;
 }
 
 const presentation: Record<TicketStatus, { icon: IconNode; iconName: string; label: string }> = {
@@ -20,10 +21,10 @@ export function statusPresentation(status: TicketStatus) {
   return presentation[status];
 }
 
-export function StatusBadge({ status, showIcon = true }: StatusBadgeProps) {
+export function StatusBadge({ status, showIcon = true, compact = false }: StatusBadgeProps) {
   const value = statusPresentation(status);
   return (
-    <span class={`status-badge status-badge--${status}`} data-component="status-badge" data-status={status}>
+    <span class={`status-badge status-badge--${status}${compact ? ' status-badge--compact' : ''}`} data-component="status-badge" data-status={status}>
       {showIcon && <LucideIcon class="status-badge__icon" icon={value.icon} name={value.iconName} />}
       <span>{value.label}</span>
     </span>

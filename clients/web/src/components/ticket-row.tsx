@@ -20,6 +20,8 @@ export interface TicketRowProps {
   busy?: boolean;
   categoryIcon?: string;
   categoryColor?: string;
+  agentName?: string;
+  updatedLabel?: string;
 }
 
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
@@ -54,6 +56,8 @@ export function normalizeTicketRowProps(props: TicketRowProps): TicketRowProps {
     needsReview: props.needsReview ?? false,
     selected: props.selected ?? false,
     busy: props.busy ?? false,
+    agentName: props.agentName?.trim() || 'AI',
+    updatedLabel: props.updatedLabel?.trim() || 'Recently',
   };
 }
 
@@ -76,20 +80,26 @@ export function TicketRow(raw: TicketRowProps) {
     >
       {indicator && <span class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} aria-label={indicator.replace('-', ' ')}></span>}
       <div class="ticket-list-row__body">
-        <div class="ticket-list-row__heading">
-          {categoryIcon && <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>}
-          <strong title={props.title}>{props.title}</strong>
+        {categoryIcon
+          ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
+          : <span class="ticket-list-row__category ticket-list-row__category--label">{props.category}</span>}
+        <div class="ticket-list-row__content">
+          <div class="ticket-list-row__heading">
+            <span class="ticket-list-row__slug">{props.slug}</span>
+            <strong title={props.title}>{props.title}</strong>
+          </div>
+          <div class="ticket-list-row__metadata">
+            <StatusBadge status={props.status} compact />
+            {props.tags.length > 0 && <div class="ticket-list-row__tags">{props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}{props.tags.length > 2 && <span class="ticket-list-row__tag-overflow">+{props.tags.length - 2}</span>}</div>}
+          </div>
+        </div>
+        <div class="ticket-list-row__trailing">
           <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} class="ticket-list-row__priority-icon" /></span>
-          {props.busy && <span class="ticket-list-row__busy" aria-label="AI working">AI working</span>}
+          {props.busy && <span class="ticket-list-row__busy" aria-label={`${props.agentName} working`}>{props.agentName} working</span>}
+          <span class="ticket-list-row__updated">{props.updatedLabel}</span>
         </div>
-        <div class="ticket-list-row__metadata">
-          <span class="ticket-list-row__slug">{props.slug}</span>
-          {!categoryIcon && <span>{props.category}</span>}
-          <StatusBadge status={props.status} />
-          {props.upNext && <span class="ticket-list-row__up-next" aria-label="Up Next" title="Up Next"><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></span>}
-        </div>
-        {props.tags.length > 0 && <div class="ticket-list-row__tags">{props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}</div>}
       </div>
+      <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>
     </article>
   );
 }

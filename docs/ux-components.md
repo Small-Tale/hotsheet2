@@ -147,12 +147,17 @@ selection where sensible.
   - `TicketListSection` where grouping is active
   - `TicketRowDivider`
 - `TicketRow` — **demo built**: a shared, horizontally responsive ticket-summary
-  boundary for list and narrow column use. It includes a two-line clamped title,
-  qualified slug, status, priority, tags, a blue selection treatment, AI-busy
-  presentation, keyboard selection, and a representative right-click context menu.
+  boundary for list and narrow column use. The comfortable list presentation is a
+  flat, separator-led row; the same component becomes a lightly elevated card at
+  narrow column widths. Its primary line treats qualified slug and two-line-clamped
+  title as one identity, with a stable trailing priority/activity/updated cluster.
+  A quieter secondary line holds status, tags, and a persistent independently
+  operable outline/filled Up Next star. Narrow tag overflow becomes a `+N` count
+  instead of clipping an arbitrary chip. It also includes blue selection, keyboard
+  selection, and a representative right-click context menu.
   The left rail is reserved for special-state attention in HS1 precedence order:
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
-  the familiar yellow Lucide star with an accessible name.
+  the familiar yellow Lucide star with an accessible add/remove name.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon

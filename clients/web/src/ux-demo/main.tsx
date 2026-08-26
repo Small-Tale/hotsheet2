@@ -1,4 +1,4 @@
-import { delegate, mount, signal } from 'kerfjs';
+import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import '@awesome.me/webawesome/dist/styles/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
@@ -131,6 +131,8 @@ delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, t
   if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;
   if (control.getAttribute('name') === 'category') ticketRowSettings.category.value = control.value;
   if (control.getAttribute('name') === 'tags') ticketRowSettings.tags.value = control.value;
+  if (control.getAttribute('name') === 'agent') ticketRowSettings.agentName.value = control.value;
+  if (control.getAttribute('name') === 'updated') ticketRowSettings.updatedLabel.value = control.value;
 });
 delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, target) => {
   const control = target as FormControl;
@@ -146,11 +148,29 @@ delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, ta
     case 'busy': ticketRowSettings.busy.value = control.checked; break;
   }
 });
-delegate(root, 'click', '[data-action="select-ticket-row"]', () => {
+delegate(root, 'click', '[data-action="select-ticket-row"]', (event) => {
+  if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
   ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
   ticketRowSettings.event.value = ticketRowSettings.selected.value ? 'Ticket selected' : 'Ticket deselected';
   const selected = root.querySelector('[data-settings="ticket-list-row"] [name="selected"]') as FormControl | null;
   if (selected) selected.checked = ticketRowSettings.selected.value;
+});
+function toggleRowUpNext(): void {
+  ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
+  ticketRowSettings.event.value = ticketRowSettings.upNext.value ? 'Added to Up Next' : 'Removed from Up Next';
+  const control = root.querySelector('[data-settings="ticket-list-row"] [name="up-next"]') as FormControl | null;
+  if (control) control.checked = ticketRowSettings.upNext.value;
+}
+delegateCapture(root, 'click', '[data-action="toggle-row-up-next"]', (event) => {
+  event.stopPropagation();
+  toggleRowUpNext();
+});
+delegateCapture(root, 'keydown', '[data-action="toggle-row-up-next"]', (event) => {
+  const key = (event as KeyboardEvent).key;
+  if (key !== 'Enter' && key !== ' ') return;
+  event.preventDefault();
+  event.stopPropagation();
+  toggleRowUpNext();
 });
 delegate(root, 'keydown', '[data-action="select-ticket-row"]', (event, target) => {
   const key = (event as KeyboardEvent).key;

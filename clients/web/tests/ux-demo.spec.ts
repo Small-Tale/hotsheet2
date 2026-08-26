@@ -51,6 +51,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const title = inspector.getByRole('textbox', { name: 'Title' });
   const category = inspector.getByRole('textbox', { name: 'Category' });
   const tags = inspector.getByRole('textbox', { name: 'Tags (comma separated)' });
+  const agent = inspector.getByRole('textbox', { name: 'Active agent' });
+  const updated = inspector.getByRole('textbox', { name: 'Updated label' });
   const status = inspector.locator('wa-select[name="status"]');
   const priority = inspector.locator('wa-select[name="priority"]');
   const categoryIcon = inspector.locator('wa-select[name="category-icon"]');
@@ -63,6 +65,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await title.fill('Fix selection synchronization');
   await category.fill('bug');
   await tags.fill('client, regression');
+  await agent.fill('Codex');
+  await updated.fill('Now');
   await status.evaluate((node: HTMLElement & { value: string }) => { node.value = 'verified'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'urgent'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await categoryIcon.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -79,8 +83,10 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(156, 163, 175)');
   await expect(row).toContainText('regression');
-  await expect(row.locator('[data-lucide="star"]')).toHaveCount(0);
-  await expect(row).not.toContainText('AI working');
+  await expect(row.locator('[data-lucide="star"]')).toHaveCount(1);
+  await expect(row.locator('[data-action="toggle-row-up-next"]')).not.toHaveClass(/active/);
+  await expect(row).not.toContainText('Codex working');
+  await expect(row).toContainText('Now');
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(239, 68, 68)');
@@ -95,6 +101,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(priority).toHaveJSProperty('value', 'high');
   await expect(category).toHaveJSProperty('value', 'feature');
   await expect(tags).toHaveJSProperty('value', 'client, ux');
+  await expect(agent).toHaveJSProperty('value', 'Claude');
+  await expect(updated).toHaveJSProperty('value', '1h ago');
   await expect(upNext).toHaveJSProperty('checked', true);
   await expect(blocked).toHaveJSProperty('checked', false);
   await expect(needsReview).toHaveJSProperty('checked', false);
@@ -104,9 +112,10 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(busy).toHaveJSProperty('checked', true);
   await expect(row).toContainText('Build the first client ticket list');
   await expect(row).toContainText('Started');
-  await expect(row.locator('[data-lucide="star"]')).toHaveCount(1);
+  await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/up-next/);
-  await expect(row).toContainText('AI working');
+  await expect(row).toContainText('Claude working');
+  await expect(row).toContainText('1h ago');
   await expect(page.getByText('No actions yet')).toBeVisible();
   await title.fill('Post-reset edit works');
   await expect(row).toContainText('Post-reset edit works');
@@ -115,21 +124,36 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(selected).toHaveJSProperty('checked', true);
 
+  const star = row.locator('[data-action="toggle-row-up-next"]');
+  const starBox = await star.boundingBox();
+  expect(starBox).not.toBeNull();
+  await star.click();
+  await expect(upNext).toHaveJSProperty('checked', false);
+  await expect(row).toHaveAttribute('data-selected', 'true');
+  await expect(star).not.toHaveClass(/active/);
+  await star.focus();
+  await page.keyboard.press('Enter');
+  await expect(upNext).toHaveJSProperty('checked', true);
+  await expect(star).toHaveClass(/active/);
+
   await row.click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Ticket actions' });
   await expect(menu).toBeVisible();
   await expect(row).toHaveAttribute('data-selected', 'true');
   await menu.getByText('Toggle Up Next', { exact: true }).click();
-  await expect(row.locator('[data-lucide="star"]')).toHaveCount(0);
+  await expect(star).not.toHaveClass(/active/);
   await expect(upNext).toHaveJSProperty('checked', false);
   await expect(page.getByText('Toggle Up Next selected')).toBeVisible();
 
   await title.fill('A deliberately long ticket title that must wrap across no more than two lines while the AI working indicator remains entirely visible');
+  await tags.fill('client, regression, server, ux');
   await row.evaluate((node: HTMLElement) => { node.style.width = '320px'; });
   const [rowBox, busyBox, titleBox] = await Promise.all([row.boundingBox(), row.locator('.ticket-list-row__busy').boundingBox(), row.locator('strong').boundingBox()]);
   expect(rowBox).not.toBeNull(); expect(busyBox).not.toBeNull(); expect(titleBox).not.toBeNull();
   expect(busyBox!.x + busyBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
   expect(titleBox!.height).toBeLessThanOrEqual(43);
+  await expect(row.locator('.ticket-list-row__tag-overflow')).toBeVisible();
+  await expect(row.locator('.ticket-list-row__tag-overflow')).toHaveText('+2');
 });
 
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {

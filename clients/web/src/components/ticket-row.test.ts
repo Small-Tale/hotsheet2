@@ -8,7 +8,7 @@ describe('TicketRow', () => {
     })).toEqual({
       slug: 'HS2-UNKNOWN', title: 'Untitled ticket', status: 'not_started', priority: 'default',
       category: 'issue', tags: ['client', 'ux'], upNext: false, selected: false, busy: false,
-      blocked: false, needsReview: false,
+      blocked: false, needsReview: false, agentName: 'AI', updatedLabel: 'Recently',
     });
   });
 
