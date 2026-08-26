@@ -15,12 +15,11 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'tickets', name: 'Ticket workspace', children: [
     { id: 'ticket-list', name: 'List', demos: [
       demo('quick-ticket-composer', 'QuickTicketComposer', 'Compact ticket creation that expands in place.'),
-      demo('ticket-list', 'TicketList', 'Virtualized, live, keyboard-navigable ticket collection.'),
+      demo('ticket-list', 'TicketList', 'Responsive, keyboard-navigable ticket collection.', 'feature-floor', true, ['ticket-row']),
       demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true, ['status-badge', 'tag-chip']),
     ]},
     { id: 'ticket-board', name: 'Columns', demos: [
-      demo('ticket-board', 'TicketBoard', 'Status/category column workspace.'),
-      demo('ticket-card', 'TicketCard', 'Ticket summary for column presentation.'),
+      demo('ticket-board', 'TicketBoard', 'Status/category column workspace.', 'feature-floor', true, ['ticket-row']),
     ]},
     { id: 'search', name: 'Search and filtering', demos: [
       demo('global-search', 'GlobalSearchOverlay', 'FTS search, scope, and suggestions.'),

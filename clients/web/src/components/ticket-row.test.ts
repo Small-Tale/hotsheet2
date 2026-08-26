@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPriorityPresentation, normalizeTicketRowProps, ticketRowIndicator } from './ticket-row';
+import { getPriorityPresentation, normalizeTicketRowProps, TicketRow, ticketRowIndicator } from './ticket-row';
 
 describe('TicketRow', () => {
   it('normalizes fallbacks, tags, and boolean defaults', () => {
@@ -27,5 +27,11 @@ describe('TicketRow', () => {
       urgent: ['chevrons-up', '#ef4444'], high: ['chevron-up', '#f97316'],
       default: ['minus', '#6b7280'], low: ['chevron-down', '#3b82f6'],
     });
+  });
+
+  it('establishes an outer width container so its descendant can enter narrow presentation', () => {
+    const markup = String(TicketRow({ slug: 'HS2-WIDTH', title: 'Responsive row', status: 'started', priority: 'default', category: 'task', tags: [] }));
+    expect(markup).toContain('data-component="ticket-list-row-container"');
+    expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(markup.indexOf('data-component="ticket-list-row"'));
   });
 });

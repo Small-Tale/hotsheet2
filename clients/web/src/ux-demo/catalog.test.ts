@@ -9,10 +9,11 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['ticket-row', 'status-badge', 'tag-chip']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['ticket-list', 'ticket-row', 'ticket-board', 'status-badge', 'tag-chip']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row']);
+    expect(demosUsing('ticket-row').map(entry => entry.id)).toEqual(['ticket-list', 'ticket-board']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
   });
 

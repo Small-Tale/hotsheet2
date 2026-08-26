@@ -69,39 +69,42 @@ export function TicketRow(raw: TicketRowProps) {
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
   return (
-    <article
-      class={`ticket-list-row${props.selected ? ' ticket-list-row--selected' : ''}`}
-      data-component="ticket-list-row"
-      data-selected={String(props.selected)}
-      data-busy={String(props.busy)}
-      data-action="select-ticket-row"
-      aria-label={`${props.slug}: ${props.title}`}
-      aria-selected={String(props.selected)}
-      role="option"
-      tabindex="0"
-    >
-      {indicator && <span class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} aria-label={indicator.replace('-', ' ')}></span>}
-      <div class="ticket-list-row__body">
-        {categoryIcon
-          ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
-          : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`} title={props.category}>{categoryAbbreviation(props.category, props.categoryShortLabel)}</span>}
-        <div class="ticket-list-row__content">
-          <div class="ticket-list-row__first-line">
-            <div class="ticket-list-row__identity">
-              <span class="ticket-list-row__slug">{props.slug}</span>
-              <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} class="ticket-list-row__priority-icon" /></span>
-              <strong title={props.title}>{props.title}</strong>
+    <div class="ticket-list-row-container" data-component="ticket-list-row-container">
+      <article
+        class={`ticket-list-row${props.selected ? ' ticket-list-row--selected' : ''}`}
+        data-component="ticket-list-row"
+        data-ticket-slug={props.slug}
+        data-selected={String(props.selected)}
+        data-busy={String(props.busy)}
+        data-action="select-ticket-row"
+        aria-label={`${props.slug}: ${props.title}`}
+        aria-selected={String(props.selected)}
+        role="option"
+        tabindex="0"
+      >
+        {indicator && <span class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} aria-label={indicator.replace('-', ' ')}></span>}
+        <div class="ticket-list-row__body">
+          {categoryIcon
+            ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
+            : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`} title={props.category}>{categoryAbbreviation(props.category, props.categoryShortLabel)}</span>}
+          <div class="ticket-list-row__content">
+            <div class="ticket-list-row__first-line">
+              <div class="ticket-list-row__identity">
+                <span class="ticket-list-row__slug">{props.slug}</span>
+                <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} class="ticket-list-row__priority-icon" /></span>
+                <strong title={props.title}>{props.title}</strong>
+              </div>
+              <span class="ticket-list-row__updated">{props.updatedLabel}</span>
             </div>
-            <span class="ticket-list-row__updated">{props.updatedLabel}</span>
-          </div>
-          <div class="ticket-list-row__metadata">
-            <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>
-            <StatusBadge status={props.status} appearance="plain" compact />
-            <span class={`ticket-list-row__owner${props.busy ? ' ticket-list-row__owner--active' : ''}`} aria-label={props.busy ? `${props.agentName} working` : props.agentName}>{props.agentName}</span>
-            {props.tags.length > 0 && <div class="ticket-list-row__tags">{props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}</div>}
+            <div class="ticket-list-row__metadata">
+              <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>
+              <StatusBadge status={props.status} appearance="plain" compact />
+              <span class={`ticket-list-row__owner${props.busy ? ' ticket-list-row__owner--active' : ''}`} aria-label={props.busy ? `${props.agentName} working` : props.agentName}>{props.agentName}</span>
+              {props.tags.length > 0 && <div class="ticket-list-row__tags">{props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}</div>}
+            </div>
           </div>
         </div>
-      </div>
-    </article>
+      </article>
+    </div>
   );
 }

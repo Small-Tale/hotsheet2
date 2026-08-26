@@ -14,13 +14,14 @@ import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
 import { Network } from 'lucide';
+import { recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
 const fromUrl = () => new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
-const contextMenu = signal<{ x: number; y: number } | undefined>(undefined);
+const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 
 function demoLink(item: DemoDefinition) {
   const selected = item.id === selectedId.value;
@@ -35,6 +36,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
   if (item.id === 'tag-chip') return <TagChipDemo />;
   if (item.id === 'ticket-row') return <TicketRowDemo />;
+  if (item.id === 'ticket-list') return <TicketListDemo />;
+  if (item.id === 'ticket-board') return <TicketBoardDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 
@@ -62,6 +65,7 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
 
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
+  const hasSettings = selected.id === 'tag-chip' || selected.id === 'status-badge' || selected.id === 'ticket-row';
   return (
     <main class={settingsOpen.value ? 'demo-shell demo-shell--settings-open' : 'demo-shell'}>
       <aside class="demo-master" aria-label="Component catalog">
@@ -77,7 +81,7 @@ function DemoApp() {
         <header><div><p class="eyebrow">Demo settings</p><h2>{selected.name}</h2></div></header>
         {selected.id === 'tag-chip' ? <TagChipSettings /> : selected.id === 'status-badge' ? <StatusBadgeSettings /> : selected.id === 'ticket-row' ? <TicketRowSettings /> : <p>This demo has no adjustable settings.</p>}
       </aside>}
-      {selected.implemented && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
+      {hasSettings && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
       {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} />}
     </main>
   );
@@ -89,6 +93,7 @@ mount(root, DemoApp);
 function selectDemo(id: string, push = true): void {
   if (!findDemo(id)) return;
   selectedId.value = id;
+  settingsOpen.value = false;
   contextMenu.value = undefined;
   if (push) history.pushState(null, '', `/ux-demo?component=${encodeURIComponent(id)}`);
 }
@@ -144,14 +149,24 @@ delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, ta
     case 'busy': ticketRowSettings.busy.value = control.checked; break;
   }
 });
-delegate(root, 'click', '[data-action="select-ticket-row"]', (event) => {
+delegate(root, 'click', '[data-action="select-ticket-row"]', (event, target) => {
   if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
+  const row = target as HTMLElement;
+  if (selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') {
+    selectCollectionTicket(row.dataset.ticketSlug!);
+    return;
+  }
   ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
   ticketRowSettings.event.value = ticketRowSettings.selected.value ? 'Ticket selected' : 'Ticket deselected';
   const selected = root.querySelector('[data-settings="ticket-list-row"] [name="selected"]') as FormControl | null;
   if (selected) selected.checked = ticketRowSettings.selected.value;
 });
-function toggleRowUpNext(): void {
+function toggleRowUpNext(target?: Element): void {
+  if (selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') {
+    const row = target?.closest('[data-component="ticket-list-row"]') as HTMLElement | null;
+    if (row) toggleCollectionTicketUpNext(row.dataset.ticketSlug!);
+    return;
+  }
   ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
   ticketRowSettings.event.value = ticketRowSettings.upNext.value ? 'Added to Up Next' : 'Removed from Up Next';
   const control = root.querySelector('[data-settings="ticket-list-row"] [name="up-next"]') as FormControl | null;
@@ -159,14 +174,14 @@ function toggleRowUpNext(): void {
 }
 delegateCapture(root, 'click', '[data-action="toggle-row-up-next"]', (event) => {
   event.stopPropagation();
-  toggleRowUpNext();
+  toggleRowUpNext(event.target as Element);
 });
 delegateCapture(root, 'keydown', '[data-action="toggle-row-up-next"]', (event) => {
   const key = (event as KeyboardEvent).key;
   if (key !== 'Enter' && key !== ' ') return;
   event.preventDefault();
   event.stopPropagation();
-  toggleRowUpNext();
+  toggleRowUpNext(event.target as Element);
 });
 delegate(root, 'keydown', '[data-action="select-ticket-row"]', (event, target) => {
   const key = (event as KeyboardEvent).key;
@@ -174,9 +189,16 @@ delegate(root, 'keydown', '[data-action="select-ticket-row"]', (event, target) =
   event.preventDefault();
   (target as HTMLElement).click();
 });
-delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event) => {
+delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, target) => {
   event.preventDefault();
   const pointer = event as MouseEvent;
+  const row = target as HTMLElement;
+  if (selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') {
+    selectCollectionTicket(row.dataset.ticketSlug!, true);
+    recordCollectionEvent(`Context menu opened for ${row.dataset.ticketSlug}`);
+    contextMenu.value = { x: pointer.clientX, y: pointer.clientY, ticketSlug: row.dataset.ticketSlug };
+    return;
+  }
   ticketRowSettings.selected.value = true;
   ticketRowSettings.event.value = 'Context menu opened';
   const selected = root.querySelector('[data-settings="ticket-list-row"] [name="selected"]') as FormControl | null;
@@ -185,6 +207,13 @@ delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event) => {
 });
 delegate(root, 'click', '[data-context-action]', (_event, target) => {
   const action = (target as HTMLElement).dataset.contextAction!;
+  if ((selectedId.value === 'ticket-list' || selectedId.value === 'ticket-board') && contextMenu.value?.ticketSlug) {
+    const slug = contextMenu.value.ticketSlug;
+    if (action === 'Toggle Up Next') toggleCollectionTicketUpNext(slug);
+    recordCollectionEvent(`${action} selected for ${slug}`);
+    contextMenu.value = undefined;
+    return;
+  }
   if (action === 'Toggle Up Next') {
     ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
     const control = root.querySelector('[data-settings="ticket-list-row"] [name="up-next"]') as FormControl | null;

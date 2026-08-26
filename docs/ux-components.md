@@ -141,8 +141,9 @@ selection where sensible.
   - compact “New ticket…” entry
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities
-- `TicketList`
-  - virtualized, keyboard navigable, multi-select capable
+- `TicketList` — **demo foundation built**: composes the production `TicketRow` at
+  comfortable list width with listbox/multi-selection semantics and no parallel row markup
+  - later data integration: virtualization, keyboard navigation, and multi-select behavior
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active
   - `TicketRowDivider`
@@ -180,10 +181,11 @@ selection where sensible.
 
 ### 3.3 `ColumnWorkspace` — feature floor
 
-- `TicketBoard`
+- `TicketBoard` — **demo foundation built**: horizontally scrolling status columns
+  with headings and counts, each composing production `TicketRow` at narrow width
 - `TicketColumn` with heading, count, loading, and empty states
-- `TicketCard` is the narrow column presentation of the same responsive ticket-summary
-  component contract and semantic actions as `TicketRow`, not an independent component
+- There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
+  container-query card presentation while preserving identical markup and actions
 - keyboard and pointer movement between columns
 - explicit mutation preview/error handling when a provider lacks the target field
 

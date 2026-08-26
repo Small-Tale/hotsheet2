@@ -191,6 +191,48 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
 });
 
+test('uses the identical responsive TicketRow in list and board compositions', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.goto('/ux-demo?component=ticket-list');
+  const list = page.getByRole('listbox', { name: 'Example ticket list' });
+  const listRows = list.locator('[data-component="ticket-list-row"]');
+  await expect(listRows).toHaveCount(5);
+  const listRow = listRows.first();
+  const listWidth = await listRow.evaluate(node => node.getBoundingClientRect().width);
+  expect(listWidth).toBeGreaterThan(600);
+  await expect(listRow).toHaveCSS('box-shadow', 'none');
+  await listRow.click();
+  await expect(listRow).toHaveAttribute('data-selected', 'true');
+  await expect(page.getByText('HS2-R76MMW selected')).toBeVisible();
+  const listStar = listRow.locator('[data-action="toggle-row-up-next"]');
+  await listStar.click();
+  await expect(listStar).not.toHaveClass(/active/);
+  await expect(page.getByText('HS2-R76MMW removed from Up Next')).toBeVisible();
+
+  await page.getByRole('navigation').getByRole('link', { name: /TicketBoard/ }).click();
+  await expect(page).toHaveURL('/ux-demo?component=ticket-board');
+  const board = page.getByRole('region', { name: 'Example status board' });
+  await expect(board.locator('.ticket-board__column')).toHaveCount(3);
+  await expect(board.getByLabel('2 tickets')).toHaveCount(2);
+  await expect(board.getByLabel('1 tickets')).toHaveCount(1);
+  const boardRows = board.locator('[data-component="ticket-list-row"]');
+  await expect(boardRows).toHaveCount(5);
+  const narrowRow = boardRows.first();
+  const boardWidth = await narrowRow.evaluate(node => node.getBoundingClientRect().width);
+  expect(boardWidth).toBeLessThan(384);
+  await expect(narrowRow).toHaveCSS('border-radius', '10.4px');
+  await expect(narrowRow).not.toHaveCSS('box-shadow', 'none');
+  await expect(page.locator('[data-component="ticket-card"]')).toHaveCount(0);
+  await narrowRow.focus();
+  await page.keyboard.press('Enter');
+  await expect(narrowRow).toHaveAttribute('data-selected', 'true');
+  await narrowRow.click({ button: 'right' });
+  const menu = page.getByRole('menu', { name: 'Ticket actions' });
+  await expect(menu).toBeVisible();
+  await menu.getByText('Toggle Up Next', { exact: true }).click();
+  await expect(page.getByText(/Toggle Up Next selected for HS2-/)).toBeVisible();
+});
+
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=tag-chip');

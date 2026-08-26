@@ -33,6 +33,8 @@ body { margin: 0; min-width: 52rem; }
 .settings-toggle { position: fixed; z-index: 20; top: 1.5rem; right: 1.5rem; width: 8.5rem; }
 .component-stage--row { justify-items: stretch; }
 .component-stage__canvas--row { width: 100%; min-width: 0; }
+.collection-demo { display: grid; width: 100%; max-width: 70rem; margin: auto; gap: 1.25rem; justify-items: center; }
+.collection-demo--board { max-width: none; }
 .demo-detail__footer { display: flex; width: 100%; max-width: 70rem; min-height: 2.5rem; margin: auto auto 0; padding-top: 1.5rem; align-items: flex-end; }
 .demo-relationships h2 { margin: 0; padding: .45rem .75rem .25rem; color: #777781; font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; }
 .demo-relationships small { color: #92929c; font-size: .68rem; text-transform: capitalize; }
