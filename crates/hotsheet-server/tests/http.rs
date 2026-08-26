@@ -5,7 +5,11 @@ use axum::http::{Request, StatusCode, header};
 use hotsheet_server::{AppState, app};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use http_body_util::BodyExt;
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
+
+use hotsheet_extsync::{GitHubConfig, GitHubProvider, GitHubTransport, HttpResponse};
 
 const SECRET: &str = "test-secret";
 
@@ -30,6 +34,43 @@ fn authed(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
 async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).unwrap()
+}
+
+struct FakeGitHub {
+    responses: Mutex<VecDeque<HttpResponse>>,
+}
+
+impl GitHubTransport for FakeGitHub {
+    fn request(
+        &self,
+        _: &str,
+        _: &str,
+        _: &[(&str, String)],
+        _: Option<&serde_json::Value>,
+    ) -> Result<HttpResponse, String> {
+        self.responses
+            .lock()
+            .unwrap()
+            .pop_front()
+            .ok_or_else(|| "unexpected GitHub request".into())
+    }
+}
+
+fn github_issue(number: u64, title: &str) -> serde_json::Value {
+    serde_json::json!({
+        "number":number,"title":title,"body":"body","state":"open","state_reason":null,
+        "html_url":format!("https://github.test/acme/repo/issues/{number}"),
+        "created_at":"2026-08-26T00:00:00Z","updated_at":"2026-08-26T00:01:00Z",
+        "closed_at":null,"labels":[],"assignees":[],"pull_request":null
+    })
+}
+
+fn github_response(status: u16, body: serde_json::Value) -> HttpResponse {
+    HttpResponse {
+        status,
+        headers: HashMap::new(),
+        body: body.to_string(),
+    }
 }
 
 #[tokio::test]
@@ -2693,6 +2734,63 @@ async fn provider_transfer_is_idempotent_and_move_closes_source_after_copy() {
         .await
         .unwrap();
     assert_eq!(body_json(source).await["close_reason"], "obsolete");
+}
+
+#[tokio::test]
+async fn direct_github_provider_runs_through_provider_routes_without_mirroring() {
+    let (dir, st) = state();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, serde_json::json!([github_issue(11, "remote issue")])),
+                github_response(201, github_issue(12, "created remotely")),
+            ]
+            .into(),
+        ),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport,
+    );
+    let app = app(st.with_ticket_provider(Arc::new(provider)));
+
+    let providers = app
+        .clone()
+        .oneshot(authed("GET", "/providers", None))
+        .await
+        .unwrap();
+    let providers = body_json(providers).await;
+    assert!(
+        providers.as_array().unwrap().iter().any(|value| {
+            value["connection_id"] == "github-main" && value["provider"] == "github"
+        })
+    );
+    let listed = app
+        .clone()
+        .oneshot(authed("GET", "/providers/github-main/tickets", None))
+        .await
+        .unwrap();
+    let listed = body_json(listed).await;
+    assert_eq!(listed[0]["qualified_id"], "github-main:11");
+
+    let created = app
+        .oneshot(authed(
+            "POST",
+            "/providers/github-main/tickets",
+            Some(r#"{"title":"created remotely"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    assert_eq!(body_json(created).await["native_id"], "12");
+    assert!(
+        FsStore::open(dir.path())
+            .unwrap()
+            .list_tickets()
+            .unwrap()
+            .is_empty(),
+        "direct provider operations must not mirror into the git store"
+    );
 }
 
 #[tokio::test]

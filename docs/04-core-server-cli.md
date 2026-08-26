@@ -216,6 +216,12 @@ hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove
 hotsheet claim-next --worker worker-1     # coordination primitive
 printf '%s' "$PROVIDER_KEY" | hotsheet key set openai  # stdin only; never argv/settings
 hotsheet key list                         # provider names only, never values
+hotsheet providers --json                 # git + configured external connections/capabilities
+hotsheet provider-ls github-main
+hotsheet provider-get github-main 42
+hotsheet provider-new github-main "Bug title"
+hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
+hotsheet provider-close github-main 42 --reason completed
 ```
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present

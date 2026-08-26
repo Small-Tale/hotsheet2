@@ -224,6 +224,70 @@ fn people_seed_github_uses_public_emails_and_reports_private_ones() {
 }
 
 #[test]
+fn provider_new_uses_direct_github_api_without_writing_git_ticket() {
+    use std::io::{Read, Write};
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    hs(dir.path()).arg("init").assert().success();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::fs::write(
+        dir.path().join("providers.json"),
+        format!(
+            r#"{{"connections":[{{"id":"github-main","provider":"github","locator":"acme/repo","settings":{{"api_base":"http://{addr}","credential":{{"secret":"cli-github-fixture"}}}}}}]}}"#
+        ),
+    )
+    .unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut buf = [0; 4096];
+        let mut request_bytes = Vec::new();
+        loop {
+            let n = stream.read(&mut buf).unwrap();
+            request_bytes.extend_from_slice(&buf[..n]);
+            let Some(header_end) = request_bytes
+                .windows(4)
+                .position(|window| window == b"\r\n\r\n")
+            else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&request_bytes[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().unwrap())
+                })
+                .unwrap_or(0);
+            if request_bytes.len() >= header_end + 4 + content_length {
+                break;
+            }
+        }
+        let request = String::from_utf8_lossy(&request_bytes);
+        assert!(request.starts_with("POST /repos/acme/repo/issues "));
+        assert!(request.contains("Authorization: Bearer fixture-token"));
+        let body = r#"{"number":31,"title":"remote from cli","body":"","state":"open","state_reason":null,"html_url":"https://github.test/acme/repo/issues/31","created_at":"2026-08-26T00:00:00Z","updated_at":"2026-08-26T00:00:00Z","closed_at":null,"labels":[],"assignees":[],"pull_request":null}"#;
+        write!(stream,"HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",body.len(),body).unwrap();
+    });
+    hs(dir.path())
+        .env("HOTSHEET_HOME", home.path())
+        .env("HOTSHEET_API_KEY_CLI_GITHUB_FIXTURE", "fixture-token")
+        .args(["provider-new", "github-main", "remote from cli"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("github-main:31"));
+    server.join().unwrap();
+    assert!(
+        hotsheet_ticketing::FsStore::open(dir.path())
+            .unwrap()
+            .list_tickets()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn init_new_ls_show_edit_close_flow() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

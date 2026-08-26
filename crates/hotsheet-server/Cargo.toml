@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
+hotsheet-extsync.workspace = true
 hotsheet-index.workspace = true
 hotsheet-plugins.workspace = true
 hotsheet-aitools.workspace = true

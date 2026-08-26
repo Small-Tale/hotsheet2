@@ -738,6 +738,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "hotsheet-aitools",
+ "hotsheet-extsync",
  "hotsheet-index",
  "hotsheet-model",
  "hotsheet-plugins",
@@ -750,6 +751,20 @@ dependencies = [
  "time",
  "toml",
  "ulid",
+ "ureq",
+]
+
+[[package]]
+name = "hotsheet-extsync"
+version = "0.0.0"
+dependencies = [
+ "hotsheet-model",
+ "hotsheet-ticketing",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.20",
  "ureq",
 ]
 
@@ -773,6 +788,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "hotsheet-extsync",
  "hotsheet-model",
  "hotsheet-ticketing",
  "serde",
@@ -816,6 +832,7 @@ dependencies = [
  "clap",
  "futures-util",
  "hotsheet-aitools",
+ "hotsheet-extsync",
  "hotsheet-index",
  "hotsheet-model",
  "hotsheet-plugins",

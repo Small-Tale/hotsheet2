@@ -28,6 +28,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   crates/
+    hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
+      src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)
     hotsheet-model/          # pure domain model + ticket file format (no I/O)
       src/lib.rs             #   re-exports; SCHEMA_VERSION
       src/enums.rs           #   Priority/Status/CloseReason/NoteKind/ReviewKind
@@ -62,7 +64,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/TicketRow incl. connection_id/native_id/qualified_id + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: init/link/new/ls/show/edit/close/providers/copy/move/provider-copy/provider-move/assign/people/read/setup/plugin/settings/import/sync/merge-driver/doctor/reindex/worklist/metrics/serve/cert/claim-next/release/renew/trigger/work/permission-hook
+      src/main.rs            #   `hotsheet-cli`: default git commands plus providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
@@ -88,7 +90,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
       src/lib.rs             #   JSON-RPC handle_message + hotsheet_* tools over a Backend
-                             #     (providers/query/get/create/update/close/batch/claim_next/release/renew/copy/move):
+                             #     (provider-aware providers/query/get/create/update/close/assign plus batch/claim/release/renew/copy/move):
                              #     CoreBackend (direct-to-disk, serverless) | HttpBackend (proxy a server)
       src/main.rs            #   stdio JSON-RPC loop; --path <store> (serverless) | --server <url> --secret
     hotsheet-tls/            # Tier-1 mTLS material (rcgen-only, no rustls; used by CLI + server) — docs/04 §4.6, HS2-VT3JMF

@@ -222,6 +222,22 @@ The provider-neutral routes are `POST /provider-transfers/copy|move`; CLI and MC
 `provider-copy|move` equivalents. The older git-store copy/move surfaces retain their
 same-ULID/tombstone compatibility semantics.
 
+Built in the GitHub reference-provider increment: `hotsheet-extsync` maps GitHub issue
+numbers/URLs, body/state/state-reason, configured `category:`/`priority:`/`status:`
+labels, ordinary labels, assignees, and comments directly to the normalized contract.
+It paginates while excluding pull requests, sends incremental `since` queries, exposes
+webhook invalidations for authoritative re-read, checks opaque optimistic-concurrency
+tokens, and maps authentication/rate-limit/conflict failures to typed provider errors.
+Unsupported claims, dependencies, review requests, attachments, Up Next, and query
+dimensions are declared or rejected rather than discarded. Project `providers.json`
+contains connection metadata and a credential reference only; CLI/server resolve the
+token through the OS-key registry (or its explicit environment override). GitHub CRUD
+is available through `/providers/{connection}/tickets`, provider-aware MCP targeting,
+and `provider-ls|get|new|edit|close` CLI commands. No operation writes a mirrored git
+ticket. GitHub has no issue-creation idempotency key, so its capability advertises
+`provider_idempotency: false`; transfer provenance is still recorded and retries
+resolve it, while the host coordinator serializes same-process attempts.
+
 ## 16.12 Cross-references
 
 - Git provider format and guarantees: [02-ticket-storage.md](02-ticket-storage.md)

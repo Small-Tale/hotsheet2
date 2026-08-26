@@ -27,6 +27,8 @@ pub struct ApiTicket {
     pub qualified_id: String,
     /// Native browser URL when the provider has one.
     pub native_url: Option<String>,
+    /// Provider-native optimistic-concurrency token (opaque to callers).
+    pub concurrency_token: Option<String>,
     pub id: String,
     pub slug: String,
     pub title: String,
@@ -88,6 +90,7 @@ impl ApiTicket {
             native_id: native_id.clone(),
             qualified_id: format!("{connection_id}:{native_id}"),
             native_url,
+            concurrency_token: Some(t.updated_at.as_str().to_string()),
             id: native_id,
             slug: t.slug.clone(),
             title: t.title.clone(),

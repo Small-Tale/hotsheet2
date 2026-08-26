@@ -33,9 +33,10 @@ use hotsheet_model::{
     to_file_string,
 };
 use hotsheet_ticketing::{
-    FsStore, GitProvider, NewTicket, OpError, ProviderRegistry, Settings, SortKey, StoreError,
-    StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between, move_between,
-    ops,
+    FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OpError, OsKeychain,
+    ProviderConfigRegistry, ProviderDraft, ProviderPatch, ProviderRegistry, Settings, SortKey,
+    StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between,
+    move_between, ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -59,6 +60,7 @@ pub struct AppState {
     /// Every store this machine server hosts (HS2-87). The primary `store` is registered
     /// here as the default entry; additional stores are added via `POST /stores`.
     host: StoreHost,
+    injected_providers: ProviderRegistry,
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive (the default
     /// store's watcher is held by the server binary). Never read — just not dropped.
     watchers: Arc<Mutex<Vec<WatchHandle>>>,
@@ -168,6 +170,7 @@ impl AppState {
             index,
             event_log,
             host,
+            injected_providers: ProviderRegistry::default(),
             watchers: Arc::new(Mutex::new(Vec::new())),
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
@@ -210,6 +213,18 @@ impl AppState {
 
     pub fn with_tts_providers(mut self, providers: Vec<Arc<dyn tts::TtsProvider>>) -> Self {
         self.tts = tts::TtsProviders::new(providers);
+        self
+    }
+
+    /// Register an injected provider (deterministic tests and embedders). Production
+    /// connections normally load from `providers.json` and the key registry.
+    pub fn with_ticket_provider(
+        self,
+        provider: Arc<dyn hotsheet_ticketing::TicketProvider>,
+    ) -> Self {
+        self.injected_providers
+            .register(provider)
+            .expect("fresh injected provider registry");
         self
     }
 
@@ -723,20 +738,20 @@ pub fn app(state: AppState) -> Router {
         // Provider-neutral aliases. Store routes remain compatibility shorthands for the
         // built-in git provider while clients migrate to `/providers/{connection_id}`.
         .route(
-            "/providers/{store_id}/tickets",
-            get(list_store_tickets).post(create_store_ticket),
+            "/providers/{connection_id}/tickets",
+            get(list_provider_tickets).post(create_provider_ticket),
         )
         .route(
-            "/providers/{store_id}/tickets/{id}",
-            get(get_store_ticket).patch(update_store_ticket),
+            "/providers/{connection_id}/tickets/{id}",
+            get(get_provider_ticket).patch(update_provider_ticket),
         )
         .route(
-            "/providers/{store_id}/tickets/{id}/close",
-            post(close_store_ticket),
+            "/providers/{connection_id}/tickets/{id}/close",
+            post(close_provider_ticket),
         )
         .route(
-            "/providers/{store_id}/tickets/{id}/assign",
-            post(assign_store_ticket),
+            "/providers/{connection_id}/tickets/{id}/assign",
+            post(assign_provider_ticket),
         )
         // Cross-store resolve: a global ULID → its live instance in whichever store hosts
         // it (follows moved tombstones). HS2-87 / HS2-S4H2AM.
@@ -1001,19 +1016,35 @@ async fn list_stores(State(state): State<AppState>) -> Json<Vec<StoreInfo>> {
 /// implementation registers every hosted store as a built-in git provider.
 async fn list_providers(
     State(state): State<AppState>,
-) -> Json<Vec<hotsheet_ticketing::ProviderDescriptor>> {
+) -> Result<Json<Vec<hotsheet_ticketing::ProviderDescriptor>>, ApiError> {
     let default_id = multistore::store_url_id(&state.store);
-    Json(
-        state
-            .host
-            .list()
-            .into_iter()
-            .map(|info| {
-                let is_default = info.id == default_id;
-                info.provider_descriptor(is_default)
-            })
-            .collect(),
-    )
+    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?;
+    let external_default = connections.iter().any(|connection| connection.default)
+        || state
+            .injected_providers
+            .descriptors()
+            .iter()
+            .any(|descriptor| descriptor.default);
+    let mut descriptors = state
+        .host
+        .list()
+        .into_iter()
+        .map(|info| {
+            let is_default = info.id == default_id && !external_default;
+            info.provider_descriptor(is_default)
+        })
+        .collect::<Vec<_>>();
+    for connection in connections {
+        if connection.provider != "git" {
+            descriptors
+                .push(hotsheet_extsync::descriptor(&connection).map_err(provider_transfer_error)?);
+        }
+    }
+    descriptors.extend(state.injected_providers.descriptors());
+    descriptors.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+    Ok(Json(descriptors))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1028,6 +1059,15 @@ struct ProviderTransferBody {
 fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiError> {
     let registry = ProviderRegistry::default();
     let default_id = multistore::store_url_id(&state.store);
+    let connections = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?;
+    let external_default = connections.iter().any(|connection| connection.default)
+        || state
+            .injected_providers
+            .descriptors()
+            .iter()
+            .any(|descriptor| descriptor.default);
     for info in state.host.list() {
         let entry = state
             .host
@@ -1035,15 +1075,196 @@ fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiErr
             .ok_or_else(|| ApiError::not_found(&info.id))?;
         registry
             .register(Arc::new(
-                GitProvider::new(info.id.clone(), entry.store).with_default(info.id == default_id),
+                GitProvider::new(info.id.clone(), entry.store)
+                    .with_default(info.id == default_id && !external_default),
             ))
+            .map_err(provider_transfer_error)?;
+    }
+    let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
+    for connection in connections {
+        if connection.provider == "git" {
+            continue;
+        }
+        let credential =
+            hotsheet_extsync::credential_reference(&connection).map_err(provider_transfer_error)?;
+        let token = keys.get(credential).map_err(provider_transfer_error)?;
+        registry
+            .register(
+                hotsheet_extsync::live_provider(&connection, token)
+                    .map_err(provider_transfer_error)?,
+            )
+            .map_err(provider_transfer_error)?;
+    }
+    for descriptor in state.injected_providers.descriptors() {
+        registry
+            .register(
+                state
+                    .injected_providers
+                    .get(&descriptor.connection_id)
+                    .map_err(provider_transfer_error)?,
+            )
             .map_err(provider_transfer_error)?;
     }
     Ok(registry)
 }
 
+fn provider_for(
+    state: &AppState,
+    connection_id: &str,
+) -> Result<Arc<dyn hotsheet_ticketing::TicketProvider>, ApiError> {
+    if let Some(entry) = state.host.get(connection_id) {
+        return Ok(Arc::new(GitProvider::new(connection_id, entry.store)));
+    }
+    if let Ok(provider) = state.injected_providers.get(connection_id) {
+        return Ok(provider);
+    }
+    let connection = ProviderConfigRegistry::new(state.store.root().join("providers.json"))
+        .load()
+        .map_err(provider_transfer_error)?
+        .into_iter()
+        .find(|connection| connection.id == connection_id)
+        .ok_or_else(|| ApiError::not_found(connection_id))?;
+    let credential =
+        hotsheet_extsync::credential_reference(&connection).map_err(provider_transfer_error)?;
+    let token = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
+        .get(credential)
+        .map_err(provider_transfer_error)?;
+    hotsheet_extsync::live_provider(&connection, token).map_err(provider_transfer_error)
+}
+
 fn provider_transfer_error(error: impl std::fmt::Display) -> ApiError {
     ApiError::new(StatusCode::CONFLICT, error.to_string())
+}
+
+async fn list_provider_tickets(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+    Query(params): Query<ListParams>,
+) -> Result<Json<Vec<ApiTicket>>, ApiError> {
+    let query = params.into_query(state.store.root())?;
+    let provider = provider_for(&state, &connection_id)?;
+    provider
+        .query(&query)
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
+async fn get_provider_ticket(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    provider_for(&state, &connection_id)?
+        .get(&id)
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
+async fn create_provider_ticket(
+    State(state): State<AppState>,
+    Path(connection_id): Path<String>,
+    Json(req): Json<CreateReq>,
+) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    let priority = opt_parse(req.priority.as_deref())?.unwrap_or_default();
+    let provider = provider_for(&state, &connection_id)?;
+    let ticket = provider
+        .create(
+            MutationContext {
+                now: now(),
+                generated_id: Ulid::new(),
+            },
+            ProviderDraft {
+                title: req.title,
+                category: req.category.unwrap_or_else(|| "issue".into()),
+                priority,
+                details: req.details.unwrap_or_default(),
+                tags: req.tags.unwrap_or_default(),
+                up_next: req.up_next.unwrap_or(false),
+                blocked_by: req.blocked_by.unwrap_or_default(),
+                transfer: None,
+            },
+        )
+        .map_err(provider_transfer_error)?;
+    Ok((StatusCode::CREATED, Json(ticket)))
+}
+
+async fn update_provider_ticket(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+    Json(req): Json<UpdateReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let provider = provider_for(&state, &connection_id)?;
+    let timestamp = now();
+    let note = req.note.clone();
+    let mut ticket = provider
+        .update(
+            &id,
+            timestamp.clone(),
+            ProviderPatch {
+                expected_token: req.expected_token,
+                title: req.title,
+                details: req.details,
+                category: req.category,
+                priority: opt_parse(req.priority.as_deref())?,
+                status: opt_parse(req.status.as_deref())?,
+                tags: req.tags,
+                up_next: req.up_next,
+                blocked_by: req.blocked_by,
+            },
+        )
+        .map_err(provider_transfer_error)?;
+    if let Some(note) = note {
+        ticket = provider
+            .add_note(
+                &id,
+                MutationContext {
+                    now: timestamp,
+                    generated_id: Ulid::new(),
+                },
+                NoteKind::Regular,
+                note,
+            )
+            .map_err(provider_transfer_error)?;
+    }
+    Ok(Json(ticket))
+}
+
+async fn close_provider_ticket(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+    Json(req): Json<CloseReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    provider_for(&state, &connection_id)?
+        .close(
+            &id,
+            now(),
+            opt_parse(Some(&req.reason))?.expect("required close reason"),
+            req.duplicate_of,
+        )
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
+async fn assign_provider_ticket(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+    Json(req): Json<AssignReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let at = now();
+    let reviews = req
+        .reviews
+        .into_iter()
+        .map(|review| ReviewRequest {
+            who: review.who,
+            kind: review.kind,
+            by: Ulid::new(),
+            at: at.clone(),
+            requested_by: None,
+        })
+        .collect();
+    provider_for(&state, &connection_id)?
+        .assign(&id, at, req.assignees, reviews)
+        .map(Json)
+        .map_err(provider_transfer_error)
 }
 
 async fn provider_copy_route(
@@ -3083,6 +3304,7 @@ struct CreateReq {
 
 #[derive(Debug, Clone, Deserialize)]
 struct UpdateReq {
+    expected_token: Option<String>,
     title: Option<String>,
     details: Option<String>,
     category: Option<String>,

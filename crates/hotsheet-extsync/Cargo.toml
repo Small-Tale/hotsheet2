@@ -1,0 +1,21 @@
+[package]
+name = "hotsheet-extsync"
+description = "Direct authoritative external ticket providers for Hot Sheet 2."
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hotsheet-model.workspace = true
+hotsheet-ticketing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

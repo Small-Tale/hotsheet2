@@ -11,6 +11,7 @@ members = [
     "crates/hotsheet-aitools",
     "crates/hotsheet-terminals",
     "crates/hotsheet-tls",
+    "crates/hotsheet-extsync",
 ]
 
 [workspace.package]
@@ -64,3 +65,4 @@ hotsheet-plugins = { path = "crates/hotsheet-plugins" }
 hotsheet-aitools = { path = "crates/hotsheet-aitools" }
 hotsheet-terminals = { path = "crates/hotsheet-terminals" }
 hotsheet-tls = { path = "crates/hotsheet-tls" }
+hotsheet-extsync = { path = "crates/hotsheet-extsync" }

@@ -112,13 +112,13 @@ fn tools_list() -> Value {
                 "page_after": str_prop("keyset cursor: a ULID; return only rows strictly after it in sort order (page a large store without OFFSET)"),
                 "fields": str_prop("comma-separated field allow-list for a leaner row (e.g. 'slug,status,up_next,title'); slug is always kept"),
                 "compact": { "type": "boolean", "description": "omit the Markdown body from each row (default true)" }
-                ,"checkout": str_prop("optional checkout id/alias/path; aggregates all linked stores")
+                ,"checkout": str_prop("optional checkout id/alias/path; aggregates all linked stores"), "connection": str_prop("optional ticket-provider connection id")
             } }
         },
         {
             "name": "hotsheet_get",
             "description": "Fetch one ticket by slug or ULID.",
-            "inputSchema": { "type": "object", "properties": { "id": str_prop("slug or ULID"), "checkout": str_prop("optional checkout id/alias/path") }, "required": ["id"] }
+            "inputSchema": { "type": "object", "properties": { "id": str_prop("provider-native id, slug, or ULID"), "checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id") }, "required": ["id"] }
         },
         {
             "name": "hotsheet_create",
@@ -129,7 +129,7 @@ fn tools_list() -> Value {
                 "details": str_prop(""), "tags": { "type": "array", "items": { "type": "string" } },
                 "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "blocker tickets (slug or ULID)" }
-                ,"checkout": str_prop("optional checkout id/alias/path"), "store": str_prop("linked store id; required when checkout has multiple stores")
+                ,"checkout": str_prop("optional checkout id/alias/path"), "store": str_prop("linked store id; required when checkout has multiple stores"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["title"] }
         },
         {
@@ -139,10 +139,11 @@ fn tools_list() -> Value {
                 "id": str_prop("slug or ULID"),
                 "title": str_prop(""), "details": str_prop(""), "category": str_prop(""),
                 "priority": str_prop(""), "status": str_prop(""),
+                "expected_token": str_prop("opaque optimistic-concurrency token returned by get"),
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
                 "note": str_prop("append a progress note")
-                ,"checkout": str_prop("optional checkout id/alias/path")
+                ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id"] }
         },
         {
@@ -152,7 +153,7 @@ fn tools_list() -> Value {
                 "id": str_prop("slug or ULID"),
                 "reason": str_prop("completed|not_planned|duplicate|obsolete"),
                 "duplicate_of": str_prop("required when reason=duplicate")
-                ,"checkout": str_prop("optional checkout id/alias/path")
+                ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id", "reason"] }
         },
         {
@@ -162,7 +163,7 @@ fn tools_list() -> Value {
                 "id": str_prop("slug or ULID"),
                 "assignees": { "type": "array", "items": { "type": "string" } },
                 "reviews": { "type": "array", "items": { "type": "object", "properties": { "who": str_prop("git email"), "kind": str_prop("feedback|review|fyi|work") }, "required": ["who","kind"] } },
-                "checkout": str_prop("optional checkout id/alias/path")
+                "checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id"] }
         },
         {
@@ -321,7 +322,7 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 .send(
                     "POST",
                     &format!("{}{}", checkout_route(args, "/tickets"), query),
-                    &without_many(args, &["checkout", "store"]),
+                    &without_many(args, &["checkout", "store", "connection"]),
                 )
                 .map_err(be_msg)
         }
@@ -331,7 +332,7 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 .send(
                     "PATCH",
                     &checkout_route(args, &format!("/tickets/{id}")),
-                    &without_many(args, &["id", "checkout"]),
+                    &without_many(args, &["id", "checkout", "connection"]),
                 )
                 .map_err(be_msg)
         }
@@ -355,7 +356,7 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                 .send(
                     "POST",
                     &checkout_route(args, &format!("/tickets/{id}/assign")),
-                    &without_many(args, &["id", "checkout"]),
+                    &without_many(args, &["id", "checkout", "connection"]),
                 )
                 .map_err(be_msg)
         }
@@ -493,6 +494,13 @@ fn without_many(args: &Value, keys: &[&str]) -> Value {
 }
 
 fn checkout_route(args: &Value, suffix: &str) -> String {
+    if let Some(connection) = args
+        .get("connection")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        return format!("/providers/{connection}{suffix}");
+    }
     args.get("checkout")
         .and_then(Value::as_str)
         .filter(|v| !v.is_empty())
@@ -1740,6 +1748,37 @@ mod tests {
         assert!(!calls[2].contains("\"checkout\""));
         assert!(calls[3].starts_with("PATCH /checkouts/web/tickets/HS-X"));
         assert!(calls[4].starts_with("POST /checkouts/web/tickets/HS-X/assign"));
+    }
+
+    #[test]
+    fn provider_targeting_routes_mcp_crud_to_the_selected_connection() {
+        let backend = FakeBackend::default();
+        call(
+            &backend,
+            "hotsheet_query",
+            json!({"connection":"github-main"}),
+        );
+        call(
+            &backend,
+            "hotsheet_get",
+            json!({"connection":"github-main","id":"42"}),
+        );
+        call(
+            &backend,
+            "hotsheet_create",
+            json!({"connection":"github-main","title":"remote"}),
+        );
+        call(
+            &backend,
+            "hotsheet_close",
+            json!({"connection":"github-main","id":"42","reason":"completed"}),
+        );
+        let calls = backend.calls.borrow();
+        assert!(calls[0].starts_with("GET /providers/github-main/tickets"));
+        assert!(calls[1].starts_with("GET /providers/github-main/tickets/42"));
+        assert!(calls[2].starts_with("POST /providers/github-main/tickets"));
+        assert!(!calls[2].contains("connection"));
+        assert!(calls[3].starts_with("POST /providers/github-main/tickets/42/close"));
     }
 
     #[test]

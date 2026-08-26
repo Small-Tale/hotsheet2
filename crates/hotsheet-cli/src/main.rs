@@ -14,9 +14,10 @@ use hotsheet_model::{
     parse_file, to_file_string,
 };
 use hotsheet_ticketing::{
-    FsStore, GitProvider, NewTicket, Person, ProviderRegistry, Roster, SortKey, StoreMetadata,
-    TicketPatch, TicketProvider, TicketQuery, TicketRef, copy_between, git_connection_id,
-    move_between, ops,
+    FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OsKeychain, Person,
+    ProviderConfigRegistry, ProviderDraft, ProviderPatch, ProviderRegistry, Roster, SortKey,
+    StoreMetadata, TicketPatch, TicketProvider, TicketQuery, TicketRef, copy_between,
+    git_connection_id, move_between, ops,
 };
 use time::{Duration, OffsetDateTime};
 
@@ -87,6 +88,45 @@ enum Cmd {
         /// Emit the full provider descriptor as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// List tickets from one configured provider connection.
+    ProviderLs { connection: String },
+    /// Get one provider-native ticket.
+    ProviderGet { connection: String, id: String },
+    /// Create a ticket directly in a configured provider.
+    ProviderNew {
+        connection: String,
+        title: String,
+        #[arg(long, default_value = "issue")]
+        category: String,
+        #[arg(long, default_value = "default")]
+        priority: String,
+        #[arg(long)]
+        details: Option<String>,
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+    },
+    /// Update a provider-native ticket with optional optimistic concurrency.
+    ProviderEdit {
+        connection: String,
+        id: String,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        details: Option<String>,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        expected_token: Option<String>,
+        #[arg(long)]
+        note: Option<String>,
+    },
+    /// Close a provider-native ticket.
+    ProviderClose {
+        connection: String,
+        id: String,
+        #[arg(long)]
+        reason: String,
     },
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
@@ -627,6 +667,49 @@ fn main() -> Result<()> {
         ),
         Cmd::Ls { filters } => cmd_ls(&cli.path, &filters),
         Cmd::Providers { json } => cmd_providers(&cli.path, json),
+        Cmd::ProviderLs { connection } => cmd_provider_ls(&cli.path, &connection),
+        Cmd::ProviderGet { connection, id } => cmd_provider_get(&cli.path, &connection, &id),
+        Cmd::ProviderNew {
+            connection,
+            title,
+            category,
+            priority,
+            details,
+            tags,
+        } => cmd_provider_new(
+            &cli.path,
+            &connection,
+            title,
+            category,
+            &priority,
+            details.unwrap_or_default(),
+            tags,
+        ),
+        Cmd::ProviderEdit {
+            connection,
+            id,
+            title,
+            details,
+            status,
+            expected_token,
+            note,
+        } => cmd_provider_edit(
+            &cli.path,
+            &connection,
+            &id,
+            ProviderEditInput {
+                title,
+                details,
+                status,
+                expected_token,
+                note,
+            },
+        ),
+        Cmd::ProviderClose {
+            connection,
+            id,
+            reason,
+        } => cmd_provider_close(&cli.path, &connection, &id, &reason),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
         Cmd::Edit {
             id,
@@ -1120,20 +1203,138 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
 
 fn cmd_providers(path: &Path, json: bool) -> Result<()> {
     let store = FsStore::open(path)?;
-    let descriptor = GitProvider::new(git_connection_id(&store), store)
-        .with_default(true)
+    let connections = ProviderConfigRegistry::new(store.root().join("providers.json")).load()?;
+    let external_default = connections.iter().any(|connection| connection.default);
+    let descriptor = GitProvider::new(git_connection_id(&store), store.clone())
+        .with_default(!external_default)
         .descriptor();
-    if json {
-        println!("{}", serde_json::to_string_pretty(&vec![descriptor])?);
-    } else {
-        println!(
-            "{}  {}  {}  {}",
-            descriptor.connection_id,
-            descriptor.provider,
-            if descriptor.default { "default" } else { "" },
-            descriptor.locator
-        );
+    let mut descriptors = vec![descriptor];
+    for connection in connections {
+        if connection.provider != "git" {
+            descriptors.push(hotsheet_extsync::descriptor(&connection)?);
+        }
     }
+    descriptors.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+    if json {
+        println!("{}", serde_json::to_string_pretty(&descriptors)?);
+    } else {
+        for descriptor in descriptors {
+            println!(
+                "{}  {}  {}  {}",
+                descriptor.connection_id,
+                descriptor.provider,
+                if descriptor.default { "default" } else { "" },
+                descriptor.locator
+            );
+        }
+    }
+    Ok(())
+}
+
+fn configured_provider(path: &Path, connection_id: &str) -> Result<Arc<dyn TicketProvider>> {
+    let store = FsStore::open(path)?;
+    let git_id = git_connection_id(&store);
+    if connection_id == git_id {
+        return Ok(Arc::new(GitProvider::new(git_id, store)));
+    }
+    let connection = ProviderConfigRegistry::new(store.root().join("providers.json"))
+        .load()?
+        .into_iter()
+        .find(|connection| connection.id == connection_id)
+        .ok_or_else(|| anyhow::anyhow!("provider connection '{connection_id}' was not found"))?;
+    let credential = hotsheet_extsync::credential_reference(&connection)?;
+    let token = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain).get(credential)?;
+    Ok(hotsheet_extsync::live_provider(&connection, token)?)
+}
+
+fn cmd_provider_ls(path: &Path, connection: &str) -> Result<()> {
+    let tickets = configured_provider(path, connection)?.query(&TicketQuery::default())?;
+    println!("{}", serde_json::to_string_pretty(&tickets)?);
+    Ok(())
+}
+
+fn cmd_provider_get(path: &Path, connection: &str, id: &str) -> Result<()> {
+    let ticket = configured_provider(path, connection)?.get(id)?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+fn cmd_provider_new(
+    path: &Path,
+    connection: &str,
+    title: String,
+    category: String,
+    priority: &str,
+    details: String,
+    tags: Vec<String>,
+) -> Result<()> {
+    let priority = parse_priority(priority)?;
+    let ticket = configured_provider(path, connection)?.create(
+        MutationContext {
+            now: now_ts(),
+            generated_id: Ulid::new(),
+        },
+        ProviderDraft {
+            title,
+            category,
+            priority,
+            details,
+            tags,
+            up_next: false,
+            blocked_by: vec![],
+            transfer: None,
+        },
+    )?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+struct ProviderEditInput {
+    title: Option<String>,
+    details: Option<String>,
+    status: Option<String>,
+    expected_token: Option<String>,
+    note: Option<String>,
+}
+
+fn cmd_provider_edit(
+    path: &Path,
+    connection: &str,
+    id: &str,
+    input: ProviderEditInput,
+) -> Result<()> {
+    let provider = configured_provider(path, connection)?;
+    let now = now_ts();
+    let mut ticket = provider.update(
+        id,
+        now.clone(),
+        ProviderPatch {
+            expected_token: input.expected_token,
+            title: input.title,
+            details: input.details,
+            status: input.status.as_deref().map(parse_status_str).transpose()?,
+            ..Default::default()
+        },
+    )?;
+    if let Some(note) = input.note {
+        ticket = provider.add_note(
+            id,
+            MutationContext {
+                now,
+                generated_id: Ulid::new(),
+            },
+            NoteKind::Regular,
+            note,
+        )?;
+    }
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
+    Ok(())
+}
+
+fn cmd_provider_close(path: &Path, connection: &str, id: &str, reason: &str) -> Result<()> {
+    let reason = parse_close_reason(reason)?;
+    let ticket = configured_provider(path, connection)?.close(id, now_ts(), reason, None)?;
+    println!("{}", serde_json::to_string_pretty(&ticket)?);
     Ok(())
 }
 

@@ -20,6 +20,7 @@ clap.workspace = true
 ureq.workspace = true
 hotsheet-model.workspace = true
 hotsheet-ticketing.workspace = true
+hotsheet-extsync.workspace = true
 time.workspace = true
 
 [dev-dependencies]

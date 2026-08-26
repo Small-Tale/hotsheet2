@@ -192,16 +192,16 @@ impl<S: SecretStore> KeyRegistry<S> {
 
     pub fn get(&self, provider: &str) -> Result<String, SecretError> {
         validate(provider)?;
+        let env = env_name(provider);
+        if let Ok(secret) = std::env::var(&env) {
+            return Ok(secret);
+        }
         let unavailable = match self.store.get(provider) {
             Ok(Some(secret)) => return Ok(secret),
             Ok(None) => None,
             Err(error @ SecretError::Unavailable(_)) => Some(error),
             Err(error) => return Err(error),
         };
-        let env = env_name(provider);
-        if let Ok(secret) = std::env::var(&env) {
-            return Ok(secret);
-        }
         match unavailable {
             Some(error) => Err(error),
             None => Err(SecretError::NotFound(provider.into())),

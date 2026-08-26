@@ -228,6 +228,7 @@ pub struct TransferProvenance {
 
 #[derive(Debug, Clone, Default)]
 pub struct ProviderPatch {
+    pub expected_token: Option<String>,
     pub title: Option<String>,
     pub details: Option<String>,
     pub category: Option<String>,
@@ -504,6 +505,16 @@ impl TicketProvider for GitProvider {
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError> {
         let ticket = self.ticket(native_id)?;
+        if patch
+            .expected_token
+            .as_deref()
+            .is_some_and(|token| token != ticket.updated_at.as_str())
+        {
+            return Err(ProviderError::Conflict {
+                ticket: native_id.into(),
+                message: "ticket changed since it was read".into(),
+            });
+        }
         let blocked_by = patch
             .blocked_by
             .as_deref()
