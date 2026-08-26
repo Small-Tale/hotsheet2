@@ -27,5 +27,8 @@ body { margin: 0; min-width: 52rem; }
 .planned-demo span { padding: .35rem .65rem; border-radius: 999px; color: #666771; background: #eeeef2; font-size: .75rem; font-weight: 700; text-transform: uppercase; }
 .planned-demo p { max-width: 32rem; }
 .settings-form { display: grid; gap: 1rem; min-width: min(23rem, 80vw); }
+.settings-inspector { position: fixed; z-index: 10; inset: 0 0 0 auto; width: min(27rem, calc(100vw - 2rem)); overflow: auto; padding: 1.5rem; border-left: 1px solid #d9d9de; background: #fafafd; box-shadow: -.75rem 0 2.5rem rgba(35, 32, 48, .12); }
+.settings-inspector > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+.settings-inspector h2 { margin: .15rem 0 0; }
 wa-tag[data-disabled="true"] { opacity: .48; pointer-events: none; }
 @media (max-width: 60rem) { body { min-width: 0; } .demo-shell { grid-template-columns: minmax(14rem, 18rem) minmax(28rem, 1fr); } .demo-detail { padding: 2rem; } }

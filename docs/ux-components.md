@@ -401,7 +401,8 @@ These remain in the component architecture but are not initial-client blockers:
 component implementation. Its Hono route is registered only for Vite `serve`, whose
 host is fixed to loopback; it is absent from the production build. The initial shell
 provides the categorized master/detail catalog, URL-addressable selection, planned
-component states, and an optional Web Awesome settings drawer. It should grow to provide:
+component states, and an optional non-modal, manually closed settings inspector that
+keeps the demo visible during live adjustment. It should grow to provide:
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios

@@ -2,7 +2,6 @@ import { delegate, mount, signal } from 'kerfjs';
 import '@awesome.me/webawesome/dist/styles/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
-import '@awesome.me/webawesome/dist/components/drawer/drawer.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
@@ -12,10 +11,10 @@ import { demoCatalog, findDemo, type DemoCategory, type DemoDefinition } from '.
 import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
-type Drawer = HTMLElement & { open: boolean };
 const defaultDemo = 'tag-chip';
 const fromUrl = () => new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
+const settingsOpen = signal(false);
 
 function demoLink(item: DemoDefinition) {
   const selected = item.id === selectedId.value;
@@ -40,12 +39,13 @@ function DemoApp() {
         <nav>{demoCatalog.map(demoNavigation)}</nav>
       </aside>
       <article class="demo-detail">
-        <header class="demo-detail__header"><div><p class="eyebrow">{selected.phase.replace('-', ' ')}</p><h1>{selected.name}</h1><p>{selected.description}</p></div>{selected.id === 'tag-chip' && <wa-button data-action="show-settings">Settings</wa-button>}</header>
+        <header class="demo-detail__header"><div><p class="eyebrow">{selected.phase.replace('-', ' ')}</p><h1>{selected.name}</h1><p>{selected.description}</p></div>{selected.id === 'tag-chip' && <wa-button data-action="show-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>Settings</wa-button>}</header>
         {demoContent(selected)}
       </article>
-      <wa-drawer data-settings-drawer label={`${selected.name} settings`} placement="end">
+      {settingsOpen.value && <aside class="settings-inspector" aria-label={`${selected.name} settings`}>
+        <header><div><p class="eyebrow">Demo settings</p><h2>{selected.name}</h2></div><wa-button size="small" data-action="close-settings">Close settings</wa-button></header>
         {selected.id === 'tag-chip' ? <TagChipSettings /> : <p>This demo has no adjustable settings.</p>}
-      </wa-drawer>
+      </aside>}
     </main>
   );
 }
@@ -60,7 +60,8 @@ function selectDemo(id: string, push = true): void {
 }
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefault(); selectDemo((target as HTMLElement).dataset.demoId!); });
-delegate(root, 'click', '[data-action="show-settings"]', () => { (document.querySelector('[data-settings-drawer]') as Drawer).open = true; });
+delegate(root, 'click', '[data-action="show-settings"]', () => { settingsOpen.value = true; });
+delegate(root, 'click', '[data-action="close-settings"]', () => { settingsOpen.value = false; });
 delegate(root, 'click', '[data-action="reset-settings"]', () => resetTagChipDemo());
 delegate(root, 'input', '[data-settings="tag-chip"] [name="label"]', (_event, target) => { tagChipSettings.label.value = (target as FormControl).value; });
 delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) => {

@@ -32,7 +32,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
     src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
     src/components/          #   Production domain UI components (TagChip first)
-    src/ux-demo/             #   Categorized master/detail catalog, mock demo state, optional settings drawer
+    src/ux-demo/             #   Categorized master/detail catalog, mock demo state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
     tests/ux-demo.spec.ts    #   Real-browser catalog navigation + TagChip settings/removal flow
   crates/
