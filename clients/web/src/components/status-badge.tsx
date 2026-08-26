@@ -1,5 +1,6 @@
 import { Archive, BadgeCheck, Circle, CircleCheck, Clock, type IconNode } from 'lucide';
 import { LucideIcon } from './lucide-icon';
+import './status-badge.css';
 
 export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog';
 

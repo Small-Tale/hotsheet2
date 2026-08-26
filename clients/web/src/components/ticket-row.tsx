@@ -3,6 +3,7 @@ import { TagChip } from './tag-chip';
 import { categoryAbbreviation, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
 import { ChevronDown, ChevronUp, ChevronsUp, Minus, Star, type IconNode } from 'lucide';
+import './ticket-row.css';
 
 export type TicketPriority = 'low' | 'default' | 'high' | 'urgent';
 

@@ -5,14 +5,12 @@ import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
-import '@awesome.me/webawesome/dist/components/tag/tag.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
-import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './style.css';
 import { demosUsing, demoCatalog, findDemo, type DemoCategory, type DemoDefinition } from './catalog';
 import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
+import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -48,24 +46,6 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
   </footer>;
 }
 
-function TicketContextMenu() {
-  const position = contextMenu.value;
-  if (!position) return null;
-  return <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${position.x}px;top:${position.y}px`}>
-    <wa-dropdown-item data-context-action="Open ticket">Open ticket</wa-dropdown-item>
-    <wa-divider></wa-divider>
-    <wa-dropdown-item data-context-action="Change category">Change category</wa-dropdown-item>
-    <wa-dropdown-item data-context-action="Change priority">Change priority</wa-dropdown-item>
-    <wa-dropdown-item data-context-action="Change status">Change status</wa-dropdown-item>
-    <wa-dropdown-item data-context-action="Toggle Up Next">Toggle Up Next</wa-dropdown-item>
-    <wa-divider></wa-divider>
-    <wa-dropdown-item data-context-action="Add tag">Add tag</wa-dropdown-item>
-    <wa-dropdown-item data-context-action="Duplicate ticket">Duplicate ticket</wa-dropdown-item>
-    <wa-dropdown-item data-context-action="Archive ticket">Archive ticket</wa-dropdown-item>
-    <wa-dropdown-item data-context-action="Delete ticket" variant="danger">Delete ticket</wa-dropdown-item>
-  </div>;
-}
-
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
   return (
@@ -84,7 +64,7 @@ function DemoApp() {
         {selected.id === 'tag-chip' ? <TagChipSettings /> : selected.id === 'status-badge' ? <StatusBadgeSettings /> : selected.id === 'ticket-row' ? <TicketRowSettings /> : <p>This demo has no adjustable settings.</p>}
       </aside>}
       {selected.implemented && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
-      <TicketContextMenu />
+      {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} />}
     </main>
   );
 }

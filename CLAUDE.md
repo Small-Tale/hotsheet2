@@ -58,6 +58,9 @@ the durable rationale is in [`docs/09-technology-decisions.md`](docs/09-technolo
 Keep shared domain components aligned across clients and presentations. In particular,
 list and column tickets use one responsive ticket-summary component contract (rather
 than separate row/card behavior) that remains usable at narrow horizontal sizes.
+Keep production component styles colocated with their component modules and imported
+from those modules; demos may provide stage/shell styles but must not own or duplicate
+the production component CSS being validated.
 
 Use **Lucide icons** for all decorative or symbolic client iconography across web,
 Tauri, SwiftUI, and later clients. Never substitute emoji, Unicode geometric shapes,
@@ -68,6 +71,8 @@ adjacent text carries the meaning; icon-only controls require an accessible name
 Literal characters in user-authored content, code, or text whose actual content is
 the character are unaffected. If several Lucide icons are materially good semantic
 choices, ask the maintainer which metaphor to standardize before committing one.
+Every actionable context-menu item should carry a meaningful Lucide icon; separators
+and other non-action structure are the only ordinary exception.
 
 <!-- hotsheet:begin section=testing-philosophy v=2 -->
 ## Testing Philosophy

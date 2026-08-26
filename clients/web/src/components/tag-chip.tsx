@@ -49,3 +49,5 @@ export function TagChip(raw: TagChipProps) {
     </wa-tag>
   );
 }
+import '@awesome.me/webawesome/dist/components/tag/tag.js';
+import './tag-chip.css';

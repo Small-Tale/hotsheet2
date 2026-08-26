@@ -1,0 +1,5 @@
+.ticket-context-menu { position: fixed; z-index: 50; display: grid; width: 14rem; padding: .35rem; border: 1px solid #d9d9de; border-radius: .6rem; background: #fff; box-shadow: 0 .75rem 2rem rgba(25, 32, 45, .2); }
+.ticket-context-menu wa-divider { --spacing: .25rem; }
+.ticket-context-menu__icon { display: inline-flex; color: #656873; }
+.ticket-context-menu__icon svg { width: 1rem; height: 1rem; }
+wa-dropdown-item[variant="danger"] .ticket-context-menu__icon { color: #c33149; }

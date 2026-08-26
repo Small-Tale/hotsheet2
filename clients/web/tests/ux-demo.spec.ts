@@ -144,6 +144,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await row.click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Ticket actions' });
   await expect(menu).toBeVisible();
+  const menuItems = menu.locator('wa-dropdown-item');
+  await expect(menuItems).toHaveCount(9);
+  expect(await menuItems.evaluateAll(items => items.every(item => item.querySelector('[data-lucide]') !== null))).toBe(true);
   await expect(row).toHaveAttribute('data-selected', 'true');
   await menu.getByText('Toggle Up Next', { exact: true }).click();
   await expect(star).not.toHaveClass(/active/);

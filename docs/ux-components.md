@@ -256,6 +256,12 @@ The trailing inspector shown in the wireframe.
 The component catalog records composition relationships. Its sidebar shows clickable
 “Uses” and “Used by” links for the selected demo so composed components can be reviewed
 in either direction.
+
+Production web component CSS is colocated in `clients/web/src/components/` and imported
+by its component module. The `/ux-demo` stylesheet owns only catalog shell, inspector,
+and stage presentation, ensuring the demo exercises the same CSS the real app imports.
+Actionable context-menu entries consistently pair their text with meaningful Lucide
+icons; structural separators do not require icons.
 - `TagPicker`
 - `AddTagButton`
 - tag removal, creation, autocomplete, unsupported-provider, and validation states

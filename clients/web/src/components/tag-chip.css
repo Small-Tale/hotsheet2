@@ -1,0 +1,2 @@
+wa-tag[data-component="tag-chip"] { height: auto; min-height: 0; padding: .2rem .4rem; line-height: 1; }
+wa-tag[data-component="tag-chip"][data-disabled="true"] { opacity: .48; pointer-events: none; }
