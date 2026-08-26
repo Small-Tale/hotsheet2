@@ -76,11 +76,14 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Verified');
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
+  await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(156, 163, 175)');
   await expect(row).toContainText('regression');
   await expect(row.locator('[data-lucide="star"]')).toHaveCount(0);
   await expect(row).not.toContainText('AI working');
   await expect(row).toHaveAttribute('data-selected', 'true');
-  await expect(row).toContainText('urgent priority');
+  await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);
+  await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(239, 68, 68)');
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/needs-review/);
   await row.click();
   await expect(selected).toHaveJSProperty('checked', false);
@@ -134,6 +137,11 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await page.goto('/ux-demo?component=tag-chip');
   const chip = page.locator('[data-component="tag-chip"]');
   await expect(chip).toContainText('needs-design');
+  const padding = await chip.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { horizontal: Number.parseFloat(style.paddingLeft), vertical: Number.parseFloat(style.paddingTop) };
+  });
+  expect(padding.horizontal / padding.vertical).toBeCloseTo(2, 1);
   const toggle = page.locator('[data-action="toggle-settings"]');
   await expect(toggle).toHaveCount(1);
   await expect(toggle).toContainText('Settings');

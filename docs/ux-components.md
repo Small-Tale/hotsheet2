@@ -154,12 +154,15 @@ selection where sensible.
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible name.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
-    command palette; a configured icon replaces category text and appears before the title
+    command palette; a configured icon replaces category text and appears before the title.
+    Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon
+    stroke for visibility
   - slug/native ticket identifier
   - title
   - up-next/star toggle
   - tag chips
-  - priority
+  - priority uses the HS1 directional Lucide semantics and colors immediately after
+    the title: double-up red, up orange, bidirectional gray, and down blue
   - assignee, active tool, or connection indicator
   - relative updated time
   - selected, unread, claimed, blocked, busy, review-needed, and provider states
@@ -238,7 +241,7 @@ The trailing inspector shown in the wireframe.
 - `TagList`
 - `TagChip` — **built**: Web Awesome tag primitive, stable domain identity, compact
   filled, non-pill default presentation plus optional variants, disabled/removable behavior, unit tests, and interactive
-  `/ux-demo` coverage
+  `/ux-demo` coverage. Tag padding uses a compact 2:1 horizontal-to-vertical ratio.
 
 The component catalog records composition relationships. Its sidebar shows clickable
 “Uses” and “Used by” links for the selected demo so composed components can be reviewed

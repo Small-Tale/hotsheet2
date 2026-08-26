@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeTicketRowProps, ticketRowIndicator } from './ticket-row';
+import { getPriorityPresentation, normalizeTicketRowProps, ticketRowIndicator } from './ticket-row';
 
 describe('TicketRow', () => {
   it('normalizes fallbacks, tags, and boolean defaults', () => {
@@ -17,5 +17,15 @@ describe('TicketRow', () => {
     expect(ticketRowIndicator({ upNext: true })).toBe('up-next');
     expect(ticketRowIndicator({ upNext: true, blocked: true })).toBe('blocked');
     expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true })).toBe('needs-review');
+  });
+
+  it('maps HS2 priorities onto the HS1 icon and color semantics', () => {
+    expect(Object.fromEntries((['urgent', 'high', 'default', 'low'] as const).map(priority => {
+      const presentation = getPriorityPresentation(priority);
+      return [priority, [presentation.name, presentation.color]];
+    }))).toEqual({
+      urgent: ['chevrons-up', '#ef4444'], high: ['chevron-up', '#f97316'],
+      default: ['chevrons-up-down', '#6b7280'], low: ['chevron-down', '#3b82f6'],
+    });
   });
 });

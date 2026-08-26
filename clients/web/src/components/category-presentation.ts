@@ -29,3 +29,9 @@ export function resolveCategoryIcon(name?: string): IconNode | undefined {
 export function resolveCategoryColor(color?: string): string {
   return CATEGORY_COLORS.some(option => option.value === color) ? color! : '#6b7280';
 }
+
+/** Neutral remains pale for filled controls but needs darker strokes on white. */
+export function resolveCategoryIconColor(color?: string): string {
+  const resolved = resolveCategoryColor(color);
+  return resolved === '#e5e7eb' ? '#9ca3af' : resolved;
+}
