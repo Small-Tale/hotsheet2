@@ -1,7 +1,7 @@
 # 06. Clients
 
-> **Status: Confirmed** (maintainer, 2026-08-19). Sequencing:
-> **1) Tauri + web → 2) native SwiftUI macOS → 3) native SwiftUI iOS → 4) Android
+> **Status: Confirmed** (maintainer, revised 2026-08-26). Sequencing:
+> **1) browser web UX → 2) Tauri host → 3) native SwiftUI macOS → 4) native SwiftUI iOS → 5) Android
 > (Kotlin/Compose).** **Every client is a pure API consumer — no client embeds the
 > core.** The server is always a separate process (local included), which the
 > client auto-starts if needed and which outlives it.
@@ -41,7 +41,13 @@ resolves the local server via `~/.hotsheet/instance.json`; if none is running it
 client quits** (in-flight AI work and terminals survive). Full lifecycle:
 [04-core-server-cli.md](04-core-server-cli.md) §4.3.1.
 
-## 6.3 Tauri desktop client
+## 6.3 Web client and Tauri desktop host
+
+- **Web first.** Build and iterate on the Kerf web client in a normal browser before
+  adding its Tauri host. A `/ux-demo` route renders the real production components
+  against deterministic mock service adapters for isolated and composed UX review.
+  Keep the platform-neutral component responsibilities close to the planned macOS
+  SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it
@@ -268,6 +274,7 @@ Net: one consistent reader mode, kind-driven rendering, and a smooth path from t
 constrained detail-panel editor to a spacious full-surface editor.
 
 ## 6.9 Cross-references
+- UX component inventory and `/ux-demo` contract: [ux-components.md](ux-components.md)
 - Server-side PTY manager that hosts the arbiter: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.4
 - The server clients talk to + its auto-start lifecycle: [04-core-server-cli.md](04-core-server-cli.md) §4.3.1
 - Remote/mTLS + mobile pairing: [08-distributed-and-remote.md](08-distributed-and-remote.md)

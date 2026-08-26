@@ -182,14 +182,22 @@ core** (§9.1e). Tauri desktop (Rust shell that *launches/supervises* the local
 server + holds the mTLS proxy for remote) + native SwiftUI (macOS/iOS, HTTP/WS,
 remote-first on iOS). Android later, same API. No `uniffi`/JNI bindings.
 
-**Sequencing (confirmed):**
-1. **Tauri + web** to feature floor first (direct successor to HS1's UI, fastest
-   path to a usable app; the web build lands with it).
-2. **Native SwiftUI macOS.**
-3. **Native SwiftUI iOS** (remote-first — no local server on iOS).
-4. **Android (Kotlin/Compose).**
+**Sequencing (confirmed, revised 2026-08-26):**
+1. **Browser web UX** to feature floor first for the fastest iteration. Its
+   `/ux-demo` route uses real production components with deterministic mock adapters.
+2. **Tauri host** for that web client, adding desktop server lifecycle and proxy work.
+3. **Native SwiftUI macOS**, following the same conceptual component structure.
+4. **Native SwiftUI iOS** (remote-first — no local server on iOS).
+5. **Android (Kotlin/Compose).**
 
 Detail: [06](06-clients.md).
+
+**Sub-decision (cross-client component architecture)** (maintainer, 2026-08-26).
+The web and macOS SwiftUI clients use closely corresponding feature-component
+boundaries, responsibilities, state inputs, and semantic actions. They do not mirror
+rendering primitives: Kerf/Web Awesome and SwiftUI each use their platform's idioms.
+The maintained inventory and `/ux-demo` contract are in
+[ux-components.md](ux-components.md).
 
 **Sub-decision (client UI framework) — Kerf (`kerfjs`)** (maintainer, 2026-08-22 —
 **revises** the 2026-08-19 Solid pick). The Tauri web UI uses **Kerf**, the
@@ -341,7 +349,7 @@ authority; capability negotiation honestly handles tracker differences. Detail:
 | — | Default-provider storage / ID / index | Git files, ULID + all-caps slug, SQLite+FTS5; external providers retain native ids — §9.1/§9.15 |
 | — | Automatic conflict resolution | Required; semantic merge driver — §9.1a / [02](02-ticket-storage.md) §2.7 |
 | S1 | Notes storage | **Inline**, each note a timestamp-ordered UUID — [02](02-ticket-storage.md) §2.6 |
-| C1 | Client sequencing | **Tauri+web → SwiftUI macOS → SwiftUI iOS → Android** — §9.5 |
+| C1 | Client sequencing | **Browser web UX → Tauri host → SwiftUI macOS → SwiftUI iOS → Android** — §9.5 |
 | — | Attachments | Supported (first-class) — [02](02-ticket-storage.md) §2.5 |
 | — | Server topology | **One server per machine** (all local projects) — [04](04-core-server-cli.md) §4.3 |
 | — | MCP delivery | **Per-project MCP shim** (not server-direct) — [05](05-ai-tool-plugins.md) §5.8 |

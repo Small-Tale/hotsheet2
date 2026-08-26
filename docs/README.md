@@ -89,7 +89,8 @@ and don't imply reading order — read by group.
 | Doc | Topic | Status |
 |---|---|---|
 | [04-core-server-cli.md](04-core-server-cli.md) | Shared core, server (+lifecycle), CLI, MCP, merge driver | Decided |
-| [06-clients.md](06-clients.md) | Tauri+web → SwiftUI macOS → iOS → Android; terminal sizing; notes/reader | Decided |
+| [06-clients.md](06-clients.md) | Browser web UX → Tauri → SwiftUI macOS → iOS → Android; terminal sizing; notes/reader | Decided |
+| [ux-components.md](ux-components.md) | Cross-client component architecture and real-component `/ux-demo` catalog | Initial inventory |
 
 **E · AI-tool integration**
 | Doc | Topic | Status |
@@ -129,8 +130,8 @@ and don't imply reading order — read by group.
 > **shared-vs-local data on-disk (gitignored), index is only a cache** · inline
 > notes with timestamp-ordered UUIDs · attachments · **server always a separate
 > process (local included), client auto-starts it and it outlives the client;
-> clients never embed the core** · client order Tauri+web → SwiftUI macOS → iOS →
-> Android · plugin-only AI tools.
+> clients never embed the core** · client order browser web UX → Tauri host →
+> SwiftUI macOS → iOS → Android · plugin-only AI tools.
 >
 > **Round-2 confirmations (2026-08-19, §9.11):** one server per machine · per-project
 > MCP shim · close-reason open/closed axis · id-prefix sharding · PTY sizing
@@ -204,9 +205,9 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Drive/transport interface (steer a running tool) | 13, 05 §5.5 | Partial (HS2-106/108: `Drive` trait + spawn-shape `SpawnDrive`, manifest `[drive]` decl, `host::trigger` (plugin→drive→registry); persistent-channel drives (`AppServerDrive`/`ClaudeChannelDrive`) + async `TurnEvent` stream (incl. `Usage`) + `hotsheet-cli trigger`/`work` + server `dist_work_loop` shipped — HS2-115/HS2-DTPX2V/HS2-1TY7GC. Remaining: live-tool protocol verification) |
 | Connection registry + busy tracking | 05 §5.6 | Partial (HS2-107: `ConnectionRegistry` + sliding-window busy; `live::pump_turn` heartbeats it per streamed event; a tool launched in a terminal (`POST /terminals connect:<tool>`) registers a `Pty` connection whose busy is fed from the terminal's OSC-133/spinner inference — HS2-4M67VN) |
 | Trigger / permissions bridge | 05 §5.5, §5.7 | Partial/Shipped (`hotsheet-cli trigger`/`work`; FIFO `SharedPermissionBridge` (blocking + timeout) + durable Always-rules; server `/permissions`,`/permissions/{id}`,`/permissions/ask` routes; codex approval path + Claude PreToolUse `permission-hook` — HS2-11/HS2-9R9YZW/HS2-YMR9HE/HS2-XCTAHM) |
-| Tauri + web client (1st) | 06 | Confirmed |
-| Native SwiftUI macOS (2nd) → iOS (3rd) | 06 | Confirmed |
-| Android client (4th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |
+| Browser web UX client (1st) → Tauri host (2nd) | 06, UX catalog | Partial; dev-only Hono `/ux-demo` catalog/master-detail/settings scaffold and first real `TagChip` are built with unit + browser E2E coverage; broader feature floor and Tauri host remain |
+| Native SwiftUI macOS (3rd) → iOS (4th) | 06, UX catalog | Confirmed; macOS follows the same conceptual component responsibilities using native SwiftUI primitives |
+| Android client (5th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |
 | Code organization (Cargo workspace/crates) + test strategy | 12 | Decided |
 | PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; deterministic/idempotent HS2 identity and normalized close state shipped; UI flow deferred) |
 | Multi-server orchestration (live-mount only; no auto-clone) | 08 §8.2 | Confirmed (design) |

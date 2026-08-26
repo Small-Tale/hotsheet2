@@ -30,7 +30,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     src/api.ts               #   Typed server client for providers, connections, tickets, and copy/move
     src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
+    src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
+    src/components/          #   Production domain UI components (TagChip first)
+    src/ux-demo/             #   Categorized master/detail catalog, mock demo state, optional settings drawer
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
+    tests/ux-demo.spec.ts    #   Real-browser catalog navigation + TagChip settings/removal flow
   crates/
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)
@@ -233,7 +237,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 | Slug derivation | `hotsheet-model/src/ids.rs` |
 | Store layout / sharding | `hotsheet-ticketing/src/store.rs`, [02](02-ticket-storage.md) §2.3 |
 | HS1 → git migration | `migrator/` + `hotsheet-cli/src/import.rs` (stable HS2 ids, close-state normalization; no retained HS1 fields), [07](07-migration.md) |
-| Web client UI foundation | `spikes/kerf-webawesome/` (Kerf morph/events + Web Awesome components/offline bundle), [06](06-clients.md) |
+| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/}` (dev-only Hono catalog + first real component), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md) |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
 | Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |
