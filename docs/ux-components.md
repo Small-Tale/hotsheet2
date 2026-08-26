@@ -407,7 +407,8 @@ occupies a dedicated grid column and shrinks the detail surface; at narrower wid
 overlays the content to preserve usable demo space. One viewport-anchored toggle stays
 in the same location and changes between “Settings” and “Close settings”; opening the
 inspector must not introduce a second control or a moving pointer target. It should
-grow to provide:
+also keep stateful Web Awesome control properties synchronized when a demo reset
+restores its canonical mock state. It should grow to provide:
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios

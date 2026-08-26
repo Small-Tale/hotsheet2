@@ -53,6 +53,18 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await chip.locator('[part~="remove-button"]').click();
   await expect(page.getByText('Remove requested for demo-tag')).toBeVisible();
   await expect(inspector).toBeVisible();
+  await inspector.getByRole('button', { name: 'Reset' }).click();
+  await expect(label).toHaveJSProperty('value', 'needs-design');
+  await expect(page.locator('wa-select[name="variant"]')).toHaveJSProperty('value', 'neutral');
+  await expect(page.locator('wa-select[name="appearance"]')).toHaveJSProperty('value', 'filled-outlined');
+  await expect(page.locator('wa-select[name="size"]')).toHaveJSProperty('value', 'small');
+  await expect(inspector.locator('wa-checkbox[name="removable"]')).toHaveJSProperty('checked', true);
+  await expect(inspector.locator('wa-checkbox[name="pill"]')).toHaveJSProperty('checked', true);
+  await expect(inspector.locator('wa-checkbox[name="disabled"]')).toHaveJSProperty('checked', false);
+  await expect(chip).toContainText('needs-design');
+  await expect(chip).toHaveAttribute('variant', 'neutral');
+  await expect(page.getByText('No actions yet')).toBeVisible();
+  await expect(inspector).toBeVisible();
   await toggle.click();
   await expect(inspector).toBeHidden();
   await expect(toggle).toContainText('Settings');

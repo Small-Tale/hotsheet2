@@ -12,7 +12,22 @@ export const tagChipSettings = {
   event: signal('No actions yet'),
 };
 
-export function resetTagChipDemo(): void {
+type LiveControl = HTMLElement & { checked: boolean; value: string };
+
+export function syncTagChipSettingsControls(root: ParentNode): void {
+  const control = (name: string) => root.querySelector(`[data-settings="tag-chip"] [name="${name}"]`) as LiveControl | null;
+  const setValue = (name: string, value: string) => { const item = control(name); if (item) item.value = value; };
+  const setChecked = (name: string, checked: boolean) => { const item = control(name); if (item) item.checked = checked; };
+  setValue('label', tagChipSettings.label.value);
+  setValue('variant', tagChipSettings.variant.value);
+  setValue('appearance', tagChipSettings.appearance.value);
+  setValue('size', tagChipSettings.size.value);
+  setChecked('removable', tagChipSettings.removable.value);
+  setChecked('pill', tagChipSettings.pill.value);
+  setChecked('disabled', tagChipSettings.disabled.value);
+}
+
+export function resetTagChipDemo(controlRoot?: ParentNode): void {
   tagChipSettings.label.value = 'needs-design';
   tagChipSettings.variant.value = 'neutral';
   tagChipSettings.appearance.value = 'filled-outlined';
@@ -21,6 +36,7 @@ export function resetTagChipDemo(): void {
   tagChipSettings.pill.value = true;
   tagChipSettings.disabled.value = false;
   tagChipSettings.event.value = 'No actions yet';
+  if (controlRoot) syncTagChipSettingsControls(controlRoot);
 }
 
 export function TagChipDemo() {

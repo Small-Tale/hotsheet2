@@ -62,7 +62,7 @@ function selectDemo(id: string, push = true): void {
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefault(); selectDemo((target as HTMLElement).dataset.demoId!); });
 delegate(root, 'click', '[data-action="toggle-settings"]', () => { settingsOpen.value = !settingsOpen.value; });
-delegate(root, 'click', '[data-action="reset-settings"]', () => resetTagChipDemo());
+delegate(root, 'click', '[data-action="reset-settings"]', () => resetTagChipDemo(root));
 delegate(root, 'input', '[data-settings="tag-chip"] [name="label"]', (_event, target) => { tagChipSettings.label.value = (target as FormControl).value; });
 delegate(root, 'change', '[data-settings="tag-chip"] [name]', (_event, target) => {
   const control = target as FormControl;
