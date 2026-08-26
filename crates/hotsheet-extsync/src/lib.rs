@@ -3,11 +3,15 @@
 //! boundary and never mirror them into the default git store.
 
 pub mod github;
+pub mod gitlab;
+pub mod jira;
 
 pub use github::{
     GitHubConfig, GitHubProvider, GitHubTransport, GitHubWebhook, HttpResponse,
     UreqGitHubTransport, parse_webhook,
 };
+pub use gitlab::{GitLabConfig, GitLabProvider};
+pub use jira::{JiraConfig, JiraProvider};
 
 use std::sync::Arc;
 
@@ -33,6 +37,12 @@ pub fn live_provider(
         "github" => Ok(Arc::new(GitHubProvider::live(
             GitHubConfig::from_connection(connection, token)?,
         ))),
+        "gitlab" => Ok(Arc::new(GitLabProvider::live(
+            GitLabConfig::from_connection(connection, token)?,
+        ))),
+        "jira" => Ok(Arc::new(JiraProvider::live(JiraConfig::from_connection(
+            connection, token,
+        )?))),
         provider => Err(ProviderError::Conflict {
             ticket: connection.id.clone(),
             message: format!("external provider '{provider}' is not implemented"),
@@ -43,6 +53,15 @@ pub fn live_provider(
 pub fn descriptor(connection: &ProviderConnection) -> Result<ProviderDescriptor, ProviderError> {
     match connection.provider.as_str() {
         "github" => Ok(GitHubProvider::live(GitHubConfig::from_connection(
+            connection,
+            String::new(),
+        )?)
+        .descriptor()),
+        "jira" => Ok(
+            JiraProvider::live(JiraConfig::from_connection(connection, String::new())?)
+                .descriptor(),
+        ),
+        "gitlab" => Ok(GitLabProvider::live(GitLabConfig::from_connection(
             connection,
             String::new(),
         )?)

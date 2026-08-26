@@ -9,7 +9,10 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
-use hotsheet_extsync::{GitHubConfig, GitHubProvider, GitHubTransport, HttpResponse};
+use hotsheet_extsync::{
+    GitHubConfig, GitHubProvider, GitHubTransport, GitLabConfig, GitLabProvider, HttpResponse,
+    JiraConfig, JiraProvider,
+};
 
 const SECRET: &str = "test-secret";
 
@@ -2790,6 +2793,87 @@ async fn direct_github_provider_runs_through_provider_routes_without_mirroring()
             .unwrap()
             .is_empty(),
         "direct provider operations must not mirror into the git store"
+    );
+}
+
+#[tokio::test]
+async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract() {
+    let (dir, st) = state();
+    let gitlab = GitLabProvider::new(
+        GitLabConfig {
+            connection_id: "gitlab-main".into(),
+            project: "acme/repo".into(),
+            api_base: "https://gitlab.test/api/v4".into(),
+            token: "fixture".into(),
+            default: false,
+        },
+        Arc::new(FakeGitHub {
+            responses: Mutex::new(
+                vec![github_response(
+                    200,
+                    serde_json::json!([{
+                        "iid":4,"title":"gitlab remote","description":"body","state":"opened",
+                        "web_url":"https://gitlab.test/acme/repo/-/issues/4",
+                        "created_at":"2026-08-26T00:00:00Z","updated_at":"2026-08-26T00:01:00Z",
+                        "closed_at":null,"labels":[],"assignees":[]
+                    }]),
+                )]
+                .into(),
+            ),
+        }),
+    );
+    let jira = JiraProvider::new(
+        JiraConfig {
+            connection_id: "jira-eng".into(),
+            project_key: "ENG".into(),
+            base_url: "https://jira.test".into(),
+            email: "dev@example.com".into(),
+            token: "fixture".into(),
+            default: false,
+        },
+        Arc::new(FakeGitHub {
+            responses: Mutex::new(
+                vec![github_response(
+                    200,
+                    serde_json::json!({
+                        "isLast":true,"issues":[{
+                            "key":"ENG-9","fields":{"summary":"jira remote","description":null,
+                            "status":{"statusCategory":{"key":"new"}},"priority":{"name":"Medium"},
+                            "issuetype":{"name":"Task"},"labels":[],"assignee":null,
+                            "created":"2026-08-26T00:00:00Z","updated":"2026-08-26T00:01:00Z",
+                            "resolutiondate":null}
+                        }]
+                    }),
+                )]
+                .into(),
+            ),
+        }),
+    );
+    let app = app(st
+        .with_ticket_provider(Arc::new(gitlab))
+        .with_ticket_provider(Arc::new(jira)));
+    for (connection, qualified) in [
+        ("gitlab-main", "gitlab-main:4"),
+        ("jira-eng", "jira-eng:ENG-9"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/providers/{connection}/tickets"),
+                None,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body_json(response).await[0]["qualified_id"], qualified);
+    }
+    assert!(
+        FsStore::open(dir.path())
+            .unwrap()
+            .list_tickets()
+            .unwrap()
+            .is_empty()
     );
 }
 

@@ -164,7 +164,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Capability | Where | Status |
 |---|---|---|
 | Git-repo file-per-ticket storage | 02, 17 | Confirmed; **parser + FsStore built** (`hotsheet-model::format`, `hotsheet-ticketing::store`) |
-| Pluggable authoritative ticket providers (git default; direct GitHub/Jira/GitLab) | 16 | Partial: provider contract/capabilities/qualified wire identity/config registry + git adapter + CLI/server/MCP discovery/routes built (HS2-ZVZP80); GitHub HS2-JAXS4Z, GitLab/Jira HS2-0RK4YC, transfer HS2-A90JRH, client connections HS2-VFXFFP |
+| Pluggable authoritative ticket providers (git default; direct GitHub/Jira/GitLab) | 16 | Shipped except client connection UI and GitHub live credential validation: provider contract/capabilities/qualified wire identity/config registry + git adapter + CLI/server/MCP discovery/routes (HS2-ZVZP80); idempotent transfer (HS2-A90JRH); direct GitHub (HS2-JAXS4Z) and GitLab/Jira (HS2-0RK4YC) adapters; client connections remain HS2-VFXFFP |
 | Standalone foreground server launch | 04 §4.3 | Shipped: `hotsheet-cli serve` resolves a sibling/PATH server, rejects version drift, and forwards start/stop; detached supervision remains client-owned |
 | Multiple ticket stores per project (mixed permissions/locality) | 02 | Confirmed |
 | Every **git-provider store** is a git repo (local-only = no remote) | 02 §2.1 | Confirmed |

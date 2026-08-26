@@ -238,6 +238,19 @@ ticket. GitHub has no issue-creation idempotency key, so its capability advertis
 `provider_idempotency: false`; transfer provenance is still recorded and retries
 resolve it, while the host coordinator serializes same-process attempts.
 
+Built in the GitLab/Jira increment: both adapters use the same provider-neutral
+routes and qualified identity contract without creating git-store mirrors. GitLab
+maps project issue IIDs, URLs, labels, usernames, and notes; uses project-issue
+pagination and incremental `updated_after` reads; and explicitly declines assignment
+because its write API requires numeric provider-native user IDs. Jira Cloud maps
+issue keys, browse URLs, ADF descriptions/comments, status categories, priorities,
+types, labels, and account IDs; uses enhanced JQL search with opaque page tokens; and
+declines close/status transitions unless a future connection supplies an explicit
+project-workflow mapping. Both expose opaque optimistic-concurrency tokens, typed
+authentication/rate-limit failures, local date-bound filtering, server-owned
+credential references, deterministic fake-transport coverage, and opt-in live drift
+tests.
+
 ## 16.12 Cross-references
 
 - Git provider format and guarantees: [02-ticket-storage.md](02-ticket-storage.md)
