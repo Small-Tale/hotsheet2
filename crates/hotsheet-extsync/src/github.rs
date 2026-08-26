@@ -1115,10 +1115,14 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "creates and closes a real GitHub issue; set HOTSHEET_GITHUB_LIVE_REPO and HOTSHEET_GITHUB_LIVE_TOKEN"]
+    #[ignore = "creates and closes a real GitHub issue; set HOTSHEET_GITHUB_LIVE_REPO and store github-live in the OS keychain (or set HOTSHEET_GITHUB_LIVE_TOKEN)"]
     fn github_live_crud_against_dedicated_test_repository() {
         let repository = std::env::var("HOTSHEET_GITHUB_LIVE_REPO").expect("live repository");
-        let token = std::env::var("HOTSHEET_GITHUB_LIVE_TOKEN").expect("live token");
+        let token = std::env::var("HOTSHEET_GITHUB_LIVE_TOKEN").unwrap_or_else(|_| {
+            hotsheet_ticketing::KeyRegistry::new("", hotsheet_ticketing::OsKeychain)
+                .get("github-live")
+                .expect("HOTSHEET_GITHUB_LIVE_TOKEN or OS-keychain entry 'github-live'")
+        });
         let mut config = GitHubConfig::new("github-live", repository, token);
         if let Ok(base) = std::env::var("HOTSHEET_GITHUB_LIVE_API_BASE") {
             config.api_base = base;
