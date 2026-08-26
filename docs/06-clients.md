@@ -78,6 +78,12 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   bundle makes no external requests. Web Awesome 3.11 form controls emit host-level
   standard `input` / `change` events—not `wa-input` / `wa-change`; component lifecycle
   events retain names such as `wa-show` / `wa-hide`.
+- **Iconography: Lucide only** (maintainer, 2026-08-26). Decorative and symbolic
+  UI never uses emoji or font glyphs as stand-in icons. All clients share the Lucide
+  metaphor and render official Lucide assets through a platform-appropriate shared
+  component. Adjacent text owns accessibility meaning; icon-only controls have an
+  explicit accessible name. Ask before choosing when multiple Lucide metaphors are
+  materially plausible.
 - **Platforms:** macOS primary; Linux/Windows via the same Tauri pipeline as HS1
   (best-effort, community-tested).
 

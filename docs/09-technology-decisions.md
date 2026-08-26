@@ -226,6 +226,14 @@ standard host `input`/`change` events (there are no `wa-input`/`wa-change` alias
 dismissal, and an offline production bundle. Pro-only components remain optional and
 require a separate license decision if adopted.
 
+**Sub-decision (iconography) — Lucide only** (maintainer, 2026-08-26).
+Use official Lucide icons as the shared symbolic vocabulary across clients. Emoji,
+Unicode geometric shapes/dingbats, and other font characters must not serve as
+decorative icons. Feature components consume a shared platform icon renderer rather
+than embedding copied SVG paths. Decorative icons are accessibility-hidden when text
+already communicates the state; icon-only controls are explicitly named. When more
+than one Lucide metaphor is a genuinely good fit, the maintainer chooses the standard.
+
 ---
 
 ## 9.6 Transport & API: **JSON REST + WebSocket + MCP** — **Decided**

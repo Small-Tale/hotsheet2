@@ -33,7 +33,7 @@ body { margin: 0; min-width: 52rem; }
 .settings-toggle { position: fixed; z-index: 20; top: 1.5rem; right: 1.5rem; width: 8.5rem; }
 wa-tag[data-disabled="true"] { opacity: .48; pointer-events: none; }
 .status-badge { display: inline-flex; align-items: center; gap: .3rem; width: max-content; padding: .22rem .5rem; border-radius: 999px; color: #555762; background: #eeeef2; font-size: .72rem; font-weight: 700; white-space: nowrap; }
-.status-badge__icon { font-size: .85rem; line-height: 1; }
+.status-badge__icon { width: .85rem; height: .85rem; flex: none; }
 .status-badge--started { color: #60450b; background: #fff0c9; }
 .status-badge--completed { color: #17623c; background: #dff4e8; }
 .status-badge--verified { color: #27508f; background: #dfebff; }

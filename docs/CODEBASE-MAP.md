@@ -31,7 +31,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, connections, tickets, and copy/move
     src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
     src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
-    src/components/          #   Production domain UI components (TagChip, StatusBadge, initial TicketRow)
+    src/components/          #   Production domain UI components + shared official-Lucide SVG renderer/policy gate
     src/ux-demo/             #   Categorized master/detail catalog, component mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
     tests/ux-demo.spec.ts    #   Real-browser catalog + bidirectional TagChip/StatusBadge/TicketRow interaction contracts

@@ -1,3 +1,6 @@
+import { Archive, BadgeCheck, Circle, CircleCheck, Clock, type IconNode } from 'lucide';
+import { LucideIcon } from './lucide-icon';
+
 export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog';
 
 export interface StatusBadgeProps {
@@ -5,12 +8,12 @@ export interface StatusBadgeProps {
   showIcon?: boolean;
 }
 
-const presentation: Record<TicketStatus, { icon: string; label: string }> = {
-  not_started: { icon: '○', label: 'Not started' },
-  started: { icon: '◐', label: 'Started' },
-  completed: { icon: '●', label: 'Completed' },
-  verified: { icon: '✓', label: 'Verified' },
-  backlog: { icon: '◇', label: 'Backlog' },
+const presentation: Record<TicketStatus, { icon: IconNode; iconName: string; label: string }> = {
+  not_started: { icon: Circle, iconName: 'circle', label: 'Not started' },
+  started: { icon: Clock, iconName: 'clock', label: 'Started' },
+  completed: { icon: CircleCheck, iconName: 'circle-check', label: 'Completed' },
+  verified: { icon: BadgeCheck, iconName: 'badge-check', label: 'Verified' },
+  backlog: { icon: Archive, iconName: 'archive', label: 'Backlog' },
 };
 
 export function statusPresentation(status: TicketStatus) {
@@ -21,7 +24,7 @@ export function StatusBadge({ status, showIcon = true }: StatusBadgeProps) {
   const value = statusPresentation(status);
   return (
     <span class={`status-badge status-badge--${status}`} data-component="status-badge" data-status={status}>
-      {showIcon && <span class="status-badge__icon" aria-hidden="true">{value.icon}</span>}
+      {showIcon && <LucideIcon class="status-badge__icon" icon={value.icon} name={value.iconName} />}
       <span>{value.label}</span>
     </span>
   );

@@ -7,6 +7,9 @@ describe('StatusBadge', () => {
     expect(statuses.map(status => statusPresentation(status).label)).toEqual([
       'Not started', 'Started', 'Completed', 'Verified', 'Backlog',
     ]);
+    expect(statuses.map(status => statusPresentation(status).iconName)).toEqual([
+      'circle', 'clock', 'circle-check', 'badge-check', 'archive',
+    ]);
     expect(statuses.every(status => statusPresentation(status).icon.length > 0)).toBe(true);
   });
 });

@@ -43,6 +43,11 @@ Rules for both clients:
   responsibilities—not afterthoughts added only to a screen.
 - Platform conventions may change presentation while preserving the same feature
   boundary and outcome.
+- All decorative/symbolic iconography uses official Lucide icons through a shared
+  platform renderer. Never use emoji, geometric Unicode characters, dingbats, or
+  other font glyphs as icons. Hide decorative icons from accessibility when adjacent
+  text carries the meaning, and name icon-only controls. Ask the maintainer when
+  multiple Lucide metaphors are materially plausible.
 
 ## 2. Application shell and navigation
 
@@ -204,7 +209,7 @@ The trailing inspector shown in the wireframe.
   - `PriorityPicker`
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone and
-    optional reinforcing icon; unit and bidirectional `/ux-demo` coverage
+    optional reinforcing Lucide icon; unit and bidirectional `/ux-demo` coverage
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection`

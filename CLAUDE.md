@@ -55,6 +55,16 @@ remain prefixed (for example `wa-show`, `wa-hide`, `wa-after-show`, and
 and executable browser tests live in [`spikes/kerf-webawesome/`](spikes/kerf-webawesome/);
 the durable rationale is in [`docs/09-technology-decisions.md`](docs/09-technology-decisions.md).
 
+Use **Lucide icons** for all decorative or symbolic client iconography across web,
+Tauri, SwiftUI, and later clients. Never substitute emoji, Unicode geometric shapes,
+dingbats, or other font characters (for example `◇`, `✓`, or `●`) as icons. Render
+official Lucide assets through a shared icon component; do not copy SVG path markup
+into feature components. Decorative icons are hidden from assistive technology when
+adjacent text carries the meaning; icon-only controls require an accessible name.
+Literal characters in user-authored content, code, or text whose actual content is
+the character are unaffected. If several Lucide icons are materially good semantic
+choices, ask the maintainer which metaphor to standardize before committing one.
+
 <!-- hotsheet:begin section=testing-philosophy v=2 -->
 ## Testing Philosophy
 

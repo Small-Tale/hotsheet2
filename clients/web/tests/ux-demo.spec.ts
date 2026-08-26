@@ -16,21 +16,25 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   await page.goto('/ux-demo?component=status-badge');
   const badge = page.locator('[data-component="status-badge"]');
   await expect(badge).toContainText('Started');
+  await expect(badge.locator('[data-lucide="clock"]')).toHaveAttribute('aria-hidden', 'true');
   await page.locator('[data-action="toggle-settings"]').click();
   const inspector = page.getByRole('complementary', { name: 'StatusBadge settings' });
   const status = inspector.locator('wa-select[name="status"]');
   const icon = inspector.locator('wa-checkbox[name="show-icon"]');
   await status.evaluate((node: HTMLElement & { value: string }) => { node.value = 'verified'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await icon.click();
   await expect(badge).toContainText('Verified');
+  await expect(badge.locator('[data-lucide="badge-check"]')).toHaveCount(1);
+  await icon.click();
   await expect(badge.locator('.status-badge__icon')).toHaveCount(0);
   await inspector.getByRole('button', { name: 'Reset' }).click();
   await expect(status).toHaveJSProperty('value', 'started');
   await expect(icon).toHaveJSProperty('checked', true);
   await expect(badge).toContainText('Started');
+  await expect(badge.locator('[data-lucide="clock"]')).toHaveCount(1);
   await expect(badge.locator('.status-badge__icon')).toHaveCount(1);
   await status.evaluate((node: HTMLElement & { value: string }) => { node.value = 'completed'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(badge).toContainText('Completed');
+  await expect(badge.locator('[data-lucide="circle-check"]')).toHaveCount(1);
 });
 
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
