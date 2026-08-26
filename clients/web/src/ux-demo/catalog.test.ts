@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDevApp } from '../dev-server';
-import { demoCatalog, findDemo, flattenCatalog } from './catalog';
+import { demosUsing, demoCatalog, findDemo, flattenCatalog } from './catalog';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
 import { resetTicketRowDemo, ticketRowSettings } from './ticket-row-demo';
@@ -11,6 +11,9 @@ describe('UX demo catalog', () => {
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
     expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['ticket-row', 'status-badge', 'tag-chip']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
+    expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
+    expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row']);
+    expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
   });
 
   it('serves UX markup only when development is explicitly enabled', async () => {
@@ -36,8 +39,8 @@ describe('UX demo catalog', () => {
       removable: tagChipSettings.removable.value, pill: tagChipSettings.pill.value,
       disabled: tagChipSettings.disabled.value, event: tagChipSettings.event.value,
     }).toEqual({
-      label: 'needs-design', variant: 'neutral', appearance: 'filled-outlined', size: 'small',
-      removable: true, pill: true, disabled: false, event: 'No actions yet',
+      label: 'needs-design', variant: 'neutral', appearance: 'filled', size: 'small',
+      removable: true, pill: false, disabled: false, event: 'No actions yet',
     });
   });
 
@@ -55,20 +58,27 @@ describe('UX demo catalog', () => {
     ticketRowSettings.category.value = 'bug';
     ticketRowSettings.tags.value = 'one';
     ticketRowSettings.upNext.value = false;
+    ticketRowSettings.blocked.value = true;
+    ticketRowSettings.needsReview.value = true;
     ticketRowSettings.selected.value = true;
     ticketRowSettings.busy.value = false;
+    ticketRowSettings.categoryIcon.value = 'bug';
+    ticketRowSettings.categoryColor.value = '#ef4444';
     ticketRowSettings.event.value = 'Changed';
     resetTicketRowDemo();
     expect({
       title: ticketRowSettings.title.value, status: ticketRowSettings.status.value,
       priority: ticketRowSettings.priority.value, category: ticketRowSettings.category.value,
       tags: ticketRowSettings.tags.value, upNext: ticketRowSettings.upNext.value,
+      blocked: ticketRowSettings.blocked.value, needsReview: ticketRowSettings.needsReview.value,
       selected: ticketRowSettings.selected.value, busy: ticketRowSettings.busy.value,
+      categoryIcon: ticketRowSettings.categoryIcon.value, categoryColor: ticketRowSettings.categoryColor.value,
       event: ticketRowSettings.event.value,
     }).toEqual({
       title: 'Build the first client ticket list', status: 'started', priority: 'high',
       category: 'feature', tags: 'client, ux', upNext: true, selected: false,
-      busy: true, event: 'No actions yet',
+      blocked: false, needsReview: false, busy: true, categoryIcon: 'sparkles',
+      categoryColor: '#3b82f6', event: 'No actions yet',
     });
   });
 });

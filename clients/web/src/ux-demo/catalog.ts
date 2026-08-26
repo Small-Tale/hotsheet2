@@ -1,9 +1,9 @@
 export type DemoPhase = 'feature-floor' | 'desktop' | 'later';
-export interface DemoDefinition { id: string; name: string; description: string; phase: DemoPhase; implemented?: boolean }
+export interface DemoDefinition { id: string; name: string; description: string; phase: DemoPhase; implemented?: boolean; uses?: string[] }
 export interface DemoCategory { id: string; name: string; children?: DemoCategory[]; demos?: DemoDefinition[] }
 
-const demo = (id: string, name: string, description: string, phase: DemoPhase = 'feature-floor', implemented = false): DemoDefinition =>
-  ({ id, name, description, phase, implemented });
+const demo = (id: string, name: string, description: string, phase: DemoPhase = 'feature-floor', implemented = false, uses?: string[]): DemoDefinition =>
+  ({ id, name, description, phase, implemented, uses });
 
 export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
@@ -16,7 +16,7 @@ export const demoCatalog: DemoCategory[] = [
     { id: 'ticket-list', name: 'List', demos: [
       demo('quick-ticket-composer', 'QuickTicketComposer', 'Compact ticket creation that expands in place.'),
       demo('ticket-list', 'TicketList', 'Virtualized, live, keyboard-navigable ticket collection.'),
-      demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true),
+      demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true, ['status-badge', 'tag-chip']),
     ]},
     { id: 'ticket-board', name: 'Columns', demos: [
       demo('ticket-board', 'TicketBoard', 'Status/category column workspace.'),
@@ -84,4 +84,8 @@ export function flattenCatalog(categories: DemoCategory[] = demoCatalog): DemoDe
 
 export function findDemo(id: string): DemoDefinition | undefined {
   return flattenCatalog().find(item => item.id === id);
+}
+
+export function demosUsing(id: string): DemoDefinition[] {
+  return flattenCatalog().filter(item => item.uses?.includes(id));
 }

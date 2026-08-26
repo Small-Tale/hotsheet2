@@ -34,7 +34,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/          #   Production domain UI components + shared official-Lucide SVG renderer/policy gate
     src/ux-demo/             #   Categorized master/detail catalog, component mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
-    tests/ux-demo.spec.ts    #   Real-browser catalog + bidirectional TagChip/StatusBadge/TicketRow interaction contracts
+    tests/ux-demo.spec.ts    #   Real-browser catalog relationships + bidirectional TagChip/StatusBadge/responsive TicketRow/context-menu contracts
   crates/
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)

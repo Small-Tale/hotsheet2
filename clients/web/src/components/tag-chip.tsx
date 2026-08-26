@@ -22,10 +22,10 @@ export function normalizeTagChipProps(props: TagChipProps): NormalizedTagChipPro
     id: props.id,
     label: props.label.trim() || 'Untitled tag',
     variant: props.variant ?? 'neutral',
-    appearance: props.appearance ?? 'filled-outlined',
+    appearance: props.appearance ?? 'filled',
     size: props.size ?? 'small',
     removable: props.removable ?? false,
-    pill: props.pill ?? true,
+    pill: props.pill ?? false,
     disabled: props.disabled ?? false,
   };
 }

@@ -4,8 +4,8 @@ import { normalizeTagChipProps } from './tag-chip';
 describe('TagChip', () => {
   it('provides stable compact defaults', () => {
     expect(normalizeTagChipProps({ id: 'tag-1', label: ' needs-design ' })).toEqual({
-      id: 'tag-1', label: 'needs-design', variant: 'neutral', appearance: 'filled-outlined',
-      size: 'small', removable: false, pill: true, disabled: false,
+      id: 'tag-1', label: 'needs-design', variant: 'neutral', appearance: 'filled',
+      size: 'small', removable: false, pill: false, disabled: false,
     });
   });
 

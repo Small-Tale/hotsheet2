@@ -5,10 +5,10 @@ import { syncSettingsControls } from './settings-controls';
 export const tagChipSettings = {
   label: signal('needs-design'),
   variant: signal<TagChipVariant>('neutral'),
-  appearance: signal<TagChipAppearance>('filled-outlined'),
+  appearance: signal<TagChipAppearance>('filled'),
   size: signal<TagChipSize>('small'),
   removable: signal(true),
-  pill: signal(true),
+  pill: signal(false),
   disabled: signal(false),
   event: signal('No actions yet'),
 };
@@ -23,10 +23,10 @@ export function syncTagChipSettingsControls(root: ParentNode): void {
 export function resetTagChipDemo(controlRoot?: ParentNode): void {
   tagChipSettings.label.value = 'needs-design';
   tagChipSettings.variant.value = 'neutral';
-  tagChipSettings.appearance.value = 'filled-outlined';
+  tagChipSettings.appearance.value = 'filled';
   tagChipSettings.size.value = 'small';
   tagChipSettings.removable.value = true;
-  tagChipSettings.pill.value = true;
+  tagChipSettings.pill.value = false;
   tagChipSettings.disabled.value = false;
   tagChipSettings.event.value = 'No actions yet';
   if (controlRoot) syncTagChipSettingsControls(controlRoot);

@@ -2,7 +2,7 @@
 
 > **Status: initial inventory; implementation started.** The development-only Hono
 > `/ux-demo` catalog shell and production `TagChip`, `StatusBadge`, and initial
-> `TicketRow` components are built in `clients/web` (HS2-61XG15/HS2-H0T0MV). This
+> `TicketRow` components are built in `clients/web` (HS2-61XG15/HS2-H0T0MV/HS2-RP0FKP). This
 > catalog is derived from the
 > [list-mode wireframe](design/exports/Main%20Interface%20Wireframe%20-%20List%20Mode.png),
 > the structural SVG export beside it, and the client requirements in
@@ -146,10 +146,15 @@ selection where sensible.
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active
   - `TicketRowDivider`
-- `TicketRow` — **initial demo built**: title, qualified slug, category, status,
-  priority, tags, Up Next, selection, and AI-busy presentation; the remaining states
-  and actions below grow this same component boundary
-  - category/type icon
+- `TicketRow` — **demo built**: a shared, horizontally responsive ticket-summary
+  boundary for list and narrow column use. It includes a two-line clamped title,
+  qualified slug, status, priority, tags, a blue selection treatment, AI-busy
+  presentation, keyboard selection, and a representative right-click context menu.
+  The left rail is reserved for special-state attention in HS1 precedence order:
+  needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
+  the familiar yellow Lucide star with an accessible name.
+  - category/type icon and color use a serializable Lucide name plus the HS1 custom
+    command palette; a configured icon replaces category text and appears before the title
   - slug/native ticket identifier
   - title
   - up-next/star toggle
@@ -158,13 +163,14 @@ selection where sensible.
   - assignee, active tool, or connection indicator
   - relative updated time
   - selected, unread, claimed, blocked, busy, review-needed, and provider states
-  - row actions/context menu and drag affordance
+  - production mutations behind row context-menu actions and drag affordance
 
 ### 3.3 `ColumnWorkspace` — feature floor
 
 - `TicketBoard`
 - `TicketColumn` with heading, count, loading, and empty states
-- `TicketCard` using the same ticket-summary model and semantic actions as `TicketRow`
+- `TicketCard` is the narrow column presentation of the same responsive ticket-summary
+  component contract and semantic actions as `TicketRow`, not an independent component
 - keyboard and pointer movement between columns
 - explicit mutation preview/error handling when a provider lacks the target field
 
@@ -231,8 +237,12 @@ The trailing inspector shown in the wireframe.
 
 - `TagList`
 - `TagChip` — **built**: Web Awesome tag primitive, stable domain identity, compact
-  presentation variants, disabled/removable behavior, unit tests, and interactive
+  filled, non-pill default presentation plus optional variants, disabled/removable behavior, unit tests, and interactive
   `/ux-demo` coverage
+
+The component catalog records composition relationships. Its sidebar shows clickable
+“Uses” and “Used by” links for the selected demo so composed components can be reviewed
+in either direction.
 - `TagPicker`
 - `AddTagButton`
 - tag removal, creation, autocomplete, unsupported-provider, and validation states

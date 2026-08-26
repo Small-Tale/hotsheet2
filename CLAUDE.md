@@ -55,6 +55,10 @@ remain prefixed (for example `wa-show`, `wa-hide`, `wa-after-show`, and
 and executable browser tests live in [`spikes/kerf-webawesome/`](spikes/kerf-webawesome/);
 the durable rationale is in [`docs/09-technology-decisions.md`](docs/09-technology-decisions.md).
 
+Keep shared domain components aligned across clients and presentations. In particular,
+list and column tickets use one responsive ticket-summary component contract (rather
+than separate row/card behavior) that remains usable at narrow horizontal sizes.
+
 Use **Lucide icons** for all decorative or symbolic client iconography across web,
 Tauri, SwiftUI, and later clients. Never substitute emoji, Unicode geometric shapes,
 dingbats, or other font characters (for example `◇`, `✓`, or `●`) as icons. Render
