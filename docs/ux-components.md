@@ -106,16 +106,20 @@ The left region in the wireframe, scoped to the selected project/store connectio
 ### 2.3 `WorkspaceHeader` — feature floor
 
 - `WorkspaceHeader` — **demo built**: responsive project/view identity, compact
-  all-Lucide Tahoe-style toolbar groups, inline expanding live search, a functional
+  all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   sort menu, and a connected list/column/settings workspace
+- `ToolbarControlGroup` — **built**: shared rounded-border container for toolbar
+  buttons, segmented choices, and popup triggers; child controls do not draw their
+  own borders or divider lines
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, and project settings** with
   accessible pressed state. Settings replaces ticket content while active rather
   than opening a transient popover; later dashboard/analytics modes join the control.
 - `SortControl` — popup menu with current-sort check state
 - `SavedOrCommandMenu`
-- `SearchButton` and `SearchField` expansion — the field grows inline immediately
-  before the trailing search button without adding a second header row
+- `SearchButton` and `SearchField` expansion — the magnifier button is replaced by
+  an animated, wider field carrying the same icon and automatic focus. An empty
+  field collapses on blur; a non-empty query remains expanded.
 
 ### 2.4 `ProjectTabBar` — feature floor
 

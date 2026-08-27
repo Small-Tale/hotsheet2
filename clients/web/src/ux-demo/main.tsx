@@ -136,12 +136,16 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
   workspaceMode.value = (target as HTMLElement).dataset.viewMode as typeof workspaceMode.value;
   recordCollectionEvent(`${workspaceMode.value === 'list' ? 'List' : 'Columns'} view selected`);
 });
-delegate(root, 'click', '[data-action="toggle-workspace-search"]', () => {
-  workspaceSearchOpen.value = !workspaceSearchOpen.value;
-  if (!workspaceSearchOpen.value) workspaceSearchQuery.value = '';
-  else queueMicrotask(() => { focusWorkspaceSearch(root); });
+delegate(root, 'click', '[data-action="open-workspace-search"]', () => {
+  workspaceSearchOpen.value = true;
+  queueMicrotask(() => { focusWorkspaceSearch(root); });
 });
 delegate(root, 'input', '[name="workspace-search"]', (_event, target) => { workspaceSearchQuery.value = (target as FormControl).value; });
+delegate(root, 'focusout', '[name="workspace-search"]', () => {
+  queueMicrotask(() => {
+    if (workspaceSearchQuery.value === '') workspaceSearchOpen.value = false;
+  });
+});
 delegate(root, 'click', '[data-sort]', (_event, target) => {
   workspaceSort.value = (target as HTMLElement).dataset.sort as typeof workspaceSort.value;
   recordCollectionEvent(`Sorted by ${workspaceSort.value}`);

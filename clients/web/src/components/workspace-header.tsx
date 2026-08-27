@@ -5,6 +5,7 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import { ArrowDownAZ, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
 import type { IconNode } from 'lucide';
 import { LucideIcon } from './lucide-icon';
+import { ToolbarControlGroup } from './toolbar-control-group';
 import './workspace-header.css';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'settings';
@@ -34,21 +35,26 @@ export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = fals
   return <header class="workspace-header" data-component="workspace-header">
     <div class="workspace-header__identity"><p>{projectName}</p><h1>{viewName}</h1></div>
     <div class="workspace-header__actions">
-      <div class="view-mode-switcher" role="group" aria-label="View mode">
+      <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
         <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
         <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
-      </div>
-      <wa-dropdown class="workspace-header__sort" placement="bottom-end">
-        <wa-button slot="trigger" appearance="outlined" with-caret aria-label="Sort tickets" title="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button>
-        {sortOptions.map(option => <wa-dropdown-item type="checkbox" checked={sort === option.value} data-sort={option.value} value={option.value}>{option.label}</wa-dropdown-item>)}
-      </wa-dropdown>
-      <div class="workspace-header__utility-group" role="group" aria-label="View actions">
+      </ToolbarControlGroup>
+      <ToolbarControlGroup className="workspace-header__sort-group">
+        <wa-dropdown class="workspace-header__sort" placement="bottom-end">
+          <wa-button slot="trigger" appearance="plain" with-caret aria-label="Sort tickets" title="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button>
+          {sortOptions.map(option => <wa-dropdown-item type="checkbox" checked={sort === option.value} data-sort={option.value} value={option.value}>{option.label}</wa-dropdown-item>)}
+        </wa-dropdown>
+      </ToolbarControlGroup>
+      <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
         <wa-button appearance="plain" data-action="toggle-favorite" aria-label="Favorite view" title="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>
         <wa-button appearance="plain" data-action="more-workspace-actions" aria-label="More workspace actions" title="More workspace actions"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
-      </div>
-      {searchOpen && <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} autofocus clearable></wa-input>}
-      <wa-button class="workspace-header__search-button" appearance="outlined" data-action="toggle-workspace-search" aria-label={searchOpen ? 'Close search' : 'Search tickets'} title={searchOpen ? 'Close search' : 'Search tickets'}><LucideIcon icon={Search} name="search" /></wa-button>
+      </ToolbarControlGroup>
+      <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen}>
+        {searchOpen
+          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} autofocus clearable><span slot="start"><LucideIcon icon={Search} name="search" /></span></wa-input>
+          : <wa-button class="workspace-header__search-button" appearance="plain" data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
+      </ToolbarControlGroup>
     </div>
   </header>;
 }

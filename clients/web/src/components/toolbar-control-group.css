@@ -1,0 +1,4 @@
+.toolbar-control-group { display: inline-flex; align-items: center; flex: 0 0 auto; gap: .15rem; padding: .2rem; border: 1px solid #d7d9df; border-radius: 999px; background: #eceef2; }
+.toolbar-control-group > button { border: 0; }
+.toolbar-control-group wa-button::part(base) { border: 0; background: transparent; }
+.toolbar-control-group wa-button::part(base):hover { background: #fff; }
