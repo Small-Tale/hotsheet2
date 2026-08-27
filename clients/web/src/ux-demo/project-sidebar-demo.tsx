@@ -26,7 +26,7 @@ export const sidebarCommands: CommandNavigationItem[] = [
 function DemoFrame({ children }: { children: unknown }) {
   return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail">{children}</div><p class="component-stage__event" aria-live="polite">{sidebarEvent.value}</p></section>;
 }
-export function ProjectSummaryDemo() { return <DemoFrame><ProjectSummary completed={42} inProgress={6} coverage={84} trend={[3, 1, 2, 5, 4, 7, 6]} /></DemoFrame>; }
+export function ProjectSummaryDemo() { return <DemoFrame><ProjectSummary completedToday={6} inProgress={3} trend={[3, 1, 2, 5, 4, 7, 6]} /></DemoFrame>; }
 export function RepositorySummaryDemo() { return <DemoFrame><RepositorySummary branch="feature/client-sidebar" unpushed={6} uncommitted={2} /></DemoFrame>; }
 export function ViewNavigationDemo() { return <DemoFrame><ViewNavigation items={sidebarViews} selectedId={selectedViewId.value} /></DemoFrame>; }
 export function CommandNavigationDemo() { return <DemoFrame><CommandNavigation label="Project commands" expanded={commandGroupExpanded.value} commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} /></DemoFrame>; }

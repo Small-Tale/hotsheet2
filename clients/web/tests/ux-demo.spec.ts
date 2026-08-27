@@ -512,8 +512,9 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
 test('exercises the five ProjectSidebar component demos and their controlled transitions', async ({ page }) => {
   await page.goto('/ux-demo?component=project-summary');
   const summary = page.locator('[data-component="project-summary"]');
-  await expect(summary).toContainText('42 completed');
-  await expect(summary).toContainText('84% coverage');
+  await expect(summary).toContainText('6 completed today');
+  await expect(summary).toContainText('3 currently in progress');
+  await expect(summary).not.toContainText('%');
   await expect(summary.locator('[data-bar]')).toHaveCount(7);
 
   await page.goto('/ux-demo?component=repository-summary');

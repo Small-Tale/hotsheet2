@@ -82,11 +82,11 @@ Supporting components:
 
 The left region in the wireframe, scoped to the selected project/store connection.
 
-- `ProjectSummary` — **demo built**: typed compact ticket-completion trend,
-  completed/in-progress totals, and an explicitly labeled test-coverage percentage
+- `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
+  completed-today count, and current in-progress count. The ambiguous day-over-day
+  percentage from the wireframe is intentionally omitted.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
-  - `CoverageOrProgressIndicator` for the secondary percentage shown in the wireframe
 - `RepositorySummary` — **demo built**: one accessible branch/status action with
   unpushed and uncommitted counts
   - `BranchChip`
