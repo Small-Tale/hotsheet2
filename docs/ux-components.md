@@ -112,7 +112,8 @@ The left region in the wireframe, scoped to the selected project/store connectio
   buttons, segmented choices, and popup triggers; child controls do not draw their
   own borders or divider lines. A single control highlights the whole group on
   hover; controls in multi-item groups receive individual 32px highlights inside
-  the 40px shell.
+  the 40px shell. Slotted Lucide icons share explicit sizing, block layout, and
+  vertical centering across native and Web Awesome buttons.
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, and project settings** with
   accessible pressed state. Settings replaces ticket content while active rather
@@ -156,7 +157,9 @@ selection where sensible.
 - `QuickTicketComposer` — **demo built**: compact launcher expands to title/category,
   provider destination, required-title validation, create, and cancel states; creation
   inserts a selected mock ticket into the shared collection. Category choices use
-  the shared colored/iconic picker; textual Cancel intentionally has no redundant icon.
+  the shared colored/iconic picker in both its selected and menu presentations;
+  created mock tickets derive their category icon/color from that same choice model.
+  Textual Cancel intentionally has no redundant icon.
   - compact “New ticket…” entry
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities
@@ -246,11 +249,15 @@ as a focused shell around separately demoed `TicketInfoPanel`, `TicketTimeline`,
   - close/collapse action
 - `InspectorTabBar`
   - `TicketInfoPanel` — **demo built**: metadata, details, and tags
-  - `TicketTimeline` — **demo built**: chronological activity and note count
-  - `TicketAttachments` — **demo built**: attachment rows and total
+  - `TicketTimeline` — **demo built**: chronological activity whose displayed total
+    is derived from the rendered entry collection
+  - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
+    derived from the rendered attachment collection
 - `TicketMetadataEditor`
-  - `TicketCategorySelect` — **demo built**: configured category icons and colors
-  - `TicketPrioritySelect` — **demo built**: semantic priority icons
+  - `TicketCategorySelect` — **demo built**: configured category icons and colors in
+    both selected-value and popup-option presentations
+  - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
+    selected-value and popup-option presentations
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact

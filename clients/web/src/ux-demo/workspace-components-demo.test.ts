@@ -16,7 +16,7 @@ describe('connected workspace demo state', () => {
     composerTitle.value = 'A newly composed ticket';
     composerCategory.value = 'bug';
     expect(createDemoTicket()).toBe(true);
-    expect(collectionTickets.value[0]).toMatchObject({ title: 'A newly composed ticket', category: 'bug', selected: true });
+    expect(collectionTickets.value[0]).toMatchObject({ title: 'A newly composed ticket', category: 'bug', selected: true, categoryIcon: 'bug', categoryColor: '#ef4444' });
     expect(collectionTickets.value.slice(1).every(ticket => !ticket.selected)).toBe(true);
   });
 

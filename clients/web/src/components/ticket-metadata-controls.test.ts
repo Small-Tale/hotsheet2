@@ -17,7 +17,11 @@ describe('ticket metadata controls and inspector panels', () => {
 
   it('renders inspector sections independently of the inspector shell', () => {
     expect(String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }))).toContain('data-component="ticket-info-panel"');
-    expect(String(TicketTimeline({ noteCount: 4 }))).toContain('4 notes total');
-    expect(String(TicketAttachments({ attachmentCount: 2 }))).toContain('2 attachments total');
+    const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', text: 'One note' }] }));
+    expect(timeline.match(/<li/g)).toHaveLength(1);
+    expect(timeline).toContain('1 note total');
+    const attachments = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }] }));
+    expect(attachments.match(/data-attachment-id=/g)).toHaveLength(1);
+    expect(attachments).toContain('1 attachment total');
   });
 });

@@ -16,5 +16,9 @@ export const DEFAULT_TICKET_CATEGORIES: readonly TicketCategoryChoice[] = [
 
 export interface TicketCategorySelectProps { name: string; value: string; label?: string; choices?: readonly TicketCategoryChoice[] }
 export function TicketCategorySelect({ name, value, label = 'Category', choices = DEFAULT_TICKET_CATEGORIES }: TicketCategorySelectProps) {
-  return <wa-select class="ticket-category-select" name={name} label={label} value={value}>{choices.map(choice => <wa-option value={choice.value}><span slot="start" class="ticket-category-select__icon" style={`color:${choice.color}`}><LucideIcon icon={choice.icon} name={choice.iconName} /></span>{choice.label}</wa-option>)}</wa-select>;
+  const selected = choices.find(choice => choice.value === value);
+  return <wa-select class="ticket-category-select" name={name} label={label} value={value}>
+    {selected && <span slot="start" class="ticket-category-select__icon ticket-category-select__icon--selected" style={`color:${selected.color}`}><LucideIcon icon={selected.icon} name={selected.iconName} /></span>}
+    {choices.map(choice => <wa-option value={choice.value}><span slot="start" class="ticket-category-select__icon" style={`color:${choice.color}`}><LucideIcon icon={choice.icon} name={choice.iconName} /></span>{choice.label}</wa-option>)}
+  </wa-select>;
 }

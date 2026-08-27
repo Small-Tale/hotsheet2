@@ -294,6 +294,7 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
   const groups = demo.locator('.toolbar-control-group');
   await expect(groups).toHaveCount(4);
+  for (const icon of ['arrow-down-a-z', 'star', 'ellipsis', 'pin']) await expect(demo.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   const heights = await groups.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
   expect(new Set(heights).size).toBe(1);
   const popup = demo.locator('wa-button[with-caret]');
@@ -320,6 +321,14 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
     return { height: button.getBoundingClientRect().height, background: getComputedStyle(node).backgroundColor };
   });
   expect(groupedGeometry).toEqual({ height: 32, background: 'rgb(255, 255, 255)' });
+  const iconAlignment = await groupedButton.evaluate(node => {
+    const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
+    const icon = node.querySelector<HTMLElement>('[data-lucide]');
+    if (!button || !icon) return null;
+    const buttonBox = button.getBoundingClientRect(); const iconBox = icon.getBoundingClientRect();
+    return Math.abs((buttonBox.top + buttonBox.height / 2) - (iconBox.top + iconBox.height / 2));
+  });
+  expect(iconAlignment).toBeLessThan(1);
   await expect(demo.getByRole('heading', { name: 'Single button' })).toBeVisible();
 });
 
@@ -334,12 +343,16 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(form).toBeVisible();
   await title.fill('Created from the UX demo');
   const category = form.locator('wa-select[name="new-ticket-category"]');
+  await expect(category.locator('.ticket-category-select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(form.locator('.ticket-category-select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await form.getByRole('button', { name: 'Create ticket' }).click();
-  await expect(page.getByRole('listbox', { name: 'Recently updated tickets' })).toContainText('Created from the UX demo');
+  const createdList = page.getByRole('listbox', { name: 'Recently updated tickets' });
+  await expect(createdList).toContainText('Created from the UX demo');
+  await expect(createdList.locator('[data-component="ticket-list-row"]').first().locator('[data-lucide="bug"]')).toBeVisible();
   await expect(page.getByText(/HS2-DEMO\d created/)).toBeVisible();
   await page.getByRole('button', { name: /New ticket/ }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Discard this');
@@ -360,15 +373,21 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector).toContainText('Build TicketList and TicketBoard');
   await expect(inspector.getByRole('button', { name: 'Info' })).toHaveAttribute('aria-current', 'page');
   await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
-  await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(1);
-  await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(1);
+  await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(2);
+  await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(2);
+  await expect(inspector.locator('.ticket-category-select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   await inspector.getByRole('button', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
+  await expect(inspector.locator('.ticket-inspector__timeline > li')).toHaveCount(2);
+  await expect(inspector.getByText('2 notes total')).toBeVisible();
   await inspector.getByRole('button', { name: 'Attachments' }).click();
   await expect(inspector.locator('[data-component="ticket-attachments"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
+  await expect(inspector.locator('[data-attachment-id]')).toHaveCount(2);
+  await expect(inspector.getByText('2 attachments total')).toBeVisible();
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();

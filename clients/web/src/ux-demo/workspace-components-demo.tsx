@@ -5,6 +5,7 @@ import { TicketInspector, type InspectorTab } from '../components/ticket-inspect
 import { TicketList } from '../components/ticket-list';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import type { TicketRowProps } from '../components/ticket-row';
+import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
@@ -56,7 +57,8 @@ export function createDemoTicket(): boolean {
   const title = composerTitle.value.trim();
   if (!title) return false;
   const slug = `HS2-DEMO${demoSequence++}`;
-  collectionTickets.value = [{ slug, title, status: 'not_started', priority: 'default', category: composerCategory.value, tags: ['new'], selected: true, categoryColor: '#3b82f6', updatedLabel: 'Now' }, ...collectionTickets.value.map(ticket => ({ ...ticket, selected: false }))];
+  const category = DEFAULT_TICKET_CATEGORIES.find(choice => choice.value === composerCategory.value)!;
+  collectionTickets.value = [{ slug, title, status: 'not_started', priority: 'default', category: category.value, tags: ['new'], selected: true, categoryIcon: category.iconName, categoryColor: category.color, updatedLabel: 'Now' }, ...collectionTickets.value.map(ticket => ({ ...ticket, selected: false }))];
   composerExpanded.value = false;
   composerTitle.value = '';
   collectionEvent.value = `${slug} created`;

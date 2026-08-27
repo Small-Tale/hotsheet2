@@ -13,5 +13,9 @@ const PRIORITIES: readonly { value: TicketPriority; label: string; color: string
 ];
 export interface TicketPrioritySelectProps { name: string; value: TicketPriority; label?: string }
 export function TicketPrioritySelect({ name, value, label = 'Priority' }: TicketPrioritySelectProps) {
-  return <wa-select class="ticket-priority-select" name={name} label={label} value={value}>{PRIORITIES.map(priority => <wa-option value={priority.value}><span slot="start" class="ticket-priority-select__icon" style={`color:${priority.color}`}><LucideIcon icon={priority.icon} name={priority.iconName} /></span>{priority.label}</wa-option>)}</wa-select>;
+  const selected = PRIORITIES.find(priority => priority.value === value)!;
+  return <wa-select class="ticket-priority-select" name={name} label={label} value={value}>
+    <span slot="start" class="ticket-priority-select__icon ticket-priority-select__icon--selected" style={`color:${selected.color}`}><LucideIcon icon={selected.icon} name={selected.iconName} /></span>
+    {PRIORITIES.map(priority => <wa-option value={priority.value}><span slot="start" class="ticket-priority-select__icon" style={`color:${priority.color}`}><LucideIcon icon={priority.icon} name={priority.iconName} /></span>{priority.label}</wa-option>)}
+  </wa-select>;
 }
