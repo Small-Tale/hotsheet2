@@ -1,4 +1,4 @@
-.ticket-list { display: grid; width: 100%; max-width: 70rem; margin: 0 auto; background: #fff; }
+.ticket-list { display: grid; width: 100%; max-width: 70rem; margin: 0 auto; overflow: hidden; border-radius: .65rem; background: #fff; }
 .ticket-list > .ticket-list-row-container:first-child .ticket-list-row { border-radius: .65rem .65rem 0 0; }
 .ticket-list > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 .65rem .65rem; }
 .ticket-list > .ticket-list-row-container:only-child .ticket-list-row { border-radius: .65rem; }

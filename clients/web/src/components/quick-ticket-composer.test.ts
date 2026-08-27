@@ -7,6 +7,8 @@ describe('QuickTicketComposer', () => {
     const expanded = String(QuickTicketComposer({ expanded: true, title: 'New work', category: 'bug' }));
     expect(expanded).toContain('data-action="create-ticket-form"');
     expect(expanded).toContain('value="New work"');
+    expect(expanded).toContain('data-lucide="bug"');
+    expect(expanded).not.toContain('data-lucide="x"');
     const disabled = String(QuickTicketComposer({ expanded: true, canCreate: false, providerName: 'Read-only Jira' }));
     expect(disabled).toContain('does not support creating tickets');
     expect(disabled).toContain('disabled');

@@ -200,6 +200,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const list = page.getByRole('listbox', { name: 'Example ticket list' });
   const listRows = list.locator('[data-component="ticket-list-row"]');
   await expect(listRows).toHaveCount(5);
+  await expect(list).toHaveCSS('border-radius', '10.4px');
   const listRow = listRows.first();
   const listWidth = await listRow.evaluate(node => node.getBoundingClientRect().width);
   expect(listWidth).toBeGreaterThan(600);
@@ -255,6 +256,8 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const closedHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   const searchGroup = header.locator('.workspace-header__search-group');
   const collapsedWidth = await searchGroup.evaluate(node => node.getBoundingClientRect().width);
+  const collapsedHeight = await searchGroup.evaluate(node => node.getBoundingClientRect().height);
+  expect(collapsedWidth).toBeCloseTo(collapsedHeight, 0);
   const findButton = header.getByRole('button', { name: 'Search tickets' });
   await findButton.click();
   await expect(findButton).toHaveCount(0);
@@ -290,15 +293,18 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   await page.goto('/ux-demo?component=toolbar-control-group');
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
   const groups = demo.locator('.toolbar-control-group');
-  await expect(groups).toHaveCount(3);
+  await expect(groups).toHaveCount(4);
   const heights = await groups.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
   expect(new Set(heights).size).toBe(1);
   const popup = demo.locator('wa-button[with-caret]');
-  const gap = await popup.evaluate(node => {
+  const caretSpacing = await popup.evaluate(node => {
     const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="button"]');
-    return button ? getComputedStyle(button).gap : null;
+    const caret = node.shadowRoot?.querySelector<HTMLElement>('[part~="caret"]');
+    return button && caret ? { gap: getComputedStyle(button).gap, margin: getComputedStyle(caret).marginInlineStart, width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height } : null;
   });
-  expect(gap).toBe('2px');
+  expect(caretSpacing).toEqual({ gap: '2px', margin: '2px', width: 48, height: 32 });
+  const popupGroupWidth = await groups.nth(1).evaluate(node => node.getBoundingClientRect().width);
+  expect(popupGroupWidth - caretSpacing!.width).toBeCloseTo(8.4, 0);
   await popup.hover();
   await expect(groups.nth(1)).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   const popupBackground = await popup.evaluate(node => {
@@ -306,7 +312,7 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
     return button ? getComputedStyle(button).backgroundColor : null;
   });
   expect(popupBackground).toBe('rgba(0, 0, 0, 0)');
-  const groupedButton = demo.locator('wa-button[aria-label="Favorite view"]');
+  const groupedButton = demo.locator('wa-button[aria-label="Favorite view"]').first();
   await groupedButton.hover();
   const groupedGeometry = await groupedButton.evaluate(node => {
     const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
@@ -314,6 +320,7 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
     return { height: button.getBoundingClientRect().height, background: getComputedStyle(node).backgroundColor };
   });
   expect(groupedGeometry).toEqual({ height: 32, background: 'rgb(255, 255, 255)' });
+  await expect(demo.getByRole('heading', { name: 'Single button' })).toBeVisible();
 });
 
 test('expands, validates, creates, and cancels through QuickTicketComposer', async ({ page }) => {
@@ -327,13 +334,18 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(form).toBeVisible();
   await title.fill('Created from the UX demo');
   const category = form.locator('wa-select[name="new-ticket-category"]');
+  await category.click();
+  await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
+  await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await form.getByRole('button', { name: 'Create ticket' }).click();
   await expect(page.getByRole('listbox', { name: 'Recently updated tickets' })).toContainText('Created from the UX demo');
   await expect(page.getByText(/HS2-DEMO\d created/)).toBeVisible();
   await page.getByRole('button', { name: /New ticket/ }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Discard this');
-  await page.getByRole('button', { name: /Cancel/ }).click();
+  const cancel = page.getByRole('button', { name: /Cancel/ });
+  await expect(cancel.locator('[data-lucide="x"]')).toHaveCount(0);
+  await cancel.click();
   await expect(page.getByText('Ticket creation cancelled')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveCount(0);
   const launcher = page.getByRole('button', { name: /New ticket/ });
@@ -348,9 +360,14 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector).toContainText('Build TicketList and TicketBoard');
   await expect(inspector.getByRole('button', { name: 'Info' })).toHaveAttribute('aria-current', 'page');
   await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
+  await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(1);
+  await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(1);
+  await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   await inspector.getByRole('button', { name: 'Timeline' }).click();
+  await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Attachments' }).click();
+  await expect(inspector.locator('[data-component="ticket-attachments"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
@@ -359,6 +376,13 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector).toHaveCount(0);
   await page.getByRole('button', { name: 'Open ticket inspector' }).click();
   await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+});
+
+test('renders standalone ticket metadata and inspector-section demos', async ({ page }) => {
+  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-attachments', 'ticket-attachments']] as const) {
+    await page.goto(`/ux-demo?component=${id}`);
+    await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`))).toBeVisible();
+  }
 });
 
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {

@@ -52,6 +52,9 @@ body { margin: 0; min-width: 52rem; }
 .toolbar-control-group-demo h2 { margin: 0 0 .65rem; color: #73747d; font-size: .8rem; }
 .toolbar-control-group-demo wa-button::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: 999px; }
 .toolbar-control-group-demo wa-button::part(button) { gap: 2px; }
+.toolbar-control-group-demo wa-button::part(caret) { margin-inline-start: 2px; }
+.metadata-control-demo { display: grid; width: min(24rem, 100%); margin: auto; padding: 3rem; }
+.inspector-panel-demo { width: min(27rem, 100%); margin: auto; overflow: hidden; border: 1px solid #d9dbe1; border-radius: .8rem; background: #fff; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .09); }
 @media (min-width: 78rem) {
   .demo-shell--settings-open { grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr) minmax(23rem, 27rem); }
   .settings-inspector { position: sticky; grid-column: 3; grid-row: 1; inset: auto; width: auto; height: 100vh; z-index: auto; box-shadow: none; }

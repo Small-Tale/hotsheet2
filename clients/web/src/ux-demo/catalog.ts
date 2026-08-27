@@ -14,7 +14,7 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'tickets', name: 'Ticket workspace', children: [
     { id: 'ticket-list', name: 'List', demos: [
-      demo('quick-ticket-composer', 'QuickTicketComposer', 'Compact ticket creation that expands in place.', 'feature-floor', true, ['ticket-list']),
+      demo('quick-ticket-composer', 'QuickTicketComposer', 'Compact ticket creation that expands in place.', 'feature-floor', true, ['ticket-category-select', 'ticket-list']),
       demo('ticket-list', 'TicketList', 'Responsive, keyboard-navigable ticket collection.', 'feature-floor', true, ['ticket-row']),
       demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true, ['status-badge', 'tag-chip']),
     ]},
@@ -28,7 +28,12 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'inspector', name: 'Ticket inspector', children: [
     { id: 'metadata', name: 'Metadata', demos: [
-      demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['status-badge', 'tag-chip']),
+      demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['ticket-info-panel', 'ticket-timeline', 'ticket-attachments']),
+      demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, and tags inspector section.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'status-badge', 'tag-chip']),
+      demo('ticket-timeline', 'TicketTimeline', 'Chronological ticket activity inspector section.', 'feature-floor', true),
+      demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true),
+      demo('ticket-category-select', 'TicketCategorySelect', 'Category chooser with configured icons and colors.', 'feature-floor', true),
+      demo('ticket-priority-select', 'TicketPrioritySelect', 'Priority chooser with semantic icons.', 'feature-floor', true),
       demo('metadata-editor', 'TicketMetadataEditor', 'Capability-aware category, priority, and status fields.'),
       demo('status-badge', 'StatusBadge', 'Readable ticket state with reinforcing iconography.', 'feature-floor', true),
       demo('tag-chip', 'TagChip', 'Compact tag label with optional removal behavior.', 'feature-floor', true),

@@ -1,5 +1,9 @@
 .toolbar-control-group { display: inline-flex; align-items: center; flex: 0 0 auto; gap: .15rem; box-sizing: border-box; height: 2.525rem; padding: .2rem; border: 1px solid #d7d9df; border-radius: 999px; background: #eceef2; }
 .toolbar-control-group > button { border: 0; }
+.toolbar-control-group > wa-button { min-width: 2rem; height: 2rem; }
+.toolbar-control-group[data-single="true"] > wa-dropdown { width: 3rem; min-width: 3rem; height: 2rem; }
+.toolbar-control-group[data-single="true"] > wa-dropdown > wa-button { width: 3rem; height: 2rem; }
+.toolbar-control-group[data-single="true"] > wa-dropdown > wa-button::part(base) { width: 3rem; height: 2rem; }
 .toolbar-control-group wa-button::part(base) { border: 0; }
 .toolbar-control-group[data-single="true"]:hover { background: #fff; }
 .toolbar-control-group[data-single="true"] wa-button { --wa-color-fill-quiet: transparent; }

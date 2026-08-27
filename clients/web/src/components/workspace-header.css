@@ -11,7 +11,8 @@
 .workspace-header__actions wa-button::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: 999px; }
 .workspace-header__sort wa-button::part(base) { width: 3rem; }
 .workspace-header__sort wa-button::part(button) { gap: 2px; }
-.workspace-header__search-group { width: 2.4rem; overflow: hidden; transition: width .25s ease, background-color .2s ease, border-color .2s ease; }
+.workspace-header__sort wa-button::part(caret) { margin-inline-start: 2px; }
+.workspace-header__search-group { width: 2.525rem; overflow: hidden; transition: width .25s ease, background-color .2s ease, border-color .2s ease; }
 .workspace-header__search-group[data-expanded="true"] { width: clamp(10rem, 22vw, 18rem); background: #fff; }
 .workspace-header__search-group:focus-within { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, .22); }
 .workspace-header__search { width: 100%; min-width: 0; }

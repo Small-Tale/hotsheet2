@@ -14,16 +14,3 @@
 .ticket-inspector__tabs button { display: flex; min-height: 2.25rem; border-radius: .4rem; font-size: .72rem; align-items: center; justify-content: center; gap: .35rem; }
 .ticket-inspector__tabs button[aria-current="page"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .14); }
 .ticket-inspector__tabs svg { width: .9rem; height: .9rem; }
-.ticket-inspector__content { display: grid; padding: 1rem; gap: 1.2rem; }
-.ticket-inspector__content section { display: grid; gap: .55rem; }
-.ticket-inspector__content section > header { display: flex; align-items: center; justify-content: space-between; }
-.ticket-inspector__content h2 { margin: 0; color: #737580; font-size: .76rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.ticket-inspector__content p { margin: 0; color: #44464e; font-size: .85rem; line-height: 1.5; }
-.ticket-inspector__metadata { grid-template-columns: 1fr 1fr; }
-.ticket-inspector__metadata > div { display: grid; grid-column: 1 / -1; gap: .35rem; }
-.ticket-inspector__metadata > div > span { color: #656771; font-size: .74rem; font-weight: 650; }
-.ticket-inspector__tags { display: flex; flex-wrap: wrap; gap: .4rem; }
-.ticket-inspector__timeline { display: grid; margin: 0; padding-left: 1.25rem; gap: .75rem; }
-.ticket-inspector__timeline time { color: #858792; font-size: .68rem; }
-.ticket-inspector__attachment { display: flex; padding: .65rem; border-radius: .45rem; background: #f1f2f5; align-items: center; gap: .5rem; font-size: .8rem; }
-.ticket-inspector__attachment svg { width: .9rem; height: .9rem; }

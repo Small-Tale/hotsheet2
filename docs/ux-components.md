@@ -155,13 +155,14 @@ selection where sensible.
 - `ViewHeading`
 - `QuickTicketComposer` — **demo built**: compact launcher expands to title/category,
   provider destination, required-title validation, create, and cancel states; creation
-  inserts a selected mock ticket into the shared collection
+  inserts a selected mock ticket into the shared collection. Category choices use
+  the shared colored/iconic picker; textual Cancel intentionally has no redundant icon.
   - compact “New ticket…” entry
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities
 - `TicketList` — **demo foundation built**: composes the production `TicketRow` at
   comfortable list width with listbox/multi-selection semantics and no parallel row
-  markup; only the first and last rows round the outer list corners
+  markup; the list shell and its first/last rows share rounded outer corners
   - later data integration: virtualization, keyboard navigation, and multi-select behavior
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active
@@ -235,8 +236,8 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 ### 4.1 `TicketInspector` — feature floor
 
 The trailing inspector shown in the wireframe. `TicketInspector` is **demo built**
-with the shared status/tag components, metadata controls, Up Next toggle, close/reopen,
-and interactive Info, Timeline, and Attachments tabs.
+as a focused shell around separately demoed `TicketInfoPanel`, `TicketTimeline`, and
+`TicketAttachments` components, plus the Up Next toggle, close/reopen, and tab routing.
 
 - `InspectorHeader`
   - ticket identifier
@@ -244,12 +245,12 @@ and interactive Info, Timeline, and Attachments tabs.
   - up-next/star toggle
   - close/collapse action
 - `InspectorTabBar`
-  - `TicketInfoTab`
-  - `TicketTimelineTab`
-  - `TicketAttachmentsTab`
+  - `TicketInfoPanel` — **demo built**: metadata, details, and tags
+  - `TicketTimeline` — **demo built**: chronological activity and note count
+  - `TicketAttachments` — **demo built**: attachment rows and total
 - `TicketMetadataEditor`
-  - `CategoryPicker`
-  - `PriorityPicker`
+  - `TicketCategorySelect` — **demo built**: configured category icons and colors
+  - `TicketPrioritySelect` — **demo built**: semantic priority icons
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact

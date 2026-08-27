@@ -17,6 +17,7 @@ import { Network } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorOpen, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
+import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -45,6 +46,11 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'quick-ticket-composer') return <QuickTicketComposerDemo />;
   if (item.id === 'ticket-inspector') return <TicketInspectorDemo />;
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
+  if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;
+  if (item.id === 'ticket-priority-select') return <TicketPrioritySelectDemo />;
+  if (item.id === 'ticket-info-panel') return <TicketInfoPanelDemo />;
+  if (item.id === 'ticket-timeline') return <TicketTimelineDemo />;
+  if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 
