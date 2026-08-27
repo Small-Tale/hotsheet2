@@ -63,6 +63,24 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .project-sidebar-demo__resize-handle { display: grid; color: #777a84; cursor: row-resize; place-items: center; touch-action: none; }
 .project-sidebar-demo__resize-handle:hover { color: #2563eb; }
 .project-sidebar-demo__resize-handle:focus-visible { border-radius: .35rem; outline: 2px solid #3b82f6; outline-offset: 1px; }
+
+.project-tab-demo, .project-tab-bar-demo, .resizable-region-demo, .connection-banner-demo, .app-shell-demo { width: min(72rem, 100%); }
+.project-tab-demo__surface { display: grid; padding: 1rem; border: 1px solid #d7dae1; border-radius: .8rem; background: #f7f8fa; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.project-tab-demo .project-tab { width: 100%; max-width: none; border-radius: .65rem; }
+.project-tab-bar-demo, .connection-banner-demo, .resizable-region-demo { display: grid; gap: 1.25rem; }
+.project-tab-bar-demo > .project-tab-bar, .connection-banner-demo { overflow: hidden; border: 1px solid #d7dae1; border-radius: .8rem; }
+.connection-banner-demo > .component-stage__event { margin: .25rem 1rem 1rem; }
+.resizable-region-demo__horizontal, .resizable-region-demo__vertical { display: flex; min-width: 0; min-height: 0; height: 17rem; overflow: hidden; border: 1px solid #d7dae1; border-radius: .8rem; background: #fff; }
+.resizable-region-demo__vertical { height: 24rem; flex-direction: column; }
+.resizable-region-demo .resizable-region { background: #f3f5f8; }
+.resizable-region-demo__controls { display: flex; justify-content: flex-start; }
+.resizable-region-demo__controls wa-button::part(base) { cursor: pointer; gap: .4rem; }
+.resizable-region-demo__controls svg { width: 1rem; height: 1rem; }
+.resizable-region-demo__panel { display: flex; width: 100%; height: 100%; padding: 1rem; box-sizing: border-box; align-items: center; justify-content: center; flex-direction: column; gap: .35rem; }
+.resizable-region-demo__panel span { color: #777a84; font-size: .74rem; }
+.resizable-region-demo__remainder { display: grid; color: #8a8d96; flex: 1; place-items: center; }
+.app-shell-demo { width: min(86rem, calc(100vw - 3rem)); }
+@media (max-width: 48rem) { .project-tab-demo__surface { grid-template-columns: 1fr; } }
 .project-sidebar-demo__resize-handle svg { width: 1.15rem; height: 1.15rem; }
 @media (min-width: 78rem) {
   .demo-shell--settings-open { grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr) minmax(23rem, 27rem); }

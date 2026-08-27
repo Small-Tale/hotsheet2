@@ -9,13 +9,15 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['project-sidebar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'toolbar-control-group']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'toolbar-control-group']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
     expect(demosUsing('ticket-row').map(entry => entry.id)).toEqual(['ticket-list', 'ticket-board']);
     expect(findDemo('workspace-header')?.uses).toEqual(['toolbar-control-group', 'ticket-list', 'ticket-board']);
     expect(demosUsing('toolbar-control-group').map(entry => entry.id)).toEqual(['workspace-header']);
+    expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);
+    expect(demosUsing('project-tab').map(entry => entry.id)).toEqual(['project-tabs']);
     expect(findDemo('ticket-inspector')?.uses).toEqual(['ticket-info-panel', 'ticket-timeline', 'ticket-attachments']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
   });

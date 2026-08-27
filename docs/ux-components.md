@@ -55,9 +55,13 @@ Rules for both clients:
 
 ## 2. Application shell and navigation
 
-### 2.1 `AppShell` — feature floor
+### 2.1 `AppShell` — feature floor, demo built
 
-Owns the top-level arrangement and responsive behavior of:
+The **built demo** composes the current production sidebar, tabs, connection banner,
+header, ticket workspace, and inspector into a desktop shell. Sidebar and inspector
+splitters are keyboard/pointer adjustable on wide displays; both secondary regions
+yield to the ticket workspace on compact displays. It owns the top-level arrangement
+and responsive behavior of:
 
 - `ProjectSidebar`
 - `WorkspaceHeader`
@@ -69,10 +73,12 @@ Owns the top-level arrangement and responsive behavior of:
 
 Supporting components:
 
-- `ResizableRegion` — sidebar, inspector, and bottom-drawer splitters; collapsed and
-  restored sizes are local UI state.
-- `ConnectionStateBanner` — connecting, reconnecting, offline, incompatible-server,
-  and authentication states.
+- `ResizableRegion` — **demo built**: horizontal and vertical accessible splitters
+  with pointer/keyboard sizing, clamped ranges, and collapse/restore without losing
+  the restored size. Sidebar, inspector, and bottom-drawer sizes are local UI state.
+- `ConnectionStateBanner` — **demo built**: connecting, reconnecting, offline,
+  incompatible-server, and authentication variants with state-specific Lucide icons,
+  live-region semantics, details, and relevant recovery actions.
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops.
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.
 - `WindowChrome` — native traffic lights/titlebar accommodation in Tauri/macOS; absent
@@ -138,17 +144,19 @@ scrolling content region can be reviewed without moving the Drive control.
   field collapses on blur; a non-empty query remains expanded. Focus is drawn by
   the outer control group so the ring is never clipped by the animated field.
 
-### 2.4 `ProjectTabBar` — feature floor
+### 2.4 `ProjectTabBar` — feature floor, demo built
 
-- `ProjectTab` — selected, remote/local, busy, disconnected, attention, and close
-  states
-- `AddProjectButton`
-- `ProjectPicker`
-- `TabOverflowMenu`
+- `ProjectTab` — **demo built**: selected, remote/local, busy, disconnected,
+  attention, closable, and fixed states with roving focus and arrow/Home/End keyboard
+  navigation when composed in the bar.
+- `AddProjectButton` — **demo built** with controlled insertion and selection.
+- `ProjectPicker` — remains part of the later add-project flow.
+- `TabOverflowMenu` — **demo built** as a compact menu projecting every open tab.
 
 Tabs represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
-servers.
+servers. The tab strip scrolls horizontally rather than compressing identities beyond
+readability.
 
 ## 3. Ticket workspace
 

@@ -7,7 +7,7 @@ const demo = (id: string, name: string, description: string, phase: DemoPhase = 
 
 export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
-    demo('app-shell', 'AppShell', 'Top-level responsive application regions.'),
+    demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'ticket-list', 'ticket-inspector']),
     demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']),
     demo('project-summary', 'ProjectSummary', 'Seven-day completion history and current ticket counts.', 'feature-floor', true),
     demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
@@ -15,7 +15,10 @@ export const demoCatalog: DemoCategory[] = [
     demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
     demo('drive-control', 'DriveControl', 'Primary AI drive start and stop action.', 'feature-floor', true),
     demo('workspace-header', 'WorkspaceHeader', 'Project heading, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-control-group', 'ticket-list', 'ticket-board']),
-    demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.'),
+    demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true),
+    demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, ['project-tab']),
+    demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.', 'feature-floor', true),
+    demo('connection-state-banner', 'ConnectionStateBanner', 'Connection progress, interruption, compatibility, and authentication states.', 'feature-floor', true),
   ]},
   { id: 'tickets', name: 'Ticket workspace', children: [
     { id: 'ticket-list', name: 'List', demos: [

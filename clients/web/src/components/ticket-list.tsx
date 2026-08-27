@@ -7,7 +7,7 @@ export interface TicketListProps {
 }
 
 export function TicketList({ tickets, label = 'Tickets' }: TicketListProps) {
-  return <section class="ticket-list" role="listbox" aria-label={label} aria-multiselectable="true">
+  return <section class="ticket-list" data-component="ticket-list" role="listbox" aria-label={label} aria-multiselectable="true">
     {tickets.map(ticket => <TicketRow {...ticket} />)}
   </section>;
 }

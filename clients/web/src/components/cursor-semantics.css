@@ -22,3 +22,6 @@ wa-button[disabled]::part(base),
 wa-checkbox[disabled]::part(checkbox),
 wa-select[disabled]::part(combobox),
 wa-input[disabled]::part(input) { cursor: not-allowed; }
+
+body[data-resizing-region="horizontal"] { cursor: col-resize; }
+body[data-resizing-region="vertical"] { cursor: row-resize; }

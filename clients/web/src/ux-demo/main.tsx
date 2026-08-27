@@ -19,6 +19,7 @@ import { composerCategory, composerExpanded, composerTitle, createDemoTicket, fo
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
+import { addDemoProject, AppShellDemo, closeProjectTab, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent } from './app-shell-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -27,7 +28,8 @@ const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
-const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer'].includes(selectedId.value);
+let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; startPoint: number; startSize: number } | undefined;
+const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer', 'app-shell'].includes(selectedId.value);
 
 function demoLink(item: DemoDefinition) {
   const selected = item.id === selectedId.value;
@@ -60,6 +62,11 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
   if (item.id === 'drive-control') return <DriveControlDemo />;
+  if (item.id === 'project-tab') return <ProjectTabDemo />;
+  if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
+  if (item.id === 'resizable-region') return <ResizableRegionDemo />;
+  if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
+  if (item.id === 'app-shell') return <AppShellDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 
@@ -128,6 +135,45 @@ delegate(root, 'click', '[data-action="select-view"]', (_event, target) => { con
 delegate(root, 'click', '[data-action="toggle-command-group"]', () => { commandGroupExpanded.value = !commandGroupExpanded.value; sidebarEvent.value = commandGroupExpanded.value ? 'Command group expanded.' : 'Command group collapsed.'; });
 delegate(root, 'click', '[data-action="run-command"]', (_event, target) => { const id = (target as HTMLElement).dataset.commandId!; runningCommandId.value = runningCommandId.value === id ? undefined : id; sidebarEvent.value = runningCommandId.value ? `${sidebarCommands.find(command => command.id === id)?.label ?? 'Command'} started.` : 'Command stopped.'; });
 delegate(root, 'click', '[data-action="toggle-drive"]', () => { driveRunning.value = !driveRunning.value; sidebarEvent.value = driveRunning.value ? 'Codex drive started.' : 'Codex drive stopped.'; });
+delegate(root, 'click', '[data-action="select-project-tab"]', (_event, target) => { selectProjectTab((target as HTMLElement).dataset.projectId!); });
+delegate(root, 'click', '[data-action="close-project-tab"]', (event, target) => { event.stopPropagation(); closeProjectTab((target as HTMLElement).dataset.projectId!); });
+delegate(root, 'click', '[data-action="add-project"]', () => { addDemoProject(); });
+delegate(root, 'click', '[data-action="toggle-resizable-collapse"]', () => { resizeDemoCollapsed.value = !resizeDemoCollapsed.value; shellEvent.value = resizeDemoCollapsed.value ? 'Horizontal region collapsed.' : 'Horizontal region restored.'; });
+delegate(root, 'click', '[data-action="retry-connection"]', () => { shellEvent.value = 'Connection retry requested.'; });
+delegate(root, 'click', '[data-action="show-connection-details"]', () => { shellEvent.value = 'Connection details requested.'; });
+delegate(root, 'click', '[data-action="authenticate-connection"]', () => { shellEvent.value = 'Authentication requested.'; });
+delegate(root, 'pointerdown', '[data-action="resize-region"]', (event, target) => {
+  event.preventDefault();
+  const handle = target as HTMLElement;
+  const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
+  const axis = region.dataset.axis as 'horizontal' | 'vertical';
+  const id = handle.dataset.regionId!;
+  regionResizeDrag = { id, axis, startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY, startSize: regionSize(id) };
+  document.body.dataset.resizingRegion = axis;
+});
+delegate(root, 'keydown', '[data-action="resize-region"]', (event, target) => {
+  const handle = target as HTMLElement;
+  const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
+  const axis = region.dataset.axis as 'horizontal' | 'vertical';
+  const key = (event as KeyboardEvent).key;
+  if ((axis === 'horizontal' && key !== 'ArrowLeft' && key !== 'ArrowRight') || (axis === 'vertical' && key !== 'ArrowUp' && key !== 'ArrowDown')) return;
+  event.preventDefault();
+  const direction = key === 'ArrowRight' || key === 'ArrowDown' ? 1 : -1;
+  setRegionSize(handle.dataset.regionId!, regionSize(handle.dataset.regionId!) + direction * 16);
+  shellEvent.value = `${region.getAttribute('aria-label')} resized.`;
+});
+delegate(root, 'keydown', '[data-action="select-project-tab"]', (event, target) => {
+  const key = (event as KeyboardEvent).key;
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
+  event.preventDefault();
+  const tabs = projectTabs.value;
+  const current = tabs.findIndex(tab => tab.id === (target as HTMLElement).dataset.projectId);
+  const next = key === 'Home' ? 0 : key === 'End' ? tabs.length - 1 : (current + (key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  const id = tabs[next]?.id;
+  if (!id) return;
+  selectProjectTab(id);
+  queueMicrotask(() => root.querySelector<HTMLElement>(`[role="tab"][data-project-id="${id}"]`)?.focus());
+});
 delegate(root, 'pointerdown', '[data-action="resize-project-sidebar"]', (event) => {
   event.preventDefault();
   sidebarResizeDrag = { startY: (event as PointerEvent).clientY, startHeight: projectSidebarHeight.value };
@@ -143,11 +189,22 @@ window.addEventListener('pointermove', event => {
   if (!sidebarResizeDrag) return;
   projectSidebarHeight.value = clampProjectSidebarHeight(sidebarResizeDrag.startHeight + event.clientY - sidebarResizeDrag.startY);
 });
+window.addEventListener('pointermove', event => {
+  if (!regionResizeDrag) return;
+  const point = regionResizeDrag.axis === 'horizontal' ? event.clientX : event.clientY;
+  setRegionSize(regionResizeDrag.id, regionResizeDrag.startSize + point - regionResizeDrag.startPoint);
+});
 window.addEventListener('pointerup', () => {
   if (!sidebarResizeDrag) return;
   sidebarResizeDrag = undefined;
   delete document.body.dataset.resizingProjectSidebar;
   sidebarEvent.value = `Sidebar height ${projectSidebarHeight.value} pixels.`;
+});
+window.addEventListener('pointerup', () => {
+  if (!regionResizeDrag) return;
+  shellEvent.value = `Region resized to ${regionSize(regionResizeDrag.id)} pixels.`;
+  regionResizeDrag = undefined;
+  delete document.body.dataset.resizingRegion;
 });
 delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
@@ -178,7 +235,7 @@ delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, targe
 });
 delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
   workspaceMode.value = (target as HTMLElement).dataset.viewMode as typeof workspaceMode.value;
-  recordCollectionEvent(`${workspaceMode.value === 'list' ? 'List' : 'Columns'} view selected`);
+  recordCollectionEvent(`${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`);
 });
 delegate(root, 'click', '[data-action="open-workspace-search"]', () => {
   workspaceSearchOpen.value = true;

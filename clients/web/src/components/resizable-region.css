@@ -1,0 +1,16 @@
+.resizable-region { position: relative; display: flex; min-width: 0; min-height: 0; }
+.resizable-region[data-axis="horizontal"] { width: var(--resizable-region-size); height: 100%; flex: 0 0 var(--resizable-region-size); }
+.resizable-region[data-axis="vertical"] { width: 100%; height: var(--resizable-region-size); flex: 0 0 var(--resizable-region-size); flex-direction: column; }
+.resizable-region[data-collapsed="true"] { overflow: visible; }
+.resizable-region__content { width: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.resizable-region__handle { position: absolute; z-index: 3; display: grid; color: #8a8d96; place-items: center; touch-action: none; }
+.resizable-region[data-axis="horizontal"] .resizable-region__handle { top: 0; bottom: 0; width: .7rem; cursor: col-resize; }
+.resizable-region[data-axis="horizontal"][data-edge="end"] .resizable-region__handle { right: -.35rem; }
+.resizable-region[data-axis="horizontal"][data-edge="start"] .resizable-region__handle { left: -.35rem; }
+.resizable-region[data-axis="vertical"] .resizable-region__handle { right: 0; left: 0; height: .7rem; cursor: row-resize; }
+.resizable-region[data-axis="vertical"][data-edge="end"] .resizable-region__handle { bottom: -.35rem; }
+.resizable-region[data-axis="vertical"][data-edge="start"] .resizable-region__handle { top: -.35rem; }
+.resizable-region__handle:hover, .resizable-region__handle:focus-visible { color: #2563eb; }
+.resizable-region__handle:focus-visible { border-radius: .3rem; outline: 2px solid #3b82f6; outline-offset: -2px; }
+.resizable-region__handle svg { width: .9rem; height: .9rem; opacity: 0; }
+.resizable-region__handle:hover svg, .resizable-region__handle:focus-visible svg { opacity: 1; }

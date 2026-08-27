@@ -1,0 +1,8 @@
+.project-tab-bar { display: flex; min-width: 0; height: 2.75rem; padding: .25rem .45rem 0; border-bottom: 1px solid #d7dae1; background: #f7f8fa; align-items: end; gap: .35rem; }
+.project-tab-bar__tabs { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: none; align-items: end; gap: .2rem; }
+.project-tab-bar__tabs::-webkit-scrollbar { display: none; }
+.project-tab-bar__actions { display: flex; flex: none; height: 2.5rem; align-items: center; }
+.project-tab-bar__actions wa-button { width: 2rem; height: 2rem; }
+.project-tab-bar__actions wa-button::part(base) { min-height: 2rem; padding: 0; border-radius: 999px; cursor: pointer; }
+.project-tab-bar__actions wa-button:hover::part(base) { background: #e9ebef; }
+.project-tab-bar__actions svg { display: block; width: 1rem; height: 1rem; }
