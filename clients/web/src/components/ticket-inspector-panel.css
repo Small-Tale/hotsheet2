@@ -4,7 +4,7 @@
 .ticket-inspector__content h2 { margin: 0; color: #737580; font-size: .76rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .ticket-inspector__content p { margin: 0; color: #44464e; font-size: .85rem; line-height: 1.5; }
 .ticket-inspector__metadata { grid-template-columns: 1fr 1fr; }
-.ticket-inspector__metadata > div { display: grid; grid-column: 1 / -1; gap: .35rem; }
+.ticket-inspector__metadata > div { display: grid; grid-column: 1 / -1; justify-items: start; gap: .35rem; }
 .ticket-inspector__metadata > div > span { color: #656771; font-size: .74rem; font-weight: 650; }
 .ticket-inspector__tags { display: flex; flex-wrap: wrap; gap: .4rem; }
 .ticket-inspector__timeline { display: grid; margin: 0; padding-left: 1.25rem; gap: .75rem; }

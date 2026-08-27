@@ -78,6 +78,10 @@ consistency with adjacent components, and overall aesthetic appeal. Fix issues f
 rerun behavioral tests, and record the visual states/viewports inspected on the ticket.
 If no usable browser is available, do not claim visual validation or complete the
 visual ticket: record `FEEDBACK NEEDED`/the outstanding review and leave it open.
+The web client keeps `domotion-svg` as a development dependency so its bundled Chromium
+is available for reproducible local screenshots even when no interactive browser is
+attached. Use that Chromium (or Playwright's browser when available) for the required
+rendered review; dependency presence alone is not visual validation.
 
 Use cursor semantics that accurately communicate the interaction under the pointer.
 Clickable controls and selectable rows use `pointer`; editable text uses `text`;

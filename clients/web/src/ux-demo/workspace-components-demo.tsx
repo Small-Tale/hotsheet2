@@ -25,14 +25,14 @@ let demoSequence = 1;
 export function focusComposerTitle(root: ParentNode): boolean {
   const input = root.querySelector<HTMLElement>('[name="new-ticket-title"]');
   if (!input) return false;
-  input.focus();
+  input.focus({ preventScroll: true });
   return true;
 }
 
 export function focusWorkspaceSearch(root: ParentNode): boolean {
   const input = root.querySelector<HTMLElement>('[name="workspace-search"]');
   if (!input) return false;
-  input.focus();
+  input.focus({ preventScroll: true });
   return true;
 }
 

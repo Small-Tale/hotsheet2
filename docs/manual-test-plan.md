@@ -50,6 +50,10 @@ For every change affecting rendered web-client visuals, inspect the real affecte
 5. Keep automated interaction and geometry assertions as regression coverage, but do
    not treat them as proof of visual appeal or final conformance.
 
+`clients/web` includes `domotion-svg` as a development dependency. Its bundled
+Chromium is the local screenshot-review fallback when an interactive browser is not
+attached; Playwright remains appropriate for automated interaction assertions.
+
 ### OpenCode ACP live compatibility
 
 Run `HOTSHEET_OPENCODE_LIVE=1 cargo test -p hotsheet-aitools

@@ -24,10 +24,11 @@ describe('connected workspace demo state', () => {
     const focus = vi.fn();
     const root = { querySelector: () => ({ focus }) } as unknown as ParentNode;
     expect(focusComposerTitle(root)).toBe(true);
-    expect(focus).toHaveBeenCalledOnce();
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
     expect(focusComposerTitle({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
     expect(focusWorkspaceSearch(root)).toBe(true);
     expect(focus).toHaveBeenCalledTimes(2);
+    expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
   });
 
   it('sorts the visible ticket projection without mutating source order', () => {
