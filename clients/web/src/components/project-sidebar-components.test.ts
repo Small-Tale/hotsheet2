@@ -40,10 +40,17 @@ describe('ProjectSidebar component slice', () => {
   });
 
   it('renders expanded command state and running presentation', () => {
-    const markup = String(CommandNavigation({ label: 'Commands', expanded: true, commands: [{ id: 'test', label: 'Test', color: '#2563eb', icon: 'test', running: true }] }));
+    const markup = String(CommandNavigation({ label: 'Commands', expanded: true, commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test', running: true }] }));
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('Running Test');
     expect(markup).toContain('data-lucide="test-tube-2"');
+    expect(markup).toContain('data-command-color="#3b82f6"');
+  });
+
+  it('falls back to the HS1 neutral command color with dark contrast', () => {
+    const markup = String(CommandNavigation({ label: 'Commands', expanded: true, commands: [{ id: 'custom', label: 'Custom', color: '#123456', icon: 'build' }] }));
+    expect(markup).toContain('data-command-color="#e5e7eb"');
+    expect(markup).toContain('--command-text-color:#1a1a1a');
   });
 
   it('changes drive action semantics with running state', () => {

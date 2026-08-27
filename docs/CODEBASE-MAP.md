@@ -31,7 +31,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, connections, tickets, and copy/move
     src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
     src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
-    src/components/          #   Production domain UI components, including ticket surfaces and composed ProjectSidebar + summary/repository/view/command/drive boundaries; shared cursor semantics and Lucide renderer/policy gate
+    src/components/          #   Production domain UI components, including ticket surfaces and composed ProjectSidebar boundaries; shared HS1 customization palette, cursor semantics, and Lucide renderer/policy gate
     src/ux-demo/             #   Categorized master/detail catalog, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
@@ -239,7 +239,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 | Slug derivation | `hotsheet-model/src/ids.rs` |
 | Store layout / sharding | `hotsheet-ticketing/src/store.rs`, [02](02-ticket-storage.md) §2.3 |
 | HS1 → git migration | `migrator/` + `hotsheet-cli/src/import.rs` (stable HS2 ids, close-state normalization; no retained HS1 fields), [07](07-migration.md) |
-| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/}` (dev-only Hono catalog + first real component), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md) |
+| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/}` (dev-only Hono catalog + real components with shared semantic ticket-state colors in `components/ticket-state-colors.css`), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md) |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
 | Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |

@@ -1,16 +1,7 @@
 import { Bug, CircleAlert, ListChecks, RefreshCw, Search, Sparkles, type IconNode } from 'lucide';
+import { CUSTOMIZATION_COLORS } from './customization-palette';
 
-export const CATEGORY_COLORS = [
-  { value: '#e5e7eb', label: 'Neutral' },
-  { value: '#3b82f6', label: 'Blue' },
-  { value: '#22c55e', label: 'Green' },
-  { value: '#f97316', label: 'Orange' },
-  { value: '#ef4444', label: 'Red' },
-  { value: '#8b5cf6', label: 'Purple' },
-  { value: '#ec4899', label: 'Pink' },
-  { value: '#14b8a6', label: 'Teal' },
-  { value: '#6b7280', label: 'Gray' },
-] as const;
+export const CATEGORY_COLORS = CUSTOMIZATION_COLORS;
 
 export const CATEGORY_ICONS: ReadonlyArray<{ value: string; label: string; icon?: IconNode }> = [
   { value: '', label: 'No icon' },

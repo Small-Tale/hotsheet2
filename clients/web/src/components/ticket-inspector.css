@@ -1,3 +1,5 @@
+@import './ticket-state-colors.css';
+
 .ticket-inspector { display: flex; width: min(27rem, 100%); min-height: 34rem; overflow: hidden; border: 1px solid #d9dbe1; border-radius: .8rem; background: #fff; flex-direction: column; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .09); }
 .ticket-inspector__header { display: flex; padding: 1rem; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .ticket-inspector__header > div:first-child { min-width: 0; }
@@ -8,7 +10,7 @@
 .ticket-inspector__header button { display: grid; width: 2rem; height: 2rem; padding: 0; border-radius: .4rem; place-items: center; }
 .ticket-inspector__header button:hover { background: #f0f2f5; }
 .ticket-inspector__header button svg { width: 1rem; height: 1rem; }
-.ticket-inspector__star--active { color: #ca8a04 !important; }
+.ticket-inspector__star--active { color: var(--ticket-state-up-next) !important; }
 .ticket-inspector__star--active svg { fill: currentColor; }
 .ticket-inspector__tabs { display: grid; margin: 0 1rem; padding: .2rem; border-radius: .55rem; background: #e7e9ed; grid-template-columns: repeat(3, 1fr); }
 .ticket-inspector__tabs button { display: flex; min-height: 2.25rem; border-radius: .4rem; font-size: .72rem; align-items: center; justify-content: center; gap: .35rem; }

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { getPriorityPresentation, normalizeTicketRowProps, TicketRow, ticketRowIndicator } from './ticket-row';
 
@@ -17,6 +19,15 @@ describe('TicketRow', () => {
     expect(ticketRowIndicator({ upNext: true })).toBe('up-next');
     expect(ticketRowIndicator({ upNext: true, blocked: true })).toBe('blocked');
     expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true })).toBe('needs-review');
+  });
+
+  it('uses one semantic color token for every Up Next presentation', () => {
+    const tokenCss = readFileSync(resolve(import.meta.dirname, 'ticket-state-colors.css'), 'utf8');
+    const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
+    expect(tokenCss).toContain('--ticket-state-up-next: #eab308');
+    expect(rowCss.match(/var\(--ticket-state-up-next\)/g)).toHaveLength(3);
+    expect(inspectorCss).toContain('color: var(--ticket-state-up-next)');
   });
 
   it('maps HS2 priorities onto the HS1 icon and color semantics', () => {

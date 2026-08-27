@@ -25,9 +25,9 @@ export const sidebarViews: ViewNavigationItem[] = [
   { id: 'archive', label: 'Archive', count: 241, icon: 'archive' },
 ];
 export const sidebarCommands: CommandNavigationItem[] = [
-  { id: 'verify', label: 'Verify project', color: '#0ea5a8', icon: 'test' },
-  { id: 'build', label: 'Build clients', color: '#ca8a04', icon: 'build' },
-  { id: 'publish', label: 'Publish preview', color: '#7c3aed', icon: 'send' },
+  { id: 'verify', label: 'Verify project', color: '#14b8a6', icon: 'test' },
+  { id: 'build', label: 'Build clients', color: '#f97316', icon: 'build' },
+  { id: 'publish', label: 'Publish preview', color: '#8b5cf6', icon: 'send' },
 ];
 
 function DemoFrame({ children }: { children: unknown }) {

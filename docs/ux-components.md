@@ -106,7 +106,8 @@ scrolling content region can be reviewed without moving the Drive control.
   - built-ins: Needs Review, All Tickets, Backlog, Archive
   - user-defined views when custom-view support lands
 - `CommandNavigation` — **demo built**: collapsible group of palette-colored,
-  icon-bearing command actions with controlled running state
+  icon-bearing command actions with controlled running state. Colors are constrained
+  to the exact shared HS1 custom-command palette, including contrast-aware neutral.
   - `CommandButton`
   - `CommandGroup` with collapsible heading
   - running, stopping, last-run, success, and failure states

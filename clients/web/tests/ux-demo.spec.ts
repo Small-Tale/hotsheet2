@@ -140,6 +140,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveClass(/active/);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('width', '32px');
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/up-next/);
+  const upNextRailColor = await row.locator('.ticket-list-row__indicator').evaluate(element => getComputedStyle(element).backgroundColor);
+  await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('color', upNextRailColor);
   await expect(row).toContainText('Claude');
   await expect(row).toContainText('1h ago');
   await expect(page.getByText('No actions yet')).toBeVisible();
@@ -550,6 +552,9 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   const commands = page.locator('[data-component="command-navigation"]');
   const heading = commands.getByRole('button', { name: /Project commands/ });
   await expect(heading).toHaveAttribute('aria-expanded', 'true');
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('background-color', 'rgb(20, 184, 166)');
+  await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS('background-color', 'rgb(249, 115, 22)');
+  await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS('background-color', 'rgb(139, 92, 246)');
   await commands.getByRole('button', { name: 'Verify project' }).click();
   await expect(commands.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
   await commands.getByRole('button', { name: /Running Verify project/ }).click();
@@ -582,6 +587,11 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(sidebar.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
   const handle = page.getByRole('separator', { name: 'Resize project sidebar' });
   await expect(handle).toHaveAttribute('aria-valuenow', '640');
+  const assertDrivePinned = async () => {
+    const geometry = await sidebar.evaluate(node => ({ sidebarBottom: node.getBoundingClientRect().bottom, driveBottom: node.querySelector('.drive-control')!.getBoundingClientRect().bottom }));
+    expect(geometry.sidebarBottom - geometry.driveBottom).toBeLessThan(16);
+  };
+  await assertDrivePinned();
   const handleBox = await handle.boundingBox();
   expect(handleBox).not.toBeNull();
   await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
@@ -599,4 +609,8 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await handle.focus();
   await page.keyboard.press('ArrowDown');
   await expect(handle).toHaveAttribute('aria-valuenow', '424');
+  await assertDrivePinned();
+  for (let index = 0; index < 20; index += 1) await page.keyboard.press('ArrowDown');
+  await expect(handle).toHaveAttribute('aria-valuenow', '768');
+  await assertDrivePinned();
 });
