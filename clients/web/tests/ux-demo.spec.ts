@@ -580,4 +580,23 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(sidebar.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
   await sidebar.getByRole('button', { name: 'Start Codex' }).click();
   await expect(sidebar.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
+  const handle = page.getByRole('separator', { name: 'Resize project sidebar' });
+  await expect(handle).toHaveAttribute('aria-valuenow', '640');
+  const handleBox = await handle.boundingBox();
+  expect(handleBox).not.toBeNull();
+  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y - 230, { steps: 5 });
+  await page.mouse.up();
+  await expect(handle).toHaveAttribute('aria-valuenow', '400');
+  const scrollState = await sidebar.evaluate(node => {
+    const content = node.querySelector('.project-sidebar__content')!;
+    const drive = node.querySelector('.drive-control')!;
+    return { contentClientHeight: content.clientHeight, contentScrollHeight: content.scrollHeight, sidebarBottom: node.getBoundingClientRect().bottom, driveBottom: drive.getBoundingClientRect().bottom };
+  });
+  expect(scrollState.contentScrollHeight).toBeGreaterThan(scrollState.contentClientHeight);
+  expect(scrollState.sidebarBottom - scrollState.driveBottom).toBeLessThan(16);
+  await handle.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(handle).toHaveAttribute('aria-valuenow', '424');
 });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { collectionTickets, resetTicketCollections } from './ticket-collections-demo';
 import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusComposerTitle, focusWorkspaceSearch, workspaceColumns, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
+import { clampProjectSidebarHeight, PROJECT_SIDEBAR_MAX_HEIGHT, PROJECT_SIDEBAR_MIN_HEIGHT } from './project-sidebar-demo';
 
 describe('connected workspace demo state', () => {
   beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; workspaceSort.value = 'updated'; composerTitle.value = ''; composerCategory.value = 'task'; });
@@ -36,5 +37,11 @@ describe('connected workspace demo state', () => {
     workspaceSort.value = 'title';
     expect(filteredWorkspaceTickets().map(ticket => ticket.title)).toEqual([...collectionTickets.value].map(ticket => ticket.title).sort());
     expect(collectionTickets.value[0].slug).toBe(sourceFirst);
+  });
+
+  it('clamps direct sidebar resizing to the reviewable height range', () => {
+    expect(clampProjectSidebarHeight(100)).toBe(PROJECT_SIDEBAR_MIN_HEIGHT);
+    expect(clampProjectSidebarHeight(420.4)).toBe(420);
+    expect(clampProjectSidebarHeight(900)).toBe(PROJECT_SIDEBAR_MAX_HEIGHT);
   });
 });

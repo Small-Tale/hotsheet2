@@ -18,7 +18,7 @@ import { collectionTickets, recordCollectionEvent, selectCollectionTicket, Ticke
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
-import { commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
+import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -26,6 +26,7 @@ const fromUrl = () => new URL(location.href).searchParams.get('component') ?? de
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
+let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
 const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer'].includes(selectedId.value);
 
 function demoLink(item: DemoDefinition) {
@@ -127,6 +128,27 @@ delegate(root, 'click', '[data-action="select-view"]', (_event, target) => { con
 delegate(root, 'click', '[data-action="toggle-command-group"]', () => { commandGroupExpanded.value = !commandGroupExpanded.value; sidebarEvent.value = commandGroupExpanded.value ? 'Command group expanded.' : 'Command group collapsed.'; });
 delegate(root, 'click', '[data-action="run-command"]', (_event, target) => { const id = (target as HTMLElement).dataset.commandId!; runningCommandId.value = runningCommandId.value === id ? undefined : id; sidebarEvent.value = runningCommandId.value ? `${sidebarCommands.find(command => command.id === id)?.label ?? 'Command'} started.` : 'Command stopped.'; });
 delegate(root, 'click', '[data-action="toggle-drive"]', () => { driveRunning.value = !driveRunning.value; sidebarEvent.value = driveRunning.value ? 'Codex drive started.' : 'Codex drive stopped.'; });
+delegate(root, 'pointerdown', '[data-action="resize-project-sidebar"]', (event) => {
+  event.preventDefault();
+  sidebarResizeDrag = { startY: (event as PointerEvent).clientY, startHeight: projectSidebarHeight.value };
+  document.body.dataset.resizingProjectSidebar = 'true';
+});
+delegate(root, 'keydown', '[data-action="resize-project-sidebar"]', (event) => {
+  if ((event as KeyboardEvent).key !== 'ArrowUp' && (event as KeyboardEvent).key !== 'ArrowDown') return;
+  event.preventDefault();
+  projectSidebarHeight.value = clampProjectSidebarHeight(projectSidebarHeight.value + ((event as KeyboardEvent).key === 'ArrowDown' ? 24 : -24));
+  sidebarEvent.value = `Sidebar height ${projectSidebarHeight.value} pixels.`;
+});
+window.addEventListener('pointermove', event => {
+  if (!sidebarResizeDrag) return;
+  projectSidebarHeight.value = clampProjectSidebarHeight(sidebarResizeDrag.startHeight + event.clientY - sidebarResizeDrag.startY);
+});
+window.addEventListener('pointerup', () => {
+  if (!sidebarResizeDrag) return;
+  sidebarResizeDrag = undefined;
+  delete document.body.dataset.resizingProjectSidebar;
+  sidebarEvent.value = `Sidebar height ${projectSidebarHeight.value} pixels.`;
+});
 delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);

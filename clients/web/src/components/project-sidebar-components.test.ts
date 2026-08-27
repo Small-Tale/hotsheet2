@@ -29,6 +29,7 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-lucide="git-branch"');
     expect(markup).toContain('repository-summary__branch-name');
     expect(markup).toContain('3 unpushed commits');
+    expect(markup).not.toContain('data-lucide="file-pen-line"');
   });
 
   it('projects current view, counts, and attention', () => {
@@ -56,4 +57,5 @@ describe('ProjectSidebar component slice', () => {
     const markup = String(ProjectSidebar({ completedToday: 1, inProgress: 2, completionTrend: [0, 1], branch: 'main', unpushed: 0, uncommitted: 1, views: [{ id: 'all', label: 'All Tickets', icon: 'all' }], selectedViewId: 'all', commandGroupLabel: 'Commands', commands: [], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex' }));
     for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) expect(markup).toContain(`data-component="${component}"`);
   });
+
 });

@@ -82,7 +82,9 @@ Supporting components:
 
 The left region in the wireframe, scoped to the selected project/store connection.
 The **built demo** composes the five production boundaries below into a full-height
-sidebar with the drive action anchored at the bottom and shared controlled state.
+sidebar with the drive action anchored at the bottom and shared controlled state. A
+direct horizontal resize handle changes the demo height by pointer or keyboard so the
+scrolling content region can be reviewed without moving the Drive control.
 
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
@@ -91,7 +93,8 @@ sidebar with the drive action anchored at the bottom and shared controlled state
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `RepositorySummary` — **demo built**: one accessible branch/status action with
-  unpushed and uncommitted counts
+  unpushed and uncommitted counts. The uncommitted count remains text-only to avoid
+  crowding the already icon-rich row.
   - `BranchChip`
   - unpushed and uncommitted counts
   - opens the repository-status popover tracked by HS2-RPVFA4

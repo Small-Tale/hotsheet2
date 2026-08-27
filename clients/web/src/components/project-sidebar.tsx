@@ -23,11 +23,12 @@ export interface ProjectSidebarProps {
 
 export function ProjectSidebar(props: ProjectSidebarProps) {
   return <aside class="project-sidebar" data-component="project-sidebar" aria-label="Project sidebar">
-    <ProjectSummary completedToday={props.completedToday} inProgress={props.inProgress} trend={props.completionTrend} />
-    <RepositorySummary branch={props.branch} unpushed={props.unpushed} uncommitted={props.uncommitted} />
-    <ViewNavigation items={props.views} selectedId={props.selectedViewId} />
-    <CommandNavigation label={props.commandGroupLabel} commands={props.commands} expanded={props.commandGroupExpanded} />
-    <div class="project-sidebar__spacer"></div>
+    <div class="project-sidebar__content">
+      <ProjectSummary completedToday={props.completedToday} inProgress={props.inProgress} trend={props.completionTrend} />
+      <RepositorySummary branch={props.branch} unpushed={props.unpushed} uncommitted={props.uncommitted} />
+      <ViewNavigation items={props.views} selectedId={props.selectedViewId} />
+      <CommandNavigation label={props.commandGroupLabel} commands={props.commands} expanded={props.commandGroupExpanded} />
+    </div>
     <DriveControl running={props.driveRunning} tool={props.driveTool} />
   </aside>;
 }
