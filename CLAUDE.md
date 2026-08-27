@@ -67,6 +67,18 @@ consumer-specific descendant CSS overrides. A component's UX demo must expose ev
 supported public variant and state that consumers rely on, including appearance and
 size options, so the catalog is a complete interactive account of the component API.
 
+Every change that can affect rendered client visuals requires a deliberate visual QA
+pass in a real browser before completion. Automated DOM, accessibility, computed-style,
+and geometry assertions remain necessary, but are not substitutes for looking at the
+rendered result. Exercise the affected demo states and transitions at representative
+wide and narrow viewport sizes; capture screenshots when they make comparison easier.
+Review critically for correctness, clipping/overflow, alignment, spacing, typography,
+contrast, icon rendering, responsive behavior, platform/design-system conformance,
+consistency with adjacent components, and overall aesthetic appeal. Fix issues found,
+rerun behavioral tests, and record the visual states/viewports inspected on the ticket.
+If no usable browser is available, do not claim visual validation or complete the
+visual ticket: record `FEEDBACK NEEDED`/the outstanding review and leave it open.
+
 Use cursor semantics that accurately communicate the interaction under the pointer.
 Clickable controls and selectable rows use `pointer`; editable text uses `text`;
 disabled controls use `not-allowed`; draggable/resizable surfaces use the appropriate

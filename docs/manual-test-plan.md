@@ -33,6 +33,23 @@ When automation lands, remove the manual-only step and record it below.
 Exercise platform accessibility, background/resume, notification presentation, and
 credential storage once the native clients exist.
 
+### Web visual quality gate
+
+For every change affecting rendered web-client visuals, inspect the real affected
+`/ux-demo` components in a browser before completing the ticket:
+
+1. Exercise every changed state and transition, including closed/open, hover, focus,
+   selected, empty, populated, and disabled states that apply.
+2. Inspect at a wide desktop viewport and at the narrowest supported component or
+   workspace width; also inspect any breakpoint directly affected by the change.
+3. Critique correctness and aesthetics: clipping, overflow, alignment, spacing,
+   typography, contrast, icon visibility/centering, responsive flow, consistency with
+   neighboring controls, and conformance with the wireframes and platform conventions.
+4. Use screenshots for side-by-side comparison when useful. Record the inspected
+   routes, states, and viewport sizes on the Hot Sheet ticket.
+5. Keep automated interaction and geometry assertions as regression coverage, but do
+   not treat them as proof of visual appeal or final conformance.
+
 ### OpenCode ACP live compatibility
 
 Run `HOTSHEET_OPENCODE_LIVE=1 cargo test -p hotsheet-aitools
