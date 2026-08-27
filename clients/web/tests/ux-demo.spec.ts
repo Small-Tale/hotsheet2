@@ -275,6 +275,10 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await page.getByRole('button', { name: /Cancel/ }).click();
   await expect(page.getByText('Ticket creation cancelled')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toHaveCount(0);
+  const launcher = page.getByRole('button', { name: /New ticket/ });
+  await expect(launcher).toHaveCSS('cursor', 'pointer');
+  await launcher.click();
+  await expect(page.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
 });
 
 test('navigates, toggles, closes, and reopens TicketInspector', async ({ page }) => {
@@ -358,4 +362,28 @@ test('adjusts and removes TagChip through its settings inspector', async ({ page
   await expect(inspector).toBeHidden();
   await expect(toggle).toContainText('Settings');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('uses semantic cursors across native and Web Awesome interactions', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-row');
+  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCSS('cursor', 'pointer');
+  await expect(page.locator('[data-action="toggle-row-up-next"]')).toHaveCSS('cursor', 'pointer');
+  await page.locator('[data-action="toggle-settings"]').click();
+  const inspector = page.getByRole('complementary', { name: 'TicketRow settings' });
+  await expect(inspector.getByRole('textbox', { name: 'Title' })).toHaveCSS('cursor', 'text');
+  const selectCursor = await inspector.locator('wa-select[name="status"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="combobox"]')!).cursor);
+  expect(selectCursor).toBe('pointer');
+  const checkboxCursor = await inspector.locator('wa-checkbox[name="up-next"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="checkbox"]')!).cursor);
+  expect(checkboxCursor).toBe('pointer');
+  const buttonCursor = await inspector.locator('wa-button[data-action="reset-settings"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
+  expect(buttonCursor).toBe('pointer');
+  await page.locator('[data-action="toggle-settings"]').click();
+  await page.locator('[data-component="ticket-list-row"]').click({ button: 'right' });
+  await expect(page.getByRole('menu', { name: 'Ticket actions' }).locator('wa-dropdown-item').first()).toHaveCSS('cursor', 'pointer');
+  await page.goto('/ux-demo?component=quick-ticket-composer');
+  await page.getByRole('button', { name: /New ticket/ }).click();
+  const create = page.locator('wa-button[type="submit"]');
+  await create.evaluate(node => { node.setAttribute('disabled', ''); });
+  const disabledCursor = await create.evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
+  expect(disabledCursor).toBe('not-allowed');
 });

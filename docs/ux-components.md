@@ -48,6 +48,10 @@ Rules for both clients:
   other font glyphs as icons. Hide decorative icons from accessibility when adjacent
   text carries the meaning, and name icon-only controls. Ask the maintainer when
   multiple Lucide metaphors are materially plausible.
+- Cursor semantics communicate the interaction under the pointer: pointer for
+  clickable/selectable targets, text for editing, not-allowed for disabled controls,
+  appropriate grab/resize cursors for direct manipulation, and platform default for
+  non-interactive content. Style Web Awesome controls through documented CSS parts.
 
 ## 2. Application shell and navigation
 

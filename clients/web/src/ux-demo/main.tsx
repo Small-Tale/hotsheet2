@@ -15,7 +15,7 @@ import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
 import { Network } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
-import { composerCategory, composerExpanded, composerTitle, createDemoTicket, inspectorOpen, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, WorkspaceHeaderDemo } from './workspace-components-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, inspectorOpen, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, WorkspaceHeaderDemo } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -145,7 +145,10 @@ delegate(root, 'click', '[data-action="sort-tickets"]', () => { recordCollection
 delegate(root, 'click', '[data-action="toggle-favorite"]', () => { recordCollectionEvent('View favorite toggled'); });
 delegate(root, 'click', '[data-action="more-workspace-actions"]', () => { recordCollectionEvent('Workspace actions requested'); });
 delegate(root, 'click', '[data-action="open-workspace-settings"]', () => { recordCollectionEvent('Workspace settings requested'); });
-delegate(root, 'click', '[data-action="expand-ticket-composer"]', () => { composerExpanded.value = true; });
+delegate(root, 'click', '[data-action="expand-ticket-composer"]', () => {
+  composerExpanded.value = true;
+  queueMicrotask(() => { focusComposerTitle(root); });
+});
 delegate(root, 'click', '[data-action="cancel-ticket-composer"]', () => { composerExpanded.value = false; composerTitle.value = ''; recordCollectionEvent('Ticket creation cancelled'); });
 delegate(root, 'input', '[name="new-ticket-title"]', (_event, target) => { composerTitle.value = (target as FormControl).value; });
 delegate(root, 'change', '[name="new-ticket-category"]', (_event, target) => { composerCategory.value = (target as FormControl).value; });

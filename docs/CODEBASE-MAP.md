@@ -31,7 +31,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, connections, tickets, and copy/move
     src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
     src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
-    src/components/          #   Production domain UI components (workspace header, composer, inspector, shared TicketRow/List/Board) + Lucide renderer/policy gate
+    src/components/          #   Production domain UI components, shared cursor semantics, and Lucide renderer/policy gate
     src/ux-demo/             #   Categorized master/detail catalog, connected workspace/composer/inspector mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS

@@ -67,6 +67,13 @@ consumer-specific descendant CSS overrides. A component's UX demo must expose ev
 supported public variant and state that consumers rely on, including appearance and
 size options, so the catalog is a complete interactive account of the component API.
 
+Use cursor semantics that accurately communicate the interaction under the pointer.
+Clickable controls and selectable rows use `pointer`; editable text uses `text`;
+disabled controls use `not-allowed`; draggable/resizable surfaces use the appropriate
+grab or resize cursor; non-interactive content keeps the platform default. Apply the
+rule to custom elements through their documented CSS parts, and cover representative
+native and Web Awesome controls in rendered browser tests.
+
 Use **Lucide icons** for all decorative or symbolic client iconography across web,
 Tauri, SwiftUI, and later clients. Never substitute emoji, Unicode geometric shapes,
 dingbats, or other font characters (for example `◇`, `✓`, or `●`) as icons. Render

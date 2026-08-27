@@ -17,6 +17,13 @@ export const inspectorOpen = signal(true);
 export const inspectorTab = signal<InspectorTab>('info');
 let demoSequence = 1;
 
+export function focusComposerTitle(root: ParentNode): boolean {
+  const input = root.querySelector<HTMLElement>('[name="new-ticket-title"]');
+  if (!input) return false;
+  input.focus();
+  return true;
+}
+
 export function filteredWorkspaceTickets(): TicketRowProps[] {
   const query = workspaceSearchQuery.value.trim().toLocaleLowerCase();
   return query ? collectionTickets.value.filter(ticket => `${ticket.slug} ${ticket.title} ${ticket.tags.join(' ')}`.toLocaleLowerCase().includes(query)) : collectionTickets.value;

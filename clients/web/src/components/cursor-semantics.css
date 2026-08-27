@@ -1,0 +1,24 @@
+button:not(:disabled),
+a[href],
+[role="button"]:not([aria-disabled="true"]),
+[role="option"][data-action],
+input:is([type="checkbox"], [type="radio"], [type="button"], [type="submit"]):not(:disabled) { cursor: pointer; }
+
+button:disabled,
+input:disabled { cursor: not-allowed; }
+
+input:not([type]),
+input:is([type="text"], [type="search"], [type="email"], [type="url"], [type="password"], [type="number"]),
+textarea,
+wa-input:not([disabled])::part(input) { cursor: text; }
+
+wa-button:not([disabled])::part(base),
+wa-checkbox:not([disabled])::part(checkbox),
+wa-select:not([disabled])::part(combobox),
+wa-tag[with-remove]:not([data-disabled="true"])::part(remove-button__base),
+wa-dropdown-item:not([disabled]) { cursor: pointer; }
+
+wa-button[disabled]::part(base),
+wa-checkbox[disabled]::part(checkbox),
+wa-select[disabled]::part(combobox),
+wa-input[disabled]::part(input) { cursor: not-allowed; }

@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { collectionTickets, resetTicketCollections } from './ticket-collections-demo';
-import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, workspaceColumns, workspaceSearchQuery } from './workspace-components-demo';
+import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusComposerTitle, workspaceColumns, workspaceSearchQuery } from './workspace-components-demo';
 
 describe('connected workspace demo state', () => {
   beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; composerTitle.value = ''; composerCategory.value = 'task'; });
@@ -18,5 +18,13 @@ describe('connected workspace demo state', () => {
     expect(createDemoTicket()).toBe(true);
     expect(collectionTickets.value[0]).toMatchObject({ title: 'A newly composed ticket', category: 'bug', selected: true });
     expect(collectionTickets.value.slice(1).every(ticket => !ticket.selected)).toBe(true);
+  });
+
+  it('focuses the live title control after every composer expansion', () => {
+    const focus = vi.fn();
+    const root = { querySelector: () => ({ focus }) } as unknown as ParentNode;
+    expect(focusComposerTitle(root)).toBe(true);
+    expect(focus).toHaveBeenCalledOnce();
+    expect(focusComposerTitle({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
   });
 });
