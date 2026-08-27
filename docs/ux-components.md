@@ -60,7 +60,9 @@ Rules for both clients:
 The **built demo** composes the current production sidebar, tabs, connection banner,
 header, ticket workspace, and inspector into a desktop shell. Sidebar and inspector
 splitters are keyboard/pointer adjustable on wide displays; both secondary regions
-yield to the ticket workspace on compact displays. It owns the top-level arrangement
+yield to the ticket workspace on compact displays. Sidebar regions never resize below
+250px. Composed WorkspaceHeader search retains its expand/autofocus/filter/empty-blur
+contract. It owns the top-level arrangement
 and responsive behavior of:
 
 - `ProjectSidebar`
@@ -146,9 +148,10 @@ scrolling content region can be reviewed without moving the Drive control.
 
 ### 2.4 `ProjectTabBar` — feature floor, demo built
 
-- `ProjectTab` — **demo built**: selected, remote/local, busy, disconnected,
-  attention, closable, and fixed states with roving focus and arrow/Home/End keyboard
-  navigation when composed in the bar.
+- `ProjectTab` — **demo built**: macOS Tahoe-inspired pill presentation owned by the
+  component itself, with selected, remote/local, busy, disconnected, attention,
+  closable, and fixed states plus roving focus and arrow/Home/End keyboard navigation
+  when composed in the bar.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
 - `ProjectPicker` — remains part of the later add-project flow.
 - `TabOverflowMenu` — **demo built** as a compact menu projecting every open tab.
@@ -156,7 +159,7 @@ scrolling content region can be reviewed without moving the Drive control.
 Tabs represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally rather than compressing identities beyond
-readability.
+readability; add and overflow actions remain vertically centered with the pills.
 
 ## 3. Ticket workspace
 
@@ -225,9 +228,11 @@ selection where sensible.
 
 ### 3.3 `ColumnWorkspace` — feature floor
 
-- `TicketBoard` — **demo foundation built**: unframed, horizontally scrolling status
-  columns with headings and counts, each composing production `TicketRow` at narrow
-  width. A hosting workspace may add its own surrounding surface when appropriate.
+- `TicketBoard` — **demo foundation built**: horizontally scrolling status columns
+  whose title and count provide sufficient grouping without an additional visual
+  container around either the board or each column. Each column composes production
+  `TicketRow` at narrow width. A hosting workspace may add its own surrounding surface
+  when appropriate.
 - `TicketColumn` with heading, count, loading, and empty states
 - There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
   container-query card presentation while preserving identical markup and actions

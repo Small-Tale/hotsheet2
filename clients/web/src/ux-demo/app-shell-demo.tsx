@@ -13,7 +13,7 @@ import { TicketList } from '../components/ticket-list';
 import { WorkspaceHeader } from '../components/workspace-header';
 import { collectionTickets } from './ticket-collections-demo';
 import { commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
-import { filteredWorkspaceTickets, inspectorOpen, workspaceColumns, workspaceMode } from './workspace-components-demo';
+import { filteredWorkspaceTickets, inspectorOpen, workspaceColumns, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
 
 const initialTabs: ProjectTabProps[] = [
   { id: 'hotsheet', name: 'Hot Sheet 2', location: 'local', selected: true },
@@ -24,7 +24,7 @@ const initialTabs: ProjectTabProps[] = [
 
 export const projectTabs = signal<ProjectTabProps[]>(initialTabs.map(tab => ({ ...tab })));
 export const shellConnectionState = signal<ConnectionState | undefined>('reconnecting');
-export const shellSidebarSize = signal(248);
+export const shellSidebarSize = signal(272);
 export const shellInspectorSize = signal(352);
 export const resizeDemoWidth = signal(260);
 export const resizeDemoHeight = signal(180);
@@ -32,9 +32,9 @@ export const resizeDemoCollapsed = signal(false);
 export const shellEvent = signal('Explore the application shell.');
 
 export const regionBounds: Record<string, { min: number; max: number }> = {
-  'resize-demo-horizontal': { min: 180, max: 420 },
+  'resize-demo-horizontal': { min: 250, max: 420 },
   'resize-demo-vertical': { min: 120, max: 260 },
-  'app-sidebar': { min: 200, max: 360 },
+  'app-sidebar': { min: 250, max: 360 },
   'app-inspector': { min: 280, max: 520 },
 };
 
@@ -97,7 +97,7 @@ export function ResizableRegionDemo() {
   return <section class="resizable-region-demo" aria-label="ResizableRegion demo">
     <div class="resizable-region-demo__controls"><wa-button appearance="outlined" data-action="toggle-resizable-collapse"><LucideIcon icon={resizeDemoCollapsed.value ? PanelLeftOpen : PanelLeftClose} name={resizeDemoCollapsed.value ? 'panel-left-open' : 'panel-left-close'} /><span>{resizeDemoCollapsed.value ? 'Restore horizontal region' : 'Collapse horizontal region'}</span></wa-button></div>
     <div class="resizable-region-demo__horizontal">
-      <ResizableRegion id="resize-demo-horizontal" label="Example sidebar" size={resizeDemoWidth.value} min={180} max={420} collapsed={resizeDemoCollapsed.value}><div class="resizable-region-demo__panel"><strong>Horizontal region</strong><span>{resizeDemoWidth.value}px</span></div></ResizableRegion>
+      <ResizableRegion id="resize-demo-horizontal" label="Example sidebar" size={resizeDemoWidth.value} min={250} max={420} collapsed={resizeDemoCollapsed.value}><div class="resizable-region-demo__panel"><strong>Horizontal region</strong><span>{resizeDemoWidth.value}px</span></div></ResizableRegion>
       <div class="resizable-region-demo__remainder">Remaining workspace</div>
     </div>
     <div class="resizable-region-demo__vertical">
@@ -127,7 +127,7 @@ export function AppShellDemo() {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   const banner = shellConnectionState.value ? <ConnectionStateBanner state={shellConnectionState.value} detail="Showing the latest cached project state." /> : undefined;
   return <section class="app-shell-demo" aria-label="AppShell demo">
-    <AppShell tabs={projectTabs.value} sidebar={<ShellSidebar />} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceHeader projectName="Hot Sheet 2" viewName="All Tickets" mode={workspaceMode.value} />} workspace={workspaceMode.value === 'settings' ? <section class="workspace-settings-preview" aria-label="Project settings"><h2>Project settings</h2><p>Configure ticket providers, project defaults, commands, and checkout behavior.</p></section> : workspaceMode.value === 'board' ? <TicketBoard columns={workspaceColumns()} label="Project board" /> : <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />} inspectorSize={shellInspectorSize.value} inspector={inspectorOpen.value ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab="info" upNext={ticket.upNext} /> : undefined} />
+    <AppShell tabs={projectTabs.value} sidebar={<ShellSidebar />} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceHeader projectName="Hot Sheet 2" viewName="All Tickets" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} />} workspace={workspaceMode.value === 'settings' ? <section class="workspace-settings-preview" aria-label="Project settings"><h2>Project settings</h2><p>Configure ticket providers, project defaults, commands, and checkout behavior.</p></section> : workspaceMode.value === 'board' ? <TicketBoard columns={workspaceColumns()} label="Project board" /> : <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />} inspectorSize={shellInspectorSize.value} inspector={inspectorOpen.value ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab="info" upNext={ticket.upNext} /> : undefined} />
     <p class="component-stage__event" aria-live="polite">{shellEvent.value}</p>
   </section>;
 }

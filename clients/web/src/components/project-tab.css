@@ -1,10 +1,10 @@
-.project-tab { position: relative; display: flex; min-width: 7.5rem; max-width: 13rem; height: 2.5rem; border: 1px solid transparent; border-radius: .65rem .65rem 0 0; color: #5f626c; background: transparent; align-items: center; }
-.project-tab:hover { background: #f1f3f6; }
-.project-tab[data-selected="true"] { border-color: #d7dae1; border-bottom-color: #fff; color: #1d4ed8; background: #fff; box-shadow: 0 -1px 4px rgba(35, 32, 48, .04); }
+.project-tab { position: relative; display: flex; min-width: 7.5rem; max-width: 13rem; height: 2rem; border: 0; border-radius: 999px; color: #5f626c; background: transparent; align-items: center; }
+.project-tab:hover { background: rgba(255, 255, 255, .72); }
+.project-tab[data-selected="true"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .16), inset 0 0 0 1px rgba(215, 218, 225, .8); }
 .project-tab[data-disconnected="true"] { color: #777a84; }
 .project-tab__select { display: grid; min-width: 0; height: 100%; padding: 0 .35rem 0 .7rem; border: 0; appearance: none; color: inherit; background: transparent; cursor: pointer; font: inherit; grid-template-columns: 1rem minmax(0, 1fr) auto; align-items: center; gap: .4rem; text-align: left; }
 .project-tab:not(:has(.project-tab__close)) .project-tab__select { padding-right: .7rem; }
-.project-tab__select:focus-visible, .project-tab__close:focus-visible { border-radius: .4rem; outline: 2px solid #3b82f6; outline-offset: -2px; }
+.project-tab__select:focus-visible, .project-tab__close:focus-visible { border-radius: 999px; outline: 2px solid #3b82f6; outline-offset: -2px; }
 .project-tab__select > svg { width: 1rem; height: 1rem; }
 .project-tab__name { overflow: hidden; font-size: .78rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .project-tab__busy { animation: project-tab-spin .9s linear infinite; }

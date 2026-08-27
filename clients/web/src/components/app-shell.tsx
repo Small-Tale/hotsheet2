@@ -15,9 +15,9 @@ export interface AppShellProps {
   inspectorSize?: number;
 }
 
-export function AppShell({ tabs, sidebar, header, workspace, inspector, banner, sidebarSize = 248, inspectorSize = 352 }: AppShellProps) {
+export function AppShell({ tabs, sidebar, header, workspace, inspector, banner, sidebarSize = 272, inspectorSize = 352 }: AppShellProps) {
   return <section class="app-shell" data-component="app-shell">
-    <ResizableRegion id="app-sidebar" label="Project sidebar" size={sidebarSize} min={200} max={360}>{sidebar}</ResizableRegion>
+    <ResizableRegion id="app-sidebar" label="Project sidebar" size={sidebarSize} min={250} max={360}>{sidebar}</ResizableRegion>
     <main class="app-shell__main">
       <ProjectTabBar tabs={tabs} />
       {banner}

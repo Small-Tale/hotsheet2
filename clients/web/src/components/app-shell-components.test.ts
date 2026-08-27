@@ -47,6 +47,7 @@ describe('application shell components', () => {
     const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never }));
     expect(markup).toContain('data-component="app-shell"');
     expect(markup).toContain('data-region-id="app-sidebar"');
+    expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-inspector"');
     expect(markup).toContain('Ticket workspace');
   });
@@ -67,10 +68,10 @@ describe('application shell components', () => {
     setRegionSize('resize-demo-horizontal', 1000);
     expect(resizeDemoWidth.value).toBe(420);
     setRegionSize('resize-demo-horizontal', 240);
-    expect(resizeDemoWidth.value).toBe(240);
+    expect(resizeDemoWidth.value).toBe(250);
     resizeDemoCollapsed.value = true;
-    expect(resizeDemoWidth.value).toBe(240);
+    expect(resizeDemoWidth.value).toBe(250);
     resizeDemoCollapsed.value = false;
-    expect(resizeDemoWidth.value).toBe(240);
+    expect(resizeDemoWidth.value).toBe(250);
   });
 });

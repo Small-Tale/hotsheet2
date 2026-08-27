@@ -223,6 +223,8 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('region', { name: 'Example status board' });
   await expect(board.locator('.ticket-board__column')).toHaveCount(3);
+  await expect(board.locator('.ticket-board__column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(board.locator('.ticket-board__column').first()).toHaveCSS('padding', '0px');
   await expect(board).toHaveCSS('padding', '0px');
   await expect(board).toHaveCSS('border-top-width', '0px');
   await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -629,6 +631,15 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=project-tabs');
   const tabBar = page.locator('[data-component="project-tab-bar"]');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
+  await expect(tabBar.locator('[data-component="project-tab"]').first()).toHaveCSS('border-radius', '999px');
+  const tabActionCenters = await tabBar.evaluate(node => {
+    const tab = node.querySelector('[data-component="project-tab"]')!.getBoundingClientRect();
+    const add = node.querySelector('[data-action="add-project"]')!.getBoundingClientRect();
+    const more = node.querySelector('[aria-label="More projects"]')!.getBoundingClientRect();
+    return { tab: tab.y + tab.height / 2, add: add.y + add.height / 2, more: more.y + more.height / 2 };
+  });
+  expect(tabActionCenters.add).toBeCloseTo(tabActionCenters.tab, 0);
+  expect(tabActionCenters.more).toBeCloseTo(tabActionCenters.tab, 0);
   await tabBar.getByRole('tab', { name: /Internal API/ }).click();
   await expect(tabBar.getByRole('tab', { name: /Internal API/ })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ArrowLeft');
@@ -649,7 +660,7 @@ test('exercises the application-shell component slice and responsive composition
   await page.keyboard.press('ArrowRight');
   await expect(horizontal).toHaveAttribute('aria-valuenow', '276');
   for (let index = 0; index < 20; index += 1) await page.keyboard.press('ArrowLeft');
-  await expect(horizontal).toHaveAttribute('aria-valuenow', '180');
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '250');
   await vertical.focus();
   await page.keyboard.press('ArrowDown');
   await expect(vertical).toHaveAttribute('aria-valuenow', '196');
@@ -659,7 +670,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(horizontal).toHaveAttribute('aria-valuenow', '0');
   await expect(horizontal).toHaveAttribute('aria-valuemin', '0');
   await page.getByRole('button', { name: 'Restore horizontal region' }).click();
-  await expect(horizontal).toHaveAttribute('aria-valuenow', '180');
+  await expect(horizontal).toHaveAttribute('aria-valuenow', '250');
 
   await page.goto('/ux-demo?component=connection-state-banner');
   const banners = page.locator('[data-component="connection-state-banner"]');
@@ -677,10 +688,11 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell).toBeVisible();
   for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-header', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const sidebarHandle = shell.getByRole('separator', { name: 'Resize Project sidebar' });
-  await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '248');
+  await expect(sidebarHandle).toHaveAttribute('aria-valuemin', '250');
+  await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '272');
   await sidebarHandle.focus();
   await page.keyboard.press('ArrowRight');
-  await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '264');
+  await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '288');
   await shell.getByRole('tab', { name: /Small Tale Website/ }).click();
   await expect(shell.getByRole('tab', { name: /Small Tale Website/ })).toHaveAttribute('aria-selected', 'true');
   await shell.getByRole('button', { name: 'Settings view' }).click();
@@ -688,6 +700,15 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(0);
   await shell.getByRole('button', { name: 'List view' }).click();
   await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
+  await shell.getByRole('button', { name: 'Search tickets' }).click();
+  const shellSearch = shell.getByRole('textbox', { name: 'Search tickets' });
+  await expect(shellSearch).toBeFocused();
+  await shellSearch.fill('long-tag-example');
+  await expect(shell.locator('[data-component="ticket-list-row"]')).toHaveCount(1);
+  await shellSearch.fill('');
+  await shellSearch.blur();
+  await expect(shell.getByRole('textbox', { name: 'Search tickets' })).toHaveCount(0);
+  await expect(shell.getByRole('button', { name: 'Search tickets' })).toBeVisible();
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(shell.locator(':scope > [data-component="resizable-region"]')).toBeHidden();
   await expect(shell.locator('.app-shell__work-area > [data-component="resizable-region"]')).toBeHidden();
