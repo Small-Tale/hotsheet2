@@ -261,7 +261,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const searchControl = header.locator('wa-input[name="workspace-search"]');
   const search = header.getByRole('textbox', { name: 'Search tickets' });
   await expect(search).toBeFocused();
-  await expect(searchControl.locator('[data-lucide="search"]')).toHaveCount(1);
+  await expect(searchControl.locator('[data-lucide="search"]')).toBeVisible();
   await expect.poll(() => searchGroup.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(collapsedWidth * 3);
   const openHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
@@ -283,6 +283,21 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(page.getByRole('region', { name: 'Workspace board' })).toHaveCount(0);
   await header.getByRole('button', { name: 'List view' }).click();
   await expect(page.getByRole('listbox', { name: 'Workspace tickets' })).toBeVisible();
+});
+
+test('shows the ToolbarControlGroup variants with shared geometry', async ({ page }) => {
+  await page.goto('/ux-demo?component=toolbar-control-group');
+  const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
+  const groups = demo.locator('.toolbar-control-group');
+  await expect(groups).toHaveCount(3);
+  const heights = await groups.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+  expect(new Set(heights).size).toBe(1);
+  const popup = demo.locator('wa-button[with-caret]');
+  const gap = await popup.evaluate(node => {
+    const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="button"]');
+    return button ? getComputedStyle(button).gap : null;
+  });
+  expect(gap).toBe('2px');
 });
 
 test('expands, validates, creates, and cancels through QuickTicketComposer', async ({ page }) => {

@@ -108,7 +108,7 @@ The left region in the wireframe, scoped to the selected project/store connectio
 - `WorkspaceHeader` — **demo built**: responsive project/view identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   sort menu, and a connected list/column/settings workspace
-- `ToolbarControlGroup` — **built**: shared rounded-border container for toolbar
+- `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
   buttons, segmented choices, and popup triggers; child controls do not draw their
   own borders or divider lines
 - `ProjectHeading`

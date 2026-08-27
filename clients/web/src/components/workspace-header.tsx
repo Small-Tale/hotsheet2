@@ -52,7 +52,7 @@ export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = fals
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen}>
         {searchOpen
-          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} autofocus clearable><span slot="start"><LucideIcon icon={Search} name="search" /></span></wa-input>
+          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} autofocus clearable><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span></wa-input>
           : <wa-button class="workspace-header__search-button" appearance="plain" data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
       </ToolbarControlGroup>
     </div>

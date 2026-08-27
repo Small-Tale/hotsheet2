@@ -9,7 +9,7 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
     demo('app-shell', 'AppShell', 'Top-level responsive application regions.'),
     demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.'),
-    demo('workspace-header', 'WorkspaceHeader', 'Project heading, display modes, sorting, settings, and search.', 'feature-floor', true, ['ticket-list', 'ticket-board']),
+    demo('workspace-header', 'WorkspaceHeader', 'Project heading, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-control-group', 'ticket-list', 'ticket-board']),
     demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.'),
   ]},
   { id: 'tickets', name: 'Ticket workspace', children: [
@@ -58,6 +58,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),
   ]},
   { id: 'shared', name: 'Shared interactions', demos: [
+    demo('toolbar-control-group', 'ToolbarControlGroup', 'Consistent rounded grouping for toolbar controls.', 'feature-floor', true),
     demo('confirmation-dialog', 'ConfirmationDialog', 'Reusable consequential confirmation.'),
     demo('empty-state', 'EmptyState', 'Actionable absence of content.'),
     demo('loading-skeleton', 'LoadingSkeleton', 'Stable loading presentation.'),
