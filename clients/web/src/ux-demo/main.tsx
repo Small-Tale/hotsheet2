@@ -19,7 +19,7 @@ import { composerCategory, composerExpanded, composerTitle, createDemoTicket, fo
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
-import { addDemoProject, AppShellDemo, closeProjectTab, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent } from './app-shell-demo';
+import { addDemoProject, AppShellDemo, closeProjectTab, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode } from './app-shell-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -138,6 +138,12 @@ delegate(root, 'click', '[data-action="toggle-drive"]', () => { driveRunning.val
 delegate(root, 'click', '[data-action="select-project-tab"]', (_event, target) => { selectProjectTab((target as HTMLElement).dataset.projectId!); });
 delegate(root, 'click', '[data-action="close-project-tab"]', (event, target) => { event.stopPropagation(); closeProjectTab((target as HTMLElement).dataset.projectId!); });
 delegate(root, 'click', '[data-action="add-project"]', () => { addDemoProject(); });
+delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
+  shellMode.value = (target as HTMLElement).dataset.shellMode as typeof shellMode.value;
+  workspaceSearchOpen.value = false;
+  workspaceSearchQuery.value = '';
+  shellEvent.value = shellMode.value === 'terminals' ? 'Terminal dashboard selected.' : 'Cross-project stats selected.';
+});
 delegate(root, 'click', '[data-action="toggle-resizable-collapse"]', () => { resizeDemoCollapsed.value = !resizeDemoCollapsed.value; shellEvent.value = resizeDemoCollapsed.value ? 'Horizontal region collapsed.' : 'Horizontal region restored.'; });
 delegate(root, 'click', '[data-action="retry-connection"]', () => { shellEvent.value = 'Connection retry requested.'; });
 delegate(root, 'click', '[data-action="show-connection-details"]', () => { shellEvent.value = 'Connection details requested.'; });
@@ -235,6 +241,10 @@ delegate(root, 'change', '[data-settings="status-badge"] [name]', (_event, targe
 });
 delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
   workspaceMode.value = (target as HTMLElement).dataset.viewMode as typeof workspaceMode.value;
+  if (workspaceMode.value === 'settings') {
+    workspaceSearchOpen.value = false;
+    workspaceSearchQuery.value = '';
+  }
   recordCollectionEvent(`${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`);
 });
 delegate(root, 'click', '[data-action="open-workspace-search"]', () => {

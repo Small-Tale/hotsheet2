@@ -62,7 +62,10 @@ header, ticket workspace, and inspector into a desktop shell. Sidebar and inspec
 splitters are keyboard/pointer adjustable on wide displays; both secondary regions
 yield to the ticket workspace on compact displays. Sidebar regions never resize below
 250px. Composed WorkspaceHeader search retains its expand/autofocus/filter/empty-blur
-contract. It owns the top-level arrangement
+contract. Project settings retain the sidebar but hide the inspector and disable
+ticket-view actions. Global Terminal Dashboard and Cross-project Stats modes hide
+both project-scoped regions, replace the project identity, and temporarily suppress
+header controls pending their dedicated wireframes. It owns the top-level arrangement
 and responsive behavior of:
 
 - `ProjectSidebar`
@@ -128,7 +131,8 @@ scrolling content region can be reviewed without moving the Drive control.
 
 - `WorkspaceHeader` — **demo built**: responsive project/view identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
-  sort menu, and a connected list/column/settings workspace
+  sort menu, and a connected list/column/settings workspace. Settings disables sort,
+  favorite, overflow, and search actions; global shell modes omit project controls.
 - `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
   buttons, segmented choices, and popup triggers; child controls do not draw their
   own borders or divider lines. A single control highlights the whole group on
@@ -155,6 +159,9 @@ scrolling content region can be reviewed without moving the Drive control.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
 - `ProjectPicker` — remains part of the later add-project flow.
 - `TabOverflowMenu` — **demo built** as a compact menu projecting every open tab.
+- `TerminalDashboardButton` and `CrossProjectStatsButton` — **shell navigation built**
+  with controlled selected state. Their full dashboard surfaces remain tracked by
+  HS2-2ZCN7K and HS2-38RJMK respectively.
 
 Tabs represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
@@ -231,8 +238,10 @@ selection where sensible.
 - `TicketBoard` — **demo foundation built**: horizontally scrolling status columns
   whose title and count provide sufficient grouping without an additional visual
   container around either the board or each column. Each column composes production
-  `TicketRow` at narrow width. A hosting workspace may add its own surrounding surface
-  when appropriate.
+  `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
+  overflow all columns; each ticket region scrolls independently while its heading and
+  count remain fixed. A hosting workspace may add its own surrounding surface when
+  appropriate.
 - `TicketColumn` with heading, count, loading, and empty states
 - There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
   container-query card presentation while preserving identical markup and actions

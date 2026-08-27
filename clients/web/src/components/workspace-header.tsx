@@ -18,6 +18,7 @@ export interface WorkspaceHeaderProps {
   searchOpen?: boolean;
   searchQuery?: string;
   sort?: WorkspaceSort;
+  controlsVisible?: boolean;
 }
 
 function ModeButton({ mode, current, label, icon, iconName }: { mode: WorkspaceViewMode; current: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }) {
@@ -31,10 +32,11 @@ const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
   { value: 'status', label: 'Status' },
 ];
 
-export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = false, searchQuery = '', sort = 'updated' }: WorkspaceHeaderProps) {
-  return <header class="workspace-header" data-component="workspace-header">
+export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = false, searchQuery = '', sort = 'updated', controlsVisible = true }: WorkspaceHeaderProps) {
+  const projectActionsDisabled = mode === 'settings';
+  return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
     <div class="workspace-header__identity"><p>{projectName}</p><h1>{viewName}</h1></div>
-    <div class="workspace-header__actions">
+    {controlsVisible && <div class="workspace-header__actions">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
         <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
@@ -42,19 +44,19 @@ export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = fals
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__sort-group" single>
         <wa-dropdown class="workspace-header__sort" placement="bottom-end">
-          <wa-button slot="trigger" appearance="plain" with-caret aria-label="Sort tickets" title="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button>
+          <wa-button slot="trigger" appearance="plain" with-caret disabled={projectActionsDisabled} aria-label="Sort tickets" title="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button>
           {sortOptions.map(option => <wa-dropdown-item type="checkbox" checked={sort === option.value} data-sort={option.value} value={option.value}>{option.label}</wa-dropdown-item>)}
         </wa-dropdown>
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
-        <wa-button appearance="plain" data-action="toggle-favorite" aria-label="Favorite view" title="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>
-        <wa-button appearance="plain" data-action="more-workspace-actions" aria-label="More workspace actions" title="More workspace actions"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
+        <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="toggle-favorite" aria-label="Favorite view" title="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>
+        <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="more-workspace-actions" aria-label="More workspace actions" title="More workspace actions"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
         {searchOpen
-          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} autofocus clearable><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span></wa-input>
-          : <wa-button class="workspace-header__search-button" appearance="plain" data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
+          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} disabled={projectActionsDisabled} autofocus clearable><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span></wa-input>
+          : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
       </ToolbarControlGroup>
-    </div>
+    </div>}
   </header>;
 }

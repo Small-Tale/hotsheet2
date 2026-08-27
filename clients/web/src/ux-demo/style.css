@@ -39,6 +39,7 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .component-stage__canvas--row { width: 100%; min-width: 0; }
 .collection-demo { display: grid; width: 100%; max-width: 70rem; margin: auto; gap: 1.25rem; justify-items: center; }
 .collection-demo--board { max-width: none; }
+.collection-demo--board .ticket-board { height: 34rem; }
 .workspace-component-demo { display: grid; width: 100%; max-width: 70rem; margin: auto; gap: 1.25rem; }
 .workspace-component-demo__content { min-height: 24rem; padding: 1rem; overflow: hidden; border: 1px solid #dddde3; border-radius: .85rem; background: #f4f5f7; }
 .workspace-settings-preview { display: grid; max-width: 38rem; margin: 2rem auto; padding: 2rem; border: 1px solid #d9dbe1; border-radius: 1rem; background: #fff; box-shadow: 0 .5rem 1.5rem rgba(35, 32, 48, .07); gap: 1rem; }
@@ -80,6 +81,9 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .resizable-region-demo__panel span { color: #777a84; font-size: .74rem; }
 .resizable-region-demo__remainder { display: grid; color: #8a8d96; flex: 1; place-items: center; }
 .app-shell-demo { width: min(86rem, calc(100vw - 3rem)); }
+.shell-mode-surface { display: grid; min-height: 20rem; padding: 2rem; border: 1px dashed #c9cdd6; border-radius: .8rem; color: #686b75; background: #fff; align-content: center; justify-items: center; text-align: center; }
+.shell-mode-surface h2 { margin: 0 0 .4rem; color: #24262d; }
+.shell-mode-surface p { margin: 0; }
 @media (max-width: 48rem) { .project-tab-demo__surface { grid-template-columns: 1fr; } }
 .project-sidebar-demo__resize-handle svg { width: 1.15rem; height: 1.15rem; }
 @media (min-width: 78rem) {

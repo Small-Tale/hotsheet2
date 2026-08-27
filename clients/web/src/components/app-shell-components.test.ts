@@ -4,7 +4,7 @@ import { ConnectionStateBanner } from './connection-state-banner';
 import { ProjectTab } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { clampRegionSize, ResizableRegion } from './resizable-region';
-import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, selectProjectTab, setRegionSize, resizeDemoWidth } from '../ux-demo/app-shell-demo';
+import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, selectProjectTab, setRegionSize, resizeDemoWidth, shellMode } from '../ux-demo/app-shell-demo';
 
 describe('application shell components', () => {
   it('projects every ProjectTab state without nesting actions', () => {
@@ -23,6 +23,8 @@ describe('application shell components', () => {
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-label="Add project"');
     expect(markup).toContain('aria-label="More projects"');
+    expect(markup).toContain('aria-label="Terminal dashboard"');
+    expect(markup).toContain('aria-label="Cross-project stats"');
     expect(markup).toContain('data-project-id="one"');
   });
 
@@ -50,6 +52,10 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-inspector"');
     expect(markup).toContain('Ticket workspace');
+    const globalMarkup = String(AppShell({ mode: 'stats', tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never }));
+    expect(globalMarkup).toContain('data-mode="stats"');
+    expect(globalMarkup).not.toContain('data-region-id="app-sidebar"');
+    expect(globalMarkup).not.toContain('data-region-id="app-inspector"');
   });
 
   it('walks select, close, add, resize, and post-resize transitions', () => {
@@ -57,7 +63,9 @@ describe('application shell components', () => {
       { id: 'one', name: 'One', location: 'local', selected: true },
       { id: 'two', name: 'Two', location: 'remote' },
     ];
+    shellMode.value = 'stats';
     selectProjectTab('two');
+    expect(shellMode.value).toBe('project');
     expect(projectTabs.value.map(tab => [tab.id, tab.selected])).toEqual([['one', false], ['two', true]]);
     closeProjectTab('two');
     expect(projectTabs.value).toMatchObject([{ id: 'one', selected: true }]);

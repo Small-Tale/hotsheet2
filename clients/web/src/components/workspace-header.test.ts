@@ -14,6 +14,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('slot="start"');
     expect(markup).not.toContain('data-action="open-workspace-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
+    expect(markup.match(/disabled/g)).toHaveLength(4);
   });
 
   it('renders the collapsed find state as a single magnifier button', () => {
@@ -21,5 +22,12 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('workspace-header__search-group" data-expanded="false"');
     expect(markup).toContain('data-action="open-workspace-search" aria-label="Search tickets"');
     expect(markup).not.toContain('name="workspace-search"');
+  });
+
+  it('omits every project control for global shell modes', () => {
+    const markup = String(WorkspaceHeader({ projectName: 'Terminals', viewName: 'Terminal Dashboard', mode: 'list', controlsVisible: false }));
+    expect(markup).toContain('data-controls-visible="false"');
+    expect(markup).not.toContain('workspace-header__actions');
+    expect(markup).not.toContain('Search tickets');
   });
 });

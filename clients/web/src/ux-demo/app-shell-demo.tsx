@@ -4,7 +4,7 @@ import { AppShell } from '../components/app-shell';
 import { ConnectionStateBanner, type ConnectionState } from '../components/connection-state-banner';
 import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
-import { ProjectTabBar } from '../components/project-tab-bar';
+import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { ResizableRegion, clampRegionSize } from '../components/resizable-region';
 import { LucideIcon } from '../components/lucide-icon';
 import { TicketBoard } from '../components/ticket-board';
@@ -24,6 +24,7 @@ const initialTabs: ProjectTabProps[] = [
 
 export const projectTabs = signal<ProjectTabProps[]>(initialTabs.map(tab => ({ ...tab })));
 export const shellConnectionState = signal<ConnectionState | undefined>('reconnecting');
+export const shellMode = signal<ProjectTabBarMode>('project');
 export const shellSidebarSize = signal(272);
 export const shellInspectorSize = signal(352);
 export const resizeDemoWidth = signal(260);
@@ -56,6 +57,7 @@ export function setRegionSize(id: string, size: number): void {
 }
 
 export function selectProjectTab(id: string): void {
+  shellMode.value = 'project';
   projectTabs.value = projectTabs.value.map(tab => ({ ...tab, selected: tab.id === id }));
   shellEvent.value = `${projectTabs.value.find(tab => tab.id === id)?.name ?? 'Project'} selected.`;
 }
@@ -70,6 +72,7 @@ export function closeProjectTab(id: string): void {
 
 let addedProject = 1;
 export function addDemoProject(): void {
+  shellMode.value = 'project';
   const id = `new-${addedProject}`;
   projectTabs.value = [...projectTabs.value.map(tab => ({ ...tab, selected: false })), { id, name: `New Project ${addedProject++}`, location: 'local', selected: true }];
   shellEvent.value = 'Project added.';
@@ -90,7 +93,7 @@ export function ProjectTabDemo() {
 }
 
 export function ProjectTabBarDemo() {
-  return <section class="project-tab-bar-demo" aria-label="ProjectTabBar demo"><ProjectTabBar tabs={projectTabs.value} /><p class="component-stage__event" aria-live="polite">{shellEvent.value}</p></section>;
+  return <section class="project-tab-bar-demo" aria-label="ProjectTabBar demo"><ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} /><p class="component-stage__event" aria-live="polite">{shellEvent.value}</p></section>;
 }
 
 export function ResizableRegionDemo() {
@@ -126,8 +129,18 @@ function ShellSidebar() {
 export function AppShellDemo() {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   const banner = shellConnectionState.value ? <ConnectionStateBanner state={shellConnectionState.value} detail="Showing the latest cached project state." /> : undefined;
+  const globalMode = shellMode.value !== 'project';
+  const projectSettings = workspaceMode.value === 'settings';
+  const projectWorkspace = projectSettings ? <section class="workspace-settings-preview" aria-label="Project settings"><h2>Project settings</h2><p>Configure ticket providers, project defaults, commands, and checkout behavior.</p></section> : workspaceMode.value === 'board' ? <TicketBoard columns={workspaceColumns()} label="Project board" /> : <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />;
+  const workspace = shellMode.value === 'terminals'
+    ? <section class="shell-mode-surface" aria-label="Terminal dashboard workspace"><h2>Terminal dashboard</h2><p>Monitor and arrange terminal sessions across connected projects.</p></section>
+    : shellMode.value === 'stats'
+      ? <section class="shell-mode-surface" aria-label="Cross-project stats workspace"><h2>Cross-project stats</h2><p>Compare ticket flow and activity across connected projects.</p></section>
+      : projectWorkspace;
+  const projectName = shellMode.value === 'terminals' ? 'Terminals' : shellMode.value === 'stats' ? 'Stats' : 'Hot Sheet 2';
+  const viewName = shellMode.value === 'terminals' ? 'Terminal Dashboard' : shellMode.value === 'stats' ? 'Cross-project Stats' : 'All Tickets';
   return <section class="app-shell-demo" aria-label="AppShell demo">
-    <AppShell tabs={projectTabs.value} sidebar={<ShellSidebar />} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceHeader projectName="Hot Sheet 2" viewName="All Tickets" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} />} workspace={workspaceMode.value === 'settings' ? <section class="workspace-settings-preview" aria-label="Project settings"><h2>Project settings</h2><p>Configure ticket providers, project defaults, commands, and checkout behavior.</p></section> : workspaceMode.value === 'board' ? <TicketBoard columns={workspaceColumns()} label="Project board" /> : <TicketList tickets={filteredWorkspaceTickets()} label="All project tickets" />} inspectorSize={shellInspectorSize.value} inspector={inspectorOpen.value ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab="info" upNext={ticket.upNext} /> : undefined} />
+    <AppShell mode={shellMode.value} tabs={projectTabs.value} sidebar={<ShellSidebar />} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceHeader projectName={projectName} viewName={viewName} mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} controlsVisible={!globalMode} />} workspace={workspace} inspectorSize={shellInspectorSize.value} inspector={!projectSettings && inspectorOpen.value ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab="info" upNext={ticket.upNext} /> : undefined} />
     <p class="component-stage__event" aria-live="polite">{shellEvent.value}</p>
   </section>;
 }
