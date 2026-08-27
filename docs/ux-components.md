@@ -154,7 +154,7 @@ selection where sensible.
   - `TicketRowDivider`
 - `TicketRow` — **demo built**: a shared, horizontally responsive ticket-summary
   boundary for list and narrow column use. The comfortable list presentation is a
-  flat, separator-led row; the same component becomes a lightly elevated card at
+  square-cornered, flat, separator-led row that reads as one continuous list; the same component becomes a lightly elevated, rounded card at
   narrow column widths. Its primary line treats qualified slug and two-line-clamped
   title as one normal inline formatting flow, ordered slug → priority → title so
   bounded priority remains visible before an arbitrarily long title (the slug is a

@@ -200,6 +200,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const listRow = listRows.first();
   const listWidth = await listRow.evaluate(node => node.getBoundingClientRect().width);
   expect(listWidth).toBeGreaterThan(600);
+  await expect(listRow).toHaveCSS('border-radius', '0px');
   await expect(listRow).toHaveCSS('box-shadow', 'none');
   await listRow.click();
   await expect(listRow).toHaveAttribute('data-selected', 'true');
