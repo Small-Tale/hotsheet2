@@ -513,16 +513,22 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await page.goto('/ux-demo?component=project-summary');
   const summary = page.locator('[data-component="project-summary"]');
   await expect(summary).toContainText('42 completed');
+  await expect(summary).toContainText('84% coverage');
   await expect(summary.locator('[data-bar]')).toHaveCount(7);
 
   await page.goto('/ux-demo?component=repository-summary');
   const repository = page.getByRole('button', { name: 'Repository status for feature/client-sidebar' });
   await expect(repository.locator('[data-lucide="git-branch"]')).toHaveCount(1);
+  await expect(repository.locator('.repository-summary__branch-name')).toHaveCSS('direction', 'rtl');
+  await expect(repository.locator('.repository-summary__branch-name')).toHaveCSS('text-overflow', 'ellipsis');
   await repository.click();
   await expect(page.getByText('Repository status requested.')).toBeVisible();
 
   await page.goto('/ux-demo?component=view-navigation');
   const views = page.locator('[data-component="view-navigation"]');
+  await expect(views.getByRole('button', { name: /All Tickets/ })).toHaveCSS('padding-left', '0px');
+  const navigationLefts = await views.locator('header, li').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
+  expect(new Set(navigationLefts.map(value => Math.round(value))).size).toBe(1);
   await expect(views.getByRole('button', { name: /All Tickets/ })).toHaveAttribute('aria-current', 'page');
   await views.getByRole('button', { name: /Needs Review/ }).click();
   await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');

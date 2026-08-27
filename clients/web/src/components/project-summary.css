@@ -3,4 +3,4 @@
 .project-summary__chart span { width: .9rem; height: var(--bar-height); min-height: .3rem; border-radius: .18rem .18rem 0 0; background: #2563eb; }
 .project-summary__counts { display: grid; color: #71737d; font-size: .76rem; line-height: 1.35; }
 .project-summary__counts strong { color: #292a30; font-weight: 650; }
-.project-summary__progress { color: #ef4444; font-size: .8rem; font-variant-numeric: tabular-nums; }
+.project-summary__coverage { color: #ef4444; font-size: .72rem; font-variant-numeric: tabular-nums; }

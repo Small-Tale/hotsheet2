@@ -82,8 +82,8 @@ Supporting components:
 
 The left region in the wireframe, scoped to the selected project/store connection.
 
-- `ProjectSummary` — **demo built**: typed compact progress trend, completed and
-  in-progress totals, and percentage
+- `ProjectSummary` — **demo built**: typed compact ticket-completion trend,
+  completed/in-progress totals, and an explicitly labeled test-coverage percentage
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
   - `CoverageOrProgressIndicator` for the secondary percentage shown in the wireframe

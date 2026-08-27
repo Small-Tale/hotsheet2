@@ -7,8 +7,9 @@ import { ViewNavigation } from './view-navigation';
 
 describe('ProjectSidebar component slice', () => {
   it('derives project progress bars and accessible summary text from props', () => {
-    const markup = String(ProjectSummary({ completed: 8, inProgress: 2, progress: 80, trend: [1, 4] }));
-    expect(markup).toContain('80% complete');
+    const markup = String(ProjectSummary({ completed: 8, inProgress: 2, coverage: 80, trend: [1, 4] }));
+    expect(markup).toContain('80% coverage');
+    expect(markup).toContain('Recent ticket completion trend');
     expect(markup).toContain('8 completed');
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
   });
@@ -17,6 +18,7 @@ describe('ProjectSidebar component slice', () => {
     const markup = String(RepositorySummary({ branch: 'main', unpushed: 3, uncommitted: 1 }));
     expect(markup).toContain('Repository status for main');
     expect(markup).toContain('data-lucide="git-branch"');
+    expect(markup).toContain('repository-summary__branch-name');
     expect(markup).toContain('3 unpushed commits');
   });
 
