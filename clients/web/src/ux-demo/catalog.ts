@@ -8,7 +8,12 @@ const demo = (id: string, name: string, description: string, phase: DemoPhase = 
 export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
     demo('app-shell', 'AppShell', 'Top-level responsive application regions.'),
-    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.'),
+    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', false, ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']),
+    demo('project-summary', 'ProjectSummary', 'Compact progress trend and ticket totals.', 'feature-floor', true),
+    demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
+    demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
+    demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
+    demo('drive-control', 'DriveControl', 'Primary AI drive start and stop action.', 'feature-floor', true),
     demo('workspace-header', 'WorkspaceHeader', 'Project heading, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-control-group', 'ticket-list', 'ticket-board']),
     demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.'),
   ]},

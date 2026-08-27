@@ -508,3 +508,47 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
   const disabledCursor = await create.evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
   expect(disabledCursor).toBe('not-allowed');
 });
+
+test('exercises the five ProjectSidebar component demos and their controlled transitions', async ({ page }) => {
+  await page.goto('/ux-demo?component=project-summary');
+  const summary = page.locator('[data-component="project-summary"]');
+  await expect(summary).toContainText('42 completed');
+  await expect(summary.locator('[data-bar]')).toHaveCount(7);
+
+  await page.goto('/ux-demo?component=repository-summary');
+  const repository = page.getByRole('button', { name: 'Repository status for feature/client-sidebar' });
+  await expect(repository.locator('[data-lucide="git-branch"]')).toHaveCount(1);
+  await repository.click();
+  await expect(page.getByText('Repository status requested.')).toBeVisible();
+
+  await page.goto('/ux-demo?component=view-navigation');
+  const views = page.locator('[data-component="view-navigation"]');
+  await expect(views.getByRole('button', { name: /All Tickets/ })).toHaveAttribute('aria-current', 'page');
+  await views.getByRole('button', { name: /Needs Review/ }).click();
+  await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');
+  await expect(views.getByRole('button', { name: /All Tickets/ })).not.toHaveAttribute('aria-current', 'page');
+  await views.getByRole('button', { name: 'Add view' }).click();
+  await expect(page.getByText('New view editor requested.')).toBeVisible();
+
+  await page.goto('/ux-demo?component=command-navigation');
+  const commands = page.locator('[data-component="command-navigation"]');
+  const heading = commands.getByRole('button', { name: /Project commands/ });
+  await expect(heading).toHaveAttribute('aria-expanded', 'true');
+  await commands.getByRole('button', { name: 'Verify project' }).click();
+  await expect(commands.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
+  await commands.getByRole('button', { name: /Running Verify project/ }).click();
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveAttribute('aria-pressed', 'false');
+  await heading.click();
+  await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCount(0);
+  await expect(heading).toHaveAttribute('aria-expanded', 'false');
+
+  await page.goto('/ux-demo?component=drive-control');
+  const drive = page.locator('[data-component="drive-control"]');
+  await expect(drive).toHaveAttribute('aria-label', 'Start Codex');
+  await drive.click();
+  await expect(drive).toHaveAttribute('aria-label', 'Stop Codex');
+  await expect(drive.locator('[data-lucide="square"]')).toHaveCount(1);
+  await drive.click();
+  await expect(drive).toHaveAttribute('aria-label', 'Start Codex');
+  await expect(drive.locator('[data-lucide="play"]')).toHaveCount(1);
+});

@@ -82,24 +82,29 @@ Supporting components:
 
 The left region in the wireframe, scoped to the selected project/store connection.
 
-- `ProjectSummary`
+- `ProjectSummary` — **demo built**: typed compact progress trend, completed and
+  in-progress totals, and percentage
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
   - `CoverageOrProgressIndicator` for the secondary percentage shown in the wireframe
-- `RepositorySummary`
+- `RepositorySummary` — **demo built**: one accessible branch/status action with
+  unpushed and uncommitted counts
   - `BranchChip`
   - unpushed and uncommitted counts
   - opens the repository-status popover tracked by HS2-RPVFA4
-- `ViewNavigation`
+- `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
+  action, and controlled selection
   - section heading and add-view action
   - `ViewNavigationItem` with icon, title, count, selection, and attention state
   - built-ins: Needs Review, All Tickets, Backlog, Archive
   - user-defined views when custom-view support lands
-- `CommandNavigation`
+- `CommandNavigation` — **demo built**: collapsible group of palette-colored,
+  icon-bearing command actions with controlled running state
   - `CommandButton`
   - `CommandGroup` with collapsible heading
   - running, stopping, last-run, success, and failure states
-- `DriveControl`
+- `DriveControl` — **demo built**: primary start/stop action with explicit tool and
+  running semantics
   - primary launch/resume action
   - active tool/connection state and stop confirmation
 

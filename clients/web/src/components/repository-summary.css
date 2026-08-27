@@ -1,0 +1,8 @@
+.repository-summary { display: grid; width: 100%; min-height: 2.25rem; padding: .35rem .65rem; border: 0; border-radius: .5rem; color: #3f4149; background: transparent; cursor: pointer; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .55rem; }
+.repository-summary:hover { background: #eef2f7; }
+.repository-summary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.repository-summary__branch, .repository-summary__metric { display: inline-flex; min-width: 0; align-items: center; gap: .3rem; }
+.repository-summary__branch { overflow: hidden; color: #1d4ed8; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.repository-summary__metric { color: #2563eb; font-size: .78rem; font-variant-numeric: tabular-nums; }
+.repository-summary__metric--changes { padding: .05rem .38rem; border-radius: 999px; color: #535661; background: #e5e7eb; }
+.repository-summary svg { width: .9rem; height: .9rem; flex: none; }

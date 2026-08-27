@@ -18,6 +18,7 @@ import { collectionTickets, recordCollectionEvent, selectCollectionTicket, Ticke
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
+import { commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -52,6 +53,11 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-info-panel') return <TicketInfoPanelDemo />;
   if (item.id === 'ticket-timeline') return <TicketTimelineDemo />;
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
+  if (item.id === 'project-summary') return <ProjectSummaryDemo />;
+  if (item.id === 'repository-summary') return <RepositorySummaryDemo />;
+  if (item.id === 'view-navigation') return <ViewNavigationDemo />;
+  if (item.id === 'command-navigation') return <CommandNavigationDemo />;
+  if (item.id === 'drive-control') return <DriveControlDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 
@@ -114,6 +120,12 @@ function selectDemo(id: string, push = true): void {
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefault(); selectDemo((target as HTMLElement).dataset.demoId!); });
 delegate(root, 'click', '[data-action="toggle-settings"]', () => { settingsOpen.value = !settingsOpen.value; });
+delegate(root, 'click', '[data-action="open-repository-status"]', () => { sidebarEvent.value = 'Repository status requested.'; });
+delegate(root, 'click', '[data-action="add-view"]', () => { sidebarEvent.value = 'New view editor requested.'; });
+delegate(root, 'click', '[data-action="select-view"]', (_event, target) => { const id = (target as HTMLElement).dataset.viewId!; selectedViewId.value = id; sidebarEvent.value = `${sidebarViews.find(view => view.id === id)?.label ?? 'View'} selected.`; });
+delegate(root, 'click', '[data-action="toggle-command-group"]', () => { commandGroupExpanded.value = !commandGroupExpanded.value; sidebarEvent.value = commandGroupExpanded.value ? 'Command group expanded.' : 'Command group collapsed.'; });
+delegate(root, 'click', '[data-action="run-command"]', (_event, target) => { const id = (target as HTMLElement).dataset.commandId!; runningCommandId.value = runningCommandId.value === id ? undefined : id; sidebarEvent.value = runningCommandId.value ? `${sidebarCommands.find(command => command.id === id)?.label ?? 'Command'} started.` : 'Command stopped.'; });
+delegate(root, 'click', '[data-action="toggle-drive"]', () => { driveRunning.value = !driveRunning.value; sidebarEvent.value = driveRunning.value ? 'Codex drive started.' : 'Codex drive stopped.'; });
 delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
