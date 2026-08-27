@@ -40,7 +40,7 @@ export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = fals
         <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
         <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
       </ToolbarControlGroup>
-      <ToolbarControlGroup className="workspace-header__sort-group">
+      <ToolbarControlGroup className="workspace-header__sort-group" single>
         <wa-dropdown class="workspace-header__sort" placement="bottom-end">
           <wa-button slot="trigger" appearance="plain" with-caret aria-label="Sort tickets" title="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button>
           {sortOptions.map(option => <wa-dropdown-item type="checkbox" checked={sort === option.value} data-sort={option.value} value={option.value}>{option.label}</wa-dropdown-item>)}
@@ -50,7 +50,7 @@ export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = fals
         <wa-button appearance="plain" data-action="toggle-favorite" aria-label="Favorite view" title="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>
         <wa-button appearance="plain" data-action="more-workspace-actions" aria-label="More workspace actions" title="More workspace actions"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
       </ToolbarControlGroup>
-      <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen}>
+      <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
         {searchOpen
           ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} autofocus clearable><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span></wa-input>
           : <wa-button class="workspace-header__search-button" appearance="plain" data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}

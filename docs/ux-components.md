@@ -110,7 +110,9 @@ The left region in the wireframe, scoped to the selected project/store connectio
   sort menu, and a connected list/column/settings workspace
 - `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
   buttons, segmented choices, and popup triggers; child controls do not draw their
-  own borders or divider lines
+  own borders or divider lines. A single control highlights the whole group on
+  hover; controls in multi-item groups receive individual 32px highlights inside
+  the 40px shell.
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, and project settings** with
   accessible pressed state. Settings replaces ticket content while active rather
@@ -119,7 +121,8 @@ The left region in the wireframe, scoped to the selected project/store connectio
 - `SavedOrCommandMenu`
 - `SearchButton` and `SearchField` expansion — the magnifier button is replaced by
   an animated, wider field carrying the same icon and automatic focus. An empty
-  field collapses on blur; a non-empty query remains expanded.
+  field collapses on blur; a non-empty query remains expanded. Focus is drawn by
+  the outer control group so the ring is never clipped by the animated field.
 
 ### 2.4 `ProjectTabBar` — feature floor
 

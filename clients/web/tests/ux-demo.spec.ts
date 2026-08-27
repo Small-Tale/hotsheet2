@@ -262,6 +262,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const search = header.getByRole('textbox', { name: 'Search tickets' });
   await expect(search).toBeFocused();
   await expect(searchControl.locator('[data-lucide="search"]')).toBeVisible();
+  await expect(searchGroup).not.toHaveCSS('box-shadow', 'none');
   await expect.poll(() => searchGroup.evaluate(node => node.getBoundingClientRect().width)).toBeGreaterThan(collapsedWidth * 3);
   const openHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
@@ -298,6 +299,21 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
     return button ? getComputedStyle(button).gap : null;
   });
   expect(gap).toBe('2px');
+  await popup.hover();
+  await expect(groups.nth(1)).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  const popupBackground = await popup.evaluate(node => {
+    const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
+    return button ? getComputedStyle(button).backgroundColor : null;
+  });
+  expect(popupBackground).toBe('rgba(0, 0, 0, 0)');
+  const groupedButton = demo.locator('wa-button[aria-label="Favorite view"]');
+  await groupedButton.hover();
+  const groupedGeometry = await groupedButton.evaluate(node => {
+    const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
+    if (!button) return null;
+    return { height: button.getBoundingClientRect().height, background: getComputedStyle(node).backgroundColor };
+  });
+  expect(groupedGeometry).toEqual({ height: 32, background: 'rgb(255, 255, 255)' });
 });
 
 test('expands, validates, creates, and cancels through QuickTicketComposer', async ({ page }) => {

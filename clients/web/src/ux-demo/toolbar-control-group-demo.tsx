@@ -12,7 +12,7 @@ export function ToolbarControlGroupDemo() {
       <button class="view-mode-switcher__button" aria-label="Columns view" aria-pressed="false"><LucideIcon icon={Columns3} name="columns-3" /></button>
       <button class="view-mode-switcher__button" aria-label="Settings view" aria-pressed="false"><LucideIcon icon={Settings} name="settings" /></button>
     </ToolbarControlGroup></div>
-    <div><h2>Popup menu</h2><ToolbarControlGroup>
+    <div><h2>Popup menu</h2><ToolbarControlGroup single>
       <wa-dropdown placement="bottom-start"><wa-button slot="trigger" appearance="plain" with-caret aria-label="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button><wa-dropdown-item>Recently updated</wa-dropdown-item><wa-dropdown-item>Priority</wa-dropdown-item></wa-dropdown>
     </ToolbarControlGroup></div>
     <div><h2>Button group</h2><ToolbarControlGroup label="View actions">
