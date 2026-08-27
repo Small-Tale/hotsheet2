@@ -17,6 +17,9 @@ export const composerTitle = signal('');
 export const composerCategory = signal('task');
 export const inspectorOpen = signal(true);
 export const inspectorTab = signal<InspectorTab>('info');
+export const inspectorCategory = signal('feature');
+export const inspectorPriority = signal<TicketRowProps['priority']>('high');
+export const inspectorStatus = signal<TicketRowProps['status']>('started');
 let demoSequence = 1;
 
 export function focusComposerTitle(root: ParentNode): boolean {
@@ -91,7 +94,7 @@ export function TicketInspectorDemo() {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   return <section class="inspector-demo" aria-label="TicketInspector demo">
     {inspectorOpen.value
-      ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="This is a focused summary of the ticket details. The production client will render Markdown and preserve in-progress edits when opening the larger reader." activeTab={inspectorTab.value} upNext={ticket.upNext} />
+      ? <TicketInspector slug={ticket.slug} title={ticket.title} status={inspectorStatus.value} priority={inspectorPriority.value} category={inspectorCategory.value} tags={ticket.tags} details="This is a focused summary of the ticket details. The production client will render Markdown and preserve in-progress edits when opening the larger reader." activeTab={inspectorTab.value} upNext={ticket.upNext} />
       : <wa-button data-action="open-ticket-inspector">Open ticket inspector</wa-button>}
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;

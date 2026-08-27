@@ -4,6 +4,7 @@ import { TicketPrioritySelect } from './ticket-priority-select';
 import { TicketInfoPanel } from './ticket-info-panel';
 import { TicketTimeline } from './ticket-timeline';
 import { TicketAttachments } from './ticket-attachments';
+import { TicketStatusMenu } from './ticket-status-menu';
 
 describe('ticket metadata controls and inspector panels', () => {
   it('renders colored category icons and semantic priority icons', () => {
@@ -13,6 +14,9 @@ describe('ticket metadata controls and inspector panels', () => {
     const priority = String(TicketPrioritySelect({ name: 'priority', value: 'urgent' }));
     expect(priority).toContain('data-lucide="chevrons-up"');
     expect(priority).toContain('data-lucide="minus"');
+    const status = String(TicketStatusMenu({ value: 'completed' }));
+    expect(status).toContain('aria-label="Change status, Completed"');
+    expect(status).toContain('data-inspector-status="verified"');
   });
 
   it('renders inspector sections independently of the inspector shell', () => {

@@ -105,6 +105,13 @@ and other non-action structure are the only ordinary exception.
   when relevant), not attributes alone. Exercise every rendered action such as Reset,
   Save, Cancel, Apply, Remove, and Undo. Prefer one tested binding/synchronization
   abstraction over per-component repair code.
+- **Assert the complete selected presentation after transitions**: when a composite
+  control renders a label plus icon, color, badge, checkmark, count, or other derived
+  decoration, changing its value must assert every visible facet in the closed/current
+  state—not only the label, initial render, or popup options. Exercise the transition
+  through the real owning surface (for example an inspector), then verify stale
+  decorations disappeared and the new label and decorations agree with application
+  state. A menu containing correct icons does not prove its selected-value projection.
 - **Manual test plan**: keep a manual test plan doc (e.g. `docs/manual-test-plan.md`) for features that can't be reliably automated. **Keep it up to date** — add such features there; when you add automated coverage for a previously-manual item, remove it and note it in an "Automated Coverage Summary".
 - **Feature coverage matrix**: update [`docs/TEST-COVERAGE.md`](docs/TEST-COVERAGE.md)
   in the same change whenever a feature is added, shipped, changed, deferred, or gains

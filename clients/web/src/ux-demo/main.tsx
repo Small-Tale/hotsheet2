@@ -15,9 +15,9 @@ import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
 import { Network } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
-import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorOpen, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
-import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketTimelineDemo } from './ticket-metadata-demo';
+import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -48,6 +48,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
   if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;
   if (item.id === 'ticket-priority-select') return <TicketPrioritySelectDemo />;
+  if (item.id === 'ticket-status-menu') return <TicketStatusMenuDemo />;
   if (item.id === 'ticket-info-panel') return <TicketInfoPanelDemo />;
   if (item.id === 'ticket-timeline') return <TicketTimelineDemo />;
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
@@ -171,6 +172,9 @@ delegate(root, 'submit', '[data-action="create-ticket-form"]', (event) => { even
 delegate(root, 'click', '[data-action="set-inspector-tab"]', (_event, target) => { inspectorTab.value = (target as HTMLElement).dataset.inspectorTab as typeof inspectorTab.value; });
 delegate(root, 'click', '[data-action="close-ticket-inspector"]', () => { inspectorOpen.value = false; recordCollectionEvent('Inspector closed'); });
 delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => { inspectorOpen.value = true; recordCollectionEvent('Inspector opened'); });
+delegate(root, 'change', '[name="inspector-category"]', (_event, target) => { inspectorCategory.value = (target as FormControl).value; });
+delegate(root, 'change', '[name="inspector-priority"]', (_event, target) => { inspectorPriority.value = (target as FormControl).value as typeof inspectorPriority.value; });
+delegate(root, 'click', '[data-inspector-status]', (_event, target) => { inspectorStatus.value = (target as HTMLElement).dataset.inspectorStatus as typeof inspectorStatus.value; });
 delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   toggleCollectionTicketUpNext(ticket.slug);

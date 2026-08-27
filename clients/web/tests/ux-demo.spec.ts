@@ -377,6 +377,18 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(2);
   await expect(inspector.locator('.ticket-category-select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
   await expect(inspector.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
+  const category = inspector.locator('wa-select[name="inspector-category"]');
+  await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(inspector.locator('.ticket-category-select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-category-select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
+  const priority = inspector.locator('wa-select[name="inspector-priority"]');
+  await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'low'; node.dispatchEvent(new Event('change', { bubbles: true })); });
+  await expect(inspector.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
+  await inspector.locator('wa-button[aria-label="Change status, Started"]').click();
+  await inspector.locator('wa-dropdown-item[data-inspector-status="completed"]').click();
+  await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
+  await expect(inspector.locator('wa-button[aria-label="Change status, Completed"]')).toBeVisible();
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   await inspector.getByRole('button', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
@@ -394,11 +406,16 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await inspector.getByRole('button', { name: 'Close inspector' }).click();
   await expect(inspector).toHaveCount(0);
   await page.getByRole('button', { name: 'Open ticket inspector' }).click();
-  await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  const reopened = page.locator('[data-component="ticket-inspector"]');
+  await expect(reopened).toBeVisible();
+  await reopened.getByRole('button', { name: 'Info' }).click();
+  await expect(reopened.locator('.ticket-category-select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(reopened.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
+  await expect(reopened.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
 });
 
 test('renders standalone ticket metadata and inspector-section demos', async ({ page }) => {
-  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-attachments', 'ticket-attachments']] as const) {
+  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-status-menu', 'ticket-status-menu'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-attachments', 'ticket-attachments']] as const) {
     await page.goto(`/ux-demo?component=${id}`);
     await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`))).toBeVisible();
   }

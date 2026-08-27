@@ -258,6 +258,9 @@ as a focused shell around separately demoed `TicketInfoPanel`, `TicketTimeline`,
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
     selected-value and popup-option presentations
+  - `TicketStatusMenu` — **demo built**: the current `StatusBadge` is an actionable
+    popup trigger whose icon-bearing options update the controlled status value
+    while retaining the compact badge presentation
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact
