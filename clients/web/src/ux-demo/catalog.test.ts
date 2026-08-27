@@ -9,7 +9,7 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'toolbar-control-group']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['project-sidebar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'toolbar-control-group']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);

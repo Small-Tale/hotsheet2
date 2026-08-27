@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CommandNavigation } from './command-navigation';
 import { DriveControl } from './drive-control';
 import { ProjectSummary } from './project-summary';
+import { ProjectSidebar } from './project-sidebar';
 import { RepositorySummary } from './repository-summary';
 import { ViewNavigation } from './view-navigation';
 
@@ -12,8 +13,14 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).not.toContain('project-summary__coverage');
     expect(markup).toContain('Tickets completed over the last 2 days: 1, 4');
     expect(markup).toContain('8 completed today');
-    expect(markup).toContain('2 currently in progress');
+    expect(markup).toContain('2 in progress');
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
+  });
+
+  it('renders zero-completion days as explicit baseline marks', () => {
+    const markup = String(ProjectSummary({ completedToday: 1, inProgress: 0, trend: [0, 1] }));
+    expect(markup).toContain('data-zero="true"');
+    expect(markup).toContain('data-zero="false"');
   });
 
   it('renders repository status as one discoverable action', () => {
@@ -43,5 +50,10 @@ describe('ProjectSidebar component slice', () => {
     const running = String(DriveControl({ running: true, tool: 'Codex' }));
     expect(running).toContain('Stop Codex');
     expect(running).toContain('data-lucide="square"');
+  });
+
+  it('composes the five sidebar boundaries without duplicating their markup', () => {
+    const markup = String(ProjectSidebar({ completedToday: 1, inProgress: 2, completionTrend: [0, 1], branch: 'main', unpushed: 0, uncommitted: 1, views: [{ id: 'all', label: 'All Tickets', icon: 'all' }], selectedViewId: 'all', commandGroupLabel: 'Commands', commands: [], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex' }));
+    for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) expect(markup).toContain(`data-component="${component}"`);
   });
 });

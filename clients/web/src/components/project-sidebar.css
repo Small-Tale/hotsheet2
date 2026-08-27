@@ -1,0 +1,2 @@
+.project-sidebar { display: flex; width: min(17rem, 100%); min-height: 38rem; padding: .65rem; border: 1px solid #d7d9df; border-radius: .9rem; background: #fafafd; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .08); flex-direction: column; gap: .65rem; }
+.project-sidebar__spacer { min-height: 2rem; flex: 1; }

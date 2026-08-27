@@ -78,13 +78,16 @@ Supporting components:
 - `WindowChrome` — native traffic lights/titlebar accommodation in Tauri/macOS; absent
   or adapted in an ordinary browser.
 
-### 2.2 `ProjectSidebar` — feature floor
+### 2.2 `ProjectSidebar` — feature floor, demo built
 
 The left region in the wireframe, scoped to the selected project/store connection.
+The **built demo** composes the five production boundaries below into a full-height
+sidebar with the drive action anchored at the bottom and shared controlled state.
 
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
-  percentage from the wireframe is intentionally omitted.
+  percentage from the wireframe is intentionally omitted. Zero-completion days retain
+  a one-pixel neutral baseline mark so all seven day positions remain visible.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `RepositorySummary` — **demo built**: one accessible branch/status action with
@@ -93,7 +96,8 @@ The left region in the wireframe, scoped to the selected project/store connectio
   - unpushed and uncommitted counts
   - opens the repository-status popover tracked by HS2-RPVFA4
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
-  action, and controlled selection
+  action, and controlled selection. Row contents align with the section heading while
+  selection/hover backgrounds extend halfway into the surrounding side gutters.
   - section heading and add-view action
   - `ViewNavigationItem` with icon, title, count, selection, and attention state
   - built-ins: Needs Review, All Tickets, Backlog, Archive

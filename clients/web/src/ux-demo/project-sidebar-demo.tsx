@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { DriveControl } from '../components/drive-control';
 import { ProjectSummary } from '../components/project-summary';
+import { ProjectSidebar } from '../components/project-sidebar';
 import { RepositorySummary } from '../components/repository-summary';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
 
@@ -26,8 +27,12 @@ export const sidebarCommands: CommandNavigationItem[] = [
 function DemoFrame({ children }: { children: unknown }) {
   return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail">{children}</div><p class="component-stage__event" aria-live="polite">{sidebarEvent.value}</p></section>;
 }
-export function ProjectSummaryDemo() { return <DemoFrame><ProjectSummary completedToday={6} inProgress={3} trend={[3, 1, 2, 5, 4, 7, 6]} /></DemoFrame>; }
+const completionTrend = [3, 0, 2, 5, 4, 7, 6];
+export function ProjectSummaryDemo() { return <DemoFrame><ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} /></DemoFrame>; }
 export function RepositorySummaryDemo() { return <DemoFrame><RepositorySummary branch="feature/client-sidebar" unpushed={6} uncommitted={2} /></DemoFrame>; }
 export function ViewNavigationDemo() { return <DemoFrame><ViewNavigation items={sidebarViews} selectedId={selectedViewId.value} /></DemoFrame>; }
 export function CommandNavigationDemo() { return <DemoFrame><CommandNavigation label="Project commands" expanded={commandGroupExpanded.value} commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} /></DemoFrame>; }
 export function DriveControlDemo() { return <DemoFrame><DriveControl running={driveRunning.value} tool="Codex" /></DemoFrame>; }
+export function ProjectSidebarDemo() {
+  return <section class="project-sidebar-demo"><ProjectSidebar completedToday={6} inProgress={3} completionTrend={completionTrend} branch="feature/client-sidebar" unpushed={6} uncommitted={2} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="Codex" /><p class="component-stage__event" aria-live="polite">{sidebarEvent.value}</p></section>;
+}

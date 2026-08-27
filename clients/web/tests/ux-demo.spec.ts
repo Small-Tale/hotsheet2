@@ -513,9 +513,12 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await page.goto('/ux-demo?component=project-summary');
   const summary = page.locator('[data-component="project-summary"]');
   await expect(summary).toContainText('6 completed today');
-  await expect(summary).toContainText('3 currently in progress');
+  await expect(summary).toContainText('3 in progress');
   await expect(summary).not.toContainText('%');
   await expect(summary.locator('[data-bar]')).toHaveCount(7);
+  await expect(summary.locator('[data-zero="true"]')).toHaveCount(1);
+  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('height', '1px');
+  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(174, 177, 186)');
 
   await page.goto('/ux-demo?component=repository-summary');
   const repository = page.getByRole('button', { name: 'Repository status for feature/client-sidebar' });
@@ -527,9 +530,15 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
 
   await page.goto('/ux-demo?component=view-navigation');
   const views = page.locator('[data-component="view-navigation"]');
-  await expect(views.getByRole('button', { name: /All Tickets/ })).toHaveCSS('padding-left', '0px');
-  const navigationLefts = await views.locator('header, li').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
-  expect(new Set(navigationLefts.map(value => Math.round(value))).size).toBe(1);
+  const navigationGeometry = await views.evaluate(node => {
+    const header = node.querySelector('header')!.getBoundingClientRect();
+    const button = node.querySelector('li button')!.getBoundingClientRect();
+    const icon = node.querySelector('li button svg')!.getBoundingClientRect();
+    return { headerLeft: header.left, buttonLeft: button.left, iconLeft: icon.left, headerRight: header.right, buttonRight: button.right };
+  });
+  expect(navigationGeometry.headerLeft - navigationGeometry.buttonLeft).toBeCloseTo(5.2, 0);
+  expect(navigationGeometry.buttonRight - navigationGeometry.headerRight).toBeCloseTo(5.2, 0);
+  expect(navigationGeometry.iconLeft).toBeCloseTo(navigationGeometry.headerLeft, 0);
   await expect(views.getByRole('button', { name: /All Tickets/ })).toHaveAttribute('aria-current', 'page');
   await views.getByRole('button', { name: /Needs Review/ }).click();
   await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');
@@ -558,4 +567,17 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await drive.click();
   await expect(drive).toHaveAttribute('aria-label', 'Start Codex');
   await expect(drive.locator('[data-lucide="play"]')).toHaveCount(1);
+});
+
+test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {
+  await page.goto('/ux-demo?component=project-sidebar');
+  const sidebar = page.locator('[data-component="project-sidebar"]');
+  await expect(sidebar).toBeVisible();
+  for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  await sidebar.getByRole('button', { name: /Backlog/ }).click();
+  await expect(sidebar.getByRole('button', { name: /Backlog/ })).toHaveAttribute('aria-current', 'page');
+  await sidebar.getByRole('button', { name: 'Verify project' }).click();
+  await expect(sidebar.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
+  await sidebar.getByRole('button', { name: 'Start Codex' }).click();
+  await expect(sidebar.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
 });

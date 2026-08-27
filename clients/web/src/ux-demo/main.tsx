@@ -18,7 +18,7 @@ import { collectionTickets, recordCollectionEvent, selectCollectionTicket, Ticke
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
-import { commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
+import { commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -54,6 +54,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-timeline') return <TicketTimelineDemo />;
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
+  if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
   if (item.id === 'repository-summary') return <RepositorySummaryDemo />;
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
