@@ -1,13 +1,20 @@
 .workspace-header { display: grid; width: 100%; gap: 1rem; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
 .workspace-header__identity p { margin: 0 0 .15rem; color: #73747d; font-size: .78rem; font-weight: 650; }
 .workspace-header__identity h1 { margin: 0; font-size: clamp(1.35rem, 2.3vw, 2rem); letter-spacing: -.025em; }
-.workspace-header__actions, .view-mode-switcher { display: flex; align-items: center; gap: .35rem; }
-.view-mode-switcher { padding: .2rem; border: 1px solid #d7d9df; border-radius: .65rem; background: #eceef2; }
-.view-mode-switcher__button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .45rem; color: #62646d; background: transparent; cursor: pointer; place-items: center; }
+.workspace-header__actions, .view-mode-switcher, .workspace-header__utility-group { display: flex; align-items: center; gap: .25rem; }
+.workspace-header__actions { justify-content: flex-end; }
+.view-mode-switcher { padding: .2rem; border: 1px solid #d7d9df; border-radius: 999px; background: #eceef2; }
+.view-mode-switcher__button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 999px; color: #62646d; background: transparent; cursor: pointer; place-items: center; }
 .view-mode-switcher__button svg, .workspace-header__actions wa-button svg { width: 1rem; height: 1rem; }
 .view-mode-switcher__button:hover { background: #fff; }
 .view-mode-switcher__button[aria-pressed="true"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .14); }
 .view-mode-switcher__button:focus-visible { outline: 3px solid rgba(37, 99, 235, .25); }
-.workspace-header__actions wa-button::part(base) { width: 2.45rem; min-height: 2.45rem; padding: 0; }
-.workspace-header__search { grid-column: 1 / -1; }
+.workspace-header__actions wa-button::part(base) { width: 2.45rem; min-height: 2.45rem; padding: 0; border-radius: 999px; }
+.workspace-header__sort wa-button::part(base) { width: 3rem; }
+.workspace-header__utility-group { overflow: hidden; gap: 0; border: 1px solid #d7d9df; border-radius: 999px; background: #fff; }
+.workspace-header__utility-group wa-button + wa-button { border-left: 1px solid #d7d9df; }
+.workspace-header__utility-group wa-button::part(base) { border: 0; border-radius: 0; }
+.workspace-header__search { width: clamp(10rem, 22vw, 18rem); }
+.workspace-header__search::part(base) { min-height: 2.45rem; border-radius: 999px; }
+.workspace-header__search::part(form-control-label) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (max-width: 48rem) { .workspace-header { grid-template-columns: 1fr; } .workspace-header__actions { flex-wrap: wrap; } }

@@ -106,14 +106,16 @@ The left region in the wireframe, scoped to the selected project/store connectio
 ### 2.3 `WorkspaceHeader` — feature floor
 
 - `WorkspaceHeader` — **demo built**: responsive project/view identity, compact
-  all-Lucide actions, expandable live search, and a connected list/column workspace
+  all-Lucide Tahoe-style toolbar groups, inline expanding live search, a functional
+  sort menu, and a connected list/column/settings workspace
 - `ProjectHeading`
-- `ViewModeSwitcher` — **built for list and columns** with accessible pressed state;
-  later dashboard/analytics modes join the same control
-- `SettingsButton`
-- `SortControl`
+- `ViewModeSwitcher` — **built for list, columns, and project settings** with
+  accessible pressed state. Settings replaces ticket content while active rather
+  than opening a transient popover; later dashboard/analytics modes join the control.
+- `SortControl` — popup menu with current-sort check state
 - `SavedOrCommandMenu`
-- `SearchButton` and `SearchField` expansion
+- `SearchButton` and `SearchField` expansion — the field grows inline immediately
+  before the trailing search button without adding a second header row
 
 ### 2.4 `ProjectTabBar` — feature floor
 
@@ -151,7 +153,8 @@ selection where sensible.
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities
 - `TicketList` — **demo foundation built**: composes the production `TicketRow` at
-  comfortable list width with listbox/multi-selection semantics and no parallel row markup
+  comfortable list width with listbox/multi-selection semantics and no parallel row
+  markup; only the first and last rows round the outer list corners
   - later data integration: virtualization, keyboard navigation, and multi-select behavior
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active
@@ -190,8 +193,9 @@ selection where sensible.
 
 ### 3.3 `ColumnWorkspace` — feature floor
 
-- `TicketBoard` — **demo foundation built**: horizontally scrolling status columns
-  with headings and counts, each composing production `TicketRow` at narrow width
+- `TicketBoard` — **demo foundation built**: unframed, horizontally scrolling status
+  columns with headings and counts, each composing production `TicketRow` at narrow
+  width. A hosting workspace may add its own surrounding surface when appropriate.
 - `TicketColumn` with heading, count, loading, and empty states
 - There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
   container-query card presentation while preserving identical markup and actions

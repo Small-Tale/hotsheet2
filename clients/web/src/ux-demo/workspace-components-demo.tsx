@@ -1,5 +1,5 @@
 import { signal } from 'kerfjs';
-import { WorkspaceHeader, type WorkspaceViewMode } from '../components/workspace-header';
+import { WorkspaceHeader, type WorkspaceSort, type WorkspaceViewMode } from '../components/workspace-header';
 import { QuickTicketComposer } from '../components/quick-ticket-composer';
 import { TicketInspector, type InspectorTab } from '../components/ticket-inspector';
 import { TicketList } from '../components/ticket-list';
@@ -10,6 +10,7 @@ import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 export const workspaceMode = signal<WorkspaceViewMode>('list');
 export const workspaceSearchOpen = signal(false);
 export const workspaceSearchQuery = signal('');
+export const workspaceSort = signal<WorkspaceSort>('updated');
 export const composerExpanded = signal(false);
 export const composerTitle = signal('');
 export const composerCategory = signal('task');
@@ -24,9 +25,23 @@ export function focusComposerTitle(root: ParentNode): boolean {
   return true;
 }
 
+export function focusWorkspaceSearch(root: ParentNode): boolean {
+  const input = root.querySelector<HTMLElement>('[name="workspace-search"]');
+  if (!input) return false;
+  input.focus();
+  return true;
+}
+
 export function filteredWorkspaceTickets(): TicketRowProps[] {
   const query = workspaceSearchQuery.value.trim().toLocaleLowerCase();
-  return query ? collectionTickets.value.filter(ticket => `${ticket.slug} ${ticket.title} ${ticket.tags.join(' ')}`.toLocaleLowerCase().includes(query)) : collectionTickets.value;
+  const tickets = query ? collectionTickets.value.filter(ticket => `${ticket.slug} ${ticket.title} ${ticket.tags.join(' ')}`.toLocaleLowerCase().includes(query)) : collectionTickets.value;
+  const priority = { urgent: 0, high: 1, default: 2, low: 3 } as const;
+  return [...tickets].sort((left, right) => {
+    if (workspaceSort.value === 'priority') return priority[left.priority] - priority[right.priority] || left.slug.localeCompare(right.slug);
+    if (workspaceSort.value === 'title') return left.title.localeCompare(right.title) || left.slug.localeCompare(right.slug);
+    if (workspaceSort.value === 'status') return left.status.localeCompare(right.status) || left.slug.localeCompare(right.slug);
+    return collectionTickets.value.indexOf(left) - collectionTickets.value.indexOf(right);
+  });
 }
 
 export function workspaceColumns(tickets = filteredWorkspaceTickets()): TicketColumnProps[] {
@@ -50,12 +65,13 @@ export function createDemoTicket(): boolean {
 
 function WorkspaceContent() {
   const tickets = filteredWorkspaceTickets();
+  if (workspaceMode.value === 'settings') return <section class="workspace-settings-preview" aria-label="Project settings"><h2>Project settings</h2><p>Configure ticket providers, project defaults, commands, and local checkout behavior for Hot Sheet 2.</p><wa-select label="Default ticket provider" value="git"><wa-option value="git">Hot Sheet git</wa-option><wa-option value="github">GitHub Issues</wa-option></wa-select></section>;
   return workspaceMode.value === 'list' ? <TicketList tickets={tickets} label="Workspace tickets" /> : <TicketBoard columns={workspaceColumns(tickets)} label="Workspace board" />;
 }
 
 export function WorkspaceHeaderDemo() {
   return <section class="workspace-component-demo" aria-label="WorkspaceHeader demo">
-    <WorkspaceHeader projectName="Hot Sheet 2" viewName="All Tickets" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} />
+    <WorkspaceHeader projectName="Hot Sheet 2" viewName="All Tickets" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} />
     <div class="workspace-component-demo__content"><WorkspaceContent /></div>
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;

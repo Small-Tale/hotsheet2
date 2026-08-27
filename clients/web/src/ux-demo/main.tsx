@@ -15,7 +15,7 @@ import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
 import { Network } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
-import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, inspectorOpen, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, WorkspaceHeaderDemo } from './workspace-components-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorOpen, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -27,7 +27,7 @@ const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-hea
 
 function demoLink(item: DemoDefinition) {
   const selected = item.id === selectedId.value;
-  return <li><a href={`/ux-demo?component=${encodeURIComponent(item.id)}`} data-demo-id={item.id} aria-current={selected ? 'page' : undefined}><span>{item.name}</span><small>{item.implemented ? 'Demo' : item.phase.replace('-', ' ')}</small></a></li>;
+  return <li><a class={item.implemented ? 'catalog-link' : 'catalog-link catalog-link--planned'} href={`/ux-demo?component=${encodeURIComponent(item.id)}`} data-demo-id={item.id} data-implemented={String(Boolean(item.implemented))} aria-current={selected ? 'page' : undefined}><span>{item.name}</span><small>{item.implemented ? 'Demo' : item.phase.replace('-', ' ')}</small></a></li>;
 }
 
 function demoNavigation(category: DemoCategory) {
@@ -139,12 +139,15 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
 delegate(root, 'click', '[data-action="toggle-workspace-search"]', () => {
   workspaceSearchOpen.value = !workspaceSearchOpen.value;
   if (!workspaceSearchOpen.value) workspaceSearchQuery.value = '';
+  else queueMicrotask(() => { focusWorkspaceSearch(root); });
 });
 delegate(root, 'input', '[name="workspace-search"]', (_event, target) => { workspaceSearchQuery.value = (target as FormControl).value; });
-delegate(root, 'click', '[data-action="sort-tickets"]', () => { recordCollectionEvent('Sort menu requested'); });
+delegate(root, 'click', '[data-sort]', (_event, target) => {
+  workspaceSort.value = (target as HTMLElement).dataset.sort as typeof workspaceSort.value;
+  recordCollectionEvent(`Sorted by ${workspaceSort.value}`);
+});
 delegate(root, 'click', '[data-action="toggle-favorite"]', () => { recordCollectionEvent('View favorite toggled'); });
 delegate(root, 'click', '[data-action="more-workspace-actions"]', () => { recordCollectionEvent('Workspace actions requested'); });
-delegate(root, 'click', '[data-action="open-workspace-settings"]', () => { recordCollectionEvent('Workspace settings requested'); });
 delegate(root, 'click', '[data-action="expand-ticket-composer"]', () => {
   composerExpanded.value = true;
   queueMicrotask(() => { focusComposerTitle(root); });

@@ -3,6 +3,9 @@ import { expect, test } from '@playwright/test';
 test('navigates the catalog and preserves URL-addressable selection', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
+  const catalog = page.getByRole('navigation');
+  await expect(catalog.locator('[data-demo-id="app-shell"]')).toHaveCSS('color', 'rgb(154, 156, 165)');
+  await expect(catalog.locator('[data-demo-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   await page.getByRole('navigation').getByRole('link', { name: /TicketRow/ }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-row');
@@ -200,7 +203,9 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const listRow = listRows.first();
   const listWidth = await listRow.evaluate(node => node.getBoundingClientRect().width);
   expect(listWidth).toBeGreaterThan(600);
-  await expect(listRow).toHaveCSS('border-radius', '0px');
+  await expect(listRows.first()).toHaveCSS('border-radius', '10.4px 10.4px 0px 0px');
+  await expect(listRows.nth(1)).toHaveCSS('border-radius', '0px');
+  await expect(listRows.last()).toHaveCSS('border-radius', '0px 0px 10.4px 10.4px');
   await expect(listRow).toHaveCSS('box-shadow', 'none');
   await listRow.click();
   await expect(listRow).toHaveAttribute('data-selected', 'true');
@@ -214,6 +219,9 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('region', { name: 'Example status board' });
   await expect(board.locator('.ticket-board__column')).toHaveCount(3);
+  await expect(board).toHaveCSS('padding', '0px');
+  await expect(board).toHaveCSS('border-top-width', '0px');
+  await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.getByLabel('2 tickets')).toHaveCount(2);
   await expect(board.getByLabel('1 tickets')).toHaveCount(1);
   const boardRows = board.locator('[data-component="ticket-list-row"]');
@@ -244,15 +252,28 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await header.getByRole('button', { name: 'Columns view' }).click();
   await expect(header.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('region', { name: 'Workspace board' })).toBeVisible();
+  const closedHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   await header.getByRole('button', { name: 'Search tickets' }).click();
   const search = header.getByRole('textbox', { name: 'Search tickets' });
+  await expect(search).toBeFocused();
+  const [searchBox, searchButtonBox, openHeaderHeight] = await Promise.all([search.boundingBox(), header.getByRole('button', { name: 'Close search' }).boundingBox(), header.evaluate(node => node.getBoundingClientRect().height)]);
+  expect(searchBox).not.toBeNull(); expect(searchButtonBox).not.toBeNull();
+  expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(searchButtonBox!.x + 1);
+  expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
   await search.fill('long-tag-example');
   await expect(page.getByRole('region', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(1);
   await header.getByRole('button', { name: 'Close search' }).click();
   await expect(header.getByRole('textbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(5);
   await header.getByRole('button', { name: 'Sort tickets' }).click();
-  await expect(page.getByText('Sort menu requested')).toBeVisible();
+  await header.locator('wa-dropdown-item[data-sort="priority"]').click();
+  await expect(page.getByText('Sorted by priority')).toBeVisible();
+  await header.getByRole('button', { name: 'Settings view' }).click();
+  await expect(header.getByRole('button', { name: 'Settings view' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('region', { name: 'Project settings' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Workspace board' })).toHaveCount(0);
+  await header.getByRole('button', { name: 'List view' }).click();
+  await expect(page.getByRole('listbox', { name: 'Workspace tickets' })).toBeVisible();
 });
 
 test('expands, validates, creates, and cancels through QuickTicketComposer', async ({ page }) => {

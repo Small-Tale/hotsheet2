@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { collectionTickets, resetTicketCollections } from './ticket-collections-demo';
-import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusComposerTitle, workspaceColumns, workspaceSearchQuery } from './workspace-components-demo';
+import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusComposerTitle, focusWorkspaceSearch, workspaceColumns, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
 
 describe('connected workspace demo state', () => {
-  beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; composerTitle.value = ''; composerCategory.value = 'task'; });
+  beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; workspaceSort.value = 'updated'; composerTitle.value = ''; composerCategory.value = 'task'; });
 
   it('filters across identity, title, and tags and preserves board totals', () => {
     workspaceSearchQuery.value = 'long-tag-example';
@@ -26,5 +26,14 @@ describe('connected workspace demo state', () => {
     expect(focusComposerTitle(root)).toBe(true);
     expect(focus).toHaveBeenCalledOnce();
     expect(focusComposerTitle({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
+    expect(focusWorkspaceSearch(root)).toBe(true);
+    expect(focus).toHaveBeenCalledTimes(2);
+  });
+
+  it('sorts the visible ticket projection without mutating source order', () => {
+    const sourceFirst = collectionTickets.value[0].slug;
+    workspaceSort.value = 'title';
+    expect(filteredWorkspaceTickets().map(ticket => ticket.title)).toEqual([...collectionTickets.value].map(ticket => ticket.title).sort());
+    expect(collectionTickets.value[0].slug).toBe(sourceFirst);
   });
 });
