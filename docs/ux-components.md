@@ -288,7 +288,8 @@ selection where sensible.
   appropriate.
 - `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
   collection, fixed header, independently scrolling ticket region, visible scroll
-  affordance, and shared responsive `TicketRow` composition. Loading and empty states
+  affordance, a standalone demo that preserves the 250px production minimum, and shared
+  responsive `TicketRow` composition. Loading and empty states
   remain future variants.
 - There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
   container-query card presentation while preserving identical markup and actions
@@ -577,6 +578,10 @@ in the same location and changes between “Settings” and “Close settings”
 inspector must not introduce a second control or a moving pointer target. It should
 also keep stateful Web Awesome control properties synchronized when a demo reset
 restores its canonical mock state. It should grow to provide:
+
+Catalog groups reset native list margins so their shared `MenuHeader` and `MenuItem`
+rows begin on the same outer edge; hierarchy is already clear from the headers and
+does not receive an additional list indent.
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios

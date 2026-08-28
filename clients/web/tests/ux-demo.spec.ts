@@ -9,6 +9,10 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
   await expect(catalog.locator('[data-component="menu-header"]')).not.toHaveCount(0);
   await expect(catalog.locator('[data-component="menu-item"]')).not.toHaveCount(0);
+  const firstCatalogList = catalog.locator('.catalog-group ul').first();
+  const firstCatalogItem = firstCatalogList.locator('li').first();
+  const [listBox, itemBox] = await Promise.all([firstCatalogList.boundingBox(), firstCatalogItem.boundingBox()]);
+  expect(itemBox!.x).toBeCloseTo(listBox!.x, 0);
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   await page.getByRole('navigation').getByRole('button', { name: /TicketRow/ }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-row');
@@ -380,7 +384,10 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await menu.getByText('Toggle Up Next', { exact: true }).click();
   await expect(page.getByText(/Toggle Up Next selected for HS2-/)).toBeVisible();
   await page.goto('/ux-demo?component=ticket-board-column');
+  const columnStage = page.locator('.collection-demo--column');
   const columnDemo = page.locator('[data-component="ticket-board-column"]');
+  await expect(columnStage).toHaveCSS('min-width', '250px');
+  expect((await columnDemo.boundingBox())!.width).toBeGreaterThanOrEqual(250);
   await expect(columnDemo).toHaveCount(1);
   await expect(columnDemo.getByLabel('7 tickets')).toBeVisible();
   await expect(columnDemo.locator('.ticket-board-column__tickets')).toHaveCSS('overflow-y', 'auto');
