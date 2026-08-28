@@ -7,14 +7,14 @@ const demo = (id: string, name: string, description: string, phase: DemoPhase = 
 
 export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
-    demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'ticket-list', 'ticket-inspector']),
-    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'menu-item', 'menu-header']),
+    demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'toolbar', 'toolbar-control-group', 'ticket-list', 'ticket-inspector']),
+    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'menu-item', 'menu-header']),
     demo('project-summary', 'ProjectSummary', 'Seven-day completion history and current ticket counts.', 'feature-floor', true),
     demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
     demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
     demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
     demo('drive-control', 'DriveControl', 'Primary AI drive start and stop action.', 'feature-floor', true),
-    demo('workspace-header', 'WorkspaceHeader', 'Project identity, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']),
+    demo('workspace-header', 'WorkspaceHeader', 'Project identity, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']),
     demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
     demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true),
     demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, ['project-tab']),
@@ -38,7 +38,7 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'inspector', name: 'Ticket inspector', children: [
     { id: 'metadata', name: 'Metadata', demos: [
-      demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['ticket-info-panel', 'ticket-timeline', 'ticket-attachments']),
+      demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments']),
       demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, and tags inspector section.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'tag-chip']),
       demo('ticket-timeline', 'TicketTimeline', 'Chronological ticket activity inspector section.', 'feature-floor', true),
       demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true),
@@ -74,9 +74,11 @@ export const demoCatalog: DemoCategory[] = [
     demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),
   ]},
   { id: 'shared', name: 'Shared interactions', demos: [
+    demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group']),
     demo('menu-item', 'MenuItem', 'Aligned icon, label, trailing value, and selection geometry for menu-like rows.', 'feature-floor', true),
     demo('menu-header', 'MenuHeader', 'Aligned section heading and optional action for menu groups.', 'feature-floor', true),
     demo('toolbar-control-group', 'ToolbarControlGroup', 'Consistent rounded grouping for toolbar controls.', 'feature-floor', true),
+    demo('toolbar-text', 'ToolbarText', 'Vertically aligned large, default, and small toolbar identity text.', 'feature-floor', true),
     demo('confirmation-dialog', 'ConfirmationDialog', 'Reusable consequential confirmation.'),
     demo('empty-state', 'EmptyState', 'Actionable absence of content.'),
     demo('loading-skeleton', 'LoadingSkeleton', 'Stable loading presentation.'),

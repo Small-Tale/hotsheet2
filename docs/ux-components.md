@@ -61,8 +61,9 @@ The **built demo** composes the current production sidebar, tabs, connection ban
 header, ticket workspace, and inspector into a desktop shell. Sidebar and inspector
 splitters are keyboard/pointer adjustable on wide displays; both secondary regions
 yield to the ticket workspace on compact displays. Sidebar regions never resize below
-250px. The project sidebar can be hidden and restored from the persistent tab bar;
-start-edge inspector resizing correctly mirrors end-edge sidebar resizing. Composed
+250px. Both sidebars animate between visible and collapsed states; their restore
+controls live at the matching leading/trailing edges of the center-column toolbar,
+never in ProjectTabBar. Start-edge inspector resizing correctly mirrors end-edge sidebar resizing. Composed
 WorkspaceHeader search retains its expand/autofocus/filter/empty-blur
 contract. Project settings retain the sidebar but hide the inspector and disable
 ticket-view actions. Global Terminal Dashboard and Cross-project Stats modes hide
@@ -96,8 +97,9 @@ Supporting components:
 The left region in the wireframe, scoped to the selected project/store connection.
 The **built demo** composes the five production boundaries below into a full-height
 sidebar with the drive action anchored at the bottom and shared controlled state. In
-AppShell, its collapse control sits at the trailing edge of a top bar exactly matching
-the workspace tab-bar height without a divider. Collapsing slides the fixed-width
+AppShell, its collapse control sits in a shared Toolbar exactly matching the center
+and inspector toolbar height/padding, without the intentionally omitted bottom divider.
+The sidebar's trailing separator remains visible. Collapsing slides the fixed-width
 sidebar content offscreen while the main region resizes, avoiding compressed content,
 and moves the restore control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
@@ -143,6 +145,11 @@ scrolling content region can be reviewed without moving the Drive control.
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   sort menu, and a connected list/column/settings workspace. Settings disables sort,
   favorite, overflow, and search actions; global shell modes omit project controls.
+- `Toolbar` — **demo built**: shared 56px-high leading/center/trailing layout with
+  consistent horizontal padding across the project sidebar, center column, and ticket
+  inspector. Its bottom divider is an explicit option rather than consumer CSS.
+- `ToolbarText` — **demo built**: vertically aligned large, default, and small toolbar
+  identity text; project names use large and inspector ticket numbers use small.
 - `PageHeader` — **demo built**: current view identity below ProjectTabBar, separate
   from the project-level toolbar above it.
 - `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
@@ -150,7 +157,9 @@ scrolling content region can be reviewed without moving the Drive control.
   own borders or divider lines. A single control highlights the whole group on
   hover; controls in multi-item groups receive individual 32px highlights inside
   the 40px shell. Slotted Lucide icons share explicit sizing, block layout, and
-  vertical centering across native and Web Awesome buttons.
+  vertical centering across native and Web Awesome buttons. Its borderless appearance
+  keeps identical 40px geometry and hover highlights while omitting the idle border
+  and background; sidebar visibility and inspector ticket-action groups use it.
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, and project settings** with
   accessible pressed state. Settings replaces ticket content while active rather
@@ -185,9 +194,10 @@ must tolerate two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally rather than compressing identities beyond
 readability; add and overflow actions remain vertically centered with the pills.
 
-In AppShell the hierarchy is WorkspaceHeader → ProjectTabBar → connection banner →
+In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →
 PageHeader → workspace. TicketInspector is a root trailing region spanning the shell's
-full height; its panel-right control replaces a generic close glyph. Inspector tab
+full height and uses the same animated slide/collapse contract as the project sidebar;
+its panel-right control replaces a generic close glyph. Inspector tab
 icons never shrink, and compact inspectors switch to icon-only labels.
 
 ## 3. Ticket workspace

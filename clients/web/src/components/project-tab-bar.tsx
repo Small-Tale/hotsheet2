@@ -1,7 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
-import { ChartNoAxesCombined, ChevronsRight, PanelLeftOpen, Plus, SquareTerminal } from 'lucide';
+import { ChartNoAxesCombined, ChevronsRight, Plus, SquareTerminal } from 'lucide';
 import { LucideIcon } from './lucide-icon';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
 import './project-tab-bar.css';
@@ -10,7 +10,6 @@ export interface ProjectTabBarProps {
   tabs: ProjectTabProps[];
   label?: string;
   mode?: ProjectTabBarMode;
-  sidebarVisible?: boolean;
   projectsOverflowing?: boolean;
 }
 export type ProjectTabBarMode = 'project' | 'terminals' | 'stats';
@@ -33,9 +32,8 @@ export function observeProjectTabBarOverflow(root: HTMLElement): () => void {
   return () => { resize.disconnect(); mutation.disconnect(); };
 }
 
-export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project', sidebarVisible = true, projectsOverflowing = false }: ProjectTabBarProps) {
+export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project', projectsOverflowing = false }: ProjectTabBarProps) {
   return <nav class="project-tab-bar" data-component="project-tab-bar" aria-label={label}>
-    {mode === 'project' && !sidebarVisible && <button class="project-tab-bar__sidebar-toggle" type="button" data-action="toggle-project-sidebar" aria-label="Show project sidebar" title="Show project sidebar" aria-pressed="true"><LucideIcon icon={PanelLeftOpen} name="panel-left-open" /></button>}
     <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
       <button type="button" data-action="set-shell-mode" data-shell-mode="terminals" aria-label="Terminal dashboard" title="Terminal dashboard" aria-pressed={String(mode === 'terminals')}><LucideIcon icon={SquareTerminal} name="square-terminal" /></button>
       <button type="button" data-action="set-shell-mode" data-shell-mode="stats" aria-label="Cross-project stats" title="Cross-project stats" aria-pressed={String(mode === 'stats')}><LucideIcon icon={ChartNoAxesCombined} name="chart-no-axes-combined" /></button>

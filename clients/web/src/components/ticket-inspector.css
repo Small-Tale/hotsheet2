@@ -1,15 +1,9 @@
 @import './ticket-state-colors.css';
 
 .ticket-inspector { display: flex; width: min(27rem, 100%); min-height: 34rem; overflow: hidden; border: 1px solid #d9dbe1; border-radius: .8rem; background: #fff; flex-direction: column; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .09); container-type: inline-size; }
-.ticket-inspector__header { display: flex; padding: 1rem; align-items: flex-start; justify-content: space-between; gap: 1rem; }
-.ticket-inspector__header > div:first-child { min-width: 0; }
-.ticket-inspector__header span { color: #666873; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; font-weight: 700; }
-.ticket-inspector__header h1 { display: -webkit-box; margin: .3rem 0 0; overflow: hidden; font-size: 1.1rem; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-.ticket-inspector__header > div:last-child { display: flex; gap: .2rem; }
+.ticket-inspector__header { display: block; padding: 0 0 1rem; }
+.ticket-inspector__header h1 { display: -webkit-box; margin: .15rem 1rem 0; overflow: hidden; font-size: 1.1rem; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .ticket-inspector__header button, .ticket-inspector__tabs button { border: 0; color: #686a73; background: transparent; cursor: pointer; }
-.ticket-inspector__header button { display: grid; width: 2rem; height: 2rem; padding: 0; border-radius: .4rem; place-items: center; }
-.ticket-inspector__header button:hover { background: #f0f2f5; }
-.ticket-inspector__header button svg { width: 1rem; height: 1rem; }
 .ticket-inspector__star--active { color: var(--ticket-state-up-next) !important; }
 .ticket-inspector__star--active svg { fill: currentColor; }
 .ticket-inspector__tabs { display: grid; margin: 0 1rem; padding: .2rem; border-radius: .55rem; background: #e7e9ed; grid-template-columns: repeat(3, 1fr); }

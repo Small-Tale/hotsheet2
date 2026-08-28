@@ -11,6 +11,8 @@ describe('TicketInspector', () => {
       expect(markup).toContain(`data-inspector-tab="${tab}" aria-label="${tab === 'info' ? 'Info' : tab === 'timeline' ? 'Timeline' : 'Attachments'}" aria-current="page"`);
       expect(markup).toContain('aria-label="Hide inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
+      expect(markup).toContain('data-component="toolbar-text" data-size="small">HS2-TEST');
+      expect(markup).toContain('data-appearance="borderless"');
       if (tab === 'info') expect(markup.match(/<wa-option value="feature"/g)).toHaveLength(1);
     }
   });

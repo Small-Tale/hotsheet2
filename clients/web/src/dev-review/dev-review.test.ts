@@ -7,7 +7,8 @@ import { createCliDevReviewSubmitter, validateDevReviewSubmission } from './serv
 import { createDevApp } from '../dev-server';
 
 const capture = { id: '1', filename: '../review.png', dataUrl: `data:image/png;base64,${Buffer.from('png').toString('base64')}`, width: 10, height: 10 };
-const submission = { notes: 'Button overlaps heading', captures: [capture], pageUrl: 'http://localhost/ux-demo', viewport: { width: 1200, height: 800 } };
+const attachment = { id: 'file-1', filename: '../notes.txt', dataUrl: `data:text/plain;base64,${Buffer.from('notes').toString('base64')}`, mimeType: 'text/plain', size: 5 };
+const submission = { notes: 'Button overlaps heading', captures: [capture], attachments: [attachment], pageUrl: 'http://localhost/ux-demo', viewport: { width: 1200, height: 800 } };
 
 describe('dev review tool', () => {
   it('normalizes, resizes, and clamps capture geometry', () => {
@@ -21,10 +22,13 @@ describe('dev review tool', () => {
     expect(translateAnchoredRect({ id: 'a', x: 20, y: 30, width: 40, height: 50 }, { x: 100, y: 200 }, { x: 85, y: 140 })).toEqual({ id: 'a', x: 5, y: -30, width: 40, height: 50 });
   });
 
-  it('validates notes and sanitizes capture filenames', () => {
-    expect(validateDevReviewSubmission(submission).captures[0].filename).toBe('review.png');
+  it('validates notes and sanitizes capture and attachment filenames', () => {
+    const validated = validateDevReviewSubmission(submission);
+    expect(validated.captures[0].filename).toBe('review.png');
+    expect(validated.attachments[0].filename).toBe('notes.txt');
     expect(() => validateDevReviewSubmission({ ...submission, notes: ' ' })).toThrow(/notes/);
     expect(() => validateDevReviewSubmission({ ...submission, captures: [{ ...capture, dataUrl: 'data:image/jpeg;base64,x' }] })).toThrow(/PNG/);
+    expect(() => validateDevReviewSubmission({ ...submission, attachments: [{ ...attachment, dataUrl: 'not-data' }] })).toThrow(/Attachment/);
   });
 
   it('keeps ticket submission development-only and delegates a validated payload', async () => {
@@ -52,6 +56,7 @@ describe('dev review tool', () => {
       expect(calls).toContain('-C');
       expect(calls).toContain('new UX feedback: Button overlaps heading');
       expect(calls).toContain('attach HS2-REVIEW');
+      expect(calls.match(/attach HS2-REVIEW/g)).toHaveLength(2);
       expect(finalize).toHaveBeenCalledWith(resolve(temp, 'store'), 'HS2-REVIEW');
     } finally { await rm(temp, { recursive: true, force: true }); }
   });

@@ -7,8 +7,9 @@ export interface ToolbarControlGroupProps {
   className?: string;
   expanded?: boolean;
   single?: boolean;
+  appearance?: 'contained' | 'borderless';
 }
 
-export function ToolbarControlGroup({ children, label, className = '', expanded = false, single = false }: ToolbarControlGroupProps) {
-  return <div class={`toolbar-control-group ${className}`.trim()} role={label ? 'group' : undefined} aria-label={label} data-expanded={String(expanded)} data-single={String(single)}>{children}</div>;
+export function ToolbarControlGroup({ children, label, className = '', expanded = false, single = false, appearance = 'contained' }: ToolbarControlGroupProps) {
+  return <div class={`toolbar-control-group ${className}`.trim()} data-component="toolbar-control-group" role={label ? 'group' : undefined} aria-label={label} data-appearance={appearance} data-expanded={String(expanded)} data-single={String(single)}>{children}</div>;
 }

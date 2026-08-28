@@ -6,6 +6,7 @@ import { ArrowDownAZ, Columns3, List, MoreHorizontal, Search, Settings, Star } f
 import type { IconNode } from 'lucide';
 import { LucideIcon } from './lucide-icon';
 import { ToolbarControlGroup } from './toolbar-control-group';
+import { ToolbarText } from './toolbar-text';
 import './workspace-header.css';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'settings';
@@ -34,7 +35,7 @@ const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
 export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', controlsVisible = true }: WorkspaceHeaderProps) {
   const projectActionsDisabled = mode === 'settings';
   return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
-    <div class="workspace-header__identity"><h1>{projectName}</h1></div>
+    <div class="workspace-header__identity"><ToolbarText text={projectName} size="large" /></div>
     {controlsVisible && <div class="workspace-header__actions">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />

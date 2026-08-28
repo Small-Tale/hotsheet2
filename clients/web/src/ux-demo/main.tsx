@@ -17,6 +17,8 @@ import { Network } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
+import { ToolbarTextDemo } from './toolbar-text-demo';
+import { ToolbarDemo } from './toolbar-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
@@ -58,6 +60,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'quick-ticket-composer') return <QuickTicketComposerDemo />;
   if (item.id === 'ticket-inspector') return <TicketInspectorDemo />;
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
+  if (item.id === 'toolbar-text') return <ToolbarTextDemo />;
+  if (item.id === 'toolbar') return <ToolbarDemo />;
   if (item.id === 'menu-item') return <MenuItemDemo />;
   if (item.id === 'menu-header') return <MenuHeaderDemo />;
   if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;

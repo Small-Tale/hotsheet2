@@ -6,6 +6,9 @@ import type { TicketPriority } from './ticket-row';
 import { TicketInfoPanel } from './ticket-info-panel';
 import { TicketTimeline, type TicketTimelineEntry } from './ticket-timeline';
 import { TicketAttachments, type TicketAttachmentItem } from './ticket-attachments';
+import { ToolbarControlGroup } from './toolbar-control-group';
+import { ToolbarText } from './toolbar-text';
+import { Toolbar } from './toolbar';
 import './ticket-inspector.css';
 
 export type InspectorTab = 'info' | 'timeline' | 'attachments';
@@ -33,8 +36,8 @@ const tabs = [
 export function TicketInspector({ slug, title, status, priority, category, tags, details, activeTab = 'info', upNext = false, timelineEntries, attachments }: TicketInspectorProps) {
   return <aside class="ticket-inspector" data-component="ticket-inspector" aria-label={`${slug} inspector`}>
     <header class="ticket-inspector__header">
-      <div><span>{slug}</span><h1>{title}</h1></div>
-      <div><button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button><button type="button" data-action="close-ticket-inspector" aria-label="Hide inspector"><LucideIcon icon={PanelRightClose} name="panel-right-close" /></button></div>
+      <Toolbar divider={false} center={<ToolbarText text={slug} size="small" />} trailing={<ToolbarControlGroup appearance="borderless" label="Ticket actions"><button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button><button type="button" data-action="close-ticket-inspector" aria-label="Hide inspector"><LucideIcon icon={PanelRightClose} name="panel-right-close" /></button></ToolbarControlGroup>} />
+      <h1>{title}</h1>
     </header>
     <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections">{tabs.map(tab => <button type="button" data-action="set-inspector-tab" data-inspector-tab={tab.id} aria-label={tab.label} aria-current={activeTab === tab.id ? 'page' : undefined}><LucideIcon icon={tab.icon} name={tab.iconName} /><span>{tab.label}</span></button>)}</nav>
     {activeTab === 'info' && <TicketInfoPanel status={status} priority={priority} category={category} tags={tags} details={details} />}

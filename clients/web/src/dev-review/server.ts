@@ -19,7 +19,13 @@ export function validateDevReviewSubmission(value: unknown): DevReviewSubmission
     if (capture.dataUrl.length > 14_000_000) throw new Error(`Capture ${index + 1} is too large.`);
     return { ...capture, filename: basename(capture.filename || `ux-feedback-${index + 1}.png`) };
   });
-  return { notes, captures, pageUrl: String(input.pageUrl ?? ''), viewport: { width: Number(input.viewport?.width ?? 0), height: Number(input.viewport?.height ?? 0) } };
+  if (!Array.isArray(input.attachments) || input.attachments.length > 20) throw new Error('Feedback supports at most 20 attachments.');
+  const attachments = input.attachments.map((attachment, index) => {
+    if (!attachment || typeof attachment.dataUrl !== 'string' || !attachment.dataUrl.startsWith('data:') || !attachment.dataUrl.includes(';base64,')) throw new Error(`Attachment ${index + 1} is invalid.`);
+    if (attachment.dataUrl.length > 28_000_000) throw new Error(`Attachment ${index + 1} is too large.`);
+    return { ...attachment, filename: basename(attachment.filename || `feedback-attachment-${index + 1}`), mimeType: String(attachment.mimeType || 'application/octet-stream'), size: Number(attachment.size || 0) };
+  });
+  return { notes, captures, attachments, pageUrl: String(input.pageUrl ?? ''), viewport: { width: Number(input.viewport?.width ?? 0), height: Number(input.viewport?.height ?? 0) } };
 }
 
 export function createCliDevReviewSubmitter(options: { repoRoot: string; storePath?: string; cliPath?: string; finalize?: (storePath: string, slug: string) => Promise<void> }): DevReviewSubmitter {
@@ -47,6 +53,11 @@ export function createCliDevReviewSubmitter(options: { repoRoot: string; storePa
       for (const [index, capture] of submission.captures.entries()) {
         const file = resolve(temp, capture.filename || `ux-feedback-${index + 1}.png`);
         await writeFile(file, Buffer.from(capture.dataUrl.slice('data:image/png;base64,'.length), 'base64'));
+        await runCli(['-C', storePath, 'attach', slug, file]);
+      }
+      for (const [index, attachment] of submission.attachments.entries()) {
+        const file = resolve(temp, attachment.filename || `feedback-attachment-${index + 1}`);
+        await writeFile(file, Buffer.from(attachment.dataUrl.slice(attachment.dataUrl.indexOf(',') + 1), 'base64'));
         await runCli(['-C', storePath, 'attach', slug, file]);
       }
     } finally { await rm(temp, { recursive: true, force: true }); }

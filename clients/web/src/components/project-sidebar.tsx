@@ -5,6 +5,8 @@ import { RepositorySummary } from './repository-summary';
 import { ViewNavigation, type ViewNavigationItem } from './view-navigation';
 import { PanelLeftClose } from 'lucide';
 import { LucideIcon } from './lucide-icon';
+import { ToolbarControlGroup } from './toolbar-control-group';
+import { Toolbar } from './toolbar';
 import './project-sidebar.css';
 
 export interface ProjectSidebarProps {
@@ -26,7 +28,7 @@ export interface ProjectSidebarProps {
 
 export function ProjectSidebar(props: ProjectSidebarProps) {
   return <aside class="project-sidebar" data-component="project-sidebar" aria-label="Project sidebar">
-    {props.collapseControl && <div class="project-sidebar__toolbar"><button type="button" data-action="toggle-project-sidebar" aria-label="Hide project sidebar" title="Hide project sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></div>}
+    {props.collapseControl && <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide project sidebar" title="Hide project sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></ToolbarControlGroup>} />}
     <div class="project-sidebar__content">
       <ProjectSummary completedToday={props.completedToday} inProgress={props.inProgress} trend={props.completionTrend} />
       <RepositorySummary branch={props.branch} unpushed={props.unpushed} uncommitted={props.uncommitted} />

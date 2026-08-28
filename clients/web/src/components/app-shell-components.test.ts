@@ -70,6 +70,11 @@ describe('application shell components', () => {
     expect(collapsedMarkup).toContain('data-region-id="app-sidebar"');
     expect(collapsedMarkup).toContain('data-collapsed="true"');
     expect(collapsedMarkup).toContain('aria-label="Show project sidebar"');
+    expect(collapsedMarkup.indexOf('aria-label="Show project sidebar"')).toBeLessThan(collapsedMarkup.indexOf('data-component="project-tab-bar"'));
+    const hiddenInspectorMarkup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never, inspectorVisible: false }));
+    expect(hiddenInspectorMarkup).toContain('aria-label="Show ticket inspector"');
+    expect(hiddenInspectorMarkup).toContain('data-region-id="app-inspector"');
+    expect(hiddenInspectorMarkup).toContain('data-collapsed="true"');
   });
 
   it('walks select, close, add, resize, and post-resize transitions', () => {

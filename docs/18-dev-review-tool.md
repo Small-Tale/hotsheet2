@@ -22,6 +22,8 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   shows a crosshair cursor and creates a numbered capture rectangle. Existing
   rectangles can be moved or resized from any side or corner without the modifier;
   handles retain fixed dimensions as their rectangle changes size.
+- Holding Option/Alt+Shift over a rectangle changes to a deletion cursor; clicking
+  removes the rectangle and its captured PNG.
 - A rectangle anchors to the underlying content at its top-left pixel. Window or
   nested-container scrolling moves the overlay with that content, including when the
   rectangle was first drawn after the interface had already scrolled.
@@ -31,6 +33,9 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   Review-tool UI is excluded from every capture.
 - `New Ticket` opens its modal immediately, prepares any uncached PNGs asynchronously,
   then presents every capture as a selectable thumbnail and large preview.
+- The dialog accepts additional files through both drag/drop and a native browse
+  control. Captures and uploaded attachments each expose a hover/focus removal control;
+  removing a capture also removes its source rectangle from the active session.
 - The dialog has one Cancel action in its top-right. Canceling it returns to the
   still-active annotation session. Successful submission clears and exits the session.
 
@@ -47,8 +52,9 @@ const review = installDevReview({
 review.destroy();
 ```
 
-The submission adapter receives notes, page URL, viewport dimensions, and PNG data
-URLs. It returns the created ticket slug and may optionally return a ticket URL. This
+The submission adapter receives notes, page URL, viewport dimensions, captured PNG
+data URLs, and base64 data URLs plus metadata for user-supplied attachments. It returns
+the created ticket slug and may optionally return a ticket URL. This
 keeps capture UX portable while allowing a host to use an authenticated Hot Sheet
 server, Tauri command, test fake, or another ticket-provider-aware bridge.
 
@@ -70,7 +76,7 @@ preserve the same compile-time exclusion; a runtime-hidden button is not suffici
 For this repository the adapter invokes `target/debug/hotsheet-cli`, creates a bug
 tagged `client` and `ux-feedback` in the sibling `hotsheet2.hs2` store, then attaches
 each decoded PNG. The CLI mutations defer their individual autocommits so the complete
-ticket and all images receive one durable local commit; one best-effort remote push is
+ticket, captured images, and uploaded files receive one durable local commit; one best-effort remote push is
 launched asynchronously and does not hold the dialog open. Alternate paths can be supplied with:
 
 - `HOTSHEET_DEV_REVIEW_STORE`
