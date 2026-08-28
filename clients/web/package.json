@@ -13,6 +13,7 @@
   "dependencies": {
     "@awesome.me/webawesome": "3.11.0",
     "hono": "^4.13.5",
+    "html2canvas": "^1.4.1",
     "kerfjs": "4.4.0",
     "lucide": "1.34.0"
   },

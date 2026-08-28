@@ -26,6 +26,64 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
 });
 
+test('captures, reviews, cancels, and submits dev-review feedback', async ({ page }) => {
+  let submitted: Record<string, unknown> | undefined;
+  await page.route('**/__hotsheet/dev-review/tickets', async route => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ slug: 'HS2-REVIEW' }) });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-row&dev-review=1');
+  const tool = page.locator('.hs-dev-review');
+  await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
+  await tool.getByRole('button', { name: 'Feedback' }).click();
+  await expect(tool.getByRole('button', { name: 'New Ticket' })).toBeVisible();
+  await page.keyboard.down('Alt');
+  await page.mouse.move(480, 220); await page.mouse.down(); await page.mouse.move(820, 430); await page.mouse.up();
+  await page.keyboard.up('Alt');
+  const selection = tool.locator('.hs-dev-review__rect');
+  await expect(selection).toHaveCount(1);
+  const before = await selection.boundingBox();
+  const resize = selection.getByRole('button', { name: /Resize capture 1 from se/ });
+  const handle = await resize.boundingBox();
+  await page.mouse.move(handle!.x + 4, handle!.y + 4); await page.mouse.down(); await page.mouse.move(handle!.x + 54, handle!.y + 34); await page.mouse.up();
+  const after = await selection.boundingBox();
+  expect(after!.width).toBeGreaterThan(before!.width);
+  expect(after!.height).toBeGreaterThan(before!.height);
+  await page.keyboard.down('Alt');
+  await page.mouse.move(940, 260); await page.mouse.down(); await page.mouse.move(1180, 480); await page.mouse.up();
+  await page.keyboard.up('Alt');
+  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(2);
+  await page.waitForTimeout(400);
+  await tool.getByRole('button', { name: 'New Ticket' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
+  await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await dialog.getByRole('button', { name: 'Review captured region 2' }).click();
+  await expect(dialog.getByRole('img', { name: 'Captured region 2 preview' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Cancel' }).last().click();
+  await expect(dialog).toHaveCount(0);
+  await expect(tool.getByRole('button', { name: 'New Ticket' })).toBeVisible();
+  await tool.getByRole('button', { name: 'Cancel' }).click();
+  await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
+  await expect(tool.locator('.hs-dev-review__rect')).toHaveCount(0);
+  await tool.getByRole('button', { name: 'Feedback' }).click();
+  await page.keyboard.down('Alt');
+  await page.mouse.move(500, 240); await page.mouse.down(); await page.mouse.move(900, 480); await page.mouse.up();
+  await page.keyboard.up('Alt');
+  await tool.getByRole('button', { name: 'New Ticket' }).click();
+  const reopened = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
+  await reopened.getByRole('textbox', { name: 'Feedback notes' }).fill('The selected row spacing is inconsistent.');
+  await reopened.getByRole('button', { name: 'Create Ticket' }).click();
+  await expect(reopened.getByRole('status')).toContainText('HS2-REVIEW created');
+  await expect.poll(() => submitted).toBeTruthy();
+  expect(submitted).toMatchObject({ notes: 'The selected row spacing is inconsistent.', captures: [{ filename: expect.stringMatching(/^ux-feedback-\d+\.png$/) }] });
+  expect((submitted!.captures as Array<{ dataUrl: string }>)[0].dataUrl).toMatch(/^data:image\/png;base64,/);
+  await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
+});
+
 test('round-trips StatusBadge controls through reset and a post-reset edit', async ({ page }) => {
   await page.goto('/ux-demo?component=status-badge');
   const badge = page.locator('[data-component="status-badge"]');

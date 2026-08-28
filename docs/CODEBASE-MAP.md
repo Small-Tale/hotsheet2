@@ -31,12 +31,13 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, connections, tickets, and copy/move
     src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
     src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
+    src/dev-review/          #   Framework-neutral review overlay, geometry/capture UI, and local-dev CLI submission adapter
     src/components/          #   Production domain UI components, including ticket surfaces and composed ProjectSidebar boundaries; shared HS1 customization palette, cursor semantics, and Lucide renderer/policy gate
     src/ux-demo/             #   Categorized master/detail catalog, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app
-    tests/ux-demo.spec.ts    #   Real-browser catalog relationships, ticket/workspace contracts, and controlled ProjectSidebar component transitions
+    tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts plus dev-review draw/resize/capture/review/submit flow
   crates/
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)
@@ -239,7 +240,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 | Slug derivation | `hotsheet-model/src/ids.rs` |
 | Store layout / sharding | `hotsheet-ticketing/src/store.rs`, [02](02-ticket-storage.md) §2.3 |
 | HS1 → git migration | `migrator/` + `hotsheet-cli/src/import.rs` (stable HS2 ids, close-state normalization; no retained HS1 fields), [07](07-migration.md) |
-| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/}` (dev-only Hono catalog + real components; application shell composition in `components/{app-shell,project-tab-bar,project-tab,resizable-region,connection-state-banner}.*`; board composition in `components/{ticket-board,ticket-board-column,ticket-row}.*`; shared ticket colors in `components/ticket-state-colors.css`), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md) |
+| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/,dev-review/}` (dev-only Hono catalog + real components; embeddable html2canvas review overlay and local CLI bridge in `dev-review/`; application shell composition in `components/{app-shell,project-tab-bar,project-tab,resizable-region,connection-state-banner}.*`; board composition in `components/{ticket-board,ticket-board-column,ticket-row}.*`; shared ticket colors in `components/ticket-state-colors.css`), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md), [Dev Review](18-dev-review-tool.md) |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
 | Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |

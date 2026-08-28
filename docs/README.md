@@ -91,6 +91,7 @@ and don't imply reading order — read by group.
 | [04-core-server-cli.md](04-core-server-cli.md) | Shared core, server (+lifecycle), CLI, MCP, merge driver | Decided |
 | [06-clients.md](06-clients.md) | Browser web UX → Tauri → SwiftUI macOS → iOS → Android; terminal sizing; notes/reader | Decided |
 | [ux-components.md](ux-components.md) | Cross-client component architecture and real-component `/ux-demo` catalog | Initial inventory |
+| [18-dev-review-tool.md](18-dev-review-tool.md) | Embeddable Option/Alt-drag screenshot annotation and Hot Sheet ticket submission tool | Shipped initial web implementation |
 
 **E · AI-tool integration**
 | Doc | Topic | Status |
