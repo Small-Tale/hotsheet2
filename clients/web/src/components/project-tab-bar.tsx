@@ -14,15 +14,7 @@ export interface ProjectTabBarProps {
 }
 export type ProjectTabBarMode = 'project' | 'terminals' | 'stats';
 
-export function visibleProjectTabCount(widths: readonly number[], available: number, gap: number): number {
-  let used = 0;
-  for (let index = 0; index < widths.length; index += 1) {
-    const needed = widths[index] + (index === 0 ? 0 : gap);
-    if (used + needed > available + 1) return index;
-    used += needed;
-  }
-  return widths.length;
-}
+export const projectTabIsFullyVisible = (left: number, right: number, viewportLeft: number, viewportRight: number) => left >= viewportLeft - 1 && right <= viewportRight + 1;
 
 export function syncProjectTabBarOverflow(root: ParentNode): void {
   root.querySelectorAll<HTMLElement>('[data-component="project-tab-bar"]').forEach(bar => {
@@ -33,19 +25,13 @@ export function syncProjectTabBarOverflow(root: ParentNode): void {
     const options = [...overflow.querySelectorAll<HTMLElement>('[data-project-id]')];
     tabNodes.forEach(tab => { tab.dataset.overflowHidden = 'false'; });
     overflow.hidden = true;
-    const gap = Number.parseFloat(getComputedStyle(tabs).columnGap) || 0;
-    const widths = tabNodes.map(tab => tab.getBoundingClientRect().width);
-    const total = widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * gap;
-    if (total > tabs.clientWidth + 1) {
-      overflow.hidden = false;
-      const visibleCount = visibleProjectTabCount(widths, tabs.clientWidth, gap);
-      widths.forEach((_width, index) => {
-        const hidden = index >= visibleCount;
-        tabNodes[index].dataset.overflowHidden = String(hidden);
-      });
-    }
-    const hiddenIds = new Set(tabNodes.filter(tab => tab.dataset.overflowHidden === 'true').map(tab => tab.dataset.projectId));
-    options.forEach(option => { option.hidden = !hiddenIds.has(option.dataset.projectId); });
+    overflow.hidden = tabs.scrollWidth <= tabs.clientWidth + 1;
+    const viewport = tabs.getBoundingClientRect();
+    const offscreenIds = new Set(tabNodes.filter(tab => {
+      const bounds = tab.getBoundingClientRect();
+      return !projectTabIsFullyVisible(bounds.left, bounds.right, viewport.left, viewport.right);
+    }).map(tab => tab.dataset.projectId));
+    options.forEach(option => { option.hidden = !offscreenIds.has(option.dataset.projectId); });
   });
 }
 
@@ -55,8 +41,9 @@ export function observeProjectTabBarOverflow(root: HTMLElement): () => void {
   const mutation = new MutationObserver(sync);
   resize.observe(root);
   mutation.observe(root, { childList: true, subtree: true });
+  root.addEventListener('scroll', sync, true);
   sync();
-  return () => { resize.disconnect(); mutation.disconnect(); };
+  return () => { resize.disconnect(); mutation.disconnect(); root.removeEventListener('scroll', sync, true); };
 }
 
 export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project', projectsOverflowing = false }: ProjectTabBarProps) {

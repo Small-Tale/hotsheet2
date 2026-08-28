@@ -187,7 +187,7 @@ scrolling content region can be reviewed without moving the Drive control.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
 - `ProjectPicker` — remains part of the later add-project flow.
 - `TabOverflowMenu` — **demo built** as a compact chevrons-right menu projecting only
-  projects whose complete tab cannot fit; partially visible tabs are never shown.
+  projects currently outside the fully visible portion of the scrollable tab strip.
 - `TerminalDashboardButton` and `CrossProjectStatsButton` — **shell navigation built**
   with controlled selected state. Their full dashboard surfaces remain tracked by
   HS2-2ZCN7K and HS2-38RJMK respectively.
@@ -195,9 +195,9 @@ scrolling content region can be reviewed without moving the Drive control.
 Global dashboard modes precede project tabs; Add follows the project strip. Tabs
 represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
-servers. The tab strip does not scroll or truncate identities: complete tabs remain
-visible in source order and the rest move to the overflow menu. Add and overflow
-actions remain vertically centered with the pills.
+servers. The tab strip scrolls horizontally without truncating identities; the overflow
+menu offers direct access to tabs outside the current viewport. Add and overflow actions
+remain vertically centered with the pills.
 
 In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →
 PageHeader → workspace. TicketInspector is a root trailing region spanning the shell's
@@ -275,7 +275,8 @@ selection where sensible.
 - `TicketBoard` — **demo foundation built**: status columns stretch equally to fill
   available width down to a 250px minimum, then the workspace scrolls horizontally
   edge-to-edge between its sidebar separators and reaches the workspace bottom, with
-  an 8px horizontal content inset and 8px column-bottom breathing room. The
+  an 8px horizontal content inset and 16px breathing room inside the bottom of each
+  independently scrolling ticket region. The
   board has no extra framing and
   whose title and count provide sufficient grouping without an additional visual
   container around either the board or each column. Each column composes production

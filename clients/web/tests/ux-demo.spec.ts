@@ -347,7 +347,8 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const board = page.getByRole('region', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px 0px 8px');
+  await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
+  await expect(board.locator('.ticket-board-column__tickets').first()).toHaveCSS('padding', '1.6px 8px 16px');
   await expect(board).toHaveCSS('padding', '0px 8px');
   await expect(board).toHaveCSS('border-top-width', '0px');
   await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -532,6 +533,17 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     return caret ? { transform: getComputedStyle(caret).transform, width: caret.getBoundingClientRect().width } : null;
   });
   expect(selectCaret?.transform).toContain('0.5');
+  await category.click();
+  const longOption = category.locator('wa-option[value="requirement_change"]');
+  const optionLayout = await longOption.evaluate(node => {
+    const label = node.shadowRoot?.querySelector<HTMLElement>('[part~="label"]');
+    const start = node.shadowRoot?.querySelector<HTMLElement>('[part~="start"]');
+    return label && start ? { whiteSpace: getComputedStyle(label).whiteSpace, optionHeight: node.getBoundingClientRect().height, labelTop: label.getBoundingClientRect().top, iconTop: start.getBoundingClientRect().top } : null;
+  });
+  expect(optionLayout?.whiteSpace).toBe('normal');
+  expect(optionLayout!.optionHeight).toBeGreaterThan(40);
+  expect(Math.abs(optionLayout!.iconTop - optionLayout!.labelTop)).toBeLessThan(3);
+  await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
@@ -849,15 +861,14 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeVisible();
   const overflowState = await tabBar.evaluate(node => {
     const strip = node.querySelector('.project-tab-bar__tabs')!.getBoundingClientRect();
-    const visible = [...node.querySelectorAll<HTMLElement>('.project-tab[data-overflow-hidden="false"]')];
-    const hidden = [...node.querySelectorAll<HTMLElement>('.project-tab[data-overflow-hidden="true"]')];
+    const tabs = [...node.querySelectorAll<HTMLElement>('.project-tab')];
+    const offscreen = tabs.filter(tab => { const bounds = tab.getBoundingClientRect(); return bounds.left < strip.left - 1 || bounds.right > strip.right + 1; });
     const menuItems = [...node.querySelectorAll<HTMLElement>('[data-project-overflow] wa-dropdown-item:not([hidden])')];
-    return { stripRight: strip.right, visibleRights: visible.map(tab => tab.getBoundingClientRect().right), hiddenIds: hidden.map(tab => tab.dataset.projectId), menuIds: menuItems.map(item => item.dataset.projectId), overflowX: getComputedStyle(node.querySelector('.project-tab-bar__tabs')!).overflowX };
+    return { offscreenIds: offscreen.map(tab => tab.dataset.projectId), menuIds: menuItems.map(item => item.dataset.projectId), overflowX: getComputedStyle(node.querySelector('.project-tab-bar__tabs')!).overflowX };
   });
-  expect(overflowState.visibleRights.every(right => right <= overflowState.stripRight + 1)).toBe(true);
-  expect(overflowState.hiddenIds.length).toBeGreaterThan(0);
-  expect(overflowState.menuIds).toEqual(overflowState.hiddenIds);
-  expect(overflowState.overflowX).toBe('hidden');
+  expect(overflowState.offscreenIds.length).toBeGreaterThan(0);
+  expect(overflowState.menuIds).toEqual(overflowState.offscreenIds);
+  expect(overflowState.overflowX).toBe('auto');
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
