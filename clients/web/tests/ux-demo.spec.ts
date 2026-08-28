@@ -348,7 +348,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
-  await expect(board).toHaveCSS('padding', '0px 0px 12px');
+  await expect(board).toHaveCSS('padding', '0px');
   await expect(board).toHaveCSS('border-top-width', '0px');
   await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.getByLabel('6 tickets')).toHaveCount(1);
@@ -527,6 +527,11 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
   await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
   const category = inspector.locator('wa-select[name="inspector-category"]');
+  const selectCaret = await category.evaluate(node => {
+    const caret = node.shadowRoot?.querySelector<HTMLElement>('[part~="expand-icon"]');
+    return caret ? { transform: getComputedStyle(caret).transform, width: caret.getBoundingClientRect().width } : null;
+  });
+  expect(selectCaret?.transform).toContain('0.5');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
@@ -534,11 +539,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'low'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
-  await inspector.locator('wa-button[aria-label="Change status, Started"]').click();
-  await expect(inspector.locator('wa-button[aria-label="Change status, Started"]')).not.toHaveAttribute('with-caret', '');
+  const statusTrigger = inspector.locator('button.status-badge[aria-label="Change status, Started"]');
+  await expect(statusTrigger.locator('[data-component="status-badge"]')).toHaveCount(0);
+  await statusTrigger.click();
   await inspector.locator('wa-dropdown-item[data-inspector-status="completed"]').click();
   await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
-  await expect(inspector.locator('wa-button[aria-label="Change status, Completed"]')).toBeVisible();
+  await expect(inspector.locator('button.status-badge[aria-label="Change status, Completed"]')).toBeVisible();
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate(node =>
     [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
@@ -735,6 +741,12 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   const menuHeaderLefts = await sidebar.locator('[data-component="menu-header"]').evaluateAll(headers => headers.map(header => header.querySelector('h2, span')!.getBoundingClientRect().left));
   expect(menuHeaderLefts).toHaveLength(2);
   expect(menuHeaderLefts[0]).toBeCloseTo(menuHeaderLefts[1], 0);
+  const viewActionAlignment = await sidebar.evaluate(node => {
+    const action = node.querySelector<HTMLElement>('.view-navigation [data-component="menu-header"] button')!.getBoundingClientRect();
+    const item = node.querySelector<HTMLElement>('.view-navigation .menu-item')!.getBoundingClientRect();
+    return { actionRight: action.right, itemRight: item.right };
+  });
+  expect(viewActionAlignment.actionRight).toBeCloseTo(viewActionAlignment.itemRight, 0);
   const alignedRows = await sidebar.evaluate(node => ['.repository-summary .menu-item', '.view-navigation .menu-item', '.command-navigation .menu-item'].map(selector => node.querySelector(selector)!).map(item => {
     const bounds = item.getBoundingClientRect();
     const icon = item.querySelector('.menu-item__icon')!.getBoundingClientRect();
@@ -803,6 +815,17 @@ test('exercises the application-shell component slice and responsive composition
   await expect(firstClose).toHaveCSS('opacity', '0');
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).hover();
   await expect(firstClose).toHaveCSS('opacity', '1');
+  const closeGeometry = await tabBar.locator('[data-component="project-tab"]').first().evaluate(node => {
+    const close = node.querySelector<HTMLElement>('.project-tab__close')!.getBoundingClientRect();
+    const select = node.querySelector<HTMLElement>('.project-tab__select')!.getBoundingClientRect();
+    const name = node.querySelector<HTMLElement>('.project-tab__name')!.getBoundingClientRect();
+    return { closeWidth: close.width, closeLeft: close.left, selectLeft: select.left, nameLeft: name.left, closeBackground: getComputedStyle(node.querySelector('.project-tab__close')!).backgroundColor, selectPaddingRight: getComputedStyle(node.querySelector('.project-tab__select')!).paddingRight };
+  });
+  expect(closeGeometry.closeWidth).toBeCloseTo(20.4, 0);
+  expect(closeGeometry.closeLeft).toBeLessThan(closeGeometry.selectLeft);
+  expect(closeGeometry.nameLeft).toBeGreaterThan(closeGeometry.selectLeft);
+  expect(closeGeometry.closeBackground).toBe('rgba(0, 0, 0, 0)');
+  expect(closeGeometry.selectPaddingRight).toBe('27.2px');
   const tabActionCenters = await tabBar.evaluate(node => {
     const tab = node.querySelector('[data-component="project-tab"]')!.getBoundingClientRect();
     const add = node.querySelector('[data-action="add-project"] svg')!.getBoundingClientRect();
@@ -824,15 +847,29 @@ test('exercises the application-shell component slice and responsive composition
   }
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeVisible();
+  const overflowState = await tabBar.evaluate(node => {
+    const strip = node.querySelector('.project-tab-bar__tabs')!.getBoundingClientRect();
+    const visible = [...node.querySelectorAll<HTMLElement>('.project-tab[data-overflow-hidden="false"]')];
+    const hidden = [...node.querySelectorAll<HTMLElement>('.project-tab[data-overflow-hidden="true"]')];
+    const menuItems = [...node.querySelectorAll<HTMLElement>('[data-project-overflow] wa-dropdown-item:not([hidden])')];
+    return { stripRight: strip.right, visibleRights: visible.map(tab => tab.getBoundingClientRect().right), hiddenIds: hidden.map(tab => tab.dataset.projectId), menuIds: menuItems.map(item => item.dataset.projectId), overflowX: getComputedStyle(node.querySelector('.project-tab-bar__tabs')!).overflowX };
+  });
+  expect(overflowState.visibleRights.every(right => right <= overflowState.stripRight + 1)).toBe(true);
+  expect(overflowState.hiddenIds.length).toBeGreaterThan(0);
+  expect(overflowState.menuIds).toEqual(overflowState.hiddenIds);
+  expect(overflowState.overflowX).toBe('hidden');
   await page.setViewportSize({ width: 1280, height: 900 });
-  await tabBar.getByRole('tab', { name: /Legacy Archive/ }).click({ button: 'right' });
+  await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
   await expect(tabMenu.locator('wa-dropdown-item')).toHaveCount(4);
   await expect(tabMenu.locator('[data-lucide]')).toHaveCount(4);
   await page.keyboard.press('Escape');
   await expect(tabMenu).toHaveCount(0);
-  await tabBar.getByRole('tab', { name: /Legacy Archive/ }).click({ button: 'right' });
+  await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   await tabMenu.locator('wa-dropdown-item', { hasText: 'Close Tabs to the Right' }).click();
+  await expect(tabBar.getByRole('tab')).toHaveCount(1);
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await page.reload();
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   await tabBar.getByRole('tab', { name: /Internal API/ }).click();
   await expect(tabBar.getByRole('tab', { name: /Internal API/ })).toHaveAttribute('aria-selected', 'true');
@@ -897,12 +934,13 @@ test('exercises the application-shell component slice and responsive composition
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
     const pageHeader = node.querySelector('.page-header')!.getBoundingClientRect();
     const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
-    return { shellTop: shellRect.top, toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, toolbarRight: toolbar.right, leadingLeft: leading.left, identityLeft: identity.left, trailingRight: trailing.right, controlsRight: controls.right, tabsTop: tabs.top, tabsBottom: tabs.bottom, pageHeaderTop: pageHeader.top, inspectorTop: inspector.top };
+    return { shellTop: shellRect.top, toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, toolbarRight: toolbar.right, toolbarGap: getComputedStyle(toolbarNode).columnGap, leadingLeft: leading.left, identityLeft: identity.left, trailingRight: trailing.right, controlsRight: controls.right, tabsTop: tabs.top, tabsBottom: tabs.bottom, pageHeaderTop: pageHeader.top, inspectorTop: inspector.top };
   });
   expect(shellHierarchy.toolbarTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
   expect(shellHierarchy.identityLeft).toBeGreaterThanOrEqual(shellHierarchy.leadingLeft);
   expect(shellHierarchy.controlsRight).toBeCloseTo(shellHierarchy.trailingRight, 0);
   expect(shellHierarchy.toolbarRight - shellHierarchy.trailingRight).toBeCloseTo(16, 0);
+  expect(shellHierarchy.toolbarGap).toBe('0px');
   await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveAttribute('data-has-center', 'false');
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
@@ -984,13 +1022,14 @@ test('exercises the application-shell component slice and responsive composition
     const boardRect = board.getBoundingClientRect();
     return { workspaceLeft: workspaceRect.left, workspaceRight: workspaceRect.right, workspaceBottom: workspaceRect.bottom, boardLeft: boardRect.left, boardRight: boardRect.right, boardBottom: boardRect.bottom, boardClientWidth: board.clientWidth, boardScrollWidth: board.scrollWidth };
   });
-  expect(boardGeometry.boardLeft - boardGeometry.workspaceLeft).toBeCloseTo(16, 0);
-  expect(boardGeometry.workspaceRight - boardGeometry.boardRight).toBeCloseTo(16, 0);
-  expect(boardGeometry.workspaceBottom - boardGeometry.boardBottom).toBeCloseTo(16, 0);
+  expect(boardGeometry.boardLeft - boardGeometry.workspaceLeft).toBeCloseTo(0, 0);
+  expect(boardGeometry.workspaceRight - boardGeometry.boardRight).toBeCloseTo(0, 0);
+  expect(boardGeometry.workspaceBottom - boardGeometry.boardBottom).toBeCloseTo(0, 0);
   expect(boardGeometry.boardScrollWidth).toBeGreaterThanOrEqual(boardGeometry.boardClientWidth);
   await shell.getByRole('button', { name: 'List view' }).click();
-  await shell.getByRole('tab', { name: /Small Tale Website/ }).click();
-  await expect(shell.getByRole('tab', { name: /Small Tale Website/ })).toHaveAttribute('aria-selected', 'true');
+  await shell.getByRole('button', { name: 'More projects' }).click();
+  await shell.locator('[data-project-overflow] wa-dropdown-item', { hasText: 'Small Tale Website' }).click();
+  await expect(shell.locator('.project-tab[data-project-id="website"] [role="tab"]')).toHaveAttribute('aria-selected', 'true');
   await shell.getByRole('button', { name: 'Settings view' }).click();
   await expect(shell.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(0);

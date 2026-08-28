@@ -10,6 +10,9 @@ export interface StatusBadgeProps {
   showIcon?: boolean;
   appearance?: StatusBadgeAppearance;
   compact?: boolean;
+  interactive?: boolean;
+  actionLabel?: string;
+  slot?: string;
 }
 
 const presentation: Record<TicketStatus, { icon: IconNode; iconName: string; label: string }> = {
@@ -24,12 +27,11 @@ export function statusPresentation(status: TicketStatus) {
   return presentation[status];
 }
 
-export function StatusBadge({ status, showIcon = true, appearance = 'filled', compact = false }: StatusBadgeProps) {
+export function StatusBadge({ status, showIcon = true, appearance = 'filled', compact = false, interactive = false, actionLabel, slot }: StatusBadgeProps) {
   const value = statusPresentation(status);
-  return (
-    <span class={`status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}`} data-component="status-badge" data-status={status} data-appearance={appearance}>
-      {showIcon && <LucideIcon class="status-badge__icon" icon={value.icon} name={value.iconName} />}
-      <span>{value.label}</span>
-    </span>
-  );
+  const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}`;
+  const content = <>{showIcon && <LucideIcon class="status-badge__icon" icon={value.icon} name={value.iconName} />}<span>{value.label}</span></>;
+  return interactive
+    ? <button type="button" slot={slot} class={className} data-component="status-badge" data-status={status} data-appearance={appearance} aria-label={actionLabel}>{content}</button>
+    : <span slot={slot} class={className} data-component="status-badge" data-status={status} data-appearance={appearance}>{content}</span>;
 }

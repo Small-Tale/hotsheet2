@@ -179,13 +179,15 @@ scrolling content region can be reviewed without moving the Drive control.
   component itself, with selected, remote/local, busy, disconnected, attention,
   closable, and fixed states plus roving focus and arrow/Home/End keyboard navigation
   when composed in the bar. Fine-pointer devices reveal close affordances on hover or
-  keyboard focus; touch-oriented devices retain the visible close control.
+  keyboard focus; touch-oriented devices retain the visible close control. The close
+  affordance is a compact, highlight-free leading control with balanced trailing space
+  so the tab identity remains visually centered.
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
   Tabs, Close Tabs to the Right, and Close All Tabs.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
 - `ProjectPicker` — remains part of the later add-project flow.
-- `TabOverflowMenu` — **demo built** as a compact chevrons-right menu projecting every
-  open tab, and only appears when the project-tab strip actually overflows.
+- `TabOverflowMenu` — **demo built** as a compact chevrons-right menu projecting only
+  projects whose complete tab cannot fit; partially visible tabs are never shown.
 - `TerminalDashboardButton` and `CrossProjectStatsButton` — **shell navigation built**
   with controlled selected state. Their full dashboard surfaces remain tracked by
   HS2-2ZCN7K and HS2-38RJMK respectively.
@@ -193,8 +195,9 @@ scrolling content region can be reviewed without moving the Drive control.
 Global dashboard modes precede project tabs; Add follows the project strip. Tabs
 represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
-servers. The tab strip scrolls horizontally rather than compressing identities beyond
-readability; add and overflow actions remain vertically centered with the pills.
+servers. The tab strip does not scroll or truncate identities: complete tabs remain
+visible in source order and the rest move to the overflow menu. Add and overflow
+actions remain vertically centered with the pills.
 
 In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →
 PageHeader → workspace. TicketInspector is a root trailing region spanning the shell's
@@ -271,7 +274,8 @@ selection where sensible.
 
 - `TicketBoard` — **demo foundation built**: status columns stretch equally to fill
   available width down to a 250px minimum, then the workspace scrolls horizontally
-  edge-to-edge between its sidebar separators. The board has no extra framing and
+  edge-to-edge between its sidebar separators and reaches the workspace bottom. The
+  board has no extra framing and
   whose title and count provide sufficient grouping without an additional visual
   container around either the board or each column. Each column composes production
   `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
@@ -286,6 +290,11 @@ selection where sensible.
   container-query card presentation while preserving identical markup and actions
 - keyboard and pointer movement between columns
 - explicit mutation preview/error handling when a provider lacks the target field
+
+Comprehensive platform-aware keyboard shortcuts are planned in HS2-KTHGVE. They must
+follow macOS conventions on Apple platforms and standard web/OS conventions elsewhere,
+remain discoverable, avoid editable-field conflicts, and receive unit plus browser
+coverage.
 
 ### 3.4 Search and filtering — feature floor
 

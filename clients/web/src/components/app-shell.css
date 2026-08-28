@@ -13,7 +13,7 @@
 body[data-resizing-region] .app-shell > .resizable-region, body[data-resizing-region] .app-shell > .resizable-region .resizable-region__content { transition: none; }
 .app-shell__work-area { display: flex; min-width: 0; min-height: 0; flex: 1; }
 .app-shell__workspace { min-width: 0; min-height: 0; padding: 1rem; overflow: auto; flex: 1; background: #f8f9fb; }
-.app-shell__workspace[data-presentation="edge-to-edge"] { padding: 1rem; overflow: hidden; }
+.app-shell__workspace[data-presentation="edge-to-edge"] { padding: 1rem 0 0; overflow: hidden; }
 .app-shell > .resizable-region[data-region-id="app-inspector"] { border-left: 1px solid #d7dae1; background: #fff; }
 .app-shell > .resizable-region[data-region-id="app-inspector"] .resizable-region__content { width: var(--resizable-region-expanded-size); min-width: var(--resizable-region-expanded-size); transition: transform .2s ease; }
 .app-shell > .resizable-region[data-region-id="app-inspector"][data-collapsed="true"] { border-left-width: 0; }

@@ -8,3 +8,6 @@
 .status-badge--compact { gap: .25rem; padding: .15rem .4rem; font-size: .7rem; font-weight: 600; }
 .status-badge--plain.status-badge--compact { padding: 0; }
 .status-badge--compact .status-badge__icon { width: .75rem; height: .75rem; }
+.status-badge--interactive { border: 0; appearance: none; font-family: inherit; cursor: pointer; }
+.status-badge--interactive:hover { filter: brightness(.97); }
+.status-badge--interactive:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }

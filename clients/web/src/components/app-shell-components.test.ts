@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
 import { ProjectTab } from './project-tab';
-import { ProjectTabBar } from './project-tab-bar';
+import { ProjectTabBar, visibleProjectTabCount } from './project-tab-bar';
 import { clampRegionSize, resizeRegionFromPointer, ResizableRegion } from './resizable-region';
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, selectProjectTab, setRegionSize, resizeDemoWidth, shellMode } from '../ux-demo/app-shell-demo';
 import { PageHeader } from './page-header';
@@ -30,6 +30,12 @@ describe('application shell components', () => {
     expect(markup).toContain('data-lucide="chevrons-right"');
     expect(markup).toContain('data-project-id="one"');
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
+  });
+
+  it('shows only complete tabs and moves the remaining suffix to overflow', () => {
+    expect(visibleProjectTabCount([100, 120, 80], 230, 8)).toBe(2);
+    expect(visibleProjectTabCount([100, 120, 80], 98, 8)).toBe(0);
+    expect(visibleProjectTabCount([100, 120, 80], 316, 8)).toBe(3);
   });
 
   it('clamps and projects accessible splitters in both axes', () => {

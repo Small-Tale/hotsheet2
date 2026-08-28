@@ -2,8 +2,9 @@
 .project-tab:hover { background: rgba(255, 255, 255, .72); }
 .project-tab[data-selected="true"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .16), inset 0 0 0 1px rgba(215, 218, 225, .8); }
 .project-tab[data-disconnected="true"] { color: #777a84; }
-.project-tab__select { display: grid; height: 100%; padding: 0 .35rem 0 .7rem; border: 0; appearance: none; color: inherit; background: transparent; cursor: pointer; font: inherit; grid-template-columns: 1rem max-content auto; align-items: center; gap: .4rem; text-align: left; }
-.project-tab:not(:has(.project-tab__close)) .project-tab__select { padding-right: .7rem; }
+.project-tab[data-overflow-hidden="true"] { display: none; }
+.project-tab__select { display: grid; height: 100%; padding: 0 1.7rem 0 .15rem; border: 0; appearance: none; color: inherit; background: transparent; cursor: pointer; font: inherit; grid-template-columns: 1rem max-content auto; align-items: center; gap: .4rem; text-align: left; }
+.project-tab:not(:has(.project-tab__close)) .project-tab__select { padding: 0 .7rem; }
 .project-tab__select:focus-visible, .project-tab__close:focus-visible { border-radius: 999px; outline: 2px solid #3b82f6; outline-offset: -2px; }
 .project-tab__select > svg { width: 1rem; height: 1rem; }
 .project-tab__name { font-size: .78rem; font-weight: 650; white-space: nowrap; }
@@ -11,9 +12,9 @@
 .project-tab__busy svg { display: block; width: 1rem; height: 1rem; }
 .project-tab__state { color: #6b7280; }
 .project-tab__state--attention { color: #dc2626; }
-.project-tab__close { display: grid; flex: none; width: 1.7rem; height: 1.7rem; margin-right: .3rem; padding: 0; border: 0; border-radius: 999px; appearance: none; color: #777a84; background: transparent; cursor: pointer; place-items: center; }
-.project-tab__close:hover { color: #30323a; background: #e5e7eb; }
-.project-tab__close svg { width: .85rem; height: .85rem; }
+.project-tab__close { display: grid; flex: none; width: 1.275rem; height: 1.275rem; margin-left: .3rem; padding: 0; border: 0; appearance: none; color: #777a84; background: transparent; cursor: pointer; place-items: center; }
+.project-tab__close:hover { color: #30323a; }
+.project-tab__close svg { width: .6375rem; height: .6375rem; }
 @media (hover: hover) and (pointer: fine) {
   .project-tab__close { opacity: 0; pointer-events: none; transition: opacity .12s ease; }
   .project-tab:hover .project-tab__close, .project-tab:focus-within .project-tab__close { opacity: 1; pointer-events: auto; }

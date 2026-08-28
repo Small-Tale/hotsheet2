@@ -86,7 +86,7 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .resizable-region-demo__panel { display: flex; width: 100%; height: 100%; padding: 1rem; box-sizing: border-box; align-items: center; justify-content: center; flex-direction: column; gap: .35rem; }
 .resizable-region-demo__panel span { color: #777a84; font-size: .74rem; }
 .resizable-region-demo__remainder { display: grid; color: #8a8d96; flex: 1; place-items: center; }
-.app-shell-demo { width: min(86rem, calc(100vw - 3rem)); }
+.app-shell-demo { width: 100%; max-width: 86rem; }
 .shell-mode-surface { display: grid; min-height: 20rem; padding: 2rem; border: 1px dashed #c9cdd6; border-radius: .8rem; color: #686b75; background: #fff; align-content: center; justify-items: center; text-align: center; }
 .shell-mode-surface h2 { margin: 0 0 .4rem; color: #24262d; }
 .shell-mode-surface p { margin: 0; }

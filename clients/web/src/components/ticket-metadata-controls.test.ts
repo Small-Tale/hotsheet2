@@ -17,6 +17,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(priority).toContain('data-lucide="minus"');
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change status, Completed"');
+    expect(status).toContain('<button type="button" slot="trigger" class="status-badge');
+    expect(status).not.toContain('<wa-button');
     expect(status).toContain('data-inspector-status="verified"');
     expect(status).not.toContain('with-caret');
   });
