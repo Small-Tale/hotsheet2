@@ -51,12 +51,14 @@ describe('application shell components', () => {
   });
 
   it('composes all top-level regions', () => {
-    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, headerActions: 'actions' as never, pageHeader: PageHeader({ title: 'All Tickets' }), workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never }));
+    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, headerActions: 'actions' as never, pageHeader: PageHeader({ title: 'All Tickets' }), composer: 'compose' as never, workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never }));
     expect(markup).toContain('data-component="app-shell"');
     expect(markup).toContain('data-region-id="app-sidebar"');
     expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-inspector"');
     expect(markup).toContain('Ticket workspace');
+    expect(markup).toContain('class="app-shell__composer">compose');
+    expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));
     expect(markup).toContain('data-component="page-header"');
     expect(markup).toContain('class="toolbar__leading">head');
     expect(markup).toContain('class="toolbar__trailing">actions');

@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-editor';
 import { NoteCard, type NoteKind } from '../components/note-card';
 import { TicketReader } from '../components/ticket-reader';
+import type { InspectorTab } from '../components/ticket-inspector';
 
 export const NOTE_DEMO_KINDS: readonly NoteKind[] = ['regular', 'status', 'feedback_needed', 'activity'];
 
@@ -19,31 +20,34 @@ export const READER_NOTES = [
   { id: 'reader-note', kind: 'regular' as const, author: 'Claude', time: '24 minutes ago', body: 'The reader should preserve a comfortable line length while the note history remains easy to scan.' },
   { id: 'reader-activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Completed the first browser review of the reading surface.' },
 ];
-export const READER_DETAILS = `## Goal
-Create a focused reading surface for ticket details and durable notes.
-
-## Acceptance criteria
-- Keep long-form content comfortably readable.
-- Scroll details and notes together under a stable header.
-- Reuse the same NoteCard presentation shown elsewhere.`;
+export const readerTab = signal<InspectorTab>('info');
 
 export function TicketReaderDemo() {
-  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" details={READER_DETAILS} notes={READER_NOTES} /></section>;
+  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={READER_NOTES} blockedReason="" providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={[{ id: 'wireframe', name: 'reader-wireframe.png' }, { id: 'notes', name: 'reader-notes.md' }]} timelineEntries={[{ id: 'started', time: '1 hour ago', text: 'Development started.' }, { id: 'reviewed', time: 'Now', text: 'Reader composition reviewed.' }]} /></section>;
 }
 
 export const MARKDOWN_INITIAL = `## Implementation notes
-The editor keeps source and preview in one predictable surface.
+The editor keeps **source and preview** in one predictable surface. See [CommonMark](https://commonmark.org/) for the base syntax.
 
-- Preserve drafts while switching modes.
-- Make expanded editing explicit and reversible.`;
+- [x] Preserve drafts while switching modes.
+- [ ] Validate the final reader flow.
+
+| Surface | Behavior |
+| --- | --- |
+| Inspector | Compact editing |
+| Reader | Full ticket editing |
+
+> Raw HTML is shown as text rather than executed.
+
+Use \`Cmd+Enter\` for a future keyboard save shortcut.`;
 export const markdownValue = signal(MARKDOWN_INITIAL);
 export const markdownSavedValue = signal(MARKDOWN_INITIAL);
-export const markdownMode = signal<MarkdownEditorMode>('write');
+export const markdownMode = signal<MarkdownEditorMode>('preview');
 export const markdownExpanded = signal(false);
 export const markdownEvent = signal('Edit the source, preview it, or expand the editor.');
 
-export function saveMarkdown(): void { markdownSavedValue.value = markdownValue.value; markdownEvent.value = 'Markdown saved.'; }
-export function cancelMarkdown(): void { markdownValue.value = markdownSavedValue.value; markdownMode.value = 'write'; markdownEvent.value = 'Edits cancelled.'; }
+export function saveMarkdown(): void { markdownSavedValue.value = markdownValue.value; markdownMode.value = 'preview'; markdownEvent.value = 'Markdown saved.'; }
+export function cancelMarkdown(): void { markdownValue.value = markdownSavedValue.value; markdownMode.value = 'preview'; markdownEvent.value = 'Edits cancelled.'; }
 
 export function MarkdownEditorDemo() {
   return <section class="markdown-editor-demo" aria-label="MarkdownEditor demo">

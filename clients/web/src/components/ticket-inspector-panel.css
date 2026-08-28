@@ -1,10 +1,14 @@
-.ticket-inspector__content { display: grid; padding: 1rem; gap: 1.2rem; }
+.ticket-inspector__content { display: grid; min-height: 0; padding: 1rem; overflow-y: auto; flex: 1; align-content: start; gap: 1.2rem; }
 .ticket-inspector__content section { display: grid; gap: .55rem; }
 .ticket-inspector__section { display: grid; gap: .55rem; }
 .ticket-inspector__section-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; }
 .ticket-inspector__section-header wa-button::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: 999px; }
 .ticket-inspector__content h2 { margin: 0; color: #737580; font-size: .76rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .ticket-inspector__content p { margin: 0; color: #44464e; font-size: .85rem; line-height: 1.5; }
+.ticket-inspector__details { min-height: 3rem; cursor: text; }
+.ticket-inspector__details:focus-visible { border-radius: .35rem; outline: 2px solid #3b82f6; outline-offset: 3px; }
+.ticket-inspector__blocked { padding: .7rem; border-radius: .55rem; background: #eceef2; }
+.ticket-inspector__provenance { display: flex; padding-top: .2rem; color: #8a8d96; justify-content: space-between; gap: .75rem; font-size: .68rem; }
 .ticket-inspector__metadata { grid-template-columns: 1fr 1fr; }
 .ticket-inspector__metadata > div { display: grid; grid-column: 1 / -1; justify-items: start; gap: .35rem; }
 .ticket-inspector__metadata > div > span { color: #656771; font-size: .74rem; font-weight: 650; }

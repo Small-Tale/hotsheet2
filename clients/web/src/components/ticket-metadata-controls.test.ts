@@ -26,7 +26,8 @@ describe('ticket metadata controls and inspector panels', () => {
   it('renders inspector sections independently of the inspector shell', () => {
     const info = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }));
     expect(info).toContain('data-component="ticket-info-panel"');
-    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(2);
+    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(3);
+    expect(info).toContain('data-component="ticket-notes"');
     const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', text: 'One note' }] }));
     expect(timeline.match(/<li/g)).toHaveLength(1);
     expect(timeline).toContain('1 note total');

@@ -337,33 +337,40 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
   await expect(reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' })).toBeVisible();
-  await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Acceptance criteria');
+  await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Implementation notes');
   await expect(reader.locator('[data-component="note-card"]')).toHaveCount(3);
   await expect(reader.getByRole('heading', { name: /Notes/ }).locator('span')).toHaveText('3');
-  await expect(reader.locator('.ticket-reader__scroll')).toHaveCSS('overflow-y', 'auto');
-  await reader.getByLabel('Edit ticket').click();
-  await expect(page).toHaveURL('/ux-demo?component=markdown-editor');
+  await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
+  await reader.getByRole('button', { name: 'Attachments' }).click();
+  await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('reader-wireframe.png');
+  await reader.getByRole('button', { name: 'Info' }).click();
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).click();
+  const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
+  await expect(readerSource).toBeFocused();
+  await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
+  await reader.getByRole('button', { name: 'Save' }).click();
+  await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Reader draft');
+
+  await page.goto('/ux-demo?component=markdown-editor');
 
   const editor = page.locator('[data-component="markdown-editor"]');
+  await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Implementation notes');
+  await editor.getByRole('button', { name: 'Edit Markdown content' }).click();
   const source = editor.getByRole('textbox', { name: 'Markdown content' });
   await expect(source).toHaveValue(/Implementation notes/);
   await source.fill('## Revised goal\nA preserved draft.');
   await expect(editor).toContainText('Unsaved changes');
-  await editor.getByRole('button', { name: 'Preview' }).click();
-  await expect(editor).toHaveAttribute('data-mode', 'preview');
-  await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Revised goal');
-  await editor.getByRole('button', { name: 'Write' }).click();
-  await expect(editor.getByRole('textbox', { name: 'Markdown content' })).toHaveValue('## Revised goal\nA preserved draft.');
   await editor.getByRole('button', { name: 'Expand editor' }).click();
   await expect(editor).toHaveAttribute('data-expanded', 'true');
   await expect(editor).toHaveCSS('position', 'fixed');
   await editor.getByRole('button', { name: 'Save' }).click();
-  await expect(editor).toContainText('Saved');
-  await expect(editor.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await expect(editor).toHaveAttribute('data-mode', 'preview');
+  await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Revised goal');
+  await editor.getByRole('button', { name: 'Edit Markdown content' }).click();
   await editor.getByRole('textbox', { name: 'Markdown content' }).fill('Temporary edit');
   await editor.getByRole('button', { name: 'Cancel' }).click();
-  await expect(editor.getByRole('textbox', { name: 'Markdown content' })).toHaveValue('## Revised goal\nA preserved draft.');
-  await expect(editor).toHaveAttribute('data-mode', 'write');
+  await expect(editor).toHaveAttribute('data-mode', 'preview');
+  await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Revised goal');
   await editor.getByRole('button', { name: 'Use inline editor' }).click();
   await expect(editor).toHaveAttribute('data-expanded', 'false');
 });
@@ -546,10 +553,10 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   const category = form.locator('wa-select[name="new-ticket-category"]');
   await expect(category.locator('.select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
-  const selectedOption = category.locator('wa-option[value="feature"]');
+  const selectedOption = category.locator('wa-option[value="task"]');
   await expect(selectedOption).toHaveCSS('background-color', 'rgb(219, 234, 254)');
   await expect(selectedOption).toHaveCSS('color', 'rgb(29, 78, 216)');
-  await expect(selectedOption.locator('.select__icon')).toHaveCSS('color', 'rgb(139, 92, 246)');
+  await expect(selectedOption.locator('.select__icon')).toHaveCSS('color', 'rgb(20, 184, 166)');
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -622,7 +629,11 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate(node =>
     [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
   );
-  expect(sectionRhythm).toEqual([{ gap: '8.8px', headerHeight: 32 }, { gap: '8.8px', headerHeight: 32 }]);
+  expect(sectionRhythm).toHaveLength(3);
+  expect(sectionRhythm.every(section => section.gap === '8.8px' && section.headerHeight === 32)).toBe(true);
+  await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(3);
+  await inspector.getByRole('button', { name: 'Add note', exact: true }).last().click();
+  await expect(page.getByText('Note composer requested')).toBeVisible();
   await inspector.getByRole('button', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
@@ -1012,7 +1023,7 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-identity', 'workspace-controls', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const shellHierarchy = await shell.evaluate(node => {
     const shellRect = node.getBoundingClientRect();
     const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
@@ -1036,6 +1047,14 @@ test('exercises the application-shell component slice and responsive composition
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
   await expect(shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]')).toHaveCount(1);
+  const shellComposer = shell.locator('.app-shell__composer');
+  expect((await shellComposer.boundingBox())!.y).toBeLessThan((await shell.locator('.app-shell__workspace').boundingBox())!.y);
+  await shellComposer.getByRole('button', { name: /New ticket/ }).click();
+  await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
+  await shellComposer.getByRole('button', { name: 'Cancel' }).click();
+  await shellComposer.getByRole('button', { name: /New ticket/ }).click();
+  await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
+  await shellComposer.getByRole('button', { name: 'Cancel' }).click();
   const inspectorToolbarAlignment = await shell.locator('.ticket-inspector__header > [data-component="toolbar"]').evaluate(node => {
     const slug = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();
     const controls = node.querySelector('[data-component="toolbar-control-group"]')!.getBoundingClientRect();
@@ -1122,10 +1141,12 @@ test('exercises the application-shell component slice and responsive composition
   await shell.getByRole('button', { name: 'Settings view' }).click();
   await expect(shell.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(0);
+  await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
   await expect(shell.locator('[data-component="ticket-inspector"]')).toHaveCount(0);
   for (const name of ['Sort tickets', 'Favorite view', 'More workspace actions', 'Search tickets']) await expect(shell.getByRole('button', { name })).toHaveAttribute('disabled', '');
   await shell.getByRole('button', { name: 'List view' }).click();
   await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
+  await expect(shell.locator('[data-component="quick-ticket-composer"]')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await shell.getByRole('button', { name: 'Search tickets' }).click();
   const shellSearch = shell.getByRole('textbox', { name: 'Search tickets' });
@@ -1140,6 +1161,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
   await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCount(0);
   await expect(shell.locator('[data-component="ticket-inspector"]')).toHaveCount(0);
+  await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
   await expect(shell.getByText('Terminals', { exact: true })).toBeVisible();
   await expect(shell.getByRole('region', { name: 'Terminal dashboard workspace' })).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toHaveCount(0);

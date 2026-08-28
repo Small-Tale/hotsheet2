@@ -19,9 +19,9 @@ describe('UX demo catalog', () => {
     expect(demosUsing('toolbar-control-group').map(entry => entry.id)).toEqual(['app-shell', 'workspace-header', 'ticket-inspector', 'toolbar']);
     expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);
     expect(demosUsing('project-tab').map(entry => entry.id)).toEqual(['project-tabs']);
-    expect(findDemo('ticket-inspector')?.uses).toEqual(['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments']);
-    expect(findDemo('ticket-reader')?.uses).toEqual(['note-card']);
-    expect(demosUsing('note-card').map(entry => entry.id)).toEqual(['ticket-reader']);
+    expect(findDemo('ticket-inspector')?.uses).toEqual(['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'note-card']);
+    expect(findDemo('ticket-reader')?.uses).toEqual(['ticket-inspector']);
+    expect(demosUsing('note-card').map(entry => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
   });
 

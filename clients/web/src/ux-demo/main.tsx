@@ -29,7 +29,7 @@ import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo,
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
-import { cancelMarkdown, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, saveMarkdown, TicketReaderDemo } from './content-components-demo';
+import { cancelMarkdown, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -310,7 +310,7 @@ delegate(root, 'click', '[data-action="cancel-ticket-composer"]', () => { compos
 delegate(root, 'input', '[name="new-ticket-title"]', (_event, target) => { composerTitle.value = (target as FormControl).value; });
 delegate(root, 'change', '[name="new-ticket-category"]', (_event, target) => { composerCategory.value = (target as FormControl).value; });
 delegate(root, 'submit', '[data-action="create-ticket-form"]', (event) => { event.preventDefault(); if (!createDemoTicket()) recordCollectionEvent('Enter a ticket title'); });
-delegate(root, 'click', '[data-action="set-inspector-tab"]', (_event, target) => { inspectorTab.value = (target as HTMLElement).dataset.inspectorTab as typeof inspectorTab.value; });
+delegate(root, 'click', '[data-action="set-inspector-tab"]', (_event, target) => { const tab = (target as HTMLElement).dataset.inspectorTab as typeof inspectorTab.value; if (selectedId.value === 'ticket-reader') readerTab.value = tab; else inspectorTab.value = tab; });
 delegate(root, 'click', '[data-action="close-ticket-inspector"]', () => { inspectorOpen.value = false; recordCollectionEvent('Inspector closed'); });
 delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => { inspectorOpen.value = true; recordCollectionEvent('Inspector opened'); });
 delegate(root, 'change', '[name="inspector-category"]', (_event, target) => { inspectorCategory.value = (target as FormControl).value; });
@@ -320,9 +320,11 @@ delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   toggleCollectionTicketUpNext(ticket.slug);
 });
-delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { recordCollectionEvent('Ticket reader requested'); });
+delegate(root, 'click', '[data-action="add-ticket-note"]', () => { recordCollectionEvent('Note composer requested'); });
+delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { recordCollectionEvent('Ticket reader requested'); selectDemo('ticket-reader'); });
 delegate(root, 'input', '[name="markdown-source"]', (_event, target) => { markdownValue.value = (target as FormControl).value; markdownEvent.value = 'Draft updated.'; });
-delegate(root, 'click', '[data-action="set-markdown-mode"]', (_event, target) => { markdownMode.value = (target as HTMLElement).dataset.markdownMode as typeof markdownMode.value; });
+delegate(root, 'click', '[data-action="edit-markdown"]', () => { markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
+delegate(root, 'keydown', '[data-action="edit-markdown"]', (event) => { if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return; event.preventDefault(); markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => { markdownExpanded.value = !markdownExpanded.value; markdownEvent.value = markdownExpanded.value ? 'Expanded editor opened.' : 'Inline editor restored.'; });
 delegate(root, 'click', '[data-action="save-markdown"]', () => { saveMarkdown(); });
 delegate(root, 'click', '[data-action="cancel-markdown-edit"]', () => { cancelMarkdown(); });

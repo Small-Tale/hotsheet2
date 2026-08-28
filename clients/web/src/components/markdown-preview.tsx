@@ -1,14 +1,28 @@
+import { raw } from 'kerfjs';
+import { marked } from 'marked';
 import './markdown-preview.css';
 
+export function escapeMarkdownHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function safeUrl(value: string): string {
+  const trimmed = value.trim();
+  return /^(https?:|mailto:|#|\/)/i.test(trimmed) ? escapeMarkdownHtml(trimmed) : '#';
+}
+
+marked.setOptions({ breaks: true, gfm: true });
+marked.use({ renderer: {
+  html({ text }) { return escapeMarkdownHtml(text); },
+  link({ href, title, tokens }) { return `<a href="${safeUrl(href)}"${title ? ` title="${escapeMarkdownHtml(title)}"` : ''}>${this.parser.parseInline(tokens)}</a>`; },
+  image({ href, title, text }) { return `<img src="${safeUrl(href)}" alt="${escapeMarkdownHtml(text)}"${title ? ` title="${escapeMarkdownHtml(title)}"` : ''}>`; },
+} });
+
+export function renderMarkdown(source: string): string {
+  return marked.parse(source, { async: false }) as string;
+}
+
 export function MarkdownPreview({ source, emptyLabel = 'Nothing to preview.' }: { source: string; emptyLabel?: string }) {
-  const lines = source.trim().split('\n');
   if (!source.trim()) return <div class="markdown-preview markdown-preview--empty" data-component="markdown-preview">{emptyLabel}</div>;
-  return <div class="markdown-preview" data-component="markdown-preview">{lines.map((line, index) => {
-    if (line.startsWith('### ')) return <h3 data-line={String(index + 1)}>{line.slice(4)}</h3>;
-    if (line.startsWith('## ')) return <h2 data-line={String(index + 1)}>{line.slice(3)}</h2>;
-    if (line.startsWith('# ')) return <h1 data-line={String(index + 1)}>{line.slice(2)}</h1>;
-    if (line.startsWith('- ')) return <div class="markdown-preview__list-item" data-line={String(index + 1)}><span aria-hidden="true"></span><p>{line.slice(2)}</p></div>;
-    if (!line.trim()) return <div class="markdown-preview__break" aria-hidden="true"></div>;
-    return <p data-line={String(index + 1)}>{line}</p>;
-  })}</div>;
+  return <div class="markdown-preview" data-component="markdown-preview">{raw(renderMarkdown(source))}</div>;
 }

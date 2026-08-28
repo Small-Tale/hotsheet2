@@ -69,6 +69,9 @@ contract. Project settings retain the sidebar but hide the inspector and disable
 ticket-view actions. Global Terminal Dashboard and Cross-project Stats modes hide
 both project-scoped regions, replace the project identity, and temporarily suppress
 header controls pending their dedicated wireframes. It owns the top-level arrangement
+The project-scoped list/column workspace also composes the real `QuickTicketComposer`
+immediately above its ticket collection, matching the wireframe; settings and global
+dashboard modes omit it.
 and responsive behavior of:
 
 - `ProjectSidebar`
@@ -338,7 +341,9 @@ than substituting a hardcoded default.
   - up-next/star toggle
   - close/collapse action
 - `InspectorTabBar`
-  - `TicketInfoPanel` — **demo built**: metadata, details, and tags
+- `TicketInfoPanel` — **demo built**: metadata; safe Markdown details; optional
+  blocked reason; tags; notes with collection-derived counts; and provider/update
+  provenance
   - `TicketTimeline` — **demo built**: chronological activity whose displayed total
     is derived from the rendered entry collection
   - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
@@ -368,15 +373,19 @@ than substituting a hardcoded default.
 
 ### 4.2 Details and reader surfaces — feature floor
 
-- `MarkdownPreview` — **built**: safe, code-native rendering for the initial heading,
-  paragraph, list-item, and empty states without injecting source as HTML
-- `MarkdownEditor` — **demo built**: controlled write/preview modes, persistent draft,
-  inline/expanded presentation, dirty state, Save, and Cancel restoration
+- `MarkdownPreview` — **built**: HS1-parity `marked` rendering with GFM tables and
+  task lists, line breaks, links, images, fenced/inline code, blockquotes, lists, and
+  headings. Raw HTML is escaped and unsafe link/image protocols are rejected.
+- `MarkdownEditor` — **demo built**: rendered preview by default, click/keyboard to
+  edit, persistent controlled draft, inline/expanded presentation, dirty state, and
+  textual Save/Cancel actions. The embedded appearance reuses the same behavior in
+  inspector and reader without a redundant standalone toolbar.
 - `InlineEditableField`
 - `ReaderButton`
-- `TicketReader` — **demo built**: large details-and-notes surface with stable identity
-  header, a single independently scrolling reading region, derived note count, shared
-  Markdown preview, and shared `NoteCard` composition
+- `TicketReader` — **demo built**: a large dialog presentation of the actual
+  `TicketInspector`, preserving its metadata editing, tabs, attachments, timeline,
+  Markdown details, notes, and controlled state rather than maintaining a reduced
+  parallel reader implementation
 - `ReaderEditMode` — carries an in-progress inline edit into the larger surface
 - `UnsavedChangesGuard`
 
@@ -430,6 +439,19 @@ icons; structural separators do not require icons.
 Activity notes are durable ticket history. The separate rich AI activity stream can
 feed a live timeline and, under HS2-3GRNZW, later propose distilled activity notes;
 the two sources must remain visually and semantically distinguishable.
+
+### 4.6 Deliberate HS1 detail-panel parity
+
+The HS1 detail panel was reviewed before defining the HS2 inspector. HS2 currently
+retains category, priority, status, Up Next, title and identity, rendered/click-to-edit
+Markdown details, blocked reason, tags, attachments, notes, and provider/update
+provenance. Timeline and attachments move to dedicated tabs so the narrow Info view
+stays readable; the reader dialog exposes those same tabs at a comfortable width.
+
+Remaining editing capabilities are explicit follow-up work: inline title/tag editing,
+note composition/edit/delete, and attachment upload/actions. Telemetry and review
+proof are deliberately not generic always-visible fields: they will appear as
+capability-aware sections when their underlying features and data contracts land.
 
 ## 5. AI drive, attention, and commands
 

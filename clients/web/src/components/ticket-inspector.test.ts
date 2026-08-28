@@ -13,7 +13,19 @@ describe('TicketInspector', () => {
       expect(markup).toContain('data-lucide="panel-right-close"');
       expect(markup).toContain('data-component="toolbar-text" data-size="small">HS2-TEST');
       expect(markup).toContain('data-appearance="borderless"');
-      if (tab === 'info') expect(markup.match(/<wa-option value="feature"/g)).toHaveLength(1);
+      if (tab === 'info') {
+        expect(markup.match(/<wa-option value="feature"/g)).toHaveLength(1);
+        expect(markup).toContain('data-component="ticket-notes"');
+        expect(markup).toContain('data-component="markdown-preview"');
+      }
     }
+  });
+
+  it('uses the same capability surface at reader scale with dialog close semantics', () => {
+    const markup = String(TicketInspector({ ...base, presentation: 'reader', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
+    expect(markup).toContain('data-presentation="reader"');
+    expect(markup).toContain('data-action="close-ticket-reader"');
+    expect(markup).toContain('data-lucide="x"');
+    expect(markup).toContain('data-component="note-card"');
   });
 });

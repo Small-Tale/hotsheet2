@@ -16,6 +16,7 @@ export interface AppShellProps {
   headerActions?: SafeHtml;
   pageHeader?: SafeHtml;
   workspace: SafeHtml;
+  composer?: SafeHtml;
   inspector?: SafeHtml;
   inspectorVisible?: boolean;
   banner?: SafeHtml;
@@ -26,7 +27,7 @@ export interface AppShellProps {
   workspacePresentation?: 'inset' | 'edge-to-edge';
 }
 
-export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset' }: AppShellProps) {
+export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset' }: AppShellProps) {
   return <section class="app-shell" data-component="app-shell" data-mode={mode} data-sidebar-visible={String(sidebarVisible)}>
     {mode === 'project' && <ResizableRegion id="app-sidebar" label="Project sidebar" size={sidebarSize} min={250} max={360} collapsed={!sidebarVisible}>{sidebar}</ResizableRegion>}
     <main class="app-shell__main">
@@ -38,6 +39,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
       {banner}
       {pageHeader}
       <div class="app-shell__work-area">
+        {composer && <div class="app-shell__composer">{composer}</div>}
         <section class="app-shell__workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
       </div>
     </main>
