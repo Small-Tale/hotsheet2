@@ -145,9 +145,11 @@ scrolling content region can be reviewed without moving the Drive control.
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   sort menu, and a connected list/column/settings workspace. Settings disables sort,
   favorite, overflow, and search actions; global shell modes omit project controls.
-- `Toolbar` — **demo built**: shared 56px-high leading/center/trailing layout with
-  consistent horizontal padding across the project sidebar, center column, and ticket
-  inspector. Its bottom divider is an explicit option rather than consumer CSS.
+- `Toolbar` — **demo built**: shared 56px-high leading/optional-center/trailing layout
+  with consistent horizontal padding across the project sidebar, center column, and
+  ticket inspector. Trailing content is edge-aligned; when center is omitted, leading
+  content owns the flexible space and trailing controls remain pinned right. Its
+  bottom divider is an explicit option rather than consumer CSS.
 - `ToolbarText` — **demo built**: vertically aligned large, default, and small toolbar
   identity text; project names use large and inspector ticket numbers use small.
 - `PageHeader` — **demo built**: current view identity below ProjectTabBar, separate
@@ -328,13 +330,17 @@ than substituting a hardcoded default.
   - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
     derived from the rendered attachment collection
 - `TicketMetadataEditor`
+  - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
+    shared by ticket category and priority controls, including selected-value and
+    popup-option icon/color projection
   - `TicketCategorySelect` — **demo built**: configured category icons and colors in
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
     selected-value and popup-option presentations
   - `TicketStatusMenu` — **demo built**: the current `StatusBadge` is an actionable
     popup trigger whose icon-bearing options update the controlled status value
-    while retaining the compact badge presentation
+    while retaining the compact badge presentation; it intentionally has no redundant
+    dropdown caret
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact

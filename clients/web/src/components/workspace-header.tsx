@@ -21,6 +21,10 @@ export interface WorkspaceHeaderProps {
   controlsVisible?: boolean;
 }
 
+export function WorkspaceIdentity({ projectName }: { projectName: string }) {
+  return <div class="workspace-header__identity" data-component="workspace-identity"><ToolbarText text={projectName} size="large" /></div>;
+}
+
 function ModeButton({ mode, current, label, icon, iconName }: { mode: WorkspaceViewMode; current: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }) {
   return <button type="button" class="view-mode-switcher__button" data-action="set-view-mode" data-view-mode={mode} aria-label={`${label} view`} aria-pressed={String(mode === current)} title={`${label} view`}><LucideIcon icon={icon} name={iconName} /></button>;
 }
@@ -32,11 +36,9 @@ const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
   { value: 'status', label: 'Status' },
 ];
 
-export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', controlsVisible = true }: WorkspaceHeaderProps) {
+export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated' }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings';
-  return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
-    <div class="workspace-header__identity"><ToolbarText text={projectName} size="large" /></div>
-    {controlsVisible && <div class="workspace-header__actions">
+  return <div class="workspace-header__actions" data-component="workspace-controls">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
         <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
@@ -57,6 +59,12 @@ export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQ
           ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} disabled={projectActionsDisabled} autofocus clearable><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span></wa-input>
           : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
       </ToolbarControlGroup>
-    </div>}
+    </div>;
+}
+
+export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', controlsVisible = true }: WorkspaceHeaderProps) {
+  return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
+    <WorkspaceIdentity projectName={projectName} />
+    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} />}
   </header>;
 }

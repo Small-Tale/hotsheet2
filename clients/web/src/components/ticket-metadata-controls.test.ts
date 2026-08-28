@@ -9,6 +9,7 @@ import { TicketStatusMenu } from './ticket-status-menu';
 describe('ticket metadata controls and inspector panels', () => {
   it('renders colored category icons and semantic priority icons', () => {
     const category = String(TicketCategorySelect({ name: 'category', value: 'bug' }));
+    expect(category).toContain('data-component="select"');
     expect(category).toContain('data-lucide="bug"');
     expect(category).toContain('color:#ef4444');
     const priority = String(TicketPrioritySelect({ name: 'priority', value: 'urgent' }));
@@ -17,10 +18,13 @@ describe('ticket metadata controls and inspector panels', () => {
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change status, Completed"');
     expect(status).toContain('data-inspector-status="verified"');
+    expect(status).not.toContain('with-caret');
   });
 
   it('renders inspector sections independently of the inspector shell', () => {
-    expect(String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }))).toContain('data-component="ticket-info-panel"');
+    const info = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }));
+    expect(info).toContain('data-component="ticket-info-panel"');
+    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(2);
     const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', text: 'One note' }] }));
     expect(timeline.match(/<li/g)).toHaveLength(1);
     expect(timeline).toContain('1 note total');

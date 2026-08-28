@@ -1,8 +1,5 @@
-import '@awesome.me/webawesome/dist/components/option/option.js';
-import '@awesome.me/webawesome/dist/components/select/select.js';
 import { Bug, CircleAlert, ListChecks, RefreshCw, Search, Sparkles, type IconNode } from 'lucide';
-import { LucideIcon } from './lucide-icon';
-import './ticket-category-select.css';
+import { Select } from './select';
 
 export interface TicketCategoryChoice { value: string; label: string; color: string; icon: IconNode; iconName: string }
 export const DEFAULT_TICKET_CATEGORIES: readonly TicketCategoryChoice[] = [
@@ -16,9 +13,5 @@ export const DEFAULT_TICKET_CATEGORIES: readonly TicketCategoryChoice[] = [
 
 export interface TicketCategorySelectProps { name: string; value: string; label?: string; choices?: readonly TicketCategoryChoice[] }
 export function TicketCategorySelect({ name, value, label = 'Category', choices = DEFAULT_TICKET_CATEGORIES }: TicketCategorySelectProps) {
-  const selected = choices.find(choice => choice.value === value);
-  return <wa-select class="ticket-category-select" name={name} label={label} value={value}>
-    {selected && <span slot="start" class="ticket-category-select__icon ticket-category-select__icon--selected" style={`color:${selected.color}`}><LucideIcon icon={selected.icon} name={selected.iconName} /></span>}
-    {choices.map(choice => <wa-option value={choice.value}><span slot="start" class="ticket-category-select__icon" style={`color:${choice.color}`}><LucideIcon icon={choice.icon} name={choice.iconName} /></span>{choice.label}</wa-option>)}
-  </wa-select>;
+  return <Select className="ticket-category-select" name={name} value={value} label={label} choices={choices} />;
 }

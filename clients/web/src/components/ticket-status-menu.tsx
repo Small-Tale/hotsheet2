@@ -9,7 +9,7 @@ const STATUSES: readonly TicketStatus[] = ['not_started', 'started', 'completed'
 export function TicketStatusMenu({ value }: { value: TicketStatus }) {
   const selected = statusPresentation(value);
   return <wa-dropdown class="ticket-status-menu" placement="bottom-start">
-    <wa-button slot="trigger" appearance="plain" with-caret aria-label={`Change status, ${selected.label}`}><StatusBadge status={value} /></wa-button>
+    <wa-button slot="trigger" appearance="plain" aria-label={`Change status, ${selected.label}`}><StatusBadge status={value} /></wa-button>
     {STATUSES.map(status => {
       const option = statusPresentation(status);
       return <wa-dropdown-item type="checkbox" checked={status === value} data-inspector-status={status} value={status}><span slot="start" class="ticket-status-menu__icon"><LucideIcon icon={option.icon} name={option.iconName} /></span>{option.label}</wa-dropdown-item>;

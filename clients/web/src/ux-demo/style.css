@@ -4,23 +4,20 @@
 body { margin: 0; min-width: 52rem; }
 body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: none; }
 .demo-shell { display: grid; grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr); min-height: 100vh; }
-.demo-master { height: 100vh; overflow: auto; padding: 1.5rem 1.25rem 3rem; border-right: 1px solid #d9d9de; background: #fafafd; }
+.demo-master { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 1.5rem 1.25rem 3rem; border-right: 1px solid #d9d9de; background: #fafafd; }
 .demo-master > header { padding: 0 .6rem 1.25rem; }
 .demo-master h1, .demo-detail h1 { margin: .15rem 0 .35rem; letter-spacing: -.025em; }
 .demo-master p, .demo-detail p { color: #666771; }
 .eyebrow { margin: 0; color: #2563eb !important; font-size: .72rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
 .catalog-group { margin-top: 1.25rem; }
-.catalog-group h2, .catalog-subgroup h3 { margin: 0 .6rem .35rem; color: #777781; font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; }
+.catalog-group > .menu-header, .catalog-subgroup > .menu-header { margin-bottom: .35rem; }
 .catalog-subgroup { margin-top: .85rem; }
 .catalog-group ul { display: grid; gap: .15rem; margin: 0; padding: 0; list-style: none; }
-.catalog-group a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem .65rem; border-radius: .45rem; color: inherit; text-decoration: none; }
-.catalog-group a.catalog-link--planned { color: #9a9ca5; }
-.catalog-group a.catalog-link--planned small { color: #b1b2b9; }
-.catalog-group a:hover { background: #eff6ff; }
-.catalog-group a[aria-current="page"] { color: #1d4ed8; background: #dbeafe; font-weight: 650; }
+.catalog-group .catalog-link--planned { color: #9a9ca5; }
+.catalog-group .catalog-link--planned small { color: #b1b2b9; }
 .catalog-group small { color: #92929c; font-size: .68rem; font-weight: 500; text-transform: capitalize; }
 .demo-detail { display: flex; min-width: 0; min-height: 100vh; padding: clamp(2rem, 5vw, 5rem); flex-direction: column; }
-.demo-detail__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; max-width: 70rem; margin: 0 auto 2rem; }
+.demo-detail__header { display: flex; width: 100%; align-items: flex-start; justify-content: flex-start; gap: 2rem; max-width: 70rem; margin: 0 0 2rem; }
 .demo-detail__header p:last-child { max-width: 42rem; margin: .25rem 0 0; }
 .component-stage, .planned-demo { max-width: 70rem; min-height: 28rem; margin: auto; padding: clamp(2rem, 5vw, 5rem); border: 1px solid #dddde3; border-radius: 1rem; background: white; box-shadow: 0 1.25rem 3rem rgba(35, 32, 48, .07); }
 .component-stage { display: grid; align-content: center; justify-items: center; gap: 1.25rem; }

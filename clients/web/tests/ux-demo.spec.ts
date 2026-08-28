@@ -4,14 +4,19 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
   const catalog = page.getByRole('navigation');
-  await expect(catalog.locator('[data-demo-id="global-search"]')).toHaveCSS('color', 'rgb(154, 156, 165)');
-  await expect(catalog.locator('[data-demo-id="app-shell"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
-  await expect(catalog.locator('[data-demo-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
+  await expect(catalog.locator('[data-item-id="global-search"]')).toHaveCSS('color', 'rgb(154, 156, 165)');
+  await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
+  await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
+  await expect(catalog.locator('[data-component="menu-header"]')).not.toHaveCount(0);
+  await expect(catalog.locator('[data-component="menu-item"]')).not.toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
-  await page.getByRole('navigation').getByRole('link', { name: /TicketRow/ }).click();
+  await page.getByRole('navigation').getByRole('button', { name: /TicketRow/ }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-row');
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
+  const catalogTop = await page.getByRole('complementary', { name: 'Component catalog' }).evaluate(node => node.getBoundingClientRect().top);
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await expect.poll(() => page.getByRole('complementary', { name: 'Component catalog' }).evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(catalogTop, 0);
   await expect(page.getByRole('complementary', { name: 'Component catalog' }).getByText('Uses')).toHaveCount(0);
   const relationships = page.locator('.demo-relationships');
   await expect(relationships.getByRole('button', { name: /Related components/ })).toBeVisible();
@@ -337,7 +342,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(listStar).not.toHaveClass(/active/);
   await expect(page.getByText('HS2-R76MMW removed from Up Next')).toBeVisible();
 
-  await page.getByRole('navigation').getByRole('link', { name: 'TicketBoard Demo', exact: true }).click();
+  await page.getByRole('navigation').getByRole('button', { name: 'TicketBoard Demo', exact: true }).click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('region', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
@@ -487,12 +492,12 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(form).toBeVisible();
   await title.fill('Created from the UX demo');
   const category = form.locator('wa-select[name="new-ticket-category"]');
-  await expect(category.locator('.ticket-category-select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
+  await expect(category.locator('.select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(form.locator('.ticket-category-select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(form.locator('.select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await form.getByRole('button', { name: 'Create ticket' }).click();
   const createdList = page.getByRole('listbox', { name: 'Recently updated tickets' });
   await expect(createdList).toContainText('Created from the UX demo');
@@ -519,21 +524,26 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
   await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(2);
   await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(2);
-  await expect(inspector.locator('.ticket-category-select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
   const category = inspector.locator('wa-select[name="inspector-category"]');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(inspector.locator('.ticket-category-select__icon--selected [data-lucide="bug"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-category-select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
+  await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
   const priority = inspector.locator('wa-select[name="inspector-priority"]');
   await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'low'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(inspector.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
+  await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
   await inspector.locator('wa-button[aria-label="Change status, Started"]').click();
+  await expect(inspector.locator('wa-button[aria-label="Change status, Started"]')).not.toHaveAttribute('with-caret', '');
   await inspector.locator('wa-dropdown-item[data-inspector-status="completed"]').click();
   await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(inspector.locator('wa-button[aria-label="Change status, Completed"]')).toBeVisible();
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
+  const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate(node =>
+    [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
+  );
+  expect(sectionRhythm).toEqual([{ gap: '8.8px', headerHeight: 32 }, { gap: '8.8px', headerHeight: 32 }]);
   await inspector.getByRole('button', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
@@ -553,8 +563,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const reopened = page.locator('[data-component="ticket-inspector"]');
   await expect(reopened).toBeVisible();
   await reopened.getByRole('button', { name: 'Info' }).click();
-  await expect(reopened.locator('.ticket-category-select__icon--selected [data-lucide="bug"]')).toBeVisible();
-  await expect(reopened.locator('.ticket-priority-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
+  await expect(reopened.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(reopened.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(reopened.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
 });
 
@@ -785,6 +795,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
 
   await page.goto('/ux-demo?component=project-tabs');
+  await page.setViewportSize({ width: 1600, height: 900 });
   const tabBar = page.locator('[data-component="project-tab-bar"]');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   await expect(tabBar.locator('[data-component="project-tab"]').first()).toHaveCSS('border-radius', '999px');
@@ -801,6 +812,16 @@ test('exercises the application-shell component slice and responsive composition
   const order = await tabBar.locator(':scope > *').evaluateAll(nodes => nodes.map(node => node.className));
   expect(order).toEqual(['project-tab-bar__modes', 'project-tab-bar__tabs', 'project-tab-bar__actions']);
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeHidden();
+  const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__busy');
+  const spinnerAlignment = await busySpinner.evaluate(node => {
+    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect();
+    return { x: Math.abs((outer.left + outer.width / 2) - (icon.left + icon.width / 2)), y: Math.abs((outer.top + outer.height / 2) - (icon.top + icon.height / 2)) };
+  });
+  expect(spinnerAlignment.x).toBeLessThan(1);
+  expect(spinnerAlignment.y).toBeLessThan(1);
+  for (const name of await tabBar.locator('.project-tab__name').all()) {
+    await expect(name).not.toHaveCSS('text-overflow', 'ellipsis');
+  }
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -864,18 +885,25 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-header', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-identity', 'workspace-controls', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const shellHierarchy = await shell.evaluate(node => {
     const shellRect = node.getBoundingClientRect();
-    const toolbar = node.querySelector('.app-shell__main > [data-component="toolbar"]')!.getBoundingClientRect();
-    const workspaceHeader = node.querySelector('.workspace-header')!.getBoundingClientRect();
+    const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
+    const toolbar = toolbarNode.getBoundingClientRect();
+    const leading = toolbarNode.querySelector('.toolbar__leading')!.getBoundingClientRect();
+    const trailing = toolbarNode.querySelector('.toolbar__trailing')!.getBoundingClientRect();
+    const identity = toolbarNode.querySelector('[data-component="workspace-identity"]')!.getBoundingClientRect();
+    const controls = toolbarNode.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
     const pageHeader = node.querySelector('.page-header')!.getBoundingClientRect();
     const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
-    return { shellTop: shellRect.top, toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, workspaceHeaderTop: workspaceHeader.top, workspaceHeaderBottom: workspaceHeader.bottom, tabsTop: tabs.top, tabsBottom: tabs.bottom, pageHeaderTop: pageHeader.top, inspectorTop: inspector.top };
+    return { shellTop: shellRect.top, toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, toolbarRight: toolbar.right, leadingLeft: leading.left, identityLeft: identity.left, trailingRight: trailing.right, controlsRight: controls.right, tabsTop: tabs.top, tabsBottom: tabs.bottom, pageHeaderTop: pageHeader.top, inspectorTop: inspector.top };
   });
   expect(shellHierarchy.toolbarTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
-  expect(shellHierarchy.workspaceHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.toolbarTop);
+  expect(shellHierarchy.identityLeft).toBeGreaterThanOrEqual(shellHierarchy.leadingLeft);
+  expect(shellHierarchy.controlsRight).toBeCloseTo(shellHierarchy.trailingRight, 0);
+  expect(shellHierarchy.toolbarRight - shellHierarchy.trailingRight).toBeCloseTo(16, 0);
+  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveAttribute('data-has-center', 'false');
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
@@ -905,8 +933,10 @@ test('exercises the application-shell component slice and responsive composition
   expect(inspectorHandleBox).not.toBeNull();
   await page.mouse.move(inspectorHandleBox!.x + inspectorHandleBox!.width / 2, inspectorHandleBox!.y + 80);
   await page.mouse.down();
+  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(inspectorHandleBox!.x - 32, inspectorHandleBox!.y + 80);
   await page.mouse.up();
+  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).not.toHaveCSS('transition-duration', '0s');
   await expect.poll(async () => Number(await inspectorHandle.getAttribute('aria-valuenow'))).toBeGreaterThan(352);
   await shell.getByRole('button', { name: 'Timeline' }).click();
   await expect(shell.getByRole('button', { name: 'Timeline' })).toHaveAttribute('aria-current', 'page');
@@ -942,6 +972,8 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'false');
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('border-right-width', '1px');
+  const sidebarSeparator = await shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]').evaluate(node => ({ width: getComputedStyle(node, '::after').width, background: getComputedStyle(node, '::after').backgroundColor }));
+  expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(207, 211, 220)' });
   await shell.getByRole('button', { name: 'Columns view' }).click();
   const shellWorkspace = shell.locator('.app-shell__workspace');
   const shellBoard = shell.getByRole('region', { name: 'Project board' });

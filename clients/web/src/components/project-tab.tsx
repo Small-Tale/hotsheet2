@@ -21,7 +21,7 @@ export function ProjectTab({ id, name, location, selected = false, busy = false,
     <button type="button" class="project-tab__select" role="tab" aria-selected={String(selected)} data-action="select-project-tab" data-project-id={id} tabindex={selected ? '0' : '-1'}>
       <LucideIcon icon={locationIcon} name={location === 'local' ? 'folder-git-2' : 'cloud'} />
       <span class="project-tab__name">{name}</span>
-      {busy && <LucideIcon icon={LoaderCircle} name="loader-circle" class="project-tab__busy" />}
+      {busy && <span class="project-tab__busy"><LucideIcon icon={LoaderCircle} name="loader-circle" /></span>}
       {!busy && disconnected && <LucideIcon icon={WifiOff} name="wifi-off" class="project-tab__state" />}
       {!busy && !disconnected && attention && <LucideIcon icon={CircleAlert} name="circle-alert" class="project-tab__state project-tab__state--attention" />}
     </button>

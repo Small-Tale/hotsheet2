@@ -13,14 +13,17 @@ import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from 
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
-import { Network } from 'lucide';
+import { Component, Network } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
 import { ToolbarDemo } from './toolbar-demo';
+import { SelectDemo } from './select-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
+import { MenuItem } from '../components/menu-item';
+import { MenuHeader } from '../components/menu-header';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
@@ -41,11 +44,11 @@ const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-hea
 
 function demoLink(item: DemoDefinition) {
   const selected = item.id === selectedId.value;
-  return <li><a class={item.implemented ? 'catalog-link' : 'catalog-link catalog-link--planned'} href={`/ux-demo?component=${encodeURIComponent(item.id)}`} data-demo-id={item.id} data-implemented={String(Boolean(item.implemented))} aria-current={selected ? 'page' : undefined}><span>{item.name}</span><small>{item.implemented ? 'Demo' : item.phase.replace('-', ' ')}</small></a></li>;
+  return <li><MenuItem className={item.implemented ? 'catalog-link' : 'catalog-link catalog-link--planned'} label={item.name} icon={<LucideIcon icon={Component} name="component" />} trailing={<small>{item.implemented ? 'Demo' : item.phase.replace('-', ' ')}</small>} action="select-demo" itemId={item.id} selected={selected} /></li>;
 }
 
 function demoNavigation(category: DemoCategory) {
-  return <section class="catalog-group"><h2>{category.name}</h2>{category.demos && <ul>{category.demos.map(demoLink)}</ul>}{category.children?.map(child => <section class="catalog-subgroup"><h3>{child.name}</h3><ul>{child.demos?.map(demoLink)}</ul></section>)}</section>;
+  return <section class="catalog-group"><MenuHeader label={category.name} />{category.demos && <ul>{category.demos.map(demoLink)}</ul>}{category.children?.map(child => <section class="catalog-subgroup"><MenuHeader label={child.name} /><ul>{child.demos?.map(demoLink)}</ul></section>)}</section>;
 }
 
 function demoContent(item: DemoDefinition) {
@@ -62,6 +65,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
   if (item.id === 'toolbar-text') return <ToolbarTextDemo />;
   if (item.id === 'toolbar') return <ToolbarDemo />;
+  if (item.id === 'select') return <SelectDemo />;
   if (item.id === 'menu-item') return <MenuItemDemo />;
   if (item.id === 'menu-header') return <MenuHeaderDemo />;
   if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;
@@ -154,6 +158,7 @@ function selectDemo(id: string, push = true): void {
 }
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefault(); selectDemo((target as HTMLElement).dataset.demoId!); });
+delegate(root, 'click', '[data-action="select-demo"]', (_event, target) => { selectDemo((target as HTMLElement).dataset.itemId!); });
 delegate(root, 'click', '[data-action="toggle-settings"]', () => { settingsOpen.value = !settingsOpen.value; });
 delegate(root, 'click', '[data-action="open-repository-status"]', () => { sidebarEvent.value = 'Repository status requested.'; });
 delegate(root, 'click', '[data-action="add-view"]', () => { sidebarEvent.value = 'New view editor requested.'; });

@@ -10,7 +10,7 @@ import { LucideIcon } from '../components/lucide-icon';
 import { TicketBoard } from '../components/ticket-board';
 import { TicketInspector } from '../components/ticket-inspector';
 import { TicketList } from '../components/ticket-list';
-import { WorkspaceHeader } from '../components/workspace-header';
+import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
 import { PageHeader } from '../components/page-header';
 import { collectionTickets } from './ticket-collections-demo';
 import { commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
@@ -160,7 +160,7 @@ export function AppShellDemo() {
   const projectName = shellMode.value === 'terminals' ? 'Terminals' : shellMode.value === 'stats' ? 'Stats' : 'Hot Sheet 2';
   const viewName = shellMode.value === 'terminals' ? 'Terminal Dashboard' : shellMode.value === 'stats' ? 'Cross-project Stats' : 'All Tickets';
   return <section class="app-shell-demo" aria-label="AppShell demo">
-    <AppShell mode={shellMode.value} tabs={projectTabs.value} sidebar={<ShellSidebar />} sidebarVisible={shellSidebarVisible.value} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceHeader projectName={projectName} mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} controlsVisible={!globalMode} />} pageHeader={<PageHeader title={projectSettings ? 'Project Settings' : viewName} />} workspace={workspace} workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'} inspectorSize={shellInspectorSize.value} inspector={!projectSettings ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab={inspectorTab.value} upNext={ticket.upNext} /> : undefined} inspectorVisible={inspectorOpen.value} />
+    <AppShell mode={shellMode.value} tabs={projectTabs.value} sidebar={<ShellSidebar />} sidebarVisible={shellSidebarVisible.value} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceIdentity projectName={projectName} />} headerActions={!globalMode ? <WorkspaceControls mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} /> : undefined} pageHeader={<PageHeader title={projectSettings ? 'Project Settings' : viewName} />} workspace={workspace} workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'} inspectorSize={shellInspectorSize.value} inspector={!projectSettings ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab={inspectorTab.value} upNext={ticket.upNext} /> : undefined} inspectorVisible={inspectorOpen.value} />
     <p class="component-stage__event" aria-live="polite">{shellEvent.value}</p>
   </section>;
 }

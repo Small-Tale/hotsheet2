@@ -42,8 +42,8 @@ export const demoCatalog: DemoCategory[] = [
       demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, and tags inspector section.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'tag-chip']),
       demo('ticket-timeline', 'TicketTimeline', 'Chronological ticket activity inspector section.', 'feature-floor', true),
       demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true),
-      demo('ticket-category-select', 'TicketCategorySelect', 'Category chooser with configured icons and colors.', 'feature-floor', true),
-      demo('ticket-priority-select', 'TicketPrioritySelect', 'Priority chooser with semantic icons.', 'feature-floor', true),
+      demo('ticket-category-select', 'TicketCategorySelect', 'Category chooser with configured icons and colors.', 'feature-floor', true, ['select']),
+      demo('ticket-priority-select', 'TicketPrioritySelect', 'Priority chooser with semantic icons.', 'feature-floor', true, ['select']),
       demo('ticket-status-menu', 'TicketStatusMenu', 'Badge-triggered status chooser with semantic icons.', 'feature-floor', true, ['status-badge']),
       demo('metadata-editor', 'TicketMetadataEditor', 'Capability-aware category, priority, and status fields.'),
       demo('status-badge', 'StatusBadge', 'Readable ticket state with reinforcing iconography.', 'feature-floor', true),
@@ -74,6 +74,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),
   ]},
   { id: 'shared', name: 'Shared interactions', demos: [
+    demo('select', 'Select', 'Compact icon-bearing single-value selection control.', 'feature-floor', true),
     demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group']),
     demo('menu-item', 'MenuItem', 'Aligned icon, label, trailing value, and selection geometry for menu-like rows.', 'feature-floor', true),
     demo('menu-header', 'MenuHeader', 'Aligned section heading and optional action for menu groups.', 'feature-floor', true),

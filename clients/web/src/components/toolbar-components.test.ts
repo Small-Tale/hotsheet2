@@ -22,8 +22,9 @@ describe('toolbar primitives', () => {
 
   it('projects leading, center, trailing, and divider state', () => {
     const markup = String(Toolbar({ leading: 'left' as never, center: 'center' as never, trailing: 'right' as never, divider: false }));
-    expect(markup.indexOf('left')).toBeLessThan(markup.indexOf('center'));
-    expect(markup.indexOf('center')).toBeLessThan(markup.indexOf('right'));
+    expect(markup.indexOf('>left<')).toBeLessThan(markup.indexOf('>center<'));
+    expect(markup.indexOf('>center<')).toBeLessThan(markup.indexOf('>right<'));
     expect(markup).toContain('data-divider="false"');
+    expect(markup).toContain('data-has-center="true"');
   });
 });

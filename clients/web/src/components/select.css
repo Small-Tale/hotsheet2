@@ -1,0 +1,6 @@
+.select::part(combobox) { min-height: 2.5rem; padding-inline: .55rem .45rem; gap: .5rem; }
+.select::part(display-input) { padding: 0; }
+.select::part(start), .select::part(end), .select::part(expand-icon) { margin: 0; }
+.select wa-option::part(label) { padding-block: .35rem; }
+.select__icon { display: inline-flex; width: 1rem; height: 1rem; flex: none; }
+.select__icon svg { display: block; width: 100%; height: 100%; }

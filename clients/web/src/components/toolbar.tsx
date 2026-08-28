@@ -11,7 +11,7 @@ export interface ToolbarProps {
 }
 
 export function Toolbar({ leading, center, trailing, label, divider = true, className = '' }: ToolbarProps) {
-  return <header class={`toolbar ${className}`.trim()} data-component="toolbar" data-divider={String(divider)} aria-label={label}>
+  return <header class={`toolbar ${className}`.trim()} data-component="toolbar" data-divider={String(divider)} data-has-center={String(Boolean(center))} aria-label={label}>
     <div class="toolbar__leading">{leading}</div>
     <div class="toolbar__center">{center}</div>
     <div class="toolbar__trailing">{trailing}</div>

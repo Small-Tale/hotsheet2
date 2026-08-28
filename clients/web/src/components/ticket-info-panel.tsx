@@ -17,7 +17,7 @@ export function TicketInfoPanel({ status, priority, category, tags, details }: T
       <TicketPrioritySelect name="inspector-priority" value={priority} />
       <div><span>Status</span><TicketStatusMenu value={status} /></div>
     </section>
-    <section><header><h2>Details</h2><wa-button appearance="plain" data-action="open-ticket-reader" aria-label="Open ticket reader"><LucideIcon icon={BookOpen} name="book-open" /></wa-button></header><p>{details}</p></section>
-    <section><header><h2>Tags</h2></header><div class="ticket-inspector__tags">{tags.map((tag, index) => TagChip({ id: `inspector-tag-${index}`, label: tag }))}</div></section>
+    <section class="ticket-inspector__section"><header class="ticket-inspector__section-header"><h2>Details</h2><wa-button appearance="plain" data-action="open-ticket-reader" aria-label="Open ticket reader"><LucideIcon icon={BookOpen} name="book-open" /></wa-button></header><p>{details}</p></section>
+    <section class="ticket-inspector__section"><header class="ticket-inspector__section-header"><h2>Tags</h2></header><div class="ticket-inspector__tags">{tags.map((tag, index) => TagChip({ id: `inspector-tag-${index}`, label: tag }))}</div></section>
   </div>;
 }
