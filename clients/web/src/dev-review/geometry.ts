@@ -1,5 +1,5 @@
 export interface ReviewRect { id: string; x: number; y: number; width: number; height: number }
-export type ResizeHandle = 'nw' | 'ne' | 'se' | 'sw';
+export type ResizeHandle = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
 
 export function normalizeRect(id: string, startX: number, startY: number, endX: number, endY: number): ReviewRect {
   return { id, x: Math.min(startX, endX), y: Math.min(startY, endY), width: Math.abs(endX - startX), height: Math.abs(endY - startY) };

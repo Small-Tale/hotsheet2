@@ -14,6 +14,8 @@ describe('dev review tool', () => {
     expect(normalizeRect('a', 80, 70, 20, 10)).toEqual({ id: 'a', x: 20, y: 10, width: 60, height: 60 });
     expect(resizeRect({ id: 'a', x: 20, y: 10, width: 60, height: 60 }, 'se', 100, 90)).toEqual({ id: 'a', x: 20, y: 10, width: 80, height: 80 });
     expect(resizeRect({ id: 'a', x: 20, y: 10, width: 60, height: 60 }, 'nw', 75, 65)).toEqual({ id: 'a', x: 56, y: 46, width: 24, height: 24 });
+    expect(resizeRect({ id: 'a', x: 20, y: 10, width: 60, height: 60 }, 'e', 110, 40)).toEqual({ id: 'a', x: 20, y: 10, width: 90, height: 60 });
+    expect(resizeRect({ id: 'a', x: 20, y: 10, width: 60, height: 60 }, 'n', 50, 30)).toEqual({ id: 'a', x: 20, y: 30, width: 60, height: 40 });
     expect(clampRectToViewport({ id: 'a', x: -5, y: 90, width: 120, height: 40 }, 100, 100)).toEqual({ id: 'a', x: 0, y: 90, width: 100, height: 10 });
   });
 

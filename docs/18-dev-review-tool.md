@@ -14,17 +14,20 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 
 - An explicit development-review mode adds a very small fixed `Feedback` launcher in
   the top-right stacking layer.
-- Activating it shows `New Ticket` and `Cancel`, plus a concise Option/Alt-drag hint.
+- Activating it shows `New Ticket` plus a concise Option/Alt-drag hint that fades
+  after a few seconds.
+- `Feedback` is also the mode toggle. It exits immediately when there are no captures
+  and asks before discarding an annotated session.
 - Holding Option on macOS or Alt elsewhere while dragging over the host application
-  creates a numbered capture rectangle. Existing rectangles can be moved or resized
-  from any corner without the modifier.
+  shows a crosshair cursor and creates a numbered capture rectangle. Existing
+  rectangles can be moved or resized from any side or corner without the modifier;
+  handles retain fixed dimensions as their rectangle changes size.
 - Creation, movement, and resizing debounce PNG recapture through `html2canvas`.
   Review-tool UI is excluded from every capture.
 - `New Ticket` flushes pending captures and opens a modal with every PNG as a
   selectable thumbnail, a large preview, and required feedback notes.
-- Canceling the modal returns to the still-active annotation session. Canceling the
-  review toolbar exits the session and discards its rectangles. Successful submission
-  clears and exits the session.
+- The dialog has one Cancel action in its top-right. Canceling it returns to the
+  still-active annotation session. Successful submission clears and exits the session.
 
 ## Embedding API
 
@@ -50,6 +53,14 @@ Open `/ux-demo?dev-review=1` (additional query parameters are fine) while runnin
 Vite development server. The UX demo adapter posts to
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.
+
+The browser entry point is guarded by Vite's compile-time `import.meta.env.DEV` value
+and loads the tool through a dynamic import only after the query flag is present.
+`html2canvas` is therefore a development dependency and is not linked into normal
+Hot Sheet clients. Every production web build runs
+`scripts/check-production-bundle.mjs` and fails if emitted JS or CSS contains a Dev
+Review or `html2canvas` signature. Future Tauri and native client entry points must
+preserve the same compile-time exclusion; a runtime-hidden button is not sufficient.
 
 For this repository the adapter invokes `target/debug/hotsheet-cli`, creates a bug
 tagged `client` and `ux-feedback` in the sibling `hotsheet2.hs2` store, then attaches

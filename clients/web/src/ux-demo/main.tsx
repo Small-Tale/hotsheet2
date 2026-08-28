@@ -22,7 +22,6 @@ import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo,
 import { addDemoProject, AppShellDemo, closeProjectTab, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { observeProjectTabBarOverflow } from '../components/project-tab-bar';
 import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
-import { installDevReview } from '../dev-review';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -123,14 +122,16 @@ function DemoApp() {
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
 observeProjectTabBarOverflow(root);
-if (new URL(location.href).searchParams.get('dev-review') === '1') installDevReview({
-  submit: async submission => {
-    const response = await fetch('/__hotsheet/dev-review/tickets', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hotsheet-dev-review': '1' }, body: JSON.stringify(submission) });
-    const result = await response.json() as { slug?: string; error?: string };
-    if (!response.ok || !result.slug) throw new Error(result.error ?? 'Ticket creation failed.');
-    return { slug: result.slug };
-  },
-});
+if (import.meta.env.DEV && new URL(location.href).searchParams.get('dev-review') === '1') {
+  void import('../dev-review').then(({ installDevReview }) => installDevReview({
+    submit: async submission => {
+      const response = await fetch('/__hotsheet/dev-review/tickets', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hotsheet-dev-review': '1' }, body: JSON.stringify(submission) });
+      const result = await response.json() as { slug?: string; error?: string };
+      if (!response.ok || !result.slug) throw new Error(result.error ?? 'Ticket creation failed.');
+      return { slug: result.slug };
+    },
+  }));
+}
 
 function selectDemo(id: string, push = true): void {
   if (!findDemo(id)) return;
