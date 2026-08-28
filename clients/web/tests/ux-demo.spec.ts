@@ -495,6 +495,10 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   const category = form.locator('wa-select[name="new-ticket-category"]');
   await expect(category.locator('.select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
+  const selectedOption = category.locator('wa-option[value="feature"]');
+  await expect(selectedOption).toHaveCSS('background-color', 'rgb(219, 234, 254)');
+  await expect(selectedOption).toHaveCSS('color', 'rgb(29, 78, 216)');
+  await expect(selectedOption.locator('.select__icon')).toHaveCSS('color', 'rgb(139, 92, 246)');
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
