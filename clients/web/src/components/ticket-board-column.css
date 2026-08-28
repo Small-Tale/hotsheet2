@@ -1,4 +1,4 @@
-.ticket-board-column { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr); gap: .6rem; }
+.ticket-board-column { display: grid; min-width: 0; min-height: 0; padding-bottom: .5rem; grid-template-rows: auto minmax(0, 1fr); gap: .6rem; }
 .ticket-board-column__header { position: relative; z-index: 2; display: flex; min-height: 2rem; padding: 0 .5rem; align-items: center; justify-content: space-between; gap: .75rem; }
 .ticket-board-column__header h2 { margin: 0; font-size: .82rem; letter-spacing: .01em; }
 .ticket-board-column__header span { display: grid; min-width: 1.45rem; height: 1.45rem; padding: 0 .35rem; border-radius: 999px; color: #686a73; background: #e5e7eb; font-size: .68rem; font-weight: 700; place-items: center; }

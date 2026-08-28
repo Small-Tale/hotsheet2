@@ -274,7 +274,8 @@ selection where sensible.
 
 - `TicketBoard` — **demo foundation built**: status columns stretch equally to fill
   available width down to a 250px minimum, then the workspace scrolls horizontally
-  edge-to-edge between its sidebar separators and reaches the workspace bottom. The
+  edge-to-edge between its sidebar separators and reaches the workspace bottom, with
+  an 8px horizontal content inset and 8px column-bottom breathing room. The
   board has no extra framing and
   whose title and count provide sufficient grouping without an additional visual
   container around either the board or each column. Each column composes production

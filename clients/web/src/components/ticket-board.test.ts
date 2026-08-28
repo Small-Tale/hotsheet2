@@ -24,7 +24,8 @@ describe('TicketBoard', () => {
   it('leaves columns visually unframed beneath their title and count', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board-column.css'), 'utf8');
     const rule = css.match(/\.ticket-board-column \{([^}]*)\}/)?.[1] ?? '';
-    expect(rule).not.toMatch(/background|border|padding|border-radius/);
+    expect(rule).not.toMatch(/background|border|border-radius/);
+    expect(rule).toMatch(/padding-bottom: \.5rem/);
   });
 
   it('projects one independently scrollable column with a derived count', () => {
