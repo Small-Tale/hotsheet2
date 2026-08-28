@@ -66,6 +66,8 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .menu-item-demo h2 { margin: 0 0 .35rem; color: #777a84; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
 .menu-item-demo small { color: #777a84; font-variant-numeric: tabular-nums; }
 .menu-item-demo > p { margin: 0; color: #666a75; font-size: .85rem; }
+.note-card-demo { display: grid; width: min(40rem, 100%); margin: auto; gap: .75rem; }
+.ticket-reader-demo, .markdown-editor-demo { display: grid; width: 100%; margin: auto; place-items: center; gap: 1rem; }
 .project-sidebar-demo { display: grid; min-height: 42rem; margin: auto; align-content: center; justify-items: center; gap: 1.25rem; }
 .project-sidebar-demo__resizer { display: grid; width: min(17rem, 100%); height: var(--project-sidebar-demo-height); min-height: 18rem; max-height: 48rem; grid-template-rows: minmax(0, 1fr) 1.25rem; }
 .project-sidebar-demo__resize-handle { display: grid; color: #777a84; cursor: row-resize; place-items: center; touch-action: none; }

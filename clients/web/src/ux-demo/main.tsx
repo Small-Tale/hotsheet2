@@ -29,6 +29,7 @@ import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo,
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
+import { cancelMarkdown, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, saveMarkdown, TicketReaderDemo } from './content-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -84,6 +85,9 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
   if (item.id === 'app-shell') return <AppShellDemo />;
+  if (item.id === 'note-card') return <NoteCardDemo />;
+  if (item.id === 'ticket-reader') return <TicketReaderDemo />;
+  if (item.id === 'markdown-editor') return <MarkdownEditorDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 
@@ -317,6 +321,13 @@ delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   toggleCollectionTicketUpNext(ticket.slug);
 });
 delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { recordCollectionEvent('Ticket reader requested'); });
+delegate(root, 'input', '[name="markdown-source"]', (_event, target) => { markdownValue.value = (target as FormControl).value; markdownEvent.value = 'Draft updated.'; });
+delegate(root, 'click', '[data-action="set-markdown-mode"]', (_event, target) => { markdownMode.value = (target as HTMLElement).dataset.markdownMode as typeof markdownMode.value; });
+delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => { markdownExpanded.value = !markdownExpanded.value; markdownEvent.value = markdownExpanded.value ? 'Expanded editor opened.' : 'Inline editor restored.'; });
+delegate(root, 'click', '[data-action="save-markdown"]', () => { saveMarkdown(); });
+delegate(root, 'click', '[data-action="cancel-markdown-edit"]', () => { cancelMarkdown(); });
+delegate(root, 'click', '[data-action="edit-ticket-reader"]', () => { selectDemo('markdown-editor'); });
+delegate(root, 'click', '[data-action="close-ticket-reader"]', () => { selectDemo('ticket-info-panel'); });
 delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
   const control = target as FormControl;
   if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;

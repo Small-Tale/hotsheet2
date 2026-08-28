@@ -1,0 +1,10 @@
+.markdown-preview { color: #30323a; font-size: .9rem; line-height: 1.6; overflow-wrap: anywhere; }
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3, .markdown-preview p { margin: 0; }
+.markdown-preview h1 { margin-bottom: .8rem; font-size: 1.35rem; }
+.markdown-preview h2 { margin: 1.15rem 0 .35rem; font-size: 1.05rem; }
+.markdown-preview h3 { margin: .9rem 0 .25rem; font-size: .92rem; }
+.markdown-preview p + p { margin-top: .65rem; }
+.markdown-preview__break { height: .65rem; }
+.markdown-preview__list-item { display: grid; grid-template-columns: .45rem minmax(0, 1fr); align-items: baseline; gap: .45rem; }
+.markdown-preview__list-item > span { width: .28rem; height: .28rem; border-radius: 999px; background: #69707d; }
+.markdown-preview--empty { color: #858893; font-style: italic; }

@@ -1,0 +1,12 @@
+.note-card { display: grid; padding: .85rem 1rem; border: 1px solid #dfe1e6; border-radius: .75rem; color: #30323a; background: #fff; gap: .55rem; }
+.note-card__header { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 1rem; }
+.note-card__kind { display: inline-flex; min-width: 0; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 700; }
+.note-card__kind svg { width: .95rem; height: .95rem; flex: none; }
+.note-card__header time, .note-card footer { color: #858893; font-size: .7rem; }
+.note-card__header time { flex: none; }
+.note-card__body { margin: 0; font-size: .88rem; line-height: 1.5; white-space: pre-wrap; }
+.note-card[data-kind="status"], .note-card[data-kind="activity"] { border-color: transparent; background: #eceef2; }
+.note-card[data-kind="status"] .note-card__kind { color: #2563eb; }
+.note-card[data-kind="activity"] .note-card__kind { color: #59606d; }
+.note-card[data-kind="feedback_needed"] { border-color: #f0c86a; background: #fff9e8; }
+.note-card[data-kind="feedback_needed"] .note-card__kind { color: #8a5a08; }

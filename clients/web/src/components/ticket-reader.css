@@ -1,0 +1,13 @@
+.ticket-reader { display: grid; width: min(48rem, 100%); height: min(42rem, calc(100vh - 10rem)); min-height: 28rem; overflow: hidden; border: 1px solid #d9dce3; border-radius: 1rem; background: #fff; box-shadow: 0 1rem 3rem rgba(31, 35, 48, .12); grid-template-rows: auto minmax(0, 1fr); }
+.ticket-reader__header { display: flex; min-width: 0; padding: 1rem 1.15rem; border-bottom: 1px solid #e1e3e8; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.ticket-reader__header > div:first-child { min-width: 0; }
+.ticket-reader__header span { color: #777a84; font-size: .72rem; font-weight: 700; }
+.ticket-reader__header h1 { margin: .2rem 0 0; overflow: hidden; font-size: 1.2rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-reader__actions { display: flex; flex: none; gap: .15rem; }
+.ticket-reader__actions wa-button::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: 999px; }
+.ticket-reader__actions svg { width: 1rem; height: 1rem; }
+.ticket-reader__scroll { min-height: 0; padding: 1.25rem; overflow-y: auto; }
+.ticket-reader__scroll > section + section { margin-top: 1.75rem; }
+.ticket-reader__scroll > section > h2 { display: flex; margin: 0 0 .75rem; color: #737580; align-items: center; gap: .45rem; font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
+.ticket-reader__scroll > section > h2 span { display: grid; min-width: 1.3rem; height: 1.3rem; padding: 0 .3rem; border-radius: 999px; background: #e8eaf0; font-size: .65rem; place-items: center; }
+.ticket-reader__notes { display: grid; gap: .7rem; }

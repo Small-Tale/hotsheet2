@@ -51,12 +51,11 @@ export const demoCatalog: DemoCategory[] = [
       demo('tag-picker', 'TagPicker', 'Find, create, and attach ticket tags.'),
     ]},
     { id: 'content', name: 'Content', demos: [
-      demo('ticket-reader', 'TicketReader', 'Large details-and-notes reading surface.'),
-      demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.'),
-      demo('attachment-list', 'AttachmentList', 'Durable attachment identity and actions.'),
+      demo('ticket-reader', 'TicketReader', 'Large details-and-notes reading surface.', 'feature-floor', true, ['note-card']),
+      demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
     ]},
     { id: 'notes', name: 'Notes and activity', demos: [
-      demo('note-card', 'NoteCard', 'Kind-specific note presentation.'),
+      demo('note-card', 'NoteCard', 'Kind-specific note presentation.', 'feature-floor', true),
       demo('feedback-draft', 'FeedbackDraftEditor', 'Local draft response to feedback.'),
       demo('activity-timeline', 'ActivityTimeline', 'Chronological durable activity notes.'),
     ]},

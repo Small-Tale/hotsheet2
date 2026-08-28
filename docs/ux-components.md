@@ -368,11 +368,15 @@ than substituting a hardcoded default.
 
 ### 4.2 Details and reader surfaces — feature floor
 
-- `MarkdownPreview`
-- `MarkdownEditor`
+- `MarkdownPreview` — **built**: safe, code-native rendering for the initial heading,
+  paragraph, list-item, and empty states without injecting source as HTML
+- `MarkdownEditor` — **demo built**: controlled write/preview modes, persistent draft,
+  inline/expanded presentation, dirty state, Save, and Cancel restoration
 - `InlineEditableField`
 - `ReaderButton`
-- `TicketReader` — large, scrollable details-and-notes surface
+- `TicketReader` — **demo built**: large details-and-notes surface with stable identity
+  header, a single independently scrolling reading region, derived note count, shared
+  Markdown preview, and shared `NoteCard` composition
 - `ReaderEditMode` — carries an in-progress inline edit into the larger surface
 - `UnsavedChangesGuard`
 
@@ -398,7 +402,9 @@ icons; structural separators do not require icons.
 
 ### 4.4 Attachments — feature floor
 
-- `AttachmentList`
+- `TicketAttachments` — the existing attachment-list surface; it will gain the row,
+  durable identity, and action capabilities below rather than being duplicated by a
+  separate `AttachmentList` component
 - `AttachmentRow`
 - `AttachmentPicker`
 - `AttachmentDropZone`
@@ -409,7 +415,8 @@ icons; structural separators do not require icons.
 ### 4.5 Notes and activity — feature floor
 
 - `NoteList`
-- `NoteCard` with kind-specific presentation
+- `NoteCard` — **demo built** with distinct regular, status, feedback-needed, and
+  activity presentations sharing stable author, timestamp, body, and note identity
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`

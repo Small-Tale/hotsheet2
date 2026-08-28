@@ -324,6 +324,50 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
 });
 
+test('presents note kinds and round-trips reader and Markdown editor compositions', async ({ page }) => {
+  await page.goto('/ux-demo?component=note-card');
+  const notes = page.locator('[data-component="note-card"]');
+  await expect(notes).toHaveCount(4);
+  for (const [kind, icon] of [['regular', 'message-square-text'], ['status', 'refresh-cw'], ['feedback_needed', 'circle-alert'], ['activity', 'activity']] as const) {
+    const note = notes.filter({ has: page.locator(`[data-lucide="${icon}"]`) });
+    await expect(note).toHaveAttribute('data-kind', kind);
+    await expect(note.locator(`[data-lucide="${icon}"]`)).toBeVisible();
+  }
+
+  await page.goto('/ux-demo?component=ticket-reader');
+  const reader = page.locator('[data-component="ticket-reader"]');
+  await expect(reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' })).toBeVisible();
+  await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Acceptance criteria');
+  await expect(reader.locator('[data-component="note-card"]')).toHaveCount(3);
+  await expect(reader.getByRole('heading', { name: /Notes/ }).locator('span')).toHaveText('3');
+  await expect(reader.locator('.ticket-reader__scroll')).toHaveCSS('overflow-y', 'auto');
+  await reader.getByLabel('Edit ticket').click();
+  await expect(page).toHaveURL('/ux-demo?component=markdown-editor');
+
+  const editor = page.locator('[data-component="markdown-editor"]');
+  const source = editor.getByRole('textbox', { name: 'Markdown content' });
+  await expect(source).toHaveValue(/Implementation notes/);
+  await source.fill('## Revised goal\nA preserved draft.');
+  await expect(editor).toContainText('Unsaved changes');
+  await editor.getByRole('button', { name: 'Preview' }).click();
+  await expect(editor).toHaveAttribute('data-mode', 'preview');
+  await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Revised goal');
+  await editor.getByRole('button', { name: 'Write' }).click();
+  await expect(editor.getByRole('textbox', { name: 'Markdown content' })).toHaveValue('## Revised goal\nA preserved draft.');
+  await editor.getByRole('button', { name: 'Expand editor' }).click();
+  await expect(editor).toHaveAttribute('data-expanded', 'true');
+  await expect(editor).toHaveCSS('position', 'fixed');
+  await editor.getByRole('button', { name: 'Save' }).click();
+  await expect(editor).toContainText('Saved');
+  await expect(editor.getByRole('button', { name: 'Save' })).toBeDisabled();
+  await editor.getByRole('textbox', { name: 'Markdown content' }).fill('Temporary edit');
+  await editor.getByRole('button', { name: 'Cancel' }).click();
+  await expect(editor.getByRole('textbox', { name: 'Markdown content' })).toHaveValue('## Revised goal\nA preserved draft.');
+  await expect(editor).toHaveAttribute('data-mode', 'write');
+  await editor.getByRole('button', { name: 'Use inline editor' }).click();
+  await expect(editor).toHaveAttribute('data-expanded', 'false');
+});
+
 test('uses the identical responsive TicketRow in list and board compositions', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=ticket-list');
