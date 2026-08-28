@@ -1,6 +1,7 @@
 import { signal } from 'kerfjs';
 import { TicketList } from '../components/ticket-list';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
+import { TicketBoardColumn } from '../components/ticket-board-column';
 import type { TicketRowProps } from '../components/ticket-row';
 
 const initialTickets: TicketRowProps[] = [
@@ -69,5 +70,14 @@ export function TicketBoardDemo() {
     <TicketBoard columns={columns} label="Example status board" />
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
     <p class="component-stage__guidance">Each narrow column activates TicketRow’s own card presentation; no TicketCard component or parallel summary markup is involved.</p>
+  </section>;
+}
+
+export function TicketBoardColumnDemo() {
+  const tickets = collectionTickets.value.filter(ticket => ticket.status === 'started');
+  return <section class="collection-demo collection-demo--column" aria-label="TicketBoardColumn demo">
+    <TicketBoardColumn id="in-progress-demo" title="In progress" tickets={tickets} />
+    <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
+    <p class="component-stage__guidance">The column owns its fixed heading, derived count, independently scrollable ticket region, and shared responsive TicketRow composition.</p>
   </section>;
 }

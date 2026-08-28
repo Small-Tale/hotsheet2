@@ -13,7 +13,7 @@ import { TicketList } from '../components/ticket-list';
 import { WorkspaceHeader } from '../components/workspace-header';
 import { collectionTickets } from './ticket-collections-demo';
 import { commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
-import { filteredWorkspaceTickets, inspectorOpen, workspaceColumns, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
+import { filteredWorkspaceTickets, inspectorOpen, inspectorTab, workspaceColumns, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
 
 const initialTabs: ProjectTabProps[] = [
   { id: 'hotsheet', name: 'Hot Sheet 2', location: 'local', selected: true },
@@ -26,6 +26,7 @@ export const projectTabs = signal<ProjectTabProps[]>(initialTabs.map(tab => ({ .
 export const shellConnectionState = signal<ConnectionState | undefined>('reconnecting');
 export const shellMode = signal<ProjectTabBarMode>('project');
 export const shellSidebarSize = signal(272);
+export const shellSidebarVisible = signal(true);
 export const shellInspectorSize = signal(352);
 export const resizeDemoWidth = signal(260);
 export const resizeDemoHeight = signal(180);
@@ -93,7 +94,7 @@ export function ProjectTabDemo() {
 }
 
 export function ProjectTabBarDemo() {
-  return <section class="project-tab-bar-demo" aria-label="ProjectTabBar demo"><ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} /><p class="component-stage__event" aria-live="polite">{shellEvent.value}</p></section>;
+  return <section class="project-tab-bar-demo" aria-label="ProjectTabBar demo"><ProjectTabBar tabs={projectTabs.value} mode={shellMode.value} sidebarVisible={shellSidebarVisible.value} /><p class="component-stage__event" aria-live="polite">{shellEvent.value}</p></section>;
 }
 
 export function ResizableRegionDemo() {
@@ -140,7 +141,7 @@ export function AppShellDemo() {
   const projectName = shellMode.value === 'terminals' ? 'Terminals' : shellMode.value === 'stats' ? 'Stats' : 'Hot Sheet 2';
   const viewName = shellMode.value === 'terminals' ? 'Terminal Dashboard' : shellMode.value === 'stats' ? 'Cross-project Stats' : 'All Tickets';
   return <section class="app-shell-demo" aria-label="AppShell demo">
-    <AppShell mode={shellMode.value} tabs={projectTabs.value} sidebar={<ShellSidebar />} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceHeader projectName={projectName} viewName={viewName} mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} controlsVisible={!globalMode} />} workspace={workspace} inspectorSize={shellInspectorSize.value} inspector={!projectSettings && inspectorOpen.value ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab="info" upNext={ticket.upNext} /> : undefined} />
+    <AppShell mode={shellMode.value} tabs={projectTabs.value} sidebar={<ShellSidebar />} sidebarVisible={shellSidebarVisible.value} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceHeader projectName={projectName} viewName={viewName} mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} controlsVisible={!globalMode} />} workspace={workspace} workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'} inspectorSize={shellInspectorSize.value} inspector={!projectSettings && inspectorOpen.value ? <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details="The inspector remains available beside the workspace on wide displays and yields on compact layouts." activeTab={inspectorTab.value} upNext={ticket.upNext} /> : undefined} />
     <p class="component-stage__event" aria-live="polite">{shellEvent.value}</p>
   </section>;
 }

@@ -128,6 +128,12 @@ and other non-action structure are the only ordinary exception.
   through the real owning surface (for example an inspector), then verify stale
   decorations disappeared and the new label and decorations agree with application
   state. A menu containing correct icons does not prove its selected-value projection.
+- **Exercise child actions through every shipped composition**: a component demo proving
+  an action works does not prove a parent composition projects the changed state back
+  into that child. For each interactive child used by a composite surface, trigger its
+  real action through the composite, assert the owning state changed, and assert the
+  composite rerendered the correct child view. Never hardcode a controlled child prop
+  in a composition when a shared signal/controller owns that state.
 - **Manual test plan**: keep a manual test plan doc (e.g. `docs/manual-test-plan.md`) for features that can't be reliably automated. **Keep it up to date** — add such features there; when you add automated coverage for a previously-manual item, remove it and note it in an "Automated Coverage Summary".
 - **Feature coverage matrix**: update [`docs/TEST-COVERAGE.md`](docs/TEST-COVERAGE.md)
   in the same change whenever a feature is added, shipped, changed, deferred, or gains

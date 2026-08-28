@@ -27,7 +27,8 @@ export const demoCatalog: DemoCategory[] = [
       demo('ticket-row', 'TicketRow', 'Dense ticket summary and selection target.', 'feature-floor', true, ['status-badge', 'tag-chip']),
     ]},
     { id: 'ticket-board', name: 'Columns', demos: [
-      demo('ticket-board', 'TicketBoard', 'Status/category column workspace.', 'feature-floor', true, ['ticket-row']),
+      demo('ticket-board', 'TicketBoard', 'Status/category column workspace.', 'feature-floor', true, ['ticket-board-column']),
+      demo('ticket-board-column', 'TicketBoardColumn', 'One titled, independently scrollable ticket column.', 'feature-floor', true, ['ticket-row']),
     ]},
     { id: 'search', name: 'Search and filtering', demos: [
       demo('global-search', 'GlobalSearchOverlay', 'FTS search, scope, and suggestions.'),

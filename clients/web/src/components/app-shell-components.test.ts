@@ -3,7 +3,7 @@ import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
 import { ProjectTab } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
-import { clampRegionSize, ResizableRegion } from './resizable-region';
+import { clampRegionSize, resizeRegionFromPointer, ResizableRegion } from './resizable-region';
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, selectProjectTab, setRegionSize, resizeDemoWidth, shellMode } from '../ux-demo/app-shell-demo';
 
 describe('application shell components', () => {
@@ -19,19 +19,25 @@ describe('application shell components', () => {
   });
 
   it('composes tabs with add and overflow actions', () => {
-    const markup = String(ProjectTabBar({ tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }] }));
+    const markup = String(ProjectTabBar({ tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }], projectsOverflowing: true }));
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-label="Add project"');
     expect(markup).toContain('aria-label="More projects"');
     expect(markup).toContain('aria-label="Terminal dashboard"');
     expect(markup).toContain('aria-label="Cross-project stats"');
+    expect(markup).toContain('aria-label="Hide project sidebar"');
+    expect(markup).toContain('data-lucide="chevrons-right"');
     expect(markup).toContain('data-project-id="one"');
+    expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
   });
 
   it('clamps and projects accessible splitters in both axes', () => {
     expect(clampRegionSize(100, 180, 420)).toBe(180);
     expect(clampRegionSize(300.6, 180, 420)).toBe(301);
     expect(clampRegionSize(500, 180, 420)).toBe(420);
+    expect(resizeRegionFromPointer(300, 20, 'end')).toBe(320);
+    expect(resizeRegionFromPointer(300, 20, 'start')).toBe(280);
+    expect(resizeRegionFromPointer(300, -20, 'start')).toBe(320);
     const markup = String(ResizableRegion({ id: 'left', label: 'Sidebar', size: 240, min: 180, max: 420, children: 'content' as never }));
     expect(markup).toContain('aria-orientation="vertical"');
     expect(markup).toContain('aria-valuenow="240"');
@@ -56,6 +62,9 @@ describe('application shell components', () => {
     expect(globalMarkup).toContain('data-mode="stats"');
     expect(globalMarkup).not.toContain('data-region-id="app-sidebar"');
     expect(globalMarkup).not.toContain('data-region-id="app-inspector"');
+    const collapsedMarkup = String(AppShell({ tabs: [], sidebar: 'side' as never, sidebarVisible: false, header: 'head' as never, workspace: 'work' as never }));
+    expect(collapsedMarkup).not.toContain('data-region-id="app-sidebar"');
+    expect(collapsedMarkup).toContain('aria-label="Show project sidebar"');
   });
 
   it('walks select, close, add, resize, and post-resize transitions', () => {

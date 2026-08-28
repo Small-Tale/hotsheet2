@@ -14,12 +14,14 @@ import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
 import { Network } from 'lucide';
-import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
+import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
-import { addDemoProject, AppShellDemo, closeProjectTab, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode } from './app-shell-demo';
+import { addDemoProject, AppShellDemo, closeProjectTab, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
+import { observeProjectTabBarOverflow } from '../components/project-tab-bar';
+import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -28,7 +30,7 @@ const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
-let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; startPoint: number; startSize: number } | undefined;
+let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; edge: ResizableRegionEdge; startPoint: number; startSize: number } | undefined;
 const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer', 'app-shell'].includes(selectedId.value);
 
 function demoLink(item: DemoDefinition) {
@@ -46,6 +48,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-row') return <TicketRowDemo />;
   if (item.id === 'ticket-list') return <TicketListDemo />;
   if (item.id === 'ticket-board') return <TicketBoardDemo />;
+  if (item.id === 'ticket-board-column') return <TicketBoardColumnDemo />;
   if (item.id === 'workspace-header') return <WorkspaceHeaderDemo />;
   if (item.id === 'quick-ticket-composer') return <QuickTicketComposerDemo />;
   if (item.id === 'ticket-inspector') return <TicketInspectorDemo />;
@@ -118,6 +121,7 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
+observeProjectTabBarOverflow(root);
 
 function selectDemo(id: string, push = true): void {
   if (!findDemo(id)) return;
@@ -138,6 +142,7 @@ delegate(root, 'click', '[data-action="toggle-drive"]', () => { driveRunning.val
 delegate(root, 'click', '[data-action="select-project-tab"]', (_event, target) => { selectProjectTab((target as HTMLElement).dataset.projectId!); });
 delegate(root, 'click', '[data-action="close-project-tab"]', (event, target) => { event.stopPropagation(); closeProjectTab((target as HTMLElement).dataset.projectId!); });
 delegate(root, 'click', '[data-action="add-project"]', () => { addDemoProject(); });
+delegate(root, 'click', '[data-action="toggle-project-sidebar"]', () => { shellSidebarVisible.value = !shellSidebarVisible.value; shellEvent.value = shellSidebarVisible.value ? 'Project sidebar shown.' : 'Project sidebar hidden.'; });
 delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
   shellMode.value = (target as HTMLElement).dataset.shellMode as typeof shellMode.value;
   workspaceSearchOpen.value = false;
@@ -154,7 +159,7 @@ delegate(root, 'pointerdown', '[data-action="resize-region"]', (event, target) =
   const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
   const axis = region.dataset.axis as 'horizontal' | 'vertical';
   const id = handle.dataset.regionId!;
-  regionResizeDrag = { id, axis, startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY, startSize: regionSize(id) };
+  regionResizeDrag = { id, axis, edge: region.dataset.edge as ResizableRegionEdge, startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY, startSize: regionSize(id) };
   document.body.dataset.resizingRegion = axis;
 });
 delegate(root, 'keydown', '[data-action="resize-region"]', (event, target) => {
@@ -165,7 +170,8 @@ delegate(root, 'keydown', '[data-action="resize-region"]', (event, target) => {
   if ((axis === 'horizontal' && key !== 'ArrowLeft' && key !== 'ArrowRight') || (axis === 'vertical' && key !== 'ArrowUp' && key !== 'ArrowDown')) return;
   event.preventDefault();
   const direction = key === 'ArrowRight' || key === 'ArrowDown' ? 1 : -1;
-  setRegionSize(handle.dataset.regionId!, regionSize(handle.dataset.regionId!) + direction * 16);
+  const edge = region.dataset.edge as ResizableRegionEdge;
+  setRegionSize(handle.dataset.regionId!, resizeRegionFromPointer(regionSize(handle.dataset.regionId!), direction * 16, edge));
   shellEvent.value = `${region.getAttribute('aria-label')} resized.`;
 });
 delegate(root, 'keydown', '[data-action="select-project-tab"]', (event, target) => {
@@ -198,7 +204,7 @@ window.addEventListener('pointermove', event => {
 window.addEventListener('pointermove', event => {
   if (!regionResizeDrag) return;
   const point = regionResizeDrag.axis === 'horizontal' ? event.clientX : event.clientY;
-  setRegionSize(regionResizeDrag.id, regionResizeDrag.startSize + point - regionResizeDrag.startPoint);
+  setRegionSize(regionResizeDrag.id, resizeRegionFromPointer(regionResizeDrag.startSize, point - regionResizeDrag.startPoint, regionResizeDrag.edge));
 });
 window.addEventListener('pointerup', () => {
   if (!sidebarResizeDrag) return;

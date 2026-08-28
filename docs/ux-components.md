@@ -61,7 +61,9 @@ The **built demo** composes the current production sidebar, tabs, connection ban
 header, ticket workspace, and inspector into a desktop shell. Sidebar and inspector
 splitters are keyboard/pointer adjustable on wide displays; both secondary regions
 yield to the ticket workspace on compact displays. Sidebar regions never resize below
-250px. Composed WorkspaceHeader search retains its expand/autofocus/filter/empty-blur
+250px. The project sidebar can be hidden and restored from the persistent tab bar;
+start-edge inspector resizing correctly mirrors end-edge sidebar resizing. Composed
+WorkspaceHeader search retains its expand/autofocus/filter/empty-blur
 contract. Project settings retain the sidebar but hide the inspector and disable
 ticket-view actions. Global Terminal Dashboard and Cross-project Stats modes hide
 both project-scoped regions, replace the project identity, and temporarily suppress
@@ -158,12 +160,14 @@ scrolling content region can be reviewed without moving the Drive control.
   when composed in the bar.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
 - `ProjectPicker` — remains part of the later add-project flow.
-- `TabOverflowMenu` — **demo built** as a compact menu projecting every open tab.
+- `TabOverflowMenu` — **demo built** as a compact chevrons-right menu projecting every
+  open tab, and only appears when the project-tab strip actually overflows.
 - `TerminalDashboardButton` and `CrossProjectStatsButton` — **shell navigation built**
   with controlled selected state. Their full dashboard surfaces remain tracked by
   HS2-2ZCN7K and HS2-38RJMK respectively.
 
-Tabs represent server/project connections rather than embedded stores. The component
+Global dashboard modes precede project tabs; Add follows the project strip. Tabs
+represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally rather than compressing identities beyond
 readability; add and overflow actions remain vertically centered with the pills.
@@ -235,14 +239,19 @@ selection where sensible.
 
 ### 3.3 `ColumnWorkspace` — feature floor
 
-- `TicketBoard` — **demo foundation built**: horizontally scrolling status columns
+- `TicketBoard` — **demo foundation built**: status columns stretch equally to fill
+  available width down to a 250px minimum, then the workspace scrolls horizontally
+  edge-to-edge between its sidebar separators. The board has no extra framing and
   whose title and count provide sufficient grouping without an additional visual
   container around either the board or each column. Each column composes production
   `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
   overflow all columns; each ticket region scrolls independently while its heading and
   count remain fixed. A hosting workspace may add its own surrounding surface when
   appropriate.
-- `TicketColumn` with heading, count, loading, and empty states
+- `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
+  collection, fixed header, independently scrolling ticket region, visible scroll
+  affordance, and shared responsive `TicketRow` composition. Loading and empty states
+  remain future variants.
 - There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
   container-query card presentation while preserving identical markup and actions
 - keyboard and pointer movement between columns
@@ -275,7 +284,9 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 
 The trailing inspector shown in the wireframe. `TicketInspector` is **demo built**
 as a focused shell around separately demoed `TicketInfoPanel`, `TicketTimeline`, and
-`TicketAttachments` components, plus the Up Next toggle, close/reopen, and tab routing.
+`TicketAttachments` components, plus the Up Next toggle, close/reopen, and controlled
+tab routing. Its AppShell composition projects the same shared active-tab state rather
+than substituting a hardcoded default.
 
 - `InspectorHeader`
   - ticket identifier

@@ -239,7 +239,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 | Slug derivation | `hotsheet-model/src/ids.rs` |
 | Store layout / sharding | `hotsheet-ticketing/src/store.rs`, [02](02-ticket-storage.md) §2.3 |
 | HS1 → git migration | `migrator/` + `hotsheet-cli/src/import.rs` (stable HS2 ids, close-state normalization; no retained HS1 fields), [07](07-migration.md) |
-| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/}` (dev-only Hono catalog + real components; application shell composition in `components/{app-shell,project-tab-bar,project-tab,resizable-region,connection-state-banner}.*`, shared ticket colors in `components/ticket-state-colors.css`), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md) |
+| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/}` (dev-only Hono catalog + real components; application shell composition in `components/{app-shell,project-tab-bar,project-tab,resizable-region,connection-state-banner}.*`; board composition in `components/{ticket-board,ticket-board-column,ticket-row}.*`; shared ticket colors in `components/ticket-state-colors.css`), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md) |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
 | Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |

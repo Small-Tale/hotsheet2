@@ -18,6 +18,7 @@ export interface ResizableRegionProps {
 }
 
 export const clampRegionSize = (size: number, min: number, max: number) => Math.min(max, Math.max(min, Math.round(size)));
+export const resizeRegionFromPointer = (startSize: number, delta: number, edge: ResizableRegionEdge) => startSize + delta * (edge === 'start' ? -1 : 1);
 
 export function ResizableRegion({ id, label, size, min, max, axis = 'horizontal', edge = 'end', collapsed = false, children }: ResizableRegionProps) {
   const resolved = collapsed ? 0 : clampRegionSize(size, min, max);

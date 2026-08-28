@@ -3,11 +3,12 @@
 .project-tab-bar__tabs::-webkit-scrollbar { display: none; }
 .project-tab-bar__modes, .project-tab-bar__actions { display: flex; flex: none; height: 100%; align-items: center; }
 .project-tab-bar__modes { gap: .1rem; }
-.project-tab-bar__modes button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 999px; color: #646771; background: transparent; cursor: pointer; place-items: center; }
-.project-tab-bar__modes button:hover { background: #fff; }
+.project-tab-bar__modes button, .project-tab-bar__sidebar-toggle { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 999px; color: #646771; background: transparent; cursor: pointer; flex: none; place-items: center; }
+.project-tab-bar__modes button:hover, .project-tab-bar__sidebar-toggle:hover { background: #fff; }
 .project-tab-bar__modes button[aria-pressed="true"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .16), inset 0 0 0 1px rgba(215, 218, 225, .8); }
-.project-tab-bar__modes button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
-.project-tab-bar__modes svg { width: 1rem; height: 1rem; }
+.project-tab-bar__modes button:focus-visible, .project-tab-bar__sidebar-toggle:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
+.project-tab-bar__modes svg, .project-tab-bar__sidebar-toggle svg { width: 1rem; height: 1rem; }
+.project-tab-bar__actions [hidden] { display: none; }
 .project-tab-bar__actions wa-button { display: inline-flex; width: 2rem; height: 2rem; line-height: 0; align-items: center; justify-content: center; }
 .project-tab-bar__actions wa-dropdown { display: inline-flex; height: 2rem; align-items: center; }
 .project-tab-bar__actions wa-button::part(base) { display: grid; width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: 999px; cursor: pointer; line-height: 0; place-items: center; }
