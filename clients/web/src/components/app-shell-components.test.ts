@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
 import { ProjectTab } from './project-tab';
-import { ProjectTabBar, projectTabIsFullyVisible } from './project-tab-bar';
+import { ProjectTabBar } from './project-tab-bar';
 import { clampRegionSize, resizeRegionFromPointer, ResizableRegion } from './resizable-region';
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, selectProjectTab, setRegionSize, resizeDemoWidth, shellMode } from '../ux-demo/app-shell-demo';
 import { PageHeader } from './page-header';
@@ -20,22 +20,14 @@ describe('application shell components', () => {
   });
 
   it('composes tabs with add and overflow actions', () => {
-    const markup = String(ProjectTabBar({ tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }], projectsOverflowing: true }));
+    const markup = String(ProjectTabBar({ tabs: [{ id: 'one', name: 'One', location: 'local', selected: true }] }));
     expect(markup).toContain('role="tablist"');
     expect(markup).toContain('aria-label="Add project"');
-    expect(markup).toContain('aria-label="More projects"');
     expect(markup).toContain('aria-label="Terminal dashboard"');
     expect(markup).toContain('aria-label="Cross-project stats"');
     expect(markup).not.toContain('aria-label="Hide project sidebar"');
-    expect(markup).toContain('data-lucide="chevrons-right"');
     expect(markup).toContain('data-project-id="one"');
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
-  });
-
-  it('identifies fully visible and offscreen tabs for overflow projection', () => {
-    expect(projectTabIsFullyVisible(10, 110, 10, 230)).toBe(true);
-    expect(projectTabIsFullyVisible(180, 260, 10, 230)).toBe(false);
-    expect(projectTabIsFullyVisible(0, 100, 10, 230)).toBe(false);
   });
 
   it('clamps and projects accessible splitters in both axes', () => {

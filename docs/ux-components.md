@@ -186,8 +186,8 @@ scrolling content region can be reviewed without moving the Drive control.
   Tabs, Close Tabs to the Right, and Close All Tabs.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
 - `ProjectPicker` — remains part of the later add-project flow.
-- `TabOverflowMenu` — **demo built** as a compact chevrons-right menu projecting only
-  projects currently outside the fully visible portion of the scrollable tab strip.
+- `TabOverflowMenu` — removed from the current design; the project strip itself is
+  horizontally scrollable and does not duplicate projects in a secondary menu.
 - `TerminalDashboardButton` and `CrossProjectStatsButton` — **shell navigation built**
   with controlled selected state. Their full dashboard surfaces remain tracked by
   HS2-2ZCN7K and HS2-38RJMK respectively.
@@ -196,8 +196,8 @@ Global dashboard modes precede project tabs; Add follows the project strip. Tabs
 represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally without truncating identities; the overflow
-menu offers direct access to tabs outside the current viewport. Add and overflow actions
-remain vertically centered with the pills.
+strip provides direct access to tabs outside the current viewport. The Add action remains
+vertically centered with the pills.
 
 In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →
 PageHeader → workspace. TicketInspector is a root trailing region spanning the shell's

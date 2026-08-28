@@ -28,7 +28,6 @@ import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, T
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
-import { observeProjectTabBarOverflow } from '../components/project-tab-bar';
 import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
@@ -137,7 +136,6 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
-observeProjectTabBarOverflow(root);
 if (import.meta.env.DEV && new URL(location.href).searchParams.get('dev-review') === '1') {
   void import('../dev-review').then(({ installDevReview }) => installDevReview({
     submit: async submission => {

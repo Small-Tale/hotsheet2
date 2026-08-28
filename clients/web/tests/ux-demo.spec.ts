@@ -772,9 +772,14 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     expect(row.icon).toBeCloseTo(alignedRows[0].icon, 0);
     expect(row.label).toBeCloseTo(alignedRows[0].label, 0);
   }
+  const command = sidebar.getByRole('button', { name: 'Verify project' });
+  const commandColors = await command.evaluate(node => ({ color: getComputedStyle(node).color, background: getComputedStyle(node).backgroundColor }));
+  await command.hover();
+  await expect(command).toHaveCSS('color', commandColors.color);
+  await expect(command).toHaveCSS('background-color', commandColors.background);
   await sidebar.getByRole('button', { name: /Backlog/ }).click();
   await expect(sidebar.getByRole('button', { name: /Backlog/ })).toHaveAttribute('aria-current', 'page');
-  await sidebar.getByRole('button', { name: 'Verify project' }).click();
+  await command.click();
   await expect(sidebar.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
   await sidebar.getByRole('button', { name: 'Start Codex' }).click();
   await expect(sidebar.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
@@ -846,7 +851,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(tabActionCenters.add).toBeCloseTo(tabActionCenters.tab, 0);
   const order = await tabBar.locator(':scope > *').evaluateAll(nodes => nodes.map(node => node.className));
   expect(order).toEqual(['project-tab-bar__modes', 'project-tab-bar__tabs', 'project-tab-bar__actions']);
-  await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeHidden();
+  await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__busy');
   const spinnerAlignment = await busySpinner.evaluate(node => {
     const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect();
@@ -858,17 +863,17 @@ test('exercises the application-shell component slice and responsive composition
     await expect(name).not.toHaveCSS('text-overflow', 'ellipsis');
   }
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeVisible();
   const overflowState = await tabBar.evaluate(node => {
-    const strip = node.querySelector('.project-tab-bar__tabs')!.getBoundingClientRect();
-    const tabs = [...node.querySelectorAll<HTMLElement>('.project-tab')];
-    const offscreen = tabs.filter(tab => { const bounds = tab.getBoundingClientRect(); return bounds.left < strip.left - 1 || bounds.right > strip.right + 1; });
-    const menuItems = [...node.querySelectorAll<HTMLElement>('[data-project-overflow] wa-dropdown-item:not([hidden])')];
-    return { offscreenIds: offscreen.map(tab => tab.dataset.projectId), menuIds: menuItems.map(item => item.dataset.projectId), overflowX: getComputedStyle(node.querySelector('.project-tab-bar__tabs')!).overflowX };
+    const strip = node.querySelector<HTMLElement>('.project-tab-bar__tabs')!;
+    const selected = node.querySelector<HTMLElement>('.project-tab[data-selected="true"]')!.getBoundingClientRect();
+    const viewport = strip.getBoundingClientRect();
+    strip.scrollLeft = 100;
+    return { clientWidth: strip.clientWidth, scrollWidth: strip.scrollWidth, scrollLeft: strip.scrollLeft, overflowX: getComputedStyle(strip).overflowX, shadowClearance: viewport.bottom - selected.bottom };
   });
-  expect(overflowState.offscreenIds.length).toBeGreaterThan(0);
-  expect(overflowState.menuIds).toEqual(overflowState.offscreenIds);
+  expect(overflowState.scrollWidth).toBeGreaterThan(overflowState.clientWidth);
+  expect(overflowState.scrollLeft).toBeGreaterThan(0);
   expect(overflowState.overflowX).toBe('auto');
+  expect(overflowState.shadowClearance).toBeGreaterThanOrEqual(3);
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
@@ -1038,8 +1043,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(boardGeometry.workspaceBottom - boardGeometry.boardBottom).toBeCloseTo(0, 0);
   expect(boardGeometry.boardScrollWidth).toBeGreaterThanOrEqual(boardGeometry.boardClientWidth);
   await shell.getByRole('button', { name: 'List view' }).click();
-  await shell.getByRole('button', { name: 'More projects' }).click();
-  await shell.locator('[data-project-overflow] wa-dropdown-item', { hasText: 'Small Tale Website' }).click();
+  await shell.getByRole('tab', { name: /Small Tale Website/ }).click();
   await expect(shell.locator('.project-tab[data-project-id="website"] [role="tab"]')).toHaveAttribute('aria-selected', 'true');
   await shell.getByRole('button', { name: 'Settings view' }).click();
   await expect(shell.getByRole('region', { name: 'Project settings' })).toBeVisible();
