@@ -13,7 +13,6 @@ export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 
 export interface WorkspaceHeaderProps {
   projectName: string;
-  viewName: string;
   mode: WorkspaceViewMode;
   searchOpen?: boolean;
   searchQuery?: string;
@@ -32,10 +31,10 @@ const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
   { value: 'status', label: 'Status' },
 ];
 
-export function WorkspaceHeader({ projectName, viewName, mode, searchOpen = false, searchQuery = '', sort = 'updated', controlsVisible = true }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', controlsVisible = true }: WorkspaceHeaderProps) {
   const projectActionsDisabled = mode === 'settings';
   return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
-    <div class="workspace-header__identity"><p>{projectName}</p><h1>{viewName}</h1></div>
+    <div class="workspace-header__identity"><h1>{projectName}</h1></div>
     {controlsVisible && <div class="workspace-header__actions">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />

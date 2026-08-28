@@ -45,12 +45,21 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await page.keyboard.down('Alt');
   await expect(page.locator('html')).toHaveClass(/hs-dev-review--crosshair/);
   await expect(page.locator('body')).toHaveCSS('cursor', 'crosshair');
-  await page.mouse.move(480, 220); await page.mouse.down(); await page.mouse.move(820, 430); await page.mouse.up();
+  await page.mouse.move(80, 320); await page.mouse.down(); await page.mouse.move(300, 560); await page.mouse.up();
   await page.keyboard.up('Alt');
   await expect(page.locator('html')).not.toHaveClass(/hs-dev-review--crosshair/);
   const selection = tool.locator('.hs-dev-review__rect');
   await expect(selection).toHaveCount(1);
   await expect(selection.locator('.hs-dev-review__handle')).toHaveCount(8);
+  const beforeScroll = await selection.boundingBox();
+  const scroller = page.locator('.demo-master');
+  const initialScroll = await scroller.evaluate(node => node.scrollTop);
+  await scroller.evaluate(node => node.scrollBy(0, 80));
+  await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeGreaterThan(initialScroll);
+  const scrolled = await selection.boundingBox();
+  const scrollDelta = await scroller.evaluate((node, start) => node.scrollTop - start, initialScroll);
+  expect(scrolled!.y).toBeCloseTo(beforeScroll!.y - scrollDelta, 0);
+  const stableSelectionNode = await selection.elementHandle();
   const before = await selection.boundingBox();
   const resize = selection.getByRole('button', { name: /Resize capture 1 from se/ });
   const handle = await resize.boundingBox();
@@ -58,6 +67,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   const after = await selection.boundingBox();
   expect(after!.width).toBeGreaterThan(before!.width);
   expect(after!.height).toBeGreaterThan(before!.height);
+  expect(await stableSelectionNode!.evaluate(node => node.isConnected)).toBe(true);
   const corner = await resize.boundingBox();
   expect(Math.abs(corner!.width - corner!.height)).toBeLessThanOrEqual(1);
   const eastResize = selection.getByRole('button', { name: /Resize capture 1 from e$/ });
@@ -306,7 +316,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
-  await expect(board).toHaveCSS('padding', '0px');
+  await expect(board).toHaveCSS('padding', '0px 0px 12px');
   await expect(board).toHaveCSS('border-top-width', '0px');
   await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.getByLabel('6 tickets')).toHaveCount(1);
@@ -504,7 +514,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
-  await inspector.getByRole('button', { name: 'Close inspector' }).click();
+  await inspector.getByRole('button', { name: 'Hide inspector' }).click();
   await expect(inspector).toHaveCount(0);
   await page.getByRole('button', { name: 'Open ticket inspector' }).click();
   const reopened = page.locator('[data-component="ticket-inspector"]');
@@ -679,6 +689,9 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   const sidebar = page.locator('[data-component="project-sidebar"]');
   await expect(sidebar).toBeVisible();
   for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  const menuHeaderLefts = await sidebar.locator('[data-component="menu-header"]').evaluateAll(headers => headers.map(header => header.querySelector('h2, span')!.getBoundingClientRect().left));
+  expect(menuHeaderLefts).toHaveLength(2);
+  expect(menuHeaderLefts[0]).toBeCloseTo(menuHeaderLefts[1], 0);
   const alignedRows = await sidebar.evaluate(node => ['.repository-summary .menu-item', '.view-navigation .menu-item', '.command-navigation .menu-item'].map(selector => node.querySelector(selector)!).map(item => {
     const bounds = item.getBoundingClientRect();
     const icon = item.querySelector('.menu-item__icon')!.getBoundingClientRect();
@@ -819,6 +832,22 @@ test('exercises the application-shell component slice and responsive composition
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
   for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-header', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  const shellHierarchy = await shell.evaluate(node => {
+    const shellRect = node.getBoundingClientRect();
+    const workspaceHeader = node.querySelector('.workspace-header')!.getBoundingClientRect();
+    const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
+    const pageHeader = node.querySelector('.page-header')!.getBoundingClientRect();
+    const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
+    return { shellTop: shellRect.top, workspaceHeaderTop: workspaceHeader.top, workspaceHeaderBottom: workspaceHeader.bottom, tabsTop: tabs.top, tabsBottom: tabs.bottom, pageHeaderTop: pageHeader.top, inspectorTop: inspector.top };
+  });
+  expect(shellHierarchy.workspaceHeaderTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
+  expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.workspaceHeaderBottom, 0);
+  expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
+  expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
+  await expect(shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]')).toHaveCount(1);
+  const compactInspectorTab = shell.getByRole('button', { name: 'Timeline' });
+  await expect(compactInspectorTab.locator('svg')).toHaveCSS('flex-shrink', '0');
+  await expect(compactInspectorTab.locator('span')).toBeHidden();
   const sidebarHandle = shell.getByRole('separator', { name: 'Resize Project sidebar' });
   await expect(sidebarHandle).toHaveAttribute('aria-valuemin', '250');
   await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '272');
@@ -848,6 +877,9 @@ test('exercises the application-shell component slice and responsive composition
   await shell.getByRole('button', { name: 'Hide project sidebar' }).click();
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'true');
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('width', '0px');
+  const collapsedSidebarContent = shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"] .resizable-region__content');
+  await expect(collapsedSidebarContent).toHaveCSS('width', '288px');
+  await expect(collapsedSidebarContent).not.toHaveCSS('transform', 'none');
   await shell.getByRole('button', { name: 'Show project sidebar' }).click();
   await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'false');
@@ -859,10 +891,11 @@ test('exercises the application-shell component slice and responsive composition
     const board = node.querySelector('.ticket-board')!;
     const workspaceRect = node.getBoundingClientRect();
     const boardRect = board.getBoundingClientRect();
-    return { workspaceLeft: workspaceRect.left, workspaceRight: workspaceRect.right, boardLeft: boardRect.left, boardRight: boardRect.right, boardClientWidth: board.clientWidth, boardScrollWidth: board.scrollWidth };
+    return { workspaceLeft: workspaceRect.left, workspaceRight: workspaceRect.right, workspaceBottom: workspaceRect.bottom, boardLeft: boardRect.left, boardRight: boardRect.right, boardBottom: boardRect.bottom, boardClientWidth: board.clientWidth, boardScrollWidth: board.scrollWidth };
   });
-  expect(boardGeometry.boardLeft).toBeCloseTo(boardGeometry.workspaceLeft, 0);
-  expect(boardGeometry.boardRight).toBeCloseTo(boardGeometry.workspaceRight, 0);
+  expect(boardGeometry.boardLeft - boardGeometry.workspaceLeft).toBeCloseTo(16, 0);
+  expect(boardGeometry.workspaceRight - boardGeometry.boardRight).toBeCloseTo(16, 0);
+  expect(boardGeometry.workspaceBottom - boardGeometry.boardBottom).toBeCloseTo(16, 0);
   expect(boardGeometry.boardScrollWidth).toBeGreaterThanOrEqual(boardGeometry.boardClientWidth);
   await shell.getByRole('button', { name: 'List view' }).click();
   await shell.getByRole('tab', { name: /Small Tale Website/ }).click();
@@ -901,7 +934,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toBeVisible();
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(shell.locator(':scope > [data-component="resizable-region"]')).toBeHidden();
-  await expect(shell.locator('.app-shell__work-area > [data-component="resizable-region"]')).toBeHidden();
+  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeHidden();
+  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toBeHidden();
   await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
 });

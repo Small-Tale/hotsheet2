@@ -3,7 +3,8 @@ import { WorkspaceHeader } from './workspace-header';
 
 describe('WorkspaceHeader', () => {
   it('exposes an accessible selected view mode and optional search field', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', viewName: 'All Tickets', mode: 'settings', searchOpen: true, searchQuery: 'client', sort: 'priority' }));
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'client', sort: 'priority' }));
+    expect(markup).not.toContain('All Tickets');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
     expect(markup).toContain('name="workspace-search"');
@@ -18,14 +19,14 @@ describe('WorkspaceHeader', () => {
   });
 
   it('renders the collapsed find state as a single magnifier button', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', viewName: 'All Tickets', mode: 'list' }));
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
     expect(markup).toContain('workspace-header__search-group" data-expanded="false"');
     expect(markup).toContain('data-action="open-workspace-search" aria-label="Search tickets"');
     expect(markup).not.toContain('name="workspace-search"');
   });
 
   it('omits every project control for global shell modes', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Terminals', viewName: 'Terminal Dashboard', mode: 'list', controlsVisible: false }));
+    const markup = String(WorkspaceHeader({ projectName: 'Terminals', mode: 'list', controlsVisible: false }));
     expect(markup).toContain('data-controls-visible="false"');
     expect(markup).not.toContain('workspace-header__actions');
     expect(markup).not.toContain('Search tickets');

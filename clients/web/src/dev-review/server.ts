@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, resolve } from 'node:path';
@@ -22,16 +22,24 @@ export function validateDevReviewSubmission(value: unknown): DevReviewSubmission
   return { notes, captures, pageUrl: String(input.pageUrl ?? ''), viewport: { width: Number(input.viewport?.width ?? 0), height: Number(input.viewport?.height ?? 0) } };
 }
 
-export function createCliDevReviewSubmitter(options: { repoRoot: string; storePath?: string; cliPath?: string }): DevReviewSubmitter {
+export function createCliDevReviewSubmitter(options: { repoRoot: string; storePath?: string; cliPath?: string; finalize?: (storePath: string, slug: string) => Promise<void> }): DevReviewSubmitter {
   const repoRoot = resolve(options.repoRoot);
   const storePath = resolve(options.storePath ?? `${repoRoot}.hs2`);
   const cliPath = resolve(options.cliPath ?? resolve(repoRoot, 'target/debug/hotsheet-cli'));
+  const runCli = (args: string[]) => run(cliPath, args, { env: { ...process.env, HOTSHEET_NO_AUTOCOMMIT: '1' } });
+  const finalize = options.finalize ?? (async (store, slug) => {
+    await run('git', ['-C', store, 'add', '-A']);
+    await run('git', ['-C', store, 'commit', '-q', '-m', `${slug}: create UX feedback with captures`]);
+    const push = spawn('git', ['-C', store, 'push', '--quiet'], { detached: true, stdio: 'ignore' });
+    push.on('error', () => {});
+    push.unref();
+  });
   return async raw => {
     const submission = validateDevReviewSubmission(raw);
     const firstLine = submission.notes.split('\n').find(line => line.trim())!.trim();
     const title = `UX feedback: ${firstLine}`.slice(0, 120);
     const details = `${submission.notes}\n\nCaptured from: ${submission.pageUrl}\nViewport: ${submission.viewport.width}×${submission.viewport.height}`;
-    const created = await run(cliPath, ['-C', storePath, 'new', title, '--category', 'bug', '--priority', 'default', '--tag', 'client', '--tag', 'ux-feedback', '--details', details]);
+    const created = await runCli(['-C', storePath, 'new', title, '--category', 'bug', '--priority', 'default', '--tag', 'client', '--tag', 'ux-feedback', '--details', details]);
     const slug = created.stdout.match(/Created\s+(HS2-[A-Z0-9]+)/)?.[1];
     if (!slug) throw new Error(`Hot Sheet did not return a ticket id: ${created.stdout.trim()}`);
     const temp = await mkdtemp(resolve(tmpdir(), 'hotsheet-dev-review-'));
@@ -39,9 +47,10 @@ export function createCliDevReviewSubmitter(options: { repoRoot: string; storePa
       for (const [index, capture] of submission.captures.entries()) {
         const file = resolve(temp, capture.filename || `ux-feedback-${index + 1}.png`);
         await writeFile(file, Buffer.from(capture.dataUrl.slice('data:image/png;base64,'.length), 'base64'));
-        await run(cliPath, ['-C', storePath, 'attach', slug, file]);
+        await runCli(['-C', storePath, 'attach', slug, file]);
       }
     } finally { await rm(temp, { recursive: true, force: true }); }
+    await finalize(storePath, slug);
     return { slug };
   };
 }

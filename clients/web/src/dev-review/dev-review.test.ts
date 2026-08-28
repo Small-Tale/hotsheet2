@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { clampRectToViewport, normalizeRect, resizeRect } from './geometry';
+import { clampRectToViewport, intersectRectWithViewport, normalizeRect, resizeRect, translateAnchoredRect } from './geometry';
 import { createCliDevReviewSubmitter, validateDevReviewSubmission } from './server';
 import { createDevApp } from '../dev-server';
 
@@ -17,6 +17,8 @@ describe('dev review tool', () => {
     expect(resizeRect({ id: 'a', x: 20, y: 10, width: 60, height: 60 }, 'e', 110, 40)).toEqual({ id: 'a', x: 20, y: 10, width: 90, height: 60 });
     expect(resizeRect({ id: 'a', x: 20, y: 10, width: 60, height: 60 }, 'n', 50, 30)).toEqual({ id: 'a', x: 20, y: 30, width: 60, height: 40 });
     expect(clampRectToViewport({ id: 'a', x: -5, y: 90, width: 120, height: 40 }, 100, 100)).toEqual({ id: 'a', x: 0, y: 90, width: 100, height: 10 });
+    expect(intersectRectWithViewport({ id: 'a', x: -5, y: 90, width: 20, height: 20 }, 100, 100)).toEqual({ id: 'a', x: 0, y: 90, width: 15, height: 10 });
+    expect(translateAnchoredRect({ id: 'a', x: 20, y: 30, width: 40, height: 50 }, { x: 100, y: 200 }, { x: 85, y: 140 })).toEqual({ id: 'a', x: 5, y: -30, width: 40, height: 50 });
   });
 
   it('validates notes and sanitizes capture filenames', () => {
@@ -43,12 +45,14 @@ describe('dev review tool', () => {
     await writeFile(cli, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nif [ "$3" = "new" ]; then printf 'Created HS2-REVIEW (ticket.md)\\n'; fi\nif [ "$3" = "attach" ] && [ ! -f "$5" ]; then exit 9; fi\n`);
     await chmod(cli, 0o755);
     try {
-      const result = await createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'store'), cliPath: cli })(submission);
+      const finalize = vi.fn(async () => undefined);
+      const result = await createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'store'), cliPath: cli, finalize })(submission);
       expect(result).toEqual({ slug: 'HS2-REVIEW' });
       const calls = await readFile(log, 'utf8');
       expect(calls).toContain('-C');
       expect(calls).toContain('new UX feedback: Button overlaps heading');
       expect(calls).toContain('attach HS2-REVIEW');
+      expect(finalize).toHaveBeenCalledWith(resolve(temp, 'store'), 'HS2-REVIEW');
     } finally { await rm(temp, { recursive: true, force: true }); }
   });
 });

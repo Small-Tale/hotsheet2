@@ -8,13 +8,14 @@ const demo = (id: string, name: string, description: string, phase: DemoPhase = 
 export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
     demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'ticket-list', 'ticket-inspector']),
-    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'menu-item']),
+    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'menu-item', 'menu-header']),
     demo('project-summary', 'ProjectSummary', 'Seven-day completion history and current ticket counts.', 'feature-floor', true),
     demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
     demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
     demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
     demo('drive-control', 'DriveControl', 'Primary AI drive start and stop action.', 'feature-floor', true),
-    demo('workspace-header', 'WorkspaceHeader', 'Project heading, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-control-group', 'ticket-list', 'ticket-board']),
+    demo('workspace-header', 'WorkspaceHeader', 'Project identity, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']),
+    demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
     demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true),
     demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, ['project-tab']),
     demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.', 'feature-floor', true),
@@ -74,6 +75,7 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'shared', name: 'Shared interactions', demos: [
     demo('menu-item', 'MenuItem', 'Aligned icon, label, trailing value, and selection geometry for menu-like rows.', 'feature-floor', true),
+    demo('menu-header', 'MenuHeader', 'Aligned section heading and optional action for menu groups.', 'feature-floor', true),
     demo('toolbar-control-group', 'ToolbarControlGroup', 'Consistent rounded grouping for toolbar controls.', 'feature-floor', true),
     demo('confirmation-dialog', 'ConfirmationDialog', 'Reusable consequential confirmation.'),
     demo('empty-state', 'EmptyState', 'Actionable absence of content.'),

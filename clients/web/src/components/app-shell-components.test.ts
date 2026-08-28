@@ -5,6 +5,7 @@ import { ProjectTab } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { clampRegionSize, resizeRegionFromPointer, ResizableRegion } from './resizable-region';
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, selectProjectTab, setRegionSize, resizeDemoWidth, shellMode } from '../ux-demo/app-shell-demo';
+import { PageHeader } from './page-header';
 
 describe('application shell components', () => {
   it('projects every ProjectTab state without nesting actions', () => {
@@ -52,12 +53,15 @@ describe('application shell components', () => {
   });
 
   it('composes all top-level regions', () => {
-    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never }));
+    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, pageHeader: PageHeader({ title: 'All Tickets' }), workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never }));
     expect(markup).toContain('data-component="app-shell"');
     expect(markup).toContain('data-region-id="app-sidebar"');
     expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-inspector"');
     expect(markup).toContain('Ticket workspace');
+    expect(markup).toContain('data-component="page-header"');
+    expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="project-tab-bar"'));
+    expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('data-component="page-header"'));
     const globalMarkup = String(AppShell({ mode: 'stats', tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never }));
     expect(globalMarkup).toContain('data-mode="stats"');
     expect(globalMarkup).not.toContain('data-region-id="app-sidebar"');

@@ -22,10 +22,15 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   shows a crosshair cursor and creates a numbered capture rectangle. Existing
   rectangles can be moved or resized from any side or corner without the modifier;
   handles retain fixed dimensions as their rectangle changes size.
+- A rectangle anchors to the underlying content at its top-left pixel. Window or
+  nested-container scrolling moves the overlay with that content, including when the
+  rectangle was first drawn after the interface had already scrolled.
 - Creation, movement, and resizing debounce PNG recapture through `html2canvas`.
+  Pointer movement updates the existing rectangle node without rebuilding handles;
+  pending rectangles share one viewport render and stale async results are discarded.
   Review-tool UI is excluded from every capture.
-- `New Ticket` flushes pending captures and opens a modal with every PNG as a
-  selectable thumbnail, a large preview, and required feedback notes.
+- `New Ticket` opens its modal immediately, prepares any uncached PNGs asynchronously,
+  then presents every capture as a selectable thumbnail and large preview.
 - The dialog has one Cancel action in its top-right. Canceling it returns to the
   still-active annotation session. Successful submission clears and exits the session.
 
@@ -64,7 +69,9 @@ preserve the same compile-time exclusion; a runtime-hidden button is not suffici
 
 For this repository the adapter invokes `target/debug/hotsheet-cli`, creates a bug
 tagged `client` and `ux-feedback` in the sibling `hotsheet2.hs2` store, then attaches
-each decoded PNG. Alternate paths can be supplied with:
+each decoded PNG. The CLI mutations defer their individual autocommits so the complete
+ticket and all images receive one durable local commit; one best-effort remote push is
+launched asynchronously and does not hold the dialog open. Alternate paths can be supplied with:
 
 - `HOTSHEET_DEV_REVIEW_STORE`
 - `HOTSHEET_DEV_REVIEW_CLI`

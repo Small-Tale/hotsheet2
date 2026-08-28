@@ -1,5 +1,5 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import { Info, ListTree, Paperclip, Star, X } from 'lucide';
+import { Info, ListTree, PanelRightClose, Paperclip, Star } from 'lucide';
 import { LucideIcon } from './lucide-icon';
 import type { TicketStatus } from './status-badge';
 import type { TicketPriority } from './ticket-row';
@@ -34,7 +34,7 @@ export function TicketInspector({ slug, title, status, priority, category, tags,
   return <aside class="ticket-inspector" data-component="ticket-inspector" aria-label={`${slug} inspector`}>
     <header class="ticket-inspector__header">
       <div><span>{slug}</span><h1>{title}</h1></div>
-      <div><button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button><button type="button" data-action="close-ticket-inspector" aria-label="Close inspector"><LucideIcon icon={X} name="x" /></button></div>
+      <div><button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button><button type="button" data-action="close-ticket-inspector" aria-label="Hide inspector"><LucideIcon icon={PanelRightClose} name="panel-right-close" /></button></div>
     </header>
     <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections">{tabs.map(tab => <button type="button" data-action="set-inspector-tab" data-inspector-tab={tab.id} aria-label={tab.label} aria-current={activeTab === tab.id ? 'page' : undefined}><LucideIcon icon={tab.icon} name={tab.iconName} /><span>{tab.label}</span></button>)}</nav>
     {activeTab === 'info' && <TicketInfoPanel status={status} priority={priority} category={category} tags={tags} details={details} />}

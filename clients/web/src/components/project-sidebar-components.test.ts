@@ -8,6 +8,8 @@ import { ViewNavigation } from './view-navigation';
 import { MenuItem } from './menu-item';
 import { Archive } from 'lucide';
 import { LucideIcon } from './lucide-icon';
+import { MenuHeader } from './menu-header';
+import { Plus } from 'lucide';
 
 describe('ProjectSidebar component slice', () => {
   it('uses one stable menu-item grid for icon, label, trailing content, and selection', () => {
@@ -18,6 +20,14 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('menu-item__icon');
     expect(markup).toContain('menu-item__label');
     expect(markup).toContain('menu-item__trailing');
+  });
+
+  it('shares one menu-header contract for action and toggle groups', () => {
+    const action = String(MenuHeader({ label: 'Views', action: 'add', actionLabel: 'Add view', actionIcon: Plus, actionIconName: 'plus' }));
+    const toggle = String(MenuHeader({ label: 'Commands', action: 'toggle', actionIcon: Plus, actionIconName: 'plus', expanded: false, toggle: true }));
+    expect(action).toContain('data-component="menu-header"');
+    expect(action).toContain('aria-label="Add view"');
+    expect(toggle).toContain('aria-expanded="false"');
   });
   it('derives project progress bars and accessible summary text from props', () => {
     const markup = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4] }));

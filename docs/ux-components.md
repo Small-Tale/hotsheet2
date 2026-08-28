@@ -97,8 +97,9 @@ The left region in the wireframe, scoped to the selected project/store connectio
 The **built demo** composes the five production boundaries below into a full-height
 sidebar with the drive action anchored at the bottom and shared controlled state. In
 AppShell, its collapse control sits at the trailing edge of a top bar exactly matching
-the workspace tab-bar height; collapsing animates the region away and moves the restore
-control to the leading edge of the main toolbar. A
+the workspace tab-bar height without a divider. Collapsing slides the fixed-width
+sidebar content offscreen while the main region resizes, avoiding compressed content,
+and moves the restore control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
 scrolling content region can be reviewed without moving the Drive control.
 
@@ -117,6 +118,8 @@ scrolling content region can be reviewed without moving the Drive control.
 - `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.
+- `MenuHeader` — **demo built**: shared section-label alignment with MenuItem icons,
+  including optional trailing action and whole-header disclosure variants.
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
   action, and controlled selection through `MenuItem`.
   - section heading and add-view action
@@ -136,10 +139,12 @@ scrolling content region can be reviewed without moving the Drive control.
 
 ### 2.3 `WorkspaceHeader` — feature floor
 
-- `WorkspaceHeader` — **demo built**: responsive project/view identity, compact
+- `WorkspaceHeader` — **demo built**: responsive project identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   sort menu, and a connected list/column/settings workspace. Settings disables sort,
   favorite, overflow, and search actions; global shell modes omit project controls.
+- `PageHeader` — **demo built**: current view identity below ProjectTabBar, separate
+  from the project-level toolbar above it.
 - `ToolbarControlGroup` — **demo built**: shared equal-height rounded-border container for toolbar
   buttons, segmented choices, and popup triggers; child controls do not draw their
   own borders or divider lines. A single control highlights the whole group on
@@ -179,6 +184,11 @@ represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally rather than compressing identities beyond
 readability; add and overflow actions remain vertically centered with the pills.
+
+In AppShell the hierarchy is WorkspaceHeader → ProjectTabBar → connection banner →
+PageHeader → workspace. TicketInspector is a root trailing region spanning the shell's
+full height; its panel-right control replaces a generic close glyph. Inspector tab
+icons never shrink, and compact inspectors switch to icon-only labels.
 
 ## 3. Ticket workspace
 

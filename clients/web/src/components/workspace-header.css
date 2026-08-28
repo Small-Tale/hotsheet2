@@ -1,7 +1,6 @@
 .workspace-header { display: grid; width: 100%; gap: 1rem; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
 .workspace-header[data-controls-visible="false"] { grid-template-columns: 1fr; }
-.workspace-header__identity p { margin: 0 0 .15rem; color: #73747d; font-size: .78rem; font-weight: 650; }
-.workspace-header__identity h1 { margin: 0; font-size: clamp(1.35rem, 2.3vw, 2rem); letter-spacing: -.025em; }
+.workspace-header__identity h1 { margin: 0; font-size: 1rem; letter-spacing: -.015em; }
 .workspace-header__actions { display: flex; align-items: center; gap: .4rem; }
 .workspace-header__actions { justify-content: flex-end; }
 .view-mode-switcher__button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 999px; color: #62646d; background: transparent; cursor: pointer; place-items: center; }

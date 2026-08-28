@@ -20,3 +20,15 @@ export function clampRectToViewport(rect: ReviewRect, viewportWidth: number, vie
   const y = Math.max(0, Math.min(rect.y, viewportHeight - 1));
   return { ...rect, x, y, width: Math.max(1, Math.min(rect.width, viewportWidth - x)), height: Math.max(1, Math.min(rect.height, viewportHeight - y)) };
 }
+
+export function intersectRectWithViewport(rect: ReviewRect, viewportWidth: number, viewportHeight: number): ReviewRect {
+  const x = Math.max(0, rect.x);
+  const y = Math.max(0, rect.y);
+  const right = Math.min(viewportWidth, rect.x + rect.width);
+  const bottom = Math.min(viewportHeight, rect.y + rect.height);
+  return { ...rect, x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
+}
+
+export function translateAnchoredRect(rect: ReviewRect, anchorStart: { x: number; y: number }, anchorCurrent: { x: number; y: number }): ReviewRect {
+  return { ...rect, x: rect.x + anchorCurrent.x - anchorStart.x, y: rect.y + anchorCurrent.y - anchorStart.y };
+}
