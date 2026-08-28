@@ -3,9 +3,8 @@
 .command-navigation__heading svg { width: .85rem; height: .85rem; transition: transform .18s ease; }
 .command-navigation__heading[aria-expanded="false"] svg { transform: rotate(-90deg); }
 .command-navigation__items { display: grid; gap: .3rem; }
-.command-navigation__command { display: grid; width: 100%; min-height: 2.5rem; padding: .45rem .7rem; border: 0; border-radius: .55rem; color: var(--command-text-color); background: var(--command-color); cursor: pointer; grid-template-columns: 1.15rem minmax(0, 1fr) auto; align-items: center; gap: .5rem; text-align: left; font-weight: 650; }
+.command-navigation__command { min-height: 2.5rem; color: var(--command-text-color); background: var(--command-color); font-weight: 650; }
 .command-navigation__command:hover { filter: brightness(.94); }
-.command-navigation__command svg { width: 1.05rem; height: 1.05rem; }
 .command-navigation__command i { width: .5rem; height: .5rem; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%; animation: command-spin .8s linear infinite; }
 @keyframes command-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .command-navigation__command i { animation: none; border-color: #fff; } }

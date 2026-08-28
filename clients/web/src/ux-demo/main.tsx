@@ -17,9 +17,11 @@ import { Network } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
+import { MenuItemDemo } from './menu-item-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
-import { addDemoProject, AppShellDemo, closeProjectTab, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
+import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
+import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { observeProjectTabBarOverflow } from '../components/project-tab-bar';
 import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
 
@@ -29,6 +31,7 @@ const fromUrl = () => new URL(location.href).searchParams.get('component') ?? de
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
+const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
 let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; edge: ResizableRegionEdge; startPoint: number; startSize: number } | undefined;
 const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer', 'app-shell'].includes(selectedId.value);
@@ -53,6 +56,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'quick-ticket-composer') return <QuickTicketComposerDemo />;
   if (item.id === 'ticket-inspector') return <TicketInspectorDemo />;
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
+  if (item.id === 'menu-item') return <MenuItemDemo />;
   if (item.id === 'ticket-category-select') return <TicketCategorySelectDemo />;
   if (item.id === 'ticket-priority-select') return <TicketPrioritySelectDemo />;
   if (item.id === 'ticket-status-menu') return <TicketStatusMenuDemo />;
@@ -115,6 +119,7 @@ function DemoApp() {
       </aside>}
       {hasSettings && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
       {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} />}
+      {tabContextMenu.value && <ProjectTabContextMenu {...tabContextMenu.value} />}
     </main>
   );
 }
@@ -145,12 +150,14 @@ delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefa
 delegate(root, 'click', '[data-action="toggle-settings"]', () => { settingsOpen.value = !settingsOpen.value; });
 delegate(root, 'click', '[data-action="open-repository-status"]', () => { sidebarEvent.value = 'Repository status requested.'; });
 delegate(root, 'click', '[data-action="add-view"]', () => { sidebarEvent.value = 'New view editor requested.'; });
-delegate(root, 'click', '[data-action="select-view"]', (_event, target) => { const id = (target as HTMLElement).dataset.viewId!; selectedViewId.value = id; sidebarEvent.value = `${sidebarViews.find(view => view.id === id)?.label ?? 'View'} selected.`; });
+delegate(root, 'click', '[data-action="select-view"]', (_event, target) => { const id = (target as HTMLElement).dataset.itemId!; selectedViewId.value = id; sidebarEvent.value = `${sidebarViews.find(view => view.id === id)?.label ?? 'View'} selected.`; });
 delegate(root, 'click', '[data-action="toggle-command-group"]', () => { commandGroupExpanded.value = !commandGroupExpanded.value; sidebarEvent.value = commandGroupExpanded.value ? 'Command group expanded.' : 'Command group collapsed.'; });
-delegate(root, 'click', '[data-action="run-command"]', (_event, target) => { const id = (target as HTMLElement).dataset.commandId!; runningCommandId.value = runningCommandId.value === id ? undefined : id; sidebarEvent.value = runningCommandId.value ? `${sidebarCommands.find(command => command.id === id)?.label ?? 'Command'} started.` : 'Command stopped.'; });
+delegate(root, 'click', '[data-action="run-command"]', (_event, target) => { const id = (target as HTMLElement).dataset.itemId!; runningCommandId.value = runningCommandId.value === id ? undefined : id; sidebarEvent.value = runningCommandId.value ? `${sidebarCommands.find(command => command.id === id)?.label ?? 'Command'} started.` : 'Command stopped.'; });
 delegate(root, 'click', '[data-action="toggle-drive"]', () => { driveRunning.value = !driveRunning.value; sidebarEvent.value = driveRunning.value ? 'Codex drive started.' : 'Codex drive stopped.'; });
 delegate(root, 'click', '[data-action="select-project-tab"]', (_event, target) => { selectProjectTab((target as HTMLElement).dataset.projectId!); });
 delegate(root, 'click', '[data-action="close-project-tab"]', (event, target) => { event.stopPropagation(); closeProjectTab((target as HTMLElement).dataset.projectId!); });
+delegate(root, 'contextmenu', '[data-component="project-tab"]', (event, target) => { event.preventDefault(); const pointer = event as MouseEvent; tabContextMenu.value = { x: pointer.clientX, y: pointer.clientY, projectId: (target as HTMLElement).dataset.projectId! }; });
+delegate(root, 'click', '[data-action="project-tab-context-action"]', (_event, target) => { const element = target as HTMLElement; const id = element.dataset.projectId!; if (element.dataset.tabAction === 'close') closeProjectTab(id); if (element.dataset.tabAction === 'close-others') closeOtherProjectTabs(id); if (element.dataset.tabAction === 'close-right') closeProjectTabsToRight(id); if (element.dataset.tabAction === 'close-all') closeAllProjectTabs(); tabContextMenu.value = undefined; });
 delegate(root, 'click', '[data-action="add-project"]', () => { addDemoProject(); });
 delegate(root, 'click', '[data-action="toggle-project-sidebar"]', () => { shellSidebarVisible.value = !shellSidebarVisible.value; shellEvent.value = shellSidebarVisible.value ? 'Project sidebar shown.' : 'Project sidebar hidden.'; });
 delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
@@ -228,6 +235,8 @@ window.addEventListener('pointerup', () => {
   regionResizeDrag = undefined;
   delete document.body.dataset.resizingRegion;
 });
+window.addEventListener('pointerdown', event => { if (tabContextMenu.value && !(event.target as HTMLElement).closest('.project-tab-context-menu,[data-component="project-tab"]')) tabContextMenu.value = undefined; });
+window.addEventListener('keydown', event => { if (event.key === 'Escape') tabContextMenu.value = undefined; });
 delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);

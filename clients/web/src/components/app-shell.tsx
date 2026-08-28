@@ -21,7 +21,7 @@ export interface AppShellProps {
 
 export function AppShell({ tabs, sidebar, header, workspace, inspector, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset' }: AppShellProps) {
   return <section class="app-shell" data-component="app-shell" data-mode={mode} data-sidebar-visible={String(sidebarVisible)}>
-    {mode === 'project' && sidebarVisible && <ResizableRegion id="app-sidebar" label="Project sidebar" size={sidebarSize} min={250} max={360}>{sidebar}</ResizableRegion>}
+    {mode === 'project' && <ResizableRegion id="app-sidebar" label="Project sidebar" size={sidebarSize} min={250} max={360} collapsed={!sidebarVisible}>{sidebar}</ResizableRegion>}
     <main class="app-shell__main">
       <ProjectTabBar tabs={tabs} mode={mode} sidebarVisible={sidebarVisible} />
       {banner}

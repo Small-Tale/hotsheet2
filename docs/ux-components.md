@@ -95,7 +95,10 @@ Supporting components:
 
 The left region in the wireframe, scoped to the selected project/store connection.
 The **built demo** composes the five production boundaries below into a full-height
-sidebar with the drive action anchored at the bottom and shared controlled state. A
+sidebar with the drive action anchored at the bottom and shared controlled state. In
+AppShell, its collapse control sits at the trailing edge of a top bar exactly matching
+the workspace tab-bar height; collapsing animates the region away and moves the restore
+control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
 scrolling content region can be reviewed without moving the Drive control.
 
@@ -111,9 +114,11 @@ scrolling content region can be reviewed without moving the Drive control.
   - `BranchChip`
   - unpushed and uncommitted counts
   - opens the repository-status popover tracked by HS2-RPVFA4
+- `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row
+  selection grid used by repository, view, and command actions. This keeps icons,
+  labels, and interaction boundaries aligned across menu-like sidebar surfaces.
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
-  action, and controlled selection. Row contents align with the section heading while
-  selection/hover backgrounds extend halfway into the surrounding side gutters.
+  action, and controlled selection through `MenuItem`.
   - section heading and add-view action
   - `ViewNavigationItem` with icon, title, count, selection, and attention state
   - built-ins: Needs Review, All Tickets, Backlog, Archive
@@ -157,7 +162,10 @@ scrolling content region can be reviewed without moving the Drive control.
 - `ProjectTab` — **demo built**: macOS Tahoe-inspired pill presentation owned by the
   component itself, with selected, remote/local, busy, disconnected, attention,
   closable, and fixed states plus roving focus and arrow/Home/End keyboard navigation
-  when composed in the bar.
+  when composed in the bar. Fine-pointer devices reveal close affordances on hover or
+  keyboard focus; touch-oriented devices retain the visible close control.
+- `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
+  Tabs, Close Tabs to the Right, and Close All Tabs.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
 - `ProjectPicker` — remains part of the later add-project flow.
 - `TabOverflowMenu` — **demo built** as a compact chevrons-right menu projecting every

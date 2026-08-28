@@ -71,6 +71,24 @@ export function closeProjectTab(id: string): void {
   shellEvent.value = `${closing?.name ?? 'Project'} closed.`;
 }
 
+export function closeOtherProjectTabs(id: string): void {
+  projectTabs.value = projectTabs.value.filter(tab => tab.id === id).map(tab => ({ ...tab, selected: true }));
+  shellMode.value = 'project';
+  shellEvent.value = 'Other project tabs closed.';
+}
+
+export function closeProjectTabsToRight(id: string): void {
+  const index = projectTabs.value.findIndex(tab => tab.id === id);
+  if (index < 0) return;
+  projectTabs.value = projectTabs.value.slice(0, index + 1);
+  shellEvent.value = 'Project tabs to the right closed.';
+}
+
+export function closeAllProjectTabs(): void {
+  projectTabs.value = [];
+  shellEvent.value = 'All project tabs closed.';
+}
+
 let addedProject = 1;
 export function addDemoProject(): void {
   shellMode.value = 'project';
@@ -124,7 +142,7 @@ export function ConnectionStateBannerDemo() {
 }
 
 function ShellSidebar() {
-  return <ProjectSidebar completedToday={6} inProgress={3} completionTrend={[3, 0, 2, 5, 4, 7, 6]} branch="feature/client-shell" unpushed={2} uncommitted={1} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="Codex" />;
+  return <ProjectSidebar completedToday={6} inProgress={3} completionTrend={[3, 0, 2, 5, 4, 7, 6]} branch="feature/client-shell" unpushed={2} uncommitted={1} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="Codex" collapseControl />;
 }
 
 export function AppShellDemo() {

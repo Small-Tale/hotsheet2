@@ -5,8 +5,20 @@ import { ProjectSummary } from './project-summary';
 import { ProjectSidebar } from './project-sidebar';
 import { RepositorySummary } from './repository-summary';
 import { ViewNavigation } from './view-navigation';
+import { MenuItem } from './menu-item';
+import { Archive } from 'lucide';
+import { LucideIcon } from './lucide-icon';
 
 describe('ProjectSidebar component slice', () => {
+  it('uses one stable menu-item grid for icon, label, trailing content, and selection', () => {
+    const markup = String(MenuItem({ action: 'select', itemId: 'archive', selected: true, icon: LucideIcon({ icon: Archive, name: 'archive' }), label: 'Archive', trailing: '241' as never }));
+    expect(markup).toContain('data-component="menu-item"');
+    expect(markup).toContain('data-item-id="archive"');
+    expect(markup).toContain('aria-current="page"');
+    expect(markup).toContain('menu-item__icon');
+    expect(markup).toContain('menu-item__label');
+    expect(markup).toContain('menu-item__trailing');
+  });
   it('derives project progress bars and accessible summary text from props', () => {
     const markup = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4] }));
     expect(markup).not.toContain('coverage');

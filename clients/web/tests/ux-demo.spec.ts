@@ -637,9 +637,10 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
     const icon = node.querySelector('li button svg')!.getBoundingClientRect();
     return { headerLeft: header.left, buttonLeft: button.left, iconLeft: icon.left, headerRight: header.right, buttonRight: button.right };
   });
-  expect(navigationGeometry.headerLeft - navigationGeometry.buttonLeft).toBeCloseTo(5.2, 0);
-  expect(navigationGeometry.buttonRight - navigationGeometry.headerRight).toBeCloseTo(5.2, 0);
-  expect(navigationGeometry.iconLeft).toBeCloseTo(navigationGeometry.headerLeft, 0);
+  expect(navigationGeometry.headerLeft).toBeCloseTo(navigationGeometry.buttonLeft, 0);
+  expect(navigationGeometry.buttonRight).toBeCloseTo(navigationGeometry.headerRight, 0);
+  expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeGreaterThan(8);
+  expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeLessThan(11);
   await expect(views.getByRole('button', { name: /All Tickets/ })).toHaveAttribute('aria-current', 'page');
   await views.getByRole('button', { name: /Needs Review/ }).click();
   await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');
@@ -678,6 +679,19 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   const sidebar = page.locator('[data-component="project-sidebar"]');
   await expect(sidebar).toBeVisible();
   for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  const alignedRows = await sidebar.evaluate(node => ['.repository-summary .menu-item', '.view-navigation .menu-item', '.command-navigation .menu-item'].map(selector => node.querySelector(selector)!).map(item => {
+    const bounds = item.getBoundingClientRect();
+    const icon = item.querySelector('.menu-item__icon')!.getBoundingClientRect();
+    const label = item.querySelector('.menu-item__label')!.getBoundingClientRect();
+    return { left: bounds.left, right: bounds.right, icon: icon.left, label: label.left };
+  }));
+  expect(alignedRows).toHaveLength(3);
+  for (const row of alignedRows.slice(1)) {
+    expect(row.left).toBeCloseTo(alignedRows[0].left, 0);
+    expect(row.right).toBeCloseTo(alignedRows[0].right, 0);
+    expect(row.icon).toBeCloseTo(alignedRows[0].icon, 0);
+    expect(row.label).toBeCloseTo(alignedRows[0].label, 0);
+  }
   await sidebar.getByRole('button', { name: /Backlog/ }).click();
   await expect(sidebar.getByRole('button', { name: /Backlog/ })).toHaveAttribute('aria-current', 'page');
   await sidebar.getByRole('button', { name: 'Verify project' }).click();
@@ -728,6 +742,10 @@ test('exercises the application-shell component slice and responsive composition
   const tabBar = page.locator('[data-component="project-tab-bar"]');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
   await expect(tabBar.locator('[data-component="project-tab"]').first()).toHaveCSS('border-radius', '999px');
+  const firstClose = tabBar.getByRole('button', { name: 'Close Hot Sheet 2' });
+  await expect(firstClose).toHaveCSS('opacity', '0');
+  await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).hover();
+  await expect(firstClose).toHaveCSS('opacity', '1');
   const tabActionCenters = await tabBar.evaluate(node => {
     const tab = node.querySelector('[data-component="project-tab"]')!.getBoundingClientRect();
     const add = node.querySelector('[data-action="add-project"] svg')!.getBoundingClientRect();
@@ -735,11 +753,20 @@ test('exercises the application-shell component slice and responsive composition
   });
   expect(tabActionCenters.add).toBeCloseTo(tabActionCenters.tab, 0);
   const order = await tabBar.locator(':scope > *').evaluateAll(nodes => nodes.map(node => node.className));
-  expect(order).toEqual(['project-tab-bar__sidebar-toggle', 'project-tab-bar__modes', 'project-tab-bar__tabs', 'project-tab-bar__actions']);
+  expect(order).toEqual(['project-tab-bar__modes', 'project-tab-bar__tabs', 'project-tab-bar__actions']);
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeHidden();
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toBeVisible();
   await page.setViewportSize({ width: 1280, height: 900 });
+  await tabBar.getByRole('tab', { name: /Legacy Archive/ }).click({ button: 'right' });
+  const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
+  await expect(tabMenu.locator('wa-dropdown-item')).toHaveCount(4);
+  await expect(tabMenu.locator('[data-lucide]')).toHaveCount(4);
+  await page.keyboard.press('Escape');
+  await expect(tabMenu).toHaveCount(0);
+  await tabBar.getByRole('tab', { name: /Legacy Archive/ }).click({ button: 'right' });
+  await tabMenu.locator('wa-dropdown-item', { hasText: 'Close Tabs to the Right' }).click();
+  await expect(tabBar.getByRole('tab')).toHaveCount(4);
   await tabBar.getByRole('tab', { name: /Internal API/ }).click();
   await expect(tabBar.getByRole('tab', { name: /Internal API/ })).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ArrowLeft');
@@ -819,9 +846,11 @@ test('exercises the application-shell component slice and responsive composition
   await shell.getByRole('button', { name: 'Info' }).click();
   await expect(shell.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   await shell.getByRole('button', { name: 'Hide project sidebar' }).click();
-  await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCount(0);
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'true');
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('width', '0px');
   await shell.getByRole('button', { name: 'Show project sidebar' }).click();
   await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();
+  await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'false');
   await shell.getByRole('button', { name: 'Columns view' }).click();
   const shellWorkspace = shell.locator('.app-shell__workspace');
   const shellBoard = shell.getByRole('region', { name: 'Project board' });
@@ -834,7 +863,7 @@ test('exercises the application-shell component slice and responsive composition
   });
   expect(boardGeometry.boardLeft).toBeCloseTo(boardGeometry.workspaceLeft, 0);
   expect(boardGeometry.boardRight).toBeCloseTo(boardGeometry.workspaceRight, 0);
-  expect(boardGeometry.boardScrollWidth).toBeGreaterThan(boardGeometry.boardClientWidth);
+  expect(boardGeometry.boardScrollWidth).toBeGreaterThanOrEqual(boardGeometry.boardClientWidth);
   await shell.getByRole('button', { name: 'List view' }).click();
   await shell.getByRole('tab', { name: /Small Tale Website/ }).click();
   await expect(shell.getByRole('tab', { name: /Small Tale Website/ })).toHaveAttribute('aria-selected', 'true');

@@ -13,5 +13,9 @@
 .project-tab__close { display: grid; flex: none; width: 1.7rem; height: 1.7rem; margin-right: .3rem; padding: 0; border: 0; border-radius: 999px; appearance: none; color: #777a84; background: transparent; cursor: pointer; place-items: center; }
 .project-tab__close:hover { color: #30323a; background: #e5e7eb; }
 .project-tab__close svg { width: .85rem; height: .85rem; }
+@media (hover: hover) and (pointer: fine) {
+  .project-tab__close { opacity: 0; pointer-events: none; transition: opacity .12s ease; }
+  .project-tab:hover .project-tab__close, .project-tab:focus-within .project-tab__close { opacity: 1; pointer-events: auto; }
+}
 @keyframes project-tab-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .project-tab__busy { animation: none; } }

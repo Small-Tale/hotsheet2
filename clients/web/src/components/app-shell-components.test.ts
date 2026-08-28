@@ -25,7 +25,7 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-label="More projects"');
     expect(markup).toContain('aria-label="Terminal dashboard"');
     expect(markup).toContain('aria-label="Cross-project stats"');
-    expect(markup).toContain('aria-label="Hide project sidebar"');
+    expect(markup).not.toContain('aria-label="Hide project sidebar"');
     expect(markup).toContain('data-lucide="chevrons-right"');
     expect(markup).toContain('data-project-id="one"');
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
@@ -63,7 +63,8 @@ describe('application shell components', () => {
     expect(globalMarkup).not.toContain('data-region-id="app-sidebar"');
     expect(globalMarkup).not.toContain('data-region-id="app-inspector"');
     const collapsedMarkup = String(AppShell({ tabs: [], sidebar: 'side' as never, sidebarVisible: false, header: 'head' as never, workspace: 'work' as never }));
-    expect(collapsedMarkup).not.toContain('data-region-id="app-sidebar"');
+    expect(collapsedMarkup).toContain('data-region-id="app-sidebar"');
+    expect(collapsedMarkup).toContain('data-collapsed="true"');
     expect(collapsedMarkup).toContain('aria-label="Show project sidebar"');
   });
 

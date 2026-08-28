@@ -61,6 +61,10 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .inspector-panel-demo { width: min(27rem, 100%); margin: auto; overflow: hidden; border: 1px solid #d9dbe1; border-radius: .8rem; background: #fff; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .09); }
 .sidebar-component-demo { display: grid; width: min(32rem, 100%); min-height: 28rem; margin: auto; align-content: center; justify-items: center; gap: 1.5rem; }
 .sidebar-component-demo__rail { width: min(17rem, 100%); padding: .65rem; border: 1px solid #d9dbe1; border-radius: .85rem; background: #fafafd; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .08); }
+.menu-item-demo { display: grid; width: min(30rem, 100%); margin: auto; padding: 1rem; border: 1px solid #d9dbe1; border-radius: .85rem; background: #fafafd; gap: 1.25rem; }
+.menu-item-demo h2 { margin: 0 0 .35rem; color: #777a84; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; }
+.menu-item-demo small { color: #777a84; font-variant-numeric: tabular-nums; }
+.menu-item-demo > p { margin: 0; color: #666a75; font-size: .85rem; }
 .project-sidebar-demo { display: grid; min-height: 42rem; margin: auto; align-content: center; justify-items: center; gap: 1.25rem; }
 .project-sidebar-demo__resizer { display: grid; width: min(17rem, 100%); height: var(--project-sidebar-demo-height); min-height: 18rem; max-height: 48rem; grid-template-rows: minmax(0, 1fr) 1.25rem; }
 .project-sidebar-demo__resize-handle { display: grid; color: #777a84; cursor: row-resize; place-items: center; touch-action: none; }
