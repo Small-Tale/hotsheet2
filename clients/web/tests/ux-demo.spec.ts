@@ -537,12 +537,18 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const longOption = category.locator('wa-option[value="requirement_change"]');
   const optionLayout = await longOption.evaluate(node => {
     const label = node.shadowRoot?.querySelector<HTMLElement>('[part~="label"]');
-    const start = node.shadowRoot?.querySelector<HTMLElement>('[part~="start"]');
-    return label && start ? { whiteSpace: getComputedStyle(label).whiteSpace, optionHeight: node.getBoundingClientRect().height, labelTop: label.getBoundingClientRect().top, iconTop: start.getBoundingClientRect().top } : null;
+    return label ? { whiteSpace: getComputedStyle(label).whiteSpace, optionHeight: node.getBoundingClientRect().height } : null;
   });
   expect(optionLayout?.whiteSpace).toBe('normal');
   expect(optionLayout!.optionHeight).toBeGreaterThan(40);
-  expect(Math.abs(optionLayout!.iconTop - optionLayout!.labelTop)).toBeLessThan(3);
+  for (const value of ['task', 'requirement_change']) {
+    const centerDelta = await category.locator(`wa-option[value="${value}"]`).evaluate(node => {
+      const label = node.shadowRoot!.querySelector<HTMLElement>('[part~="label"]')!.getBoundingClientRect();
+      const start = node.shadowRoot!.querySelector<HTMLElement>('[part~="start"]')!.getBoundingClientRect();
+      return Math.abs((label.top + label.height / 2) - (start.top + start.height / 2));
+    });
+    expect(centerDelta).toBeLessThan(1);
+  }
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
