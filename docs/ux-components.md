@@ -181,7 +181,9 @@ scrolling content region can be reviewed without moving the Drive control.
   when composed in the bar. Fine-pointer devices reveal close affordances on hover or
   keyboard focus; touch-oriented devices retain the visible close control. The close
   affordance is a compact, highlight-free leading control with balanced trailing space
-  so the tab identity remains visually centered.
+  so the tab identity remains visually centered; transient trailing indicators such as
+  busy, offline, and attention occupy that reserved balance space instead of widening
+  the tab or displacing its label.
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
   Tabs, Close Tabs to the Right, and Close All Tabs.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.

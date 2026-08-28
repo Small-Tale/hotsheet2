@@ -832,6 +832,19 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Disconnected' }).locator('[data-lucide="wifi-off"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
+  for (const [label, selector] of [['Busy project', '.project-tab__busy'], ['Needs attention', '.project-tab__state--attention'], ['Disconnected', '.project-tab__state']] as const) {
+    const tab = tabStates.filter({ hasText: label });
+    const stateIndicator = tab.locator(selector);
+    await expect(stateIndicator).toHaveCSS('right', '9.6px');
+    const geometry = await tab.evaluate((node, stateSelector) => {
+      const tab = node.getBoundingClientRect();
+      const name = node.querySelector<HTMLElement>('.project-tab__name')!.getBoundingClientRect();
+      const state = node.querySelector<HTMLElement>(stateSelector)!.getBoundingClientRect();
+      return { rightInset: tab.right - state.right, labelGap: state.left - name.right };
+    }, selector);
+    expect(geometry.rightInset).toBeGreaterThan(7);
+    expect(geometry.labelGap).toBeGreaterThan(0);
+  }
 
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
