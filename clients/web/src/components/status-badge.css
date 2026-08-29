@@ -11,3 +11,5 @@
 .status-badge--interactive { border: 0; appearance: none; font-family: inherit; cursor: pointer; }
 .status-badge--interactive:hover { filter: brightness(.97); }
 .status-badge--interactive:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.blocked-badge { display: inline-flex; width: max-content; padding: .2rem .5rem; border-radius: 999px; color: #fff; background: #59606d; align-items: center; font-size: .7rem; font-weight: 700; white-space: nowrap; }
+.blocked-badge--compact { padding: .12rem .4rem; font-size: .68rem; }

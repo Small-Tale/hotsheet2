@@ -190,7 +190,10 @@ scrolling content region can be reviewed without moving the Drive control.
   affordance is a compact, highlight-free leading control with balanced trailing space
   so the tab identity remains visually centered; transient trailing indicators such as
   busy, offline, and attention occupy that reserved balance space instead of widening
-  the tab or displacing its label.
+  the tab or displacing its label. Busy uses a full-ring CSS spinner: its statically
+  centered wrapper never transforms, and the ring alone rotates around its center.
+  This avoids both transform-composition drift and the perceptual wobble of rotating
+  an incomplete Lucide arc; browser coverage samples its center across animation frames.
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
   Tabs, Close Tabs to the Right, and Close All Tabs.
 - `AddProjectButton` — **demo built** with controlled insertion and selection.
@@ -261,7 +264,8 @@ selection where sensible.
   selection, and a representative right-click context menu.
   The left rail is reserved for special-state attention in HS1 precedence order:
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
-  the familiar yellow Lucide star with an accessible add/remove name.
+  the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets
+  additionally show a compact `Blocked` pill immediately after their status.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon
@@ -345,11 +349,14 @@ than substituting a hardcoded default.
   - up-next/star toggle
   - close/collapse action
 - `InspectorTabBar`
-- `TicketInfoPanel` — **demo built**: metadata; safe Markdown details; optional
-  blocked reason; tags; notes with collection-derived counts; and provider/update
-  provenance
-  - `TicketTimeline` — **demo built**: chronological activity whose displayed total
-    is derived from the rendered entry collection
+- `TicketInfoPanel` — **demo built**: metadata; safe Markdown details on a white
+  basic-note-like surface; blocked reason before Details with its header outside the
+  gray reason box; tags; notes with collection-derived counts; and provider/update
+  provenance. An unblocked ticket exposes a small secondary `Block ticket` action;
+  its controlled editor creates the reason and the adjacent status `Blocked` pill.
+  - `TicketTimeline` — **demo built**: chronological activity shown as time-ago,
+    required title, and optional subtitle along a continuous dot/line track; its
+    displayed event total is derived from the rendered entry collection
   - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
     derived from the rendered collection, plus native browse and drop entry points.
     The inspector and TicketRow are also attachment drop targets.
@@ -407,9 +414,9 @@ than substituting a hardcoded default.
   `/ux-demo` coverage. Tag padding uses a compact 2:1 horizontal-to-vertical ratio.
 
 The component catalog records composition relationships. A left-aligned “Related
-components” menu in the main demo footer uses the shared `Select` and groups “Uses”
-and “Used by” destinations so composed
-components can be reviewed in either direction without crowding the catalog sidebar.
+components” menu in the main demo footer uses the shared `Select`. It lists `Used by`
+first, then a separated `Uses` section when both exist; headings carry the relationship
+meaning and each option uses the same evocative component icon as the catalog sidebar.
 
 Production web component CSS is colocated in `clients/web/src/components/` and imported
 by its component module. The `/ux-demo` stylesheet owns only catalog shell, inspector,

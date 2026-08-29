@@ -30,10 +30,14 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(page.getByRole('complementary', { name: 'Component catalog' }).getByText('Uses')).toHaveCount(0);
   const relationships = page.locator('.demo-relationships');
   await expect(relationships).toBeVisible();
-  await expect(relationships.locator('wa-option', { hasText: 'Uses · TagChip' })).toHaveCount(1);
+  await expect(relationships.locator('.select__group').nth(0)).toHaveAttribute('aria-label', 'Used by');
+  await expect(relationships.locator('.select__group').nth(1)).toHaveAttribute('aria-label', 'Uses');
+  await expect(relationships.locator('.select__group').nth(1)).toHaveClass(/select__group--separated/);
+  await expect(relationships.locator('wa-option', { hasText: 'TagChip' })).toHaveCount(1);
   await relationships.evaluate((node: HTMLElement & { value: string }) => { node.value = 'tag-chip'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(page).toHaveURL('/ux-demo?component=tag-chip');
-  await expect(page.locator('.demo-relationships wa-option', { hasText: 'Used by · TicketRow' })).toHaveCount(1);
+  await expect(page.locator('.demo-relationships .select__group').nth(0)).toHaveAttribute('aria-label', 'Used by');
+  await expect(page.locator('.demo-relationships wa-option', { hasText: 'TicketRow' })).toHaveCount(1);
   await page.locator('.demo-relationships').evaluate((node: HTMLElement & { value: string }) => { node.value = 'ticket-row'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
@@ -237,6 +241,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await busy.click();
   await expect(row).toContainText('Fix selection synchronization');
   await expect(row).toContainText('Verified');
+  await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'plain');
   await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
@@ -384,7 +389,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('dropped.txt');
   await reader.getByRole('button', { name: 'Info' }).click();
   await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS('background-color', 'rgb(248, 249, 251)');
+  await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(reader.locator('.ticket-inspector__details-surface .markdown-editor--embedded')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
@@ -679,6 +684,17 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   );
   expect(sectionRhythm).toHaveLength(3);
   expect(sectionRhythm.every(section => section.gap === '8.8px' && section.headerHeight === 32)).toBe(true);
+  await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
+  await inspector.getByRole('button', { name: 'Block ticket' }).click();
+  const blockedReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
+  await expect(blockedReason).toBeFocused();
+  await blockedReason.fill('Waiting for API review.');
+  await inspector.getByRole('button', { name: 'Save' }).click();
+  await expect(inspector.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
+  await expect(inspector.getByText('Waiting for API review.')).toBeVisible();
+  const blockedSection = inspector.locator('.ticket-inspector__blocked-section');
+  const detailsSection = inspector.locator('.ticket-inspector__details-section');
+  expect((await blockedSection.boundingBox())!.y).toBeLessThan((await detailsSection.boundingBox())!.y);
   await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(3);
   const firstNote = inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]').first();
   await expect(firstNote.getByRole('button', { name: 'Edit note' })).toBeAttached();
@@ -691,8 +707,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await inspector.getByRole('button', { name: 'Timeline' }).click();
   await expect(inspector.locator('[data-component="ticket-timeline"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Timeline' })).toBeVisible();
-  await expect(inspector.locator('.ticket-inspector__timeline > li')).toHaveCount(2);
-  await expect(inspector.getByText('2 notes total')).toBeVisible();
+  await expect(inspector.locator('.ticket-inspector__timeline > li')).toHaveCount(4);
+  await expect(inspector.getByText('4 events total')).toBeVisible();
+  await expect(inspector.locator('.ticket-inspector__timeline > li').first()).toContainText('Claude started work');
   await inspector.getByRole('button', { name: 'Attachments' }).click();
   await expect(inspector.locator('[data-component="ticket-attachments"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
@@ -948,7 +965,7 @@ test('exercises the application-shell component slice and responsive composition
   const tabStates = page.locator('[data-component="project-tab"]');
   await expect(tabStates).toHaveCount(6);
   await expect(tabStates.filter({ hasText: 'Selected local' })).toHaveAttribute('data-selected', 'true');
-  await expect(tabStates.filter({ hasText: 'Busy project' }).locator('[data-lucide="loader-circle"]')).toHaveCount(1);
+  await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy i')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Disconnected' }).locator('[data-lucide="wifi-off"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
@@ -997,12 +1014,19 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__busy');
   const spinnerAlignment = await busySpinner.evaluate(node => {
-    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect(); const tab = node.closest('[data-component="project-tab"]')!.getBoundingClientRect();
+    const outer = node.getBoundingClientRect(); const icon = node.querySelector('i')!.getBoundingClientRect(); const tab = node.closest('[data-component="project-tab"]')!.getBoundingClientRect();
     return { x: Math.abs((outer.left + outer.width / 2) - (icon.left + icon.width / 2)), y: Math.abs((outer.top + outer.height / 2) - (icon.top + icon.height / 2)), tabY: Math.abs((outer.top + outer.height / 2) - (tab.top + tab.height / 2)) };
   });
   expect(spinnerAlignment.x).toBeLessThan(1);
   expect(spinnerAlignment.y).toBeLessThan(1);
   expect(spinnerAlignment.tabY).toBeLessThan(1);
+  const animatedCenters = await busySpinner.evaluate(async node => {
+    const centers: Array<[number, number]> = [];
+    for (let frame = 0; frame < 12; frame++) await new Promise<void>(resolve => requestAnimationFrame(() => { const box = node.querySelector('i')!.getBoundingClientRect(); centers.push([box.x + box.width / 2, box.y + box.height / 2]); resolve(); }));
+    return centers;
+  });
+  expect(Math.max(...animatedCenters.map(([x]) => x)) - Math.min(...animatedCenters.map(([x]) => x))).toBeLessThan(.1);
+  expect(Math.max(...animatedCenters.map(([, y]) => y)) - Math.min(...animatedCenters.map(([, y]) => y))).toBeLessThan(.1);
   for (const name of await tabBar.locator('.project-tab__name').all()) {
     await expect(name).not.toHaveCSS('text-overflow', 'ellipsis');
   }

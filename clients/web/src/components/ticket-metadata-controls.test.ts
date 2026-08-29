@@ -26,11 +26,15 @@ describe('ticket metadata controls and inspector panels', () => {
   it('renders inspector sections independently of the inspector shell', () => {
     const info = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }));
     expect(info).toContain('data-component="ticket-info-panel"');
-    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(3);
+    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(4);
+    expect(info).toContain('data-action="edit-blocked-reason"');
+    expect(info).toContain('Block ticket');
     expect(info).toContain('data-component="ticket-notes"');
-    const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', text: 'One note' }] }));
+    const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }));
     expect(timeline.match(/<li/g)).toHaveLength(1);
-    expect(timeline).toContain('1 note total');
+    expect(timeline).toContain('One event');
+    expect(timeline).toContain('Optional detail');
+    expect(timeline).toContain('1 event total');
     const attachments = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }] }));
     expect(attachments.match(/data-attachment-id=/g)).toHaveLength(1);
     expect(attachments).toContain('1 attachment total');

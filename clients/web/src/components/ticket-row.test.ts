@@ -45,4 +45,10 @@ describe('TicketRow', () => {
     expect(markup).toContain('data-component="ticket-list-row-container"');
     expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(markup.indexOf('data-component="ticket-list-row"'));
   });
+
+  it('shows a blocked pill immediately after status metadata', () => {
+    const markup = String(TicketRow({ slug: 'HS2-BLOCK', title: 'Blocked row', status: 'started', priority: 'high', category: 'bug', tags: [], blocked: true }));
+    expect(markup).toContain('data-component="blocked-badge"');
+    expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-component="blocked-badge"'));
+  });
 });

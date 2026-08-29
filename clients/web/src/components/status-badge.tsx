@@ -35,3 +35,7 @@ export function StatusBadge({ status, showIcon = true, appearance = 'filled', co
     ? <button type="button" slot={slot} class={className} data-component="status-badge" data-status={status} data-appearance={appearance} aria-label={actionLabel}>{content}</button>
     : <span slot={slot} class={className} data-component="status-badge" data-status={status} data-appearance={appearance}>{content}</span>;
 }
+
+export function BlockedBadge({ compact = false }: { compact?: boolean }) {
+  return <span class={`blocked-badge${compact ? ' blocked-badge--compact' : ''}`} data-component="blocked-badge">Blocked</span>;
+}

@@ -14,7 +14,8 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain('data-location="remote"');
     expect(markup).toContain('data-lucide="cloud"');
-    expect(markup).toContain('data-lucide="loader-circle"');
+    expect(markup).toContain('aria-label="Project busy"');
+    expect(markup).not.toContain('data-lucide="loader-circle"');
     expect(markup).not.toContain('data-lucide="wifi-off"');
     expect(markup.indexOf('</button><button')).toBeGreaterThan(0);
   });

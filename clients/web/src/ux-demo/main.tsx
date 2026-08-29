@@ -13,7 +13,7 @@ import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from 
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
-import { Activity, AppWindow, ArrowDownToLine, ArrowUpFromLine, Badge, BookOpen, ChartNoAxesColumnIncreasing, Columns3, Command, FilePenLine, Filter, FolderGit2, GitBranch, Info, Kanban, LayoutDashboard, List, ListPlus, ListTree, Menu, MessageSquareText, PanelLeft, PanelRight, Paperclip, Play, Search, Settings, Tags, Terminal, Text, Wrench, type IconNode } from 'lucide';
+import { Activity, AppWindow, Badge, BookOpen, ChartNoAxesColumnIncreasing, Columns3, Command, FilePenLine, Filter, FolderGit2, GitBranch, Info, Kanban, LayoutDashboard, List, ListPlus, ListTree, Menu, MessageSquareText, PanelLeft, PanelRight, Paperclip, Play, Search, Settings, Tags, Terminal, Text, Wrench, type IconNode } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
@@ -30,7 +30,7 @@ import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo,
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
-import { cancelMarkdown, editingNoteId, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, noteDemoNotes, noteDraft, NoteCardDemo, readerAttachments, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
+import { cancelMarkdown, editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, noteDemoNotes, noteDraft, NoteCardDemo, readerAttachments, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -123,9 +123,10 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
   const uses = (item.uses ?? []).map(findDemo).filter((demo): demo is DemoDefinition => Boolean(demo));
   const usedBy = demosUsing(item.id);
   if (uses.length === 0 && usedBy.length === 0) return null;
+  const choice = (demo: DemoDefinition, group: string) => { const icon = catalogIcon(demo.id); return { value: demo.id, label: demo.name, icon: icon.icon, iconName: icon.name, group }; };
   const choices = [
-    ...uses.map(demo => ({ value: demo.id, label: `Uses · ${demo.name}`, icon: ArrowDownToLine, iconName: 'arrow-down-to-line' })),
-    ...usedBy.map(demo => ({ value: demo.id, label: `Used by · ${demo.name}`, icon: ArrowUpFromLine, iconName: 'arrow-up-from-line' })),
+    ...usedBy.map(demo => choice(demo, 'Used by')),
+    ...uses.map(demo => choice(demo, 'Uses')),
   ];
   return <Select className="demo-relationships" name="related-component" value="" label="Related components" placeholder="Choose a related component" choices={choices} />;
 }
@@ -340,6 +341,10 @@ delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => { inspect
 delegate(root, 'change', '[name="inspector-category"]', (_event, target) => { inspectorCategory.value = (target as FormControl).value; });
 delegate(root, 'change', '[name="inspector-priority"]', (_event, target) => { inspectorPriority.value = (target as FormControl).value as typeof inspectorPriority.value; });
 delegate(root, 'click', '[data-inspector-status]', (_event, target) => { inspectorStatus.value = (target as HTMLElement).dataset.inspectorStatus as typeof inspectorStatus.value; });
+delegate(root, 'click', '[data-action="edit-blocked-reason"]', () => { inspectorBlockedReasonDraft.value = inspectorBlockedReason.value; inspectorBlockedReasonEditing.value = true; queueMicrotask(() => root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus()); });
+delegate(root, 'input', '[name="blocked-reason"]', (_event, target) => { inspectorBlockedReasonDraft.value = (target as FormControl).value; });
+delegate(root, 'click', '[data-action="cancel-blocked-reason"]', () => { inspectorBlockedReasonDraft.value = inspectorBlockedReason.value; inspectorBlockedReasonEditing.value = false; recordCollectionEvent('Blocked reason edit cancelled'); });
+delegate(root, 'click', '[data-action="save-blocked-reason"]', () => { const reason = inspectorBlockedReasonDraft.value.trim(); if (!reason) return; inspectorBlockedReason.value = reason; inspectorBlockedReasonDraft.value = reason; inspectorBlockedReasonEditing.value = false; recordCollectionEvent('Ticket blocked'); });
 delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   toggleCollectionTicketUpNext(ticket.slug);
