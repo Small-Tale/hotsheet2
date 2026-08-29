@@ -1,6 +1,4 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import { BookOpen } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import type { TicketStatus } from './status-badge';
 import { TicketStatusMenu } from './ticket-status-menu';
 import { TagChip } from './tag-chip';
@@ -20,10 +18,10 @@ export function TicketInfoPanel({ status, priority, category, tags, details, det
       <TicketPrioritySelect name="inspector-priority" value={priority} />
       <div><span>Status</span><TicketStatusMenu value={status} /></div>
     </section>
-    <section class="ticket-inspector__section ticket-inspector__details-section"><header class="ticket-inspector__section-header"><h2>Details</h2>{!readerPresentation && <button type="button" class="ticket-inspector__reader-button" data-action="open-ticket-reader" aria-label="Open ticket reader" title="Open ticket reader"><LucideIcon icon={BookOpen} name="book-open" /><span>Reader</span></button>}</header><MarkdownEditor value={details} mode={detailsMode} dirty={detailsDirty} appearance="embedded" showExpand={false} label="Ticket details" /></section>
+    <section class="ticket-inspector__section ticket-inspector__details-section"><header class="ticket-inspector__section-header"><h2>Details</h2></header><div class="ticket-inspector__details-surface"><MarkdownEditor value={details} mode={detailsMode} dirty={detailsDirty} appearance="embedded" showExpand={false} label="Ticket details" /></div></section>
     {blockedReason && <section class="ticket-inspector__section ticket-inspector__blocked"><header class="ticket-inspector__section-header"><h2>Blocked reason</h2></header><p>{blockedReason}</p></section>}
     <section class="ticket-inspector__section"><header class="ticket-inspector__section-header"><h2>Tags</h2></header><div class="ticket-inspector__tags">{tags.map((tag, index) => TagChip({ id: `inspector-tag-${index}`, label: tag }))}</div></section>
-    <TicketNotes notes={notes} editingNoteId={editingNoteId} noteDraft={noteDraft} />
+    <TicketNotes notes={notes} editingNoteId={editingNoteId} noteDraft={noteDraft} readerAvailable={!readerPresentation} />
     <footer class="ticket-inspector__provenance"><span>{providerName}</span><span>{updatedLabel}</span></footer>
   </div>;
 }

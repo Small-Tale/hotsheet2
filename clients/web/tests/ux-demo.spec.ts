@@ -383,7 +383,8 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await reader.locator('[data-component="ticket-inspector"]').evaluate(node => { const transfer = new DataTransfer(); transfer.items.add(new File(['drop'], 'dropped.txt', { type: 'text/plain' })); node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })); });
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('dropped.txt');
   await reader.getByRole('button', { name: 'Info' }).click();
-  await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgb(248, 249, 251)');
+  await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS('background-color', 'rgb(248, 249, 251)');
   await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(readerSource).toBeFocused();
@@ -629,6 +630,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(2);
   await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
   await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
+  const selectedSpacing = await inspector.locator('wa-select[name="inspector-category"]').evaluate(node => {
+    const icon = node.querySelector<HTMLElement>('.select__icon--selected')!.getBoundingClientRect();
+    const input = node.shadowRoot!.querySelector<HTMLElement>('[part~="display-input"]')!.getBoundingClientRect();
+    return input.left - icon.right;
+  });
+  expect(selectedSpacing).toBeLessThanOrEqual(5);
   const category = inspector.locator('wa-select[name="inspector-category"]');
   const selectCaret = await category.evaluate(node => {
     const caret = node.shadowRoot?.querySelector<HTMLElement>('[part~="expand-icon"]');
@@ -672,6 +679,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   expect(sectionRhythm).toHaveLength(3);
   expect(sectionRhythm.every(section => section.gap === '8.8px' && section.headerHeight === 32)).toBe(true);
   await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(3);
+  const firstNote = inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]').first();
+  await expect(firstNote.getByRole('button', { name: 'Edit note' })).toBeAttached();
+  await expect(firstNote.getByRole('button', { name: 'Open ticket reader from note' })).toBeAttached();
+  await firstNote.getByRole('button', { name: 'Edit note' }).click();
+  await expect(firstNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
+  await firstNote.getByRole('button', { name: 'Cancel' }).click();
   await inspector.getByRole('button', { name: 'Add note', exact: true }).last().click();
   await expect(page.getByText('Note composer requested')).toBeVisible();
   await inspector.getByRole('button', { name: 'Timeline' }).click();
@@ -696,8 +709,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(reopened.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await expect(reopened.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(reopened.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
-  await expect(reopened.getByRole('button', { name: 'Open ticket reader' })).toBeVisible();
-  await reopened.getByRole('button', { name: 'Open ticket reader' }).click();
+  await expect(reopened.getByRole('button', { name: 'Open ticket reader', exact: true })).toBeVisible();
+  await reopened.getByRole('button', { name: 'Open ticket reader from note' }).first().click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-reader');
   await expect(page.locator('[data-component="ticket-reader"]')).toBeVisible();
 });

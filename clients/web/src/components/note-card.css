@@ -4,6 +4,12 @@
 .note-card__kind svg { width: .95rem; height: .95rem; flex: none; }
 .note-card__header time, .note-card footer { color: #858893; font-size: .7rem; }
 .note-card__header time { flex: none; }
+.note-card__header-end { display: inline-flex; flex: none; align-items: center; gap: .3rem; }
+.note-card__actions { display: inline-flex; opacity: 0; align-items: center; gap: .1rem; transition: opacity 120ms ease; }
+.note-card:hover .note-card__actions, .note-card:focus-within .note-card__actions { opacity: 1; }
+.note-card__actions button { display: inline-grid; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: 999px; color: #656a75; background: transparent; cursor: pointer; place-items: center; }
+.note-card__actions button:hover { color: #1d4ed8; background: #eaf2ff; }
+.note-card__actions svg { width: .8rem; height: .8rem; }
 .note-card__body { margin: 0; font-size: .88rem; line-height: 1.5; white-space: pre-wrap; }
 .note-card:not(.note-card--editing) { cursor: text; }
 .note-card__editor { display: grid; gap: .5rem; }

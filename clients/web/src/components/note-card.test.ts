@@ -24,4 +24,11 @@ describe('NoteCard', () => {
     expect(markup).toContain('data-action="save-note-edit"');
     expect(markup).toContain('data-action="cancel-note-edit"');
   });
+
+  it('exposes discoverable edit and optional reader actions', () => {
+    const markup = String(NoteCard({ id: 'actions', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body', readerAvailable: true }));
+    expect(markup).toContain('data-edit-on-double-click="true"');
+    expect(markup).toContain('aria-label="Edit note"');
+    expect(markup).toContain('aria-label="Open ticket reader from note"');
+  });
 });

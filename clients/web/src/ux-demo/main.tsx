@@ -345,7 +345,9 @@ delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   toggleCollectionTicketUpNext(ticket.slug);
 });
 delegate(root, 'click', '[data-action="add-ticket-note"]', () => { recordCollectionEvent('Note composer requested'); });
-delegate(root, 'dblclick', '[data-action="edit-note"]', (_event, target) => { const id = (target as HTMLElement).dataset.noteId!; editingNoteId.value = id; noteDraft.value = readerNotes.value.find(note => note.id === id)?.body ?? noteDemoNotes.value.find(note => note.id === id)?.body ?? ''; queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus()); });
+const beginNoteEdit = (id: string) => { editingNoteId.value = id; noteDraft.value = readerNotes.value.find(note => note.id === id)?.body ?? noteDemoNotes.value.find(note => note.id === id)?.body ?? ''; queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus()); };
+delegate(root, 'dblclick', '[data-edit-on-double-click="true"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });
+delegate(root, 'click', '[data-action="edit-note"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });
 delegate(root, 'input', '[name="note-body"]', (_event, target) => { noteDraft.value = (target as FormControl).value; });
 delegate(root, 'click', '[data-action="cancel-note-edit"]', () => { editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit cancelled'); });
 delegate(root, 'click', '[data-action="save-note-edit"]', () => { const id = editingNoteId.value; if (id) { readerNotes.value = readerNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); noteDemoNotes.value = noteDemoNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); } editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit saved'); });

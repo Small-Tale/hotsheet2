@@ -356,7 +356,8 @@ than substituting a hardcoded default.
 - `TicketMetadataEditor`
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
     shared by ticket category and priority controls, including selected-value and
-    popup-option icon/color projection with custom-command-style icon/label spacing
+    popup-option icon/color projection with a measured four-pixel icon/label gap;
+    the light-DOM icon margin explicitly overrides Web Awesome's slotted default
   - `TicketCategorySelect` — **demo built**: configured category icons and colors in
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
@@ -371,8 +372,9 @@ than substituting a hardcoded default.
     sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
-- `TicketDetailsSection` — visually distinct bordered surface; double-click or use
-  its keyboard action to begin editing
+- `TicketDetailsSection` — section header remains outside its visually distinct
+  bordered Markdown surface, matching Notes hierarchy; double-click or use its
+  keyboard action to begin editing
 - `TicketTagsSection`
 - `TicketAttachmentsSection`
 - `TicketNotesSection`
@@ -434,7 +436,9 @@ icons; structural separators do not require icons.
 - `NoteList`
 - `NoteCard` — **demo built** with distinct regular, status, feedback-needed, and
   activity presentations sharing stable author, timestamp, body, and note identity;
-  double-click enters a controlled editor whose Save persists and Cancel restores
+  double-click enters a controlled editor whose Save persists and Cancel restores.
+  Hover/focus reveals explicit Edit and Open Reader actions, while the inspector
+  toolbar exposes Reader from every inspector tab.
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`
