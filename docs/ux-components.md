@@ -356,7 +356,8 @@ than substituting a hardcoded default.
 - `TicketMetadataEditor`
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
     shared by ticket category and priority controls, including selected-value and
-    popup-option icon/color projection with a measured four-pixel icon/label gap;
+    popup-option icon/color projection with the same measured `0.5rem` icon/label
+    gap used by custom-command `MenuItem`s;
     the light-DOM icon margin explicitly overrides Web Awesome's slotted default
   - `TicketCategorySelect` — **demo built**: configured category icons and colors in
     both selected-value and popup-option presentations
@@ -437,8 +438,8 @@ icons; structural separators do not require icons.
 - `NoteCard` — **demo built** with distinct regular, status, feedback-needed, and
   activity presentations sharing stable author, timestamp, body, and note identity;
   double-click enters a controlled editor whose Save persists and Cancel restores.
-  Hover/focus reveals explicit Edit and Open Reader actions, while the inspector
-  toolbar exposes Reader from every inspector tab.
+  Hover/focus reveals an explicit Edit action, while the inspector toolbar provides
+  the single Reader entry point from every inspector tab.
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`
