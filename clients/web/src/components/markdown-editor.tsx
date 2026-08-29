@@ -15,7 +15,7 @@ export function MarkdownEditor({ value, mode, expanded = false, dirty = false, l
     <div class="markdown-editor__surface">
       {mode === 'write'
         ? <textarea name="markdown-source" aria-label={label} spellcheck="true">{value}</textarea>
-        : <div class="markdown-editor__preview" role="button" tabIndex={0} data-action="edit-markdown" aria-label={`Edit ${label}`}><MarkdownPreview source={value} emptyLabel="Click to add Markdown." /></div>}
+        : <div class="markdown-editor__preview" role="button" tabIndex={0} data-action="edit-markdown" aria-label={`Edit ${label}`} title="Double-click to edit"><MarkdownPreview source={value} emptyLabel="Double-click to add Markdown." /></div>}
     </div>
     {mode === 'write' && <footer><span aria-live="polite">{dirty ? 'Unsaved changes' : 'No changes'}</span><div><wa-button appearance="plain" data-action="cancel-markdown-edit">Cancel</wa-button><wa-button variant="brand" data-action="save-markdown" disabled={!dirty}>Save</wa-button></div></footer>}
   </section>;

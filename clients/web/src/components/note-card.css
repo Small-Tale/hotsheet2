@@ -5,6 +5,10 @@
 .note-card__header time, .note-card footer { color: #858893; font-size: .7rem; }
 .note-card__header time { flex: none; }
 .note-card__body { margin: 0; font-size: .88rem; line-height: 1.5; white-space: pre-wrap; }
+.note-card:not(.note-card--editing) { cursor: text; }
+.note-card__editor { display: grid; gap: .5rem; }
+.note-card__editor textarea { width: 100%; min-height: 5rem; padding: .55rem .65rem; resize: vertical; border: 1px solid #aeb4c0; border-radius: .45rem; color: inherit; background: #fff; font: inherit; line-height: 1.5; }
+.note-card__editor > div { display: flex; justify-content: flex-end; gap: .35rem; }
 .note-card[data-kind="status"], .note-card[data-kind="activity"] { border-color: transparent; background: #eceef2; }
 .note-card[data-kind="status"] .note-card__kind { color: #2563eb; }
 .note-card[data-kind="activity"] .note-card__kind { color: #59606d; }

@@ -4,8 +4,10 @@
 body { margin: 0; min-width: 52rem; }
 body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: none; }
 .demo-shell { display: grid; grid-template-columns: minmax(17rem, 22rem) minmax(0, 1fr); min-height: 100vh; }
-.demo-master { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 1.5rem 1.25rem 3rem; border-right: 1px solid #d9d9de; background: #fafafd; }
+.demo-master { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 1.5rem 1.25rem 3rem; border-right: 1px solid #d9d9de; background: #fff; }
 .demo-master > header { padding: 0 .6rem 1.25rem; }
+.demo-master__review-toggle { min-height: 2rem; margin-top: .8rem; padding: 0 .7rem; border: 1px solid #d7dae1; border-radius: 999px; color: #626671; background: #fff; cursor: pointer; font: inherit; font-size: .72rem; }
+.demo-master__review-toggle[aria-pressed="true"] { color: #1d4ed8; border-color: #93b4f5; background: #eff6ff; }
 .demo-master h1, .demo-detail h1 { margin: .15rem 0 .35rem; letter-spacing: -.025em; }
 .demo-master p, .demo-detail p { color: #666771; }
 .eyebrow { margin: 0; color: #2563eb !important; font-size: .72rem; font-weight: 750; letter-spacing: .1em; text-transform: uppercase; }
@@ -45,11 +47,8 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .workspace-settings-preview { display: grid; max-width: 38rem; margin: 2rem auto; padding: 2rem; border: 1px solid #d9dbe1; border-radius: 1rem; background: #fff; box-shadow: 0 .5rem 1.5rem rgba(35, 32, 48, .07); gap: 1rem; }
 .workspace-settings-preview h2, .workspace-settings-preview p { margin: 0; }
 .inspector-demo { display: grid; min-height: 36rem; place-items: center; gap: 1rem; }
-.demo-detail__footer { display: flex; width: 100%; max-width: 70rem; min-height: 2.5rem; margin: auto auto 0; padding-top: 1.5rem; align-items: flex-end; }
-.demo-relationships h2 { margin: 0; padding: .45rem .75rem .25rem; color: #777781; font-size: .68rem; letter-spacing: .07em; text-transform: uppercase; }
-.demo-relationships small { color: #92929c; font-size: .68rem; text-transform: capitalize; }
-.demo-relationships__icon { display: inline-flex; width: 1rem; height: 1rem; }
-.demo-relationships__icon svg { width: 100%; height: 100%; }
+.demo-detail__footer { display: flex; width: 100%; max-width: 70rem; min-height: 2.5rem; margin: auto auto 0 0; padding-top: 1.5rem; align-items: flex-end; }
+.demo-relationships { width: min(22rem, 100%); }
 .toolbar-control-group-demo { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2rem; padding: clamp(1.5rem, 4vw, 3rem); }
 .toolbar-text-demo { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2rem; padding: clamp(1.5rem, 4vw, 3rem); }
 .toolbar-text-demo h2 { margin: 0 0 .65rem; color: #73747d; font-size: .8rem; }

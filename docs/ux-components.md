@@ -72,6 +72,10 @@ header controls pending their dedicated wireframes. It owns the top-level arrang
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
 immediately above its ticket collection, matching the wireframe; settings and global
 dashboard modes omit it.
+The composed project sidebar uses the same white surface as the inspector, while the
+ProjectTabBar adds no redundant background or top separator. Busy indicators preserve
+their visual center throughout rotation. The composer title input and category select
+share one control height.
 and responsive behavior of:
 
 - `ProjectSidebar`
@@ -347,11 +351,12 @@ than substituting a hardcoded default.
   - `TicketTimeline` — **demo built**: chronological activity whose displayed total
     is derived from the rendered entry collection
   - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
-    derived from the rendered attachment collection
+    derived from the rendered collection, plus native browse and drop entry points.
+    The inspector and TicketRow are also attachment drop targets.
 - `TicketMetadataEditor`
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
     shared by ticket category and priority controls, including selected-value and
-    popup-option icon/color projection
+    popup-option icon/color projection with custom-command-style icon/label spacing
   - `TicketCategorySelect` — **demo built**: configured category icons and colors in
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
@@ -366,7 +371,8 @@ than substituting a hardcoded default.
     sizing; every public variant is exposed with unit and bidirectional `/ux-demo` coverage
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
-- `TicketDetailsSection`
+- `TicketDetailsSection` — visually distinct bordered surface; double-click or use
+  its keyboard action to begin editing
 - `TicketTagsSection`
 - `TicketAttachmentsSection`
 - `TicketNotesSection`
@@ -376,7 +382,7 @@ than substituting a hardcoded default.
 - `MarkdownPreview` — **built**: HS1-parity `marked` rendering with GFM tables and
   task lists, line breaks, links, images, fenced/inline code, blockquotes, lists, and
   headings. Raw HTML is escaped and unsafe link/image protocols are rejected.
-- `MarkdownEditor` — **demo built**: rendered preview by default, click/keyboard to
+- `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard to
   edit, persistent controlled draft, inline/expanded presentation, dirty state, and
   textual Save/Cancel actions. The embedded appearance reuses the same behavior in
   inspector and reader without a redundant standalone toolbar.
@@ -385,7 +391,8 @@ than substituting a hardcoded default.
 - `TicketReader` — **demo built**: a large dialog presentation of the actual
   `TicketInspector`, preserving its metadata editing, tabs, attachments, timeline,
   Markdown details, notes, and controlled state rather than maintaining a reduced
-  parallel reader implementation
+  parallel reader implementation. The inspector exposes a Reader action, and reader
+  content uses its full available width.
 - `ReaderEditMode` — carries an in-progress inline edit into the larger surface
 - `UnsavedChangesGuard`
 
@@ -396,8 +403,9 @@ than substituting a hardcoded default.
   filled, non-pill default presentation plus optional variants, disabled/removable behavior, unit tests, and interactive
   `/ux-demo` coverage. Tag padding uses a compact 2:1 horizontal-to-vertical ratio.
 
-The component catalog records composition relationships. A “Related components” menu
-in the main demo footer groups clickable “Uses” and “Used by” destinations so composed
+The component catalog records composition relationships. A left-aligned “Related
+components” menu in the main demo footer uses the shared `Select` and groups “Uses”
+and “Used by” destinations so composed
 components can be reviewed in either direction without crowding the catalog sidebar.
 
 Production web component CSS is colocated in `clients/web/src/components/` and imported
@@ -411,9 +419,9 @@ icons; structural separators do not require icons.
 
 ### 4.4 Attachments — feature floor
 
-- `TicketAttachments` — the existing attachment-list surface; it will gain the row,
-  durable identity, and action capabilities below rather than being duplicated by a
-  separate `AttachmentList` component
+- `TicketAttachments` — the existing attachment-list surface, with browse/drop input;
+  it will gain durable row identity and remaining action capabilities rather than
+  being duplicated by a separate `AttachmentList` component
 - `AttachmentRow`
 - `AttachmentPicker`
 - `AttachmentDropZone`
@@ -425,7 +433,8 @@ icons; structural separators do not require icons.
 
 - `NoteList`
 - `NoteCard` — **demo built** with distinct regular, status, feedback-needed, and
-  activity presentations sharing stable author, timestamp, body, and note identity
+  activity presentations sharing stable author, timestamp, body, and note identity;
+  double-click enters a controlled editor whose Save persists and Cancel restores
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`
@@ -611,6 +620,11 @@ restores its canonical mock state. It should grow to provide:
 Catalog groups reset native list margins so their shared `MenuHeader` and `MenuItem`
 rows begin on the same outer edge; hierarchy is already clear from the headers and
 does not receive an additional list indent.
+Implemented entries use component-specific Lucide icons instead of one generic glyph.
+Their trailing value is a dependency-aware last-modified time: changes to a demo,
+recursively imported component/style dependencies, or global catalog code make the
+demo current again. Planned entries remain visually muted and omit that value. A
+development-only sidebar toggle enables or disables Dev Review without editing the URL.
 
 - a searchable component index grouped by the sections above
 - isolated examples plus composed screen scenarios

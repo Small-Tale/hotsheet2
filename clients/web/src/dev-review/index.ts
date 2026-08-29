@@ -108,16 +108,17 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   const captureSelections = (targets: Selection[]): Promise<void> => {
     const revisions = new Map(targets.map(selection => [selection.id, selection.revision]));
     const promise = (async () => {
-      const canvas = await html2canvas(doc.documentElement, {
-      x: view.scrollX, y: view.scrollY, width: view.innerWidth, height: view.innerHeight,
-      windowWidth: view.innerWidth, windowHeight: view.innerHeight, scrollX: -view.scrollX, scrollY: -view.scrollY, backgroundColor: null, logging: false,
-      ignoreElements: element => element.hasAttribute('data-hotsheet-dev-review'),
-      });
       for (const selection of targets) {
         if (selection.revision !== revisions.get(selection.id)) continue;
         const bounded = intersectRectWithViewport(selection, view.innerWidth, view.innerHeight);
-        const cropped = doc.createElement('canvas'); cropped.width = bounded.width; cropped.height = bounded.height;
-        cropped.getContext('2d')!.drawImage(canvas, bounded.x, bounded.y, bounded.width, bounded.height, 0, 0, bounded.width, bounded.height);
+        const cropped = await html2canvas(doc.documentElement, {
+          x: bounded.x + view.scrollX, y: bounded.y + view.scrollY, width: bounded.width, height: bounded.height,
+          windowWidth: view.innerWidth, windowHeight: view.innerHeight, scrollX: view.scrollX, scrollY: view.scrollY,
+          // Review rectangles use CSS viewport pixels; keep the output in that same
+          // coordinate space on Retina/high-DPI displays.
+          scale: 1, backgroundColor: null, logging: false,
+          ignoreElements: element => element.hasAttribute('data-hotsheet-dev-review'),
+        });
         selection.capture = { id: selection.id, filename: `ux-feedback-${selection.id}.png`, dataUrl: cropped.toDataURL('image/png'), width: cropped.width, height: cropped.height };
       }
     })().finally(() => { for (const selection of targets) if (selection.capturePromise === promise) selection.capturePromise = undefined; });

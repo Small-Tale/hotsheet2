@@ -5,14 +5,15 @@ import { TicketReader } from '../components/ticket-reader';
 import type { InspectorTab } from '../components/ticket-inspector';
 
 export const NOTE_DEMO_KINDS: readonly NoteKind[] = ['regular', 'status', 'feedback_needed', 'activity'];
+export const noteDemoNotes = signal([
+  { id: 'regular', kind: 'regular' as const, author: 'Claude', time: '12 minutes ago', body: 'The shared row now keeps metadata readable at narrow widths.' },
+  { id: 'status', kind: 'status' as const, author: 'Hot Sheet', time: '9 minutes ago', body: 'Status changed from Started to Needs Review.' },
+  { id: 'feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '4 minutes ago', title: 'Feedback needed', body: 'Should this interaction preserve the current filter when switching projects?' },
+  { id: 'activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Finished the responsive layout pass and browser verification.' },
+]);
 
 export function NoteCardDemo() {
-  return <section class="note-card-demo" aria-label="NoteCard demo">
-    <NoteCard id="regular" kind="regular" author="Claude" time="12 minutes ago" body="The shared row now keeps metadata readable at narrow widths." />
-    <NoteCard id="status" kind="status" author="Hot Sheet" time="9 minutes ago" body="Status changed from Started to Needs Review." />
-    <NoteCard id="feedback" kind="feedback_needed" author="Codex" time="4 minutes ago" title="Feedback needed" body="Should this interaction preserve the current filter when switching projects?" />
-    <NoteCard id="activity" kind="activity" author="Codex" time="Now" body="Finished the responsive layout pass and browser verification." />
-  </section>;
+  return <section class="note-card-demo" aria-label="NoteCard demo">{noteDemoNotes.value.map(note => <NoteCard {...note} editing={editingNoteId.value === note.id} draft={editingNoteId.value === note.id ? noteDraft.value : undefined} />)}</section>;
 }
 
 export const READER_NOTES = [
@@ -20,10 +21,14 @@ export const READER_NOTES = [
   { id: 'reader-note', kind: 'regular' as const, author: 'Claude', time: '24 minutes ago', body: 'The reader should preserve a comfortable line length while the note history remains easy to scan.' },
   { id: 'reader-activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Completed the first browser review of the reading surface.' },
 ];
+export const readerNotes = signal(READER_NOTES);
 export const readerTab = signal<InspectorTab>('info');
+export const readerAttachments = signal([{ id: 'wireframe', name: 'reader-wireframe.png' }, { id: 'notes', name: 'reader-notes.md' }]);
+export const editingNoteId = signal<string | undefined>(undefined);
+export const noteDraft = signal('');
 
 export function TicketReaderDemo() {
-  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={READER_NOTES} blockedReason="" providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={[{ id: 'wireframe', name: 'reader-wireframe.png' }, { id: 'notes', name: 'reader-notes.md' }]} timelineEntries={[{ id: 'started', time: '1 hour ago', text: 'Development started.' }, { id: 'reviewed', time: 'Now', text: 'Reader composition reviewed.' }]} /></section>;
+  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason="" providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={readerAttachments.value} timelineEntries={[{ id: 'started', time: '1 hour ago', text: 'Development started.' }, { id: 'reviewed', time: 'Now', text: 'Reader composition reviewed.' }]} /></section>;
 }
 
 export const MARKDOWN_INITIAL = `## Implementation notes

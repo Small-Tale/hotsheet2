@@ -5,7 +5,7 @@ export default defineConfig(({ command }) => ({
   plugins: command === 'serve'
     ? [devServer({
         entry: 'src/dev-server.ts',
-        exclude: [/^(?!\/(?:ux-demo|__hotsheet\/dev-review)(?:[/?]|$)).*/, ...defaultOptions.exclude],
+        exclude: [/^(?!\/(?:ux-demo|__hotsheet\/(?:dev-review|demo-modified))(?:[/?]|$)).*/, ...defaultOptions.exclude],
       })]
     : [],
   server: { host: '127.0.0.1', port: 4175, strictPort: true },

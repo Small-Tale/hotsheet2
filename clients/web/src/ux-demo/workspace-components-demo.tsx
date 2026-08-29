@@ -7,7 +7,7 @@ import { TicketList } from '../components/ticket-list';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import type { TicketRowProps } from '../components/ticket-row';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
-import { markdownMode, markdownSavedValue, markdownValue, READER_NOTES } from './content-components-demo';
+import { editingNoteId, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 
 export const workspaceMode = signal<WorkspaceViewMode>('list');
@@ -99,7 +99,7 @@ export function TicketInspectorDemo() {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   return <section class="inspector-demo" aria-label="TicketInspector demo">
     {inspectorOpen.value
-      ? <TicketInspector slug={ticket.slug} title={ticket.title} status={inspectorStatus.value} priority={inspectorPriority.value} category={inspectorCategory.value} tags={ticket.tags} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={READER_NOTES} blockedReason="Waiting for design review of the final reader interaction." providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={inspectorTab.value} upNext={ticket.upNext} />
+      ? <TicketInspector slug={ticket.slug} title={ticket.title} status={inspectorStatus.value} priority={inspectorPriority.value} category={inspectorCategory.value} tags={ticket.tags} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason="Waiting for design review of the final reader interaction." providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={inspectorTab.value} upNext={ticket.upNext} />
       : <wa-button data-action="open-ticket-inspector">Open ticket inspector</wa-button>}
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;

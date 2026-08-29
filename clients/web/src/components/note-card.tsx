@@ -1,9 +1,10 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
 import { Activity, CircleAlert, MessageSquareText, RefreshCw } from 'lucide';
 import { LucideIcon } from './lucide-icon';
 import './note-card.css';
 
 export type NoteKind = 'regular' | 'status' | 'feedback_needed' | 'activity';
-export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string }
+export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editing?: boolean; draft?: string }
 
 const presentations = {
   regular: { label: 'Note', icon: MessageSquareText, iconName: 'message-square-text' },
@@ -12,14 +13,14 @@ const presentations = {
   activity: { label: 'Activity', icon: Activity, iconName: 'activity' },
 } as const;
 
-export function NoteCard({ id, kind, author, time, body, title }: NoteCardProps) {
+export function NoteCard({ id, kind, author, time, body, title, editing = false, draft = body }: NoteCardProps) {
   const presentation = presentations[kind];
-  return <article class="note-card" data-component="note-card" data-note-id={id} data-kind={kind}>
+  return <article class={`note-card${editing ? ' note-card--editing' : ''}`} data-component="note-card" data-note-id={id} data-kind={kind} data-action={editing ? undefined : 'edit-note'} title={editing ? undefined : 'Double-click to edit'}>
     <header class="note-card__header">
       <span class="note-card__kind"><LucideIcon icon={presentation.icon} name={presentation.iconName} />{title ?? presentation.label}</span>
       <time>{time}</time>
     </header>
-    <p class="note-card__body">{body}</p>
+    {editing ? <div class="note-card__editor"><textarea name="note-body" data-note-id={id} aria-label="Note body">{draft}</textarea><div><wa-button appearance="plain" data-action="cancel-note-edit" data-note-id={id}>Cancel</wa-button><wa-button appearance="accent" data-action="save-note-edit" data-note-id={id}>Save</wa-button></div></div> : <p class="note-card__body">{body}</p>}
     <footer>{author}</footer>
   </article>;
 }

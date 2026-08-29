@@ -1,4 +1,4 @@
-.select::part(combobox) { min-height: 2.5rem; padding-inline: .55rem .45rem; gap: .5rem; }
+.select::part(combobox) { min-height: 2.5rem; padding-inline: .55rem .45rem; gap: .25rem; }
 .select::part(display-input) { min-width: 0; overflow: hidden; padding: 0; text-overflow: ellipsis; white-space: nowrap; }
 .select::part(start), .select::part(end), .select::part(expand-icon) { margin: 0; }
 .select::part(expand-icon) { transform: scale(.5); }

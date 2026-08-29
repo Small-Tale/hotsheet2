@@ -13,13 +13,14 @@ import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from 
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { LucideIcon } from '../components/lucide-icon';
-import { Component, Network } from 'lucide';
+import { Activity, AppWindow, ArrowDownToLine, ArrowUpFromLine, Badge, BookOpen, ChartNoAxesColumnIncreasing, Columns3, Command, FilePenLine, Filter, FolderGit2, GitBranch, Info, Kanban, LayoutDashboard, List, ListPlus, ListTree, Menu, MessageSquareText, PanelLeft, PanelRight, Paperclip, Play, Search, Settings, Tags, Terminal, Text, Wrench, type IconNode } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
 import { ToolbarDemo } from './toolbar-demo';
 import { SelectDemo } from './select-demo';
+import { Select } from '../components/select';
 import { MenuItemDemo } from './menu-item-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItem } from '../components/menu-item';
@@ -29,22 +30,49 @@ import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo,
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
-import { cancelMarkdown, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
+import { cancelMarkdown, editingNoteId, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, noteDemoNotes, noteDraft, NoteCardDemo, readerAttachments, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
 const fromUrl = () => new URL(location.href).searchParams.get('component') ?? defaultDemo;
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
+const devReviewOn = signal(import.meta.env.DEV && new URL(location.href).searchParams.get('dev-review') === '1');
+const demoModified = signal<Record<string, string>>({});
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
 let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; edge: ResizableRegionEdge; startPoint: number; startSize: number } | undefined;
+let devReviewController: { destroy(): void } | undefined;
 const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer', 'app-shell'].includes(selectedId.value);
 
 function demoLink(item: DemoDefinition) {
   const selected = item.id === selectedId.value;
-  return <li><MenuItem className={item.implemented ? 'catalog-link' : 'catalog-link catalog-link--planned'} label={item.name} icon={<LucideIcon icon={Component} name="component" />} trailing={<small>{item.implemented ? 'Demo' : item.phase.replace('-', ' ')}</small>} action="select-demo" itemId={item.id} selected={selected} /></li>;
+  const icon = catalogIcon(item.id);
+  const modified = demoModified.value[item.id];
+  return <li><MenuItem className={item.implemented ? 'catalog-link' : 'catalog-link catalog-link--planned'} label={item.name} icon={<LucideIcon icon={icon.icon} name={icon.name} />} trailing={modified ? <small title={`Last modified ${new Date(modified).toLocaleString()}`}>{relativeModified(modified)}</small> : undefined} action="select-demo" itemId={item.id} selected={selected} /></li>;
+}
+
+function relativeModified(value: string): string {
+  const elapsed = Date.now() - new Date(value).getTime();
+  if (elapsed < 60_000) return 'Now';
+  if (elapsed < 3_600_000) return `${Math.floor(elapsed / 60_000)}m`;
+  if (elapsed < 86_400_000) return `${Math.floor(elapsed / 3_600_000)}h`;
+  if (elapsed < 604_800_000) return `${Math.floor(elapsed / 86_400_000)}d`;
+  return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function catalogIcon(id: string): { icon: IconNode; name: string } {
+  const exact: Record<string, { icon: IconNode; name: string }> = {
+    'app-shell': { icon: AppWindow, name: 'app-window' }, 'project-sidebar': { icon: PanelLeft, name: 'panel-left' }, 'project-summary': { icon: ChartNoAxesColumnIncreasing, name: 'chart-no-axes-column-increasing' },
+    'repository-summary': { icon: GitBranch, name: 'git-branch' }, 'view-navigation': { icon: ListTree, name: 'list-tree' }, 'command-navigation': { icon: Command, name: 'command' }, 'drive-control': { icon: Play, name: 'play' },
+    'workspace-header': { icon: LayoutDashboard, name: 'layout-dashboard' }, 'page-header': { icon: Text, name: 'text' }, 'project-tab': { icon: FolderGit2, name: 'folder-git-2' }, 'project-tabs': { icon: Columns3, name: 'columns-3' },
+    'quick-ticket-composer': { icon: ListPlus, name: 'list-plus' }, 'ticket-list': { icon: List, name: 'list' }, 'ticket-row': { icon: Menu, name: 'menu' }, 'ticket-board': { icon: Kanban, name: 'kanban' }, 'ticket-board-column': { icon: Columns3, name: 'columns-3' },
+    'ticket-inspector': { icon: PanelRight, name: 'panel-right' }, 'ticket-info-panel': { icon: Info, name: 'info' }, 'ticket-timeline': { icon: Activity, name: 'activity' }, 'ticket-attachments': { icon: Paperclip, name: 'paperclip' },
+    'ticket-reader': { icon: BookOpen, name: 'book-open' }, 'markdown-editor': { icon: FilePenLine, name: 'file-pen-line' }, 'note-card': { icon: MessageSquareText, name: 'message-square-text' }, 'tag-chip': { icon: Tags, name: 'tags' },
+    'global-search': { icon: Search, name: 'search' }, 'filter-chip': { icon: Filter, name: 'filter' }, 'status-badge': { icon: Badge, name: 'badge' }, 'terminal-dashboard': { icon: Terminal, name: 'terminal' }, 'settings-window': { icon: Settings, name: 'settings' },
+  };
+  return exact[id] ?? (id.includes('command') ? { icon: Command, name: 'command' } : id.includes('attachment') ? { icon: Paperclip, name: 'paperclip' } : id.includes('note') ? { icon: MessageSquareText, name: 'message-square-text' } : { icon: Wrench, name: 'wrench' });
 }
 
 function demoNavigation(category: DemoCategory) {
@@ -95,22 +123,11 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
   const uses = (item.uses ?? []).map(findDemo).filter((demo): demo is DemoDefinition => Boolean(demo));
   const usedBy = demosUsing(item.id);
   if (uses.length === 0 && usedBy.length === 0) return null;
-  const items = (demos: DemoDefinition[]) => demos.map(demo =>
-    <wa-dropdown-item data-demo-id={demo.id} value={demo.id}>
-      {demo.name}<small slot="details">{demo.implemented ? 'Demo' : demo.phase.replace('-', ' ')}</small>
-    </wa-dropdown-item>
-  );
-  return <wa-dropdown class="demo-relationships" placement="top-start">
-    <wa-button slot="trigger" appearance="outlined" with-caret>
-      <span slot="start" class="demo-relationships__icon"><LucideIcon icon={Network} name="network" /></span>
-      Related components
-    </wa-button>
-    {uses.length > 0 && <h2>Uses</h2>}
-    {items(uses)}
-    {uses.length > 0 && usedBy.length > 0 && <wa-divider></wa-divider>}
-    {usedBy.length > 0 && <h2>Used by</h2>}
-    {items(usedBy)}
-  </wa-dropdown>;
+  const choices = [
+    ...uses.map(demo => ({ value: demo.id, label: `Uses · ${demo.name}`, icon: ArrowDownToLine, iconName: 'arrow-down-to-line' })),
+    ...usedBy.map(demo => ({ value: demo.id, label: `Used by · ${demo.name}`, icon: ArrowUpFromLine, iconName: 'arrow-up-from-line' })),
+  ];
+  return <Select className="demo-relationships" name="related-component" value="" label="Related components" placeholder="Choose a related component" choices={choices} />;
 }
 
 function DemoApp() {
@@ -119,7 +136,7 @@ function DemoApp() {
   return (
     <main class={settingsOpen.value ? 'demo-shell demo-shell--settings-open' : 'demo-shell'}>
       <aside class="demo-master" aria-label="Component catalog">
-        <header><p class="eyebrow">Hot Sheet</p><h1>UX components</h1><p>Production components with deterministic development support.</p></header>
+        <header><p class="eyebrow">Hot Sheet</p><h1>UX components</h1><p>Production components with deterministic development support.</p>{import.meta.env.DEV && <button type="button" class="demo-master__review-toggle" data-action="toggle-dev-review" aria-pressed={String(devReviewOn.value)}>Dev Review {devReviewOn.value ? 'On' : 'Off'}</button>}</header>
         <nav>{demoCatalog.map(demoNavigation)}</nav>
       </aside>
       <article class="demo-detail">
@@ -140,8 +157,12 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
-if (import.meta.env.DEV && new URL(location.href).searchParams.get('dev-review') === '1') {
-  void import('../dev-review').then(({ installDevReview }) => installDevReview({
+if (import.meta.env.DEV) void fetch('/__hotsheet/demo-modified').then(response => response.json()).then(value => { demoModified.value = value as Record<string, string>; });
+const setDevReview = async (active: boolean) => {
+  devReviewController?.destroy(); devReviewController = undefined;
+  devReviewOn.value = active;
+  const url = new URL(location.href); if (active) url.searchParams.set('dev-review', '1'); else url.searchParams.delete('dev-review'); history.replaceState(null, '', url);
+  if (active) devReviewController = await import('../dev-review').then(({ installDevReview }) => installDevReview({
     submit: async submission => {
       const response = await fetch('/__hotsheet/dev-review/tickets', { method: 'POST', headers: { 'content-type': 'application/json', 'x-hotsheet-dev-review': '1' }, body: JSON.stringify(submission) });
       const result = await response.json() as { slug?: string; error?: string };
@@ -149,7 +170,8 @@ if (import.meta.env.DEV && new URL(location.href).searchParams.get('dev-review')
       return { slug: result.slug };
     },
   }));
-}
+};
+if (devReviewOn.value) void setDevReview(true);
 
 function selectDemo(id: string, push = true): void {
   if (!findDemo(id)) return;
@@ -160,8 +182,10 @@ function selectDemo(id: string, push = true): void {
 }
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => { event.preventDefault(); selectDemo((target as HTMLElement).dataset.demoId!); });
+delegate(root, 'change', '[name="related-component"]', (_event, target) => { selectDemo((target as FormControl).value); });
 delegate(root, 'click', '[data-action="select-demo"]', (_event, target) => { selectDemo((target as HTMLElement).dataset.itemId!); });
 delegate(root, 'click', '[data-action="toggle-settings"]', () => { settingsOpen.value = !settingsOpen.value; });
+delegate(root, 'click', '[data-action="toggle-dev-review"]', () => { void setDevReview(!devReviewOn.value); });
 delegate(root, 'click', '[data-action="open-repository-status"]', () => { sidebarEvent.value = 'Repository status requested.'; });
 delegate(root, 'click', '[data-action="add-view"]', () => { sidebarEvent.value = 'New view editor requested.'; });
 delegate(root, 'click', '[data-action="select-view"]', (_event, target) => { const id = (target as HTMLElement).dataset.itemId!; selectedViewId.value = id; sidebarEvent.value = `${sidebarViews.find(view => view.id === id)?.label ?? 'View'} selected.`; });
@@ -321,15 +345,28 @@ delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   toggleCollectionTicketUpNext(ticket.slug);
 });
 delegate(root, 'click', '[data-action="add-ticket-note"]', () => { recordCollectionEvent('Note composer requested'); });
+delegate(root, 'dblclick', '[data-action="edit-note"]', (_event, target) => { const id = (target as HTMLElement).dataset.noteId!; editingNoteId.value = id; noteDraft.value = readerNotes.value.find(note => note.id === id)?.body ?? noteDemoNotes.value.find(note => note.id === id)?.body ?? ''; queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus()); });
+delegate(root, 'input', '[name="note-body"]', (_event, target) => { noteDraft.value = (target as FormControl).value; });
+delegate(root, 'click', '[data-action="cancel-note-edit"]', () => { editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit cancelled'); });
+delegate(root, 'click', '[data-action="save-note-edit"]', () => { const id = editingNoteId.value; if (id) { readerNotes.value = readerNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); noteDemoNotes.value = noteDemoNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); } editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit saved'); });
 delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { recordCollectionEvent('Ticket reader requested'); selectDemo('ticket-reader'); });
 delegate(root, 'input', '[name="markdown-source"]', (_event, target) => { markdownValue.value = (target as FormControl).value; markdownEvent.value = 'Draft updated.'; });
-delegate(root, 'click', '[data-action="edit-markdown"]', () => { markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
+delegate(root, 'dblclick', '[data-action="edit-markdown"]', () => { markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'keydown', '[data-action="edit-markdown"]', (event) => { if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return; event.preventDefault(); markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => { markdownExpanded.value = !markdownExpanded.value; markdownEvent.value = markdownExpanded.value ? 'Expanded editor opened.' : 'Inline editor restored.'; });
 delegate(root, 'click', '[data-action="save-markdown"]', () => { saveMarkdown(); });
 delegate(root, 'click', '[data-action="cancel-markdown-edit"]', () => { cancelMarkdown(); });
 delegate(root, 'click', '[data-action="edit-ticket-reader"]', () => { selectDemo('markdown-editor'); });
 delegate(root, 'click', '[data-action="close-ticket-reader"]', () => { selectDemo('ticket-info-panel'); });
+const addMockAttachments = (files: FileList | File[], target: HTMLElement) => {
+  const added = Array.from(files).map((file, index) => ({ id: `added-${Date.now()}-${index}`, name: file.name }));
+  if (selectedId.value === 'ticket-reader' || target.closest('[data-component="ticket-attachments"]')) readerAttachments.value = [...readerAttachments.value, ...added];
+  recordCollectionEvent(`${added.length} attachment${added.length === 1 ? '' : 's'} added to ${target.closest<HTMLElement>('[data-ticket-slug]')?.dataset.ticketSlug ?? 'ticket'}`);
+};
+delegate(root, 'change', 'input[name="ticket-attachments"]', (_event, target) => { const input = target as HTMLInputElement; if (input.files?.length) addMockAttachments(input.files, input); input.value = ''; });
+delegate(root, 'dragover', '[data-attachment-drop-target="true"]', (event, target) => { event.preventDefault(); (target as HTMLElement).dataset.draggingAttachment = 'true'; });
+delegate(root, 'dragleave', '[data-attachment-drop-target="true"]', (_event, target) => { delete (target as HTMLElement).dataset.draggingAttachment; });
+delegate(root, 'drop', '[data-attachment-drop-target="true"]', (event, target) => { event.preventDefault(); const element = target as HTMLElement; delete element.dataset.draggingAttachment; const files = (event as DragEvent).dataTransfer?.files; if (files?.length) addMockAttachments(files, element); });
 delegate(root, 'input', '[data-settings="ticket-list-row"] wa-input', (_event, target) => {
   const control = target as FormControl;
   if (control.getAttribute('name') === 'title') ticketRowSettings.title.value = control.value;

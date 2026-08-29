@@ -3,6 +3,12 @@ import { expect, test } from '@playwright/test';
 test('navigates the catalog and preserves URL-addressable selection', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
+  const reviewToggle = page.getByRole('button', { name: 'Dev Review Off' });
+  await reviewToggle.click();
+  await expect(page.getByRole('button', { name: 'Dev Review On' })).toBeVisible();
+  await expect(page.locator('.hs-dev-review')).toBeVisible();
+  await page.getByRole('button', { name: 'Dev Review On' }).click();
+  await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   const catalog = page.getByRole('navigation');
   await expect(catalog.locator('[data-item-id="global-search"]')).toHaveCSS('color', 'rgb(154, 156, 165)');
   await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
@@ -23,14 +29,12 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect.poll(() => page.getByRole('complementary', { name: 'Component catalog' }).evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(catalogTop, 0);
   await expect(page.getByRole('complementary', { name: 'Component catalog' }).getByText('Uses')).toHaveCount(0);
   const relationships = page.locator('.demo-relationships');
-  await expect(relationships.getByRole('button', { name: /Related components/ })).toBeVisible();
-  await relationships.getByRole('button', { name: /Related components/ }).click();
-  await expect(relationships.getByRole('heading', { name: 'Uses' })).toBeVisible();
-  await relationships.locator('wa-dropdown-item', { hasText: 'TagChip' }).click();
+  await expect(relationships).toBeVisible();
+  await expect(relationships.locator('wa-option', { hasText: 'Uses · TagChip' })).toHaveCount(1);
+  await relationships.evaluate((node: HTMLElement & { value: string }) => { node.value = 'tag-chip'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(page).toHaveURL('/ux-demo?component=tag-chip');
-  await relationships.getByRole('button', { name: /Related components/ }).click();
-  await expect(relationships.getByRole('heading', { name: 'Used by' })).toBeVisible();
-  await relationships.locator('wa-dropdown-item', { hasText: 'TicketRow' }).click();
+  await expect(page.locator('.demo-relationships wa-option', { hasText: 'Used by · TicketRow' })).toHaveCount(1);
+  await page.locator('.demo-relationships').evaluate((node: HTMLElement & { value: string }) => { node.value = 'ticket-row'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
 });
@@ -43,6 +47,9 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   });
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-row&dev-review=1');
+  const captureTarget = page.locator('.demo-master [data-item-id="ticket-row"]');
+  await captureTarget.scrollIntoViewIfNeeded();
+  const markerBox = (await captureTarget.boundingBox())!;
   const tool = page.locator('.hs-dev-review');
   await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
   await tool.getByRole('button', { name: 'Feedback' }).click();
@@ -54,7 +61,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await page.keyboard.down('Alt');
   await expect(page.locator('html')).toHaveClass(/hs-dev-review--crosshair/);
   await expect(page.locator('body')).toHaveCSS('cursor', 'crosshair');
-  await page.mouse.move(80, 320); await page.mouse.down(); await page.mouse.move(300, 560); await page.mouse.up();
+  await page.mouse.move(markerBox.x, markerBox.y); await page.mouse.down(); await page.mouse.move(markerBox.x + markerBox.width, markerBox.y + markerBox.height); await page.mouse.up();
   await page.keyboard.up('Alt');
   await expect(page.locator('html')).not.toHaveClass(/hs-dev-review--crosshair/);
   const selection = tool.locator('.hs-dev-review__rect');
@@ -63,8 +70,8 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   const beforeScroll = await selection.boundingBox();
   const scroller = page.locator('.demo-master');
   const initialScroll = await scroller.evaluate(node => node.scrollTop);
-  await scroller.evaluate(node => node.scrollBy(0, 80));
-  await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeGreaterThan(initialScroll);
+  await scroller.evaluate(node => node.scrollBy(0, -80));
+  await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeLessThan(initialScroll);
   const scrolled = await selection.boundingBox();
   const scrollDelta = await scroller.evaluate((node, start) => node.scrollTop - start, initialScroll);
   expect(scrolled!.y).toBeCloseTo(beforeScroll!.y - scrollDelta, 0);
@@ -110,6 +117,11 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
   await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
+  const capturedPixels = await dialog.getByRole('img', { name: 'Captured region 1 preview' }).evaluate(async image => {
+    if (!(image as HTMLImageElement).complete) await new Promise(resolve => image.addEventListener('load', resolve, { once: true }));
+    const canvas = document.createElement('canvas'); canvas.width = (image as HTMLImageElement).naturalWidth; canvas.height = (image as HTMLImageElement).naturalHeight; const context = canvas.getContext('2d')!; context.drawImage(image as HTMLImageElement, 0, 0); const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data; let green = 0; for (let index = 0; index < pixels.length; index += 4) if (pixels[index] === 12 && pixels[index + 1] === 200 && pixels[index + 2] === 34) green += 1; return { center: [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data], green, width: canvas.width, height: canvas.height };
+  });
+  expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([219, 234, 254]);
   await dialog.getByRole('button', { name: 'Review captured region 2' }).click();
   await expect(dialog.getByRole('img', { name: 'Captured region 2 preview' })).toBeVisible();
   const attachmentInput = dialog.getByLabel('Add attachments');
@@ -333,6 +345,15 @@ test('presents note kinds and round-trips reader and Markdown editor composition
     await expect(note).toHaveAttribute('data-kind', kind);
     await expect(note.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   }
+  const standaloneNote = notes.filter({ has: page.locator('[data-lucide="message-square-text"]') });
+  await standaloneNote.dblclick();
+  await standaloneNote.getByRole('textbox', { name: 'Note body' }).fill('Persisted standalone note');
+  await standaloneNote.getByRole('button', { name: 'Save' }).click();
+  await expect(standaloneNote).toContainText('Persisted standalone note');
+  await standaloneNote.dblclick();
+  await standaloneNote.getByRole('textbox', { name: 'Note body' }).fill('Discard this');
+  await standaloneNote.getByRole('button', { name: 'Cancel' }).click();
+  await expect(standaloneNote).toContainText('Persisted standalone note');
 
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
@@ -341,10 +362,29 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(reader.locator('[data-component="note-card"]')).toHaveCount(3);
   await expect(reader.getByRole('heading', { name: /Notes/ }).locator('span')).toHaveText('3');
   await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
+  const readerWidth = await reader.boundingBox();
+  const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
+  expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * .9);
+  const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
+  await editableNote.dblclick();
+  await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
+  await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Edited note body');
+  await editableNote.getByRole('button', { name: 'Save' }).click();
+  await expect(editableNote).toContainText('Edited note body');
+  await editableNote.dblclick();
+  await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Discarded note body');
+  await editableNote.getByRole('button', { name: 'Cancel' }).click();
+  await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toHaveCount(0);
+  await expect(editableNote).toContainText('Edited note body');
   await reader.getByRole('button', { name: 'Attachments' }).click();
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('reader-wireframe.png');
+  await reader.getByLabel('Browse and add attachments').setInputFiles({ name: 'browser-added.txt', mimeType: 'text/plain', buffer: Buffer.from('added') });
+  await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('browser-added.txt');
+  await reader.locator('[data-component="ticket-inspector"]').evaluate(node => { const transfer = new DataTransfer(); transfer.items.add(new File(['drop'], 'dropped.txt', { type: 'text/plain' })); node.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer })); });
+  await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('dropped.txt');
   await reader.getByRole('button', { name: 'Info' }).click();
-  await reader.getByRole('button', { name: 'Edit Ticket details' }).click();
+  await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgb(248, 249, 251)');
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(readerSource).toBeFocused();
   await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
@@ -355,7 +395,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
 
   const editor = page.locator('[data-component="markdown-editor"]');
   await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Implementation notes');
-  await editor.getByRole('button', { name: 'Edit Markdown content' }).click();
+  await editor.getByRole('button', { name: 'Edit Markdown content' }).dblclick();
   const source = editor.getByRole('textbox', { name: 'Markdown content' });
   await expect(source).toHaveValue(/Implementation notes/);
   await source.fill('## Revised goal\nA preserved draft.');
@@ -366,7 +406,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await editor.getByRole('button', { name: 'Save' }).click();
   await expect(editor).toHaveAttribute('data-mode', 'preview');
   await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Revised goal');
-  await editor.getByRole('button', { name: 'Edit Markdown content' }).click();
+  await editor.getByRole('button', { name: 'Edit Markdown content' }).dblclick();
   await editor.getByRole('textbox', { name: 'Markdown content' }).fill('Temporary edit');
   await editor.getByRole('button', { name: 'Cancel' }).click();
   await expect(editor).toHaveAttribute('data-mode', 'preview');
@@ -397,7 +437,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(listStar).not.toHaveClass(/active/);
   await expect(page.getByText('HS2-R76MMW removed from Up Next')).toBeVisible();
 
-  await page.getByRole('navigation').getByRole('button', { name: 'TicketBoard Demo', exact: true }).click();
+  await page.locator('.demo-master [data-item-id="ticket-board"]').click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('region', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
@@ -656,6 +696,10 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(reopened.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await expect(reopened.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(reopened.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
+  await expect(reopened.getByRole('button', { name: 'Open ticket reader' })).toBeVisible();
+  await reopened.getByRole('button', { name: 'Open ticket reader' }).click();
+  await expect(page).toHaveURL('/ux-demo?component=ticket-reader');
+  await expect(page.locator('[data-component="ticket-reader"]')).toBeVisible();
 });
 
 test('renders standalone ticket metadata and inspector-section demos', async ({ page }) => {
@@ -939,11 +983,12 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__busy');
   const spinnerAlignment = await busySpinner.evaluate(node => {
-    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect();
-    return { x: Math.abs((outer.left + outer.width / 2) - (icon.left + icon.width / 2)), y: Math.abs((outer.top + outer.height / 2) - (icon.top + icon.height / 2)) };
+    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect(); const tab = node.closest('[data-component="project-tab"]')!.getBoundingClientRect();
+    return { x: Math.abs((outer.left + outer.width / 2) - (icon.left + icon.width / 2)), y: Math.abs((outer.top + outer.height / 2) - (icon.top + icon.height / 2)), tabY: Math.abs((outer.top + outer.height / 2) - (tab.top + tab.height / 2)) };
   });
   expect(spinnerAlignment.x).toBeLessThan(1);
   expect(spinnerAlignment.y).toBeLessThan(1);
+  expect(spinnerAlignment.tabY).toBeLessThan(1);
   for (const name of await tabBar.locator('.project-tab__name').all()) {
     await expect(name).not.toHaveCSS('text-overflow', 'ellipsis');
   }
@@ -1047,10 +1092,19 @@ test('exercises the application-shell component slice and responsive composition
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
   await expect(shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]')).toHaveCount(1);
+  await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
+  await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   const shellComposer = shell.locator('.app-shell__composer');
   expect((await shellComposer.boundingBox())!.y).toBeLessThan((await shell.locator('.app-shell__workspace').boundingBox())!.y);
   await shellComposer.getByRole('button', { name: /New ticket/ }).click();
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
+  const composerControlHeights = await shellComposer.evaluate(node => {
+    const input = node.querySelector('wa-input')!.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!.getBoundingClientRect();
+    const select = node.querySelector('wa-select')!.shadowRoot!.querySelector<HTMLElement>('[part~="combobox"]')!.getBoundingClientRect();
+    return { input: input.height, select: select.height };
+  });
+  expect(composerControlHeights.input).toBeCloseTo(composerControlHeights.select, 0);
   await shellComposer.getByRole('button', { name: 'Cancel' }).click();
   await shellComposer.getByRole('button', { name: /New ticket/ }).click();
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();

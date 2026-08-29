@@ -6,6 +6,11 @@
 .ticket-inspector__content h2 { margin: 0; color: #737580; font-size: .76rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .ticket-inspector__content p { margin: 0; color: #44464e; font-size: .85rem; line-height: 1.5; }
 .ticket-inspector__details { min-height: 3rem; cursor: text; }
+.ticket-inspector__details-section { padding: .75rem; border: 1px solid #dfe1e6; border-radius: .65rem; background: #f8f9fb; }
+.ticket-inspector__reader-button { display: inline-flex; align-items: center; gap: .3rem; height: 2rem; min-height: 2rem; padding: 0 .5rem; border: 0; border-radius: 999px; color: var(--wa-color-text-normal); background: transparent; cursor: pointer; }
+.ticket-inspector__reader-button:hover { background: var(--wa-color-neutral-fill-quiet); }
+.ticket-inspector__reader-button span { font-size: .7rem; }
+.ticket-inspector__reader-button svg { display: block; width: .9rem; height: .9rem; flex: none; }
 .ticket-inspector__details:focus-visible { border-radius: .35rem; outline: 2px solid #3b82f6; outline-offset: 3px; }
 .ticket-inspector__blocked { padding: .7rem; border-radius: .55rem; background: #eceef2; }
 .ticket-inspector__provenance { display: flex; padding-top: .2rem; color: #8a8d96; justify-content: space-between; gap: .75rem; font-size: .68rem; }
@@ -17,3 +22,10 @@
 .ticket-inspector__timeline time { color: #858792; font-size: .68rem; }
 .ticket-inspector__attachment { display: flex; padding: .65rem; border-radius: .45rem; background: #f1f2f5; align-items: center; gap: .5rem; font-size: .8rem; }
 .ticket-inspector__attachment svg { width: .9rem; height: .9rem; }
+.ticket-attachments__browse { display: inline-flex; min-height: 2rem; padding: 0 .5rem; border-radius: .4rem; color: #2563eb; cursor: pointer; align-items: center; gap: .3rem; font-size: .72rem; font-weight: 650; }
+.ticket-attachments__browse:hover { background: #eaf2ff; }
+.ticket-attachments__browse svg { width: .85rem; height: .85rem; }
+.ticket-attachments__browse input, .ticket-attachments__drop input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.ticket-attachments__drop { display: grid; min-height: 5rem; padding: .75rem; border: 1px dashed #b9c0cc; border-radius: .55rem; color: #717581; cursor: pointer; place-items: center; align-content: center; gap: .35rem; font-size: .76rem; }
+.ticket-attachments__drop:hover, [data-dragging-attachment="true"] .ticket-attachments__drop, [data-dragging-attachment="true"].ticket-inspector, [data-dragging-attachment="true"].ticket-list-row { border-color: #3b82f6; background: #eff6ff; }
+.ticket-attachments__drop svg { width: 1rem; height: 1rem; color: #3b82f6; }

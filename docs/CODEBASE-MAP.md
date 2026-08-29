@@ -33,11 +33,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
     src/dev-review/          #   Content-anchored capture/delete overlay, upload/removal review UI, and single-commit local-dev CLI submission adapter
     src/components/          #   Production domain UI components, including shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
-    src/ux-demo/             #   Categorized master/detail catalog, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
+    src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app
-    tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts plus dev-review draw/resize/capture/review/submit flow
+    tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts plus pixel-verified dev-review draw/resize/scrolled-capture/review/submit flow
   crates/
     hotsheet-extsync/          # Direct authoritative external providers (network deps, no terminals)
       src/github.rs            #   GitHub Issues mapping, pagination/incremental reads, webhook invalidation, errors/auth/concurrency, fake + opt-in live tests (HS2-JAXS4Z)

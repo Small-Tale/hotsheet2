@@ -37,6 +37,16 @@ describe('UX demo catalog', () => {
     expect((await createDevApp(false).request('/ux-demo')).status).toBe(404);
   });
 
+  it('reports dependency-aware modification times only in development', async () => {
+    const response = await createDevApp(true).request('/__hotsheet/demo-modified');
+    expect(response.status).toBe(200);
+    const modified = await response.json() as Record<string, string>;
+    expect(Date.parse(modified['app-shell'])).not.toBeNaN();
+    expect(Date.parse(modified['ticket-reader'])).not.toBeNaN();
+    expect(modified['attachment-list']).toBeUndefined();
+    expect((await createDevApp(false).request('/__hotsheet/demo-modified')).status).toBe(404);
+  });
+
   it('resets every canonical TagChip demo setting', () => {
     tagChipSettings.label.value = 'changed';
     tagChipSettings.variant.value = 'danger';

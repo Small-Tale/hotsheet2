@@ -74,6 +74,7 @@ export function TicketRow(raw: TicketRowProps) {
         class={`ticket-list-row${props.selected ? ' ticket-list-row--selected' : ''}`}
         data-component="ticket-list-row"
         data-ticket-slug={props.slug}
+        data-attachment-drop-target="true"
         data-selected={String(props.selected)}
         data-busy={String(props.busy)}
         data-action="select-ticket-row"

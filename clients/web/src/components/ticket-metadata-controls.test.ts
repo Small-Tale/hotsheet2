@@ -34,5 +34,8 @@ describe('ticket metadata controls and inspector panels', () => {
     const attachments = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }] }));
     expect(attachments.match(/data-attachment-id=/g)).toHaveLength(1);
     expect(attachments).toContain('1 attachment total');
+    expect(attachments).toContain('data-attachment-drop-target="true"');
+    expect(attachments).toContain('aria-label="Browse and add attachments"');
+    expect(attachments).toContain('aria-label="Drop or browse attachments"');
   });
 });

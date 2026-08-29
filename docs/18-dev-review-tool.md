@@ -28,8 +28,11 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   nested-container scrolling moves the overlay with that content, including when the
   rectangle was first drawn after the interface had already scrolled.
 - Creation, movement, and resizing debounce PNG recapture through `html2canvas`.
-  Pointer movement updates the existing rectangle node without rebuilding handles;
-  pending rectangles share one viewport render and stale async results are discarded.
+  Each capture renders its bounded document region directly at CSS-pixel scale using
+  the current window scroll offset; this avoids device-pixel-ratio crop drift and
+  keeps scrolled and unscrolled captures aligned with their rectangles. Pointer
+  movement updates the existing rectangle node without rebuilding handles and stale
+  async results are discarded.
   Review-tool UI is excluded from every capture.
 - `New Ticket` opens its modal immediately, prepares any uncached PNGs asynchronously,
   then presents every capture as a selectable thumbnail and large preview.
@@ -64,6 +67,8 @@ Open `/ux-demo?dev-review=1` (additional query parameters are fine) while runnin
 Vite development server. The UX demo adapter posts to
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.
+The catalog sidebar also exposes a development-only `Dev Review On/Off` toggle that
+updates the same query-backed state, so reviewers do not need to edit the URL.
 
 The browser entry point is guarded by Vite's compile-time `import.meta.env.DEV` value
 and loads the tool through a dynamic import only after the query flag is present.
