@@ -12,7 +12,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use hotsheet_model::{Attachment, ParseError, Ticket, Timestamp, Ulid, parse_file, to_file_string};
 use serde::{Deserialize, Serialize};
@@ -63,6 +63,7 @@ pub enum StoreError {
 #[derive(Debug, Clone)]
 pub struct FsStore {
     root: PathBuf,
+    push_after_commit: bool,
 }
 
 impl FsStore {
@@ -73,7 +74,10 @@ impl FsStore {
         fs::create_dir_all(root.join("tickets"))?;
         let json = serde_json::to_string_pretty(meta)?;
         fs::write(root.join(STORE_METADATA_FILE), format!("{json}\n"))?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            push_after_commit: true,
+        })
     }
 
     /// Open an existing store, erroring if `root` is not a Hot Sheet store.
@@ -82,7 +86,18 @@ impl FsStore {
         if !root.join(STORE_METADATA_FILE).is_file() {
             return Err(StoreError::NotAStore(root));
         }
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            push_after_commit: true,
+        })
+    }
+
+    /// Let an owning service publish commits itself (for example, the server's
+    /// coalescing fetch/rebase/push loop) instead of launching a per-write push.
+    #[must_use]
+    pub fn with_deferred_push(mut self) -> Self {
+        self.push_after_commit = false;
+        self
     }
 
     /// The store root directory.
@@ -107,11 +122,15 @@ impl FsStore {
 
     /// Write a ticket file (creating its shard directory), returning the path.
     pub fn write_ticket(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
+        let mut normalized = ticket.clone();
+        if !normalized.status.is_active() {
+            normalized.up_next = false;
+        }
         let path = self.ticket_path(&ticket.id);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&path, to_file_string(ticket))?;
+        fs::write(&path, to_file_string(&normalized))?;
         Ok(path)
     }
 
@@ -134,7 +153,7 @@ impl FsStore {
         Ok(path)
     }
 
-    /// Stage everything, commit with `message`, and best-effort push. No-op when the
+    /// Stage everything, commit with `message`, and launch a best-effort push. No-op when the
     /// store isn't a git repo or `HOTSHEET_NO_AUTOCOMMIT` is set. Returns whether a
     /// commit was actually made. Falls back to a bot identity when the repo has none
     /// configured, so a fresh/CI checkout still commits.
@@ -164,10 +183,25 @@ impl FsStore {
         let mut commit = ident.to_vec();
         commit.extend_from_slice(&["commit", "-q", "-m", message]);
         git(&self.root, &commit)?;
-        // Push is best-effort: offline / no remote / rejected non-fast-forward are fine
-        // here (the aggressive fetch/rebase/push engine is HS2-19).
-        if git_stdout(&self.root, &["remote"]).is_some_and(|s| !s.trim().is_empty()) {
-            let _ = git(&self.root, &["push", "--quiet"]);
+        // Remote publication must not hold a local mutation open for network latency.
+        // Server-owned stores defer to their coalescing sync loop; headless callers launch
+        // a child and a lightweight reaper. The child survives a short-lived CLI process.
+        if self.push_after_commit
+            && git_stdout(&self.root, &["remote"]).is_some_and(|s| !s.trim().is_empty())
+        {
+            if let Ok(mut child) = Command::new("git")
+                .arg("-C")
+                .arg(&self.root)
+                .args(["push", "--quiet"])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+            {
+                std::thread::spawn(move || {
+                    let _ = child.wait();
+                });
+            }
         }
         Ok(true)
     }
@@ -487,6 +521,16 @@ mod tests {
     }
 
     #[test]
+    fn write_normalizes_up_next_off_inactive_statuses() {
+        let (_dir, store) = temp_store();
+        let mut ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        ticket.status = hotsheet_model::Status::Archive;
+        ticket.up_next = true;
+        store.write_ticket(&ticket).unwrap();
+        assert!(!store.read_ticket(&ticket.id).unwrap().up_next);
+    }
+
+    #[test]
     fn list_returns_all_tickets_sorted_and_ignores_non_md() {
         let (_dir, store) = temp_store();
         let a = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
@@ -616,5 +660,53 @@ mod tests {
             "1",
             "an unchanged re-write must not add a commit"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn committing_write_does_not_wait_for_a_slow_remote_push() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::time::{Duration, Instant};
+
+        let (dir, store) = temp_store();
+        let remote = tempfile::tempdir().unwrap();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        git(dir.path(), &["config", "user.name", "Hot Sheet Test"]).unwrap();
+        git(dir.path(), &["config", "user.email", "test@localhost"]).unwrap();
+        git(dir.path(), &["add", "-A"]).unwrap();
+        git(dir.path(), &["commit", "-q", "-m", "initial"]).unwrap();
+        git(remote.path(), &["init", "--bare", "-q"]).unwrap();
+        git(
+            dir.path(),
+            &["remote", "add", "origin", remote.path().to_str().unwrap()],
+        )
+        .unwrap();
+        git(dir.path(), &["push", "-q", "-u", "origin", "HEAD"]).unwrap();
+
+        let hook = remote.path().join("hooks/pre-receive");
+        fs::write(&hook, "#!/bin/sh\nsleep 1\n").unwrap();
+        let mut permissions = fs::metadata(&hook).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&hook, permissions).unwrap();
+
+        let started = Instant::now();
+        store
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+        assert!(
+            started.elapsed() < Duration::from_millis(750),
+            "a local mutation waited for remote publication"
+        );
+
+        let local_head = git_stdout(dir.path(), &["rev-parse", "HEAD"]).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(4);
+        loop {
+            let remote_head = git_stdout(remote.path(), &["rev-parse", "HEAD"]);
+            if remote_head.as_deref().map(str::trim) == Some(local_head.trim()) {
+                break;
+            }
+            assert!(Instant::now() < deadline, "background push never published");
+            std::thread::sleep(Duration::from_millis(50));
+        }
     }
 }
