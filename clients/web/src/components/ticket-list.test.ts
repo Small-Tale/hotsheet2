@@ -10,6 +10,8 @@ describe('TicketList', () => {
     const markup = String(TicketList({ tickets: [ticket, { ...ticket, slug: 'HS2-NEXT' }], label: 'Up Next tickets' }));
     expect(markup).toContain('class="ticket-list"');
     expect(markup).toContain('aria-label="Up Next tickets"');
+    expect(markup).toContain('data-ticket-selection-root="true"');
+    expect(markup).toContain('aria-multiselectable="true"');
     expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(2);
     expect(markup).not.toContain('ticket-card');
   });

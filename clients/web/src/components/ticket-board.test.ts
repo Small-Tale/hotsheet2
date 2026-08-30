@@ -16,6 +16,9 @@ describe('TicketBoard', () => {
       { id: 'done', title: 'Done', tickets: [] },
     ] }));
     expect(markup).toContain('data-column-id="active"');
+    expect(markup).toContain('data-ticket-selection-root="true"');
+    expect(markup).toContain('role="listbox"');
+    expect(markup).toContain('role="group"');
     expect(markup.match(/data-component="ticket-board-column"/g)).toHaveLength(2);
     expect(markup).toContain('aria-label="1 tickets"');
     expect(markup).toContain('aria-label="0 tickets"');
