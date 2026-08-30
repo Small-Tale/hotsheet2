@@ -621,13 +621,14 @@ fn trigger_preflight_blocks_hs1_and_requires_setup() {
     hs(p).arg("init").assert().success();
 
     // 1) An HS1 store under the project is refused before anything launches.
-    std::fs::create_dir(p.join(".hotsheet")).unwrap();
+    std::fs::create_dir_all(p.join(".hotsheet/db")).unwrap();
+    std::fs::write(p.join(".hotsheet/db/PG_VERSION"), "17").unwrap();
     hs(p)
         .args(["trigger", "claude"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("HS1 store"));
-    std::fs::remove_dir(p.join(".hotsheet")).unwrap();
+    std::fs::remove_dir_all(p.join(".hotsheet")).unwrap();
 
     // 2) Without the tool set up (no .mcp.json), trigger refuses (MCP isolation gate).
     hs(p)
@@ -1442,30 +1443,51 @@ fn reindex_rebuilds_the_index_from_disk() {
 }
 
 #[test]
-fn worklist_regenerates_a_derived_file() {
+fn mutations_keep_worklist_current_and_inactive_tickets_off_up_next() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
     hs(p).args(["init", "--prefix", "HS"]).assert().success();
     let slug = new_ticket(p, "draft the readme");
     hs(p).args(["edit", &slug, "--up-next"]).assert().success();
 
-    hs(p)
-        .arg("worklist")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("worklist.md"));
-
-    let body = std::fs::read_to_string(p.join("worklist.md")).unwrap();
-    assert!(body.contains("## Up Next"));
+    // No explicit `worklist` command and no watcher: the mutation itself refreshes it.
+    let worklist = p.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST);
+    let body = std::fs::read_to_string(&worklist).unwrap();
+    assert!(body.contains("# Hot Sheet — Up Next"));
+    assert!(body.contains("## Workflow"));
+    assert!(body.contains("## Tickets"));
+    assert!(!body.contains("## Open"));
     assert!(body.contains("draft the readme"));
     assert!(
         body.contains("Clarify the problem and its impact before acting"),
         "default issue auto-context is injected"
     );
 
-    // It's gitignored (derived output, not committed).
-    let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
-    assert!(gi.lines().any(|l| l.trim() == "worklist.md"));
+    // It is checkout-local and ignored without modifying committed `.gitignore`.
+    let gi = std::fs::read_to_string(p.join(".git/info/exclude")).unwrap();
+    assert!(
+        gi.lines()
+            .any(|l| l.trim() == hotsheet_ticketing::worklist::CHECKOUT_WORKLIST)
+    );
+    assert!(!p.join("worklist.md").exists());
+
+    hs(p)
+        .args(["edit", &slug, "--status", "archive", "--up-next"])
+        .assert()
+        .success();
+    let archived = std::fs::read_to_string(&worklist).unwrap();
+    assert!(!archived.contains("draft the readme"));
+    hs(p)
+        .args(["ls", "--up-next"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(no tickets)"));
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: archive"))
+        .stdout(predicate::str::contains("up_next: true").not());
 }
 
 #[test]

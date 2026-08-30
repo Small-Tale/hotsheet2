@@ -636,6 +636,7 @@ impl LsFilters {
 
 fn main() -> Result<()> {
     let mut cli = Cli::parse();
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
     // `.hotsheet/store` link walked up from cwd — so a standalone store is found without -C
     // (HS2-5CXKZ0). `init`/`link` operate on the literal path, not a resolved one.
@@ -643,10 +644,13 @@ fn main() -> Result<()> {
         cli.command,
         Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. }
     ) {
-        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
     }
-    match cli.command {
+    let refresh = !matches!(
+        cli.command,
+        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. }
+    );
+    let result = match cli.command {
         Cmd::Init {
             prefix,
             standalone,
@@ -806,7 +810,7 @@ fn main() -> Result<()> {
         Cmd::Sync => cmd_sync(&cli.path),
         Cmd::Doctor { project } => cmd_doctor(&cli.path, &project),
         Cmd::Reindex { index } => cmd_reindex(&cli.path, index),
-        Cmd::Worklist => cmd_worklist(&cli.path),
+        Cmd::Worklist => cmd_worklist(&cli.path, &cwd),
         Cmd::Metrics {
             roll_up,
             prune_before,
@@ -865,7 +869,11 @@ fn main() -> Result<()> {
             worker,
             shared_daemon,
         ),
+    };
+    if result.is_ok() && refresh {
+        refresh_checkout_worklists(&cli.path, &cwd)?;
     }
+    result
 }
 
 /// The default "play" prompt: work the top Up Next ticket end to end, headless.
@@ -1104,6 +1112,11 @@ fn cmd_init(
 fn cmd_link(store: &Path) -> Result<()> {
     let cwd = std::env::current_dir()?;
     let abs = hotsheet_cli::link_store(store, &cwd)?;
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let checkout = registry.register(&cwd, None, None, vec![abs.clone()])?;
+    hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
     println!(
         "Linked {} → {} (via {})",
         cwd.display(),
@@ -1931,18 +1944,68 @@ fn ask_server(
     Ok(serde_json::from_str(&text)?)
 }
 
-/// Regenerate the derived `worklist.md` from the store's tickets (`hotsheet-cli worklist`).
-fn cmd_worklist(path: &Path) -> Result<()> {
+/// Regenerate the checkout-local worklist from all sources registered for this checkout.
+fn cmd_worklist(path: &Path, cwd: &Path) -> Result<()> {
     let store = FsStore::open(path)?;
-    let n = hotsheet_ticketing::worklist::regenerate(&store)?;
-    println!(
-        "wrote {} ({n} open ticket(s))",
-        store
-            .root()
-            .join(hotsheet_ticketing::worklist::WORKLIST_FILE)
-            .display()
+    let checkout_root = local_checkout_root(path, cwd);
+    let output = checkout_root.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST);
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     );
+    let registered = registry.list()?.into_iter().find(|checkout| {
+        Path::new(&checkout.root).canonicalize().ok().as_ref()
+            == checkout_root.canonicalize().ok().as_ref()
+    });
+    let n = if let Some(checkout) = registered {
+        hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?
+    } else {
+        hotsheet_ticketing::worklist::regenerate_to(&store, &output)?
+    };
+    println!("wrote {} ({n} Up Next ticket(s))", output.display());
     Ok(())
+}
+
+/// Refresh every registered checkout backed by `store_path`. If the current checkout is
+/// not registered yet, still maintain its local projection from the resolved store.
+fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
+    let store_path = store_path
+        .canonicalize()
+        .unwrap_or_else(|_| store_path.to_path_buf());
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let mut refreshed_current = false;
+    for checkout in registry.list()? {
+        let matches = checkout.stores.iter().any(|candidate| {
+            Path::new(candidate)
+                .canonicalize()
+                .unwrap_or_else(|_| PathBuf::from(candidate))
+                == store_path
+        });
+        if matches {
+            refreshed_current |= Path::new(&checkout.root).canonicalize().ok().as_ref()
+                == cwd.canonicalize().ok().as_ref();
+            hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
+        }
+    }
+    if !refreshed_current && FsStore::open(&store_path).is_ok() {
+        let checkout_root = local_checkout_root(&store_path, cwd);
+        hotsheet_ticketing::worklist::regenerate_to(
+            &FsStore::open(&store_path)?,
+            &checkout_root.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST),
+        )?;
+    }
+    Ok(())
+}
+
+fn local_checkout_root(store_path: &Path, cwd: &Path) -> PathBuf {
+    let linked = hotsheet_cli::resolve_store_path(PathBuf::from("."), cwd);
+    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    if cwd.join(hotsheet_cli::STORE_LINK).is_file() && canonical(&linked) == canonical(store_path) {
+        cwd.to_path_buf()
+    } else {
+        store_path.to_path_buf()
+    }
 }
 
 /// Run the server for this store in the foreground by exec'ing the sibling

@@ -11,7 +11,10 @@
 
 For the built-in **`git` ticket provider**, tickets are plain files in git
 repositories. Git is that provider's single source of truth. Everything else—the
-SQLite index, worklist Markdown, and UI—is derived and rebuildable.
+SQLite index, checkout-local worklist Markdown, and UI—is derived and rebuildable.
+`<checkout>/.hotsheet/worklist.md` belongs to the code checkout, not a ticket store:
+it aggregates the checkout's configured sources and stays machine-local while those
+authoritative sources synchronize through their normal providers.
 
 Git storage is not required for every project. The provider-neutral architecture in
 [16](16-external-sync-interface.md) lets GitHub Issues, Jira, and other trackers be
@@ -323,6 +326,12 @@ untracked in that dimension — but "closed" (a reason is set) always implies a 
 status, and `verified` remains the human-checked flag on top of a completed ticket.
 This mirrors the up-next rule (a ticket leaving the active set drops off Up Next,
 HS2-55610S).
+
+`up_next: true` is valid only for `not_started` and `started`. Every store write
+normalizes it off for all other statuses, update operations reapply that invariant even
+when a patch only tries to set Up Next, and queries/projectors defensively ignore stale
+legacy flags. Thus backlog, completed, verified, archive, deleted, and moved tickets can
+never participate in the Up Next queue.
 
 **Freeform vs. structured.** `close_reason` is the *structured* tag (filterable,
 reportable). A **note** still carries any freeform explanation ("closing — we chose

@@ -1,65 +1,57 @@
 //! The **derived `worklist.md`** (`docs/03` §3.6, docs/05 §5.9, HS2-90). HS1 generates a
 //! Markdown worklist that any AI tool can read *without* the API; HS2 keeps that as a
 //! **derived output** — regenerated (debounced) from the tickets on change, never a second
-//! source of truth. It lives at `<store>/worklist.md` and is **gitignored** (it rebuilds
-//! from the committed tickets, so committing it would only add churn).
+//! source of truth. It lives at `<checkout>/.hotsheet/worklist.md` and is **gitignored**.
+//! A checkout may aggregate several stores; the stores sync normally while this local
+//! projection is rebuilt from them.
 //!
-//! [`render`] is pure (tickets → Markdown) so it is unit-tested directly; [`regenerate`]
-//! is the effectful writer the watcher calls.
+//! [`render`] is pure (tickets → Markdown) so it is unit-tested directly;
+//! [`regenerate_checkout`] is the effectful writer used by clients and watchers.
 
+use std::collections::BTreeMap;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use hotsheet_model::{Priority, Status, Ticket};
 
 use crate::auto_context::{self, AutoContextEntry};
-use crate::ops::{is_open, priority_rank};
+use crate::checkouts::Checkout;
+use crate::ops::priority_rank;
 use crate::settings::Settings;
 use crate::store::{FsStore, StoreError};
 
-/// The derived file's name at the store root.
-pub const WORKLIST_FILE: &str = "worklist.md";
+/// The local derived file, relative to a code checkout.
+pub const CHECKOUT_WORKLIST: &str = ".hotsheet/worklist.md";
 
-/// Render the worklist Markdown from a set of tickets. Open tickets only (terminal/hidden
-/// statuses are excluded), ordered the way a worker reads them: **Up Next first, then by
-/// priority, then newest-first** within a priority. Deterministic — same input, same bytes.
+/// Render active Up Next tickets in worker priority order. The file deliberately omits the
+/// rest of the backlog: it is an executable queue, not a second ticket browser.
 pub fn render(tickets: &[Ticket]) -> String {
     render_with_auto_context(tickets, &auto_context::defaults())
 }
 
 /// Render with an already-resolved effective auto-context list.
 pub fn render_with_auto_context(tickets: &[Ticket], entries: &[AutoContextEntry]) -> String {
-    let mut open: Vec<&Ticket> = tickets.iter().filter(|t| is_open(t)).collect();
-    // Sort key: up_next (true first), then priority rank (highest first), then created
-    // recency (newest first — ULIDs/timestamps sort chronologically).
-    open.sort_by(|a, b| {
-        (!a.up_next)
-            .cmp(&!b.up_next)
-            .then(priority_rank(a.priority).cmp(&priority_rank(b.priority)))
+    let mut up_next: Vec<&Ticket> = tickets
+        .iter()
+        .filter(|ticket| ticket.up_next && ticket.status.is_active())
+        .collect();
+    up_next.sort_by(|a, b| {
+        priority_rank(a.priority)
+            .cmp(&priority_rank(b.priority))
             .then(b.created_at.as_str().cmp(a.created_at.as_str()))
     });
 
     let mut out = String::new();
-    out.push_str("# Worklist\n\n");
-    out.push_str("_Derived from the tickets — regenerated on change. Do not edit by hand._\n\n");
-
-    let up_next: Vec<&&Ticket> = open.iter().filter(|t| t.up_next).collect();
-    out.push_str("## Up Next\n\n");
+    out.push_str("# Hot Sheet — Up Next\n\n");
+    out.push_str("_Local projection of the current priority queue. Regenerated automatically; do not edit._\n\n");
+    out.push_str("## Workflow\n\n");
+    out.push_str("Work these tickets in priority order, where reasonable. Before starting, read the ticket in full and set it to `started`. When finished, set it to `completed` and add a note describing the result and verification. Then run the repository's required gates, commit the coherent ticket-sized change, and push it before starting another ticket. File follow-up tickets for discovered work rather than leaving loose TODOs. Do not set `verified`; that is reserved for human review.\n\n");
+    out.push_str("Use `hotsheet-cli show <slug>` and `hotsheet-cli edit <slug> --status started|completed --note \"…\"`, or the equivalent Hot Sheet MCP tools. If neither is available, report that status could not be updated rather than silently skipping it.\n\n");
+    out.push_str("## Tickets\n\n");
     if up_next.is_empty() {
         out.push_str("_(nothing queued)_\n\n");
     } else {
         for t in &up_next {
-            out.push_str(&entry(t, entries));
-        }
-        out.push('\n');
-    }
-
-    out.push_str("## Open\n\n");
-    let rest: Vec<&&Ticket> = open.iter().filter(|t| !t.up_next).collect();
-    if rest.is_empty() {
-        out.push_str("_(no other open tickets)_\n");
-    } else {
-        for t in &rest {
             out.push_str(&entry(t, entries));
         }
     }
@@ -133,35 +125,114 @@ fn status_label(s: Status) -> &'static str {
     }
 }
 
-/// Regenerate `<store>/worklist.md` from the store's current tickets and ensure it is
-/// gitignored. Called by the watcher on change (debounced) and by `hotsheet-cli worklist`.
-/// Returns the number of open tickets written.
-pub fn regenerate(store: &FsStore) -> Result<usize, StoreError> {
+/// Regenerate a checkout-local worklist from one store. This is useful for an ad-hoc
+/// checkout that has not entered the machine registry yet.
+pub fn regenerate_to(store: &FsStore, path: &Path) -> Result<usize, StoreError> {
     let tickets = store.list_tickets()?;
-    let n = tickets.iter().filter(|t| is_open(t)).count();
+    let n = tickets
+        .iter()
+        .filter(|ticket| ticket.up_next && ticket.status.is_active())
+        .count();
     let entries = auto_context::effective(&Settings::new(store.root()))
         .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
     let body = render_with_auto_context(&tickets, &entries);
-    let path = store.root().join(WORKLIST_FILE);
-    std::fs::write(&path, body)?;
-    ensure_gitignored(store.root(), WORKLIST_FILE)?;
+    write_worklist(path, &body)?;
     Ok(n)
 }
 
-/// Add `name` to the store's `.gitignore` if it isn't already listed (derived output).
-fn ensure_gitignored(root: &Path, name: &str) -> io::Result<()> {
-    let gi = root.join(".gitignore");
-    let existing = std::fs::read_to_string(&gi).unwrap_or_default();
-    if existing.lines().any(|l| l.trim() == name) {
-        return Ok(());
+/// Regenerate the one local worklist for a registered checkout by aggregating all of its
+/// linked git ticket stores. The stores remain authoritative/syncable; this projection is
+/// machine-local and lives under the code checkout.
+pub fn regenerate_checkout(checkout: &Checkout) -> Result<usize, StoreError> {
+    let mut by_id: BTreeMap<hotsheet_model::Ulid, Ticket> = BTreeMap::new();
+    let mut entries = Vec::new();
+    for root in &checkout.stores {
+        let store = FsStore::open(root)?;
+        for ticket in store.list_tickets()? {
+            match by_id.get(&ticket.id) {
+                Some(existing) if existing.status != Status::Moved => {}
+                _ => {
+                    by_id.insert(ticket.id, ticket);
+                }
+            }
+        }
+        entries.extend(
+            auto_context::effective(&Settings::new(store.root()))
+                .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?,
+        );
     }
-    let mut out = existing;
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
+    let tickets: Vec<Ticket> = by_id.into_values().collect();
+    let n = tickets
+        .iter()
+        .filter(|ticket| ticket.up_next && ticket.status.is_active())
+        .count();
+    let body = render_with_auto_context(&tickets, &entries);
+    write_worklist(
+        &PathBuf::from(&checkout.root).join(CHECKOUT_WORKLIST),
+        &body,
+    )?;
+    Ok(n)
+}
+
+fn write_worklist(path: &Path, body: &str) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
     }
-    out.push_str(name);
-    out.push('\n');
-    std::fs::write(&gi, out)
+    if path.ends_with(CHECKOUT_WORKLIST) {
+        let checkout = path
+            .parent()
+            .and_then(Path::parent)
+            .expect("checkout worklist always has .hotsheet parent");
+        let Some(ignore) = local_git_exclude(checkout) else {
+            return std::fs::write(path, body);
+        };
+        let mut contents = std::fs::read_to_string(&ignore).unwrap_or_default();
+        if !contents
+            .lines()
+            .any(|line| line.trim() == CHECKOUT_WORKLIST)
+        {
+            if !contents.is_empty() && !contents.ends_with('\n') {
+                contents.push('\n');
+            }
+            contents.push_str(CHECKOUT_WORKLIST);
+            contents.push('\n');
+            if let Some(parent) = ignore.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::write(ignore, contents)?;
+        }
+    }
+    std::fs::write(path, body)
+}
+
+/// Resolve git's machine-local exclude file without changing committed `.gitignore`.
+/// This also follows the gitdir/commondir indirection used by linked worktrees.
+fn local_git_exclude(checkout: &Path) -> Option<PathBuf> {
+    let dot_git = checkout.join(".git");
+    let git_dir = if dot_git.is_dir() {
+        dot_git
+    } else {
+        let pointer = std::fs::read_to_string(dot_git).ok()?;
+        let raw = pointer.strip_prefix("gitdir:")?.trim();
+        let path = PathBuf::from(raw);
+        if path.is_absolute() {
+            path
+        } else {
+            checkout.join(path)
+        }
+    };
+    let common = std::fs::read_to_string(git_dir.join("commondir"))
+        .ok()
+        .map(|value| {
+            let path = PathBuf::from(value.trim());
+            if path.is_absolute() {
+                path
+            } else {
+                git_dir.join(path)
+            }
+        })
+        .unwrap_or(git_dir);
+    Some(common.join("info/exclude"))
 }
 
 #[cfg(test)]
@@ -181,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn render_orders_up_next_then_priority_and_excludes_terminal() {
+    fn render_includes_only_active_up_next_tickets() {
         let mk = |id: &str, title: &str, pri: Priority, up_next: bool, status: Status| {
             let mut t = Ticket::new(
                 Ulid::from_string(id).unwrap(),
@@ -225,27 +296,29 @@ mod tests {
                 false,
                 Status::NotStarted,
             ),
+            mk(
+                "01ARZ3NDEKTSV4RRFFQ69G5EEE",
+                "stale backlog flag",
+                Priority::Highest,
+                true,
+                Status::Backlog,
+            ),
         ];
         let md = render(&tickets);
 
-        // Completed ticket is excluded (terminal).
+        assert!(md.contains("## Workflow"));
+        assert!(md.contains("## Tickets"));
         assert!(!md.contains("done"), "terminal statuses excluded");
-        // Up Next section holds the queued one; Open holds the rest ordered by priority.
-        let up = md.find("## Up Next").unwrap();
-        let open = md.find("## Open").unwrap();
-        let queued = md.find("high queued").unwrap();
-        let def = md.find("default open").unwrap();
-        let low = md.find("low open").unwrap();
-        assert!(up < queued && queued < open, "queued sits under Up Next");
-        assert!(
-            open < def && def < low,
-            "default (higher) precedes low in Open"
-        );
+        assert!(md.contains("high queued"));
+        assert!(!md.contains("default open"));
+        assert!(!md.contains("low open"));
+        assert!(!md.contains("stale backlog flag"));
+        assert!(!md.contains("## Open"));
     }
 
     #[test]
-    fn regenerate_writes_and_gitignores() {
-        let (_d, store) = store();
+    fn regenerate_to_writes_a_checkout_local_projection() {
+        let (checkout, store) = store();
         let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5EEE").unwrap();
         create(
             &store,
@@ -254,20 +327,17 @@ mod tests {
             ts("0"),
             NewTicket {
                 title: "alpha".into(),
+                up_next: true,
                 ..Default::default()
             },
         )
         .unwrap();
 
-        let n = regenerate(&store).unwrap();
-        assert_eq!(n, 1);
-        let body = std::fs::read_to_string(store.root().join(WORKLIST_FILE)).unwrap();
+        let output = checkout.path().join("project/.hotsheet/worklist.md");
+        regenerate_to(&store, &output).unwrap();
+        let body = std::fs::read_to_string(&output).unwrap();
         assert!(body.contains("alpha"));
-        let gi = std::fs::read_to_string(store.root().join(".gitignore")).unwrap();
-        assert!(
-            gi.lines().any(|l| l.trim() == WORKLIST_FILE),
-            "worklist.md gitignored"
-        );
+        assert!(!store.root().join("worklist.md").exists());
 
         // Closing the ticket drops it from the regenerated worklist.
         update(
@@ -280,15 +350,61 @@ mod tests {
             },
         )
         .unwrap();
-        let n2 = regenerate(&store).unwrap();
-        assert_eq!(n2, 0, "completed ticket no longer counted");
-        let body2 = std::fs::read_to_string(store.root().join(WORKLIST_FILE)).unwrap();
-        assert!(!body2.contains("alpha"), "dropped from Open");
+        regenerate_to(&store, &output).unwrap();
+        let body2 = std::fs::read_to_string(&output).unwrap();
+        assert!(!body2.contains("alpha"), "dropped from the queue");
+    }
 
-        // Idempotent gitignore — regenerating twice doesn't duplicate the line.
-        regenerate(&store).unwrap();
-        let gi2 = std::fs::read_to_string(store.root().join(".gitignore")).unwrap();
-        assert_eq!(gi2.lines().filter(|l| l.trim() == WORKLIST_FILE).count(), 1);
+    #[test]
+    fn regenerate_checkout_aggregates_all_registered_stores_locally() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        let first = FsStore::init(
+            root.path().join("first.hs2"),
+            &crate::store::StoreMetadata::new("ONE"),
+        )
+        .unwrap();
+        let second = FsStore::init(
+            root.path().join("second.hs2"),
+            &crate::store::StoreMetadata::new("TWO"),
+        )
+        .unwrap();
+        for (store, id, title) in [
+            (&first, "01ARZ3NDEKTSV4RRFFQ69G5AAA", "from first"),
+            (&second, "01ARZ3NDEKTSV4RRFFQ69G5BBB", "from second"),
+        ] {
+            create(
+                store,
+                Ulid::from_string(id).unwrap(),
+                store.metadata().unwrap().ticket_prefix.as_str(),
+                ts("0"),
+                NewTicket {
+                    title: title.into(),
+                    category: "task".into(),
+                    up_next: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        let checkout = Checkout {
+            id: "project-test".into(),
+            root: project.to_string_lossy().into_owned(),
+            alias: "project".into(),
+            repository: None,
+            stores: vec![
+                first.root().to_string_lossy().into_owned(),
+                second.root().to_string_lossy().into_owned(),
+            ],
+        };
+
+        assert_eq!(regenerate_checkout(&checkout).unwrap(), 2);
+        let body = std::fs::read_to_string(project.join(CHECKOUT_WORKLIST)).unwrap();
+        assert!(body.contains("from first"));
+        assert!(body.contains("from second"));
+        assert!(!first.root().join("worklist.md").exists());
+        assert!(!second.root().join("worklist.md").exists());
     }
 
     #[test]
@@ -318,6 +434,7 @@ mod tests {
             ts("0"),
             ts("0"),
         );
+        ticket.up_next = true;
         ticket.tags = vec!["Security".into()];
         let mut entries = auto_context::defaults();
         entries.push(AutoContextEntry {

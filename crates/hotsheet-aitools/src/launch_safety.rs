@@ -242,12 +242,12 @@ pub fn prepend_path(dirs: &[&Path], base: &str) -> String {
     out.join(":")
 }
 
-/// Refuse to drive a tool in a project that still holds an HS1 store (`.hotsheet/`) —
-/// the HS2-103 `assert_no_hs1` gate, so a headless run can't touch HS1 data.
+/// Refuse to drive a tool in a project that still holds an HS1 PGLite store. The
+/// `.hotsheet/` directory itself is also used by HS2 for checkout-local metadata.
 pub fn assert_no_hs1(project: &Path) -> Result<()> {
-    if project.join(".hotsheet").exists() {
+    if project.join(".hotsheet/db/PG_VERSION").is_file() {
         bail!(
-            "refusing to drive a tool in {}: an HS1 store (.hotsheet/) is present — \
+            "refusing to drive a tool in {}: an HS1 store (.hotsheet/db/PG_VERSION) is present — \
              migrate or move it first (HS2-103 launch safety)",
             project.display()
         );
@@ -335,7 +335,8 @@ mod tests {
     fn assert_no_hs1_flags_a_legacy_store() {
         let dir = tempfile::tempdir().unwrap();
         assert!(assert_no_hs1(dir.path()).is_ok());
-        std::fs::create_dir(dir.path().join(".hotsheet")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".hotsheet/db")).unwrap();
+        std::fs::write(dir.path().join(".hotsheet/db/PG_VERSION"), "17").unwrap();
         let err = assert_no_hs1(dir.path()).unwrap_err().to_string();
         assert!(err.contains("HS1 store"), "{err}");
     }
