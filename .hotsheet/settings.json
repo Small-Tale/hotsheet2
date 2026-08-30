@@ -6,7 +6,7 @@
       "id": "claude",
       "name": "AI",
       "command": "{{aiCommand}}",
-      "lazy": true
+      "lazy": false
     }
   ]
 }
