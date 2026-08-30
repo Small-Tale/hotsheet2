@@ -243,28 +243,31 @@ Maintain two synthesis docs an AI assistant reads at the start of a fresh sessio
 
 ## Commit / push hygiene
 
-Keep the repo in a **known-good state**, and especially so **before pushing**. The
-working rhythm (once there is code to lint/test):
+Keep the repo in a **known-good state**. After each completed ticket (or other
+coherent user-requested unit), finish its documentation and ticket notes, run the
+required gates, commit it, and push it **before starting the next ticket**. Do not
+accumulate completed tickets as uncommitted or unpushed work.
 
-**During work — repeatable per round (multiple local commits, no push):**
-1. Do a chunk of work (e.g. a ticket).
-2. **Lint and fix** — `cargo fmt --all --check` + `cargo lint` for Rust; `npm run
-   lint` in `clients/web`, `migrator`, and `spikes/kerf-webawesome`.
-3. Run the **light/fast tests and fix** — e.g. `cargo nextest run` for the affected
-   crates.
+For each ticket:
+1. Implement the coherent ticket-sized change and update its docs and coverage matrix.
+2. **Lint and fix** every affected package — `cargo fmt --all --check` + `cargo lint`
+   for Rust; `npm run lint` in affected TypeScript packages.
+3. Run the affected unit, integration, browser, and visual tests. Use the full local
+   suite for shared/risky changes and always before publishing an accumulated recovery
+   batch (per [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md)
+   §12.7).
+4. Mark the ticket completed with its verification note, review the diff, make **one
+   commit for that ticket**, and push immediately. Combine tickets in one commit only
+   when their implementations overlap so strongly that separating them would be unsafe
+   or misleading, or when the tickets are duplicates of the same work.
+5. Confirm the push succeeded and the worktree is clean before taking the next ticket.
 
-**Before pushing:**
-1. **Final lint pass** (fix everything).
-2. **Full test suite** (fix everything) — the whole `nextest` run + web E2E + the
-   conformance/fake-agent suites + the migrator conformance test (per
-   [`docs/12-code-organization-and-testing.md`](docs/12-code-organization-and-testing.md) §12.7).
-3. **Push** (only when the maintainer has asked / agreed to push).
-
-You may do several work rounds with multiple commits before pushing; once you push,
-**local must be green**. CI may still surface issues from heavier CI-only tests or
-from merging multiple changes together — that's expected — but the local environment
-should be verified good before a push. **Exception:** when deliberately testing CI
-itself, a red-ish push may be intentional — but then don't push to `main`.
+If pre-existing changes have accumulated, separate them into one commit per ticket
+wherever attribution remains safe. Use a combined recovery commit only for strongly
+overlapping or duplicate tickets whose changes cannot be separated without rewriting
+or risking completed work. CI may still surface issues from heavier CI-only tests, but
+the local environment must be green before every push. **Exception:** when deliberately
+testing CI itself, a red-ish push may be intentional, but then do not push to `main`.
 
 (While the repo is still design-only, "lint/test" is a no-op for docs changes;
 this rhythm applies once implementation code exists.)

@@ -3,7 +3,7 @@ name: hotsheet
 description: Work the Hot Sheet ticket queue for this project — find Up Next tickets, implement them in priority order, and record progress. Works headless (no app), with or without a server.
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 29 -->
+<!-- hotsheet-skill-version: 30 -->
 
 Work the project's Hot Sheet ticket queue in priority order.
 
@@ -11,7 +11,7 @@ Work the project's Hot Sheet ticket queue in priority order.
    tickets. (Equivalently, the `hotsheet_query` MCP tool with `up_next: true`.)
 2. **Pick the top ticket** and read it in full: `hotsheet-cli show <slug>` (or
    `hotsheet_get`). Understand what "done" means before you start.
-3. **Mark it started**, implement it, then **mark it done** with a note:
+3. **Mark it started**, implement it, verify it, then **mark it done** with a note:
    - `hotsheet-cli edit <slug> --status started`
    - …do the work…
    - `hotsheet-cli edit <slug> --status completed --note "what you did"`
@@ -19,7 +19,12 @@ Work the project's Hot Sheet ticket queue in priority order.
 4. **File follow-ups** for anything you discover but don't finish (gaps, bugs,
    TODOs): `hotsheet-cli new --title "…" --category <bug|task|feature>` (or
    `hotsheet_create`). Don't leave loose ends only in code comments.
-5. Move to the next Up Next ticket and repeat, honoring priority order.
+5. **Publish the completed ticket before taking another one.** Run the repository's
+   required lint and test gates, review the diff, make one commit for that ticket, and
+   push it. Combine tickets only for strongly overlapping implementations or duplicate
+   tickets. Confirm the push succeeded and the worktree is clean. Do not accumulate
+   multiple completed tickets locally.
+6. Move to the next Up Next ticket and repeat, honoring priority order.
 
 Notes:
 - The CLI (`hotsheet-cli …`) and the `hotsheet_*` MCP tools run the same engine — use
