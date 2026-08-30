@@ -130,7 +130,9 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
         q.status.is_none_or(|s| t.status == s)
             && q.priority.is_none_or(|p| t.priority == p)
             && q.category.as_deref().is_none_or(|c| t.category == c)
-            && (!q.up_next_only || t.up_next)
+            // Defensive read-side enforcement for legacy or hand-edited files: Up Next is
+            // exclusively an active-work queue, never backlog/archive/completed/etc.
+            && (!q.up_next_only || (t.up_next && t.status.is_active()))
             && (!q.open_only || is_open(t))
             // Moved tombstones are hidden from lists unless explicitly asked for (docs/03 §3.5).
             && (q.status == Some(Status::Moved) || t.status != Status::Moved)
@@ -391,6 +393,11 @@ pub fn update(
             t.closed_at = None;
             t.duplicate_of = None;
         }
+    }
+    // Also covers `--up-next` on an already-inactive ticket when no status is present in
+    // this patch. Up Next is only meaningful for not_started/started.
+    if !t.status.is_active() {
+        t.up_next = false;
     }
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
@@ -1159,6 +1166,31 @@ mod tests {
         )
         .unwrap();
         assert!(!done.up_next, "completed is not active → up_next cleared");
+
+        // A later attempt to queue an already-inactive ticket is normalized too, even
+        // when the patch does not include a status transition.
+        let still_done = update(
+            &store,
+            &id,
+            ts("t3"),
+            TicketPatch {
+                up_next: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!still_done.up_next);
+        assert!(
+            query(
+                &store,
+                &TicketQuery {
+                    up_next_only: true,
+                    ..Default::default()
+                }
+            )
+            .unwrap()
+            .is_empty()
+        );
     }
 
     fn store_pfx(prefix: &str) -> (tempfile::TempDir, FsStore) {
