@@ -22,5 +22,6 @@ export class Api {
   checkoutTicket=(checkout:string,id:string)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(ticket=>({store:ticket.store,ticket}));
   createCheckoutTicket=(checkout:string,value:{title:string;category:string})=>this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`,{method:'POST',body:JSON.stringify(value)});
   updateCheckoutTicket=(checkout:string,id:string,value:Record<string,unknown>)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(value)}).then(ticket=>({store:ticket.store,ticket}));
+  addCheckoutAttachment=(checkout:string,id:string,file:File)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments`,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream','X-Hotsheet-Filename':file.name},body:file}).then(ticket=>({store:ticket.store,ticket}));
   repositoryStatus=(checkout:string)=>this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
 }

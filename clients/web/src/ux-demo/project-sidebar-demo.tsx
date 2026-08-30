@@ -21,7 +21,7 @@ export const clampProjectSidebarHeight = (height: number) => Math.min(PROJECT_SI
 
 export const sidebarViews: ViewNavigationItem[] = [
   { id: 'needs-review', label: 'Needs Review', count: 3, attention: true, icon: 'needs-review' },
-  { id: 'all', label: 'All Tickets', count: 12, icon: 'all' },
+  { id: 'all', label: 'Queue', count: 12, icon: 'all' },
   { id: 'backlog', label: 'Backlog', count: 5, icon: 'backlog' },
   { id: 'archive', label: 'Archive', count: 241, icon: 'archive' },
 ];

@@ -65,6 +65,14 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   references). Full multi-source editing in the real Settings view is tracked separately;
   the initial view reports the active source paths and their storage model.
 
+  The real inspector's attachment surface sends browsed and dropped files directly to
+  the selected ticket's checkout-scoped attachment endpoint, then refreshes both the
+  selected ticket and project rows from the authoritative response.
+
+  The default `Queue` view is the active working set and intentionally excludes both
+  Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit
+  views with counts derived from those same predicates.
+
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it
   detached if `instance.json` shows none, watch its health) — not to run the core
@@ -264,8 +272,9 @@ disconnects self-heal, and one arbiter means local and remote behave identically
 
 ## 6.8 Notes, reader mode & editing
 
-> **Design** (maintainer, 2026-08-19, HS2-26). Keep HS1's reader mode + feedback
-> concepts, but unify and enlarge them. Build: **HS2-65**.
+> **Web implementation shipped** (HS2-F3SS63). Keep HS1's reader mode + feedback
+> concepts, but unify and enlarge them. Native-client parity and the local feedback-draft
+> overlay/submission lifecycle remain separately tracked.
 
 **Five note kinds, one rendering rule.** A note's `kind` ([02](02-ticket-storage.md)
 §2.6 — `regular` / `activity` / `feedback_needed` / `feedback_draft` / `status`) determines how

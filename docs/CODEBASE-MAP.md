@@ -30,6 +30,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     src/api.ts               #   Typed server client for providers plus checkout-scoped real ticket/repository operations
     src/main.tsx             #   Real AppShell: project tabs, ticket browse/read/create/update, views/search/source summary
+    src/ticket-views.ts      #   Disjoint active Queue, Backlog, and Archive view semantics
     src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding API proxy
     src/dev-server.ts        #   Hono local project bridge plus dev-only /ux-demo and review routes
     src/dev-review/          #   Content-anchored capture/delete overlay, upload/removal review UI, and single-commit local-dev CLI submission adapter
@@ -76,7 +77,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/commands.rs        #   typed safe argv command settings schema (HS2-JN3X4W)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/ApiAttachment timestamp metadata/TicketRow incl. provider identity + compact body-optional lists (shared by server + MCP)
-      src/worklist.rs        #   derived worklist.md: render(tickets)→md + regenerate(store) (gitignored, watcher-regenerated; docs/03 §3.6, HS2-90)
+      src/worklist.rs        #   checkout-local .hotsheet/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`

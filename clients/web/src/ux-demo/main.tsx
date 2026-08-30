@@ -19,14 +19,14 @@ import { Select } from '../components/select';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDemo } from './catalog';
-import { cancelMarkdown, editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, noteDemoNotes, noteDraft, readerAttachments, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
+import { cancelMarkdown, editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, DriveControlDemo, driveRunning, ProjectSidebarDemo, projectSidebarHeight, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 import { SelectDemo } from './select-demo';
 import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
-import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
+import { collectionTickets, recordCollectionEvent, selectAllCollectionTickets, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
 import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
@@ -355,18 +355,19 @@ delegate(root, 'click', '[data-action="add-ticket-note"]', () => { recordCollect
 const beginNoteEdit = (id: string) => { editingNoteId.value = id; noteDraft.value = readerNotes.value.find(note => note.id === id)?.body ?? noteDemoNotes.value.find(note => note.id === id)?.body ?? ''; queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus()); };
 delegate(root, 'dblclick', '[data-edit-on-double-click="true"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });
 delegate(root, 'click', '[data-action="edit-note"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });
-delegate(root, 'input', '[name="note-body"]', (_event, target) => { noteDraft.value = (target as FormControl).value; });
+delegate(root, 'input', '[name="note-body"]', (_event, target) => { editingNoteId.value = (target as HTMLElement).dataset.noteId; noteDraft.value = (target as FormControl).value; });
 delegate(root, 'click', '[data-action="cancel-note-edit"]', () => { editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit cancelled'); });
-delegate(root, 'click', '[data-action="save-note-edit"]', () => { const id = editingNoteId.value; if (id) { readerNotes.value = readerNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); noteDemoNotes.value = noteDemoNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); } editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit saved'); });
-delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { recordCollectionEvent('Ticket reader requested'); selectDemo('ticket-reader'); });
+delegate(root, 'click', '[data-action="save-note-edit"]', (_event, target) => { const id = editingNoteId.value ?? (target as HTMLElement).dataset.noteId; if (id) { const original = readerNotes.value.find(note => note.id === id); if ((target as HTMLElement).dataset.noteResponse === 'true') readerNotes.value = [...readerNotes.value, { id: `${id}-response`, kind: 'regular', author: 'You', time: 'Now', body: noteDraft.value }]; else readerNotes.value = readerNotes.value.map(note => note.id === id ? { ...note, kind: original?.kind === 'feedback_draft' ? 'regular' as const : note.kind, body: noteDraft.value } : note); noteDemoNotes.value = noteDemoNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); } editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit saved'); });
+delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { readerEditing.value = markdownMode.value === 'write'; recordCollectionEvent('Ticket reader requested'); selectDemo('ticket-reader'); });
 delegate(root, 'input', '[name="markdown-source"]', (_event, target) => { markdownValue.value = (target as FormControl).value; markdownEvent.value = 'Draft updated.'; });
 delegate(root, 'dblclick', '[data-action="edit-markdown"]', () => { markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
+delegate(root, 'click', '[data-action="edit-markdown"][data-empty="true"]', () => { markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'keydown', '[data-action="edit-markdown"]', (event) => { if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return; event.preventDefault(); markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => { markdownExpanded.value = !markdownExpanded.value; markdownEvent.value = markdownExpanded.value ? 'Expanded editor opened.' : 'Inline editor restored.'; });
 delegate(root, 'click', '[data-action="save-markdown"]', () => { saveMarkdown(); });
 delegate(root, 'click', '[data-action="cancel-markdown-edit"]', () => { cancelMarkdown(); });
-delegate(root, 'click', '[data-action="edit-ticket-reader"]', () => { selectDemo('markdown-editor'); });
-delegate(root, 'click', '[data-action="close-ticket-reader"]', () => { selectDemo('ticket-info-panel'); });
+delegate(root, 'click', '[data-action="edit-ticket-reader"]', () => { readerEditing.value = true; markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
+delegate(root, 'click', '[data-action="close-ticket-reader"]', () => { readerEditing.value = false; selectDemo('ticket-info-panel'); });
 const addMockAttachments = (files: FileList | File[], target: HTMLElement) => {
   const added = Array.from(files).map((file, index) => ({ id: `added-${Date.now()}-${index}`, name: file.name }));
   if (selectedId.value === 'ticket-reader' || target.closest('[data-component="ticket-attachments"]')) readerAttachments.value = [...readerAttachments.value, ...added];
@@ -402,7 +403,8 @@ delegate(root, 'click', '[data-action="select-ticket-row"]', (event, target) => 
   if ((event.target as Element).closest('[data-action="toggle-row-up-next"]')) return;
   const row = target as HTMLElement;
   if (usesCollectionState()) {
-    selectCollectionTicket(row.dataset.ticketSlug!);
+    const pointer = event as MouseEvent;
+    selectCollectionTicket(row.dataset.ticketSlug!, { range: pointer.shiftKey, toggle: pointer.metaKey || pointer.ctrlKey });
     return;
   }
   ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
@@ -433,17 +435,32 @@ delegateCapture(root, 'keydown', '[data-action="toggle-row-up-next"]', (event) =
   toggleRowUpNext(event.target as Element);
 });
 delegate(root, 'keydown', '[data-action="select-ticket-row"]', (event, target) => {
-  const key = (event as KeyboardEvent).key;
+  const keyboard = event as KeyboardEvent;
+  const key = keyboard.key;
+  const row = target as HTMLElement;
+  if (usesCollectionState() && (keyboard.metaKey || keyboard.ctrlKey) && key.toLowerCase() === 'a') {
+    event.preventDefault(); selectAllCollectionTickets(); return;
+  }
+  if (usesCollectionState() && (key === 'ArrowUp' || key === 'ArrowDown')) {
+    event.preventDefault();
+    const scope = row.closest<HTMLElement>('[data-ticket-selection-root]')!;
+    const rows = [...scope.querySelectorAll<HTMLElement>('[data-action="select-ticket-row"]')];
+    const index = rows.indexOf(row);
+    const next = rows[Math.max(0, Math.min(rows.length - 1, index + (key === 'ArrowDown' ? 1 : -1)))];
+    if (next) { next.focus(); selectCollectionTicket(next.dataset.ticketSlug!, { range: keyboard.shiftKey }); }
+    return;
+  }
   if (key !== 'Enter' && key !== ' ') return;
   event.preventDefault();
-  (target as HTMLElement).click();
+  if (usesCollectionState()) selectCollectionTicket(row.dataset.ticketSlug!, { range: keyboard.shiftKey, toggle: keyboard.metaKey || keyboard.ctrlKey });
+  else row.click();
 });
 delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, target) => {
   event.preventDefault();
   const pointer = event as MouseEvent;
   const row = target as HTMLElement;
   if (usesCollectionState()) {
-    selectCollectionTicket(row.dataset.ticketSlug!, true);
+    if (!collectionTickets.value.find(ticket => ticket.slug === row.dataset.ticketSlug)?.selected) selectCollectionTicket(row.dataset.ticketSlug!);
     recordCollectionEvent(`Context menu opened for ${row.dataset.ticketSlug}`);
     contextMenu.value = { x: pointer.clientX, y: pointer.clientY, ticketSlug: row.dataset.ticketSlug };
     return;

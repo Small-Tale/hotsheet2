@@ -4,6 +4,7 @@ import { TicketBoard, type TicketColumnProps } from '../components/ticket-board'
 import { TicketBoardColumn } from '../components/ticket-board-column';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
+import { selectAllTickets, type TicketSelectionIntent, type TicketSelectionState,updateTicketSelection } from '../components/ticket-selection';
 
 const initialTickets: TicketRowProps[] = [
   { slug: 'HS2-R76MMW', title: 'Build TicketList and TicketBoard around shared responsive TicketRow', status: 'started', priority: 'high', category: 'feature', tags: ['client', 'ux'], upNext: true, busy: true, categoryIcon: 'sparkles', categoryColor: '#3b82f6', agentName: 'Codex', updatedLabel: 'Now' },
@@ -30,16 +31,24 @@ const initialTickets: TicketRowProps[] = [
 
 export const collectionTickets = signal(initialTickets.map(ticket => ({ ...ticket, tags: [...ticket.tags] })));
 export const collectionEvent = signal('Select a ticket or toggle its Up Next star.');
+let collectionSelection: TicketSelectionState = { selected: new Set<string>() };
 
 export function resetTicketCollections(): void {
   collectionTickets.value = initialTickets.map(ticket => ({ ...ticket, tags: [...ticket.tags] }));
+  collectionSelection = { selected: new Set() };
   collectionEvent.value = 'Select a ticket or toggle its Up Next star.';
 }
 
-export function selectCollectionTicket(slug: string, force?: boolean): void {
-  collectionTickets.value = collectionTickets.value.map(ticket => ({ ...ticket, selected: ticket.slug === slug ? (force ?? !ticket.selected) : false }));
-  const selected = collectionTickets.value.find(ticket => ticket.slug === slug)?.selected;
-  collectionEvent.value = `${slug} ${selected ? 'selected' : 'deselected'}`;
+export function selectCollectionTicket(slug: string, intent: TicketSelectionIntent = {}): void {
+  collectionSelection = updateTicketSelection(collectionTickets.value.map(ticket => ticket.slug), collectionSelection, slug, intent);
+  collectionTickets.value = collectionTickets.value.map(ticket => ({ ...ticket, selected: collectionSelection.selected.has(ticket.slug) }));
+  collectionEvent.value = `${collectionSelection.selected.size} ticket${collectionSelection.selected.size === 1 ? '' : 's'} selected`;
+}
+
+export function selectAllCollectionTickets(): void {
+  collectionSelection = selectAllTickets(collectionTickets.value.map(ticket => ticket.slug));
+  collectionTickets.value = collectionTickets.value.map(ticket => ({ ...ticket, selected: true }));
+  collectionEvent.value = `${collectionSelection.selected.size} tickets selected`;
 }
 
 export function recordCollectionEvent(message: string): void {

@@ -133,7 +133,7 @@ scrolling content region can be reviewed without moving the Drive control.
   action, and controlled selection through `MenuItem`.
   - section heading and add-view action
   - `ViewNavigationItem` with icon, title, count, selection, and attention state
-  - built-ins: Needs Review, All Tickets, Backlog, Archive
+  - built-ins: Needs Review, Queue (active tickets), Backlog, Archive
   - user-defined views when custom-view support lands
 - `CommandNavigation` — **demo built**: collapsible group of palette-colored,
   icon-bearing command actions with controlled running state. Colors are constrained
@@ -243,10 +243,11 @@ selection where sensible.
   - compact “New ticket…” entry
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities
-- `TicketList` — **demo foundation built**: composes the production `TicketRow` at
-  comfortable list width with listbox/multi-selection semantics and no parallel row
+- `TicketList` — **demo built**: composes the production `TicketRow` at
+  comfortable list width with platform-style replacement, Command/Ctrl toggle, Shift
+  range, arrow-key range extension, and Select All semantics and no parallel row
   markup; the list shell and its first/last rows share rounded outer corners
-  - later data integration: virtualization, keyboard navigation, and multi-select behavior
+  - later data integration: virtualization for exceptionally large result sets
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active
   - `TicketRowDivider`
@@ -285,8 +286,9 @@ selection where sensible.
 
 ### 3.3 `ColumnWorkspace` — feature floor
 
-- `TicketBoard` — **demo foundation built**: status columns stretch equally to fill
-  available width down to a 250px minimum, then the workspace scrolls horizontally
+- `TicketBoard` — **demo built**: status columns stretch equally to fill
+  available width down to a 250px minimum, share TicketList's multi-selection contract
+  across columns, then the workspace scrolls horizontally
   edge-to-edge between its sidebar separators and reaches the workspace bottom, with
   an 8px horizontal content inset and 16px breathing room inside the bottom of each
   independently scrolling ticket region. The
@@ -381,8 +383,8 @@ than substituting a hardcoded default.
   - assignee/reviewer/claim fields when supported
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection` — section header remains outside its visually distinct
-  bordered Markdown surface, matching Notes hierarchy; double-click or use its
-  keyboard action to begin editing
+  bordered Markdown surface, matching Notes hierarchy; double-click non-empty details,
+  single-click the empty prompt, or use its keyboard action to begin editing
 - `TicketTagsSection`
 - `TicketAttachmentsSection`
 - `TicketNotesSection`
@@ -392,18 +394,21 @@ than substituting a hardcoded default.
 - `MarkdownPreview` — **built**: HS1-parity `marked` rendering with GFM tables and
   task lists, line breaks, links, images, fenced/inline code, blockquotes, lists, and
   headings. Raw HTML is escaped and unsafe link/image protocols are rejected.
-- `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard to
-  edit, persistent controlled draft, inline/expanded presentation, dirty state, and
-  textual Save/Cancel actions. The embedded appearance reuses the same behavior in
-  inspector and reader without a redundant standalone toolbar.
+- `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
+  to edit non-empty content, single-click to add empty content, persistent controlled
+  draft, inline/expanded presentation, dirty state, and textual Save/Cancel actions.
+  The embedded appearance reuses the same behavior in inspector and reader without a
+  redundant standalone toolbar; the real inspector persists edits through its checkout.
 - `InlineEditableField`
 - `ReaderButton`
-- `TicketReader` — **demo built**: a large dialog presentation of the actual
+- `TicketReader` — **built in the demo and real web shell**: a large dialog
+  presentation of the actual
   `TicketInspector`, preserving its metadata editing, tabs, attachments, timeline,
   Markdown details, notes, and controlled state rather than maintaining a reduced
-  parallel reader implementation. The inspector exposes a Reader action, and reader
-  content uses its full available width.
-- `ReaderEditMode` — carries an in-progress inline edit into the larger surface
+  parallel reader implementation. The inspector exposes a Reader action, reader content
+  uses its full available width, and the Edit action gates read-only details/notes.
+- `ReaderEditMode` — **built**: carries an in-progress inline details edit and draft into
+  the larger surface without losing focus or content
 - `UnsavedChangesGuard`
 
 ### 4.3 Tags — feature floor
@@ -442,11 +447,14 @@ icons; structural separators do not require icons.
 ### 4.5 Notes and activity — feature floor
 
 - `NoteList`
-- `NoteCard` — **demo built** with distinct regular, status, feedback-needed, and
-  activity presentations sharing stable author, timestamp, body, and note identity;
+- `NoteCard` — **demo built** with distinct regular, status, feedback-needed,
+  feedback-draft, and activity presentations sharing stable author, timestamp, body,
+  and note identity;
   double-click enters a controlled editor whose Save persists and Cancel restores.
-  Hover/focus reveals an explicit Edit action, while the inspector toolbar provides
-  the single Reader entry point from every inspector tab.
+  In reader mode, regular/status notes remain read-only until the top-level Edit action,
+  while feedback-needed and feedback-draft notes always render their Respond/Submit
+  editor style. Hover/focus reveals an explicit Edit action outside reader mode, while
+  the inspector toolbar provides the single Reader entry point from every inspector tab.
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`

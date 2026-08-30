@@ -344,8 +344,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
 test('presents note kinds and round-trips reader and Markdown editor compositions', async ({ page }) => {
   await page.goto('/ux-demo?component=note-card');
   const notes = page.locator('[data-component="note-card"]');
-  await expect(notes).toHaveCount(4);
-  for (const [kind, icon] of [['regular', 'message-square-text'], ['status', 'refresh-cw'], ['feedback_needed', 'circle-alert'], ['activity', 'activity']] as const) {
+  await expect(notes).toHaveCount(5);
+  for (const [kind, icon] of [['regular', 'message-square-text'], ['status', 'refresh-cw'], ['feedback_needed', 'circle-alert'], ['feedback_draft', 'file-pen-line'], ['activity', 'activity']] as const) {
     const note = notes.filter({ has: page.locator(`[data-lucide="${icon}"]`) });
     await expect(note).toHaveAttribute('data-kind', kind);
     await expect(note.locator(`[data-lucide="${icon}"]`)).toBeVisible();
@@ -364,13 +364,16 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const reader = page.locator('[data-component="ticket-reader"]');
   await expect(reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' })).toBeVisible();
   await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Implementation notes');
-  await expect(reader.locator('[data-component="note-card"]')).toHaveCount(3);
-  await expect(reader.getByRole('heading', { name: /Notes/ }).locator('span')).toHaveText('3');
+  await expect(reader.locator('[data-component="note-card"]')).toHaveCount(5);
+  await expect(reader.getByRole('heading', { name: /Notes/ }).locator('span')).toHaveText('5');
   await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
   const readerWidth = await reader.boundingBox();
   const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
   expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * .9);
   const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
+  await expect(editableNote.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
+  await reader.getByRole('button', { name: 'Edit ticket' }).click();
+  await expect(reader.getByRole('textbox', { name: 'Ticket details' })).toBeFocused();
   await editableNote.dblclick();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
   await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Edited note body');
@@ -391,9 +394,9 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(reader.locator('.ticket-inspector__details-section')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(reader.locator('.ticket-inspector__details-surface')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(reader.locator('.ticket-inspector__details-surface .markdown-editor--embedded')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
+  await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toBeVisible();
+  await expect(reader.getByRole('textbox', { name: 'Note body' })).toHaveValue(/keep the response/i);
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
-  await expect(readerSource).toBeFocused();
   await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
   await reader.getByRole('button', { name: 'Save' }).click();
   await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Reader draft');
@@ -438,7 +441,16 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(listRow).toHaveCSS('box-shadow', 'none');
   await listRow.click();
   await expect(listRow).toHaveAttribute('data-selected', 'true');
-  await expect(page.getByText('HS2-R76MMW selected')).toBeVisible();
+  await expect(page.getByText('1 ticket selected')).toBeVisible();
+  await listRows.nth(1).click({ modifiers: ['Meta'] });
+  await expect(listRows.nth(0)).toHaveAttribute('data-selected', 'true');
+  await expect(listRows.nth(1)).toHaveAttribute('data-selected', 'true');
+  await expect(page.getByText('2 tickets selected')).toBeVisible();
+  await listRows.nth(3).click({ modifiers: ['Shift'] });
+  await expect(listRows.nth(1)).toHaveAttribute('data-selected', 'true');
+  await expect(listRows.nth(2)).toHaveAttribute('data-selected', 'true');
+  await expect(listRows.nth(3)).toHaveAttribute('data-selected', 'true');
+  await expect(listRows.nth(0)).toHaveAttribute('data-selected', 'false');
   const listStar = listRow.locator('[data-action="toggle-row-up-next"]');
   await listStar.click();
   await expect(listStar).not.toHaveClass(/active/);
@@ -446,7 +458,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
 
   await page.locator('.demo-master [data-item-id="ticket-board"]').click();
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
-  const board = page.getByRole('region', { name: 'Example status board' });
+  const board = page.getByRole('listbox', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
@@ -474,7 +486,10 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(narrowRow).not.toHaveCSS('box-shadow', 'none');
   await expect(page.locator('[data-component="ticket-card"]')).toHaveCount(0);
   await narrowRow.focus();
+  await page.keyboard.press('Meta+A');
+  await expect(board.locator('[data-selected="true"]')).toHaveCount(20);
   await page.keyboard.press('Enter');
+  await expect(board.locator('[data-selected="true"]')).toHaveCount(1);
   await expect(narrowRow).toHaveAttribute('data-selected', 'true');
   await narrowRow.click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Ticket actions' });
@@ -500,7 +515,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
   await header.getByRole('button', { name: 'Columns view' }).click();
   await expect(header.getByRole('button', { name: 'Columns view' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('region', { name: 'Workspace board' })).toBeVisible();
+  await expect(page.getByRole('listbox', { name: 'Workspace board' })).toBeVisible();
   const closedHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   const searchGroup = header.locator('.workspace-header__search-group');
   const collapsedWidth = await searchGroup.evaluate(node => node.getBoundingClientRect().width);
@@ -518,14 +533,14 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const openHeaderHeight = await header.evaluate(node => node.getBoundingClientRect().height);
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
   await search.fill('long-tag-example');
-  await expect(page.getByRole('region', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(1);
+  await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(1);
   await header.getByRole('button', { name: 'Columns view' }).focus();
   await expect(search).toBeVisible();
   await search.fill('');
   await header.getByRole('button', { name: 'Columns view' }).focus();
   await expect(header.getByRole('textbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(header.getByRole('button', { name: 'Search tickets' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
+  await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
   await header.getByRole('button', { name: 'Sort tickets' }).click();
   await header.locator('wa-dropdown-item[data-sort="priority"]').click();
   await expect(page.getByText('Sorted by priority')).toBeVisible();
@@ -695,7 +710,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const blockedSection = inspector.locator('.ticket-inspector__blocked-section');
   const detailsSection = inspector.locator('.ticket-inspector__details-section');
   expect((await blockedSection.boundingBox())!.y).toBeLessThan((await detailsSection.boundingBox())!.y);
-  await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(3);
+  await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(5);
   const firstNote = inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]').first();
   await expect(firstNote.getByRole('button', { name: 'Edit note' })).toBeAttached();
   await expect(firstNote.locator('[data-action="open-ticket-reader"]')).toHaveCount(0);
@@ -824,8 +839,7 @@ test('uses semantic cursors across native and Web Awesome interactions', async (
   await page.getByRole('button', { name: /New ticket/ }).click();
   const create = page.locator('wa-button[type="submit"]');
   await create.evaluate(node => { node.setAttribute('disabled', ''); });
-  const disabledCursor = await create.evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor);
-  expect(disabledCursor).toBe('not-allowed');
+  await expect.poll(() => create.evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="base"]')!).cursor)).toBe('not-allowed');
 });
 
 test('exercises the five ProjectSidebar component demos and their controlled transitions', async ({ page }) => {
@@ -859,10 +873,10 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   expect(navigationGeometry.buttonRight).toBeCloseTo(navigationGeometry.headerRight, 0);
   expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeGreaterThan(8);
   expect(navigationGeometry.iconLeft - navigationGeometry.buttonLeft).toBeLessThan(11);
-  await expect(views.getByRole('button', { name: /All Tickets/ })).toHaveAttribute('aria-current', 'page');
+  await expect(views.getByRole('button', { name: /Queue/ })).toHaveAttribute('aria-current', 'page');
   await views.getByRole('button', { name: /Needs Review/ }).click();
   await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');
-  await expect(views.getByRole('button', { name: /All Tickets/ })).not.toHaveAttribute('aria-current', 'page');
+  await expect(views.getByRole('button', { name: /Queue/ })).not.toHaveAttribute('aria-current', 'page');
   await views.getByRole('button', { name: 'Add view' }).click();
   await expect(page.getByText('New view editor requested.')).toBeVisible();
 
