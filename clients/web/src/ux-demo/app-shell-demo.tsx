@@ -1,23 +1,23 @@
 import { signal } from 'kerfjs';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide';
+
 import { AppShell } from '../components/app-shell';
-import { ConnectionStateBanner, type ConnectionState } from '../components/connection-state-banner';
+import { type ConnectionState,ConnectionStateBanner } from '../components/connection-state-banner';
+import { LucideIcon } from '../components/lucide-icon';
+import { PageHeader } from '../components/page-header';
 import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';
-import { ResizableRegion, clampRegionSize } from '../components/resizable-region';
-import { LucideIcon } from '../components/lucide-icon';
+import { QuickTicketComposer } from '../components/quick-ticket-composer';
+import { clampRegionSize,ResizableRegion } from '../components/resizable-region';
 import { TicketBoard } from '../components/ticket-board';
 import { TicketInspector } from '../components/ticket-inspector';
 import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
-import { PageHeader } from '../components/page-header';
-import { collectionTickets } from './ticket-collections-demo';
-import { commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
-import { filteredWorkspaceTickets, inspectorOpen, inspectorTab, workspaceColumns, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
-import { composerCategory, composerExpanded, composerTitle } from './workspace-components-demo';
-import { QuickTicketComposer } from '../components/quick-ticket-composer';
 import { editingNoteId, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
+import { commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
+import { collectionTickets } from './ticket-collections-demo';
+import { composerCategory, composerExpanded, composerTitle,filteredWorkspaceTickets, inspectorOpen, inspectorTab, workspaceColumns, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort  } from './workspace-components-demo';
 
 const initialTabs: ProjectTabProps[] = [
   { id: 'hotsheet', name: 'Hot Sheet 2', location: 'local', selected: true },

@@ -1,7 +1,9 @@
+import './resizable-region.css';
+
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { GripHorizontal, GripVertical } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
-import './resizable-region.css';
 
 export type ResizableRegionAxis = 'horizontal' | 'vertical';
 export type ResizableRegionEdge = 'start' | 'end';

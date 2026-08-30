@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { NoteCard } from './note-card';
 
 describe('NoteCard', () => {

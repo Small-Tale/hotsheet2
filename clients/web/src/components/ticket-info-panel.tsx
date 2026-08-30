@@ -1,18 +1,19 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import type { TicketStatus } from './status-badge';
-import { TicketStatusMenu } from './ticket-status-menu';
-import { TagChip } from './tag-chip';
-import { TicketCategorySelect } from './ticket-category-select';
-import { TicketPrioritySelect } from './ticket-priority-select';
-import type { TicketPriority } from './ticket-row';
-import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
-import { TicketNotes } from './ticket-notes';
-import type { NoteCardProps } from './note-card';
-import { BlockedBadge } from './status-badge';
 import './ticket-inspector-panel.css';
 
+import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
+import type { NoteCardProps } from './note-card';
+import type { TicketStatus } from './status-badge';
+import { BlockedBadge } from './status-badge';
+import { TagChip } from './tag-chip';
+import { TicketCategorySelect } from './ticket-category-select';
+import { TicketNotes } from './ticket-notes';
+import { TicketPrioritySelect } from './ticket-priority-select';
+import type { TicketPriority } from './ticket-row';
+import { TicketStatusMenu } from './ticket-status-menu';
+
 export interface TicketInfoPanelProps { status: TicketStatus; priority: TicketPriority; category: string; tags: string[]; details: string; detailsMode?: MarkdownEditorMode; detailsDirty?: boolean; readerPresentation?: boolean; notes?: readonly NoteCardProps[]; editingNoteId?: string; noteDraft?: string; blockedReason?: string; blockedReasonEditing?: boolean; blockedReasonDraft?: string; providerName?: string; updatedLabel?: string }
-export function TicketInfoPanel({ status, priority, category, tags, details, detailsMode = 'preview', detailsDirty = false, readerPresentation = false, notes = [], editingNoteId, noteDraft, blockedReason = '', blockedReasonEditing = false, blockedReasonDraft = blockedReason, providerName = 'Hot Sheet git', updatedLabel = 'Updated now' }: TicketInfoPanelProps) {
+export function TicketInfoPanel({ status, priority, category, tags, details, detailsMode = 'preview', detailsDirty = false, notes = [], editingNoteId, noteDraft, blockedReason = '', blockedReasonEditing = false, blockedReasonDraft = blockedReason, providerName = 'Hot Sheet git', updatedLabel = 'Updated now' }: TicketInfoPanelProps) {
   return <div class="ticket-inspector__content" data-component="ticket-info-panel">
     <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
       <TicketCategorySelect name="inspector-category" value={category} />

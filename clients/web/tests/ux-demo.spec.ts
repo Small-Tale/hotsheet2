@@ -25,7 +25,7 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
   const catalogTop = await page.getByRole('complementary', { name: 'Component catalog' }).evaluate(node => node.getBoundingClientRect().top);
-  await page.evaluate(() => window.scrollTo(0, 500));
+  await page.evaluate(() => { window.scrollTo(0, 500); });
   await expect.poll(() => page.getByRole('complementary', { name: 'Component catalog' }).evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(catalogTop, 0);
   await expect(page.getByRole('complementary', { name: 'Component catalog' }).getByText('Uses')).toHaveCount(0);
   const relationships = page.locator('.demo-relationships');
@@ -74,7 +74,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   const beforeScroll = await selection.boundingBox();
   const scroller = page.locator('.demo-master');
   const initialScroll = await scroller.evaluate(node => node.scrollTop);
-  await scroller.evaluate(node => node.scrollBy(0, -80));
+  await scroller.evaluate(node => { node.scrollBy(0, -80); });
   await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeLessThan(initialScroll);
   const scrolled = await selection.boundingBox();
   const scrollDelta = await scroller.evaluate((node, start) => node.scrollTop - start, initialScroll);
@@ -87,7 +87,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   const after = await selection.boundingBox();
   expect(after!.width).toBeGreaterThan(before!.width);
   expect(after!.height).toBeGreaterThan(before!.height);
-  expect(await stableSelectionNode!.evaluate(node => node.isConnected)).toBe(true);
+  expect(await stableSelectionNode.evaluate(node => node.isConnected)).toBe(true);
   const corner = await resize.boundingBox();
   expect(Math.abs(corner!.width - corner!.height)).toBeLessThanOrEqual(1);
   const eastResize = selection.getByRole('button', { name: /Resize capture 1 from e$/ });
@@ -122,7 +122,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
   await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
   const capturedPixels = await dialog.getByRole('img', { name: 'Captured region 1 preview' }).evaluate(async image => {
-    if (!(image as HTMLImageElement).complete) await new Promise(resolve => image.addEventListener('load', resolve, { once: true }));
+    if (!(image as HTMLImageElement).complete) await new Promise(resolve => { image.addEventListener('load', resolve, { once: true }); });
     const canvas = document.createElement('canvas'); canvas.width = (image as HTMLImageElement).naturalWidth; canvas.height = (image as HTMLImageElement).naturalHeight; const context = canvas.getContext('2d')!; context.drawImage(image as HTMLImageElement, 0, 0); const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data; let green = 0; for (let index = 0; index < pixels.length; index += 4) if (pixels[index] === 12 && pixels[index + 1] === 200 && pixels[index + 2] === 34) green += 1; return { center: [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data], green, width: canvas.width, height: canvas.height };
   });
   expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([219, 234, 254]);
@@ -965,7 +965,7 @@ test('exercises the application-shell component slice and responsive composition
   const tabStates = page.locator('[data-component="project-tab"]');
   await expect(tabStates).toHaveCount(6);
   await expect(tabStates.filter({ hasText: 'Selected local' })).toHaveAttribute('data-selected', 'true');
-  await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy i')).toHaveCount(1);
+  await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .loading-spinner')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Disconnected' }).locator('[data-lucide="wifi-off"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
@@ -1014,7 +1014,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__busy');
   const spinnerAlignment = await busySpinner.evaluate(node => {
-    const outer = node.getBoundingClientRect(); const icon = node.querySelector('i')!.getBoundingClientRect(); const tab = node.closest('[data-component="project-tab"]')!.getBoundingClientRect();
+    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect(); const tab = node.closest('[data-component="project-tab"]')!.getBoundingClientRect();
     return { x: Math.abs((outer.left + outer.width / 2) - (icon.left + icon.width / 2)), y: Math.abs((outer.top + outer.height / 2) - (icon.top + icon.height / 2)), tabY: Math.abs((outer.top + outer.height / 2) - (tab.top + tab.height / 2)) };
   });
   expect(spinnerAlignment.x).toBeLessThan(1);
@@ -1022,7 +1022,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(spinnerAlignment.tabY).toBeLessThan(1);
   const animatedCenters = await busySpinner.evaluate(async node => {
     const centers: Array<[number, number]> = [];
-    for (let frame = 0; frame < 12; frame++) await new Promise<void>(resolve => requestAnimationFrame(() => { const box = node.querySelector('i')!.getBoundingClientRect(); centers.push([box.x + box.width / 2, box.y + box.height / 2]); resolve(); }));
+    for (let frame = 0; frame < 12; frame++) await new Promise<void>(resolve => requestAnimationFrame(() => { const box = node.querySelector('svg')!.getBoundingClientRect(); centers.push([box.x + box.width / 2, box.y + box.height / 2]); resolve(); }));
     return centers;
   });
   expect(Math.max(...animatedCenters.map(([x]) => x)) - Math.min(...animatedCenters.map(([x]) => x))).toBeLessThan(.1);
@@ -1215,7 +1215,6 @@ test('exercises the application-shell component slice and responsive composition
   expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(207, 211, 220)' });
   await shell.getByRole('button', { name: 'Columns view' }).click();
   const shellWorkspace = shell.locator('.app-shell__workspace');
-  const shellBoard = shell.getByRole('region', { name: 'Project board' });
   await expect(shellWorkspace).toHaveAttribute('data-presentation', 'edge-to-edge');
   const boardGeometry = await shellWorkspace.evaluate(node => {
     const board = node.querySelector('.ticket-board')!;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { CATEGORY_COLORS, categoryAbbreviation, resolveCategoryColor, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 
 describe('category presentation', () => {

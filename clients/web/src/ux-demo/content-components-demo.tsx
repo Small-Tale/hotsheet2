@@ -1,8 +1,9 @@
 import { signal } from 'kerfjs';
+
 import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-editor';
 import { NoteCard, type NoteKind } from '../components/note-card';
-import { TicketReader } from '../components/ticket-reader';
 import type { InspectorTab } from '../components/ticket-inspector';
+import { TicketReader } from '../components/ticket-reader';
 
 export const NOTE_DEMO_KINDS: readonly NoteKind[] = ['regular', 'status', 'feedback_needed', 'activity'];
 export const noteDemoNotes = signal([

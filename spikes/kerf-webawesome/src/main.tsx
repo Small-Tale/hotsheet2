@@ -1,14 +1,16 @@
-import { delegate, mount, signal } from 'kerfjs';
 import '@awesome.me/webawesome/dist/styles/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './style.css';
 
+import { delegate, mount, signal } from 'kerfjs';
+
 type WaInput = HTMLElement & { value: string };
 type WaDialog = HTMLElement & { open: boolean; show(): void; hide(): void };
 
-const app = document.querySelector<HTMLElement>('#app')!;
+const app = document.querySelector<HTMLElement>('#app');
+if (app === null) throw new Error('Missing #app mount point.');
 const value = signal('initial');
 const structuralRevision = signal(0);
 const dark = signal(false);
@@ -16,7 +18,9 @@ const events: string[] = [];
 
 function record(name: string): void {
   events.push(name);
-  document.querySelector('[data-events]')!.textContent = events.join(',');
+  const output = document.querySelector('[data-events]');
+  if (output === null) throw new Error('Missing event output.');
+  output.textContent = events.join(',');
 }
 
 mount(app, () => {
@@ -38,7 +42,7 @@ mount(app, () => {
 });
 
 for (const name of ['input', 'change', 'wa-input', 'wa-change', 'wa-show', 'wa-hide', 'wa-after-show', 'wa-after-hide']) {
-  delegate(app, name, 'wa-input, wa-dialog', (event, target) => {
+  void delegate(app, name, 'wa-input, wa-dialog', (event, target) => {
     record(event.type);
     if (target.matches('wa-input') && (event.type === 'input' || event.type === 'wa-input')) {
       value.value = (target as WaInput).value;
@@ -46,12 +50,13 @@ for (const name of ['input', 'change', 'wa-input', 'wa-change', 'wa-show', 'wa-h
   });
 }
 
-delegate(app, 'click', '[data-action]', (_event, target) => {
+void delegate(app, 'click', '[data-action]', (_event, target) => {
   switch ((target as HTMLElement).dataset.action) {
     case 'rerender': structuralRevision.value += 1; break;
     case 'theme': dark.value = !dark.value; break;
     case 'open': (document.querySelector('[data-testid="dialog"]') as WaDialog).show(); break;
     case 'close': (document.querySelector('[data-testid="dialog"]') as WaDialog).hide(); break;
+    case undefined: break;
   }
 });
 

@@ -1,7 +1,8 @@
 import { signal } from 'kerfjs';
-import { TicketList } from '../components/ticket-list';
+
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { TicketBoardColumn } from '../components/ticket-board-column';
+import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 
 const initialTickets: TicketRowProps[] = [

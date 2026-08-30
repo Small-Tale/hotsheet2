@@ -1,8 +1,10 @@
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
-import { ArrowRight, CircleX, Trash2, X, type IconNode } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './project-tab-context-menu.css';
+
+import { ArrowRight, CircleX, type IconNode,Trash2, X } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
 
 const actions: ReadonlyArray<{ id: string; label: string; icon: IconNode; iconName: string; danger?: boolean }> = [
   { id: 'close', label: 'Close Tab', icon: X, iconName: 'x' },

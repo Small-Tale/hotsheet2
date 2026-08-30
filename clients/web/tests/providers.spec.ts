@@ -1,41 +1,65 @@
-import {test,expect} from '@playwright/test';
-test('manages connections, filters providers, and honors capabilities',async({page})=>{
-  let connections=[{id:'github-main',provider:'github',locator:'acme/repo',name:'Public',default:true,settings:{credential:{secret:'github-work'}}}];
-  const descriptors=[
-    {connection_id:'github-main',provider:'github',display_name:'GitHub acme/repo',locator:'acme/repo',default:true,capabilities:{create:true,update:true,close:true,notes:true,attachments:false,assignment:true,review_requests:false,dependencies:false,up_next:false,close_reasons:true,claims:false,atomic_batch:false,offline_mutation:false,history:true,watch:true,provider_idempotency:false,query_fields:[]}},
-    {connection_id:'jira-team',provider:'jira',display_name:'Jira ENG',locator:'ENG',default:false,capabilities:{create:true,update:true,close:false,notes:true,attachments:false,assignment:true,review_requests:false,dependencies:false,up_next:false,close_reasons:false,claims:false,atomic_batch:false,offline_mutation:false,history:true,watch:true,provider_idempotency:false,query_fields:[]}}
-  ];
-  await page.route('**/*',async route=>{const url=new URL(route.request().url()),path=url.pathname,method=route.request().method();if(path==='/providers')return route.fulfill({json:descriptors});if(path==='/provider-connections'&&method==='GET')return route.fulfill({json:connections});if(path==='/provider-connections'&&method==='POST'){const body=route.request().postDataJSON();connections=[...connections,body];return route.fulfill({status:201,json:body})}if(path.startsWith('/provider-connections/')&&method==='DELETE'){connections=connections.filter(c=>c.id!==path.split('/').pop());return route.fulfill({status:204})}if(path==='/providers/github-main/tickets')return route.fulfill({json:[{qualified_id:'github-main:12',native_id:'12',native_url:'https://github.test/12',title:'GitHub bug',status:'not_started',connection_id:'github-main',notes:[{id:'03',kind:'activity',created_at:'2026-08-26T03:00:00Z',edited_at:'2026-08-26T03:00:00Z',text:'Completed again'},{id:'01',kind:'activity',created_at:'2026-08-26T01:00:00Z',edited_at:'2026-08-26T01:30:00Z',text:'Completed'},{id:'02',kind:'activity',created_at:'2026-08-26T02:00:00Z',edited_at:'2026-08-26T02:00:00Z',text:'Marked not working'},{id:'04',kind:'regular',created_at:'2026-08-26T04:00:00Z',edited_at:'2026-08-26T04:00:00Z',text:'Not timeline activity'}]}]});if(path==='/providers/jira-team/tickets')return route.fulfill({json:[{qualified_id:'jira-team:ENG-9',native_id:'ENG-9',native_url:'https://jira.test/ENG-9',title:'Jira task',status:'started',connection_id:'jira-team'}]});return route.continue()});
-  await page.goto('/');
-  await expect(page.getByText('GitHub bug')).toBeVisible();
-  await expect(page.getByRole('link',{name:/github-main:12/})).toHaveAttribute('href','https://github.test/12');
-  const timeline=page.getByRole('region',{name:'Activity for GitHub bug'});await expect(timeline.locator('li')).toHaveText(['2026-08-26T01:00:00ZCompletedEdited 2026-08-26T01:30:00Z','2026-08-26T02:00:00ZMarked not working','2026-08-26T03:00:00ZCompleted again']);await expect(timeline).not.toContainText('Not timeline activity');
-  await page.locator('[data-filter]').evaluate((node:HTMLElement&{value:string})=>{node.value='jira-team';node.dispatchEvent(new Event('change',{bubbles:true}))});
-  await expect(page.getByText('Jira task')).toBeVisible();
-  const jira=page.locator('.tickets article').filter({hasText:'Jira task'});await expect(jira.getByRole('button',{name:'Close'})).toBeDisabled();await expect(jira.getByRole('button',{name:'Close'})).toHaveAttribute('title','This provider does not support closing');
-  await page.getByRole('button',{name:'Add connection'}).click();
-  await page.locator('wa-input[name=id]').evaluate((n:HTMLElement&{value:string})=>n.value='gitlab-team');
-  await page.locator('wa-select[name=provider]').evaluate((n:HTMLElement&{value:string})=>n.value='gitlab');
-  await page.locator('wa-input[name=locator]').evaluate((n:HTMLElement&{value:string})=>n.value='team/project');
-  await page.locator('wa-input[name=credential]').evaluate((n:HTMLElement&{value:string})=>n.value='gitlab-work');
-  const posted=page.waitForRequest(request=>new URL(request.url()).pathname==='/provider-connections'&&request.method()==='POST');
-  await page.getByRole('button',{name:'Save'}).click();
-  await posted;
-  await expect(page.getByText(/gitlab · team\/project/)).toBeVisible();
-});
+import { expect,test } from '@playwright/test';
 
-test('renders attachment identity and creation time',async({page})=>{
-  const capabilities={create:true,update:true,close:true,notes:true,attachments:true,assignment:true,review_requests:false,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]};
-  await page.route('**/*',async route=>{
-    const path=new URL(route.request().url()).pathname;
-    if(path==='/providers')return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Local',locator:'store',default:true,capabilities}]});
-    if(path==='/provider-connections')return route.fulfill({json:[]});
-    if(path==='/providers/git-local/tickets')return route.fulfill({json:[{qualified_id:'git-local:01',native_id:'01',title:'Evidence',status:'started',connection_id:'git-local',attachments:[{id:'01ATTACHMENT',filename:'proof.txt',created_at:'2026-08-26T05:00:00Z'}]}]});
+const project = { id:'demo-checkout', root:'/work/demo', name:'demo', stores:['/work/demo.hs2'], apiPath:'/__hotsheet/project-api/demo-checkout' };
+const row = { connection_id:'git-local', native_id:'01', qualified_id:'git-local:01', id:'01', slug:'HS2-DEMO01', title:'Use real project tickets', category:'feature', priority:'high', status:'started', up_next:true, tags:['client'], blocked_by:[], claim_count:0, created_at:'2026-08-30T00:00:00Z', updated_at:'2026-08-30T01:00:00Z' };
+const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
+
+async function mockProject(page: import('@playwright/test').Page) {
+  let rows = [row];
+  let selectedFull = full;
+  await page.route('**/*', async route => {
+    const request=route.request(), url=new URL(request.url()), path=url.pathname;
+    if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:project});
+    if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
+    if(path.endsWith('/tickets')&&request.method()==='GET') return route.fulfill({json:rows});
+    if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
+    if(path.endsWith('/tickets/01')&&request.method()==='GET') return route.fulfill({json:{store:'git-local',...selectedFull}});
+    if(path.includes('/tickets/')&&request.method()==='PATCH'){const id=path.split('/').pop(),body=request.postDataJSON();rows=rows.map(item=>item.id===id?{...item,...body}:item);selectedFull={...selectedFull,...body};return route.fulfill({json:{store:'git-local',...selectedFull}})}
     return route.continue();
   });
-  await page.goto('/');
-  const attachments=page.getByRole('region',{name:'Attachments for Evidence'});
-  await expect(attachments).toContainText('proof.txt');
-  await expect(attachments).toContainText('2026-08-26T05:00:00Z');
-  await expect(attachments.locator('li')).toHaveAttribute('data-attachment-id','01ATTACHMENT');
+}
+
+test('opens a checkout, discovers its source, and drives real shell ticket flows',async({page})=>{
+  await mockProject(page); await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/Users/westphal/Documents/hotsheet2');
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.getByText('Use real project tickets')).toBeVisible();
+  await page.getByText('Use real project tickets').click();
+  await expect(page.getByText('The real ticket body.')).toBeVisible();
+  await page.getByRole('button',{name:/Change status/}).click();
+  await page.locator('[data-inspector-status="completed"]').click();
+  await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');
+  await page.getByRole('button',{name:'Timeline'}).click();
+  await expect(page.getByText('Connected the client')).toBeVisible();
+  await page.getByRole('button',{name:'Info'}).click();
+  await page.getByRole('button',{name:'New ticket…'}).click();
+  await page.locator('wa-input[name="new-ticket-title"]').evaluate((node:HTMLElement&{value:string})=>{node.value='Created from the real shell';node.dispatchEvent(new Event('input',{bubbles:true}))});
+  await page.getByRole('button',{name:'Create ticket'}).click();
+  await expect(page.getByText('Created from the real shell')).toBeVisible();
+  await page.getByLabel('Settings view').click();
+  await expect(page.getByText('/work/demo.hs2')).toBeVisible();
+});
+
+test('renders attachment identity from a selected real ticket',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();await page.getByRole('button',{name:'Attachments'}).click();
+  const item=page.locator('[data-attachment-id="A1"]');await expect(item).toContainText('proof.png');
+});
+
+test('live project visual review',async({page})=>{
+  test.skip(!process.env.HOTSHEET_LIVE_PROJECT,'opt-in local visual review');
+  const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();
+  await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string},value)=>node.value=value,process.env.HOTSHEET_LIVE_PROJECT);
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible({timeout:15_000});
+  const loaded=page.waitForResponse(response=>response.url().includes('/tickets/')&&response.request().method()==='GET');
+  await page.locator('[data-component="ticket-list-row"]').first().click();
+  expect((await loaded).status()).toBe(200);
+  expect(pageErrors).toEqual([]);
+  await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hotsheet-real-app.png',fullPage:true});
+  await page.setViewportSize({width:900,height:760});
+  await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hotsheet-real-app-narrow.png',fullPage:true});
 });

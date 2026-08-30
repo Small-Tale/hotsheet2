@@ -49,6 +49,22 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 
+- **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
+  production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
+  development catalog. The project-tab `+` action opens a code-checkout dialog. On first
+  open, the server conservatively discovers a valid sibling `<checkout>.hs2` git ticket
+  store, hosts it, and records the many-to-many checkout/store link. The dialog accepts
+  an explicit git-store path when the convention does not apply. The Vite-only bridge
+  discovers or detached-starts the local server and keeps its bearer credential out of
+  browser state; Tauri will replace that bridge with its native lifecycle layer.
+
+  Ticket-provider connections are not stored in `hotsheet-settings.json` or
+  `hotsheet-settings.local.json`: those remain shared/local preferences. Git sources are
+  checkout/store links in the machine registry, while external provider connections are
+  non-secret records in the ticket store's `providers.json` (credentials remain keychain
+  references). Full multi-source editing in the real Settings view is tracked separately;
+  the initial view reports the active source paths and their storage model.
+
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it
   detached if `instance.json` shows none, watch its health) — not to run the core

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { normalizeTagChipProps } from './tag-chip';
 
 describe('TagChip', () => {

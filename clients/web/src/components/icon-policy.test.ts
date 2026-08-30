@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 const decorativeGlyph = /[\u25A0-\u27BF\u{1F300}-\u{1FAFF}]/u;

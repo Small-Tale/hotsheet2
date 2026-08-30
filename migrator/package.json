@@ -12,6 +12,7 @@
   "scripts": {
     "export": "node src/export.mjs",
     "introspect": "node src/introspect.mjs",
+    "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
@@ -20,7 +21,9 @@
     "pglite-migrate": "^2.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@vitest/coverage-v8": "^3.0.0",
+    "eslint": "^10.9.1",
     "pglite-old": "npm:@electric-sql/pglite@^0.3.16",
     "vitest": "^3.0.0"
   }

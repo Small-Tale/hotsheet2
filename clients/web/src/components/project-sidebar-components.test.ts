@@ -1,15 +1,15 @@
+import { Archive, Plus  } from 'lucide';
 import { describe, expect, it } from 'vitest';
+
 import { CommandNavigation } from './command-navigation';
 import { DriveControl } from './drive-control';
-import { ProjectSummary } from './project-summary';
-import { ProjectSidebar } from './project-sidebar';
-import { RepositorySummary } from './repository-summary';
-import { ViewNavigation } from './view-navigation';
-import { MenuItem } from './menu-item';
-import { Archive } from 'lucide';
 import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
-import { Plus } from 'lucide';
+import { MenuItem } from './menu-item';
+import { ProjectSidebar } from './project-sidebar';
+import { ProjectSummary } from './project-summary';
+import { RepositorySummary } from './repository-summary';
+import { ViewNavigation } from './view-navigation';
 
 describe('ProjectSidebar component slice', () => {
   it('uses one stable menu-item grid for icon, label, trailing content, and selection', () => {

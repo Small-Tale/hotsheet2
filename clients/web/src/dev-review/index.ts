@@ -1,6 +1,8 @@
-import html2canvas from 'html2canvas';
-import { clampRectToViewport, intersectRectWithViewport, normalizeRect, resizeRect, translateAnchoredRect, type ResizeHandle, type ReviewRect } from './geometry';
 import './dev-review.css';
+
+import html2canvas from 'html2canvas';
+
+import { clampRectToViewport, intersectRectWithViewport, normalizeRect, type ResizeHandle, resizeRect, type ReviewRect,translateAnchoredRect } from './geometry';
 
 export interface ReviewCapture { id: string; filename: string; dataUrl: string; width: number; height: number }
 export interface ReviewAttachment { id: string; filename: string; dataUrl: string; mimeType: string; size: number }
@@ -64,7 +66,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     toolbar.innerHTML = enabled
       ? '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>'
       : '<button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button>';
-    root.querySelectorAll('.hs-dev-review__hint,.hs-dev-review__rect').forEach(node => node.remove());
+    root.querySelectorAll('.hs-dev-review__hint,.hs-dev-review__rect').forEach(node => { node.remove(); });
     if (!enabled) return;
     const hint = doc.createElement('div');
     hint.className = hintVisible ? 'hs-dev-review__hint' : 'hs-dev-review__hint hs-dev-review__hint--hidden';
@@ -145,7 +147,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     dialog.dataset.hotsheetDevReview = 'true';
     dialog.setAttribute('aria-labelledby', 'hs-dev-review-dialog-title');
     let captures: ReviewCapture[] = [];
-    let attachments: ReviewAttachment[] = [];
+    const attachments: ReviewAttachment[] = [];
     dialog.innerHTML = `<form method="dialog" class="hs-dev-review__form"><header><h2 id="hs-dev-review-dialog-title">New Hot Sheet ticket</h2><button type="button" data-action="close-dialog">Cancel</button></header><div class="hs-dev-review__dialog-body"><div class="hs-dev-review__thumbnails" aria-label="Captured regions"></div><div class="hs-dev-review__preview" aria-label="Selected capture preview"></div><label class="hs-dev-review__dropzone">Drop attachments here or <span>browse</span><input type="file" multiple aria-label="Add attachments"></label><div class="hs-dev-review__attachments" aria-label="Added attachments"></div><label>Feedback notes<textarea name="notes" required placeholder="Describe the issue or requested change…"></textarea></label><p class="hs-dev-review__status" role="status"></p></div><footer><button type="submit">Create Ticket</button></footer></form>`;
     doc.body.append(dialog);
     const thumbnails = dialog.querySelector<HTMLElement>('.hs-dev-review__thumbnails')!;
@@ -157,14 +159,14 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     const attachmentList = dialog.querySelector<HTMLElement>('.hs-dev-review__attachments')!;
     const showPreview = (index: number) => {
       selectedPreview = index;
-      thumbnails.querySelectorAll<HTMLButtonElement>('[data-action="review-capture"]').forEach((button, buttonIndex) => button.setAttribute('aria-pressed', String(buttonIndex === index)));
+      thumbnails.querySelectorAll<HTMLButtonElement>('[data-action="review-capture"]').forEach((button, buttonIndex) => { button.setAttribute('aria-pressed', String(buttonIndex === index)); });
       preview.innerHTML = captures[index] ? `<img src="${captures[index].dataUrl}" alt="Captured region ${index + 1} preview">` : '<span>No captured regions</span>';
     };
     const showCaptures = () => {
       thumbnails.replaceChildren();
       captures.forEach((item, index) => {
         const wrapper = doc.createElement('div'); wrapper.className = 'hs-dev-review__item';
-        const button = doc.createElement('button'); button.type = 'button'; button.className = 'hs-dev-review__thumbnail'; button.dataset.action = 'review-capture'; button.setAttribute('aria-label', `Review captured region ${index + 1}`); button.innerHTML = `<img src="${item.dataUrl}" alt="">`; button.addEventListener('click', () => showPreview(index));
+        const button = doc.createElement('button'); button.type = 'button'; button.className = 'hs-dev-review__thumbnail'; button.dataset.action = 'review-capture'; button.setAttribute('aria-label', `Review captured region ${index + 1}`); button.innerHTML = `<img src="${item.dataUrl}" alt="">`; button.addEventListener('click', () => { showPreview(index); });
         const remove = doc.createElement('button'); remove.type = 'button'; remove.className = 'hs-dev-review__remove'; remove.setAttribute('aria-label', `Remove captured region ${index + 1}`); remove.addEventListener('click', () => { captures.splice(index, 1); const selectionIndex = selections.findIndex(selection => selection.id === item.id); if (selectionIndex >= 0) selections.splice(selectionIndex, 1); selectedPreview = Math.min(selectedPreview, Math.max(0, captures.length - 1)); render(); showCaptures(); });
         wrapper.append(button, remove); thumbnails.append(wrapper);
       });
@@ -182,7 +184,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     };
     const addFiles = async (files: FileList | File[]) => {
       for (const file of Array.from(files)) {
-        const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error); reader.readAsDataURL(file); });
+        const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => { resolve(String(reader.result)); }; reader.onerror = () => { reject(reader.error); }; reader.readAsDataURL(file); });
         attachments.push({ id: `attachment-${Date.now()}-${attachments.length}`, filename: file.name, dataUrl, mimeType: file.type || 'application/octet-stream', size: file.size });
       }
       showAttachments();
@@ -191,8 +193,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     for (const type of ['dragenter', 'dragover']) dropzone.addEventListener(type, event => { event.preventDefault(); dropzone.dataset.dragging = 'true'; });
     for (const type of ['dragleave', 'drop']) dropzone.addEventListener(type, event => { event.preventDefault(); delete dropzone.dataset.dragging; });
     dropzone.addEventListener('drop', event => { if (event.dataTransfer?.files.length) void addFiles(event.dataTransfer.files); });
-    dialog.querySelectorAll<HTMLElement>('[data-action="close-dialog"]').forEach(button => button.addEventListener('click', () => dialog.close()));
-    dialog.addEventListener('close', () => dialog.remove());
+    dialog.querySelectorAll<HTMLElement>('[data-action="close-dialog"]').forEach(button => { button.addEventListener('click', () => { dialog.close(); }); });
+    dialog.addEventListener('close', () => { dialog.remove(); });
     dialog.querySelector('form')!.addEventListener('submit', async event => {
       event.preventDefault();
       if (submitting) return;
@@ -204,7 +206,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
         const result = await options.submit({ notes: textarea.value.trim(), captures, attachments, pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
         status.textContent = `${result.slug} created.`;
         leaveFeedback();
-        view.setTimeout(() => dialog.close(), 500);
+        view.setTimeout(() => { dialog.close(); }, 500);
       } catch (error) {
         status.textContent = error instanceof Error ? error.message : 'Ticket creation failed.';
         submit.disabled = false;
@@ -284,8 +286,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     else { anchorSelection(selection); scheduleCapture(selection); updateSelectionElement(selection); }
   };
   doc.addEventListener('pointerdown', onPointerDown, true);
-  const onKeyChange = (event: KeyboardEvent) => setModifiers(event.altKey, event.shiftKey);
-  const onWindowBlur = () => setModifiers(false);
+  const onKeyChange = (event: KeyboardEvent) => { setModifiers(event.altKey, event.shiftKey); };
+  const onWindowBlur = () => { setModifiers(false); };
   doc.addEventListener('keydown', onKeyChange, true);
   doc.addEventListener('keyup', onKeyChange, true);
   view.addEventListener('blur', onWindowBlur);

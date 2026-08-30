@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+
 import { createDevApp } from '../dev-server';
-import { demosUsing, demoCatalog, findDemo, flattenCatalog } from './catalog';
+import { demoCatalog, demosUsing, findDemo, flattenCatalog } from './catalog';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
 import { resetTicketRowDemo, ticketRowSettings } from './ticket-row-demo';

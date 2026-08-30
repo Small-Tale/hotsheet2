@@ -7,7 +7,7 @@ export interface ControlState {
 
 /** Synchronize state into live custom-element properties after a Kerf morph/reset. */
 export function syncSettingsControls(root: ParentNode, settingsId: string, state: ControlState): void {
-  const control = (name: string) => root.querySelector(`[data-settings="${settingsId}"] [name="${name}"]`) as LiveControl | null;
+  const control = (name: string) => root.querySelector<LiveControl>(`[data-settings="${settingsId}"] [name="${name}"]`);
   for (const [name, value] of Object.entries(state.values ?? {})) {
     const item = control(name);
     if (item) item.value = value;

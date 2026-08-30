@@ -1,7 +1,9 @@
+import './ticket-notes.css';
+
 import { Plus } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
 import { NoteCard, type NoteCardProps } from './note-card';
-import './ticket-notes.css';
 
 export function TicketNotes({ notes, editingNoteId, noteDraft }: { notes: readonly NoteCardProps[]; editingNoteId?: string; noteDraft?: string }) {
   return <section class="ticket-notes" data-component="ticket-notes">

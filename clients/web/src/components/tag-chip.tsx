@@ -1,3 +1,6 @@
+import '@awesome.me/webawesome/dist/components/tag/tag.js';
+import './tag-chip.css';
+
 export type TagChipVariant = 'brand' | 'neutral' | 'success' | 'warning' | 'danger';
 export type TagChipAppearance = 'accent' | 'filled' | 'outlined' | 'filled-outlined';
 export type TagChipSize = 'small' | 'medium' | 'large';
@@ -49,5 +52,3 @@ export function TagChip(raw: TagChipProps) {
     </wa-tag>
   );
 }
-import '@awesome.me/webawesome/dist/components/tag/tag.js';
-import './tag-chip.css';

@@ -113,7 +113,9 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
 
 - Errors: `thiserror` in libraries, `anyhow` at binary edges; `Result` throughout.
 - Logging: `tracing` structured logs.
-- Workspace-level dependency versions; `rustfmt` + `clippy -D warnings` enforced in CI.
+- Workspace-level dependency versions; `rustfmt` + the repository `cargo lint` Clippy
+  alias are enforced in CI. Every code package also exposes a zero-warning lint command;
+  TypeScript clients use the shared Glassbox-derived ESLint baseline.
 - Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
 
@@ -194,10 +196,11 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
 - **Shared fixtures ("helpers to always use"):** a `TempStore` builder (temp git repo
   + seeded tickets), a `TestServer` harness (real server + temp store on an ephemeral
   port), and an in-memory adapter set for pure unit tests.
-- **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`,
-  `clippy -D warnings`, `nextest`, the plugin **conformance test** (HS2-64), the CLI
+- **CI (GitHub Actions) — built:** the `check` job runs `fmt --check`, `cargo lint`,
+  `nextest`, web client lint/typecheck/unit/build, spike lint/typecheck/build, the plugin
+  **conformance test** (HS2-64), the CLI
   build, and the **migrator vitest + coverage** (now `test:coverage`, gated on the
-  per-language thresholds in `migrator/vitest.config.mjs`) + the cross-language
+  per-language thresholds in `migrator/vitest.config.mjs`) + lint + the cross-language
   conformance. A separate **`coverage` job** collects Rust coverage once
   (`cargo llvm-cov nextest --no-report`), uploads an lcov artifact (a *separate*
   per-language summary, not one merged lcov), and **gates** on a conservative line

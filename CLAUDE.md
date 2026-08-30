@@ -108,6 +108,11 @@ and other non-action structure are the only ordinary exception.
 - **Double coverage**: every feature covered by both unit tests AND E2E tests. Unit = logic in isolation; E2E = real user flows through the running app with minimal mocking.
 - **Unit tests**: Mock external deps (filesystem, network), test real logic.
 - **E2E tests**: As much as possible, use test automation tools to run realistic, user-facing flows. Minimize mocks.
+- **Mock the exact transport contract**: browser fixtures must use the server's real wire
+  shape, including flattening/envelopes, optional fields, and status codes. Do not invent a
+  more convenient response shape for a client test. For each newly composed real API
+  surface, run at least one integration or opt-in local-browser flow against the actual
+  server; a mocked UI test alone cannot validate the adapter boundary.
 - **Coverage**: Merge all test coverage (e.g. unit, E2E server, E2E browser) into one report. Low-coverage files should get more of both test types. Aim for 100% coverage of code lines, 100% coverage of branches, and 100% of features described in the requirements documentation.
 - **Coverage is a floor, not a ceiling**: 100% line/branch coverage shows every line *ran*, not that every *behavior* — or every *sequence* of behaviors — is *asserted*. It is structurally blind to a **missing state transition**: a bug living in an untested interaction sails through a green 100% report because the individual lines still get hit by isolated, single-operation tests.
 - **Transition-matrix testing for stateful modules**: for anything with modes / multiple code paths / a cache / a state machine, enumerate the states AND the transitions between them, then write tests that walk realistic multi-step sequences crossing state boundaries — not just each operation from a clean initial state.
@@ -141,6 +146,15 @@ and other non-action structure are the only ordinary exception.
   CI gate for valid statuses and live evidence paths; line coverage is not a substitute
   for recording both behavioral layers.
 - **Always fix lint and type errors before finishing**: Fix as you go, don't batch.
+  Every client, server, tool, spike, and other code package must ship with a real
+  lint configuration and a package-local lint command from the moment code is added.
+  The web/TypeScript baseline is the shared Glassbox ESLint stack (ESLint recommended,
+  typed TypeScript rules, import ordering, TSDoc, and Kerf rules); Rust uses the pinned
+  toolchain's `rustfmt` and `cargo lint` alias (Clippy for the workspace/all targets/all
+  features, warnings plus debug/TODO/unimplemented macros denied). Do not push with a
+  lint warning or error. Suppress a rule only at a documented compatibility or external
+  boundary—not merely to make the command green—and tighten transitional exceptions as
+  touched code is made safe.
 
 <!-- hotsheet:begin specifics=testing-philosophy v=1 -->
 ### This project's test setup
@@ -234,8 +248,8 @@ working rhythm (once there is code to lint/test):
 
 **During work — repeatable per round (multiple local commits, no push):**
 1. Do a chunk of work (e.g. a ticket).
-2. **Lint and fix** — `cargo fmt` + `cargo clippy -D warnings` for Rust; the
-   client/migrator linters for their trees.
+2. **Lint and fix** — `cargo fmt --all --check` + `cargo lint` for Rust; `npm run
+   lint` in `clients/web`, `migrator`, and `spikes/kerf-webawesome`.
 3. Run the **light/fast tests and fix** — e.g. `cargo nextest run` for the affected
    crates.
 

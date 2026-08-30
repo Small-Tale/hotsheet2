@@ -1,5 +1,5 @@
-import type { IconNode } from 'lucide';
 import { jsx } from 'kerfjs/jsx-runtime';
+import type { IconNode } from 'lucide';
 
 export interface LucideIconProps {
   icon: IconNode;

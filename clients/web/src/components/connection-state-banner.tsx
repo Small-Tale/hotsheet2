@@ -1,6 +1,8 @@
-import { CloudOff, KeyRound, LoaderCircle, RefreshCw, ShieldAlert } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './connection-state-banner.css';
+
+import { CloudOff, KeyRound, LoaderCircle, RefreshCw, ShieldAlert } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
 
 export type ConnectionState = 'connecting' | 'reconnecting' | 'offline' | 'incompatible' | 'authentication';
 export interface ConnectionStateBannerProps { state: ConnectionState; detail?: string }

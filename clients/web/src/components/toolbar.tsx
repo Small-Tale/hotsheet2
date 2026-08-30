@@ -1,5 +1,6 @@
-import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import './toolbar.css';
+
+import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 export interface ToolbarProps {
   leading?: SafeHtml;

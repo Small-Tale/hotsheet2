@@ -1,4 +1,5 @@
-import { Bug, CircleAlert, ListChecks, RefreshCw, Search, Sparkles, type IconNode } from 'lucide';
+import { Bug, CircleAlert, type IconNode,ListChecks, RefreshCw, Search, Sparkles } from 'lucide';
+
 import { Select } from './select';
 
 export interface TicketCategoryChoice { value: string; label: string; color: string; icon: IconNode; iconName: string }

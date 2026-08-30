@@ -1,4 +1,5 @@
-import { Bug, CircleAlert, ListChecks, RefreshCw, Search, Sparkles, type IconNode } from 'lucide';
+import { Bug, CircleAlert, type IconNode,ListChecks, RefreshCw, Search, Sparkles } from 'lucide';
+
 import { CUSTOMIZATION_COLORS } from './customization-palette';
 
 export const CATEGORY_COLORS = CUSTOMIZATION_COLORS;

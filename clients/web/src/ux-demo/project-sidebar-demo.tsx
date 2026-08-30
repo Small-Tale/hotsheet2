@@ -1,12 +1,13 @@
 import { signal } from 'kerfjs';
 import { GripHorizontal } from 'lucide';
+
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { DriveControl } from '../components/drive-control';
-import { ProjectSummary } from '../components/project-summary';
+import { LucideIcon } from '../components/lucide-icon';
 import { ProjectSidebar } from '../components/project-sidebar';
+import { ProjectSummary } from '../components/project-summary';
 import { RepositorySummary } from '../components/repository-summary';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
-import { LucideIcon } from '../components/lucide-icon';
 
 export const selectedViewId = signal('all');
 export const commandGroupExpanded = signal(true);

@@ -1,6 +1,9 @@
-import { Paperclip, Plus, Upload } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './ticket-inspector-panel.css';
+
+import { Paperclip, Plus, Upload } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
+
 export interface TicketAttachmentItem { id: string; name: string }
 export const DEFAULT_ATTACHMENTS: readonly TicketAttachmentItem[] = [
   { id: 'wireframe', name: 'wireframe.png' },

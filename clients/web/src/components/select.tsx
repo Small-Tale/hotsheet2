@@ -1,8 +1,10 @@
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
-import type { IconNode } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './select.css';
+
+import type { IconNode } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
 
 export interface SelectChoice<Value extends string = string> { value: Value; label: string; icon: IconNode; iconName: string; color?: string; group?: string }
 export interface SelectProps<Value extends string = string> { name: string; value: Value; label: string; choices: readonly SelectChoice<Value>[]; className?: string; placeholder?: string }

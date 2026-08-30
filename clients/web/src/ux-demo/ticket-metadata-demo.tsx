@@ -2,8 +2,8 @@ import { TicketAttachments } from '../components/ticket-attachments';
 import { TicketCategorySelect } from '../components/ticket-category-select';
 import { TicketInfoPanel } from '../components/ticket-info-panel';
 import { TicketPrioritySelect } from '../components/ticket-priority-select';
-import { TicketTimeline } from '../components/ticket-timeline';
 import { TicketStatusMenu } from '../components/ticket-status-menu';
+import { TicketTimeline } from '../components/ticket-timeline';
 
 export function TicketCategorySelectDemo() { return <section class="metadata-control-demo" aria-label="TicketCategorySelect demo"><TicketCategorySelect name="demo-category" value="feature" /></section>; }
 export function TicketPrioritySelectDemo() { return <section class="metadata-control-demo" aria-label="TicketPrioritySelect demo"><TicketPrioritySelect name="demo-priority" value="urgent" /></section>; }

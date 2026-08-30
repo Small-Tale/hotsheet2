@@ -1,8 +1,10 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import './project-tab-bar.css';
+
 import { ChartNoAxesCombined, Plus, SquareTerminal } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
-import './project-tab-bar.css';
 
 export interface ProjectTabBarProps {
   tabs: ProjectTabProps[];

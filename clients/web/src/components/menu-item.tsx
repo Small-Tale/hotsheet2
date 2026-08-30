@@ -1,5 +1,6 @@
-import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import './menu-item.css';
+
+import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 export interface MenuItemProps {
   label: string | SafeHtml;

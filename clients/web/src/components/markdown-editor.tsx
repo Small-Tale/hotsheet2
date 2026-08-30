@@ -1,7 +1,9 @@
+import './markdown-editor.css';
+
 import { Maximize2, Minimize2 } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
-import './markdown-editor.css';
 
 export type MarkdownEditorMode = 'write' | 'preview';
 export interface MarkdownEditorProps { value: string; mode: MarkdownEditorMode; expanded?: boolean; dirty?: boolean; label?: string; appearance?: 'standalone' | 'embedded'; showExpand?: boolean; expandAction?: string }

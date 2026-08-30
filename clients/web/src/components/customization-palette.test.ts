@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { CUSTOMIZATION_COLORS, customizationContrastColor, resolveCustomizationColor } from './customization-palette';
 
 describe('shared HS1 customization palette', () => {

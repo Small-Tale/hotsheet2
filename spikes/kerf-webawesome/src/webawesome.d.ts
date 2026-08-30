@@ -1,6 +1,6 @@
 import type { AttrLike, KerfBaseAttrs } from 'kerfjs/jsx-runtime';
 
-type WaBase = KerfBaseAttrs & { slot?: AttrLike<string> };
+type WaBase = KerfBaseAttrs & { slot?: AttrLike };
 
 declare module 'kerfjs/jsx-runtime' {
   namespace JSX {
@@ -11,14 +11,14 @@ declare module 'kerfjs/jsx-runtime' {
         disabled?: AttrLike<boolean>;
       };
       'wa-input': WaBase & {
-        name?: AttrLike<string>;
-        label?: AttrLike<string>;
-        hint?: AttrLike<string>;
-        value?: AttrLike<string>;
+        name?: AttrLike;
+        label?: AttrLike;
+        hint?: AttrLike;
+        value?: AttrLike;
         required?: AttrLike<boolean>;
       };
       'wa-dialog': WaBase & {
-        label?: AttrLike<string>;
+        label?: AttrLike;
         open?: AttrLike<boolean>;
         'light-dismiss'?: AttrLike<boolean>;
       };

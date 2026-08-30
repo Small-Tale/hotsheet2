@@ -1,12 +1,13 @@
 import { signal } from 'kerfjs';
-import { WorkspaceHeader, type WorkspaceSort, type WorkspaceViewMode } from '../components/workspace-header';
+
 import { PageHeader } from '../components/page-header';
 import { QuickTicketComposer } from '../components/quick-ticket-composer';
-import { TicketInspector, type InspectorTab } from '../components/ticket-inspector';
-import { TicketList } from '../components/ticket-list';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
-import type { TicketRowProps } from '../components/ticket-row';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
+import { type InspectorTab,TicketInspector } from '../components/ticket-inspector';
+import { TicketList } from '../components/ticket-list';
+import type { TicketRowProps } from '../components/ticket-row';
+import { WorkspaceHeader, type WorkspaceSort, type WorkspaceViewMode } from '../components/workspace-header';
 import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 

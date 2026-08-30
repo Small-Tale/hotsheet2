@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { StatusBadge, statusPresentation, type TicketStatus } from './status-badge';
 
 describe('StatusBadge', () => {

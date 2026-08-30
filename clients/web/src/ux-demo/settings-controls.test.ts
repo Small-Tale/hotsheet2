@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { syncSettingsControls, type LiveControl } from './settings-controls';
+
+import { type LiveControl,syncSettingsControls } from './settings-controls';
 
 describe('syncSettingsControls', () => {
   it('writes live value and checked properties and tolerates absent controls', () => {

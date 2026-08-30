@@ -1,13 +1,15 @@
+import './project-sidebar.css';
+
+import { PanelLeftClose } from 'lucide';
+
 import { CommandNavigation, type CommandNavigationItem } from './command-navigation';
 import { DriveControl } from './drive-control';
+import { LucideIcon } from './lucide-icon';
 import { ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
-import { ViewNavigation, type ViewNavigationItem } from './view-navigation';
-import { PanelLeftClose } from 'lucide';
-import { LucideIcon } from './lucide-icon';
-import { ToolbarControlGroup } from './toolbar-control-group';
 import { Toolbar } from './toolbar';
-import './project-sidebar.css';
+import { ToolbarControlGroup } from './toolbar-control-group';
+import { ViewNavigation, type ViewNavigationItem } from './view-navigation';
 
 export interface ProjectSidebarProps {
   completedToday: number;

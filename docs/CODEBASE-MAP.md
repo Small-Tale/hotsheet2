@@ -28,13 +28,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
-    src/api.ts               #   Typed server client for providers, connections, tickets, and copy/move
-    src/main.tsx             #   Connection CRUD/default, provider filtering/native links, capability-aware actions
-    src/dev-server.ts        #   Hono /ux-demo HTML route, loaded only by Vite serve on loopback
+    src/api.ts               #   Typed server client for providers plus checkout-scoped real ticket/repository operations
+    src/main.tsx             #   Real AppShell: project tabs, ticket browse/read/create/update, views/search/source summary
+    src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding API proxy
+    src/dev-server.ts        #   Hono local project bridge plus dev-only /ux-demo and review routes
     src/dev-review/          #   Content-anchored capture/delete overlay, upload/removal review UI, and single-commit local-dev CLI submission adapter
     src/components/          #   Production domain UI components, including shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
     src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
-    tests/providers.spec.ts  #   Real-browser mocked-server provider-management flow (HS2-VFXFFP)
+    tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts plus pixel-verified dev-review draw/resize/scrolled-capture/review/submit flow
@@ -228,8 +229,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 - **Rust tests:** `cargo nextest run` (fallback `cargo test`)
 - **Migrator tests:** `cd migrator && npm install && npx vitest run` (the conformance
   test needs `target/debug/hotsheet-cli` built first; it skips otherwise)
-- **Lint (must pass before push):** `cargo fmt --all --check` + `cargo clippy
-  --all-targets --all-features -- -D warnings`
+- **Lint (must pass with zero warnings before push):** `cargo fmt --all --check` +
+  `cargo lint`; then `npm run lint` in `clients/web`, `migrator`, and
+  `spikes/kerf-webawesome`. `.cargo/config.toml` owns the pinned workspace Clippy
+  policy; each Node package owns its ESLint flat config. The web and spike configs use
+  the Glassbox ESLint/TypeScript/import/TSDoc/Kerf baseline.
 
 ## Where do I look for X?
 
@@ -240,7 +244,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 | Slug derivation | `hotsheet-model/src/ids.rs` |
 | Store layout / sharding | `hotsheet-ticketing/src/store.rs`, [02](02-ticket-storage.md) §2.3 |
 | HS1 → git migration | `migrator/` + `hotsheet-cli/src/import.rs` (stable HS2 ids, close-state normalization; no retained HS1 fields), [07](07-migration.md) |
-| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/,dev-review/}` (dev-only Hono catalog + real components; content-anchored, batched html2canvas review overlay and single-commit local CLI bridge in `dev-review/`; application shell composition in `components/{app-shell,workspace-header,page-header,project-tab-bar,project-tab,resizable-region,connection-state-banner}.*`; shared sidebar rows/headings in `components/{menu-item,menu-header}.*`; board composition in `components/{ticket-board,ticket-board-column,ticket-row}.*`; ticket content reading/editing in `components/{note-card,ticket-notes,markdown-preview,markdown-editor,ticket-info-panel,ticket-inspector,ticket-reader}.*`; shared ticket colors in `components/ticket-state-colors.css`), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md), [Dev Review](18-dev-review-tool.md) |
+| Web client UI foundation | `clients/web/src/{dev-server.ts,components/,ux-demo/,dev-review/}` (dev-only Hono catalog + real components; content-anchored, batched html2canvas review overlay and single-commit local CLI bridge in `dev-review/`; application shell composition in `components/{app-shell,workspace-header,page-header,project-tab-bar,project-tab,resizable-region,connection-state-banner,loading-spinner}.*`; shared sidebar rows/headings in `components/{menu-item,menu-header}.*`; board composition in `components/{ticket-board,ticket-board-column,ticket-row}.*`; ticket content reading/editing in `components/{note-card,ticket-notes,markdown-preview,markdown-editor,ticket-info-panel,ticket-inspector,ticket-reader}.*`; shared ticket colors in `components/ticket-state-colors.css`), `spikes/kerf-webawesome/` (Kerf/Web Awesome compatibility proof), [06](06-clients.md), [UX component catalog](ux-components.md), [Dev Review](18-dev-review-tool.md) |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
 | Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |

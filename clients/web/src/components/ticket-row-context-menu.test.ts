@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
 
 describe('TicketRowContextMenu', () => {

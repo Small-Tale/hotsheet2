@@ -1,17 +1,19 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import './ticket-inspector.css';
+
 import { BookOpen, Info, ListTree, PanelRightClose, Paperclip, Star, X } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
+import type { MarkdownEditorMode } from './markdown-editor';
+import type { NoteCardProps } from './note-card';
 import type { TicketStatus } from './status-badge';
-import type { TicketPriority } from './ticket-row';
+import { type TicketAttachmentItem,TicketAttachments } from './ticket-attachments';
 import { TicketInfoPanel } from './ticket-info-panel';
+import type { TicketPriority } from './ticket-row';
 import { TicketTimeline, type TicketTimelineEntry } from './ticket-timeline';
-import { TicketAttachments, type TicketAttachmentItem } from './ticket-attachments';
+import { Toolbar } from './toolbar';
 import { ToolbarControlGroup } from './toolbar-control-group';
 import { ToolbarText } from './toolbar-text';
-import { Toolbar } from './toolbar';
-import './ticket-inspector.css';
-import type { NoteCardProps } from './note-card';
-import type { MarkdownEditorMode } from './markdown-editor';
 
 export type InspectorTab = 'info' | 'timeline' | 'attachments';
 

@@ -2,10 +2,12 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
+import './quick-ticket-composer.css';
+
 import { Plus } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
 import { TicketCategorySelect } from './ticket-category-select';
-import './quick-ticket-composer.css';
 
 export interface QuickTicketComposerProps {
   expanded?: boolean;

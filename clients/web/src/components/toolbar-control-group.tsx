@@ -1,5 +1,6 @@
-import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import './toolbar-control-group.css';
+
+import type { SafeHtml } from 'kerfjs/jsx-runtime';
 
 export interface ToolbarControlGroupProps {
   children: SafeHtml | SafeHtml[];

@@ -1,4 +1,5 @@
 import './ticket-inspector-panel.css';
+
 export interface TicketTimelineEntry { id: string; time: string; title: string; subtitle?: string; emphasized?: boolean }
 export const DEFAULT_TIMELINE_ENTRIES: readonly TicketTimelineEntry[] = [
   { id: 'started', time: '1h ago', title: 'Claude started work', subtitle: 'Plan: build the shared inspector and timeline states.', emphasized: true },

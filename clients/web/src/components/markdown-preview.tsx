@@ -1,6 +1,7 @@
+import './markdown-preview.css';
+
 import { raw } from 'kerfjs';
 import { marked } from 'marked';
-import './markdown-preview.css';
 
 export function escapeMarkdownHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -19,7 +20,7 @@ marked.use({ renderer: {
 } });
 
 export function renderMarkdown(source: string): string {
-  return marked.parse(source, { async: false }) as string;
+  return marked.parse(source, { async: false });
 }
 
 export function MarkdownPreview({ source, emptyLabel = 'Nothing to preview.' }: { source: string; emptyLabel?: string }) {

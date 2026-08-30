@@ -1,5 +1,6 @@
-import { TicketRow, type TicketRowProps } from './ticket-row';
 import './ticket-board-column.css';
+
+import { TicketRow, type TicketRowProps } from './ticket-row';
 
 export interface TicketBoardColumnProps {
   id: string;

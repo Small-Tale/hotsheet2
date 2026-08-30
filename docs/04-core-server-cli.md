@@ -90,6 +90,13 @@ only linked store or requires an explicit store id when several are linked. MCP 
 tools accept the same optional `checkout` target (and `store` for ambiguous creates) in
 both HTTP and serverless modes.
 
+`POST /projects/open` is the client onboarding transaction: it validates a code checkout,
+accepts explicit git-store paths or discovers an exact sibling `<checkout>.hs2` store,
+hosts those stores, and registers the checkout links. Discovery only accepts a directory
+containing `hotsheet-store.json`; it never creates a store or assumes a checkout has only
+one source. An empty discovered source set remains valid at the core layer so a richer
+client can present provider setup.
+
 ### Headless platform APIs
 
 The authenticated server exposes checkout-scoped repository snapshots at

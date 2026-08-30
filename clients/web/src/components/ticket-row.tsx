@@ -1,9 +1,11 @@
-import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
-import { TagChip } from './tag-chip';
+import './ticket-row.css';
+
+import { ChevronDown, ChevronsUp, ChevronUp, type IconNode,Minus, Star } from 'lucide';
+
 import { categoryAbbreviation, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
-import { ChevronDown, ChevronUp, ChevronsUp, Minus, Star, type IconNode } from 'lucide';
-import './ticket-row.css';
+import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
+import { TagChip } from './tag-chip';
 
 export type TicketPriority = 'low' | 'default' | 'high' | 'urgent';
 

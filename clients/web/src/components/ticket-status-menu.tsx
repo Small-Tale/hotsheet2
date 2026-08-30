@@ -1,8 +1,9 @@
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
-import { StatusBadge, statusPresentation, type TicketStatus } from './status-badge';
-import { LucideIcon } from './lucide-icon';
 import './ticket-status-menu.css';
+
+import { LucideIcon } from './lucide-icon';
+import { StatusBadge, statusPresentation, type TicketStatus } from './status-badge';
 
 const STATUSES: readonly TicketStatus[] = ['not_started', 'started', 'completed', 'verified', 'backlog'];
 export function TicketStatusMenu({ value }: { value: TicketStatus }) {

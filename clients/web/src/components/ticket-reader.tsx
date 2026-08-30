@@ -1,5 +1,6 @@
-import { TicketInspector, type TicketInspectorProps } from './ticket-inspector';
 import './ticket-reader.css';
+
+import { TicketInspector, type TicketInspectorProps } from './ticket-inspector';
 
 export type TicketReaderProps = Omit<TicketInspectorProps, 'presentation'>;
 

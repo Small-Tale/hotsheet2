@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { TicketCategorySelect } from './ticket-category-select';
-import { TicketPrioritySelect } from './ticket-priority-select';
-import { TicketInfoPanel } from './ticket-info-panel';
-import { TicketTimeline } from './ticket-timeline';
+
 import { TicketAttachments } from './ticket-attachments';
+import { TicketCategorySelect } from './ticket-category-select';
+import { TicketInfoPanel } from './ticket-info-panel';
+import { TicketPrioritySelect } from './ticket-priority-select';
 import { TicketStatusMenu } from './ticket-status-menu';
+import { TicketTimeline } from './ticket-timeline';
 
 describe('ticket metadata controls and inspector panels', () => {
   it('renders colored category icons and semantic priority icons', () => {

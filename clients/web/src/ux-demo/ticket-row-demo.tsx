@@ -1,8 +1,9 @@
 import { signal } from 'kerfjs';
-import { TicketRow, type TicketPriority } from '../components/ticket-row';
-import type { TicketStatus } from '../components/status-badge';
-import { syncSettingsControls } from './settings-controls';
+
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../components/category-presentation';
+import type { TicketStatus } from '../components/status-badge';
+import { type TicketPriority,TicketRow } from '../components/ticket-row';
+import { syncSettingsControls } from './settings-controls';
 
 export const ticketRowSettings = {
   title: signal('Build the first client ticket list'),

@@ -1,6 +1,8 @@
-import { Play, Square } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './drive-control.css';
+
+import { Play, Square } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
 
 export interface DriveControlProps { running: boolean; tool?: string }
 export function DriveControl({ running, tool = 'AI tool' }: DriveControlProps) {

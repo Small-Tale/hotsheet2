@@ -1,2 +1,21 @@
 @import './components/cursor-semantics.css';
-:root{font-family:system-ui;color:#18202a;background:#f4f6f8}.app{max-width:960px;margin:auto;padding:2rem}header,article,footer{display:flex;align-items:center;gap:1rem}header{justify-content:space-between}.connections,.tickets{display:grid;gap:.75rem;margin:1rem 0 2rem}article{background:white;border:1px solid #d7dde4;border-radius:.6rem;padding:1rem}article strong,article a{flex:1}article span{color:#5b6673}form{display:grid;gap:1rem;min-width:min(32rem,80vw)}footer{justify-content:flex-end}.tickets article{align-items:flex-start;flex-wrap:wrap}.tickets article>div{display:flex;gap:.5rem;width:100%}.activity,.attachments{width:100%;border-left:.2rem solid #8a63d2;padding-left:1rem}.activity h3,.attachments h3{margin:.25rem 0}.activity ol,.attachments ul{display:grid;gap:.5rem;margin:.5rem 0;padding-left:1.25rem}.activity li{padding-left:.25rem}.activity time,.activity small,.attachments time{display:block;color:#5b6673;font-size:.8rem}.activity li span{color:inherit}
+
+:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202126; background: #f7f7f9; }
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+button, input, textarea, select { font: inherit; }
+.app-shell[data-component="app-shell"] { width: 100%; height: 100%; min-height: 100%; border: 0; border-radius: 0; }
+.app-empty { min-height: 100%; display: grid; place-content: center; justify-items: center; gap: .75rem; text-align: center; padding: 2rem; }
+.app-empty h1, .app-empty p { margin: 0; }
+.app-empty p { color: #6c6e78; }
+.project-dialog { display: grid; gap: 1rem; width: min(36rem, 80vw); }
+.project-dialog > p { margin: 0; line-height: 1.5; color: #5d606b; }
+.project-dialog footer { display: flex; justify-content: flex-end; gap: .5rem; }
+.project-dialog__error:empty { display: none; }
+.project-dialog__error { color: #b42318 !important; }
+.app-loading, .app-error { position: fixed; z-index: 1000; right: 1rem; bottom: 1rem; padding: .65rem .85rem; border-radius: .6rem; box-shadow: 0 8px 30px rgb(0 0 0 / .16); background: #25262b; color: white; }
+.app-error { background: #9f2d27; max-width: 32rem; }
+.project-settings { max-width: 54rem; margin: 0 auto; padding: 1.5rem; }
+.project-settings h2 { margin-top: 0; }
+.project-settings__source { display: grid; gap: .35rem; margin: 1rem 0; padding: 1rem; border: 1px solid #dfe1e7; border-radius: .75rem; background: white; }
+.project-settings__source code { overflow: hidden; text-overflow: ellipsis; color: #666a75; }

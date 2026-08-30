@@ -1,7 +1,9 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
+
 import { ArrowDownAZ, Columns3, List, MoreHorizontal, PanelLeftOpen, Pin, Settings, Star } from 'lucide';
+
 import { LucideIcon } from '../components/lucide-icon';
 import { ToolbarControlGroup } from '../components/toolbar-control-group';
 

@@ -1,5 +1,6 @@
-import { TicketBoardColumn, type TicketBoardColumnProps } from './ticket-board-column';
 import './ticket-board.css';
+
+import { TicketBoardColumn, type TicketBoardColumnProps } from './ticket-board-column';
 
 export type TicketColumnProps = TicketBoardColumnProps;
 

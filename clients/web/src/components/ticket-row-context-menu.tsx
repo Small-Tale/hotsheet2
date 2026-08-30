@@ -1,8 +1,10 @@
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
-import { Archive, CircleDot, Copy, Gauge, Shapes, SquareArrowOutUpRight, Star, Tag, Trash2, type IconNode } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './ticket-row-context-menu.css';
+
+import { Archive, CircleDot, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Trash2 } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
 
 export const TICKET_CONTEXT_ACTIONS: ReadonlyArray<{ action: string; icon: IconNode; iconName: string; danger?: boolean }> = [
   { action: 'Open ticket', icon: SquareArrowOutUpRight, iconName: 'square-arrow-out-up-right' },

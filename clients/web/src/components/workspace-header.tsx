@@ -2,12 +2,14 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import { ArrowDownAZ, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
+import './workspace-header.css';
+
 import type { IconNode } from 'lucide';
+import { ArrowDownAZ, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
 import { ToolbarControlGroup } from './toolbar-control-group';
 import { ToolbarText } from './toolbar-text';
-import './workspace-header.css';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'settings';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
+import { Toolbar } from './toolbar';
 import { ToolbarControlGroup } from './toolbar-control-group';
 import { ToolbarText } from './toolbar-text';
-import { Toolbar } from './toolbar';
 
 describe('toolbar primitives', () => {
   it('exposes contained and borderless control groups without changing their structure', () => {

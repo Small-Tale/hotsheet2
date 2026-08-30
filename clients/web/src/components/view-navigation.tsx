@@ -1,8 +1,10 @@
-import { Archive, Clock3, Layers3, Plus, ShieldAlert, type IconNode } from 'lucide';
-import { LucideIcon } from './lucide-icon';
-import { MenuItem } from './menu-item';
-import { MenuHeader } from './menu-header';
 import './view-navigation.css';
+
+import { Archive, Clock3, type IconNode,Layers3, Plus, ShieldAlert } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
+import { MenuHeader } from './menu-header';
+import { MenuItem } from './menu-item';
 
 export interface ViewNavigationItem { id: string; label: string; count?: number; attention?: boolean; icon: 'needs-review' | 'all' | 'backlog' | 'archive' }
 export interface ViewNavigationProps { items: ViewNavigationItem[]; selectedId: string }

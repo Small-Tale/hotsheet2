@@ -1,4 +1,3 @@
-import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import '@awesome.me/webawesome/dist/styles/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
@@ -7,30 +6,33 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
 import './style.css';
-import { demosUsing, demoCatalog, findDemo, type DemoCategory, type DemoDefinition } from './catalog';
+
+import { delegate, delegateCapture, mount, signal } from 'kerfjs';
+import { Activity, AppWindow, Badge, BookOpen, ChartNoAxesColumnIncreasing, Columns3, Command, FilePenLine, Filter, FolderGit2, GitBranch, type IconNode,Info, Kanban, LayoutDashboard, List, ListPlus, ListTree, Menu, MessageSquareText, PanelLeft, PanelRight, Paperclip, Play, Search, Settings, Tags, Terminal, Text, Wrench } from 'lucide';
+
+import { LucideIcon } from '../components/lucide-icon';
+import { MenuHeader } from '../components/menu-header';
+import { MenuItem } from '../components/menu-item';
+import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
+import { type ResizableRegionEdge,resizeRegionFromPointer } from '../components/resizable-region';
+import { Select } from '../components/select';
+import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
+import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
+import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDemo } from './catalog';
+import { cancelMarkdown, editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, noteDemoNotes, noteDraft, readerAttachments, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
+import { MenuHeaderDemo } from './menu-header-demo';
+import { MenuItemDemo } from './menu-item-demo';
+import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, DriveControlDemo, driveRunning, ProjectSidebarDemo, projectSidebarHeight, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
+import { SelectDemo } from './select-demo';
 import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, TagChipDemo, TagChipSettings, tagChipSettings } from './tag-chip-demo';
-import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
-import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
-import { LucideIcon } from '../components/lucide-icon';
-import { Activity, AppWindow, Badge, BookOpen, ChartNoAxesColumnIncreasing, Columns3, Command, FilePenLine, Filter, FolderGit2, GitBranch, Info, Kanban, LayoutDashboard, List, ListPlus, ListTree, Menu, MessageSquareText, PanelLeft, PanelRight, Paperclip, Play, Search, Settings, Tags, Terminal, Text, Wrench, type IconNode } from 'lucide';
 import { collectionTickets, recordCollectionEvent, selectCollectionTicket, TicketBoardColumnDemo, TicketBoardDemo, TicketListDemo, toggleCollectionTicketUpNext } from './ticket-collections-demo';
-import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, WorkspaceHeaderDemo } from './workspace-components-demo';
-import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
-import { ToolbarTextDemo } from './toolbar-text-demo';
-import { ToolbarDemo } from './toolbar-demo';
-import { SelectDemo } from './select-demo';
-import { Select } from '../components/select';
-import { MenuItemDemo } from './menu-item-demo';
-import { MenuHeaderDemo } from './menu-header-demo';
-import { MenuItem } from '../components/menu-item';
-import { MenuHeader } from '../components/menu-header';
 import { TicketAttachmentsDemo, TicketCategorySelectDemo, TicketInfoPanelDemo, TicketPrioritySelectDemo, TicketStatusMenuDemo, TicketTimelineDemo } from './ticket-metadata-demo';
-import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, driveRunning, DriveControlDemo, projectSidebarHeight, ProjectSidebarDemo, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
-import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, projectTabs, ProjectTabBarDemo, ProjectTabDemo, regionSize, resizeDemoCollapsed, ResizableRegionDemo, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
-import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
-import { resizeRegionFromPointer, type ResizableRegionEdge } from '../components/resizable-region';
-import { cancelMarkdown, editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, noteDemoNotes, noteDraft, NoteCardDemo, readerAttachments, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
+import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings } from './ticket-row-demo';
+import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
+import { ToolbarDemo } from './toolbar-demo';
+import { ToolbarTextDemo } from './toolbar-text-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, WorkspaceHeaderDemo,workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -405,7 +407,7 @@ delegate(root, 'click', '[data-action="select-ticket-row"]', (event, target) => 
   }
   ticketRowSettings.selected.value = !ticketRowSettings.selected.value;
   ticketRowSettings.event.value = ticketRowSettings.selected.value ? 'Ticket selected' : 'Ticket deselected';
-  const selected = root.querySelector('[data-settings="ticket-list-row"] [name="selected"]') as FormControl | null;
+  const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
   if (selected) selected.checked = ticketRowSettings.selected.value;
 });
 function toggleRowUpNext(target?: Element): void {
@@ -416,7 +418,7 @@ function toggleRowUpNext(target?: Element): void {
   }
   ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
   ticketRowSettings.event.value = ticketRowSettings.upNext.value ? 'Added to Up Next' : 'Removed from Up Next';
-  const control = root.querySelector('[data-settings="ticket-list-row"] [name="up-next"]') as FormControl | null;
+  const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
   if (control) control.checked = ticketRowSettings.upNext.value;
 }
 delegateCapture(root, 'click', '[data-action="toggle-row-up-next"]', (event) => {
@@ -448,7 +450,7 @@ delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, targe
   }
   ticketRowSettings.selected.value = true;
   ticketRowSettings.event.value = 'Context menu opened';
-  const selected = root.querySelector('[data-settings="ticket-list-row"] [name="selected"]') as FormControl | null;
+  const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
   if (selected) selected.checked = true;
   contextMenu.value = { x: pointer.clientX, y: pointer.clientY };
 });
@@ -463,7 +465,7 @@ delegate(root, 'click', '[data-context-action]', (_event, target) => {
   }
   if (action === 'Toggle Up Next') {
     ticketRowSettings.upNext.value = !ticketRowSettings.upNext.value;
-    const control = root.querySelector('[data-settings="ticket-list-row"] [name="up-next"]') as FormControl | null;
+    const control = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="up-next"]');
     if (control) control.checked = ticketRowSettings.upNext.value;
   }
   ticketRowSettings.event.value = `${action} selected`;
@@ -473,4 +475,4 @@ addEventListener('pointerdown', event => {
   if (contextMenu.value && !(event.target as Element).closest('.ticket-context-menu')) contextMenu.value = undefined;
 });
 addEventListener('keydown', event => { if (event.key === 'Escape') contextMenu.value = undefined; });
-addEventListener('popstate', () => selectDemo(fromUrl(), false));
+addEventListener('popstate', () => { selectDemo(fromUrl(), false); });

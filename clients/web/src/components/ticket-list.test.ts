@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { TicketList } from './ticket-list';
 import type { TicketRowProps } from './ticket-row';
 

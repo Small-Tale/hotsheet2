@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { clampProjectSidebarHeight, PROJECT_SIDEBAR_MAX_HEIGHT, PROJECT_SIDEBAR_MIN_HEIGHT } from './project-sidebar-demo';
 import { collectionTickets, resetTicketCollections } from './ticket-collections-demo';
 import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusComposerTitle, focusWorkspaceSearch, workspaceColumns, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
-import { clampProjectSidebarHeight, PROJECT_SIDEBAR_MAX_HEIGHT, PROJECT_SIDEBAR_MIN_HEIGHT } from './project-sidebar-demo';
 
 describe('connected workspace demo state', () => {
   beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; workspaceSort.value = 'updated'; composerTitle.value = ''; composerCategory.value = 'task'; });

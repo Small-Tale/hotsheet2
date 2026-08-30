@@ -1,7 +1,9 @@
+import './repository-summary.css';
+
 import { ArrowUp, GitBranch } from 'lucide';
+
 import { LucideIcon } from './lucide-icon';
 import { MenuItem } from './menu-item';
-import './repository-summary.css';
 
 export interface RepositorySummaryProps { branch: string; unpushed: number; uncommitted: number }
 export function RepositorySummary({ branch, unpushed, uncommitted }: RepositorySummaryProps) {

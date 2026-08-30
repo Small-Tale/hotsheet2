@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
+
+import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resizeDemoWidth, selectProjectTab, setRegionSize, shellMode } from '../ux-demo/app-shell-demo';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
+import { PageHeader } from './page-header';
 import { ProjectTab } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
-import { clampRegionSize, resizeRegionFromPointer, ResizableRegion } from './resizable-region';
-import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, selectProjectTab, setRegionSize, resizeDemoWidth, shellMode } from '../ux-demo/app-shell-demo';
-import { PageHeader } from './page-header';
+import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from './resizable-region';
 
 describe('application shell components', () => {
   it('projects every ProjectTab state without nesting actions', () => {

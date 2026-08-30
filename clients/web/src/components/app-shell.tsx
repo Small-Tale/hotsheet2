@@ -1,13 +1,15 @@
-import type { SafeHtml } from 'kerfjs/jsx-runtime';
-import { ResizableRegion } from './resizable-region';
-import type { ProjectTabProps } from './project-tab';
-import { ProjectTabBar } from './project-tab-bar';
-import type { ProjectTabBarMode } from './project-tab-bar';
-import { PanelLeftOpen, PanelRightOpen } from 'lucide';
-import { LucideIcon } from './lucide-icon';
-import { ToolbarControlGroup } from './toolbar-control-group';
-import { Toolbar } from './toolbar';
 import './app-shell.css';
+
+import type { SafeHtml } from 'kerfjs/jsx-runtime';
+import { PanelLeftOpen, PanelRightOpen } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
+import type { ProjectTabProps } from './project-tab';
+import type { ProjectTabBarMode } from './project-tab-bar';
+import { ProjectTabBar } from './project-tab-bar';
+import { ResizableRegion } from './resizable-region';
+import { Toolbar } from './toolbar';
+import { ToolbarControlGroup } from './toolbar-control-group';
 
 export interface AppShellProps {
   tabs: ProjectTabProps[];

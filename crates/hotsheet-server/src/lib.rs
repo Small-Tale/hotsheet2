@@ -700,6 +700,7 @@ pub fn app(state: AppState) -> Router {
         .route("/provider-transfers/copy", post(provider_copy_route))
         .route("/provider-transfers/move", post(provider_move_route))
         .route("/checkouts", get(list_checkouts).post(register_checkout))
+        .route("/projects/open", post(open_project))
         .route("/checkouts/{reference}", get(resolve_checkout))
         .route(
             "/checkouts/{reference}/repository/status",
@@ -1438,6 +1439,54 @@ struct RegisterCheckoutBody {
     repository: Option<String>,
     #[serde(default)]
     stores: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenProjectBody {
+    root: String,
+    alias: Option<String>,
+    repository: Option<String>,
+    /// Explicit git stores. When omitted, conservative filesystem discovery is used.
+    stores: Option<Vec<String>>,
+}
+
+#[derive(Debug, Serialize)]
+struct OpenProjectResponse {
+    checkout: hotsheet_ticketing::checkouts::Checkout,
+    discovered: bool,
+}
+
+/// Open a code checkout for client use: discover or accept its git ticket stores, host
+/// them in this machine server, and persist the checkout-to-store links atomically from
+/// the client's point of view. An empty result is valid and lets a settings UI ask the
+/// user to choose one or more providers explicitly.
+async fn open_project(
+    State(state): State<AppState>,
+    Json(body): Json<OpenProjectBody>,
+) -> Result<(StatusCode, Json<OpenProjectResponse>), ApiError> {
+    let root = FsPath::new(&body.root);
+    let discovered = body.stores.is_none();
+    let stores = match body.stores {
+        Some(paths) => paths.into_iter().map(std::path::PathBuf::from).collect(),
+        None => hotsheet_ticketing::checkouts::discover_ticket_stores(root)
+            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?,
+    };
+    for path in &stores {
+        let store = FsStore::open(path)
+            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+        state.host_store(store)?;
+    }
+    let checkout = state
+        .checkout_registry
+        .register(root, body.alias.as_deref(), body.repository, stores)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    Ok((
+        StatusCode::CREATED,
+        Json(OpenProjectResponse {
+            checkout,
+            discovered,
+        }),
+    ))
 }
 
 async fn list_checkouts(

@@ -1,6 +1,8 @@
-import type { IconNode } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './menu-header.css';
+
+import type { IconNode } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
 
 export interface MenuHeaderProps { label: string; action?: string; actionLabel?: string; actionIcon?: IconNode; actionIconName?: string; expanded?: boolean; toggle?: boolean }
 

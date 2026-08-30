@@ -1,5 +1,6 @@
 import { Circle } from 'lucide';
 import { describe, expect, it } from 'vitest';
+
 import { LucideIcon } from './lucide-icon';
 
 describe('LucideIcon', () => {

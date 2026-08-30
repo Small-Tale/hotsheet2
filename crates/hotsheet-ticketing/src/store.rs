@@ -236,7 +236,11 @@ impl FsStore {
         fs::create_dir_all(&dir)?;
         let path = dir.join(name);
         fs::write(&path, bytes)?;
-        if !ticket.attachments.iter().any(|item| item.id == attachment_id) {
+        if !ticket
+            .attachments
+            .iter()
+            .any(|item| item.id == attachment_id)
+        {
             ticket.attachments.push(Attachment {
                 id: attachment_id,
                 filename: name.to_string(),

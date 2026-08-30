@@ -30,7 +30,7 @@ test('kerf morph preserves the upgraded element, live value, and focus', async (
   expect(await page.evaluate(() => document.querySelector('wa-input') === (globalThis as typeof globalThis & { originalInput?: Element }).originalInput)).toBe(true);
   await expect(host).toHaveJSProperty('value', 'survives');
   await host.locator('input').focus();
-  await page.locator('[data-action="rerender"]').evaluate((button: HTMLElement) => button.click());
+  await page.locator('[data-action="rerender"]').evaluate((button: HTMLElement) => { button.click(); });
   await expect(host.locator('input')).toBeFocused();
 });
 

@@ -39,6 +39,22 @@ pub enum CheckoutError {
     Io(#[from] std::io::Error),
 }
 
+/// Discover conventional git-backed ticket stores for a checkout. The first convention
+/// is a sibling whose path is the checkout path plus `.hs2` (for example `app` and
+/// `app.hs2`). Discovery is deliberately conservative: it never creates a store and never
+/// guesses that one checkout maps to only one provider.
+pub fn discover_ticket_stores(root: &Path) -> Result<Vec<PathBuf>, CheckoutError> {
+    let canonical = root
+        .canonicalize()
+        .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+    let sibling = PathBuf::from(format!("{}.hs2", canonical.display()));
+    if sibling.join("hotsheet-store.json").is_file() {
+        Ok(vec![sibling.canonicalize().unwrap_or(sibling)])
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 /// Stable, discoverable checkout id: basename plus twelve hex chars from the canonical
 /// absolute path. It deliberately is not a secret and changes when the checkout moves.
 pub fn checkout_id(root: &Path) -> Result<String, CheckoutError> {
@@ -210,5 +226,20 @@ mod tests {
         assert_eq!(registry.resolve("frontend").unwrap(), saved);
         assert_eq!(registry.resolve(&saved.id[..8]).unwrap(), saved);
         assert_eq!(registry.resolve(checkout.to_str().unwrap()).unwrap(), saved);
+    }
+
+    #[test]
+    fn discovers_only_a_valid_parallel_hs2_store() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        let sibling = temp.path().join("app.hs2");
+        std::fs::create_dir(&checkout).unwrap();
+        std::fs::create_dir(&sibling).unwrap();
+        assert!(discover_ticket_stores(&checkout).unwrap().is_empty());
+        std::fs::write(sibling.join("hotsheet-store.json"), "{}").unwrap();
+        assert_eq!(
+            discover_ticket_stores(&checkout).unwrap(),
+            vec![sibling.canonicalize().unwrap()]
+        );
     }
 }

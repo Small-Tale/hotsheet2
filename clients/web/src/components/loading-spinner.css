@@ -1,0 +1,4 @@
+.loading-spinner { display: block; width: 1em; height: 1em; overflow: visible; fill: currentColor; }
+.loading-spinner path { transform-origin: 12px 12px; animation: loading-spinner-rotate .85s linear infinite; }
+@keyframes loading-spinner-rotate { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .loading-spinner path { animation: none; } }

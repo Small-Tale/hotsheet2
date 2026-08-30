@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { TicketInspector } from './ticket-inspector';
 
 const base = { slug: 'HS2-TEST', title: 'Inspect this ticket', status: 'started' as const, priority: 'high' as const, category: 'feature', tags: ['client'], details: 'Readable details.' };

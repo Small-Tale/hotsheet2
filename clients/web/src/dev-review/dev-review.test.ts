@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+
+import { describe, expect, it, vi } from 'vitest';
+
+import { createDevApp } from '../dev-server';
 import { clampRectToViewport, intersectRectWithViewport, normalizeRect, resizeRect, translateAnchoredRect } from './geometry';
 import { createCliDevReviewSubmitter, validateDevReviewSubmission } from './server';
-import { createDevApp } from '../dev-server';
 
 const capture = { id: '1', filename: '../review.png', dataUrl: `data:image/png;base64,${Buffer.from('png').toString('base64')}`, width: 10, height: 10 };
 const attachment = { id: 'file-1', filename: '../notes.txt', dataUrl: `data:text/plain;base64,${Buffer.from('notes').toString('base64')}`, mimeType: 'text/plain', size: 5 };

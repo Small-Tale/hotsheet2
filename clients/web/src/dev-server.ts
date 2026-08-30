@@ -1,10 +1,28 @@
-import { Hono } from 'hono';
-import { resolve } from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+import { Hono } from 'hono';
+
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
+import { openLocalProject, proxyProjectRequest } from './project-bridge';
 
 export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter): Hono {
   const app = new Hono();
+  app.post('/__hotsheet/projects/open', async context => {
+    if (!dev) return context.notFound();
+    try {
+      const body = await context.req.json<{root:string;ticketStore?:string}>();
+      return context.json(await openLocalProject(body.root, body.ticketStore), 201);
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Could not open project.' }, 400);
+    }
+  });
+  app.all('/__hotsheet/project-api/:project/*', async context => {
+    if (!dev) return context.notFound();
+    const prefix = `/__hotsheet/project-api/${encodeURIComponent(context.req.param('project'))}`;
+    const path = context.req.path.slice(prefix.length) || '/';
+    return proxyProjectRequest(context.req.param('project'), `${path}${new URL(context.req.url).search}`, context.req.raw);
+  });
   app.get('/ux-demo', (context) => {
     if (!dev) return context.notFound();
     return context.html(`<!doctype html>

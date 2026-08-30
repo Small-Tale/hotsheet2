@@ -211,6 +211,49 @@ async fn checkout_registry_is_authenticated_and_resolvable() {
 }
 
 #[tokio::test]
+async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let opened = body_json(opened).await;
+    assert_eq!(opened["discovered"], true);
+    assert_eq!(opened["checkout"]["stores"].as_array().unwrap().len(), 1);
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+
+    let created = app
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{checkout_id}/tickets"),
+            Some(r#"{"title":"Opened through project onboarding"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    assert!(
+        body_json(created).await["slug"]
+            .as_str()
+            .unwrap()
+            .starts_with("APP-")
+    );
+}
+
+#[tokio::test]
 async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();

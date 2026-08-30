@@ -1,6 +1,7 @@
-import { ChevronDown, ChevronUp, ChevronsUp, Minus, type IconNode } from 'lucide';
-import type { TicketPriority } from './ticket-row';
+import { ChevronDown, ChevronsUp, ChevronUp, type IconNode,Minus } from 'lucide';
+
 import { Select } from './select';
+import type { TicketPriority } from './ticket-row';
 
 const PRIORITIES: readonly { value: TicketPriority; label: string; color: string; icon: IconNode; iconName: string }[] = [
   { value: 'urgent', label: 'Urgent', color: '#ef4444', icon: ChevronsUp, iconName: 'chevrons-up' },

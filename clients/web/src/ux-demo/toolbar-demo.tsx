@@ -1,4 +1,5 @@
 import { PanelLeftOpen, PanelRightOpen } from 'lucide';
+
 import { LucideIcon } from '../components/lucide-icon';
 import { Toolbar } from '../components/toolbar';
 import { ToolbarControlGroup } from '../components/toolbar-control-group';

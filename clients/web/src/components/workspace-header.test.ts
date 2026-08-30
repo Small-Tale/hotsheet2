@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { WorkspaceHeader } from './workspace-header';
 
 describe('WorkspaceHeader', () => {

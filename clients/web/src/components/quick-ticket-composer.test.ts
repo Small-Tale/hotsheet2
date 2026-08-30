@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+
 import { QuickTicketComposer } from './quick-ticket-composer';
 
 describe('QuickTicketComposer', () => {

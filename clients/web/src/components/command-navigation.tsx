@@ -1,9 +1,11 @@
-import { ChevronDown, Hammer, Send, TestTube2, type IconNode } from 'lucide';
-import { LucideIcon } from './lucide-icon';
-import { MenuItem } from './menu-item';
-import { MenuHeader } from './menu-header';
-import { customizationContrastColor, resolveCustomizationColor } from './customization-palette';
 import './command-navigation.css';
+
+import { ChevronDown, Hammer, type IconNode,Send, TestTube2 } from 'lucide';
+
+import { customizationContrastColor, resolveCustomizationColor } from './customization-palette';
+import { LucideIcon } from './lucide-icon';
+import { MenuHeader } from './menu-header';
+import { MenuItem } from './menu-item';
 
 export interface CommandNavigationItem { id: string; label: string; color: string; icon: 'send' | 'test' | 'build'; running?: boolean }
 export interface CommandNavigationProps { label: string; commands: CommandNavigationItem[]; expanded: boolean }

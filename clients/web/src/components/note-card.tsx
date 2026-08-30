@@ -1,7 +1,9 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import { Activity, CircleAlert, MessageSquareText, Pencil, RefreshCw } from 'lucide';
-import { LucideIcon } from './lucide-icon';
 import './note-card.css';
+
+import { Activity, CircleAlert, MessageSquareText, Pencil, RefreshCw } from 'lucide';
+
+import { LucideIcon } from './lucide-icon';
 
 export type NoteKind = 'regular' | 'status' | 'feedback_needed' | 'activity';
 export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editing?: boolean; draft?: string }
