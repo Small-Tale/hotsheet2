@@ -14,6 +14,9 @@ describe('content components', () => {
     expect(preview).toContain('data-component="markdown-preview"');
     expect(preview).toContain('data-expanded="true"');
     expect(preview).toContain('data-lucide="minimize-2"');
+    const empty = String(MarkdownEditor({ value: '', mode: 'preview' }));
+    expect(empty).toContain('data-empty="true"');
+    expect(empty).toContain('Click to add Markdown.');
   });
 
   it('projects GFM Markdown while escaping raw HTML and unsafe links', () => {
