@@ -234,7 +234,9 @@ hotsheet provider-close github-main 42 --reason completed
 ```
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
 an `x-hotsheet-filename` header; the returned `ApiTicket.attachments` carries the
-stable id, sanitized filename, and creation timestamp.
+stable id, sanitized filename, and creation timestamp. Checkout-scoped clients use
+`POST /checkouts/{reference}/tickets/{id}/attachments`, which resolves the ticket's
+linked store and returns the same ticket plus its store identity.
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
 `--blocked-by` **replaces** the set and `--clear-blocked-by` empties it. The same edge
@@ -244,10 +246,14 @@ update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. 
 surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
 resolved on close.
 These write ticket files directly and **auto-commit** each mutation to the store's git
-repo, then best-effort push (HS2-VJD1W4) — so a headless `work` run (or any CLI/MCP edit)
-never leaves the store dirty or unshared; the shared `ops` layer routes every mutation
-through `FsStore::write_ticket_committing`, so CLI + MCP + server all commit. It's a no-op
-when the store isn't a git repo, and `HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
+repo, then publish without holding the user-facing mutation open for network latency
+(HS2-VJD1W4, HS2-0RDWSW). Headless CLI/MCP writes launch a reaped best-effort push in the
+background; server-owned stores defer publication to the server's kicked, coalescing sync
+loop. Thus a headless `work` run remains clean and shareable while browser/server writes
+return after local durability rather than waiting several seconds for a remote. The shared
+`ops` layer routes every mutation through `FsStore::write_ticket_committing`, so CLI + MCP
++ server all commit. It's a no-op when the store isn't a git repo, and
+`HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
 Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
 semantic merge driver (§2.7) resolves concurrent edits. The CLI reads via a
 **direct store scan** — it does **not** touch the index; the index is the *server's*

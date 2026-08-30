@@ -6,6 +6,7 @@ use hotsheet_server::{AppState, app};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use http_body_util::BodyExt;
 use std::collections::{HashMap, VecDeque};
+use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
 
@@ -110,6 +111,70 @@ async fn tickets_require_the_secret() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ticket_mutation_does_not_wait_for_remote_publication() {
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{Duration, Instant};
+
+    fn git(path: &std::path::Path, args: &[&str]) {
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    }
+
+    let dir = tempfile::tempdir().unwrap();
+    let remote = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    git(dir.path(), &["init", "-q"]);
+    git(dir.path(), &["add", "-A"]);
+    git(
+        dir.path(),
+        &[
+            "-c",
+            "user.name=Hot Sheet Test",
+            "-c",
+            "user.email=test@localhost",
+            "commit",
+            "-q",
+            "-m",
+            "initial",
+        ],
+    );
+    git(remote.path(), &["init", "--bare", "-q"]);
+    git(
+        dir.path(),
+        &["remote", "add", "origin", remote.path().to_str().unwrap()],
+    );
+    git(dir.path(), &["push", "-q", "-u", "origin", "HEAD"]);
+    let hook = remote.path().join("hooks/pre-receive");
+    std::fs::write(&hook, "#!/bin/sh\nsleep 2\n").unwrap();
+    let mut permissions = std::fs::metadata(&hook).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(hook, permissions).unwrap();
+
+    let started = Instant::now();
+    let response = app(AppState::new(store, SECRET.into()).unwrap())
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"fast local write"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "server mutation waited for the deliberately slow remote"
+    );
 }
 
 #[tokio::test]
@@ -322,6 +387,15 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     )
     .await;
     assert_eq!(got["title"], "Scoped");
+    let attachment_request = Request::builder()
+        .method("POST")
+        .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "proof.txt")
+        .body(Body::from("checkout evidence"))
+        .unwrap();
+    let attached = body_json(app.clone().oneshot(attachment_request).await.unwrap()).await;
+    assert_eq!(attached["attachments"][0]["filename"], "proof.txt");
     let updated = body_json(
         app.oneshot(authed(
             "PATCH",
@@ -1206,8 +1280,7 @@ async fn watcher_reindexes_an_external_write() {
     panic!("watcher did not reindex the external write within 4s");
 }
 
-/// The watcher also regenerates the derived `worklist.md` on change (HS2-90) — once per
-/// debounced batch, from the store root (outside the watched tickets/ dir).
+/// The watcher also regenerates each consuming checkout's local worklist on change.
 #[tokio::test]
 async fn watcher_regenerates_the_worklist() {
     use hotsheet_model::{Timestamp, Ulid};
@@ -1215,7 +1288,14 @@ async fn watcher_regenerates_the_worklist() {
 
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
-    let state = AppState::new(store.clone(), SECRET.into()).unwrap();
+    let registry_path = dir.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+    registry
+        .register(dir.path(), None, None, vec![dir.path().to_path_buf()])
+        .unwrap();
+    let state = AppState::new(store.clone(), SECRET.into())
+        .unwrap()
+        .with_checkout_registry(&registry_path);
     let _watch = hotsheet_server::spawn_watcher(state).unwrap();
 
     ops::create(
@@ -1232,10 +1312,12 @@ async fn watcher_regenerates_the_worklist() {
     )
     .unwrap();
 
-    let worklist = dir.path().join("worklist.md");
+    let worklist = dir
+        .path()
+        .join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST);
     for _ in 0..40 {
         if let Ok(body) = std::fs::read_to_string(&worklist) {
-            if body.contains("worklist me") && body.contains("## Up Next") {
+            if body.contains("worklist me") && body.contains("## Workflow") {
                 return;
             }
         }

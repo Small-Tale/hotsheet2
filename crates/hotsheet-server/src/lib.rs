@@ -128,6 +128,7 @@ impl AppState {
     /// State over a store + a prepared index, guarded by `secret`. The caller decides
     /// whether the index is in-memory or file-backed (`Index::open_reconciled`).
     pub fn with_index(store: FsStore, secret: String, index: Index) -> Self {
+        let store = store.with_deferred_push();
         let (events, _) = broadcast::channel(256);
         let index = Arc::new(Mutex::new(index));
         let host = StoreHost::new();
@@ -324,6 +325,7 @@ impl AppState {
     /// register it, and spawn its fs-watcher. Idempotent by store id — returns whether it
     /// was newly added. Shared by `POST /stores` and startup discovery.
     fn host_store(&self, store: FsStore) -> Result<bool, ApiError> {
+        let store = store.with_deferred_push();
         let id = multistore::store_url_id(&store);
         if self.host.contains(&id) {
             return Ok(false);
@@ -347,6 +349,7 @@ impl AppState {
             entry,
             store_id: id,
             events: self.events.clone(),
+            checkout_registry: self.checkout_registry.clone(),
         }) {
             Ok(handle) => {
                 if let Ok(mut w) = self.watchers.lock() {
@@ -721,6 +724,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}/assign",
             post(assign_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/attachments",
+            post(add_checkout_ticket_attachment),
         )
         .route(
             "/stores/{store_id}/tickets",
@@ -1480,6 +1487,8 @@ async fn open_project(
         .checkout_registry
         .register(root, body.alias.as_deref(), body.repository, stores)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    hotsheet_ticketing::worklist::regenerate_checkout(&checkout)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((
         StatusCode::CREATED,
         Json(OpenProjectResponse {
@@ -1515,6 +1524,8 @@ async fn register_checkout(
                 .collect(),
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
+    hotsheet_ticketing::worklist::regenerate_checkout(&entry)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok((StatusCode::CREATED, Json(entry)))
 }
 
@@ -1730,6 +1741,33 @@ async fn assign_checkout_ticket(
         store: multistore::store_url_id(&entry.store),
         ticket: do_assign(&state, &entry, &id, req)?,
     }))
+}
+
+async fn add_checkout_ticket_attachment(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<(StatusCode, Json<ResolvedTicket>), ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let filename = headers
+        .get("x-hotsheet-filename")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "missing x-hotsheet-filename"))?;
+    let (updated, _) =
+        entry
+            .store
+            .write_attachment(&ticket.id, Ulid::new(), now(), filename, &body)?;
+    state.changed_in(&entry, "attachment_added", &updated);
+    Ok((
+        StatusCode::CREATED,
+        Json(ResolvedTicket {
+            store: multistore::store_url_id(&entry.store),
+            ticket: api_ticket(&entry, &updated)?,
+        }),
+    ))
 }
 
 async fn ticket_flow_summary(
@@ -3701,6 +3739,7 @@ struct WatchTarget {
     entry: StoreEntry,
     store_id: String,
     events: broadcast::Sender<ChangeEvent>,
+    checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
 }
 
 /// Watch the **default** store (back-compat entry point used by the server binary).
@@ -3709,6 +3748,7 @@ pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
         entry: state.default_entry(),
         store_id: multistore::store_url_id(&state.store),
         events: state.events.clone(),
+        checkout_registry: state.checkout_registry.clone(),
     };
     spawn_watcher_for(target)
 }
@@ -3754,12 +3794,20 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, targ
         for path in &paths {
             handle_path_change(&target, path);
         }
-        // The derived worklist.md is regenerated once per debounced batch (not per file),
-        // so it stays in sync with the tickets without churning on every event (docs/03
-        // §3.6, HS2-90). worklist.md lives at the store root — outside the watched
-        // tickets/ dir — so this write never re-triggers the watcher.
-        if let Err(e) = hotsheet_ticketing::worklist::regenerate(&target.entry.store) {
-            eprintln!("worklist regenerate failed: {e}");
+        // Refresh each checkout-local projection that consumes this store. The store is
+        // syncable authority; worklists remain local per checkout and may aggregate stores.
+        if let Ok(checkouts) = target.checkout_registry.list() {
+            for checkout in checkouts {
+                if checkout
+                    .stores
+                    .iter()
+                    .any(|root| same_path(FsPath::new(root), target.entry.store.root()))
+                {
+                    if let Err(e) = hotsheet_ticketing::worklist::regenerate_checkout(&checkout) {
+                        eprintln!("worklist regenerate failed for {}: {e}", checkout.root);
+                    }
+                }
+            }
         }
     }
 }
