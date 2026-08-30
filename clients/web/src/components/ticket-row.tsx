@@ -2,7 +2,7 @@ import './ticket-row.css';
 
 import { ChevronDown, ChevronsUp, ChevronUp, type IconNode,Minus, Star } from 'lucide';
 
-import { categoryAbbreviation, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
+import { categoryAbbreviation, defaultCategoryPresentation, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
@@ -49,11 +49,15 @@ export function ticketRowIndicator(props: Pick<TicketRowProps, 'needsReview' | '
 }
 
 export function normalizeTicketRowProps(props: TicketRowProps): TicketRowProps {
+  const category = props.category.trim() || 'issue';
+  const categoryPresentation = defaultCategoryPresentation(category);
   return {
     ...props,
     slug: props.slug.trim() || 'HS2-UNKNOWN',
     title: props.title.trim() || 'Untitled ticket',
-    category: props.category.trim() || 'issue',
+    category,
+    categoryIcon: props.categoryIcon === undefined ? categoryPresentation?.iconName : props.categoryIcon,
+    categoryColor: props.categoryColor ?? categoryPresentation?.color,
     tags: props.tags.map(tag => tag.trim()).filter(Boolean),
     upNext: props.upNext ?? false,
     blocked: props.blocked ?? false,

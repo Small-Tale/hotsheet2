@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CATEGORY_COLORS, categoryAbbreviation, resolveCategoryColor, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
+import { CATEGORY_COLORS, categoryAbbreviation, defaultCategoryPresentation, resolveCategoryColor, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
 
 describe('category presentation', () => {
   it('retains the HS1 custom-command palette and resolves registered Lucide icons', () => {
@@ -9,6 +9,8 @@ describe('category presentation', () => {
     ]);
     expect(resolveCategoryIcon('bug')).toBeDefined();
     expect(resolveCategoryIcon('unknown')).toBeUndefined();
+    expect(defaultCategoryPresentation(' feature ')).toMatchObject({ iconName: 'sparkles', color: '#8b5cf6' });
+    expect(defaultCategoryPresentation('custom')).toBeUndefined();
   });
 
   it('rejects colors outside the supported palette', () => {

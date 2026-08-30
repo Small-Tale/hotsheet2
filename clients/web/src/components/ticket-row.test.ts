@@ -11,9 +11,17 @@ describe('TicketRow', () => {
       slug: ' ', title: ' ', status: 'not_started', priority: 'default', category: ' ', tags: [' client ', '', ' ux '],
     })).toEqual({
       slug: 'HS2-UNKNOWN', title: 'Untitled ticket', status: 'not_started', priority: 'default',
-      category: 'issue', tags: ['client', 'ux'], upNext: false, selected: false, busy: false,
+      category: 'issue', categoryIcon: 'circle-alert', categoryColor: '#6b7280', tags: ['client', 'ux'], upNext: false, selected: false, busy: false,
       blocked: false, needsReview: false, agentName: 'AI', updatedLabel: 'Recently',
     });
+  });
+
+  it('uses the picker defaults for API rows while preserving explicit no-icon categories', () => {
+    const feature = String(TicketRow({ slug: 'HS2-FEA', title: 'Feature row', status: 'started', priority: 'default', category: 'feature', tags: [] }));
+    expect(feature).toContain('data-lucide="sparkles"');
+    expect(feature).not.toContain('>FEA<');
+    const textOnly = String(TicketRow({ slug: 'HS2-TEXT', title: 'Text row', status: 'started', priority: 'default', category: 'feature', categoryIcon: '', tags: [] }));
+    expect(textOnly).toContain('>FEA<');
   });
 
   it('reserves the indicator rail for special states in HS1 precedence order', () => {
