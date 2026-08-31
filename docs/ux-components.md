@@ -254,8 +254,9 @@ selection where sensible.
 - `TicketRow` — **demo built**: a shared, horizontally responsive ticket-summary
   boundary for list and narrow column use. The comfortable list presentation is a
   square-cornered, flat, separator-led row that reads as one continuous list; the same component becomes a lightly elevated, rounded card at
-  narrow column widths. Its primary line treats qualified slug and two-line-clamped
-  title as one normal inline formatting flow, ordered slug → priority → title so
+  narrow column widths. Its primary line treats qualified slug and title as one normal
+  inline formatting flow, with an explicit two-line limit in lists and three-line
+  limit in board columns. The flow is ordered slug → priority → title so
   bounded priority remains visible before an arbitrarily long title (the slug is a
   stable-width inline block), while updated time is
   pinned right and baseline-aligned with the first line. A quieter, vertically

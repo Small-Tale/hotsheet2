@@ -14,6 +14,7 @@
 .ticket-list-row__content { display: grid; gap: .3rem; min-width: 0; }
 .ticket-list-row__first-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: .75rem; min-width: 0; }
 .ticket-list-row__identity { display: block; min-width: 0; max-height: 2.6em; overflow: hidden; line-height: 1.3; }
+.ticket-list-row--column .ticket-list-row__identity { max-height: 3.9em; }
 .ticket-list-row__identity strong { display: inline; white-space: normal; }
 .ticket-list-row__category { display: grid; width: 2rem; height: 2rem; place-items: center; }
 .ticket-list-row__category-icon { width: 1.65rem; height: 1.65rem; }

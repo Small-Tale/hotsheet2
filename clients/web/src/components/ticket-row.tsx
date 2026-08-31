@@ -8,6 +8,7 @@ import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
 
 export type TicketPriority = 'low' | 'default' | 'high' | 'urgent';
+export type TicketRowPresentation = 'list' | 'column';
 
 export interface TicketRowProps {
   slug: string;
@@ -27,6 +28,7 @@ export interface TicketRowProps {
   agentName?: string;
   updatedLabel?: string;
   cutPending?: boolean;
+  presentation?: TicketRowPresentation;
 }
 
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
@@ -67,6 +69,7 @@ export function normalizeTicketRowProps(props: TicketRowProps): TicketRowProps {
     busy: props.busy ?? false,
     agentName: props.agentName?.trim() || 'AI',
     updatedLabel: props.updatedLabel?.trim() || 'Recently',
+    presentation: props.presentation ?? 'list',
   };
 }
 
@@ -78,8 +81,9 @@ export function TicketRow(raw: TicketRowProps) {
   return (
     <div class="ticket-list-row-container" data-component="ticket-list-row-container">
       <article
-        class={`ticket-list-row${props.selected ? ' ticket-list-row--selected' : ''}`}
+        class={`ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`}
         data-component="ticket-list-row"
+        data-presentation={props.presentation}
         data-ticket-slug={props.slug}
         data-attachment-drop-target="true"
         data-selected={String(props.selected)}

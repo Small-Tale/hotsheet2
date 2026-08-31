@@ -13,6 +13,7 @@ describe('TicketRow', () => {
       slug: 'HS2-UNKNOWN', title: 'Untitled ticket', status: 'not_started', priority: 'default',
       category: 'issue', categoryIcon: 'circle-alert', categoryColor: '#6b7280', tags: ['client', 'ux'], upNext: false, selected: false, busy: false,
       blocked: false, needsReview: false, agentName: 'AI', updatedLabel: 'Recently',
+      presentation: 'list',
     });
   });
 
@@ -54,6 +55,18 @@ describe('TicketRow', () => {
     const markup = String(TicketRow({ slug: 'HS2-WIDTH', title: 'Responsive row', status: 'started', priority: 'default', category: 'task', tags: [] }));
     expect(markup).toContain('data-component="ticket-list-row-container"');
     expect(markup.indexOf('ticket-list-row-container')).toBeLessThan(markup.indexOf('data-component="ticket-list-row"'));
+  });
+
+  it('uses an explicit presentation variant for the title line limit', () => {
+    const list = String(TicketRow({ slug: 'HS2-LIST', title: 'List row', status: 'started', priority: 'default', category: 'task', tags: [] }));
+    const column = String(TicketRow({ slug: 'HS2-COLUMN', title: 'Column row', status: 'started', priority: 'default', category: 'task', tags: [], presentation: 'column' }));
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    expect(list).toContain('ticket-list-row--list');
+    expect(list).toContain('data-presentation="list"');
+    expect(column).toContain('ticket-list-row--column');
+    expect(column).toContain('data-presentation="column"');
+    expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
+    expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 3\.9em/);
   });
 
   it('shows a blocked pill immediately after status metadata', () => {

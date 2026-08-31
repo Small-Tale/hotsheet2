@@ -436,6 +436,13 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(listRows).toHaveCount(20);
   await expect(list).toHaveCSS('border-radius', '10.4px');
   const listRow = listRows.first();
+  await expect(listRow).toHaveAttribute('data-presentation', 'list');
+  const listIdentity = listRow.locator('.ticket-list-row__identity');
+  const listTitleMetrics = await listIdentity.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
+  });
+  expect(listTitleMetrics.maxHeight / listTitleMetrics.lineHeight).toBeCloseTo(2, 1);
   const listWidth = await listRow.evaluate(node => node.getBoundingClientRect().width);
   expect(listWidth).toBeGreaterThan(600);
   await expect(listRows.first()).toHaveCSS('border-radius', '10.4px 10.4px 0px 0px');
@@ -483,6 +490,13 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   expect(await scrollRegions.nth(1).evaluate(node => node.scrollTop)).toBe(0);
   expect(await board.locator('.ticket-board-column__header').first().evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(firstHeaderTop, 0);
   const narrowRow = boardRows.first();
+  await expect(narrowRow).toHaveAttribute('data-presentation', 'column');
+  const columnIdentity = narrowRow.locator('.ticket-list-row__identity');
+  const columnTitleMetrics = await columnIdentity.evaluate(node => {
+    const style = getComputedStyle(node);
+    return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
+  });
+  expect(columnTitleMetrics.maxHeight / columnTitleMetrics.lineHeight).toBeCloseTo(3, 1);
   const boardWidth = await narrowRow.evaluate(node => node.getBoundingClientRect().width);
   expect(boardWidth).toBeLessThan(384);
   await expect(narrowRow).toHaveCSS('border-radius', '10.4px');

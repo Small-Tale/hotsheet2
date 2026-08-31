@@ -16,7 +16,7 @@ export function TicketBoardColumn({ id, title, tickets, selectionRoot = true }: 
       <span aria-label={`${tickets.length} tickets`}>{tickets.length}</span>
     </header>
     <div class="ticket-board-column__tickets" data-ticket-selection-root={selectionRoot ? 'true' : undefined} role={selectionRoot ? 'listbox' : 'group'} aria-label={`${title} tickets`} aria-multiselectable={selectionRoot ? 'true' : undefined}>
-      {tickets.map(ticket => <TicketRow {...ticket} />)}
+      {tickets.map(ticket => <TicketRow {...ticket} presentation="column" />)}
     </div>
   </section>;
 }

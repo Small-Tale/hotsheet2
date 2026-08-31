@@ -23,6 +23,7 @@ describe('TicketBoard', () => {
     expect(markup).toContain('aria-label="1 tickets"');
     expect(markup).toContain('aria-label="0 tickets"');
     expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
+    expect(markup).toContain('data-presentation="column"');
     expect(markup).not.toContain('ticket-card');
   });
 
