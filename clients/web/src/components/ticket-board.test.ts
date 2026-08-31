@@ -34,6 +34,14 @@ describe('TicketBoard', () => {
     expect(css).toMatch(/ticket-board-column__tickets[^}]*padding: \.1rem \.5rem 1rem/);
   });
 
+  it('uses matching 8px outer and inter-column gutters', () => {
+    const markup = String(TicketBoard({ columns: [{ id: 'one', title: 'One', tickets: [] }, { id: 'two', title: 'Two', tickets: [] }] }));
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-board.css'), 'utf8');
+    expect(markup).toContain('--ticket-board-min-width:508px');
+    expect(css).toMatch(/ticket-board[^}]*padding-inline: \.5rem/);
+    expect(css).toMatch(/ticket-board__columns[^}]*gap: \.5rem/);
+  });
+
   it('projects one independently scrollable column with a derived count', () => {
     const markup = String(TicketBoardColumn({ id: 'active', title: 'Active', tickets: [ticket] }));
     expect(markup).toContain('data-component="ticket-board-column"');

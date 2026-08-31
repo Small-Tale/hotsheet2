@@ -67,6 +67,7 @@ describe('TicketRow', () => {
     expect(column).toContain('data-presentation="column"');
     expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 3\.9em/);
+    expect(css).toMatch(/ticket-list-row--column[^}]*box-shadow: none/);
   });
 
   it('floats the updated time first in the identity flow so long titles can wrap beneath it', () => {

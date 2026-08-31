@@ -484,6 +484,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
   await expect(board.locator('.ticket-board-column__tickets').first()).toHaveCSS('padding', '1.6px 8px 16px');
   await expect(board).toHaveCSS('padding', '0px 8px');
+  await expect(board.locator('.ticket-board__columns')).toHaveCSS('gap', '8px');
   await expect(board).toHaveCSS('border-top-width', '0px');
   await expect(board).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.getByLabel('6 tickets')).toHaveCount(1);
@@ -510,7 +511,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const boardWidth = await narrowRow.evaluate(node => node.getBoundingClientRect().width);
   expect(boardWidth).toBeLessThan(384);
   await expect(narrowRow).toHaveCSS('border-radius', '10.4px');
-  await expect(narrowRow).not.toHaveCSS('box-shadow', 'none');
+  await expect(narrowRow).toHaveCSS('box-shadow', 'none');
   await expect(page.locator('[data-component="ticket-card"]')).toHaveCount(0);
   await narrowRow.focus();
   await page.keyboard.press('Meta+A');

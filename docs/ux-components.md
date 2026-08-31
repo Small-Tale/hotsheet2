@@ -294,12 +294,12 @@ selection where sensible.
   available width down to a 250px minimum, share TicketList's multi-selection contract
   across columns, then the workspace scrolls horizontally
   edge-to-edge between its sidebar separators and reaches the workspace bottom, with
-  an 8px horizontal content inset and 16px breathing room inside the bottom of each
+  uniform 8px outer and inter-column gutters plus 16px breathing room inside the bottom of each
   independently scrolling ticket region. The
   board has no extra framing and
   whose title and count provide sufficient grouping without an additional visual
   container around either the board or each column. Each column composes production
-  `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
+  flat, elevation-free `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
   overflow all columns; each ticket region scrolls independently while its heading and
   count remain fixed. A hosting workspace may add its own surrounding surface when
   appropriate.
