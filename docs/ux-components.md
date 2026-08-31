@@ -150,7 +150,8 @@ scrolling content region can be reviewed without moving the Drive control.
 
 - `WorkspaceHeader` — **demo built**: responsive project identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
-  sort menu, and a connected list/column/settings workspace. Settings disables sort,
+  sort menu whose selected option remains highlighted and toggles ascending/descending
+  direction when reselected, and a connected list/column/settings workspace. Settings disables sort,
   favorite, overflow, and search actions; global shell modes omit project controls.
 - `Toolbar` — **demo built**: shared 56px-high leading/optional-center/trailing layout
   with consistent horizontal padding across the project sidebar, center column, and
@@ -173,7 +174,10 @@ scrolling content region can be reviewed without moving the Drive control.
 - `ViewModeSwitcher` — **built for list, columns, and project settings** with
   accessible pressed state. Settings replaces ticket content while active rather
   than opening a transient popover; later dashboard/analytics modes join the control.
-- `SortControl` — popup menu with current-sort check state
+- `SortControl` — popup menu with a persistent current-sort highlight and ascending or
+  descending Lucide arrow; reselecting the current field reverses its direction. This
+  intentionally remains an action menu rather than `Select`: a value-only select does
+  not emit the same-value activation needed to reverse the current ordering.
 - `SavedOrCommandMenu`
 - `SearchButton` and `SearchField` expansion — the magnifier button is replaced by
   an animated, wider field carrying the same icon and automatic focus. An empty

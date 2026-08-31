@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { WorkspaceHeader } from './workspace-header';
+import { applyWorkspaceSortDirection, nextWorkspaceSort, WorkspaceHeader } from './workspace-header';
 
 describe('WorkspaceHeader', () => {
   it('exposes an accessible selected view mode and optional search field', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'client', sort: 'priority' }));
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'client', sort: 'priority', sortDirection: 'descending' }));
     expect(markup).not.toContain('All Tickets');
     expect(markup).toContain('data-component="toolbar-text" data-size="large">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
@@ -12,12 +12,23 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('name="workspace-search"');
     expect(markup).toContain('value="client"');
     expect(markup).toContain('slot="trigger" appearance="plain" with-caret');
-    expect(markup).toContain('checked data-sort="priority" value="priority"');
+    expect(markup).toContain('aria-current="true" aria-label="Priority, descending" data-sort="priority"');
+    expect(markup).toContain('data-lucide="arrow-down"');
+    expect(markup).not.toContain('type="checkbox"');
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
     expect(markup).toContain('slot="start"');
     expect(markup).not.toContain('data-action="open-workspace-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
     expect(markup.match(/disabled/g)).toHaveLength(4);
+  });
+
+  it('retains the selected sort while toggling its direction', () => {
+    expect(nextWorkspaceSort('updated', 'descending', 'priority')).toEqual({ sort: 'priority', direction: 'ascending' });
+    expect(nextWorkspaceSort('priority', 'ascending', 'priority')).toEqual({ sort: 'priority', direction: 'descending' });
+    expect(nextWorkspaceSort('priority', 'descending', 'priority')).toEqual({ sort: 'priority', direction: 'ascending' });
+    expect(nextWorkspaceSort('priority', 'descending', 'updated')).toEqual({ sort: 'updated', direction: 'descending' });
+    expect(applyWorkspaceSortDirection(-3, 'ascending')).toBe(-3);
+    expect(applyWorkspaceSortDirection(-3, 'descending')).toBe(3);
   });
 
   it('renders the collapsed find state as a single magnifier button', () => {

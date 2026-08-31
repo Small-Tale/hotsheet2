@@ -7,7 +7,7 @@ import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select'
 import { type InspectorTab,TicketInspector } from '../components/ticket-inspector';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
-import { WorkspaceHeader, type WorkspaceSort, type WorkspaceViewMode } from '../components/workspace-header';
+import { applyWorkspaceSortDirection, defaultWorkspaceSortDirection, WorkspaceHeader, type WorkspaceSort, type WorkspaceSortDirection, type WorkspaceViewMode } from '../components/workspace-header';
 import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 
@@ -15,6 +15,7 @@ export const workspaceMode = signal<WorkspaceViewMode>('list');
 export const workspaceSearchOpen = signal(false);
 export const workspaceSearchQuery = signal('');
 export const workspaceSort = signal<WorkspaceSort>('updated');
+export const workspaceSortDirection = signal<WorkspaceSortDirection>(defaultWorkspaceSortDirection(workspaceSort.value));
 export const composerExpanded = signal(false);
 export const composerTitle = signal('');
 export const composerCategory = signal('task');
@@ -40,12 +41,13 @@ export function filteredWorkspaceTickets(): TicketRowProps[] {
   const query = workspaceSearchQuery.value.trim().toLocaleLowerCase();
   const tickets = query ? collectionTickets.value.filter(ticket => `${ticket.slug} ${ticket.title} ${ticket.tags.join(' ')}`.toLocaleLowerCase().includes(query)) : collectionTickets.value;
   const priority = { urgent: 0, high: 1, default: 2, low: 3 } as const;
-  return [...tickets].sort((left, right) => {
-    if (workspaceSort.value === 'priority') return priority[left.priority] - priority[right.priority] || left.slug.localeCompare(right.slug);
-    if (workspaceSort.value === 'title') return left.title.localeCompare(right.title) || left.slug.localeCompare(right.slug);
-    if (workspaceSort.value === 'status') return left.status.localeCompare(right.status) || left.slug.localeCompare(right.slug);
-    return collectionTickets.value.indexOf(left) - collectionTickets.value.indexOf(right);
-  });
+  return [...tickets].sort((left, right) => applyWorkspaceSortDirection(
+    workspaceSort.value === 'priority' ? priority[left.priority] - priority[right.priority] || left.slug.localeCompare(right.slug)
+      : workspaceSort.value === 'title' ? left.title.localeCompare(right.title) || left.slug.localeCompare(right.slug)
+        : workspaceSort.value === 'status' ? left.status.localeCompare(right.status) || left.slug.localeCompare(right.slug)
+          : collectionTickets.value.indexOf(right) - collectionTickets.value.indexOf(left),
+    workspaceSortDirection.value,
+  ));
 }
 
 export function workspaceColumns(tickets = filteredWorkspaceTickets()): TicketColumnProps[] {
@@ -76,7 +78,7 @@ function WorkspaceContent() {
 
 export function WorkspaceHeaderDemo() {
   return <section class="workspace-component-demo" aria-label="WorkspaceHeader demo">
-    <WorkspaceHeader projectName="Hot Sheet 2" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} />
+    <WorkspaceHeader projectName="Hot Sheet 2" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} sortDirection={workspaceSortDirection.value} />
     <PageHeader title={workspaceMode.value === 'settings' ? 'Project Settings' : 'Queue'} />
     <div class="workspace-component-demo__content"><WorkspaceContent /></div>
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>

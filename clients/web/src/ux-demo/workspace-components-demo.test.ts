@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { focusQuickTicketComposerTitle } from '../components/quick-ticket-composer';
 import { clampProjectSidebarHeight, PROJECT_SIDEBAR_MAX_HEIGHT, PROJECT_SIDEBAR_MIN_HEIGHT } from './project-sidebar-demo';
 import { collectionTickets, resetTicketCollections } from './ticket-collections-demo';
-import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusWorkspaceSearch, workspaceColumns, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
+import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusWorkspaceSearch, workspaceColumns, workspaceSearchQuery, workspaceSort, workspaceSortDirection } from './workspace-components-demo';
 
 describe('connected workspace demo state', () => {
-  beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; workspaceSort.value = 'updated'; composerTitle.value = ''; composerCategory.value = 'task'; });
+  beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; workspaceSort.value = 'updated'; workspaceSortDirection.value = 'descending'; composerTitle.value = ''; composerCategory.value = 'task'; });
 
   it('filters across identity, title, and tags and preserves board totals', () => {
     workspaceSearchQuery.value = 'long-tag-example';
@@ -37,8 +37,11 @@ describe('connected workspace demo state', () => {
   it('sorts the visible ticket projection without mutating source order', () => {
     const sourceFirst = collectionTickets.value[0].slug;
     workspaceSort.value = 'title';
+    workspaceSortDirection.value = 'ascending';
     expect(filteredWorkspaceTickets().map(ticket => ticket.title)).toEqual([...collectionTickets.value].map(ticket => ticket.title).sort());
     expect(collectionTickets.value[0].slug).toBe(sourceFirst);
+    workspaceSortDirection.value = 'descending';
+    expect(filteredWorkspaceTickets().map(ticket => ticket.title)).toEqual([...collectionTickets.value].map(ticket => ticket.title).sort().reverse());
   });
 
   it('clamps direct sidebar resizing to the reviewable height range', () => {

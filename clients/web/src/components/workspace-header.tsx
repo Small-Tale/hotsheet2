@@ -5,7 +5,7 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
-import { ArrowDownAZ, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
+import { ArrowDown, ArrowDownAZ, ArrowUp, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { ToolbarControlGroup } from './toolbar-control-group';
@@ -13,6 +13,7 @@ import { ToolbarText } from './toolbar-text';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
+export type WorkspaceSortDirection = 'ascending' | 'descending';
 
 export interface WorkspaceHeaderProps {
   projectName: string;
@@ -20,6 +21,7 @@ export interface WorkspaceHeaderProps {
   searchOpen?: boolean;
   searchQuery?: string;
   sort?: WorkspaceSort;
+  sortDirection?: WorkspaceSortDirection;
   controlsVisible?: boolean;
   notificationCount?: number;
 }
@@ -39,7 +41,20 @@ const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
   { value: 'status', label: 'Status' },
 ];
 
-export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated',notificationCount=0 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
+export function defaultWorkspaceSortDirection(sort: WorkspaceSort): WorkspaceSortDirection {
+  return sort === 'updated' ? 'descending' : 'ascending';
+}
+
+export function nextWorkspaceSort(current: WorkspaceSort, direction: WorkspaceSortDirection, selected: WorkspaceSort): { sort: WorkspaceSort; direction: WorkspaceSortDirection } {
+  if (selected !== current) return { sort: selected, direction: defaultWorkspaceSortDirection(selected) };
+  return { sort: current, direction: direction === 'ascending' ? 'descending' : 'ascending' };
+}
+
+export function applyWorkspaceSortDirection(comparison: number, direction: WorkspaceSortDirection): number {
+  return direction === 'ascending' ? comparison : -comparison;
+}
+
+export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   return <div class="workspace-header__actions" data-component="workspace-controls">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
@@ -51,7 +66,14 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
       <ToolbarControlGroup className="workspace-header__sort-group" single>
         <wa-dropdown class="workspace-header__sort" placement="bottom-end">
           <wa-button slot="trigger" appearance="plain" with-caret disabled={projectActionsDisabled} aria-label="Sort tickets" title="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button>
-          {sortOptions.map(option => <wa-dropdown-item type="checkbox" checked={sort === option.value} data-sort={option.value} value={option.value}>{option.label}</wa-dropdown-item>)}
+          {sortOptions.map(option => {
+            const selected = sort === option.value;
+            const directionLabel = sortDirection === 'ascending' ? 'ascending' : 'descending';
+            return <wa-dropdown-item aria-current={selected ? 'true' : undefined} aria-label={selected ? `${option.label}, ${directionLabel}` : option.label} data-sort={option.value} value={option.value}>
+              {selected && <span slot="icon" class="workspace-header__sort-direction"><LucideIcon icon={sortDirection === 'ascending' ? ArrowUp : ArrowDown} name={sortDirection === 'ascending' ? 'arrow-up' : 'arrow-down'} /></span>}
+              {option.label}
+            </wa-dropdown-item>;
+          })}
         </wa-dropdown>
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
@@ -66,9 +88,9 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
     </div>;
 }
 
-export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', controlsVisible = true }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true }: WorkspaceHeaderProps) {
   return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
     <WorkspaceIdentity projectName={projectName} />
-    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} />}
+    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} sortDirection={sortDirection} />}
   </header>;
 }

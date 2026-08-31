@@ -19,6 +19,7 @@ import { type ResizableRegionEdge,resizeRegionFromPointer } from '../components/
 import { Select } from '../components/select';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
+import { nextWorkspaceSort } from '../components/workspace-header';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDemo } from './catalog';
@@ -36,7 +37,7 @@ import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
-import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, inspectorTags, inspectorTitle, inspectorTitleDraft, inspectorTitleEditing, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, WorkspaceHeaderDemo,workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, inspectorTags, inspectorTitle, inspectorTitleDraft, inspectorTitleEditing, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, WorkspaceHeaderDemo,workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort, workspaceSortDirection } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -338,8 +339,10 @@ delegate(root, 'focusout', '[name="workspace-search"]', () => {
   });
 });
 delegate(root, 'click', '[data-sort]', (_event, target) => {
-  workspaceSort.value = (target as HTMLElement).dataset.sort as typeof workspaceSort.value;
-  recordCollectionEvent(`Sorted by ${workspaceSort.value}`);
+  const next = nextWorkspaceSort(workspaceSort.value, workspaceSortDirection.value, (target as HTMLElement).dataset.sort as typeof workspaceSort.value);
+  workspaceSort.value = next.sort;
+  workspaceSortDirection.value = next.direction;
+  recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
 });
 delegate(root, 'click', '[data-action="toggle-favorite"]', () => { recordCollectionEvent('View favorite toggled'); });
 delegate(root, 'click', '[data-action="more-workspace-actions"]', () => { recordCollectionEvent('Workspace actions requested'); });
