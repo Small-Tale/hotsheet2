@@ -106,6 +106,13 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit
   views with counts derived from those same predicates.
 
+  Ticket selection follows the native HS1 interaction model in both presentations:
+  plain click replaces the selection, Command/Ctrl-click toggles one ticket, and
+  Shift-click selects a contiguous range. Board ranges are deliberately column-local;
+  Shift-clicking into another column becomes a single selection. Clicking unused list
+  or column space clears the selection. Every selected row uses the same blue border
+  and background component state in list and column layouts.
+
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it
   detached if `instance.json` shows none, watch its health) — not to run the core

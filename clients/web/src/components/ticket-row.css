@@ -5,7 +5,6 @@
 .ticket-list-row:hover { background: #f8fafc; }
 .ticket-list-row[data-cut-pending="true"] { opacity: .5; }
 .ticket-list-row:focus-visible { box-shadow: 0 0 0 3px rgba(37, 99, 235, .24); }
-.ticket-list-row--selected { border-color: #60a5fa; background: #eff6ff; box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .12); }
 .ticket-list-row__indicator { position: absolute; inset: 0 auto 0 0; width: .25rem; }
 .ticket-list-row__indicator--up-next { background: var(--ticket-state-up-next); }
 .ticket-list-row__indicator--blocked { background: #4b5563; }
@@ -37,3 +36,4 @@
   .ticket-list-row__body { gap: .55rem; padding: .75rem .8rem; }
   .ticket-list-row__metadata { gap: .35rem; }
 }
+.ticket-list-row.ticket-list-row--selected { border-color: #60a5fa; background: #eff6ff; box-shadow: inset 0 0 0 1px rgba(37, 99, 235, .12); }

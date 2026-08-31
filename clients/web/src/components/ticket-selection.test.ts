@@ -22,4 +22,9 @@ describe('ticket selection', () => {
     const state = { anchor: 'HS2-A', selected: new Set(['HS2-A']) };
     expect(updateTicketSelection(slugs, state, 'missing')).toBe(state);
   });
+
+  it('falls back to one ticket when a range anchor is outside the active column',()=>{
+    const state={anchor:'HS2-A',selected:new Set(['HS2-A'])};
+    expect([...updateTicketSelection(['HS2-C','HS2-D'],state,'HS2-D',{range:true}).selected]).toEqual(['HS2-D']);
+  });
 });

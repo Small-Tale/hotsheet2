@@ -7,10 +7,12 @@ const archiveRow = { ...row, native_id:'04', qualified_id:'git-local:04', id:'04
 const notStartedRow = { ...row, native_id:'05', qualified_id:'git-local:05', id:'05', slug:'HS2-NEXT01', title:'Not started ticket', status:'not_started', up_next:false };
 const completedRow = { ...row, native_id:'06', qualified_id:'git-local:06', id:'06', slug:'HS2-DONE01', title:'Completed ticket', status:'completed', up_next:false };
 const verifiedRow = { ...row, native_id:'07', qualified_id:'git-local:07', id:'07', slug:'HS2-VERIFY01', title:'Verified ticket', status:'verified', up_next:false };
+const startedRow2 = { ...row, native_id:'08', qualified_id:'git-local:08', id:'08', slug:'HS2-START02', title:'Second started ticket', status:'started', up_next:false };
+const startedRow3 = { ...row, native_id:'09', qualified_id:'git-local:09', id:'09', slug:'HS2-START03', title:'Third started ticket', status:'started', up_next:false };
 const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'},{id:'N3',kind:'regular',created_at:'2026-08-30T00:36:00Z',edited_at:'2026-08-30T00:36:00Z',text:'Editable note'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
 
 async function mockProject(page: import('@playwright/test').Page, canUpdate = true) {
-  let rows = [row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow];
+  let rows = [row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3];
   let selectedFull = full;
   const patches: Record<string,unknown>[] = [];
   await page.route('**/*', async route => {
@@ -24,6 +26,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
     if(path.endsWith('/tickets/01')&&request.method()==='GET') return route.fulfill({json:{store:'git-local',...selectedFull}});
+    if(path.includes('/tickets/')&&request.method()==='GET'){const id=path.split('/').pop(),ticket=rows.find(item=>item.id===id);if(ticket)return route.fulfill({json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:[]}})}
     if(path.endsWith('/tickets/01/attachments')&&request.method()==='POST'){const filename=request.headers()['x-hotsheet-filename']??'attachment';selectedFull={...selectedFull,attachments:[...selectedFull.attachments,{id:`A${selectedFull.attachments.length+1}`,filename,created_at:'2026-08-30T01:10:00Z'}]};return route.fulfill({status:201,json:{store:'git-local',...selectedFull}})}
     if(path.includes('/tickets/01/attachments/')&&request.method()==='GET')return route.fulfill({body:'attachment bytes',headers:{'content-type':'application/octet-stream','x-hotsheet-filename':'proof.png'}});
     if(path.includes('/tickets/01/attachments/')&&request.method()==='DELETE'){const attachmentId=path.split('/').pop();selectedFull={...selectedFull,attachments:selectedFull.attachments.filter(item=>item.id!==attachmentId)};return route.fulfill({json:{store:'git-local',...selectedFull}})}
@@ -181,6 +184,14 @@ test('derives board columns from the selected view and merges Verified by projec
   await page.getByRole('button',{name:/Archive/}).click();
   await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Archive']);
   await expect(board.locator('[data-column-id="archive"]')).toContainText('Archived ticket');
+});
+
+test('matches HS1 multi-selection semantics and selected outlines in list and column views',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const first=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');await first.click();await second.click({modifiers:['Meta']});await expect(first).toHaveAttribute('data-selected','true');await expect(second).toHaveAttribute('data-selected','true');await expect(first).toHaveCSS('border-color','rgb(96, 165, 250)');
+  await page.getByLabel('Columns view').click();const started=page.locator('[data-column-id="started"]');const firstStarted=started.locator('[data-ticket-slug="HS2-DEMO01"]'),thirdStarted=started.locator('[data-ticket-slug="HS2-START03"]');await firstStarted.click();await thirdStarted.click({modifiers:['Shift']});await expect(started.locator('[data-selected="true"]')).toHaveCount(3);
+  const crossColumn=page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]');await crossColumn.click({modifiers:['Shift']});await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(1);await expect(crossColumn).toHaveAttribute('data-selected','true');await expect(crossColumn).toHaveCSS('border-color','rgb(96, 165, 250)');await page.screenshot({path:'/private/tmp/hotsheet-real-selection.png'});
+  await page.locator('[data-column-id="not-started"] .ticket-board-column__tickets').click({position:{x:240,y:300}});await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(0);
 });
 
 test('undoes, redoes, copies, pastes, and drags ticket mutations through the real shell',async({page})=>{
