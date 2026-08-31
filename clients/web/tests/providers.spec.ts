@@ -112,7 +112,11 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.getByRole('button',{name:'New ticket…'}).click();
   await page.locator('wa-input[name="new-ticket-title"]').evaluate((node:HTMLElement&{value:string})=>{node.value='Created from the real shell';node.dispatchEvent(new Event('input',{bubbles:true}))});
   await page.getByRole('button',{name:'Create ticket'}).click();
-  await expect(page.getByText('Created from the real shell')).toBeVisible();
+  const createdRow=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
+  await expect(createdRow).toContainText('Created from the real shell');
+  await expect(createdRow).toHaveAttribute('data-selected','true');
+  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('HS2-NEW001');
+  await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(1);
   await page.getByLabel('Settings view').click();
   await expect(page.getByText('/work/demo.hs2')).toBeVisible();
 });
