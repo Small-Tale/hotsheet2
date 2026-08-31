@@ -318,7 +318,23 @@ ticket's details + notes on one large scrollable surface (per the rule above).
 Net: one consistent reader mode, kind-driven rendering, and a smooth path from the
 constrained detail-panel editor to a spacious full-surface editor.
 
-## 6.9 Cross-references
+## 6.9 Mutation feedback and reconciliation
+
+Local ticket mutations project their renderable fields into the current list and
+inspector immediately, then reconcile from the authoritative PATCH response. A
+single-ticket mutation must not synchronously reload the ticket collection, selected
+ticket, or repository status. Responses carry a per-ticket generation: late responses
+are ignored, while the current failed request restores its captured projection and
+shows the error. The client emits `hotsheet:mutation-timing` with optimistic and request
+phase durations for local profiling.
+
+CI protects the deterministic contract (one PATCH and no follow-up collection/status
+GET) and the projection/reconciliation logic. `npm run test:performance` is the stricter
+local browser gate: after warm application startup, its click-to-next-frame projection
+must remain below 100 ms; 33 ms is the aspirational two-frame target. Network/disk/git
+completion is reported separately and does not delay acknowledged visual feedback.
+
+## 6.10 Cross-references
 - UX component inventory and `/ux-demo` contract: [ux-components.md](ux-components.md)
 - Server-side PTY manager that hosts the arbiter: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.4
 - The server clients talk to + its auto-start lifecycle: [04-core-server-cli.md](04-core-server-cli.md) §4.3.1

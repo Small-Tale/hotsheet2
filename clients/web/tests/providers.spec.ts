@@ -36,6 +36,17 @@ test('translates urgent priority through the canonical server contract',async({p
   await expect(page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"] .select__icon--selected [data-lucide="chevrons-up"]')).toBeVisible();
 });
 
+test('projects Up Next immediately and reconciles without a full project refresh',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const row=page.locator('[data-component="ticket-list-row"]',{hasText:'Not started ticket'});const requests:string[]=[];page.on('request',request=>{requests.push(`${request.method()} ${new URL(request.url()).pathname}`)});
+  await page.route('**/tickets/05',async route=>{if(route.request().method()!=='PATCH')return route.continue();await new Promise(resolve=>setTimeout(resolve,250));const body=route.request().postDataJSON();return route.fulfill({json:{store:'git-local',...notStartedRow,...body,details:'',notes:[],attachments:[]}})});
+  await page.evaluate(()=>{document.addEventListener('click',()=>{const started=performance.now();requestAnimationFrame(()=>{(window as typeof window&{mutationRenderMs?:number}).mutationRenderMs=performance.now()-started})},{once:true,capture:true})});
+  await row.getByRole('button',{name:'Add to Up Next'}).click();
+  await expect(row.getByRole('button',{name:'Remove from Up Next'})).toBeVisible();await expect.poll(()=>page.evaluate(()=>(window as typeof window&{mutationRenderMs?:number}).mutationRenderMs)).toBeLessThan(100);
+  await expect.poll(()=>requests.some(value=>value.startsWith('PATCH ')&&!value.endsWith('/tickets'))).toBe(true);await page.waitForTimeout(300);
+  const afterPatch=requests.slice(requests.findIndex(value=>value.startsWith('PATCH '))+1);expect(afterPatch.filter(value=>value.includes('/tickets')||value.includes('/repository/status'))).toEqual([]);
+});
+
 test('autosaves ticket text fields without explicit save or cancel controls',async({page})=>{
   const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
   const inspector=page.locator('[data-component="ticket-inspector"]');
