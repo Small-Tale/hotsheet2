@@ -1,3 +1,4 @@
+import type { ServerCompatibility } from './compatibility';
 import { prioritiesToWire } from './priority-wire';
 
 export type Capabilities = Record<'create'|'update'|'close'|'notes'|'note_edit'|'note_delete'|'attachments'|'assignment'|'review_requests'|'dependencies'|'up_next'|'close_reasons'|'claims'|'atomic_batch'|'offline_mutation'|'history'|'watch'|'provider_idempotency', boolean> & {query_fields:string[]};
@@ -13,6 +14,7 @@ export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;
 export class Api {
   constructor(private origin='',private secret=''){}
   private async request<T>(path:string,init:RequestInit={}):Promise<T>{const response=await fetch(`${this.origin}${path}`,{...init,headers:{'Content-Type':'application/json','X-Hotsheet-Secret':this.secret,...init.headers}});if(!response.ok)throw new Error((await response.json().catch(()=>null))?.error??`${response.status}`);return response.status===204?undefined as T:response.json()}
+  compatibility=()=>this.request<ServerCompatibility>('/compatibility');
   providers=()=>this.request<ProviderDescriptor[]>('/providers');
   connections=()=>this.request<ProviderConnection[]>('/provider-connections');
   tickets=(id:string)=>this.request<Ticket[]>(`/providers/${encodeURIComponent(id)}/tickets`);

@@ -99,6 +99,41 @@ async fn health_needs_no_secret() {
 }
 
 #[tokio::test]
+async fn compatibility_is_authenticated_and_reports_ranges_without_promising_restart() {
+    let (_d, st) = state();
+    let router = app(st);
+    let denied = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/compatibility")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+
+    let response = router
+        .oneshot(authed("GET", "/compatibility", None))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let value = body_json(response).await;
+    assert_eq!(value["generation"], "hs2");
+    assert_eq!(value["application_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(value["protocol"], serde_json::json!({"min": 1, "max": 1}));
+    assert_eq!(
+        value["store_schema"],
+        serde_json::json!({"min": 1, "max": 1})
+    );
+    assert_eq!(value["capabilities"]["lifecycle_restart"], false);
+    assert_eq!(value["capabilities"]["lifecycle_quiescence"], false);
+    assert!(value.get("build_revision").is_some());
+    assert!(value.get("started_at").is_some());
+}
+
+#[tokio::test]
 async fn tickets_require_the_secret() {
     let (_d, st) = state();
     let resp = app(st)

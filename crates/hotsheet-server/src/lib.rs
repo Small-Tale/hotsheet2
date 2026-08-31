@@ -780,6 +780,9 @@ pub fn app(state: AppState) -> Router {
             "/provider-connections/{connection_id}",
             patch(update_provider_connection).delete(delete_provider_connection),
         )
+        // Authenticated application/protocol negotiation. `/health` intentionally remains
+        // a small unauthenticated liveness probe.
+        .route("/compatibility", get(compatibility))
         // Cross-store resolve: a global ULID → its live instance in whichever store hosts
         // it (follows moved tombstones). HS2-87 / HS2-S4H2AM.
         .route("/resolve/{id}", get(resolve_ticket))
@@ -870,6 +873,31 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
         "store_schema": metadata.schema_version,
         "tickets": count
     })))
+}
+
+const API_PROTOCOL_MIN: u32 = 1;
+const API_PROTOCOL_MAX: u32 = 1;
+
+/// Authenticated build metadata and protocol compatibility. Exact application/revision
+/// equality is informational; clients make hard decisions from the inclusive range.
+async fn compatibility(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let started_at = state
+        .instance
+        .lock()
+        .ok()
+        .and_then(|instance| instance.as_ref().map(|value| value.started_at.clone()));
+    Json(serde_json::json!({
+        "generation": "hs2",
+        "application_version": env!("CARGO_PKG_VERSION"),
+        "build_revision": option_env!("HOT_SHEET_BUILD_REVISION"),
+        "protocol": { "min": API_PROTOCOL_MIN, "max": API_PROTOCOL_MAX },
+        "store_schema": { "min": 1, "max": 1 },
+        "capabilities": {
+            "lifecycle_restart": false,
+            "lifecycle_quiescence": false
+        },
+        "started_at": started_at
+    }))
 }
 
 async fn list_tickets(

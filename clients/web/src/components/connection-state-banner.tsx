@@ -4,13 +4,17 @@ import { CloudOff, KeyRound, LoaderCircle, RefreshCw, ShieldAlert } from 'lucide
 
 import { LucideIcon } from './lucide-icon';
 
-export type ConnectionState = 'connecting' | 'reconnecting' | 'offline' | 'incompatible' | 'authentication';
+export type ConnectionState = 'connecting' | 'reconnecting' | 'offline' | 'incompatible' | 'client-too-old' | 'server-too-old' | 'compatibility-unknown' | 'revision-mismatch' | 'authentication';
 export interface ConnectionStateBannerProps { state: ConnectionState; detail?: string }
 const presentation = {
   connecting: { label: 'Connecting to server', action: undefined, actionLabel: undefined, icon: LoaderCircle, iconName: 'loader-circle' },
   reconnecting: { label: 'Connection interrupted', action: 'retry-connection', actionLabel: 'Retry now', icon: RefreshCw, iconName: 'refresh-cw' },
   offline: { label: 'Working from offline data', action: 'retry-connection', actionLabel: 'Reconnect', icon: CloudOff, iconName: 'cloud-off' },
   incompatible: { label: 'Server update required', action: 'show-connection-details', actionLabel: 'View details', icon: ShieldAlert, iconName: 'shield-alert' },
+  'client-too-old': { label: 'Client update required', action: 'reload-client', actionLabel: 'Reload client', icon: ShieldAlert, iconName: 'shield-alert' },
+  'server-too-old': { label: 'Server update required', action: 'show-connection-details', actionLabel: 'View details', icon: ShieldAlert, iconName: 'shield-alert' },
+  'compatibility-unknown': { label: 'Server compatibility unknown', action: 'show-connection-details', actionLabel: 'View details', icon: ShieldAlert, iconName: 'shield-alert' },
+  'revision-mismatch': { label: 'Different server build is running', action: 'show-connection-details', actionLabel: 'View details', icon: ShieldAlert, iconName: 'shield-alert' },
   authentication: { label: 'Authentication required', action: 'authenticate-connection', actionLabel: 'Sign in', icon: KeyRound, iconName: 'key-round' },
 } as const;
 

@@ -197,6 +197,17 @@ spawning the server *detached* and *supervising* it — lands with the clients
 (**HS2-4072GM**); the server is already a separate process,
 so a detached spawn makes it outlive the client by construction.
 
+Clients negotiate the protected `GET /compatibility` contract before relying on the
+application API. It reports the HS2 generation, semantic application version, optional
+build revision, inclusive API-protocol and store-schema ranges, server start time when
+available, and lifecycle capabilities. Hard compatibility is based on protocol-range
+intersection, not exact version or revision equality, so rolling compatible builds can
+coexist. Missing or invalid metadata is an explicit unknown state. The server currently
+advertises lifecycle restart and quiescence as unsupported: clients must not offer an
+automatic restart until the server can account for active commands, AI work, mutations,
+terminals, and other connected clients. Remote restart likewise requires a future explicit
+authenticated capability.
+
 ## 4.4 The CLI (`hotsheet-cli`)
 
 A thin binary that wraps the same core for **direct-to-disk** operations, usable

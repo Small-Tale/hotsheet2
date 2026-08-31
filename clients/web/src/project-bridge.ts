@@ -4,12 +4,15 @@ import { access, readFile, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
+import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
+
 export interface ProjectSession {
   id: string;
   root: string;
   name: string;
   stores: string[];
   apiPath: string;
+  compatibility: CompatibilityAssessment;
 }
 
 interface InstanceInfo { pid:number; url:string; secret:string }
@@ -69,12 +72,14 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   if (!ticketStore) throw new Error(`No ticket source was found at ${root}.hs2. Choose a git ticket store to continue.`);
   const instance = await ensureServer(ticketStore);
   const target = { url: instance.url, secret: instance.secret };
+  const metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
+  const compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
   const opened = await serverRequest<{checkout:{id:string;root:string;alias:string;stores:string[]}}>(target, '/projects/open', {
     method: 'POST',
     body: JSON.stringify({ root, ...(ticketStoreInput?.trim() ? { stores: [ticketStore] } : {}) }),
   });
   sessions.set(opened.checkout.id, target);
-  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}` };
+  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility };
 }
 
 export async function proxyProjectRequest(projectId: string, path: string, request: Request): Promise<Response> {

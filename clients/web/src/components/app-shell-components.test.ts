@@ -50,6 +50,10 @@ describe('application shell components', () => {
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).not.toContain('<button');
     expect(String(ConnectionStateBanner({ state: 'offline' }))).toContain('data-action="retry-connection"');
     expect(String(ConnectionStateBanner({ state: 'authentication' }))).toContain('data-action="authenticate-connection"');
+    expect(String(ConnectionStateBanner({ state: 'client-too-old' }))).toContain('data-action="reload-client"');
+    expect(String(ConnectionStateBanner({ state: 'server-too-old' }))).toContain('Server update required');
+    expect(String(ConnectionStateBanner({ state: 'compatibility-unknown' }))).toContain('Server compatibility unknown');
+    expect(String(ConnectionStateBanner({ state: 'revision-mismatch' }))).toContain('Different server build is running');
   });
 
   it('composes all top-level regions', () => {

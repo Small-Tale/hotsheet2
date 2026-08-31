@@ -72,6 +72,12 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   discovers or detached-starts the local server and keeps its bearer credential out of
   browser state; Tauri will replace that bridge with its native lifecycle layer.
 
+  The bridge performs the authenticated compatibility handshake when attaching to a
+  discovered server. The client distinguishes compatible skew, client-too-old,
+  server-too-old, and unknown metadata. Compatible revision differences do not block use;
+  an old client offers reload/update, while an old server is surfaced without an unsafe
+  restart action unless both restart and quiescence capabilities are explicitly present.
+
   Ticket-provider connections are not stored in `hotsheet-settings.json` or
   `hotsheet-settings.local.json`: those remain shared/local preferences. Git sources are
   checkout/store links in the machine registry, while external provider connections are
