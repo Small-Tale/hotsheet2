@@ -21,7 +21,7 @@ import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDemo } from './catalog';
-import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownSavedValue, markdownValue, NoteCardDemo, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, TicketReaderDemo } from './content-components-demo';
+import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownSavedValue, markdownValue, NoteCardDemo, NoteComposerDemo, noteComposerValue, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, TicketReaderDemo } from './content-components-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, DriveControlDemo, driveRunning, ProjectSidebarDemo, projectSidebarHeight, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
@@ -123,6 +123,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'connection-state-banner') return <ConnectionStateBannerDemo />;
   if (item.id === 'app-shell') return <AppShellDemo />;
   if (item.id === 'note-card') return <NoteCardDemo />;
+  if (item.id === 'note-composer') return <NoteComposerDemo />;
   if (item.id === 'ticket-reader') return <TicketReaderDemo />;
   if (item.id === 'markdown-editor') return <MarkdownEditorDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
@@ -367,6 +368,9 @@ delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   toggleCollectionTicketUpNext(ticket.slug);
 });
 delegate(root, 'click', '[data-action="add-ticket-note"]', () => { recordCollectionEvent('Note composer requested'); });
+delegate(root, 'input', '[name="new-note-body"]', (_event, target) => { noteComposerValue.value = (target as FormControl).value; });
+delegate(root, 'click', '[data-action="cancel-new-note"]', () => { noteComposerValue.value = ''; recordCollectionEvent('New note cancelled'); });
+delegate(root, 'submit', '[data-action="create-note-form"]', event => { event.preventDefault(); if (noteComposerValue.value.trim()) recordCollectionEvent('New note submitted'); });
 const beginNoteEdit = (id: string) => { editingNoteId.value = id; noteDraft.value = readerNotes.value.find(note => note.id === id)?.body ?? noteDemoNotes.value.find(note => note.id === id)?.body ?? ''; queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus()); };
 delegate(root, 'dblclick', '[data-edit-on-double-click="true"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });
 delegate(root, 'click', '[data-action="edit-note"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });

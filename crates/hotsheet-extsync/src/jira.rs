@@ -579,6 +579,8 @@ fn capabilities() -> ProviderCapabilities {
         update: true,
         close: false,
         notes: true,
+        note_edit: false,
+        note_delete: false,
         attachments: false,
         assignment: true,
         review_requests: false,

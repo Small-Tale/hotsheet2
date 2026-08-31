@@ -26,7 +26,7 @@ use axum::extract::{Path, Query, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, patch, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
 use hotsheet_model::{
@@ -683,6 +683,7 @@ pub fn app(state: AppState) -> Router {
     let protected = Router::new()
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
+        .route("/tickets/{id}/notes/{note_id}", delete(delete_ticket_note))
         .route("/tickets/{id}/attachments", post(add_ticket_attachment))
         .route("/tickets/{id}/close", post(close_ticket))
         .route("/tickets/{id}/assign", post(assign_ticket))
@@ -730,6 +731,10 @@ pub fn app(state: AppState) -> Router {
             post(add_checkout_ticket_attachment),
         )
         .route(
+            "/checkouts/{reference}/tickets/{id}/notes/{note_id}",
+            delete(delete_checkout_ticket_note),
+        )
+        .route(
             "/stores/{store_id}/tickets",
             get(list_store_tickets).post(create_store_ticket),
         )
@@ -754,6 +759,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/providers/{connection_id}/tickets/{id}",
             get(get_provider_ticket).patch(update_provider_ticket),
+        )
+        .route(
+            "/providers/{connection_id}/tickets/{id}/notes/{note_id}",
+            delete(delete_provider_ticket_note),
         )
         .route(
             "/providers/{connection_id}/tickets/{id}/close",
@@ -1364,6 +1373,23 @@ async fn update_provider_ticket(
     Ok(Json(ticket))
 }
 
+async fn delete_provider_ticket_note(
+    State(state): State<AppState>,
+    Path((connection_id, id, note_id)): Path<(String, String, String)>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let provider = provider_for(&state, &connection_id)?;
+    if !provider.supports_note_delete() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("provider connection '{connection_id}' does not support note deletion"),
+        ));
+    }
+    provider
+        .delete_note(&id, &note_id, now())
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
 async fn close_provider_ticket(
     State(state): State<AppState>,
     Path((connection_id, id)): Path<(String, String)>,
@@ -1718,6 +1744,21 @@ async fn update_checkout_ticket(
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
         ticket: do_update(&state, &entry, &id, req)?,
+    }))
+}
+async fn delete_checkout_ticket_note(
+    State(state): State<AppState>,
+    Path((reference, id, note_id)): Path<(String, String, String)>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let note_id = Ulid::from_string(&note_id)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid note ULID"))?;
+    let updated = ops::delete_note(&entry.store, &ticket.id, &note_id, now())?;
+    state.changed_in(&entry, "updated", &updated);
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket(&entry, &updated)?,
     }))
 }
 async fn close_checkout_ticket(
@@ -2165,6 +2206,19 @@ async fn update_ticket(
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     Ok(Json(do_update(&state, &state.default_entry(), &id, req)?))
+}
+
+async fn delete_ticket_note(
+    State(state): State<AppState>,
+    Path((id, note_id)): Path<(String, String)>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = state.default_entry();
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let note_id = Ulid::from_string(&note_id)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid note ULID"))?;
+    let updated = ops::delete_note(&entry.store, &ticket.id, &note_id, now())?;
+    state.changed_in(&entry, "updated", &updated);
+    Ok(Json(api_ticket(&entry, &updated)?))
 }
 
 async fn add_ticket_attachment(

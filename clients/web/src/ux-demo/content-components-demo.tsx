@@ -2,6 +2,7 @@ import { signal } from 'kerfjs';
 
 import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-editor';
 import { NoteCard, type NoteKind } from '../components/note-card';
+import { NoteComposer } from '../components/note-composer';
 import type { InspectorTab } from '../components/ticket-inspector';
 import { TicketReader } from '../components/ticket-reader';
 
@@ -17,6 +18,9 @@ export const noteDemoNotes = signal([
 export function NoteCardDemo() {
   return <section class="note-card-demo" aria-label="NoteCard demo">{noteDemoNotes.value.map(note => <NoteCard {...note} editing={editingNoteId.value === note.id} draft={editingNoteId.value === note.id ? noteDraft.value : undefined} />)}</section>;
 }
+
+export const noteComposerValue = signal('Summarize the design decision and link the verification evidence.');
+export function NoteComposerDemo() { return <section class="note-card-demo" aria-label="NoteComposer demo"><NoteComposer value={noteComposerValue.value} /></section>; }
 
 export const READER_NOTES = [
   { id: 'reader-status', kind: 'status' as const, author: 'Hot Sheet', time: '1 hour ago', body: 'Status changed from Not started to Started.' },

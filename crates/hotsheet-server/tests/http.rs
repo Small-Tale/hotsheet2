@@ -1424,16 +1424,28 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
     }
 
     // The note persisted (a fresh GET sees it).
+    let deleted = body_json(
+        app.clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/tickets/{id}/notes/{note_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(deleted["notes"].as_array().unwrap().len(), 2);
+
     let got = body_json(
         app.oneshot(authed("GET", &format!("/tickets/{id}"), None))
             .await
             .unwrap(),
     )
     .await;
-    assert_eq!(got["notes"].as_array().unwrap().len(), 3);
-    assert_eq!(got["notes"][0]["text"], "completed initial investigation");
-    assert_eq!(got["notes"][1]["text"], "marked not working");
-    assert_eq!(got["notes"][2]["text"], "completed again");
+    assert_eq!(got["notes"].as_array().unwrap().len(), 2);
+    assert_eq!(got["notes"][0]["text"], "marked not working");
+    assert_eq!(got["notes"][1]["text"], "completed again");
 }
 
 #[tokio::test]

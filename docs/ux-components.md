@@ -467,7 +467,9 @@ icons; structural separators do not require icons.
 - `FeedbackDraftEditor`
 - `ActivityTimeline`
 - `ActivityTimelineEntry`
-- `NoteComposer`
+- `NoteComposer` — **demo built** as the shared controlled create/cancel surface used
+  by both TicketInspector and TicketReader. Provider note capabilities gate create,
+  edit, and delete independently; deletion is an explicit provider operation.
 - `NoteEditor`
 - `NoteReaderButton`
 
@@ -483,8 +485,9 @@ Markdown details, blocked reason, tags, attachments, notes, and provider/update
 provenance. Timeline and attachments move to dedicated tabs so the narrow Info view
 stays readable; the reader dialog exposes those same tabs at a comfortable width.
 
-Remaining editing capabilities are explicit follow-up work: note composition/edit/delete
-and attachment upload/actions. Telemetry and review
+Remaining editing capabilities are explicit follow-up work: attachment actions.
+Note composition/edit/delete is shipped with provider-capability gating and shared
+Inspector/Reader state. Telemetry and review
 proof are deliberately not generic always-visible fields: they will appear as
 capability-aware sections when their underlying features and data contracts land.
 

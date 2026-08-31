@@ -86,6 +86,8 @@ trait TicketProvider {
     fn create(&self, draft: &TicketDraft) -> Result<Ticket>;
     fn update(&self, id: &NativeTicketId, patch: &TicketPatch) -> Result<Ticket>;
     fn add_note(&self, id: &NativeTicketId, note: &NoteDraft) -> Result<Note>;
+    fn edit_note(&self, id: &NativeTicketId, note_id: &str, text: &str) -> Result<Ticket>;
+    fn delete_note(&self, id: &NativeTicketId, note_id: &str) -> Result<Ticket>;
 
     // Optional operations are guarded by capabilities.
     fn claim(&self, id: &NativeTicketId, claim: &ClaimRequest) -> Result<Claim>;
@@ -94,7 +96,7 @@ trait TicketProvider {
 ```
 
 Capabilities are structured rather than a single “supported” flag. At minimum they
-cover create/update/delete, searchable/filterable fields, notes, attachments,
+cover create/update/delete, searchable/filterable fields, note create/edit/delete, attachments,
 assignment/review, dependencies, Up Next, close reasons, claims/leases, atomic batch,
 offline mutation, history, watch/webhooks, and provider-side idempotency. A
 conformance suite verifies both implemented behavior and honest rejection of absent

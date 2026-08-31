@@ -38,8 +38,8 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'inspector', name: 'Ticket inspector', children: [
     { id: 'metadata', name: 'Metadata', demos: [
-      demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'note-card']),
-      demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, tags, notes, and provenance.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'markdown-editor', 'tag-chip', 'note-card']),
+      demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'note-card', 'note-composer']),
+      demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, tags, notes, and provenance.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'markdown-editor', 'tag-chip', 'note-card', 'note-composer']),
       demo('ticket-timeline', 'TicketTimeline', 'Chronological ticket activity inspector section.', 'feature-floor', true),
       demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true),
       demo('ticket-category-select', 'TicketCategorySelect', 'Category chooser with configured icons and colors.', 'feature-floor', true, ['select']),
@@ -55,6 +55,7 @@ export const demoCatalog: DemoCategory[] = [
       demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
     ]},
     { id: 'notes', name: 'Notes and activity', demos: [
+      demo('note-composer', 'NoteComposer', 'Create or cancel a provider-backed ticket note.', 'feature-floor', true),
       demo('note-card', 'NoteCard', 'Kind-specific note presentation.', 'feature-floor', true),
       demo('feedback-draft', 'FeedbackDraftEditor', 'Local draft response to feedback.'),
       demo('activity-timeline', 'ActivityTimeline', 'Chronological durable activity notes.'),

@@ -453,6 +453,27 @@ pub fn edit_note(
     Ok(ticket)
 }
 
+/// Delete one note while preserving the ticket and remaining note order.
+pub fn delete_note(
+    store: &FsStore,
+    ticket_id: &Ulid,
+    note_id: &Ulid,
+    now: Timestamp,
+) -> Result<Ticket, StoreError> {
+    let mut ticket = store.read_ticket(ticket_id)?;
+    let before = ticket.notes.len();
+    ticket.notes.retain(|note| &note.id != note_id);
+    if ticket.notes.len() == before {
+        return Err(StoreError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("note {note_id}"),
+        )));
+    }
+    ticket.updated_at = now;
+    store.write_ticket_committing(&ticket)?;
+    Ok(ticket)
+}
+
 /// Record a close outcome (`docs/02` §2.6a). Closing **settles the status**: a
 /// close_reason may never coexist with an active status (not_started/started), so an
 /// active ticket is moved to `completed` (stamping `completed_at`). A ticket already
@@ -1076,6 +1097,12 @@ mod tests {
         assert_eq!(edited.notes[0].text, "did the corrected thing");
         assert_eq!(edited.notes[0].created_at, original_created);
         assert_eq!(edited.notes[0].edited_at.as_str(), "2026-08-19T03:00:00Z");
+
+        let deleted = delete_note(&store, &id, &n1, ts("2026-08-19T04:00:00Z")).unwrap();
+        assert_eq!(deleted.notes.len(), 1);
+        assert_eq!(deleted.notes[0].id, n2);
+        assert_eq!(deleted.updated_at.as_str(), "2026-08-19T04:00:00Z");
+        assert!(delete_note(&store, &id, &n1, ts("t5")).is_err());
     }
 
     #[test]

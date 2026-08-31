@@ -728,6 +728,8 @@ fn github_capabilities() -> ProviderCapabilities {
         update: true,
         close: true,
         notes: true,
+        note_edit: false,
+        note_delete: false,
         attachments: false,
         assignment: true,
         review_requests: false,

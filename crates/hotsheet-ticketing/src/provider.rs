@@ -152,6 +152,8 @@ pub struct ProviderCapabilities {
     pub update: bool,
     pub close: bool,
     pub notes: bool,
+    pub note_edit: bool,
+    pub note_delete: bool,
     pub attachments: bool,
     pub assignment: bool,
     pub review_requests: bool,
@@ -174,6 +176,8 @@ impl ProviderCapabilities {
             update: true,
             close: true,
             notes: true,
+            note_edit: true,
+            note_delete: true,
             attachments: true,
             assignment: true,
             review_requests: true,
@@ -284,7 +288,10 @@ pub enum ProviderError {
 pub trait TicketProvider: Send + Sync {
     fn descriptor(&self) -> ProviderDescriptor;
     fn supports_note_edit(&self) -> bool {
-        false
+        self.descriptor().capabilities.note_edit
+    }
+    fn supports_note_delete(&self) -> bool {
+        self.descriptor().capabilities.note_delete
     }
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError>;
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError>;
@@ -317,6 +324,17 @@ pub trait TicketProvider: Send + Sync {
         Err(ProviderError::Unsupported {
             connection_id: self.descriptor().connection_id,
             capability: "note_edit",
+        })
+    }
+    fn delete_note(
+        &self,
+        _native_id: &str,
+        _note_id: &str,
+        _now: Timestamp,
+    ) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "note_delete",
         })
     }
     fn attachment_bytes(
@@ -619,6 +637,23 @@ impl TicketProvider for GitProvider {
         let note_id = Ulid::from_string(note_id)
             .map_err(|_| ProviderError::InvalidNativeId(note_id.into()))?;
         let updated = ops::edit_note(&self.store, &ticket.id, &note_id, now, text)?;
+        Ok(ApiTicket::from_provider(
+            &updated,
+            &self.connection_id,
+            None,
+        ))
+    }
+
+    fn delete_note(
+        &self,
+        native_id: &str,
+        note_id: &str,
+        now: Timestamp,
+    ) -> Result<ApiTicket, ProviderError> {
+        let ticket = self.ticket(native_id)?;
+        let note_id = Ulid::from_string(note_id)
+            .map_err(|_| ProviderError::InvalidNativeId(note_id.into()))?;
+        let updated = ops::delete_note(&self.store, &ticket.id, &note_id, now)?;
         Ok(ApiTicket::from_provider(
             &updated,
             &self.connection_id,

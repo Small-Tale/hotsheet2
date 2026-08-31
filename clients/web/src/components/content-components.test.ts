@@ -2,9 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import { MarkdownEditor } from './markdown-editor';
 import { MarkdownPreview } from './markdown-preview';
+import { NoteComposer } from './note-composer';
 import { TicketReader } from './ticket-reader';
 
 describe('content components', () => {
+  it('renders a controlled note composer with explicit submit and cancel states', () => {
+    const empty = String(NoteComposer({ value: '' }));
+    expect(empty).toContain('data-action="create-note-form"');
+    expect(empty).toContain('data-action="cancel-new-note"');
+    expect(empty).toContain('disabled');
+    const ready = String(NoteComposer({ value: 'Ready' }));
+    expect(ready).not.toContain('disabled');
+  });
   it('renders Markdown source, preview, dirty state, and expansion as explicit states', () => {
     const source = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true }));
     expect(source).toContain('textarea');

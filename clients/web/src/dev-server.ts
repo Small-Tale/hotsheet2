@@ -66,7 +66,7 @@ const demoEntries: Record<string, string> = {
   'workspace-header': 'ux-demo/workspace-components-demo.tsx', 'page-header': 'ux-demo/workspace-components-demo.tsx', 'quick-ticket-composer': 'ux-demo/workspace-components-demo.tsx', 'ticket-inspector': 'ux-demo/workspace-components-demo.tsx',
   'ticket-list': 'ux-demo/ticket-collections-demo.tsx', 'ticket-row': 'ux-demo/ticket-row-demo.tsx', 'ticket-board': 'ux-demo/ticket-collections-demo.tsx', 'ticket-board-column': 'ux-demo/ticket-collections-demo.tsx',
   'ticket-info-panel': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-timeline': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-attachments': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-category-select': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-priority-select': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-status-menu': 'ux-demo/ticket-metadata-demo.tsx',
-  'ticket-reader': 'ux-demo/content-components-demo.tsx', 'markdown-editor': 'ux-demo/content-components-demo.tsx', 'note-card': 'ux-demo/content-components-demo.tsx', 'tag-chip': 'ux-demo/tag-chip-demo.tsx', 'status-badge': 'ux-demo/status-badge-demo.tsx',
+  'ticket-reader': 'ux-demo/content-components-demo.tsx', 'markdown-editor': 'ux-demo/content-components-demo.tsx', 'note-card': 'ux-demo/content-components-demo.tsx', 'note-composer': 'ux-demo/content-components-demo.tsx', 'tag-chip': 'ux-demo/tag-chip-demo.tsx', 'status-badge': 'ux-demo/status-badge-demo.tsx',
   'select': 'ux-demo/select-demo.tsx', 'toolbar': 'ux-demo/toolbar-demo.tsx', 'menu-item': 'ux-demo/menu-item-demo.tsx', 'menu-header': 'ux-demo/menu-header-demo.tsx', 'toolbar-control-group': 'ux-demo/toolbar-control-group-demo.tsx', 'toolbar-text': 'ux-demo/toolbar-text-demo.tsx',
 };
 
