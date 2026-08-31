@@ -54,4 +54,10 @@ describe('TicketInspector', () => {
     expect(css).toContain('span:nth-child(2) { min-width: 0; overflow: hidden; flex: 1;');
     expect(css).toContain('.ticket-inspector__attachment-actions { display: inline-flex; margin-left: auto; flex: none;');
   });
+
+  it('hides the Up Next action for ineligible lifecycle states', () => {
+    expect(String(TicketInspector({ ...base }))).toContain('data-action="toggle-inspector-up-next"');
+    expect(String(TicketInspector({ ...base, status: 'completed' }))).not.toContain('data-action="toggle-inspector-up-next"');
+    expect(String(TicketInspector({ ...base, upNextEligible: false }))).not.toContain('data-action="toggle-inspector-up-next"');
+  });
 });

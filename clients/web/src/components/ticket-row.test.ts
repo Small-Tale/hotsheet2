@@ -11,7 +11,7 @@ describe('TicketRow', () => {
       slug: ' ', title: ' ', status: 'not_started', priority: 'default', category: ' ', tags: [' client ', '', ' ux '],
     })).toEqual({
       slug: 'HS2-UNKNOWN', title: 'Untitled ticket', status: 'not_started', priority: 'default',
-      category: 'issue', categoryIcon: 'circle-alert', categoryColor: '#6b7280', tags: ['client', 'ux'], upNext: false, selected: false, busy: false,
+      category: 'issue', categoryIcon: 'circle-alert', categoryColor: '#6b7280', tags: ['client', 'ux'], upNext: false, upNextEligible: true, selected: false, busy: false,
       blocked: false, needsReview: false, agentName: 'AI', updatedLabel: 'Recently',
       presentation: 'list',
     });
@@ -80,5 +80,11 @@ describe('TicketRow', () => {
     for (const status of ['completed', 'verified'] as const) expect(String(TicketRow({ slug: 'HS2-DONE', title: 'Finished row', status, priority: 'default', category: 'task', tags: [] }))).toContain(`data-status="${status}"`);
     expect(css).toContain('[data-status="completed"], [data-status="verified"]');
     expect(css).toContain('.ticket-list-row__identity strong { color: #6b7280; text-decoration: line-through; }');
+  });
+
+  it('offers Up Next only for not-started and started lifecycle states', () => {
+    for (const status of ['not_started', 'started'] as const) expect(String(TicketRow({ slug: 'HS2-ACTIVE', title: 'Active', status, priority: 'default', category: 'task', tags: [] }))).toContain('data-action="toggle-row-up-next"');
+    for (const status of ['completed', 'verified', 'backlog'] as const) expect(String(TicketRow({ slug: 'HS2-INACTIVE', title: 'Inactive', status, priority: 'default', category: 'task', tags: [] }))).not.toContain('data-action="toggle-row-up-next"');
+    expect(String(TicketRow({ slug: 'HS2-ARCHIVE', title: 'Archive projection', status: 'not_started', upNextEligible: false, priority: 'default', category: 'task', tags: [] }))).not.toContain('data-action="toggle-row-up-next"');
   });
 });

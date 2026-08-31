@@ -18,6 +18,7 @@ export interface TicketRowProps {
   category: string;
   tags: string[];
   upNext?: boolean;
+  upNextEligible?: boolean;
   blocked?: boolean;
   needsReview?: boolean;
   selected?: boolean;
@@ -63,6 +64,7 @@ export function normalizeTicketRowProps(props: TicketRowProps): TicketRowProps {
     categoryColor: props.categoryColor ?? categoryPresentation?.color,
     tags: props.tags.map(tag => tag.trim()).filter(Boolean),
     upNext: props.upNext ?? false,
+    upNextEligible: props.upNextEligible ?? (props.status === 'not_started' || props.status === 'started'),
     blocked: props.blocked ?? false,
     needsReview: props.needsReview ?? false,
     selected: props.selected ?? false,
@@ -112,7 +114,7 @@ export function TicketRow(raw: TicketRowProps) {
               <span class="ticket-list-row__updated">{props.updatedLabel}</span>
             </div>
             <div class="ticket-list-row__metadata">
-              <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>
+              {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>}
               <StatusBadge status={props.status} appearance="plain" compact />
               {props.blocked && <BlockedBadge compact />}
               <span class={`ticket-list-row__owner${props.busy ? ' ticket-list-row__owner--active' : ''}`} aria-label={props.busy ? `${props.agentName} working` : props.agentName}>{props.agentName}</span>

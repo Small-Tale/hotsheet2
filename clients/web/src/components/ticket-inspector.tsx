@@ -38,6 +38,7 @@ export interface TicketInspectorProps {
   detailsDirty?: boolean;
   activeTab?: InspectorTab;
   upNext?: boolean;
+  upNextEligible?: boolean;
   timelineEntries?: readonly TicketTimelineEntry[];
   attachments?: readonly TicketAttachmentItem[];
   attachmentsEnabled?: boolean;
@@ -60,8 +61,8 @@ const tabs = [
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
 
-export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, timelineEntries, attachments, attachmentsEnabled = true, attachmentMessage = '', notes, editingNoteId, noteDraft, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', readerEditing = false }: TicketInspectorProps) {
-  const star = <button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button>;
+export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, upNextEligible = status === 'not_started' || status === 'started', timelineEntries, attachments, attachmentsEnabled = true, attachmentMessage = '', notes, editingNoteId, noteDraft, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', readerEditing = false }: TicketInspectorProps) {
+  const star = <>{upNextEligible && <button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button>}</>;
   const close = <button type="button" data-action={presentation === 'reader' ? 'close-ticket-reader' : 'close-ticket-inspector'} aria-label={presentation === 'reader' ? 'Close ticket reader' : 'Hide inspector'}><LucideIcon icon={presentation === 'reader' ? X : PanelRightClose} name={presentation === 'reader' ? 'x' : 'panel-right-close'} /></button>;
   const actions = presentation === 'reader'
     ? <ToolbarControlGroup appearance="borderless" label="Ticket actions">{star}<button type="button" data-action="edit-ticket-reader" aria-label={readerEditing ? 'Editing ticket' : 'Edit ticket'} aria-pressed={readerEditing} disabled={readerEditing}><LucideIcon icon={Pencil} name="pencil" /></button>{close}</ToolbarControlGroup>
