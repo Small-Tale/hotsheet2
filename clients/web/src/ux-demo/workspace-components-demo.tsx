@@ -23,6 +23,10 @@ export const inspectorTab = signal<InspectorTab>('info');
 export const inspectorCategory = signal('feature');
 export const inspectorPriority = signal<TicketRowProps['priority']>('high');
 export const inspectorStatus = signal<TicketRowProps['status']>('started');
+export const inspectorTitle = signal('Build TicketList and TicketBoard around shared responsive TicketRow');
+export const inspectorTitleDraft = signal(inspectorTitle.value);
+export const inspectorTitleEditing = signal(false);
+export const inspectorTags = signal(['client', 'ux']);
 let demoSequence = 1;
 
 export function focusComposerTitle(root: ParentNode): boolean {
@@ -100,7 +104,7 @@ export function TicketInspectorDemo() {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   return <section class="inspector-demo" aria-label="TicketInspector demo">
     {inspectorOpen.value
-      ? <TicketInspector slug={ticket.slug} title={ticket.title} status={inspectorStatus.value} priority={inspectorPriority.value} category={inspectorCategory.value} tags={ticket.tags} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={inspectorTab.value} upNext={ticket.upNext} />
+      ? <TicketInspector slug={ticket.slug} title={inspectorTitle.value} titleEditing={inspectorTitleEditing.value} titleDraft={inspectorTitleDraft.value} status={inspectorStatus.value} priority={inspectorPriority.value} category={inspectorCategory.value} tags={inspectorTags.value} tagSuggestions={['client', 'ux', 'server', 'regression', 'accessibility']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={inspectorTab.value} upNext={ticket.upNext} />
       : <wa-button data-action="open-ticket-inspector">Open ticket inspector</wa-button>}
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;

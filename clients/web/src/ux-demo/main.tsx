@@ -17,6 +17,7 @@ import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { type ResizableRegionEdge,resizeRegionFromPointer } from '../components/resizable-region';
 import { Select } from '../components/select';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
+import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDemo } from './catalog';
@@ -33,7 +34,7 @@ import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
-import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, WorkspaceHeaderDemo,workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, inspectorTags, inspectorTitle, inspectorTitleDraft, inspectorTitleEditing, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, WorkspaceHeaderDemo,workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -47,6 +48,8 @@ const tabContextMenu = signal<{ x: number; y: number; projectId: string } | unde
 const markdownAutosave = createDebouncedAutosave((value: string) => { markdownSavedValue.value = value; markdownEvent.value = 'Markdown autosaved.'; return Promise.resolve(true); });
 const blockedReasonAutosave = createDebouncedAutosave((value: string) => { inspectorBlockedReason.value = value.trim(); return Promise.resolve(true); });
 const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) => { readerNotes.value = readerNotes.value.map(note => note.id === id ? { ...note, body: value } : note); noteDemoNotes.value = noteDemoNotes.value.map(note => note.id === id ? { ...note, body: value } : note); return Promise.resolve(true); });
+const titleAutosave = createDebouncedAutosave((value: string) => { inspectorTitle.value = value.trim(); return Promise.resolve(true); });
+const tagsAutosave = createDebouncedAutosave((value: string[]) => { inspectorTags.value = value; return Promise.resolve(true); });
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
 let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; edge: ResizableRegionEdge; startPoint: number; startSize: number } | undefined;
 let devReviewController: { destroy(): void } | undefined;
@@ -347,6 +350,15 @@ delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => { inspect
 delegate(root, 'change', '[name="inspector-category"]', (_event, target) => { inspectorCategory.value = (target as FormControl).value; });
 delegate(root, 'change', '[name="inspector-priority"]', (_event, target) => { inspectorPriority.value = (target as FormControl).value as typeof inspectorPriority.value; });
 delegate(root, 'click', '[data-inspector-status]', (_event, target) => { inspectorStatus.value = (target as HTMLElement).dataset.inspectorStatus as typeof inspectorStatus.value; });
+const beginTitleEdit = () => { inspectorTitleDraft.value = inspectorTitle.value; inspectorTitleEditing.value = true; queueMicrotask(() => root.querySelector<HTMLElement>('[name="ticket-title"]')?.focus()); };
+delegate(root, 'dblclick', '[data-action="edit-ticket-title"]', () => { beginTitleEdit(); });
+delegate(root, 'keydown', '[data-action="edit-ticket-title"]', event => { if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return; event.preventDefault(); beginTitleEdit(); });
+delegate(root, 'input', '[name="ticket-title"]', (_event, target) => { inspectorTitleDraft.value = (target as FormControl).value; if (inspectorTitleDraft.value.trim()) titleAutosave.schedule(inspectorTitleDraft.value); });
+delegate(root, 'focusout', '[name="ticket-title"]', () => { if (!inspectorTitleDraft.value.trim()) return; void titleAutosave.flush().then(() => { inspectorTitleEditing.value = false; }); });
+const addInspectorTag = (target: HTMLInputElement) => { inspectorTags.value = addTicketTag(inspectorTags.value, target.value); target.value = ''; tagsAutosave.schedule(inspectorTags.value); };
+delegate(root, 'keydown', '[name="ticket-tag-input"]', (event, target) => { if (!['Enter', ','].includes((event as KeyboardEvent).key)) return; event.preventDefault(); addInspectorTag(target as HTMLInputElement); });
+delegate(root, 'focusout', '[name="ticket-tag-input"]', (_event, target) => { if ((target as HTMLInputElement).value.trim()) addInspectorTag(target as HTMLInputElement); void tagsAutosave.flush(); });
+delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => { const tag = (target as HTMLElement).dataset.tagId; if (!tag) return; inspectorTags.value = removeTicketTag(inspectorTags.value, tag); tagsAutosave.schedule(inspectorTags.value); });
 delegate(root, 'click', '[data-action="edit-blocked-reason"]', () => { inspectorBlockedReasonDraft.value = inspectorBlockedReason.value; inspectorBlockedReasonEditing.value = true; queueMicrotask(() => root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus()); });
 delegate(root, 'input', '[name="blocked-reason"]', (_event, target) => { inspectorBlockedReasonDraft.value = (target as FormControl).value; blockedReasonAutosave.schedule(inspectorBlockedReasonDraft.value); });
 delegate(root, 'focusout', '[name="blocked-reason"]', () => { void blockedReasonAutosave.flush().then(() => { inspectorBlockedReasonEditing.value = false; recordCollectionEvent('Blocked reason autosaved'); }); });

@@ -351,7 +351,7 @@ than substituting a hardcoded default.
 
 - `InspectorHeader`
   - ticket identifier
-  - title
+  - capability-aware inline title editing with debounced persistence
   - up-next/star toggle
   - close/collapse action
 - `InspectorTabBar`
@@ -389,7 +389,9 @@ than substituting a hardcoded default.
 - `TicketDetailsSection` — section header remains outside its visually distinct
   bordered Markdown surface, matching Notes hierarchy; double-click non-empty details,
   single-click the empty prompt, or use its keyboard action to begin editing
-- `TicketTagsSection`
+- `TicketTagsSection` — **built**: controlled chips with capability-aware removal,
+  duplicate-safe creation, and native autocomplete suggestions shared by inspector
+  and reader
 - `TicketAttachmentsSection`
 - `TicketNotesSection`
 
@@ -433,9 +435,8 @@ by its component module. The `/ux-demo` stylesheet owns only catalog shell, insp
 and stage presentation, ensuring the demo exercises the same CSS the real app imports.
 Actionable context-menu entries consistently pair their text with meaningful Lucide
 icons; structural separators do not require icons.
-- `TagPicker`
-- `AddTagButton`
-- tag removal, creation, autocomplete, unsupported-provider, and validation states
+- `TicketTagEditor` — **built**: shared tag list, compact add control, autocomplete,
+  normalization, duplicate prevention, removal, and unsupported-provider state
 
 ### 4.4 Attachments — feature floor
 
@@ -482,8 +483,8 @@ Markdown details, blocked reason, tags, attachments, notes, and provider/update
 provenance. Timeline and attachments move to dedicated tabs so the narrow Info view
 stays readable; the reader dialog exposes those same tabs at a comfortable width.
 
-Remaining editing capabilities are explicit follow-up work: inline title/tag editing,
-note composition/edit/delete, and attachment upload/actions. Telemetry and review
+Remaining editing capabilities are explicit follow-up work: note composition/edit/delete
+and attachment upload/actions. Telemetry and review
 proof are deliberately not generic always-visible fields: they will appear as
 capability-aware sections when their underlying features and data contracts land.
 

@@ -648,6 +648,17 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toContainText('Build TicketList and TicketBoard');
+  await inspector.getByRole('heading', { name: /Build TicketList/ }).dblclick();
+  const titleEditor = inspector.getByRole('textbox', { name: 'Ticket title' });
+  await titleEditor.fill('Autosaved inspector title');
+  await titleEditor.blur();
+  await expect(inspector.getByRole('heading', { name: 'Autosaved inspector title' })).toBeVisible();
+  const tagEditor = inspector.getByRole('combobox', { name: 'Add tag' });
+  await tagEditor.fill('regression');
+  await tagEditor.press('Enter');
+  await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();
+  await inspector.locator('[data-component="tag-chip"][data-tag-id="client"]').evaluate(node => node.dispatchEvent(new CustomEvent('wa-remove', { bubbles: true })));
+  await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);
   await expect(inspector.getByRole('button', { name: 'Info' })).toHaveAttribute('aria-current', 'page');
   await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
   await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(2);
@@ -707,7 +718,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const blockedReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
   await expect(blockedReason).toBeFocused();
   await blockedReason.fill('Waiting for API review.');
-  await inspector.getByRole('button', { name: 'Save' }).click();
+  await blockedReason.blur();
   await expect(inspector.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
   await expect(inspector.getByText('Waiting for API review.')).toBeVisible();
   const blockedSection = inspector.locator('.ticket-inspector__blocked-section');
@@ -719,7 +730,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(firstNote.locator('[data-action="open-ticket-reader"]')).toHaveCount(0);
   await firstNote.getByRole('button', { name: 'Edit note' }).click();
   await expect(firstNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
-  await firstNote.getByRole('button', { name: 'Cancel' }).click();
+  await firstNote.getByRole('textbox', { name: 'Note body' }).fill('Autosaved inspector note');
+  await firstNote.getByRole('textbox', { name: 'Note body' }).blur();
+  await expect(firstNote).toContainText('Autosaved inspector note');
   await inspector.getByRole('button', { name: 'Add note', exact: true }).last().click();
   await expect(page.getByText('Note composer requested')).toBeVisible();
   await inspector.getByRole('button', { name: 'Timeline' }).click();

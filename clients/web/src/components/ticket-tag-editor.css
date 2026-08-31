@@ -1,0 +1,8 @@
+.ticket-tag-editor { display: grid; gap: .5rem; }
+.ticket-tag-editor__chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.ticket-tag-editor__add { display: inline-flex; width: fit-content; min-height: 1.8rem; padding: 0 .45rem; border-radius: .4rem; color: #667085; cursor: text; align-items: center; gap: .35rem; font-size: .72rem; }
+.ticket-tag-editor__add:focus-within, .ticket-tag-editor__add:hover { color: #1d4ed8; background: #eef4ff; }
+.ticket-tag-editor__add svg { width: .8rem; height: .8rem; flex: none; }
+.ticket-tag-editor__add input { width: 7rem; min-width: 3rem; padding: 0; border: 0; color: inherit; background: transparent; outline: 0; font: inherit; }
+.ticket-tag-editor__add input:placeholder-shown { width: 1px; }
+.ticket-tag-editor__add span { white-space: nowrap; }

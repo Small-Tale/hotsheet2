@@ -9,13 +9,14 @@ const completedRow = { ...row, native_id:'06', qualified_id:'git-local:06', id:'
 const verifiedRow = { ...row, native_id:'07', qualified_id:'git-local:07', id:'07', slug:'HS2-VERIFY01', title:'Verified ticket', status:'verified', up_next:false };
 const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'},{id:'N3',kind:'regular',created_at:'2026-08-30T00:36:00Z',edited_at:'2026-08-30T00:36:00Z',text:'Editable note'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
 
-async function mockProject(page: import('@playwright/test').Page) {
+async function mockProject(page: import('@playwright/test').Page, canUpdate = true) {
   let rows = [row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow];
   let selectedFull = full;
   const patches: Record<string,unknown>[] = [];
   await page.route('**/*', async route => {
     const request=route.request(), url=new URL(request.url()), path=url.pathname;
     if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:project});
+    if(path.endsWith('/providers')) return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:canUpdate,close:true,notes:true,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
     if(path.endsWith('/tickets')&&request.method()==='GET') return route.fulfill({json:rows});
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
@@ -48,6 +49,18 @@ test('autosaves ticket text fields without explicit save or cancel controls',asy
 
   await inspector.getByRole('button',{name:'Block ticket'}).click();const blocked=inspector.getByRole('textbox',{name:'Blocked reason'});await blocked.fill('Waiting for review');
   await expect.poll(()=>patches.some(patch=>patch.blocked_reason==='Waiting for review')).toBe(true);
+});
+
+test('edits title and tags through controlled capability-aware inspector state',async({page})=>{
+  const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');const title=inspector.getByRole('heading',{name:'Use real project tickets'});await title.dblclick();const titleInput=inspector.getByRole('textbox',{name:'Ticket title'});await titleInput.fill('Renamed ticket');await expect.poll(()=>patches.some(patch=>patch.title==='Renamed ticket')).toBe(true);await titleInput.blur();await expect(inspector.getByRole('heading',{name:'Renamed ticket'})).toBeVisible();
+  const tagInput=inspector.getByRole('combobox',{name:'Add tag'});await tagInput.fill('regression');await tagInput.press('Enter');await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();await expect.poll(()=>patches.some(patch=>Array.isArray(patch.tags)&&patch.tags.includes('regression'))).toBe(true);
+  await inspector.locator('[data-component="tag-chip"][data-tag-id="client"]').evaluate(node=>node.dispatchEvent(new CustomEvent('wa-remove',{bubbles:true})));await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="client"]')).toHaveCount(0);await expect.poll(()=>patches.some(patch=>Array.isArray(patch.tags)&&!patch.tags.includes('client'))).toBe(true);
+});
+
+test('hides title and tag mutation affordances when the provider cannot update',async({page})=>{
+  await mockProject(page,false);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();const inspector=page.locator('[data-component="ticket-inspector"]');
+  await inspector.getByRole('heading',{name:'Use real project tickets'}).dblclick();await expect(inspector.getByRole('textbox',{name:'Ticket title'})).toHaveCount(0);await expect(inspector.getByRole('combobox',{name:'Add tag'})).toHaveCount(0);await expect(inspector.locator('[data-component="tag-chip"]')).not.toHaveAttribute('with-remove','');
 });
 
 test('opens a checkout, discovers its source, and drives real shell ticket flows',async({page})=>{
