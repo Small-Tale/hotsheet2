@@ -23,8 +23,9 @@ describe('NoteCard', () => {
     expect(markup).toContain('note-card--editing');
     expect(markup).toContain('aria-label="Note body"');
     expect(markup).toContain('Draft body');
-    expect(markup).toContain('data-action="save-note-edit"');
-    expect(markup).toContain('data-action="cancel-note-edit"');
+    expect(markup).toContain('Changes save automatically');
+    expect(markup).not.toContain('data-action="save-note-edit"');
+    expect(markup).not.toContain('data-action="cancel-note-edit"');
   });
 
   it('exposes a discoverable edit action', () => {

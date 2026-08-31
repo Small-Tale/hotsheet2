@@ -352,13 +352,14 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   }
   const standaloneNote = notes.filter({ has: page.locator('[data-lucide="message-square-text"]') });
   await standaloneNote.dblclick();
-  await standaloneNote.getByRole('textbox', { name: 'Note body' }).fill('Persisted standalone note');
-  await standaloneNote.getByRole('button', { name: 'Save' }).click();
+  const standaloneEditor = standaloneNote.getByRole('textbox', { name: 'Note body' });
+  await standaloneEditor.fill('Persisted standalone note');
+  await standaloneEditor.blur();
   await expect(standaloneNote).toContainText('Persisted standalone note');
   await standaloneNote.dblclick();
-  await standaloneNote.getByRole('textbox', { name: 'Note body' }).fill('Discard this');
-  await standaloneNote.getByRole('button', { name: 'Cancel' }).click();
-  await expect(standaloneNote).toContainText('Persisted standalone note');
+  await standaloneNote.getByRole('textbox', { name: 'Note body' }).fill('Autosaved replacement');
+  await standaloneNote.getByRole('textbox', { name: 'Note body' }).blur();
+  await expect(standaloneNote).toContainText('Autosaved replacement');
 
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
@@ -377,13 +378,13 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await editableNote.dblclick();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
   await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Edited note body');
-  await editableNote.getByRole('button', { name: 'Save' }).click();
+  await editableNote.getByRole('textbox', { name: 'Note body' }).blur();
   await expect(editableNote).toContainText('Edited note body');
   await editableNote.dblclick();
-  await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Discarded note body');
-  await editableNote.getByRole('button', { name: 'Cancel' }).click();
+  await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Autosaved note body');
+  await editableNote.getByRole('textbox', { name: 'Note body' }).blur();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toHaveCount(0);
-  await expect(editableNote).toContainText('Edited note body');
+  await expect(editableNote).toContainText('Autosaved note body');
   await reader.getByRole('button', { name: 'Attachments' }).click();
   await expect(reader.locator('[data-component="ticket-attachments"]')).toContainText('reader-wireframe.png');
   await reader.getByLabel('Browse and add attachments').setInputFiles({ name: 'browser-added.txt', mimeType: 'text/plain', buffer: Buffer.from('added') });
@@ -396,9 +397,10 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(reader.locator('.ticket-inspector__details-surface .markdown-editor--embedded')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(reader.getByRole('textbox', { name: 'Feedback response' })).toBeVisible();
   await expect(reader.getByRole('textbox', { name: 'Note body' })).toHaveValue(/keep the response/i);
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
   await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
-  await reader.getByRole('button', { name: 'Save' }).click();
+  await readerSource.blur();
   await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Reader draft');
 
   await page.goto('/ux-demo?component=markdown-editor');
@@ -409,18 +411,19 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const source = editor.getByRole('textbox', { name: 'Markdown content' });
   await expect(source).toHaveValue(/Implementation notes/);
   await source.fill('## Revised goal\nA preserved draft.');
-  await expect(editor).toContainText('Unsaved changes');
+  await expect(editor).toContainText('Saving changes');
   await editor.getByRole('button', { name: 'Expand editor' }).click();
   await expect(editor).toHaveAttribute('data-expanded', 'true');
   await expect(editor).toHaveCSS('position', 'fixed');
-  await editor.getByRole('button', { name: 'Save' }).click();
+  await editor.getByRole('textbox', { name: 'Markdown content' }).focus();
+  await editor.getByRole('textbox', { name: 'Markdown content' }).blur();
   await expect(editor).toHaveAttribute('data-mode', 'preview');
   await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Revised goal');
   await editor.getByRole('button', { name: 'Edit Markdown content' }).dblclick();
-  await editor.getByRole('textbox', { name: 'Markdown content' }).fill('Temporary edit');
-  await editor.getByRole('button', { name: 'Cancel' }).click();
+  await editor.getByRole('textbox', { name: 'Markdown content' }).fill('Autosaved edit');
+  await editor.getByRole('textbox', { name: 'Markdown content' }).blur();
   await expect(editor).toHaveAttribute('data-mode', 'preview');
-  await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Revised goal');
+  await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Autosaved edit');
   await editor.getByRole('button', { name: 'Use inline editor' }).click();
   await expect(editor).toHaveAttribute('data-expanded', 'false');
 });

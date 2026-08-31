@@ -17,9 +17,10 @@ import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { type ResizableRegionEdge,resizeRegionFromPointer } from '../components/resizable-region';
 import { Select } from '../components/select';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
+import { createDebouncedAutosave } from '../debounced-autosave';
 import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDemo } from './catalog';
-import { cancelMarkdown, editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownValue, NoteCardDemo, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, saveMarkdown, TicketReaderDemo } from './content-components-demo';
+import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownSavedValue, markdownValue, NoteCardDemo, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, TicketReaderDemo } from './content-components-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, DriveControlDemo, driveRunning, ProjectSidebarDemo, projectSidebarHeight, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
@@ -43,6 +44,9 @@ const devReviewOn = signal(import.meta.env.DEV && new URL(location.href).searchP
 const demoModified = signal<Record<string, string>>({});
 const contextMenu = signal<{ x: number; y: number; ticketSlug?: string } | undefined>(undefined);
 const tabContextMenu = signal<{ x: number; y: number; projectId: string } | undefined>(undefined);
+const markdownAutosave = createDebouncedAutosave((value: string) => { markdownSavedValue.value = value; markdownEvent.value = 'Markdown autosaved.'; return Promise.resolve(true); });
+const blockedReasonAutosave = createDebouncedAutosave((value: string) => { inspectorBlockedReason.value = value.trim(); return Promise.resolve(true); });
+const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value: string }) => { readerNotes.value = readerNotes.value.map(note => note.id === id ? { ...note, body: value } : note); noteDemoNotes.value = noteDemoNotes.value.map(note => note.id === id ? { ...note, body: value } : note); return Promise.resolve(true); });
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
 let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; edge: ResizableRegionEdge; startPoint: number; startSize: number } | undefined;
 let devReviewController: { destroy(): void } | undefined;
@@ -344,9 +348,8 @@ delegate(root, 'change', '[name="inspector-category"]', (_event, target) => { in
 delegate(root, 'change', '[name="inspector-priority"]', (_event, target) => { inspectorPriority.value = (target as FormControl).value as typeof inspectorPriority.value; });
 delegate(root, 'click', '[data-inspector-status]', (_event, target) => { inspectorStatus.value = (target as HTMLElement).dataset.inspectorStatus as typeof inspectorStatus.value; });
 delegate(root, 'click', '[data-action="edit-blocked-reason"]', () => { inspectorBlockedReasonDraft.value = inspectorBlockedReason.value; inspectorBlockedReasonEditing.value = true; queueMicrotask(() => root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus()); });
-delegate(root, 'input', '[name="blocked-reason"]', (_event, target) => { inspectorBlockedReasonDraft.value = (target as FormControl).value; });
-delegate(root, 'click', '[data-action="cancel-blocked-reason"]', () => { inspectorBlockedReasonDraft.value = inspectorBlockedReason.value; inspectorBlockedReasonEditing.value = false; recordCollectionEvent('Blocked reason edit cancelled'); });
-delegate(root, 'click', '[data-action="save-blocked-reason"]', () => { const reason = inspectorBlockedReasonDraft.value.trim(); if (!reason) return; inspectorBlockedReason.value = reason; inspectorBlockedReasonDraft.value = reason; inspectorBlockedReasonEditing.value = false; recordCollectionEvent('Ticket blocked'); });
+delegate(root, 'input', '[name="blocked-reason"]', (_event, target) => { inspectorBlockedReasonDraft.value = (target as FormControl).value; blockedReasonAutosave.schedule(inspectorBlockedReasonDraft.value); });
+delegate(root, 'focusout', '[name="blocked-reason"]', () => { void blockedReasonAutosave.flush().then(() => { inspectorBlockedReasonEditing.value = false; recordCollectionEvent('Blocked reason autosaved'); }); });
 delegate(root, 'click', '[data-action="toggle-inspector-up-next"]', () => {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   toggleCollectionTicketUpNext(ticket.slug);
@@ -355,17 +358,16 @@ delegate(root, 'click', '[data-action="add-ticket-note"]', () => { recordCollect
 const beginNoteEdit = (id: string) => { editingNoteId.value = id; noteDraft.value = readerNotes.value.find(note => note.id === id)?.body ?? noteDemoNotes.value.find(note => note.id === id)?.body ?? ''; queueMicrotask(() => root.querySelector<HTMLElement>(`[name="note-body"][data-note-id="${id}"]`)?.focus()); };
 delegate(root, 'dblclick', '[data-edit-on-double-click="true"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });
 delegate(root, 'click', '[data-action="edit-note"]', (_event, target) => { beginNoteEdit((target as HTMLElement).dataset.noteId!); });
-delegate(root, 'input', '[name="note-body"]', (_event, target) => { editingNoteId.value = (target as HTMLElement).dataset.noteId; noteDraft.value = (target as FormControl).value; });
-delegate(root, 'click', '[data-action="cancel-note-edit"]', () => { editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit cancelled'); });
+delegate(root, 'input', '[name="note-body"]', (_event, target) => { editingNoteId.value = (target as HTMLElement).dataset.noteId; noteDraft.value = (target as FormControl).value; if ((target as HTMLElement).dataset.noteResponse !== 'true' && editingNoteId.value) noteAutosave.schedule({ id: editingNoteId.value, value: noteDraft.value }); });
+delegate(root, 'focusout', '[name="note-body"]', (_event, target) => { if ((target as HTMLElement).dataset.noteResponse === 'true') return; void noteAutosave.flush().then(() => { editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note autosaved'); }); });
 delegate(root, 'click', '[data-action="save-note-edit"]', (_event, target) => { const id = editingNoteId.value ?? (target as HTMLElement).dataset.noteId; if (id) { const original = readerNotes.value.find(note => note.id === id); if ((target as HTMLElement).dataset.noteResponse === 'true') readerNotes.value = [...readerNotes.value, { id: `${id}-response`, kind: 'regular', author: 'You', time: 'Now', body: noteDraft.value }]; else readerNotes.value = readerNotes.value.map(note => note.id === id ? { ...note, kind: original?.kind === 'feedback_draft' ? 'regular' as const : note.kind, body: noteDraft.value } : note); noteDemoNotes.value = noteDemoNotes.value.map(note => note.id === id ? { ...note, body: noteDraft.value } : note); } editingNoteId.value = undefined; noteDraft.value = ''; recordCollectionEvent('Note edit saved'); });
 delegate(root, 'click', '[data-action="open-ticket-reader"]', () => { readerEditing.value = markdownMode.value === 'write'; recordCollectionEvent('Ticket reader requested'); selectDemo('ticket-reader'); });
-delegate(root, 'input', '[name="markdown-source"]', (_event, target) => { markdownValue.value = (target as FormControl).value; markdownEvent.value = 'Draft updated.'; });
+delegate(root, 'input', '[name="markdown-source"]', (_event, target) => { markdownValue.value = (target as FormControl).value; markdownEvent.value = 'Saving changes…'; markdownAutosave.schedule(markdownValue.value); });
+delegate(root, 'focusout', '[name="markdown-source"]', (event, target) => { const next = (event as FocusEvent).relatedTarget; if (next instanceof Node && target.closest('[data-component="markdown-editor"]')?.contains(next)) return; void markdownAutosave.flush().then(() => { markdownMode.value = 'preview'; }); });
 delegate(root, 'dblclick', '[data-action="edit-markdown"]', () => { markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'click', '[data-action="edit-markdown"][data-empty="true"]', () => { markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'keydown', '[data-action="edit-markdown"]', (event) => { if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return; event.preventDefault(); markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => { markdownExpanded.value = !markdownExpanded.value; markdownEvent.value = markdownExpanded.value ? 'Expanded editor opened.' : 'Inline editor restored.'; });
-delegate(root, 'click', '[data-action="save-markdown"]', () => { saveMarkdown(); });
-delegate(root, 'click', '[data-action="cancel-markdown-edit"]', () => { cancelMarkdown(); });
 delegate(root, 'click', '[data-action="edit-ticket-reader"]', () => { readerEditing.value = true; markdownMode.value = 'write'; queueMicrotask(() => root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus()); });
 delegate(root, 'click', '[data-action="close-ticket-reader"]', () => { readerEditing.value = false; selectDemo('ticket-info-panel'); });
 const addMockAttachments = (files: FileList | File[], target: HTMLElement) => {

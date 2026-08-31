@@ -8,7 +8,9 @@ describe('content components', () => {
   it('renders Markdown source, preview, dirty state, and expansion as explicit states', () => {
     const source = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true }));
     expect(source).toContain('textarea');
-    expect(source).toContain('Unsaved changes');
+    expect(source).toContain('Saving changes');
+    expect(source).not.toContain('data-action="save-markdown"');
+    expect(source).not.toContain('data-action="cancel-markdown-edit"');
     expect(source).toContain('data-lucide="maximize-2"');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');

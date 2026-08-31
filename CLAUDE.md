@@ -67,6 +67,13 @@ consumer-specific descendant CSS overrides. A component's UX demo must expose ev
 supported public variant and state that consumers rely on, including appearance and
 size options, so the catalog is a complete interactive account of the component API.
 
+Ticket text editing is autosaved with a 150 ms debounce. Do not add routine Save/Cancel
+buttons for details, notes, titles, tags, blocked reasons, or similar fields. Keep the
+controlled draft visible while saving, flush when focus leaves the editing surface, and
+test rapid coalescing, blur, composed-editor focus moves, and post-save editing. Explicit
+submission actions remain appropriate when they create a new object or complete a
+workflow rather than merely persisting an edit.
+
 Every change that can affect rendered client visuals requires a deliberate visual QA
 pass in a real browser before completion. Automated DOM, accessibility, computed-style,
 and geometry assertions remain necessary, but are not substitutes for looking at the

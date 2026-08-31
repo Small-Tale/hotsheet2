@@ -7,7 +7,7 @@ const archiveRow = { ...row, native_id:'04', qualified_id:'git-local:04', id:'04
 const notStartedRow = { ...row, native_id:'05', qualified_id:'git-local:05', id:'05', slug:'HS2-NEXT01', title:'Not started ticket', status:'not_started', up_next:false };
 const completedRow = { ...row, native_id:'06', qualified_id:'git-local:06', id:'06', slug:'HS2-DONE01', title:'Completed ticket', status:'completed', up_next:false };
 const verifiedRow = { ...row, native_id:'07', qualified_id:'git-local:07', id:'07', slug:'HS2-VERIFY01', title:'Verified ticket', status:'verified', up_next:false };
-const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
+const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'},{id:'N3',kind:'regular',created_at:'2026-08-30T00:36:00Z',edited_at:'2026-08-30T00:36:00Z',text:'Editable note'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
 
 async function mockProject(page: import('@playwright/test').Page) {
   let rows = [row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow];
@@ -33,6 +33,21 @@ test('translates urgent priority through the canonical server contract',async({p
   await expect.poll(()=>patches.at(-1)?.priority).toBe('highest');
   await expect(page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"]')).toHaveJSProperty('value','urgent');
   await expect(page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"] .select__icon--selected [data-lucide="chevrons-up"]')).toBeVisible();
+});
+
+test('autosaves ticket text fields without explicit save or cancel controls',async({page})=>{
+  const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');
+  await inspector.getByRole('button',{name:'Edit Ticket details'}).dblclick();
+  const details=inspector.getByRole('textbox',{name:'Ticket details'});await details.fill('Autosaved details');
+  await expect.poll(()=>patches.some(patch=>patch.details==='Autosaved details')).toBe(true);
+  await expect(inspector.getByRole('button',{name:/Save|Cancel/})).toHaveCount(0);
+
+  const note=inspector.locator('[data-component="note-card"][data-note-id="N3"]');await note.dblclick();const noteEditor=note.getByRole('textbox',{name:'Note body'});await noteEditor.fill('Autosaved note');
+  await expect.poll(()=>patches.some(patch=>patch.note_id==='N3'&&patch.note==='Autosaved note')).toBe(true);
+
+  await inspector.getByRole('button',{name:'Block ticket'}).click();const blocked=inspector.getByRole('textbox',{name:'Blocked reason'});await blocked.fill('Waiting for review');
+  await expect.poll(()=>patches.some(patch=>patch.blocked_reason==='Waiting for review')).toBe(true);
 });
 
 test('opens a checkout, discovers its source, and drives real shell ticket flows',async({page})=>{

@@ -400,7 +400,8 @@ than substituting a hardcoded default.
   headings. Raw HTML is escaped and unsafe link/image protocols are rejected.
 - `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
   to edit non-empty content, single-click to add empty content, persistent controlled
-  draft, inline/expanded presentation, dirty state, and textual Save/Cancel actions.
+  draft, inline/expanded presentation, and 150 ms debounced autosave without routine
+  Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
   The embedded appearance reuses the same behavior in inspector and reader without a
   redundant standalone toolbar; the real inspector persists edits through its checkout.
 - `InlineEditableField`
