@@ -20,6 +20,6 @@ export function MarkdownEditor({ value, mode, expanded = false, dirty = false, l
         ? <textarea name="markdown-source" aria-label={label} spellcheck="true">{value}</textarea>
         : <div class="markdown-editor__preview" role={editable ? 'button' : undefined} tabIndex={editable ? 0 : undefined} data-action={editable ? 'edit-markdown' : undefined} data-empty={String(empty)} aria-label={editable ? `Edit ${label}` : label} title={editable ? empty ? 'Click to add Markdown' : 'Double-click to edit' : undefined}><MarkdownPreview source={value} emptyLabel={editable ? 'Click to add Markdown.' : 'No details.'} /></div>}
     </div>
-    {mode === 'write' && <footer><span aria-live="polite">{dirty ? 'Saving changes…' : 'Changes saved'}</span></footer>}
+    {mode === 'write' && appearance === 'standalone' && <footer><span aria-live="polite">{dirty ? 'Saving changes…' : 'Changes saved'}</span></footer>}
   </section>;
 }

@@ -408,7 +408,8 @@ than substituting a hardcoded default.
   draft, inline/expanded presentation, and 150 ms debounced autosave without routine
   Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
   The embedded appearance reuses the same behavior in inspector and reader without a
-  redundant standalone toolbar; the real inspector persists edits through its checkout.
+  redundant standalone toolbar or save-status footer; the real inspector persists edits
+  through its checkout.
 - `InlineEditableField`
 - `ReaderButton`
 - `TicketReader` — **built in the demo and real web shell**: a large dialog

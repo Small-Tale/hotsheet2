@@ -21,6 +21,9 @@ describe('content components', () => {
     expect(source).not.toContain('data-action="save-markdown"');
     expect(source).not.toContain('data-action="cancel-markdown-edit"');
     expect(source).toContain('data-lucide="maximize-2"');
+    const embedded = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true, appearance: 'embedded' }));
+    expect(embedded).not.toContain('<footer>');
+    expect(embedded).not.toContain('Saving changes');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');
     expect(preview).toContain('data-expanded="true"');
