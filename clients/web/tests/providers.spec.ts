@@ -9,6 +9,7 @@ const full = { ...row, details:'The real ticket body.', blocked_reason:null, con
 async function mockProject(page: import('@playwright/test').Page) {
   let rows = [row,backlogRow,archiveRow];
   let selectedFull = full;
+  const patches: Record<string,unknown>[] = [];
   await page.route('**/*', async route => {
     const request=route.request(), url=new URL(request.url()), path=url.pathname;
     if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:project});
@@ -17,10 +18,19 @@ async function mockProject(page: import('@playwright/test').Page) {
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
     if(path.endsWith('/tickets/01')&&request.method()==='GET') return route.fulfill({json:{store:'git-local',...selectedFull}});
     if(path.endsWith('/tickets/01/attachments')&&request.method()==='POST'){const filename=request.headers()['x-hotsheet-filename']??'attachment';selectedFull={...selectedFull,attachments:[...selectedFull.attachments,{id:`A${selectedFull.attachments.length+1}`,filename,created_at:'2026-08-30T01:10:00Z'}]};return route.fulfill({status:201,json:{store:'git-local',...selectedFull}})}
-    if(path.includes('/tickets/')&&request.method()==='PATCH'){const id=path.split('/').pop(),body=request.postDataJSON();rows=rows.map(item=>item.id===id?{...item,...body}:item);selectedFull={...selectedFull,...body};return route.fulfill({json:{store:'git-local',...selectedFull}})}
+    if(path.includes('/tickets/')&&request.method()==='PATCH'){const id=path.split('/').pop(),body=request.postDataJSON();patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);selectedFull={...selectedFull,...body};return route.fulfill({json:{store:'git-local',...selectedFull}})}
     return route.continue();
   });
+  return patches;
 }
+
+test('translates urgent priority through the canonical server contract',async({page})=>{
+  const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
+  await page.locator('wa-select[name="inspector-priority"]').evaluate((node:HTMLElement&{value:string})=>{node.value='urgent';node.dispatchEvent(new Event('change',{bubbles:true}))});
+  await expect.poll(()=>patches.at(-1)?.priority).toBe('highest');
+  await expect(page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"]')).toHaveJSProperty('value','urgent');
+  await expect(page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"] .select__icon--selected [data-lucide="chevrons-up"]')).toBeVisible();
+});
 
 test('opens a checkout, discovers its source, and drives real shell ticket flows',async({page})=>{
   await mockProject(page); await page.goto('/');

@@ -1,3 +1,5 @@
+import { prioritiesToWire } from './priority-wire';
+
 export type Capabilities = Record<'create'|'update'|'close'|'notes'|'attachments'|'assignment'|'review_requests'|'dependencies'|'up_next'|'close_reasons'|'claims'|'atomic_batch'|'offline_mutation'|'history'|'watch'|'provider_idempotency', boolean> & {query_fields:string[]};
 export interface ProviderDescriptor {connection_id:string;provider:string;display_name:string;locator:string;default:boolean;capabilities:Capabilities}
 export interface ProviderConnection {id:string;provider:string;locator:string;name:string|null;default:boolean;settings:Record<string,unknown>}
@@ -20,8 +22,8 @@ export class Api {
   transfer=(kind:'copy'|'move',source:Ticket,destination_connection:string)=>this.request(`/provider-transfers/${kind}`,{method:'POST',body:JSON.stringify({source:{connection_id:source.connection_id,native_id:source.native_id},destination_connection,operation_id:crypto.randomUUID(),confirm:kind==='move'})});
   checkoutTickets=(checkout:string)=>this.request<TicketRow[]>(`/checkouts/${encodeURIComponent(checkout)}/tickets`);
   checkoutTicket=(checkout:string,id:string)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(ticket=>({store:ticket.store,ticket}));
-  createCheckoutTicket=(checkout:string,value:{title:string;details?:string;category:string;priority?:string;status?:string;up_next?:boolean;tags?:string[]})=>this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`,{method:'POST',body:JSON.stringify(value)});
-  updateCheckoutTicket=(checkout:string,id:string,value:Record<string,unknown>)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(value)}).then(ticket=>({store:ticket.store,ticket}));
+  createCheckoutTicket=(checkout:string,value:{title:string;details?:string;category:string;priority?:string;status?:string;up_next?:boolean;tags?:string[]})=>this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`,{method:'POST',body:JSON.stringify(prioritiesToWire(value))});
+  updateCheckoutTicket=(checkout:string,id:string,value:Record<string,unknown>)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(prioritiesToWire(value))}).then(ticket=>({store:ticket.store,ticket}));
   addCheckoutAttachment=(checkout:string,id:string,file:File)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments`,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream','X-Hotsheet-Filename':file.name},body:file}).then(ticket=>({store:ticket.store,ticket}));
   repositoryStatus=(checkout:string)=>this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
 }

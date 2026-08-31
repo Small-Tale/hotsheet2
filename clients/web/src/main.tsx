@@ -20,6 +20,7 @@ import { TicketReader } from './components/ticket-reader';
 import type { TicketPriority, TicketRowProps } from './components/ticket-row';
 import { adjacentTicketSlug, selectAllTickets, updateTicketSelection } from './components/ticket-selection';
 import { WorkspaceControls, WorkspaceIdentity, type WorkspaceSort, type WorkspaceViewMode } from './components/workspace-header';
+import { priorityFromWire } from './priority-wire';
 import { type ClipboardTicket, deduplicateTitle, TicketHistory, type TicketPatch, type TicketSnapshot } from './ticket-operations';
 import { isArchivedTicket, isQueuedTicket, ticketsForView, type TicketView } from './ticket-views';
 
@@ -41,7 +42,7 @@ const editingNoteId = signal<string|undefined>(undefined), noteDraft = signal(''
 const project = () => projects.value.find(item => item.id === selectedProjectId.value);
 const api = () => new Api(project()?.apiPath ?? '');
 const status = (value?:string):TicketStatus => ['not_started','started','completed','verified','backlog'].includes(value ?? '') ? value as TicketStatus : 'not_started';
-const priority = (value?:string):TicketPriority => ['low','default','high','urgent'].includes(value ?? '') ? value as TicketPriority : 'default';
+const priority = (value?:string):TicketPriority => priorityFromWire(value);
 const ticketSnapshot = (slug:string) => tickets.value.find(item=>item.slug===slug) as TicketSnapshot|undefined;
 const ago = (value?:string) => { if (!value) return 'Recently'; const seconds=Math.max(0,(Date.now()-Date.parse(value))/1000); if(seconds<60)return 'Now';if(seconds<3600)return `${Math.floor(seconds/60)}m ago`;if(seconds<86400)return `${Math.floor(seconds/3600)}h ago`;return `${Math.floor(seconds/86400)}d ago`; };
 const row = (ticket:WireTicketRow):TicketRowProps => ({slug:ticket.slug,title:ticket.title,status:status(ticket.status),priority:priority(ticket.priority),category:ticket.category??'issue',tags:ticket.tags,upNext:ticket.up_next,blocked:ticket.blocked_by.length>0,selected:selectedTicketSlugs.value.includes(ticket.slug),cutPending:Boolean(clipboard?.cut&&clipboard.source.id===project()?.id&&clipboard.tickets.some(item=>item.slug===ticket.slug)),busy:ticket.claim_count>0,agentName:ticket.worker_label||ticket.claimed_by||'AI',updatedLabel:ago(ticket.updated_at)});
