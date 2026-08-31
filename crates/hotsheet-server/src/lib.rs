@@ -22,7 +22,7 @@ use multistore::{StoreEntry, StoreHost, StoreInfo};
 
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -46,6 +46,10 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use time::OffsetDateTime;
 use tokio::sync::broadcast;
+
+/// Attachment uploads may contain screenshots, recordings, and other binary evidence.
+/// Keep this route-specific so ordinary JSON endpoints retain Axum's conservative default.
+pub const MAX_ATTACHMENT_BODY_BYTES: usize = 100 * 1024 * 1024;
 
 /// Shared server state (cheaply cloned into each handler).
 #[derive(Clone)]
@@ -685,7 +689,10 @@ pub fn app(state: AppState) -> Router {
         .route("/tickets", get(list_tickets).post(create_ticket))
         .route("/tickets/{id}", get(get_ticket).patch(update_ticket))
         .route("/tickets/{id}/notes/{note_id}", delete(delete_ticket_note))
-        .route("/tickets/{id}/attachments", post(add_ticket_attachment))
+        .route(
+            "/tickets/{id}/attachments",
+            post(add_ticket_attachment).layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
+        )
         .route("/tickets/{id}/close", post(close_ticket))
         .route("/tickets/{id}/assign", post(assign_ticket))
         // Coordination: claim the next available ticket, release, renew a lease (HS2-86).
@@ -729,7 +736,8 @@ pub fn app(state: AppState) -> Router {
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments",
-            post(add_checkout_ticket_attachment),
+            post(add_checkout_ticket_attachment)
+                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}",

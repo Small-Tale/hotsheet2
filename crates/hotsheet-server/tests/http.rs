@@ -1,11 +1,12 @@
 //! HTTP E2E for the server, driven through the router in-process (no real socket).
 
-use axum::body::Body;
+use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
-use hotsheet_server::{AppState, app};
+use hotsheet_server::{AppState, MAX_ATTACHMENT_BODY_BYTES, app};
 use hotsheet_ticketing::{FsStore, StoreMetadata};
 use http_body_util::BodyExt;
 use std::collections::{HashMap, VecDeque};
+use std::convert::Infallible;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tower::ServiceExt;
@@ -422,6 +423,33 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     )
     .await;
     assert_eq!(got["title"], "Scoped");
+    // Axum's default buffered-body limit is 2 MiB. Real screen recordings commonly
+    // exceed that, so exercise the checkout-scoped route with a representative video.
+    let video_bytes = vec![0x5a; 3 * 1024 * 1024];
+    let video_request = Request::builder()
+        .method("POST")
+        .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "choppy.mov")
+        .body(Body::from(video_bytes))
+        .unwrap();
+    let video_response = app.clone().oneshot(video_request).await.unwrap();
+    assert_eq!(video_response.status(), StatusCode::CREATED);
+    let video_attached = body_json(video_response).await;
+    assert_eq!(video_attached["attachments"][0]["filename"], "choppy.mov");
+    let video_attachment_id = video_attached["attachments"][0]["id"].as_str().unwrap();
+    let video_removed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(video_removed["attachments"].as_array().unwrap().len(), 0);
     let attachment_request = Request::builder()
         .method("POST")
         .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
@@ -1556,27 +1584,51 @@ async fn attachment_upload_returns_and_persists_durable_metadata() {
     )
     .await;
     let id = created["id"].as_str().unwrap();
+    let video_bytes = vec![0x5a; 3 * 1024 * 1024];
     let request = Request::builder()
         .method("POST")
         .uri(format!("/tickets/{id}/attachments"))
         .header("x-hotsheet-secret", SECRET)
-        .header("x-hotsheet-filename", "../proof.txt")
-        .body(Body::from("evidence bytes"))
+        .header("x-hotsheet-filename", "../choppy.mov")
+        .body(Body::from(video_bytes))
         .unwrap();
     let response = app.clone().oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let attached = body_json(response).await;
-    assert_eq!(attached["attachments"][0]["filename"], "proof.txt");
+    assert_eq!(attached["attachments"][0]["filename"], "choppy.mov");
     assert!(attached["attachments"][0]["id"].is_string());
     assert!(attached["attachments"][0]["created_at"].is_string());
 
     let reread = body_json(
-        app.oneshot(authed("GET", &format!("/tickets/{id}"), None))
+        app.clone()
+            .oneshot(authed("GET", &format!("/tickets/{id}"), None))
             .await
             .unwrap(),
     )
     .await;
     assert_eq!(reread["attachments"], attached["attachments"]);
+
+    // Stream repeated shared chunks so the boundary is exercised without allocating a
+    // second 100 MiB buffer in the test process.
+    let chunk = Bytes::from(vec![0x5a; 1024 * 1024]);
+    let oversized_body = Body::from_stream(futures_util::stream::iter(
+        (0..101).map(move |_| Ok::<_, Infallible>(chunk.clone())),
+    ));
+    let oversized = Request::builder()
+        .method("POST")
+        .uri(format!("/tickets/{id}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "too-large.mov")
+        .header(
+            header::CONTENT_LENGTH,
+            MAX_ATTACHMENT_BODY_BYTES + 1024 * 1024,
+        )
+        .body(oversized_body)
+        .unwrap();
+    assert_eq!(
+        app.oneshot(oversized).await.unwrap().status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
 }
 
 #[tokio::test]

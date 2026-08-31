@@ -101,6 +101,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   no-break space macOS inserts into screenshot names—are percent-encoded into an
   ASCII-safe transport header and decoded by the server before sanitization. The client then refreshes both the
   selected ticket and project rows from the authoritative response.
+  Attachment upload endpoints accept bodies up to 100 MiB so ordinary screen recordings
+  are not rejected by the framework's smaller default body limit; the larger allowance is
+  route-specific and does not loosen JSON request limits.
   When the selected provider advertises attachment support, each attachment exposes
   icon actions to open, download, copy its checkout-qualified reference, or remove it;
   upload/removal progress and failures remain visible in the attachment panel. Browser
