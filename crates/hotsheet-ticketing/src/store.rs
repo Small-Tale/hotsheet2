@@ -332,6 +332,68 @@ impl FsStore {
         Ok(ticket)
     }
 
+    /// Read an attachment payload using its durable ticket-scoped identity.
+    pub fn read_attachment(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: &Ulid,
+    ) -> Result<(Attachment, Vec<u8>), StoreError> {
+        let ticket = self.read_ticket(ticket_id)?;
+        let attachment = ticket
+            .attachments
+            .iter()
+            .find(|item| &item.id == attachment_id)
+            .cloned()
+            .ok_or_else(|| {
+                StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("attachment {attachment_id}"),
+                ))
+            })?;
+        let nested = self
+            .attachment_dir(ticket_id)
+            .join(attachment_id.to_string())
+            .join(&attachment.filename);
+        let legacy = self.attachment_dir(ticket_id).join(&attachment.filename);
+        let bytes = fs::read(if nested.is_file() { nested } else { legacy })?;
+        Ok((attachment, bytes))
+    }
+
+    /// Remove attachment metadata and its payload, committing the ticket update.
+    pub fn remove_attachment(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: &Ulid,
+        now: Timestamp,
+    ) -> Result<Ticket, StoreError> {
+        let mut ticket = self.read_ticket(ticket_id)?;
+        let index = ticket
+            .attachments
+            .iter()
+            .position(|item| &item.id == attachment_id)
+            .ok_or_else(|| {
+                StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("attachment {attachment_id}"),
+                ))
+            })?;
+        let attachment = ticket.attachments.remove(index);
+        let nested = self
+            .attachment_dir(ticket_id)
+            .join(attachment_id.to_string());
+        if nested.exists() {
+            fs::remove_dir_all(nested)?;
+        } else {
+            let legacy = self.attachment_dir(ticket_id).join(attachment.filename);
+            if legacy.exists() {
+                fs::remove_file(legacy)?;
+            }
+        }
+        ticket.updated_at = now;
+        self.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    }
+
     fn add_legacy_attachment_metadata(&self, ticket: &mut Ticket) -> Result<(), StoreError> {
         let dir = self.attachment_dir(&ticket.id);
         let entries = match fs::read_dir(dir) {
@@ -589,6 +651,19 @@ mod tests {
             ticket.attachments[0].created_at
         );
         assert!(path.with_file_name("renamed.png").is_file());
+        let (metadata, bytes) = store.read_attachment(&id, &attachment_id).unwrap();
+        assert_eq!(metadata.filename, "renamed.png");
+        assert_eq!(bytes, b"PNGDATA");
+        let removed = store
+            .remove_attachment(&id, &attachment_id, Timestamp::new("2026-08-26T02:00:00Z"))
+            .unwrap();
+        assert!(removed.attachments.is_empty());
+        assert!(
+            !store
+                .attachment_dir(&id)
+                .join(attachment_id.to_string())
+                .exists()
+        );
     }
 
     #[test]

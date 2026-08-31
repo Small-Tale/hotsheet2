@@ -40,6 +40,8 @@ export interface TicketInspectorProps {
   upNext?: boolean;
   timelineEntries?: readonly TicketTimelineEntry[];
   attachments?: readonly TicketAttachmentItem[];
+  attachmentsEnabled?: boolean;
+  attachmentMessage?: string;
   notes?: readonly NoteCardProps[];
   editingNoteId?: string;
   noteDraft?: string;
@@ -58,7 +60,7 @@ const tabs = [
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
 
-export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, timelineEntries, attachments, notes, editingNoteId, noteDraft, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', readerEditing = false }: TicketInspectorProps) {
+export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, timelineEntries, attachments, attachmentsEnabled = true, attachmentMessage = '', notes, editingNoteId, noteDraft, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', readerEditing = false }: TicketInspectorProps) {
   const star = <button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button>;
   const close = <button type="button" data-action={presentation === 'reader' ? 'close-ticket-reader' : 'close-ticket-inspector'} aria-label={presentation === 'reader' ? 'Close ticket reader' : 'Hide inspector'}><LucideIcon icon={presentation === 'reader' ? X : PanelRightClose} name={presentation === 'reader' ? 'x' : 'panel-right-close'} /></button>;
   const actions = presentation === 'reader'
@@ -72,6 +74,6 @@ export function TicketInspector({ slug, title, titleEditing = false, titleDraft 
     <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections">{tabs.map(tab => <button type="button" data-action="set-inspector-tab" data-inspector-tab={tab.id} aria-label={tab.label} aria-current={activeTab === tab.id ? 'page' : undefined}><LucideIcon icon={tab.icon} name={tab.iconName} /><span>{tab.label}</span></button>)}</nav>
     {activeTab === 'info' && <TicketInfoPanel status={status} priority={priority} category={category} tags={tags} tagSuggestions={tagSuggestions} canUpdate={canUpdate} canAddNotes={canAddNotes} canEditNotes={canEditNotes} canDeleteNotes={canDeleteNotes} composingNote={composingNote} composerDraft={composerDraft} details={details} detailsMode={detailsMode} detailsDirty={detailsDirty} readerPresentation={presentation === 'reader'} readerEditing={readerEditing} notes={notes} editingNoteId={editingNoteId} noteDraft={noteDraft} blockedReason={blockedReason} blockedReasonEditing={blockedReasonEditing} blockedReasonDraft={blockedReasonDraft} providerName={providerName} updatedLabel={updatedLabel} />}
     {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
-    {activeTab === 'attachments' && <TicketAttachments attachments={attachments} />}
+    {activeTab === 'attachments' && <TicketAttachments attachments={attachments} enabled={attachmentsEnabled} message={attachmentMessage} />}
   </aside>;
 }

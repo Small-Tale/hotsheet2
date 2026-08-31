@@ -20,10 +20,13 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
     if(path.endsWith('/tickets')&&request.method()==='GET') return route.fulfill({json:rows});
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
+    if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
     if(path.endsWith('/tickets/01')&&request.method()==='GET') return route.fulfill({json:{store:'git-local',...selectedFull}});
     if(path.endsWith('/tickets/01/attachments')&&request.method()==='POST'){const filename=request.headers()['x-hotsheet-filename']??'attachment';selectedFull={...selectedFull,attachments:[...selectedFull.attachments,{id:`A${selectedFull.attachments.length+1}`,filename,created_at:'2026-08-30T01:10:00Z'}]};return route.fulfill({status:201,json:{store:'git-local',...selectedFull}})}
+    if(path.includes('/tickets/01/attachments/')&&request.method()==='GET')return route.fulfill({body:'attachment bytes',headers:{'content-type':'application/octet-stream','x-hotsheet-filename':'proof.png'}});
+    if(path.includes('/tickets/01/attachments/')&&request.method()==='DELETE'){const attachmentId=path.split('/').pop();selectedFull={...selectedFull,attachments:selectedFull.attachments.filter(item=>item.id!==attachmentId)};return route.fulfill({json:{store:'git-local',...selectedFull}})}
     if(path.includes('/tickets/01/notes/')&&request.method()==='DELETE'){const noteId=path.split('/').pop();selectedFull={...selectedFull,notes:selectedFull.notes.filter(note=>{return note.id!==noteId})};return route.fulfill({json:{store:'git-local',...selectedFull}})}
-    if(path.includes('/tickets/')&&request.method()==='PATCH'){const id=path.split('/').pop(),body=request.postDataJSON();patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);selectedFull={...selectedFull,...body};return route.fulfill({json:{store:'git-local',...selectedFull}})}
+    if(path.includes('/tickets/')&&request.method()==='PATCH'){const id=path.split('/').pop(),body=request.postDataJSON();patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);if(id==='01'){selectedFull={...selectedFull,...body};return route.fulfill({json:{store:'git-local',...selectedFull}})}const changed=rows.find(item=>item.id===id)!;return route.fulfill({json:{store:'git-local',...changed,details:'',notes:[],attachments:[]}})}
     return route.continue();
   });
   return patches;
@@ -120,6 +123,9 @@ test('renders attachment identity from a selected real ticket',async({page})=>{
   await expect(page.getByRole('alert')).toContainText('floating-capture.png');
   await expect(page.getByRole('alert')).toContainText('Wait for it to appear on the desktop');
   await expect(page.locator('[data-attachment-id="A4"]')).toHaveCount(0);
+  await page.getByRole('button',{name:'Remove new-proof.txt'}).click();
+  await expect(page.locator('[data-attachment-id="A2"]')).toHaveCount(0);
+  await expect(page.getByText('Attachment removed.')).toBeVisible();
 });
 
 test('edits non-empty details on double click and empty details on one click',async({page})=>{
@@ -187,6 +193,18 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await expect(page.locator('[data-ticket-drop-status="backlog"]')).toHaveAttribute('data-dragging-ticket','true');
   await page.locator('[data-ticket-drop-status="backlog"]').dispatchEvent('drop');
   await page.locator('[data-ticket-drop-status="backlog"]').click();await expect(page.locator('[data-component="ticket-list-row"]',{hasText:'Use real project tickets'})).toBeVisible();
+});
+
+test('preserves attachments and atomically undoes and redoes cut-paste',async({page})=>{
+  const copyRequests:unknown[]=[];page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/provider-attachments/copy'))copyRequests.push(request.postDataJSON())});
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const source=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await source.click();await page.getByRole('button',{name:'Attachments'}).click();await expect(page.locator('[data-attachment-id="A1"]')).toBeVisible();await page.keyboard.press('Control+x');await page.keyboard.press('Control+v');
+  await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
+  await expect.poll(()=>copyRequests.length).toBe(1);
+  expect(copyRequests[0]).toEqual({source:{connection_id:'git-local',native_id:'01',attachment_id:'A1'},destination:{connection_id:'git-local',native_id:'02'}});
+  await expect(source).toHaveCount(0);
+  await page.keyboard.press('Control+z');await expect(source).toBeVisible();await expect(page.getByText('Use real project tickets (Copy)')).toHaveCount(0);
+  await page.keyboard.press('Control+Shift+z');await expect(source).toHaveCount(0);await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
 });
 
 test('live project visual review',async({page})=>{

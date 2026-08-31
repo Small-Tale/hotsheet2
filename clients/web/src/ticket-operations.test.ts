@@ -26,4 +26,13 @@ describe('ticket operation history', () => {
     await history.executeMany([{slug:'A',patch:{status:'backlog'}},{slug:'B',patch:{status:'backlog'}}]);
     await history.undo(); expect(tickets.get('A')?.status).toBe('started'); expect(tickets.get('B')?.status).toBe('started');
   });
+  it('undoes and redoes an already-applied external transaction', async () => {
+    const calls:string[]=[];const history=new TicketHistory(()=>undefined,async()=>false);
+    history.recordExternal(async()=>{calls.push('undo');return true},async()=>{calls.push('redo');return true});
+    expect(await history.undo()).toBe(true);expect(await history.redo()).toBe(true);expect(calls).toEqual(['undo','redo']);
+  });
+  it('keeps a failed external transaction available to retry', async () => {
+    let attempts=0;const history=new TicketHistory(()=>undefined,async()=>false);history.recordExternal(async()=>{attempts+=1;return false},async()=>true);
+    expect(await history.undo()).toBe(false);expect(await history.undo()).toBe(false);expect(attempts).toBe(2);
+  });
 });

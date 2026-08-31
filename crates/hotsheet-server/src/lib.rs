@@ -33,6 +33,7 @@ use hotsheet_model::{
     CloseReason, NoteKind, ReviewKind, ReviewRequest, Ticket, Timestamp, Ulid, parse_file,
     to_file_string,
 };
+use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OpError, OsKeychain,
     ProviderConfigRegistry, ProviderConnection, ProviderDraft, ProviderPatch, ProviderRegistry,
@@ -731,6 +732,10 @@ pub fn app(state: AppState) -> Router {
             post(add_checkout_ticket_attachment),
         )
         .route(
+            "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}",
+            get(get_checkout_ticket_attachment).delete(delete_checkout_ticket_attachment),
+        )
+        .route(
             "/checkouts/{reference}/tickets/{id}/notes/{note_id}",
             delete(delete_checkout_ticket_note),
         )
@@ -780,6 +785,7 @@ pub fn app(state: AppState) -> Router {
             "/provider-connections/{connection_id}",
             patch(update_provider_connection).delete(delete_provider_connection),
         )
+        .route("/provider-attachments/copy", post(copy_provider_attachment))
         // Authenticated application/protocol negotiation. `/health` intentionally remains
         // a small unauthenticated liveness probe.
         .route("/compatibility", get(compatibility))
@@ -1293,6 +1299,56 @@ fn provider_for(
         .get(credential)
         .map_err(provider_transfer_error)?;
     hotsheet_extsync::live_provider(&connection, token).map_err(provider_transfer_error)
+}
+
+#[derive(Debug, Deserialize)]
+struct AttachmentCopyRef {
+    connection_id: String,
+    native_id: String,
+    attachment_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AttachmentTicketRef {
+    connection_id: String,
+    native_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CopyAttachmentReq {
+    source: AttachmentCopyRef,
+    destination: AttachmentTicketRef,
+}
+
+async fn copy_provider_attachment(
+    State(state): State<AppState>,
+    Json(req): Json<CopyAttachmentReq>,
+) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    let source = provider_for(&state, &req.source.connection_id)?;
+    let destination = provider_for(&state, &req.destination.connection_id)?;
+    let source_ticket = source
+        .get(&req.source.native_id)
+        .map_err(provider_transfer_error)?;
+    let metadata = source_ticket
+        .attachments
+        .into_iter()
+        .find(|item| item.id == req.source.attachment_id)
+        .ok_or_else(|| ApiError::not_found(&req.source.attachment_id))?;
+    let bytes = source
+        .attachment_bytes(&req.source.native_id, &req.source.attachment_id)
+        .map_err(provider_transfer_error)?;
+    let copied = destination
+        .add_attachment(
+            &req.destination.native_id,
+            ApiAttachment {
+                id: Ulid::new().to_string(),
+                filename: metadata.filename,
+                created_at: now().to_string(),
+            },
+            bytes,
+        )
+        .map_err(provider_transfer_error)?;
+    Ok((StatusCode::CREATED, Json(copied)))
 }
 
 fn provider_transfer_error(error: impl std::fmt::Display) -> ApiError {
@@ -1837,6 +1893,74 @@ async fn add_checkout_ticket_attachment(
             ticket: api_ticket(&entry, &updated)?,
         }),
     ))
+}
+
+async fn get_checkout_ticket_attachment(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+) -> Result<Response, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let (attachment, bytes) = entry
+        .store
+        .read_attachment(&ticket.id, &attachment_id)
+        .map_err(|error| match &error {
+            StoreError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+                ApiError::not_found(&attachment_id.to_string())
+            }
+            _ => error.into(),
+        })?;
+    let mut headers = HeaderMap::new();
+    let content_type = match FsPath::new(&attachment.filename)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
+        Some("pdf") => "application/pdf",
+        Some("txt" | "md") => "text/plain; charset=utf-8",
+        Some("json") => "application/json",
+        _ => "application/octet-stream",
+    };
+    headers.insert(
+        "content-type",
+        content_type.parse().expect("static content type"),
+    );
+    if let Ok(filename) = attachment.filename.parse() {
+        headers.insert("x-hotsheet-filename", filename);
+    }
+    Ok((headers, Bytes::from(bytes)).into_response())
+}
+
+async fn delete_checkout_ticket_attachment(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let updated = entry
+        .store
+        .remove_attachment(&ticket.id, &attachment_id, now())
+        .map_err(|error| match &error {
+            StoreError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+                ApiError::not_found(&attachment_id.to_string())
+            }
+            _ => error.into(),
+        })?;
+    state.changed_in(&entry, "attachment_removed", &updated);
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket(&entry, &updated)?,
+    }))
 }
 
 async fn ticket_flow_summary(

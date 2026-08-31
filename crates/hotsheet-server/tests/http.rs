@@ -431,6 +431,38 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .unwrap();
     let attached = body_json(app.clone().oneshot(attachment_request).await.unwrap()).await;
     assert_eq!(attached["attachments"][0]["filename"], "proof.txt");
+    let attachment_id = attached["attachments"][0]["id"].as_str().unwrap();
+    let downloaded = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/combo/tickets/{slug}/attachments/{attachment_id}"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(downloaded.status(), StatusCode::OK);
+    assert_eq!(downloaded.headers()["x-hotsheet-filename"], "proof.txt");
+    assert_eq!(
+        downloaded.headers()["content-type"],
+        "text/plain; charset=utf-8"
+    );
+    assert_eq!(
+        downloaded.into_body().collect().await.unwrap().to_bytes(),
+        "checkout evidence"
+    );
+    let removed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/{attachment_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(removed["attachments"].as_array().unwrap().len(), 0);
     let updated = body_json(
         app.oneshot(authed(
             "PATCH",
@@ -1516,6 +1548,92 @@ async fn attachment_upload_returns_and_persists_durable_metadata() {
     )
     .await;
     assert_eq!(reread["attachments"], attached["attachments"]);
+}
+
+#[tokio::test]
+async fn provider_attachment_copy_preserves_bytes_across_hosted_stores() {
+    let (_dir, state) = state();
+    let app = app(state);
+    let source = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"source"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let source_id = source["id"].as_str().unwrap();
+    let upload = Request::builder()
+        .method("POST")
+        .uri(format!("/tickets/{source_id}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "evidence.txt")
+        .body(Body::from("preserved bytes"))
+        .unwrap();
+    let attached = body_json(app.clone().oneshot(upload).await.unwrap()).await;
+    let attachment_id = attached["attachments"][0]["id"].as_str().unwrap();
+    let source_connection = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await[0]["connection_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let destination_dir = tempfile::tempdir().unwrap();
+    FsStore::init(destination_dir.path(), &StoreMetadata::new("DS")).unwrap();
+    let register_body = format!(r#"{{"path":"{}"}}"#, destination_dir.path().display());
+    let destination_connection = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/stores", Some(&register_body)))
+            .await
+            .unwrap(),
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let destination = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/providers/{destination_connection}/tickets"),
+                Some(r#"{"title":"destination"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let destination_id = destination["native_id"].as_str().unwrap();
+    let copy_body = serde_json::json!({
+        "source": {"connection_id": source_connection, "native_id": source_id, "attachment_id": attachment_id},
+        "destination": {"connection_id": destination_connection, "native_id": destination_id}
+    });
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/provider-attachments/copy",
+            Some(&copy_body.to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let copied = body_json(response).await;
+    assert_eq!(copied["attachments"][0]["filename"], "evidence.txt");
+    let copied_attachment_id = copied["attachments"][0]["id"].as_str().unwrap();
+    let stored = std::fs::read(
+        destination_dir
+            .path()
+            .join("attachments")
+            .join(destination_id)
+            .join(copied_attachment_id)
+            .join("evidence.txt"),
+    )
+    .unwrap();
+    assert_eq!(stored, b"preserved bytes");
 }
 
 #[tokio::test]

@@ -31,7 +31,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers plus checkout-scoped real ticket/repository operations
     src/main.tsx             #   Real AppShell: project tabs, ticket browse/read/create/update, views/search/source summary
     src/ticket-views.ts      #   Disjoint active Queue, Backlog, and Archive view semantics
-    src/ticket-operations.ts #   Checkout-scoped field-aware undo/redo and structured ticket clipboard title deduplication
+    src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
     src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding API proxy
     src/dev-server.ts        #   Hono local project bridge plus dev-only /ux-demo and review routes

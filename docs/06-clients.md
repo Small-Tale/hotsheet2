@@ -22,7 +22,11 @@ field-aware rule, and a new edit after undo clears redo.
 Following HS1, Cmd/Ctrl+C and X retain structured selected-ticket data while writing
 readable text to the system clipboard. Cmd/Ctrl+V copies the ticket content and uses
 ` (Copy)`, ` (Copy 2)`, and so on for case-insensitive title collisions; cut originals
-are deleted only after destination creation succeeds. These global shortcuts yield to
+are deleted only after destination creation, note creation, and provider-qualified
+attachment copying all succeed. A paste is one history transaction: undo archives every
+created copy and restores cut originals, while redo reapplies the complete transfer.
+Failed transfers archive partial destination tickets and leave cut originals intact.
+These global shortcuts yield to
 editable controls and dialogs. Dragging an unselected ticket moves only it, while
 dragging a selected ticket moves the selection; Queue, Backlog, and Archive sidebar
 destinations apply the corresponding status and visibly highlight during dragover.
@@ -91,6 +95,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   actionable guidance while valid siblings continue. Accepted files go to the selected
   ticket's checkout-scoped attachment endpoint, then the client refreshes both the
   selected ticket and project rows from the authoritative response.
+  When the selected provider advertises attachment support, each attachment exposes
+  icon actions to open, download, copy its checkout-qualified reference, or remove it;
+  upload/removal progress and failures remain visible in the attachment panel. Browser
+  clients use download where a native Tauri host can later offer Reveal in Finder.
 
   The default `Queue` view is the active working set and intentionally excludes both
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit

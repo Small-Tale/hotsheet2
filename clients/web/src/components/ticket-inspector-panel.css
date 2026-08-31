@@ -30,6 +30,12 @@
 .ticket-inspector__timeline li > div > p { margin-top: .2rem; color: #747985; font-size: .76rem; line-height: 1.4; }
 .ticket-inspector__attachment { display: flex; padding: .65rem; border-radius: .45rem; background: #f1f2f5; align-items: center; gap: .5rem; font-size: .8rem; }
 .ticket-inspector__attachment svg { width: .9rem; height: .9rem; }
+.ticket-inspector__attachment > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-inspector__attachment-actions { display: inline-flex; margin-left: auto; gap: .15rem; }
+.ticket-inspector__attachment-actions button { display: inline-grid; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: .35rem; background: transparent; color: #656873; cursor: pointer; place-items: center; }
+.ticket-inspector__attachment-actions button:hover { background: #dde5f2; color: #25262b; }
+.ticket-inspector__attachment-actions button:last-child:hover { background: #feecec; color: #b42318; }
+.ticket-attachments__status, .ticket-attachments__unsupported { color: #717581; font-size: .76rem; }
 .ticket-attachments__browse { display: inline-flex; min-height: 2rem; padding: 0 .5rem; border-radius: .4rem; color: #2563eb; cursor: pointer; align-items: center; gap: .3rem; font-size: .72rem; font-weight: 650; }
 .ticket-attachments__browse:hover { background: #eaf2ff; }
 .ticket-attachments__browse svg { width: .85rem; height: .85rem; }
