@@ -75,6 +75,8 @@ mod tests {
 
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
         assert!(skill.contains("name: hotsheet"));
+        assert!(skill.contains("not a stopping condition"));
+        assert!(skill.contains("Priority is an important guidance signal"));
 
         let mcp: serde_json::Value = serde_json::from_str(&read(d.path(), ".mcp.json")).unwrap();
         let hs = &mcp["mcpServers"]["hotsheet"];

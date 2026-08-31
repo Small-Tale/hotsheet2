@@ -24,6 +24,9 @@ fn claude_exposes_nonempty_setup_artifacts() {
     let (skill_target, skill_body) = p.skill().expect("claude has a skill");
     assert!(skill_body.starts_with("---"), "skill has frontmatter");
     assert!(skill_body.contains("name: hotsheet"));
+    assert!(skill_body.contains("not a stopping condition"));
+    assert!(skill_body.contains("Priority is an important guidance signal"));
+    assert!(skill_body.contains("Use available parallelism deliberately"));
     assert_eq!(skill_target, ".claude/skills/hotsheet/SKILL.md");
 
     assert_eq!(p.manifest.instructions.target, "CLAUDE.md");
