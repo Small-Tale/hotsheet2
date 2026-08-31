@@ -29,7 +29,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     src/api.ts               #   Typed server client for providers plus checkout-scoped real ticket/repository operations
-    src/main.tsx             #   Real AppShell: project tabs, ticket browse/read/create/update, views/search/source summary
+    src/main.tsx             #   Real AppShell: project tabs, tickets/views, and cross-project permission polling/resolution
+    src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/ticket-views.ts      #   Disjoint active Queue, Backlog, and Archive view semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
@@ -141,7 +142,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/ports.rs           #   ProcessSpawner/SpawnedProcess + AcpClient + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
       src/registry.rs        #   ConnectionRegistry: live connections + sliding-window busy tracking
-      src/permission.rs      #   PermissionBridge: FIFO request queue (concurrent-preserving, fixes HS1 overwrite) + allow-rules (once/session/always) + route-back (docs/05 §5.7, HS2-11)
+      src/permission.rs      #   FIFO permission queue + allow-rules + route-back; production rules live under ${HOTSHEET_HOME}/permissions/<primary-store-id>.json and Claude/Codex share a 24-hour safe-deny guard
       src/codex.rs (perm)    #   Codex approval ServerRequests route through a PermissionPolicy (Arc<SharedPermissionBridge> + connection + timeout) via decide_approval → request_blocking_timeout: allow-rules auto-resolve, else BLOCK the turn for a human over the route-back (up to timeout, then safe default) — HS2-0QGW07 → HS2-Q1F6HV; attached in live.rs when a bridge is threaded through LiveTrigger/SafeTrigger
       src/permission.rs (2)  #   SharedPermissionBridge: thread-safe request_blocking (blocks a tool until a human resolve() over the route-back) + pending() + resolve() + set_on_pending (event-bus nudge) + reseed_rules; durable rule storage load_rules/append_rule (StoredRule) — the human-round-trip transport (docs/05 §5.7, HS2-9R9YZW) + request_blocking_timeout (block for a human, safe fallback); codex is activated through the drive (HS2-Q1F6HV); Claude PreToolUse hook adapter pending (HS2-YMR9HE)
     hotsheet-plugins/        # AI-tool plugin loader + registry (core `plugins` module)

@@ -17,6 +17,8 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     const request=route.request(), url=new URL(request.url()), path=url.pathname;
     if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:project});
     if(path.endsWith('/providers')) return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:canUpdate,close:true,notes:true,note_edit:canUpdate,note_delete:canUpdate,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
+    if(path.endsWith('/permissions')&&request.method()==='GET')return route.fulfill({json:[]});
+    if(path.endsWith('/connections')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
     if(path.endsWith('/tickets')&&request.method()==='GET') return route.fulfill({json:rows});
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
@@ -205,6 +207,34 @@ test('preserves attachments and atomically undoes and redoes cut-paste',async({p
   await expect(source).toHaveCount(0);
   await page.keyboard.press('Control+z');await expect(source).toBeVisible();await expect(page.getByText('Use real project tickets (Copy)')).toHaveCount(0);
   await page.keyboard.press('Control+Shift+z');await expect(source).toHaveCount(0);await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
+});
+
+test('shows and resolves cross-project permission notifications with badges and history',async({page})=>{
+  await mockProject(page);let pending=[{id:7,connection:'claude-session',tool:'Edit',action:'/work/demo/src/main.ts',always_allow_supported:true}],answer:unknown;
+  await page.route('**/connections',route=>route.fulfill({json:[{id:'claude-session',tool:'Claude',project:'/work/demo',role:'main',busy:true}]}));
+  await page.route('**/permissions',route=>route.fulfill({json:pending}));
+  await page.route('**/permissions/7',route=>{answer=route.request().postDataJSON();pending=[];return route.fulfill({json:{connection:'claude-session',decision:'allow',persisted:true}})});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const popup=page.locator('[data-component="permission-request-popup"]');await expect(popup).toBeVisible();await expect(popup).toContainText('demo');await expect(popup).toContainText('/work/demo/src/main.ts');
+  await expect(page.getByRole('button',{name:/Notifications view, 1 pending/})).toBeVisible();await expect(page.locator('[data-component="project-tab"] .project-tab__notification')).toContainText('1');
+  const notificationsButton=page.getByRole('button',{name:/Notifications view/});await notificationsButton.click();await expect(notificationsButton).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('button',{name:'List view'})).toHaveAttribute('aria-pressed','false');await expect(page.locator('[data-component="notification-center"]')).toBeVisible();await expect(popup).toBeVisible();await expect(page.locator('.notification-inspector-empty')).toBeVisible();await page.screenshot({path:'/private/tmp/hotsheet-permission-shell.png'});await page.setViewportSize({width:820,height:760});await expect(popup).toBeInViewport();await page.screenshot({path:'/private/tmp/hotsheet-permission-shell-narrow.png'});
+  await popup.getByRole('button',{name:'Always Allow'}).click();await expect.poll(()=>answer).toEqual({decision:'allow',scope:'always'});await expect(popup).toHaveCount(0);await expect(page.getByText('allowed this kind of request')).toBeVisible();await expect(page.getByRole('button',{name:'Notifications view'})).toBeVisible();
+});
+
+test('counts permission automation only while its popup is visible',async({page})=>{
+  await page.clock.install();await mockProject(page);let pending=[{id:8,connection:'codex-session',tool:'item/commandExecution/requestApproval',action:'npm test',always_allow_supported:true}],answers=0;
+  await page.route('**/connections',route=>route.fulfill({json:[{id:'codex-session',tool:'Codex',project:'/work/demo',role:'worker',busy:true}]}));
+  await page.route('**/permissions',route=>route.fulfill({json:pending}));
+  await page.route('**/permissions/8',route=>{answers+=1;pending=[];return route.fulfill({json:{connection:'codex-session',decision:'allow',persisted:false}})});
+  await page.goto('/');await page.evaluate(()=>{localStorage.setItem('hotsheet.project.demo-checkout.permission-automation',JSON.stringify({action:'allow',delayMs:15_000}))});await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const popup=page.locator('[data-component="permission-request-popup"]');await expect(popup).toContainText('Automatically allowed in');await page.clock.fastForward(10_000);await expect(popup).toContainText('0:05');await popup.getByRole('button',{name:'Ignore'}).click();await expect(popup).toHaveCount(0);await page.clock.fastForward(30_000);expect(answers).toBe(0);await page.getByRole('button',{name:/Notifications view/}).click();await page.locator('[data-component="notification-center"]').getByRole('button',{name:'Allow Once'}).click();await expect.poll(()=>answers).toBe(1);
+});
+
+test('persists and restores per-project permission automation settings',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();
+  const action=page.locator('wa-select[name="permission-automation-action"]'),delay=page.locator('wa-select[name="permission-automation-delay"]');await expect(action).toHaveJSProperty('value','off');await expect(delay).toHaveJSProperty('disabled',true);
+  await action.evaluate((node:HTMLElement&{value:string})=>{node.value='deny';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(delay).toHaveJSProperty('disabled',false);await delay.evaluate((node:HTMLElement&{value:string})=>{node.value='120000';node.dispatchEvent(new Event('change',{bubbles:true}))});
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'))).toBe('{"action":"deny","delayMs":120000}');await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await expect(action).toHaveJSProperty('value','deny');await expect(delay).toHaveJSProperty('value','120000');
 });
 
 test('live project visual review',async({page})=>{

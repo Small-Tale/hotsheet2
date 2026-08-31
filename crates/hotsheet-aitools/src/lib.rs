@@ -41,10 +41,11 @@ pub use drive::{
 pub use host::{TriggerError, Triggered, drive_for, trigger};
 pub use live::{LiveError, LiveTrigger, TurnDone, run_trigger};
 pub use permission::{
-    Decision as PermissionDecision, Outcome as PermissionOutcome, PermissionBridge,
-    Request as PermissionRequest, Resolved as PermissionResolved, Rule as PermissionRule,
-    Scope as PermissionScope, SharedPermissionBridge, StoredRule as StoredPermissionRule,
-    append_rule as append_permission_rule, load_rules as load_permission_rules,
+    DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision, Outcome as PermissionOutcome,
+    PermissionBridge, Request as PermissionRequest, Resolved as PermissionResolved,
+    Rule as PermissionRule, Scope as PermissionScope, SharedPermissionBridge,
+    StoredRule as StoredPermissionRule, append_rule as append_permission_rule,
+    load_rules as load_permission_rules,
 };
 pub use ports::{
     AcpClient, AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, ProcessSpawner,

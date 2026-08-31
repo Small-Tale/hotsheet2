@@ -19,6 +19,9 @@ describe('application shell components', () => {
     expect(markup).not.toContain('data-lucide="loader-circle"');
     expect(markup).not.toContain('data-lucide="wifi-off"');
     expect(markup.indexOf('</button><button')).toBeGreaterThan(0);
+    const notificationMarkup = String(ProjectTab({ id: 'one', name: 'One', location: 'local', notificationCount: 2 }));
+    expect(notificationMarkup).toContain('aria-label="2 pending notifications"');
+    expect(notificationMarkup).toContain('data-lucide="bell"');
   });
 
   it('composes tabs with add and overflow actions', () => {
@@ -57,7 +60,7 @@ describe('application shell components', () => {
   });
 
   it('composes all top-level regions', () => {
-    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, headerActions: 'actions' as never, pageHeader: PageHeader({ title: 'All Tickets' }), composer: 'compose' as never, workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never }));
+    const markup = String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, headerActions: 'actions' as never, pageHeader: PageHeader({ title: 'All Tickets' }), composer: 'compose' as never, workspace: 'work' as never, inspector: 'inspect' as never, banner: 'banner' as never, overlay: 'overlay' as never }));
     expect(markup).toContain('data-component="app-shell"');
     expect(markup).toContain('data-region-id="app-sidebar"');
     expect(markup).toContain('aria-valuemin="250"');
@@ -68,6 +71,8 @@ describe('application shell components', () => {
     expect(markup).toContain('data-component="page-header"');
     expect(markup).toContain('class="toolbar__leading">head');
     expect(markup).toContain('class="toolbar__trailing">actions');
+    expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
+    expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));
     expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="project-tab-bar"'));
     expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('data-component="page-header"'));
     const globalMarkup = String(AppShell({ mode: 'stats', tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never, inspector: 'inspect' as never }));

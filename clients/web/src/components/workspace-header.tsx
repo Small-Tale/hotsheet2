@@ -5,13 +5,13 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
-import { ArrowDownAZ, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
+import { ArrowDownAZ, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { ToolbarControlGroup } from './toolbar-control-group';
 import { ToolbarText } from './toolbar-text';
 
-export type WorkspaceViewMode = 'list' | 'board' | 'settings';
+export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
 
 export interface WorkspaceHeaderProps {
@@ -21,14 +21,15 @@ export interface WorkspaceHeaderProps {
   searchQuery?: string;
   sort?: WorkspaceSort;
   controlsVisible?: boolean;
+  notificationCount?: number;
 }
 
 export function WorkspaceIdentity({ projectName }: { projectName: string }) {
   return <div class="workspace-header__identity" data-component="workspace-identity"><ToolbarText text={projectName} size="large" /></div>;
 }
 
-function ModeButton({ mode, current, label, icon, iconName }: { mode: WorkspaceViewMode; current: WorkspaceViewMode; label: string; icon: IconNode; iconName: string }) {
-  return <button type="button" class="view-mode-switcher__button" data-action="set-view-mode" data-view-mode={mode} aria-label={`${label} view`} aria-pressed={String(mode === current)} title={`${label} view`}><LucideIcon icon={icon} name={iconName} /></button>;
+function ModeButton({ mode, current, label, icon, iconName, badge = 0 }: { mode: WorkspaceViewMode; current: WorkspaceViewMode; label: string; icon: IconNode; iconName: string; badge?:number }) {
+  return <button type="button" class="view-mode-switcher__button" data-action="set-view-mode" data-view-mode={mode} aria-label={`${label} view${badge?`, ${badge} pending`:''}`} aria-pressed={String(mode === current)} title={`${label} view`}><LucideIcon icon={icon} name={iconName} />{badge>0&&<span class="view-mode-switcher__badge" aria-hidden="true">{badge>99?'99+':badge}</span>}</button>;
 }
 
 const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
@@ -38,12 +39,13 @@ const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
   { value: 'status', label: 'Status' },
 ];
 
-export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated' }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
-  const projectActionsDisabled = mode === 'settings';
+export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated',notificationCount=0 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
+  const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   return <div class="workspace-header__actions" data-component="workspace-controls">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
         <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
+        <ModeButton mode="notifications" current={mode} label="Notifications" icon={Bell} iconName="bell" badge={notificationCount}/>
         <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__sort-group" single>

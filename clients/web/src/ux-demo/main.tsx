@@ -8,7 +8,7 @@ import '@awesome.me/webawesome/dist/components/select/select.js';
 import './style.css';
 
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
-import { Activity, AppWindow, Badge, BookOpen, ChartNoAxesColumnIncreasing, Columns3, Command, FilePenLine, Filter, FolderGit2, GitBranch, type IconNode,Info, Kanban, LayoutDashboard, List, ListPlus, ListTree, Menu, MessageSquareText, PanelLeft, PanelRight, Paperclip, Play, Search, Settings, Tags, Terminal, Text, Wrench } from 'lucide';
+import { Activity, AppWindow, Badge, Bell, BookOpen, ChartNoAxesColumnIncreasing, Columns3, Command, FilePenLine, Filter, FolderGit2, GitBranch, type IconNode,Info, Kanban, LayoutDashboard, List, ListPlus, ListTree, Menu, MessageSquareText, PanelLeft, PanelRight, Paperclip, Play, Search, Settings, ShieldCheck, Tags, Terminal, Text, Wrench } from 'lucide';
 
 import { LucideIcon } from '../components/lucide-icon';
 import { MenuHeader } from '../components/menu-header';
@@ -24,6 +24,7 @@ import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDem
 import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownSavedValue, markdownValue, NoteCardDemo, NoteComposerDemo, noteComposerValue, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, TicketReaderDemo } from './content-components-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
+import { NotificationCenterDemo, PermissionRequestDemo } from './permission-components-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, DriveControlDemo, driveRunning, ProjectSidebarDemo, projectSidebarHeight, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 import { SelectDemo } from './select-demo';
 import { resetStatusBadgeDemo, StatusBadgeDemo, StatusBadgeSettings, statusBadgeSettings } from './status-badge-demo';
@@ -80,6 +81,7 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'ticket-inspector': { icon: PanelRight, name: 'panel-right' }, 'ticket-info-panel': { icon: Info, name: 'info' }, 'ticket-timeline': { icon: Activity, name: 'activity' }, 'ticket-attachments': { icon: Paperclip, name: 'paperclip' },
     'ticket-reader': { icon: BookOpen, name: 'book-open' }, 'markdown-editor': { icon: FilePenLine, name: 'file-pen-line' }, 'note-card': { icon: MessageSquareText, name: 'message-square-text' }, 'tag-chip': { icon: Tags, name: 'tags' },
     'global-search': { icon: Search, name: 'search' }, 'filter-chip': { icon: Filter, name: 'filter' }, 'status-badge': { icon: Badge, name: 'badge' }, 'terminal-dashboard': { icon: Terminal, name: 'terminal' }, 'settings-window': { icon: Settings, name: 'settings' },
+    'permission-request': { icon: ShieldCheck, name: 'shield-check' }, 'notification-center': { icon: Bell, name: 'bell' },
   };
   return exact[id] ?? (id.includes('command') ? { icon: Command, name: 'command' } : id.includes('attachment') ? { icon: Paperclip, name: 'paperclip' } : id.includes('note') ? { icon: MessageSquareText, name: 'message-square-text' } : { icon: Wrench, name: 'wrench' });
 }
@@ -126,6 +128,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'note-composer') return <NoteComposerDemo />;
   if (item.id === 'ticket-reader') return <TicketReaderDemo />;
   if (item.id === 'markdown-editor') return <MarkdownEditorDemo />;
+  if (item.id === 'permission-request') return <PermissionRequestDemo />;
+  if (item.id === 'notification-center') return <NotificationCenterDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
 }
 

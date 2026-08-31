@@ -50,9 +50,6 @@ pub struct LiveTrigger {
     pub now_ms: u64,
 }
 
-/// How long a driven codex approval blocks for a human before the safe fallback (`Deny`).
-const PERMISSION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
-
 /// The result of one driven turn: why it ended, plus the tool's session/thread id (when it
 /// reports one) so the next turn can resume the same session (HS2-3C1XK3).
 #[derive(Debug, Clone)]
@@ -147,7 +144,7 @@ pub fn run_trigger(
                     bridge: bridge.clone(),
                     connection: t.conn_id.clone(),
                     default: crate::permission::Decision::Deny,
-                    timeout: PERMISSION_TIMEOUT,
+                    timeout: crate::permission::DEFAULT_PERMISSION_TIMEOUT,
                 });
             }
             let ctx = DriveCtx {

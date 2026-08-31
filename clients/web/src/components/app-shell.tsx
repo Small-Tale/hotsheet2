@@ -27,9 +27,10 @@ export interface AppShellProps {
   mode?: ProjectTabBarMode;
   sidebarVisible?: boolean;
   workspacePresentation?: 'inset' | 'edge-to-edge';
+  overlay?: SafeHtml;
 }
 
-export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset' }: AppShellProps) {
+export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset',overlay }: AppShellProps) {
   return <section class="app-shell" data-component="app-shell" data-mode={mode} data-sidebar-visible={String(sidebarVisible)}>
     {mode === 'project' && <ResizableRegion id="app-sidebar" label="Project sidebar" size={sidebarSize} min={250} max={360} collapsed={!sidebarVisible}>{sidebar}</ResizableRegion>}
     <main class="app-shell__main">
@@ -38,6 +39,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
         trailing={<>{headerActions}{mode === 'project' && inspector && !inspectorVisible && <ToolbarControlGroup appearance="borderless" single><button type="button" data-action="open-ticket-inspector" aria-label="Show ticket inspector" title="Show ticket inspector"><LucideIcon icon={PanelRightOpen} name="panel-right-open" /></button></ToolbarControlGroup>}</>}
       />
       <ProjectTabBar tabs={tabs} mode={mode} />
+      {overlay}
       {banner}
       {pageHeader}
       <div class="app-shell__work-area">

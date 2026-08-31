@@ -127,8 +127,10 @@ async fn main() -> Result<()> {
     let index = Index::open_reconciled(&index_path, &store)?;
     println!("index: {}", index_path.display());
     // A real run persists the indexes of any POST /stores-registered store too.
-    let mut state =
-        AppState::with_index(store, secret.clone(), index).with_persistent_registered_indexes();
+    let permission_rules_path = hotsheet_server::multistore::permission_rules_path_for(&store)?;
+    let mut state = AppState::with_index(store, secret.clone(), index)
+        .with_persistent_registered_indexes()
+        .with_permission_rules(permission_rules_path);
 
     // Opt-in detached terminal broker (HS2-ERT00F): host terminals in a separate process so
     // they survive a server restart. Spawns/discovers the broker for the primary store.

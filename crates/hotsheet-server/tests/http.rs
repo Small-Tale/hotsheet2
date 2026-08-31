@@ -2699,6 +2699,7 @@ async fn permission_round_trip_lists_answers_and_unblocks_the_tool() {
             assert_eq!(first["connection"], "conn-1");
             assert_eq!(first["tool"], "Bash");
             assert_eq!(first["action"], "rm -rf build");
+            assert_eq!(first["always_allow_supported"], false);
             break first["id"].as_u64().unwrap();
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
@@ -2818,6 +2819,7 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
             .await
             .unwrap();
         if let Some(first) = body_json(resp).await.as_array().unwrap().first() {
+            assert_eq!(first["always_allow_supported"], true);
             break first["id"].as_u64().unwrap();
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;

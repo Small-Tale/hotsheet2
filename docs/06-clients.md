@@ -178,6 +178,23 @@ view layer is new work.
 - Multi-project tabs (local + remote).
 - Search (FTS) and filtered views.
 
+The web client now implements the permission portion of that floor for Claude and
+Codex. It polls every open project's authenticated permission and connection routes,
+shows pending counts in the main segmented control and project tabs, and presents a
+non-modal popup even when another project is selected. The global Notifications view
+keeps pending requests above newest-first machine-local client history; a request that
+disappears without this client resolving it is labeled “Decision made outside Hot
+Sheet.” The right inspector region remains present and manually collapsible in this
+view rather than changing the workspace width.
+
+Ignore is client-only and hides the popup without answering. When the server advertises
+durable Always Allow support, actions are Ignore, Deny, Always Allow, and Allow Once;
+otherwise the final action is simply Allow. Per-project localStorage settings can turn
+on auto-Allow or auto-Deny after 15 seconds or 1/2/5/15/60 minutes. The timer accumulates
+only while that request's popup is visibly presented, pauses when hidden or ignored, and
+can be cancelled for one request. Automatic decisions use the same authenticated route
+as clicks and are distinguished in client history.
+
 The long tail of HS1 UI (custom views/query builder, terminal dashboard, stats,
 Announcer, telemetry dashboards, print) is **deferred**, each its own ticket after
 the floor lands.

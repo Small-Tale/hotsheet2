@@ -60,6 +60,23 @@ pub fn index_path_for(store: &FsStore) -> std::io::Result<std::path::PathBuf> {
     Ok(dir.join(format!("{}.sqlite", store_url_id(store))))
 }
 
+/// Machine-local durable permission rules for a server's primary store. Keeping these
+/// under `HOTSHEET_HOME` avoids committing personal approvals to the ticket repository;
+/// keying by store identity also prevents an approval in one project from silently
+/// becoming an approval in another independently served project.
+pub fn permission_rules_path_for(store: &FsStore) -> std::io::Result<std::path::PathBuf> {
+    permission_rules_path_in(&hotsheet_plugins::hotsheet_home(), store)
+}
+
+fn permission_rules_path_in(
+    home: &std::path::Path,
+    store: &FsStore,
+) -> std::io::Result<std::path::PathBuf> {
+    let dir = home.join("permissions");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(format!("{}.json", store_url_id(store))))
+}
+
 /// A served store as listed by `GET /stores`.
 #[derive(Debug, Serialize)]
 pub struct StoreInfo {
@@ -162,5 +179,34 @@ impl StoreHost {
             Some((store, ticket)) => Ok(Some((store_url_id(store), ticket))),
             None => Ok(None),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hotsheet_ticketing::StoreMetadata;
+
+    #[test]
+    fn permission_rules_are_machine_local_and_store_scoped() {
+        let home = tempfile::tempdir().unwrap();
+        let first_dir = tempfile::tempdir().unwrap();
+        let second_dir = tempfile::tempdir().unwrap();
+        let first = FsStore::init(first_dir.path(), &StoreMetadata::new("ONE")).unwrap();
+        let second = FsStore::init(second_dir.path(), &StoreMetadata::new("TWO")).unwrap();
+
+        let first_path = permission_rules_path_in(home.path(), &first).unwrap();
+        let second_path = permission_rules_path_in(home.path(), &second).unwrap();
+
+        assert_eq!(
+            first_path.parent(),
+            Some(home.path().join("permissions").as_path())
+        );
+        assert_ne!(first_path, second_path);
+        assert_eq!(
+            first_path.extension().and_then(|value| value.to_str()),
+            Some("json")
+        );
+        assert!(home.path().join("permissions").is_dir());
     }
 }

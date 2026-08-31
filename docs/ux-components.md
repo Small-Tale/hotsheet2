@@ -506,7 +506,10 @@ capability-aware sections when their underlying features and data contracts land
 
 ### 5.2 Permission flow — feature floor
 
-- `PermissionRequestDialog`
+- `PermissionRequestCard` — shared list/popup presentation with project identity,
+  operation details, optional visible-time automation countdown, and capability-aware
+  Ignore/Deny/Always Allow/Allow Once actions
+- `PermissionRequestPopup` — non-modal fixed presentation of the shared request card
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
 - allow/deny/session-scope actions
@@ -526,7 +529,8 @@ capability-aware sections when their underlying features and data contracts land
 
 - `ToastRegion` and `Toast`
 - `NotificationBell`
-- `NotificationCenter`
+- `NotificationCenter` — pending requests followed by newest-first resolution history;
+  externally resolved requests remain visible with a neutral outcome message
 - `AttentionBadge`
 - `NativeNotificationRouter`
 - `NotificationPreferences`

@@ -25,6 +25,12 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+/// Eventual safe-deny guard for an unattended permission request. Client automation is
+/// deliberately independent: its countdown advances only while the popup is visible, so
+/// this transport guard must be long enough to survive an ignored popup or a 60-minute
+/// client setting without silently deciding first.
+pub const DEFAULT_PERMISSION_TIMEOUT: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// An allow/deny decision on a permission request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -411,6 +417,15 @@ pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_transport_timeout_outlasts_longest_client_automation_window() {
+        assert!(DEFAULT_PERMISSION_TIMEOUT > Duration::from_secs(60 * 60));
+        assert_eq!(
+            DEFAULT_PERMISSION_TIMEOUT,
+            Duration::from_secs(24 * 60 * 60)
+        );
+    }
 
     #[test]
     fn shared_bridge_blocks_until_a_human_resolves() {

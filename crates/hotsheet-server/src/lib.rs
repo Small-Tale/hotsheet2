@@ -2489,14 +2489,34 @@ async fn renew_ticket(
 
 /// `GET /permissions` — the requests a driven tool is currently blocked on, for a client
 /// to render + answer. Each carries the raising connection + the `(tool, action)` asked.
-async fn list_permissions(
-    State(state): State<AppState>,
-) -> Json<Vec<hotsheet_aitools::PermissionRequest>> {
-    Json(state.permissions.pending())
+async fn list_permissions(State(state): State<AppState>) -> Json<Vec<PermissionInfo>> {
+    let always_allow_supported = state.permission_rules_path.is_some();
+    Json(
+        state
+            .permissions
+            .pending()
+            .into_iter()
+            .map(|request| PermissionInfo {
+                id: request.id,
+                connection: request.connection,
+                tool: request.tool,
+                action: request.action,
+                always_allow_supported,
+            })
+            .collect(),
+    )
 }
 
-/// How long `POST /permissions/ask` blocks for a human before the safe fallback (`deny`).
-const ASK_TIMEOUT: Duration = Duration::from_secs(300);
+/// Client-facing pending permission request. The capability flag is explicit so a client
+/// never offers a durable response when this server has no rule store configured.
+#[derive(Serialize)]
+struct PermissionInfo {
+    id: u64,
+    connection: String,
+    tool: String,
+    action: String,
+    always_allow_supported: bool,
+}
 
 /// Body for `POST /permissions/ask`: who's asking + what.
 #[derive(Deserialize)]
@@ -2523,7 +2543,7 @@ async fn ask_permission(
             body.connection,
             body.tool,
             body.action,
-            ASK_TIMEOUT,
+            hotsheet_aitools::DEFAULT_PERMISSION_TIMEOUT,
             hotsheet_aitools::PermissionDecision::Deny,
         )
     })

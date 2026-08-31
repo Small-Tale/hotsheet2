@@ -2,7 +2,8 @@
 .workspace-header[data-controls-visible="false"] { grid-template-columns: 1fr; }
 .workspace-header__actions { display: flex; align-items: center; gap: .4rem; }
 .workspace-header__actions { justify-content: flex-end; }
-.view-mode-switcher__button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 999px; color: #62646d; background: transparent; cursor: pointer; place-items: center; }
+.view-mode-switcher__button { position: relative; display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: 999px; color: #62646d; background: transparent; cursor: pointer; place-items: center; }
+.view-mode-switcher__badge { position: absolute; top: -.24rem; right: -.3rem; display: grid; min-width: .9rem; height: .9rem; padding: 0 .18rem; border: 1.5px solid #eef0f4; border-radius: 999px; color: #392900; background: #facc15; font-size: .57rem; font-weight: 750; line-height: 1; place-items: center; }
 .view-mode-switcher__button svg, .workspace-header__actions wa-button svg { width: 1rem; height: 1rem; }
 .view-mode-switcher__button:hover { background: #fff; }
 .view-mode-switcher__button[aria-pressed="true"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .14); }

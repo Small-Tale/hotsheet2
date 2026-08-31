@@ -279,6 +279,15 @@ command:
    user allows/denies (with allow-once/always mapping onto persisted allow-rules).
 4. The answer routes back to the connection that raised it.
 
+`Always Allow` rules are personal machine state, stored per primary project under
+`${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
+ticket repository. `GET /permissions` advertises `always_allow_supported` on each
+pending request so clients only render that action when durable rule storage is active.
+The server retains an eventual safe-deny guard of 24 hours. This is intentionally much
+longer than client-side automation windows: an ignored or otherwise hidden popup does
+not advance a client's visible-presentation countdown and must not disappear after the
+old five-minute transport timeout.
+
 This is also the seam for **other prompts** the ticket mentions — the bridge is a
 generic "the tool needs a human decision" channel, not just tool-permissions.
 
