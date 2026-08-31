@@ -74,4 +74,11 @@ describe('TicketRow', () => {
     expect(markup).toContain('data-component="blocked-badge"');
     expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-component="blocked-badge"'));
   });
+
+  it('marks completed and verified rows for readable title-only completion styling', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    for (const status of ['completed', 'verified'] as const) expect(String(TicketRow({ slug: 'HS2-DONE', title: 'Finished row', status, priority: 'default', category: 'task', tags: [] }))).toContain(`data-status="${status}"`);
+    expect(css).toContain('[data-status="completed"], [data-status="verified"]');
+    expect(css).toContain('.ticket-list-row__identity strong { color: #6b7280; text-decoration: line-through; }');
+  });
 });
