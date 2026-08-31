@@ -21,3 +21,5 @@ button, input, textarea, select { font: inherit; }
 .project-settings h2 { margin-top: 0; }
 .project-settings__source { display: grid; gap: .35rem; margin: 1rem 0; padding: 1rem; border: 1px solid #dfe1e7; border-radius: .75rem; background: white; }
 .project-settings__source code { overflow: hidden; text-overflow: ellipsis; color: #666a75; }
+.project-settings__option { display: grid; grid-template-columns: auto 1fr; width: fit-content; align-items: center; gap: .25rem .5rem; cursor: pointer; }
+.project-settings__option span { grid-column: 2; color: #666a75; font-size: .875rem; }

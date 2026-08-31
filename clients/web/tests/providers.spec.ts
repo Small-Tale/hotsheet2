@@ -4,10 +4,13 @@ const project = { id:'demo-checkout', root:'/work/demo', name:'demo', stores:['/
 const row = { connection_id:'git-local', native_id:'01', qualified_id:'git-local:01', id:'01', slug:'HS2-DEMO01', title:'Use real project tickets', category:'feature', priority:'high', status:'started', up_next:true, tags:['client'], blocked_by:[], claim_count:0, created_at:'2026-08-30T00:00:00Z', updated_at:'2026-08-30T01:00:00Z' };
 const backlogRow = { ...row, native_id:'03', qualified_id:'git-local:03', id:'03', slug:'HS2-BACK01', title:'Deferred backlog ticket', status:'backlog', up_next:false };
 const archiveRow = { ...row, native_id:'04', qualified_id:'git-local:04', id:'04', slug:'HS2-ARCH01', title:'Archived ticket', status:'archive', up_next:false };
+const notStartedRow = { ...row, native_id:'05', qualified_id:'git-local:05', id:'05', slug:'HS2-NEXT01', title:'Not started ticket', status:'not_started', up_next:false };
+const completedRow = { ...row, native_id:'06', qualified_id:'git-local:06', id:'06', slug:'HS2-DONE01', title:'Completed ticket', status:'completed', up_next:false };
+const verifiedRow = { ...row, native_id:'07', qualified_id:'git-local:07', id:'07', slug:'HS2-VERIFY01', title:'Verified ticket', status:'verified', up_next:false };
 const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
 
 async function mockProject(page: import('@playwright/test').Page) {
-  let rows = [row,backlogRow,archiveRow];
+  let rows = [row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow];
   let selectedFull = full;
   const patches: Record<string,unknown>[] = [];
   await page.route('**/*', async route => {
@@ -89,9 +92,39 @@ test('keeps backlog and archived tickets out of the active Queue',async({page})=
   await page.getByRole('button',{name:/Archive/}).click();await expect(page.getByText('Archived ticket')).toBeVisible();await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);
 });
 
+test('derives board columns from the selected view and merges Verified by project setting',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByLabel('Columns view').click();
+  const board=page.locator('.ticket-board');
+  await expect(board.locator('.ticket-board-column')).toHaveCount(4);
+  await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Not Started','Started','Completed','Verified']);
+  await expect(board.locator('[data-column-id="completed"]')).toContainText('Completed ticket');
+  await expect(board.locator('[data-column-id="verified"]')).toContainText('Verified ticket');
+
+  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Hide Verified column').check();
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('hotsheet.project.demo-checkout.hide-verified-column'))).toBe('true');
+  await page.getByLabel('Columns view').click();
+  await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Not Started','Started','Completed']);
+  await expect(board.locator('[data-column-id="completed"]')).toContainText('Completed ticket');
+  await expect(board.locator('[data-column-id="completed"]')).toContainText('Verified ticket');
+
+  await page.getByLabel('Settings view').click();
+  await page.getByLabel('Hide Verified column').uncheck();
+  await page.getByLabel('Columns view').click();
+  await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Not Started','Started','Completed','Verified']);
+
+  await page.getByRole('button',{name:/Backlog/}).click();
+  await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Backlog']);
+  await expect(board.locator('[data-column-id="backlog"]')).toContainText('Deferred backlog ticket');
+  await page.getByRole('button',{name:/Archive/}).click();
+  await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Archive']);
+  await expect(board.locator('[data-column-id="archive"]')).toContainText('Archived ticket');
+});
+
 test('undoes, redoes, copies, pastes, and drags ticket mutations through the real shell',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');await ticket.click();
+  const ticket=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await ticket.click();
   await page.getByRole('button',{name:/Change status/}).click();await page.locator('[data-inspector-status="completed"]').click();
   await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');
   await page.keyboard.press('Control+z');await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Started');
@@ -100,7 +133,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await ticket.evaluate(node=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));document.querySelector<HTMLElement>('[data-ticket-drop-status="backlog"]')!.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer}))});
   await expect(page.locator('[data-ticket-drop-status="backlog"]')).toHaveAttribute('data-dragging-ticket','true');
   await page.locator('[data-ticket-drop-status="backlog"]').dispatchEvent('drop');
-  await page.getByRole('button',{name:/Backlog/}).click();await expect(page.getByText('Use real project tickets')).toBeVisible();
+  await page.getByRole('button',{name:/Backlog/}).click();await expect(page.locator('[data-component="ticket-list-row"]',{hasText:'Use real project tickets'})).toBeVisible();
 });
 
 test('live project visual review',async({page})=>{

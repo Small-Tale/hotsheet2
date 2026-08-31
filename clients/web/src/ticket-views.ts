@@ -3,7 +3,7 @@ import type { TicketRow } from './api';
 export type TicketView = 'all' | 'backlog' | 'archive';
 
 export function isArchivedTicket(ticket: TicketRow): boolean {
-  return ['completed', 'verified', 'archive', 'deleted', 'moved'].includes(ticket.status ?? '');
+  return ['archive', 'deleted', 'moved'].includes(ticket.status ?? '');
 }
 
 export function isQueuedTicket(ticket: TicketRow): boolean {

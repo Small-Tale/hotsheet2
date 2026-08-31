@@ -11,10 +11,10 @@ const ticket = (status: string): TicketRow => ({
 describe('ticket views', () => {
   it('partitions active queue, backlog, and every archived status without overlap', () => {
     const tickets = ['not_started', 'started', 'backlog', 'completed', 'verified', 'archive', 'deleted', 'moved'].map(ticket);
-    expect(tickets.filter(isQueuedTicket).map(item => item.status)).toEqual(['not_started', 'started']);
-    expect(tickets.filter(isArchivedTicket).map(item => item.status)).toEqual(['completed', 'verified', 'archive', 'deleted', 'moved']);
-    expect(ticketsForView(tickets, 'all').map(item => item.status)).toEqual(['not_started', 'started']);
+    expect(tickets.filter(isQueuedTicket).map(item => item.status)).toEqual(['not_started', 'started', 'completed', 'verified']);
+    expect(tickets.filter(isArchivedTicket).map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
+    expect(ticketsForView(tickets, 'all').map(item => item.status)).toEqual(['not_started', 'started', 'completed', 'verified']);
     expect(ticketsForView(tickets, 'backlog').map(item => item.status)).toEqual(['backlog']);
-    expect(ticketsForView(tickets, 'archive').map(item => item.status)).toEqual(['completed', 'verified', 'archive', 'deleted', 'moved']);
+    expect(ticketsForView(tickets, 'archive').map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
   });
 });

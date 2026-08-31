@@ -304,6 +304,10 @@ selection where sensible.
   affordance, a standalone demo that preserves the 250px production minimum, and shared
   responsive `TicketRow` composition. Loading and empty states
   remain future variants.
+- The real Queue board uses `Not Started`, `Started`, `Completed`, and `Verified`
+  columns. A per-project setting can hide `Verified`, merging those tickets into
+  `Completed`. Backlog and Archive views each use one eponymous column because the
+  selected view already supplies their grouping.
 - There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
   container-query card presentation while preserving identical markup and actions
 - keyboard and pointer movement between columns
