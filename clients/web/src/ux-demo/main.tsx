@@ -494,6 +494,12 @@ delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, targe
   if (selected) selected.checked = true;
   contextMenu.value = { x: pointer.clientX, y: pointer.clientY };
 });
+delegate(root, 'dblclick', '[data-action="select-ticket-row"]', (event, target) => {
+  if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;
+  if (usesCollectionState()) selectCollectionTicket((target as HTMLElement).dataset.ticketSlug!);
+  recordCollectionEvent(`Ticket reader opened for ${(target as HTMLElement).dataset.ticketSlug}`);
+  selectDemo('ticket-reader');
+});
 delegate(root, 'click', '[data-context-action]', (_event, target) => {
   const action = (target as HTMLElement).dataset.contextAction!;
   if (usesCollectionState() && contextMenu.value?.ticketSlug) {

@@ -785,6 +785,12 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   }
 });
 
+test('opens the shared TicketReader intent when a composed row is double-clicked', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-list');
+  await page.locator('[data-component="ticket-list-row"]').first().dblclick();
+  await expect(page.getByRole('heading', { name: 'TicketReader', exact: true })).toBeVisible();
+});
+
 test('adjusts and removes TagChip through its settings inspector', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=tag-chip');
