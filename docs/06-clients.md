@@ -28,8 +28,12 @@ created copy and restores cut originals, while redo reapplies the complete trans
 Failed transfers archive partial destination tickets and leave cut originals intact.
 These global shortcuts yield to
 editable controls and dialogs. Dragging an unselected ticket moves only it, while
-dragging a selected ticket moves the selection; Queue, Backlog, and Archive sidebar
-destinations apply the corresponding status and visibly highlight during dragover.
+  dragging a selected ticket moves the selection; Queue, Backlog, and Archive sidebar
+  destinations apply the corresponding status and visibly highlight during dragover.
+  Right-clicking either a list or board TicketRow preserves an existing multi-selection
+  (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
+  menu. Production handlers cover reader opening, metadata affordances, batch Up Next,
+  duplication, archive, and deletion; outside pointer-down and Escape dismiss it.
 
 This is the clean client/service split the rewrite is chartered to create, made
 **absolute**: the server is a standalone process even for local use, so the client

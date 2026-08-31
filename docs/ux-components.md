@@ -263,7 +263,9 @@ selection where sensible.
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or
   collapsing metadata at narrow widths. It also includes blue selection, keyboard
-  selection, and a representative right-click context menu.
+  selection, and one shared right-click context menu. The real TicketList and TicketBoard
+  compositions wire that same menu to reader, metadata, Up Next, duplication, archive,
+  and delete handlers; the demo only substitutes deterministic effects.
   The left rail is reserved for special-state attention in HS1 precedence order:
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets

@@ -194,6 +194,11 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await page.locator('[data-column-id="not-started"] .ticket-board-column__tickets').click({position:{x:240,y:300}});await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(0);
 });
 
+test('ships TicketRow context-menu behavior through real list and board compositions',async({page})=>{
+  const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const first=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');await first.click();await second.click({modifiers:['Meta']});await first.click({button:'right'});const menu=page.getByRole('menu',{name:'Ticket actions'});await expect(menu).toBeVisible();await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);await menu.getByText('Toggle Up Next').click();await expect.poll(()=>patches.filter(patch=>patch.up_next===false).length).toBe(2);
+  await first.click({button:'right'});await menu.getByText('Open ticket').click();await expect(page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/})).toBeVisible();await page.getByRole('button',{name:'Close ticket reader'}).click();await page.getByLabel('Columns view').click();const boardRow=page.locator('[data-column-id="started"] [data-ticket-slug="HS2-DEMO01"]');await boardRow.click({button:'right'});await expect(menu).toBeVisible();await page.screenshot({path:'/private/tmp/hotsheet-real-context-menu.png'});await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);
+});
+
 test('undoes, redoes, copies, pastes, and drags ticket mutations through the real shell',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const ticket=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await ticket.click();

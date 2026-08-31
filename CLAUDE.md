@@ -67,6 +67,14 @@ consumer-specific descendant CSS overrides. A component's UX demo must expose ev
 supported public variant and state that consumers rely on, including appearance and
 size options, so the catalog is a complete interactive account of the component API.
 
+UX demos may replace production data sources and external side effects with deterministic
+fixtures, but they must not be the sole owners of component interaction behavior. When a
+component is composed into the real app, inventory every rendered action/event from that
+component and wire or deliberately capability-disable each one. An enabled control that
+only works in `/ux-demo` is a production bug. Browser coverage must exercise representative
+child actions through every shipped parent composition (for example TicketRow through both
+TicketList and TicketBoard), not merely through the isolated demo.
+
 Ticket text editing is autosaved with a 150 ms debounce. Do not add routine Save/Cancel
 buttons for details, notes, titles, tags, blocked reasons, or similar fields. Keep the
 controlled draft visible while saving, flush when focus leaves the editing surface, and
