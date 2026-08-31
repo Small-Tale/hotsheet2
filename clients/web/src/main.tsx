@@ -17,7 +17,7 @@ import { NotificationCenter } from './components/notification-center';
 import { PageHeader } from './components/page-header';
 import { PermissionRequestPopup } from './components/permission-request-card';
 import { ProjectSidebar } from './components/project-sidebar';
-import { QuickTicketComposer } from './components/quick-ticket-composer';
+import { focusQuickTicketComposerTitle,QuickTicketComposer } from './components/quick-ticket-composer';
 import type { TicketStatus } from './components/status-badge';
 import { TicketBoard } from './components/ticket-board';
 import { type InspectorTab,TicketInspector } from './components/ticket-inspector';
@@ -152,7 +152,7 @@ delegate(document.body,'click','[data-action="open-workspace-search"]',()=>{sear
 delegate(document.body,'input','[name="workspace-search"]',(_event,target)=>{searchQuery.value=(target as Control).value});
 delegate(document.body,'focusout','[name="workspace-search"]',(_event,target)=>{if(!(target as Control).value){searchOpen.value=false;searchQuery.value=''}});
 delegate(document.body,'click','[data-sort]',(_event,target)=>{sort.value=data(target).sort as WorkspaceSort});
-delegate(document.body,'click','[data-action="expand-ticket-composer"]',()=>{composerExpanded.value=true});
+delegate(document.body,'click','[data-action="expand-ticket-composer"]',()=>{composerExpanded.value=true;queueMicrotask(()=>focusQuickTicketComposerTitle(document))});
 delegate(document.body,'click','[data-action="cancel-ticket-composer"]',()=>{composerExpanded.value=false;composerTitle.value=''});
 delegate(document.body,'input','[name="new-ticket-title"]',(_event,target)=>{composerTitle.value=(target as Control).value});
 delegate(document.body,'change','[name="new-ticket-category"]',(_event,target)=>{composerCategory.value=(target as Control).value});

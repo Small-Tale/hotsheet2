@@ -17,6 +17,13 @@ export interface QuickTicketComposerProps {
   canCreate?: boolean;
 }
 
+export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
+  const input = root.querySelector<HTMLElement>('[name="new-ticket-title"]');
+  if (!input) return false;
+  input.focus({ preventScroll: true });
+  return true;
+}
+
 export function QuickTicketComposer({ expanded = false, title = '', category = 'task', providerName = 'Hot Sheet', canCreate = true }: QuickTicketComposerProps) {
   if (!expanded) return <button type="button" class="quick-ticket-composer__launcher" data-component="quick-ticket-composer" data-action="expand-ticket-composer"><LucideIcon icon={Plus} name="plus" />New ticket…</button>;
   return <form class="quick-ticket-composer" data-component="quick-ticket-composer" data-action="create-ticket-form">

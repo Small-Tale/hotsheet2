@@ -117,6 +117,10 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(page.getByText('/work/demo.hs2')).toBeVisible();
 });
 
+test('focuses the ticket title every time the real composer expands',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const launcher=page.getByRole('button',{name:'New ticket…'});await launcher.click();const title=page.locator('wa-input[name="new-ticket-title"]');await expect(title).toBeFocused();await page.getByRole('button',{name:'Cancel'}).click();await launcher.click();await expect(title).toBeFocused();
+});
+
 test('renders attachment identity from a selected real ticket',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();await page.getByRole('button',{name:'Attachments'}).click();
   const item=page.locator('[data-attachment-id="A1"]');await expect(item).toContainText('proof.png');

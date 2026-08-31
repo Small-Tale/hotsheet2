@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { focusQuickTicketComposerTitle } from '../components/quick-ticket-composer';
 import { clampProjectSidebarHeight, PROJECT_SIDEBAR_MAX_HEIGHT, PROJECT_SIDEBAR_MIN_HEIGHT } from './project-sidebar-demo';
 import { collectionTickets, resetTicketCollections } from './ticket-collections-demo';
-import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusComposerTitle, focusWorkspaceSearch, workspaceColumns, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
+import { composerCategory, composerTitle, createDemoTicket, filteredWorkspaceTickets, focusWorkspaceSearch, workspaceColumns, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
 
 describe('connected workspace demo state', () => {
   beforeEach(() => { resetTicketCollections(); workspaceSearchQuery.value = ''; workspaceSort.value = 'updated'; composerTitle.value = ''; composerCategory.value = 'task'; });
@@ -25,9 +26,9 @@ describe('connected workspace demo state', () => {
   it('focuses the live title control after every composer expansion', () => {
     const focus = vi.fn();
     const root = { querySelector: () => ({ focus }) } as unknown as ParentNode;
-    expect(focusComposerTitle(root)).toBe(true);
+    expect(focusQuickTicketComposerTitle(root)).toBe(true);
     expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });
-    expect(focusComposerTitle({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
+    expect(focusQuickTicketComposerTitle({ querySelector: () => null } as unknown as ParentNode)).toBe(false);
     expect(focusWorkspaceSearch(root)).toBe(true);
     expect(focus).toHaveBeenCalledTimes(2);
     expect(focus).toHaveBeenLastCalledWith({ preventScroll: true });

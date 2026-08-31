@@ -14,6 +14,7 @@ import { LucideIcon } from '../components/lucide-icon';
 import { MenuHeader } from '../components/menu-header';
 import { MenuItem } from '../components/menu-item';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
+import { focusQuickTicketComposerTitle } from '../components/quick-ticket-composer';
 import { type ResizableRegionEdge,resizeRegionFromPointer } from '../components/resizable-region';
 import { Select } from '../components/select';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
@@ -35,7 +36,7 @@ import { resetTicketRowDemo, TicketRowDemo, TicketRowSettings, ticketRowSettings
 import { ToolbarControlGroupDemo } from './toolbar-control-group-demo';
 import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
-import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusComposerTitle, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, inspectorTags, inspectorTitle, inspectorTitleDraft, inspectorTitleEditing, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, WorkspaceHeaderDemo,workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
+import { composerCategory, composerExpanded, composerTitle, createDemoTicket, focusWorkspaceSearch, inspectorCategory, inspectorOpen, inspectorPriority, inspectorStatus, inspectorTab, inspectorTags, inspectorTitle, inspectorTitleDraft, inspectorTitleEditing, PageHeaderDemo, QuickTicketComposerDemo, TicketInspectorDemo, WorkspaceHeaderDemo,workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
 const defaultDemo = 'tag-chip';
@@ -343,7 +344,7 @@ delegate(root, 'click', '[data-action="toggle-favorite"]', () => { recordCollect
 delegate(root, 'click', '[data-action="more-workspace-actions"]', () => { recordCollectionEvent('Workspace actions requested'); });
 delegate(root, 'click', '[data-action="expand-ticket-composer"]', () => {
   composerExpanded.value = true;
-  queueMicrotask(() => { focusComposerTitle(root); });
+  queueMicrotask(() => { focusQuickTicketComposerTitle(root); });
 });
 delegate(root, 'click', '[data-action="cancel-ticket-composer"]', () => { composerExpanded.value = false; composerTitle.value = ''; recordCollectionEvent('Ticket creation cancelled'); });
 delegate(root, 'input', '[name="new-ticket-title"]', (_event, target) => { composerTitle.value = (target as FormControl).value; });
