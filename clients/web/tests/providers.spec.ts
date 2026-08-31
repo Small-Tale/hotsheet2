@@ -249,6 +249,16 @@ test('live project visual review',async({page})=>{
   expect((await loaded).status()).toBe(200);
   expect(pageErrors).toEqual([]);
   await expect(page.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  if(process.env.HOTSHEET_LIVE_ATTACHMENT){
+    await page.getByRole('button',{name:'Attachments'}).click();
+    const uploaded=page.waitForResponse(response=>response.url().endsWith('/attachments')&&response.request().method()==='POST');
+    await page.getByLabel('Browse and add attachments').setInputFiles(process.env.HOTSHEET_LIVE_ATTACHMENT);
+    expect((await uploaded).status()).toBe(201);
+    const filename=process.env.HOTSHEET_LIVE_ATTACHMENT.split('/').at(-1)!;
+    await expect(page.locator('[data-component="ticket-attachments"]')).toContainText(filename);
+    await page.getByRole('button',{name:`Remove ${filename}`}).click();
+    await expect(page.locator('[data-component="ticket-attachments"]')).not.toContainText(filename);
+  }
   await page.screenshot({path:'/private/tmp/hotsheet-real-app.png',fullPage:true});
   await page.setViewportSize({width:900,height:760});
   await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible();

@@ -13,6 +13,7 @@ export interface FullTicket extends TicketRow {details:string;blocked_reason?:st
 export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number}
 export interface PermissionRequest {id:number;connection:string;tool:string;action:string;always_allow_supported?:boolean}
 export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}
+export const encodeAttachmentFilename=(filename:string)=>encodeURIComponent(filename);
 export class Api {
   constructor(private origin='',private secret=''){}
   private async request<T>(path:string,init:RequestInit={}):Promise<T>{const response=await fetch(`${this.origin}${path}`,{...init,headers:{'Content-Type':'application/json','X-Hotsheet-Secret':this.secret,...init.headers}});if(!response.ok)throw new Error((await response.json().catch(()=>null))?.error??`${response.status}`);return response.status===204?undefined as T:response.json()}
@@ -30,7 +31,7 @@ export class Api {
   createCheckoutTicket=(checkout:string,value:{title:string;details?:string;category:string;priority?:string;status?:string;up_next?:boolean;tags?:string[]})=>this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`,{method:'POST',body:JSON.stringify(prioritiesToWire(value))});
   updateCheckoutTicket=(checkout:string,id:string,value:Record<string,unknown>)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(prioritiesToWire(value))}).then(ticket=>({store:ticket.store,ticket}));
   deleteCheckoutNote=(checkout:string,id:string,noteId:string)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,{method:'DELETE'}).then(ticket=>({store:ticket.store,ticket}));
-  addCheckoutAttachment=(checkout:string,id:string,file:File)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments`,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream','X-Hotsheet-Filename':file.name},body:file}).then(ticket=>({store:ticket.store,ticket}));
+  addCheckoutAttachment=(checkout:string,id:string,file:File)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments`,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream','X-Hotsheet-Filename':encodeAttachmentFilename(file.name),'X-Hotsheet-Filename-Encoding':'percent'},body:file}).then(ticket=>({store:ticket.store,ticket}));
   checkoutAttachmentUrl=(checkout:string,id:string,attachmentId:string)=>`${this.origin}/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`;
   deleteCheckoutAttachment=(checkout:string,id:string,attachmentId:string)=>this.request<FullTicket&{store:string}>(this.checkoutAttachmentUrl(checkout,id,attachmentId).slice(this.origin.length),{method:'DELETE'}).then(ticket=>({store:ticket.store,ticket}));
   repositoryStatus=(checkout:string)=>this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);

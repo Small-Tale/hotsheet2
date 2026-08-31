@@ -244,7 +244,9 @@ hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-close github-main 42 --reason completed
 ```
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
-an `x-hotsheet-filename` header; the returned `ApiTicket.attachments` carries the
+an `x-hotsheet-filename` header. Browser clients percent-encode Unicode filenames and
+declare `x-hotsheet-filename-encoding: percent`; the server decodes them before normal
+filename sanitization. The returned `ApiTicket.attachments` carries the
 stable id, sanitized filename, and creation timestamp. Checkout-scoped clients use
 `POST /checkouts/{reference}/tickets/{id}/attachments`, which resolves the ticket's
 linked store and returns the same ticket plus its store identity.

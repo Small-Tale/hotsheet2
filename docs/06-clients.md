@@ -93,7 +93,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   dropped files before upload, so a macOS promised screenshot cannot disappear while
   `fetch` lazily reads it. Empty, unreadable, and short-read files are rejected with
   actionable guidance while valid siblings continue. Accepted files go to the selected
-  ticket's checkout-scoped attachment endpoint, then the client refreshes both the
+  ticket's checkout-scoped attachment endpoint. Unicode filenames—including the narrow
+  no-break space macOS inserts into screenshot names—are percent-encoded into an
+  ASCII-safe transport header and decoded by the server before sanitization. The client then refreshes both the
   selected ticket and project rows from the authoritative response.
   When the selected provider advertises attachment support, each attachment exposes
   icon actions to open, download, copy its checkout-qualified reference, or remove it;

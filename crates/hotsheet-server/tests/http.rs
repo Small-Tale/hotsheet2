@@ -431,6 +431,22 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .unwrap();
     let attached = body_json(app.clone().oneshot(attachment_request).await.unwrap()).await;
     assert_eq!(attached["attachments"][0]["filename"], "proof.txt");
+    let unicode_request = Request::builder()
+        .method("POST")
+        .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "Screenshot%20%E2%80%AFAM.png")
+        .header("x-hotsheet-filename-encoding", "percent")
+        .body(Body::from("unicode evidence"))
+        .unwrap();
+    let unicode_attached = body_json(app.clone().oneshot(unicode_request).await.unwrap()).await;
+    assert!(
+        unicode_attached["attachments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["filename"] == "Screenshot  AM.png")
+    );
     let attachment_id = attached["attachments"][0]["id"].as_str().unwrap();
     let downloaded = app
         .clone()
@@ -456,6 +472,19 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
             .oneshot(authed(
                 "DELETE",
                 &format!("/checkouts/combo/tickets/{slug}/attachments/{attachment_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(removed["attachments"].as_array().unwrap().len(), 1);
+    let unicode_attachment_id = removed["attachments"][0]["id"].as_str().unwrap();
+    let removed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/{unicode_attachment_id}"),
                 None,
             ))
             .await

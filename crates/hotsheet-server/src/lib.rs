@@ -1876,15 +1876,11 @@ async fn add_checkout_ticket_attachment(
 ) -> Result<(StatusCode, Json<ResolvedTicket>), ApiError> {
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    let filename = headers
-        .get("x-hotsheet-filename")
-        .and_then(|value| value.to_str().ok())
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "missing x-hotsheet-filename"))?;
+    let filename = attachment_filename(&headers)?;
     let (updated, _) =
         entry
             .store
-            .write_attachment(&ticket.id, Ulid::new(), now(), filename, &body)?;
+            .write_attachment(&ticket.id, Ulid::new(), now(), &filename, &body)?;
     state.changed_in(&entry, "attachment_added", &updated);
     Ok((
         StatusCode::CREATED,
@@ -2381,17 +2377,58 @@ async fn add_ticket_attachment(
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
     let entry = state.default_entry();
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    let filename = headers
+    let filename = attachment_filename(&headers)?;
+    let (updated, _) =
+        entry
+            .store
+            .write_attachment(&ticket.id, Ulid::new(), now(), &filename, &body)?;
+    state.changed_in(&entry, "attachment_added", &updated);
+    Ok((StatusCode::CREATED, Json(api_ticket(&entry, &updated)?)))
+}
+
+fn attachment_filename(headers: &HeaderMap) -> Result<String, ApiError> {
+    let raw = headers
         .get("x-hotsheet-filename")
         .and_then(|value| value.to_str().ok())
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "missing x-hotsheet-filename"))?;
-    let (updated, _) =
-        entry
-            .store
-            .write_attachment(&ticket.id, Ulid::new(), now(), filename, &body)?;
-    state.changed_in(&entry, "attachment_added", &updated);
-    Ok((StatusCode::CREATED, Json(api_ticket(&entry, &updated)?)))
+    if headers
+        .get("x-hotsheet-filename-encoding")
+        .and_then(|value| value.to_str().ok())
+        != Some("percent")
+    {
+        return Ok(raw.to_owned());
+    }
+    let bytes = raw.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let high = bytes
+                .get(index + 1)
+                .and_then(|value| (*value as char).to_digit(16));
+            let low = bytes
+                .get(index + 2)
+                .and_then(|value| (*value as char).to_digit(16));
+            let (Some(high), Some(low)) = (high, low) else {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid encoded attachment filename",
+                ));
+            };
+            decoded.push(((high << 4) | low) as u8);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid encoded attachment filename",
+        )
+    })
 }
 
 async fn close_ticket(
