@@ -26,6 +26,7 @@ export interface TicketRowProps {
   categoryShortLabel?: string;
   agentName?: string;
   updatedLabel?: string;
+  cutPending?: boolean;
 }
 
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
@@ -83,11 +84,13 @@ export function TicketRow(raw: TicketRowProps) {
         data-attachment-drop-target="true"
         data-selected={String(props.selected)}
         data-busy={String(props.busy)}
+        data-cut-pending={String(Boolean(props.cutPending))}
         data-action="select-ticket-row"
         aria-label={`${props.slug}: ${props.title}`}
         aria-selected={String(props.selected)}
         role="option"
         tabindex="0"
+        draggable="true"
       >
         {indicator && <span class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} aria-label={indicator.replace('-', ' ')}></span>}
         <div class="ticket-list-row__body">

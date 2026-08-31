@@ -79,6 +79,20 @@ test('keeps backlog and archived tickets out of the active Queue',async({page})=
   await page.getByRole('button',{name:/Archive/}).click();await expect(page.getByText('Archived ticket')).toBeVisible();await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);
 });
 
+test('undoes, redoes, copies, pastes, and drags ticket mutations through the real shell',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');await ticket.click();
+  await page.getByRole('button',{name:/Change status/}).click();await page.locator('[data-inspector-status="completed"]').click();
+  await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');
+  await page.keyboard.press('Control+z');await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Started');
+  await page.keyboard.press('Control+Shift+z');await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');
+  await page.keyboard.press('Control+c');await page.keyboard.press('Control+v');await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
+  await ticket.evaluate(node=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));document.querySelector<HTMLElement>('[data-ticket-drop-status="backlog"]')!.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer}))});
+  await expect(page.locator('[data-ticket-drop-status="backlog"]')).toHaveAttribute('data-dragging-ticket','true');
+  await page.locator('[data-ticket-drop-status="backlog"]').dispatchEvent('drop');
+  await page.getByRole('button',{name:/Backlog/}).click();await expect(page.getByText('Use real project tickets')).toBeVisible();
+});
+
 test('live project visual review',async({page})=>{
   test.skip(!process.env.HOTSHEET_LIVE_PROJECT,'opt-in local visual review');
   const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));

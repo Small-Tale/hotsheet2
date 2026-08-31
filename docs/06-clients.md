@@ -13,6 +13,20 @@ client holds authoritative state and **no client embeds `hotsheet-core`** — th
 all talk to a running `hotsheet-server`. Two clients on one project show the same
 thing because the server is the single authority.
 
+The web client keeps a separate undo/redo history per checkout. Inspector field
+edits, Up Next toggles, and sidebar drops are individual transactions. Undo changes
+only fields that still equal the local operation's after-state, so an interleaved
+remote update wins while untouched fields can still be restored; redo uses the same
+field-aware rule, and a new edit after undo clears redo.
+
+Following HS1, Cmd/Ctrl+C and X retain structured selected-ticket data while writing
+readable text to the system clipboard. Cmd/Ctrl+V copies the ticket content and uses
+` (Copy)`, ` (Copy 2)`, and so on for case-insensitive title collisions; cut originals
+are deleted only after destination creation succeeds. These global shortcuts yield to
+editable controls and dialogs. Dragging an unselected ticket moves only it, while
+dragging a selected ticket moves the selection; Queue, Backlog, and Archive sidebar
+destinations apply the corresponding status and visibly highlight during dragover.
+
 This is the clean client/service split the rewrite is chartered to create, made
 **absolute**: the server is a standalone process even for local use, so the client
 is only ever a view. Sharp contrast with HS1, where the server rendered HTML via a

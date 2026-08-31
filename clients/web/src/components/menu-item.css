@@ -1,5 +1,6 @@
 .menu-item { display: grid; width: 100%; min-height: 2.1rem; padding: .35rem .55rem; border: 0; border-radius: .5rem; color: #2c2e34; background: transparent; cursor: pointer; grid-template-columns: 1.125rem minmax(0, 1fr) auto; align-items: center; column-gap: .5rem; font: inherit; text-align: left; }
 .menu-item:hover { background: #eef2f7; }
+.menu-item[data-dragging-ticket="true"] { color: #1d4ed8; background: #dbeafe; outline: 2px solid #60a5fa; outline-offset: -2px; }
 .menu-item[aria-current="page"] { color: #1d4ed8; background: #dbeafe; font-weight: 650; }
 .menu-item:focus-visible { outline: 2px solid #3b82f6; outline-offset: 1px; }
 .menu-item__icon { display: grid; width: 1.125rem; height: 1.125rem; color: currentColor; place-items: center; }
