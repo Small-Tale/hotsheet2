@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { TicketList } from './ticket-list';
@@ -14,5 +17,11 @@ describe('TicketList', () => {
     expect(markup).toContain('aria-multiselectable="true"');
     expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(2);
     expect(markup).not.toContain('ticket-card');
+  });
+
+  it('overlaps only adjacent selected list-row borders into one seam', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
+    expect(css).toContain(':has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected)');
+    expect(css).toContain('margin-top: -1px');
   });
 });
