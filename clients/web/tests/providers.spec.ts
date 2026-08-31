@@ -126,7 +126,7 @@ test('focuses the ticket title every time the real composer expands',async({page
 });
 
 test('renders attachment identity from a selected real ticket',async({page})=>{
-  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();await page.getByRole('button',{name:'Attachments'}).click();
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();await expect(page.getByRole('button',{name:'Attachments, 1'}).locator('.ticket-inspector__tab-count')).toHaveText('1');await page.getByRole('button',{name:'Attachments, 1'}).click();
   const item=page.locator('[data-attachment-id="A1"]');await expect(item).toContainText('proof.png');
   await page.getByLabel('Browse and add attachments').setInputFiles({name:'new-proof.txt',mimeType:'text/plain',buffer:Buffer.from('proof')});
   await expect(page.locator('[data-attachment-id="A2"]')).toContainText('new-proof.txt');

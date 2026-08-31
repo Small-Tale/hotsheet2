@@ -36,4 +36,12 @@ describe('TicketInspector', () => {
     expect(editing).toContain('aria-label="Editing ticket"');
     expect(editing).toContain('aria-pressed disabled');
   });
+
+  it('shows a derived attachment count on the attachments segment', () => {
+    const markup = String(TicketInspector({ ...base, attachments: [{ id: 'one', name: 'one.png' }, { id: 'two', name: 'two.md' }] }));
+    expect(markup).toContain('aria-label="Attachments, 2"');
+    expect(markup).toContain('ticket-inspector__tab-count');
+    expect(markup).toContain('>2</span>');
+    expect(String(TicketInspector({ ...base, attachments: [] }))).not.toContain('ticket-inspector__tab-count');
+  });
 });

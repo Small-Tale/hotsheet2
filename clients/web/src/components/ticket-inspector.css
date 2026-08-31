@@ -13,4 +13,7 @@
 .ticket-inspector__tabs button[aria-current="page"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .14); }
 .ticket-inspector__tabs svg { width: .9rem; height: .9rem; }
 .ticket-inspector__tabs svg { flex: none; }
+.ticket-inspector__tab-count { display: inline-grid; min-width: 1rem; height: 1rem; padding: 0 .25rem; border-radius: 999px; color: #4f5665; background: #d4d8e0; place-items: center; font-size: .62rem; font-weight: 700; line-height: 1; }
+.ticket-inspector__tabs button[aria-current="page"] .ticket-inspector__tab-count { color: #1d4ed8; background: #dbeafe; }
 @container (max-width: 22rem) { .ticket-inspector__tabs button span { display: none; } }
+@container (max-width: 22rem) { .ticket-inspector__tabs button .ticket-inspector__tab-count { display: inline-grid; } }
