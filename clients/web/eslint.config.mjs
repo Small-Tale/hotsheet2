@@ -9,6 +9,11 @@ export default tseslint.config(
   {
     ignores: ['dist/**', 'node_modules/**', 'test-results/**', 'playwright-report/**', 'scripts/**', 'eslint.config.mjs'],
   },
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: 'error',
+    },
+  },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
@@ -38,29 +43,75 @@ export default tseslint.config(
   },
   kerfjs.configs.recommended,
   {
-    // The client predates this lint gate. Keep Glassbox's strict typed baseline while
-    // allowing its established null checks and DOM assertions until those modules are
-    // naturally tightened; correctness-oriented unsafe and promise rules stay active.
+    // High-volume legacy patterns require broader migrations. Every other strict
+    // typed and Kerf correctness rule remains enforced, including in new files.
     rules: {
-      '@typescript-eslint/no-base-to-string': 'off',
-      '@typescript-eslint/no-deprecated': 'off',
-      '@typescript-eslint/no-invalid-void-type': 'off',
-      '@typescript-eslint/no-misused-promises': 'off',
-      '@typescript-eslint/no-misused-spread': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
-      '@typescript-eslint/no-unnecessary-condition': 'off',
-      '@typescript-eslint/no-unnecessary-type-conversion': 'off',
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/prefer-promise-reject-errors': 'off',
       '@typescript-eslint/strict-boolean-expressions': 'off',
-      '@typescript-eslint/switch-exhaustiveness-check': 'off',
-      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
-      'kerfjs/no-raw-with-dynamic-arg': 'off',
       'kerfjs/prefer-attr-selector': 'off',
       'kerfjs/require-delegate-disposer': 'off',
+    },
+  },
+  {
+    // Typed request/response boundaries are intentionally narrowed by their callers.
+    files: ['src/api.ts'],
+    rules: {
+      '@typescript-eslint/no-invalid-void-type': 'off',
+      '@typescript-eslint/no-misused-spread': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      'import/first': 'off',
+    },
+  },
+  {
+    // These dev-only browser/file/CLI boundaries validate data at runtime. Keep the
+    // exceptions file-local so equivalent mistakes remain errors everywhere else.
+    files: ['src/dev-review/index.ts'],
+    rules: {
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/prefer-promise-reject-errors': 'off',
+    },
+  },
+  {
+    files: ['src/dev-review/server.ts'],
+    rules: {
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/no-unnecessary-type-conversion': 'off',
+    },
+  },
+  {
+    files: ['src/dev-server.ts'],
+    rules: { '@typescript-eslint/no-unsafe-return': 'off' },
+  },
+  {
+    files: ['src/main.tsx'],
+    rules: {
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/use-unknown-in-catch-callback-variable': 'off',
+      'simple-import-sort/imports': 'off',
+    },
+  },
+  {
+    files: ['src/project-bridge.ts'],
+    rules: { '@typescript-eslint/no-misused-spread': 'off' },
+  },
+  {
+    // MarkdownPreview's renderer escapes raw HTML and constrains URL schemes before
+    // the deliberately raw Kerf rendering boundary.
+    files: ['src/components/markdown-preview.tsx'],
+    rules: { 'kerfjs/no-raw-with-dynamic-arg': 'off' },
+  },
+  {
+    files: ['src/ux-demo/app-shell-demo.tsx'],
+    rules: { '@typescript-eslint/no-unnecessary-condition': 'off' },
+  },
+  {
+    files: ['src/ux-demo/main.tsx'],
+    rules: {
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/switch-exhaustiveness-check': 'off',
     },
   },
   {
@@ -72,6 +123,7 @@ export default tseslint.config(
       '@typescript-eslint/no-unsafe-call': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-deprecated': 'off',
       '@typescript-eslint/require-await': 'off',
     },
   },
