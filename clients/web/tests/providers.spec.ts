@@ -106,6 +106,10 @@ test('renders attachment identity from a selected real ticket',async({page})=>{
   await expect(page.locator('[data-attachment-id="A2"]')).toContainText('new-proof.txt');
   await page.locator('[data-component="ticket-inspector"]').evaluate(node=>{const transfer=new DataTransfer();transfer.items.add(new File(['drop proof'],'dropped-proof.txt',{type:'text/plain'}));node.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer}))});
   await expect(page.locator('[data-attachment-id="A3"]')).toContainText('dropped-proof.txt');
+  await page.locator('[data-component="ticket-inspector"]').evaluate(node=>{class PromisedFile extends File { override arrayBuffer(){return Promise.reject(new TypeError('backing file is unavailable'))} }const transfer=new DataTransfer();transfer.items.add(new PromisedFile(['pending'],'floating-capture.png',{type:'image/png'}));node.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer}))});
+  await expect(page.getByRole('alert')).toContainText('floating-capture.png');
+  await expect(page.getByRole('alert')).toContainText('Wait for it to appear on the desktop');
+  await expect(page.locator('[data-attachment-id="A4"]')).toHaveCount(0);
 });
 
 test('edits non-empty details on double click and empty details on one click',async({page})=>{

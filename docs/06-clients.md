@@ -79,8 +79,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   references). Full multi-source editing in the real Settings view is tracked separately;
   the initial view reports the active source paths and their storage model.
 
-  The real inspector's attachment surface sends browsed and dropped files directly to
-  the selected ticket's checkout-scoped attachment endpoint, then refreshes both the
+  The real inspector's attachment surface materializes ordinary-sized browsed and
+  dropped files before upload, so a macOS promised screenshot cannot disappear while
+  `fetch` lazily reads it. Empty, unreadable, and short-read files are rejected with
+  actionable guidance while valid siblings continue. Accepted files go to the selected
+  ticket's checkout-scoped attachment endpoint, then the client refreshes both the
   selected ticket and project rows from the authoritative response.
 
   The default `Queue` view is the active working set and intentionally excludes both
