@@ -127,11 +127,11 @@ test('edits non-empty details on double click and empty details on one click',as
   const preview=page.getByRole('button',{name:'Edit Ticket details'});
   await preview.dblclick();
   const source=page.getByRole('textbox',{name:'Ticket details'});await expect(source).toBeFocused();await source.fill('Carried into the larger editor');await page.getByRole('button',{name:'Open ticket reader'}).click();
-  const reader=page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/});await expect(reader).toBeVisible();await expect(reader.getByRole('textbox',{name:'Ticket details'})).toHaveValue('Carried into the larger editor');await expect(reader.getByRole('textbox',{name:'Feedback response'})).toBeVisible();await reader.getByRole('button',{name:'Cancel'}).click();await reader.getByRole('button',{name:'Close ticket reader'}).click();
-  await preview.dblclick();await source.fill('');await page.getByRole('button',{name:'Save'}).click();
+  const reader=page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/});await expect(reader).toBeVisible();await expect(reader.getByRole('textbox',{name:'Ticket details'})).toHaveValue('Carried into the larger editor');await expect(reader.getByRole('textbox',{name:'Feedback response'})).toBeVisible();await reader.getByRole('button',{name:'Close ticket reader'}).click();
+  await source.fill('');await source.blur();
   await expect(page.getByText('Click to add Markdown.')).toBeVisible();
   await page.getByRole('button',{name:'Edit Ticket details'}).click();
-  await expect(source).toBeFocused();await source.fill('Added from an empty ticket');await page.getByRole('button',{name:'Save'}).click();
+  await expect(source).toBeFocused();await source.fill('Added from an empty ticket');await source.blur();
   await expect(page.locator('[data-component="markdown-preview"]')).toContainText('Added from an empty ticket');
 });
 
@@ -186,7 +186,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   await ticket.evaluate(node=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));document.querySelector<HTMLElement>('[data-ticket-drop-status="backlog"]')!.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer}))});
   await expect(page.locator('[data-ticket-drop-status="backlog"]')).toHaveAttribute('data-dragging-ticket','true');
   await page.locator('[data-ticket-drop-status="backlog"]').dispatchEvent('drop');
-  await page.getByRole('button',{name:/Backlog/}).click();await expect(page.locator('[data-component="ticket-list-row"]',{hasText:'Use real project tickets'})).toBeVisible();
+  await page.locator('[data-ticket-drop-status="backlog"]').click();await expect(page.locator('[data-component="ticket-list-row"]',{hasText:'Use real project tickets'})).toBeVisible();
 });
 
 test('live project visual review',async({page})=>{
