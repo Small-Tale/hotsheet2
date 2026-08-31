@@ -107,11 +107,11 @@ export function TicketRow(raw: TicketRowProps) {
           <div class="ticket-list-row__content">
             <div class="ticket-list-row__first-line">
               <div class="ticket-list-row__identity">
+                <span class="ticket-list-row__updated">{props.updatedLabel}</span>
                 <span class="ticket-list-row__slug">{props.slug}</span>
                 <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} class="ticket-list-row__priority-icon" /></span>
                 <strong title={props.title}>{props.title}</strong>
               </div>
-              <span class="ticket-list-row__updated">{props.updatedLabel}</span>
             </div>
             <div class="ticket-list-row__metadata">
               {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>}

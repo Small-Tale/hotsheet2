@@ -258,8 +258,8 @@ selection where sensible.
   inline formatting flow, with an explicit two-line limit in lists and three-line
   limit in board columns. The flow is ordered slug → priority → title so
   bounded priority remains visible before an arbitrarily long title (the slug is a
-  stable-width inline block), while updated time is
-  pinned right and baseline-aligned with the first line. A quieter, vertically
+  stable-width inline block). Updated time is the first item in that identity flow and
+  floats right, allowing later lines of a long title to use the space beneath it. A quieter, vertically
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or
   collapsing metadata at narrow widths. It also includes blue selection, keyboard

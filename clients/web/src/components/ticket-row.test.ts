@@ -69,6 +69,18 @@ describe('TicketRow', () => {
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 3\.9em/);
   });
 
+  it('floats the updated time first in the identity flow so long titles can wrap beneath it', () => {
+    const markup = String(TicketRow({ slug: 'HS2-FLOW', title: 'A long title that flows beneath its timestamp', updatedLabel: 'Now', status: 'started', priority: 'default', category: 'task', tags: [] }));
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    const identityStart = markup.indexOf('class="ticket-list-row__identity"');
+    const updated = markup.indexOf('class="ticket-list-row__updated"');
+    const slug = markup.indexOf('class="ticket-list-row__slug"');
+    expect(identityStart).toBeGreaterThanOrEqual(0);
+    expect(identityStart).toBeLessThan(updated);
+    expect(updated).toBeLessThan(slug);
+    expect(css).toMatch(/ticket-list-row__updated[^}]*float: right/);
+  });
+
   it('shows a blocked pill immediately after status metadata', () => {
     const markup = String(TicketRow({ slug: 'HS2-BLOCK', title: 'Blocked row', status: 'started', priority: 'high', category: 'bug', tags: [], blocked: true }));
     expect(markup).toContain('data-component="blocked-badge"');

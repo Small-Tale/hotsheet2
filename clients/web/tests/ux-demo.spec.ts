@@ -327,17 +327,26 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-lucide="minus"]')).toHaveCount(1);
   await tags.fill('client, regression, server, ux');
   await row.evaluate((node: HTMLElement) => { node.style.width = '320px'; });
-  const [rowBox, timeBox, slugBox, identityBox] = await Promise.all([row.boundingBox(), row.locator('.ticket-list-row__updated').boundingBox(), row.locator('.ticket-list-row__slug').boundingBox(), row.locator('.ticket-list-row__identity').boundingBox()]);
+  const [rowBox, timeBox, slugBox, identityBox, titleLineBoxes] = await Promise.all([
+    row.boundingBox(),
+    row.locator('.ticket-list-row__updated').boundingBox(),
+    row.locator('.ticket-list-row__slug').boundingBox(),
+    row.locator('.ticket-list-row__identity').boundingBox(),
+    row.locator('.ticket-list-row__identity strong').evaluate(node => [...node.getClientRects()].map(rect => ({ x: rect.x, width: rect.width }))),
+  ]);
   expect(rowBox).not.toBeNull(); expect(timeBox).not.toBeNull(); expect(slugBox).not.toBeNull(); expect(identityBox).not.toBeNull();
   expect(timeBox!.x + timeBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width);
   expect(Math.abs(timeBox!.y + timeBox!.height - (slugBox!.y + slugBox!.height))).toBeLessThanOrEqual(3);
   expect(identityBox!.height).toBeLessThanOrEqual(43);
   await expect(row.locator('.ticket-list-row__identity')).toHaveCSS('display', 'block');
+  await expect(row.locator('.ticket-list-row__updated')).toHaveCSS('float', 'right');
   await expect(row.locator('.ticket-list-row__slug')).toHaveCSS('display', 'inline-block');
   await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('display', 'inline');
   expect(await row.locator('.ticket-list-row__identity > *').evaluateAll(elements => elements.map(element => element.className || element.tagName.toLowerCase()))).toEqual([
-    'ticket-list-row__slug', 'ticket-list-row__priority', 'strong',
+    'ticket-list-row__updated', 'ticket-list-row__slug', 'ticket-list-row__priority', 'strong',
   ]);
+  expect(titleLineBoxes.length).toBeGreaterThan(1);
+  expect(titleLineBoxes.at(-1)!.x + titleLineBoxes.at(-1)!.width).toBeGreaterThan(timeBox!.x);
   await expect(row.locator('[data-component="tag-chip"]')).toHaveCount(4);
   for (const chip of await row.locator('[data-component="tag-chip"]').all()) await expect(chip).toBeVisible();
 });
