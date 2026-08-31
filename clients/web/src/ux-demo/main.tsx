@@ -148,6 +148,7 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
 
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
+  const menuTicket = contextMenu.value?.ticketSlug ? collectionTickets.value.find(ticket => ticket.slug === contextMenu.value?.ticketSlug) : undefined;
   const hasSettings = selected.id === 'tag-chip' || selected.id === 'status-badge' || selected.id === 'ticket-row';
   return (
     <main class={settingsOpen.value ? 'demo-shell demo-shell--settings-open' : 'demo-shell'}>
@@ -165,7 +166,7 @@ function DemoApp() {
         {selected.id === 'tag-chip' ? <TagChipSettings /> : selected.id === 'status-badge' ? <StatusBadgeSettings /> : selected.id === 'ticket-row' ? <TicketRowSettings /> : <p>This demo has no adjustable settings.</p>}
       </aside>}
       {hasSettings && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
-      {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} />}
+      {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} category={menuTicket?.category} priority={menuTicket?.priority} status={menuTicket?.status} />}
       {tabContextMenu.value && <ProjectTabContextMenu {...tabContextMenu.value} />}
     </main>
   );
@@ -499,6 +500,23 @@ delegate(root, 'dblclick', '[data-action="select-ticket-row"]', (event, target) 
   if (usesCollectionState()) selectCollectionTicket((target as HTMLElement).dataset.ticketSlug!);
   recordCollectionEvent(`Ticket reader opened for ${(target as HTMLElement).dataset.ticketSlug}`);
   selectDemo('ticket-reader');
+});
+delegate(root, 'click', '[data-context-field]', (event, target) => {
+  event.stopPropagation();
+  const field = (target as HTMLElement).dataset.contextField as 'category' | 'priority' | 'status';
+  const value = (target as HTMLElement).dataset.contextValue!;
+  if (usesCollectionState() && contextMenu.value?.ticketSlug) {
+    const selected = new Set(collectionTickets.value.filter(ticket => ticket.selected).map(ticket => ticket.slug));
+    if (!selected.size) selected.add(contextMenu.value.ticketSlug);
+    collectionTickets.value = collectionTickets.value.map(ticket => {
+      if (!selected.has(ticket.slug)) return ticket;
+      if (field === 'category') return { ...ticket, category: value };
+      if (field === 'priority') return { ...ticket, priority: value as typeof ticket.priority };
+      return { ...ticket, status: value as typeof ticket.status };
+    });
+    recordCollectionEvent(`${field} changed to ${value} for ${selected.size} ticket${selected.size === 1 ? '' : 's'}`);
+  }
+  contextMenu.value = undefined;
 });
 delegate(root, 'click', '[data-context-action]', (_event, target) => {
   const action = (target as HTMLElement).dataset.contextAction!;

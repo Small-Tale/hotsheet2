@@ -1,10 +1,14 @@
+import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ticket-row-context-menu.css';
 
 import { Archive, CircleDot, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Trash2 } from 'lucide';
 
+import { DEFAULT_TICKET_CATEGORIES } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
+import { statusPresentation, type TicketStatus } from './status-badge';
+import { getPriorityPresentation, type TicketPriority } from './ticket-row';
 
 export const TICKET_CONTEXT_ACTIONS: ReadonlyArray<{ action: string; icon: IconNode; iconName: string; danger?: boolean }> = [
   { action: 'Open ticket', icon: SquareArrowOutUpRight, iconName: 'square-arrow-out-up-right' },
@@ -25,12 +29,31 @@ function ContextItem({ item }: { item: typeof TICKET_CONTEXT_ACTIONS[number] }) 
   </wa-dropdown-item>;
 }
 
-export function TicketRowContextMenu({ x, y }: { x: number; y: number }) {
+const PRIORITIES: readonly { value: TicketPriority; label: string }[] = [{ value: 'urgent', label: 'Urgent' }, { value: 'high', label: 'High' }, { value: 'default', label: 'Default' }, { value: 'low', label: 'Low' }];
+const STATUSES: readonly TicketStatus[] = ['not_started', 'started', 'completed', 'verified'];
+
+function MetadataSubmenu({ field, label, icon, iconName, choices, selected }: { field: 'category' | 'priority' | 'status'; label: string; icon: IconNode; iconName: string; choices: readonly { value: string; label: string; icon: IconNode; iconName: string; color?: string }[]; selected?: string }) {
+  return <wa-dropdown-item>
+    <span slot="icon" class="ticket-context-menu__icon"><LucideIcon icon={icon} name={iconName} /></span>{label}
+    {choices.map(choice => <wa-dropdown-item slot="submenu" type="checkbox" checked={choice.value === selected} data-context-field={field} data-context-value={choice.value} value={choice.value}><span slot="icon" class="ticket-context-menu__icon" style={choice.color ? `color:${choice.color}` : undefined}><LucideIcon icon={choice.icon} name={choice.iconName} /></span>{choice.label}</wa-dropdown-item>)}
+  </wa-dropdown-item>;
+}
+
+export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean }
+export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true }: TicketRowContextMenuProps) {
+  const priorityChoices = PRIORITIES.map(choice => { const option = getPriorityPresentation(choice.value); return { ...choice, icon: option.icon, iconName: option.name, color: option.color }; });
+  const statusChoices = STATUSES.map(value => ({ value, ...statusPresentation(value) }));
   return <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${x}px;top:${y}px`}>
-    <ContextItem item={TICKET_CONTEXT_ACTIONS[0]} />
-    <wa-divider></wa-divider>
-    {TICKET_CONTEXT_ACTIONS.slice(1, 5).map(item => <ContextItem item={item} />)}
-    <wa-divider></wa-divider>
-    {TICKET_CONTEXT_ACTIONS.slice(5).map(item => <ContextItem item={item} />)}
+    <wa-dropdown open placement="bottom-start" distance={0}>
+      <span slot="trigger" class="ticket-context-menu__anchor" aria-hidden="true"></span>
+      <ContextItem item={TICKET_CONTEXT_ACTIONS[0]} />
+      <wa-divider></wa-divider>
+      <MetadataSubmenu field="category" label="Change category" icon={Shapes} iconName="shapes" choices={DEFAULT_TICKET_CATEGORIES} selected={category} />
+      <MetadataSubmenu field="priority" label="Change priority" icon={Gauge} iconName="gauge" choices={priorityChoices} selected={priority} />
+      <MetadataSubmenu field="status" label="Change status" icon={CircleDot} iconName="circle-dot" choices={statusChoices} selected={status} />
+      {upNextEligible && <ContextItem item={TICKET_CONTEXT_ACTIONS[4]} />}
+      <wa-divider></wa-divider>
+      {TICKET_CONTEXT_ACTIONS.slice(5).map(item => <ContextItem item={item} />)}
+    </wa-dropdown>
   </div>;
 }

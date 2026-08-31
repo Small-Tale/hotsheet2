@@ -253,8 +253,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('color', 'rgb(156, 163, 175)');
   await expect(row.locator('.ticket-list-row__category--label')).toHaveCSS('width', '32px');
   await expect(row).toContainText('regression');
-  await expect(row.locator('[data-lucide="star"]')).toHaveCount(1);
-  await expect(row.locator('[data-action="toggle-row-up-next"]')).not.toHaveClass(/active/);
+  await expect(row.locator('[data-lucide="star"]')).toHaveCount(0);
+  await expect(row.locator('[data-action="toggle-row-up-next"]')).toHaveCount(0);
   await expect(row).toContainText('Codex');
   await expect(row).toContainText('Now');
   await expect(row).toHaveAttribute('data-selected', 'true');
@@ -313,7 +313,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const menu = page.getByRole('menu', { name: 'Ticket actions' });
   await expect(menu).toBeVisible();
   const menuItems = menu.locator('wa-dropdown-item');
-  await expect(menuItems).toHaveCount(9);
+  await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(9);
+  await expect(menuItems).toHaveCount(23);
   expect(await menuItems.evaluateAll(items => items.every(item => item.querySelector('[data-lucide]') !== null))).toBe(true);
   await expect(row).toHaveAttribute('data-selected', 'true');
   await menu.getByText('Toggle Up Next', { exact: true }).click();
@@ -715,6 +716,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'low'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
+  const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
+  await star.click();
+  await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
   const statusTrigger = inspector.locator('button.status-badge[aria-label="Change status, Started"]');
   await expect(statusTrigger.locator('[data-component="status-badge"]')).toHaveCount(0);
   await statusTrigger.click();
@@ -760,9 +764,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
   await expect(inspector.locator('[data-attachment-id]')).toHaveCount(2);
   await expect(inspector.getByText('2 attachments total')).toBeVisible();
-  const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
-  await star.click();
-  await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
+  await expect(inspector.locator('[data-action="toggle-inspector-up-next"]')).toHaveCount(0);
   await inspector.getByRole('button', { name: 'Hide inspector' }).click();
   await expect(inspector).toHaveCount(0);
   await page.getByRole('button', { name: 'Open ticket inspector' }).click();
