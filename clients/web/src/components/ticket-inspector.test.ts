@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { TicketInspector } from './ticket-inspector';
@@ -43,5 +46,12 @@ describe('TicketInspector', () => {
     expect(markup).toContain('ticket-inspector__tab-count');
     expect(markup).toContain('>2</span>');
     expect(String(TicketInspector({ ...base, attachments: [] }))).not.toContain('ticket-inspector__tab-count');
+  });
+
+  it('keeps attachment names shrinkable while preserving the action group', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(css).toContain('.ticket-inspector__attachment { display: flex; width: 100%; min-width: 0;');
+    expect(css).toContain('span:nth-child(2) { min-width: 0; overflow: hidden; flex: 1;');
+    expect(css).toContain('.ticket-inspector__attachment-actions { display: inline-flex; margin-left: auto; flex: none;');
   });
 });
