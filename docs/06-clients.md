@@ -123,7 +123,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Shift-click selects a contiguous range. Board ranges are deliberately column-local;
   Shift-clicking into another column becomes a single selection. Clicking unused list
   or column space clears the selection. Every selected row uses the same blue border
-  and background component state in list and column layouts.
+  and background component state in list and column layouts. The inspector remains
+  available in both layouts: it shows ticket details only for exactly one selection,
+  otherwise showing the HS1-style zero- or multi-selection guidance placeholder.
 
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it
