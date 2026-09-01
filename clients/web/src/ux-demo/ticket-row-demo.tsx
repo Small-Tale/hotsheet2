@@ -14,6 +14,7 @@ export const ticketRowSettings = {
   upNext: signal(true),
   blocked: signal(false),
   needsReview: signal(false),
+  feedbackNeeded: signal(false),
   selected: signal(false),
   busy: signal(true),
   categoryIcon: signal('sparkles'),
@@ -32,6 +33,7 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.upNext.value = true;
   ticketRowSettings.blocked.value = false;
   ticketRowSettings.needsReview.value = false;
+  ticketRowSettings.feedbackNeeded.value = false;
   ticketRowSettings.selected.value = false;
   ticketRowSettings.busy.value = true;
   ticketRowSettings.categoryIcon.value = 'sparkles';
@@ -41,14 +43,14 @@ export function resetTicketRowDemo(root?: ParentNode): void {
   ticketRowSettings.event.value = 'No actions yet';
   if (root) syncSettingsControls(root, 'ticket-list-row', {
     values: { title: ticketRowSettings.title.value, status: ticketRowSettings.status.value, priority: ticketRowSettings.priority.value, category: ticketRowSettings.category.value, tags: ticketRowSettings.tags.value, 'category-icon': ticketRowSettings.categoryIcon.value, 'category-color': ticketRowSettings.categoryColor.value, agent: ticketRowSettings.agentName.value, updated: ticketRowSettings.updatedLabel.value },
-    checked: { 'up-next': ticketRowSettings.upNext.value, blocked: ticketRowSettings.blocked.value, 'needs-review': ticketRowSettings.needsReview.value, selected: ticketRowSettings.selected.value, busy: ticketRowSettings.busy.value },
+    checked: { 'up-next': ticketRowSettings.upNext.value, blocked: ticketRowSettings.blocked.value, 'needs-review': ticketRowSettings.needsReview.value, 'feedback-needed': ticketRowSettings.feedbackNeeded.value, selected: ticketRowSettings.selected.value, busy: ticketRowSettings.busy.value },
   });
 }
 
 export function TicketRowDemo() {
   return <section class="component-stage component-stage--row" aria-label="TicketRow demo">
     <div class="component-stage__canvas component-stage__canvas--row" role="listbox" aria-label="Example ticket list">
-      {TicketRow({ slug: 'HS2-D3M0', title: ticketRowSettings.title.value, status: ticketRowSettings.status.value, priority: ticketRowSettings.priority.value, category: ticketRowSettings.category.value, tags: ticketRowSettings.tags.value.split(','), upNext: ticketRowSettings.upNext.value, blocked: ticketRowSettings.blocked.value, needsReview: ticketRowSettings.needsReview.value, selected: ticketRowSettings.selected.value, busy: ticketRowSettings.busy.value, categoryIcon: ticketRowSettings.categoryIcon.value, categoryColor: ticketRowSettings.categoryColor.value, agentName: ticketRowSettings.agentName.value, updatedLabel: ticketRowSettings.updatedLabel.value })}
+      {TicketRow({ slug: 'HS2-D3M0', title: ticketRowSettings.title.value, status: ticketRowSettings.status.value, priority: ticketRowSettings.priority.value, category: ticketRowSettings.category.value, tags: ticketRowSettings.tags.value.split(','), upNext: ticketRowSettings.upNext.value, blocked: ticketRowSettings.blocked.value, needsReview: ticketRowSettings.needsReview.value, feedbackNeeded: ticketRowSettings.feedbackNeeded.value, selected: ticketRowSettings.selected.value, busy: ticketRowSettings.busy.value, categoryIcon: ticketRowSettings.categoryIcon.value, categoryColor: ticketRowSettings.categoryColor.value, agentName: ticketRowSettings.agentName.value, updatedLabel: ticketRowSettings.updatedLabel.value })}
     </div>
     <p class="component-stage__event" aria-live="polite">{ticketRowSettings.event}</p>
     <p class="component-stage__guidance">The full row is the selection target. Metadata stays scannable while tags and transient AI activity remain secondary.</p>
@@ -69,6 +71,7 @@ export function TicketRowSettings() {
     <wa-checkbox name="up-next" checked={ticketRowSettings.upNext.value}>Up Next</wa-checkbox>
     <wa-checkbox name="blocked" checked={ticketRowSettings.blocked.value}>Blocked</wa-checkbox>
     <wa-checkbox name="needs-review" checked={ticketRowSettings.needsReview.value}>Needs review</wa-checkbox>
+    <wa-checkbox name="feedback-needed" checked={ticketRowSettings.feedbackNeeded.value}>Feedback needed</wa-checkbox>
     <wa-checkbox name="selected" checked={ticketRowSettings.selected.value}>Selected</wa-checkbox>
     <wa-checkbox name="busy" checked={ticketRowSettings.busy.value}>AI working</wa-checkbox>
     <wa-button type="button" data-action="reset-settings">Reset</wa-button>

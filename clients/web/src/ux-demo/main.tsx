@@ -431,6 +431,7 @@ delegate(root, 'change', '[data-settings="ticket-list-row"] [name]', (_event, ta
     case 'up-next': ticketRowSettings.upNext.value = control.checked; break;
     case 'blocked': ticketRowSettings.blocked.value = control.checked; break;
     case 'needs-review': ticketRowSettings.needsReview.value = control.checked; break;
+    case 'feedback-needed': ticketRowSettings.feedbackNeeded.value = control.checked; break;
     case 'selected': ticketRowSettings.selected.value = control.checked; break;
     case 'busy': ticketRowSettings.busy.value = control.checked; break;
   }

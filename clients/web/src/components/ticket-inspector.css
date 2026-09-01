@@ -8,6 +8,8 @@
 .ticket-inspector__header button, .ticket-inspector__tabs button { border: 0; color: #686a73; background: transparent; cursor: pointer; }
 .ticket-inspector__star--active { color: var(--ticket-state-up-next) !important; }
 .ticket-inspector__star--active svg { fill: currentColor; }
+.ticket-inspector__feedback { display: flex; align-items: center; gap: .4rem; margin: 0 1rem .75rem; padding: .45rem .6rem; border: 1px solid #f0c86a; border-radius: .5rem; color: #8a5a08; background: #fff9e8; font-size: .8rem; font-weight: 600; }
+.ticket-inspector__feedback-icon { flex: none; width: 1rem; height: 1rem; }
 .ticket-inspector__tabs { display: grid; margin: 0 1rem; padding: .2rem; border-radius: .55rem; background: #e7e9ed; grid-template-columns: repeat(3, 1fr); }
 .ticket-inspector__tabs button { display: flex; min-height: 2.25rem; border-radius: .4rem; font-size: .72rem; align-items: center; justify-content: center; gap: .35rem; }
 .ticket-inspector__tabs button[aria-current="page"] { color: #1d4ed8; background: #fff; box-shadow: 0 1px 3px rgba(35, 32, 48, .14); }

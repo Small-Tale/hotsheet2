@@ -10,13 +10,13 @@
 
 use std::path::{Path, PathBuf};
 
-use hotsheet_model::{Ticket, Ulid, parse_file};
+use hotsheet_model::{NoteKind, Ticket, Ulid, parse_file};
 use hotsheet_ticketing::{FsStore, SortKey, TicketQuery};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -35,6 +35,7 @@ CREATE TABLE tickets (
   duplicate_of    TEXT,
   closed_at       TEXT,
   up_next         INTEGER NOT NULL DEFAULT 0,
+  feedback_needed INTEGER NOT NULL DEFAULT 0,
   tags_json       TEXT NOT NULL DEFAULT '[]',
   blocked_by_json TEXT NOT NULL DEFAULT '[]',
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
@@ -194,6 +195,8 @@ impl Index {
         content_hash: &str,
     ) -> Result<(), IndexError> {
         let id = t.id.to_string();
+        let feedback_needed =
+            t.notes.iter().any(|n| n.kind == NoteKind::FeedbackNeeded) as i64;
         let tags_json = serde_json::to_string(&t.tags).unwrap_or_else(|_| "[]".into());
         let blocked_json = serde_json::to_string(
             &t.blocked_by
@@ -207,8 +210,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,\
              created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -218,7 +221,7 @@ impl Index {
              completed_at=excluded.completed_at,verified_at=excluded.verified_at,claimed_by=excluded.claimed_by,\
              claim_lease_expires_at=excluded.claim_lease_expires_at,worker_label=excluded.worker_label,\
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
-             content_hash=excluded.content_hash",
+             content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -227,7 +230,7 @@ impl Index {
                 ts(&t.closed_at), t.up_next as i64, tags_json, blocked_json,
                 t.created_at.as_str(), t.updated_at.as_str(), ts(&t.completed_at), ts(&t.verified_at),
                 t.claimed_by, ts(&t.claim_lease_expires_at), t.worker_label, t.claim_count,
-                file_path, content_hash,
+                file_path, content_hash, feedback_needed,
             ],
         )?;
 
@@ -631,7 +634,8 @@ impl Index {
         let sql = format!(
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
-             t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.worker_label,t.claim_count \
+             t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.worker_label,t.claim_count,\
+             t.feedback_needed \
              FROM {from} WHERE {} ORDER BY {order}, t.id{limit}",
             wheres.join(" AND ")
         );
@@ -652,6 +656,7 @@ impl Index {
                     priority: r.get(5)?,
                     status: r.get(6)?,
                     up_next: r.get::<_, i64>(7)? != 0,
+                    feedback_needed: r.get::<_, i64>(20)? != 0,
                     tags: json_vec(r.get::<_, String>(8)?),
                     blocked_by: json_vec(r.get::<_, String>(9)?),
                     created_at: r.get(10)?,

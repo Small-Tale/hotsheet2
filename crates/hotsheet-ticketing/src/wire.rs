@@ -194,6 +194,10 @@ pub struct TicketRow {
     pub priority: Option<String>,
     pub status: Option<String>,
     pub up_next: bool,
+    /// True when the ticket carries at least one `feedback_needed` note — it is waiting
+    /// on the user. Computed here (a compact row has no notes) so a list can show a
+    /// ticket-level indicator without loading every ticket's notes.
+    pub feedback_needed: bool,
     pub tags: Vec<String>,
     pub blocked_by: Vec<String>,
     pub created_at: Option<String>,
@@ -225,6 +229,7 @@ impl From<&Ticket> for TicketRow {
             priority: Some(enum_str(&t.priority)),
             status: Some(enum_str(&t.status)),
             up_next: t.up_next,
+            feedback_needed: t.notes.iter().any(|n| n.kind == NoteKind::FeedbackNeeded),
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             created_at: Some(t.created_at.as_str().to_string()),
@@ -336,6 +341,35 @@ mod tests {
         assert_eq!(row.category.as_deref(), Some("bug"));
         assert!(row.up_next);
         assert!(row.slug.starts_with("HS-"));
+    }
+
+    #[test]
+    fn feedback_needed_row_flag_tracks_a_feedback_needed_note() {
+        use hotsheet_model::Note;
+        let note = |kind| Note {
+            id: Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
+            kind,
+            created_at: Timestamp::new("2026-08-20T00:00:00Z"),
+            edited_at: Timestamp::new("2026-08-20T00:00:00Z"),
+            text: "please confirm".into(),
+        };
+
+        // No notes → not waiting on the user.
+        assert!(!TicketRow::from(&ticket()).feedback_needed);
+
+        // A regular note alone doesn't raise the flag.
+        let mut regular = ticket();
+        regular.notes.push(note(NoteKind::Regular));
+        assert!(!TicketRow::from(&regular).feedback_needed);
+
+        // A feedback_needed note does — including on the compact list row and its JSON.
+        let mut waiting = ticket();
+        waiting.notes.push(note(NoteKind::Regular));
+        waiting.notes.push(note(NoteKind::FeedbackNeeded));
+        assert!(TicketRow::from(&waiting).feedback_needed);
+        assert!(TicketRow::compact(&waiting).feedback_needed);
+        let json = serde_json::to_value(TicketRow::compact(&waiting)).unwrap();
+        assert_eq!(json["feedback_needed"], true);
     }
 
     #[test]

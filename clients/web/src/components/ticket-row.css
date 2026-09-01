@@ -24,6 +24,8 @@
 .ticket-list-row__metadata, .ticket-list-row__tags { display: flex; align-items: center; min-width: 0; flex-wrap: wrap; gap: .4rem; color: #73747d; font-size: .74rem; }
 .ticket-list-row__slug { display: inline-block; min-width: 5em; margin-right: .5em; color: #4f5058; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; }
 .ticket-list-row__updated { float: right; margin-left: .75rem; color: #92949d; font-size: .7rem; line-height: 1.3rem; white-space: nowrap; }
+.ticket-list-row__feedback { display: inline-flex; align-items: center; gap: .25rem; flex: none; padding: .05rem .4rem; border: 1px solid #f0c86a; border-radius: 999px; color: #8a5a08; background: #fff9e8; font-size: .68rem; font-weight: 700; white-space: nowrap; }
+.ticket-list-row__feedback-icon { width: .8rem; height: .8rem; }
 .ticket-list-row__owner { display: inline-flex; align-items: center; gap: .3rem; color: #555762; font-size: .72rem; white-space: nowrap; }
 .ticket-list-row__owner--active::before { content: ''; width: .42rem; height: .42rem; border-radius: 50%; background: #22a559; }
 .ticket-list-row__up-next { position: relative; z-index: 2; display: inline-grid; flex: none; width: 1.5rem; height: 1.5rem; margin: -.25rem 0; padding: 0; border: 0; appearance: none; color: #a6a8b0; background: transparent; cursor: pointer; font: inherit; outline: none; place-items: center; }

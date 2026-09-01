@@ -243,6 +243,14 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await needsReview.click();
   await selected.click();
   await busy.click();
+  const feedbackNeeded = inspector.locator('wa-checkbox[name="feedback-needed"]');
+  await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
+  await feedbackNeeded.click();
+  await expect(row.locator('.ticket-list-row__feedback')).toContainText('Feedback');
+  await expect(row.locator('.ticket-list-row__feedback [data-lucide="circle-alert"]')).toHaveCount(1);
+  await feedbackNeeded.click();
+  await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
+  await feedbackNeeded.click();
   await expect(row).toContainText('Fix selection synchronization');
   await expect(row).toContainText('Verified');
   await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
@@ -1362,4 +1370,19 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeHidden();
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toBeHidden();
   await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
+});
+
+test('projects the feedback-needed indicator through list and board compositions', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-list');
+  const listFeedback = page.getByRole('listbox', { name: 'Example ticket list' })
+    .locator('[data-ticket-slug="HS2-R76MMW"] .ticket-list-row__feedback');
+  await expect(listFeedback).toContainText('Feedback');
+  await expect(listFeedback.locator('[data-lucide="circle-alert"]')).toHaveCount(1);
+  // A ticket without a feedback_needed note shows no indicator.
+  await expect(page.getByRole('listbox', { name: 'Example ticket list' })
+    .locator('[data-ticket-slug="HS2-RPVFA4"] .ticket-list-row__feedback')).toHaveCount(0);
+
+  await page.goto('/ux-demo?component=ticket-board');
+  await expect(page.getByRole('listbox', { name: 'Example status board' })
+    .locator('[data-ticket-slug="HS2-R76MMW"] .ticket-list-row__feedback')).toContainText('Feedback');
 });

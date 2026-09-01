@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { TicketRow } from './api';
 import { projectTicketPatch, ticketRowFromFull } from './ticket-mutation';
 
-const row: TicketRow = { connection_id:'git',native_id:'1',qualified_id:'git:1',id:'1',slug:'HS2-1',title:'Before',status:'not_started',up_next:false,tags:[],blocked_by:[],claim_count:0 };
+const row: TicketRow = { connection_id:'git',native_id:'1',qualified_id:'git:1',id:'1',slug:'HS2-1',title:'Before',status:'not_started',up_next:false,feedback_needed:false,tags:[],blocked_by:[],claim_count:0 };
 
 describe('ticket mutation projection', () => {
   it('projects renderable fields immediately without leaking command-only fields', () => {

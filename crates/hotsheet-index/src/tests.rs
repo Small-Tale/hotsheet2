@@ -358,6 +358,50 @@ fn upsert_updates_the_hash_and_delete_removes() {
 }
 
 #[test]
+fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
+    use hotsheet_model::NoteKind;
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let now = Timestamp::new("2026-08-19T01:00:00Z");
+
+    let row = |ix: &Index| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == id.to_string())
+            .unwrap()
+    };
+
+    // No feedback_needed note yet.
+    assert!(!row(&ix).feedback_needed);
+
+    // Add a feedback_needed note and reconcile: the flag flips on.
+    ops::add_note(
+        &store,
+        &id,
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"),
+        now.clone(),
+        NoteKind::FeedbackNeeded,
+        "please confirm".into(),
+    )
+    .unwrap();
+    ix.reconcile(&store).unwrap();
+    assert!(row(&ix).feedback_needed, "flag on after a feedback_needed note");
+
+    // A plain add_note (regular) leaves it on; only when the feedback_needed note is
+    // gone does it clear — remove every note and reconcile.
+    let mut t = store.read_ticket(&id).unwrap();
+    t.notes.retain(|n| n.kind != NoteKind::FeedbackNeeded);
+    t.updated_at = Timestamp::new("2026-08-19T02:00:00Z");
+    store.write_ticket_committing(&t).unwrap();
+    ix.reconcile(&store).unwrap();
+    assert!(
+        !row(&ix).feedback_needed,
+        "flag clears once the feedback_needed note is removed"
+    );
+}
+
+#[test]
 fn a_stale_schema_version_triggers_a_rebuild() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("i.sqlite");

@@ -7,7 +7,7 @@ import type { TicketRowProps } from '../components/ticket-row';
 import { selectAllTickets, type TicketSelectionIntent, type TicketSelectionState,updateTicketSelection } from '../components/ticket-selection';
 
 const initialTickets: TicketRowProps[] = [
-  { slug: 'HS2-R76MMW', title: 'Build TicketList and TicketBoard around shared responsive TicketRow', status: 'started', priority: 'high', category: 'feature', tags: ['client', 'ux'], upNext: true, busy: true, categoryIcon: 'sparkles', categoryColor: '#3b82f6', agentName: 'Codex', updatedLabel: 'Now' },
+  { slug: 'HS2-R76MMW', title: 'Build TicketList and TicketBoard around shared responsive TicketRow', status: 'started', priority: 'high', category: 'feature', tags: ['client', 'ux'], upNext: true, busy: true, feedbackNeeded: true, categoryIcon: 'sparkles', categoryColor: '#3b82f6', agentName: 'Codex', updatedLabel: 'Now' },
   { slug: 'HS2-K00QPZ', title: 'Expose StatusBadge plain appearance as a supported demo variant', status: 'completed', priority: 'default', category: 'bug', tags: ['client'], needsReview: true, categoryIcon: 'bug', categoryColor: '#ef4444', agentName: 'Claude', updatedLabel: '8m ago' },
   { slug: 'HS2-RPVFA4', title: 'Add a repository-status snapshot and server endpoint', status: 'verified', priority: 'default', category: 'task', tags: ['core', 'server'], categoryColor: '#14b8a6', agentName: 'AI', updatedLabel: '2h ago' },
   { slug: 'HS2-JN3X4W', title: 'Define safe command execution, streaming, cancellation, and history contracts', status: 'started', priority: 'urgent', category: 'feature', tags: ['server', 'commands', 'security'], blocked: true, categoryIcon: 'terminal', categoryColor: '#8b5cf6', agentName: 'Claude', updatedLabel: '4h ago' },

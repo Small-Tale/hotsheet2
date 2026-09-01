@@ -12,9 +12,22 @@ describe('TicketRow', () => {
     })).toEqual({
       slug: 'HS2-UNKNOWN', title: 'Untitled ticket', status: 'not_started', priority: 'default',
       category: 'issue', categoryIcon: 'circle-alert', categoryColor: '#6b7280', tags: ['client', 'ux'], upNext: false, upNextEligible: true, selected: false, busy: false,
-      blocked: false, needsReview: false, agentName: 'AI', updatedLabel: 'Recently',
+      blocked: false, needsReview: false, feedbackNeeded: false, agentName: 'AI', updatedLabel: 'Recently',
       presentation: 'list',
     });
+  });
+
+  it('renders a feedback-needed indicator only when the ticket is waiting on the user', () => {
+    const base = { slug: 'HS2-FB', title: 'Needs a decision', status: 'started' as const, priority: 'default' as const, category: 'task', tags: [] };
+    const without = String(TicketRow({ ...base }));
+    expect(without).not.toContain('ticket-list-row__feedback');
+    expect(without).not.toContain('Feedback needed');
+
+    const withFlag = String(TicketRow({ ...base, feedbackNeeded: true }));
+    expect(withFlag).toContain('ticket-list-row__feedback');
+    expect(withFlag).toContain('circle-alert');
+    expect(withFlag).toContain('Feedback needed');
+    expect(withFlag).toContain('>Feedback<');
   });
 
   it('uses the picker defaults for API rows while preserving explicit no-icon categories', () => {
