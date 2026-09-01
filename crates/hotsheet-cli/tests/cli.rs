@@ -6,6 +6,9 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 use std::path::Path;
 
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 fn hs(dir: &Path) -> Command {
     let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
     cmd.arg("-C").arg(dir);
@@ -178,6 +181,83 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .assert()
         .success()
         .stdout(predicate::str::contains(checkout.path().to_str().unwrap()));
+}
+
+#[cfg(unix)]
+#[test]
+fn launch_discovers_the_linked_store_and_injects_the_running_server() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project");
+    let store = root.path().join("tickets");
+    let home = root.path().join("home");
+    std::fs::create_dir_all(&project).unwrap();
+    hotsheet_ticketing::FsStore::init(&store, &hotsheet_ticketing::StoreMetadata::new("HS"))
+        .unwrap();
+    let linked = project.join(".hotsheet");
+    std::fs::create_dir_all(&linked).unwrap();
+    std::fs::write(linked.join("store"), format!("{}\n", store.display())).unwrap();
+
+    let agent = root.path().join("fake-agent");
+    std::fs::write(
+        &agent,
+        "#!/bin/sh\nprintf '%s|%s|%s\\n' \"$HOTSHEET_SERVER\" \"$HOTSHEET_SECRET\" \"$1\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&agent, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let plugin = home.join("plugins/fake");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("instructions.md"), "## Fake agent\n").unwrap();
+    std::fs::write(
+        plugin.join("manifest.toml"),
+        format!(
+            r#"id = "fake"
+display_name = "Fake"
+product_name = "Fake Agent"
+tier = "cli-agent"
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[mcp]
+target = ".mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{{store}}"]
+[launch]
+program = "{}"
+[hooks]
+target = ".fake/settings.json"
+event = "PreToolUse"
+command = "hotsheet-cli permission-hook"
+"#,
+            agent.display()
+        ),
+    )
+    .unwrap();
+
+    let instance = hotsheet_cli::external_launch::instance_path(&home, &store);
+    std::fs::create_dir_all(instance.parent().unwrap()).unwrap();
+    std::fs::write(
+        instance,
+        serde_json::json!({
+            "pid": std::process::id(),
+            "url": "http://127.0.0.1:4567",
+            "secret": "route-back",
+            "store_path": store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let mut command = Command::cargo_bin("hotsheet-cli").unwrap();
+    command
+        .current_dir(&project)
+        .env("HOTSHEET_HOME", &home)
+        .args(["launch", "fake", "--", "hello"])
+        .assert()
+        .success()
+        .stdout("http://127.0.0.1:4567|route-back|hello\n");
+    assert!(project.join(".fake/settings.json").is_file());
 }
 
 #[test]

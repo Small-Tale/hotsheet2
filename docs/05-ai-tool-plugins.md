@@ -291,6 +291,15 @@ old five-minute transport timeout.
 This is also the seam for **other prompts** the ticket mentions — the bridge is a
 generic "the tool needs a human decision" channel, not just tool-permissions.
 
+**External interactive terminals.** `hotsheet-cli launch <tool>` runs the plugin's
+interactive `[launch]` command in the caller's existing terminal after installing its
+setup artifacts and injecting the running server's `HOTSHEET_SERVER`/`HOTSHEET_SECRET`
+route-back. From a linked code checkout, the ordinary `.hotsheet/store` machine-local
+link resolves the ticket store, so no `-C` is needed. This path is capability-gated:
+currently Claude's `PreToolUse` hook supports it; native interactive Codex is rejected
+until it has an adapter rather than being launched with misleading, unused environment.
+Codex permissions remain supported through Hot Sheet's app-server drive (`trigger`/`work`).
+
 **The claim/lease primitive** (`coord`) is what keeps distributed work sane, and it
 underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-storage.md)
 §2.7). Two regimes:

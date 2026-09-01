@@ -326,6 +326,19 @@ enum Cmd {
     /// for an allow/deny, and writes the decision to stdout. With no server it emits `ask`
     /// (defer to Claude's normal flow). Register it as a Claude `PreToolUse` hook.
     PermissionHook,
+    /// Launch an interactive AI tool in this terminal with permission requests routed to
+    /// the running Hot Sheet server. The ticket store is discovered from the current
+    /// checkout's `.hotsheet/store` link, so `-C` is normally unnecessary.
+    Launch {
+        /// The tool to launch (currently `claude`; other tools require a native adapter).
+        tool: String,
+        /// Project directory in which to run the tool (defaults to the current directory).
+        #[arg(long)]
+        project: Option<PathBuf>,
+        /// Additional arguments passed to the tool after `--`.
+        #[arg(last = true)]
+        args: Vec<String>,
+    },
     /// Regenerate the derived `worklist.md` at the store root from the current tickets
     /// (the file-based worklist any AI tool can read without the API; docs/03 §3.6). The
     /// server does this automatically on change — this is the headless "regenerate now".
@@ -817,6 +830,11 @@ fn main() -> Result<()> {
             team,
         } => cmd_metrics(&cli.path, roll_up, prune_before, team),
         Cmd::PermissionHook => cmd_permission_hook(),
+        Cmd::Launch {
+            tool,
+            project,
+            args,
+        } => cmd_launch(&cli.path, &cwd, &tool, project, args),
         Cmd::Serve { bind, secret, stop } => cmd_serve(&cli.path, &bind, secret, stop),
         Cmd::Cert { cmd } => cmd_cert(&cli.path, &cmd),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
@@ -1921,6 +1939,47 @@ fn cmd_permission_hook() -> Result<()> {
     };
     println!("{}", hook_decision_json(decision));
     Ok(())
+}
+
+/// Set up and replace this process with a hook-capable interactive AI tool. Because the
+/// child inherits the ordinary terminal, this behaves like invoking the tool directly.
+fn cmd_launch(
+    store: &Path,
+    cwd: &Path,
+    tool: &str,
+    project: Option<PathBuf>,
+    args: Vec<String>,
+) -> Result<()> {
+    let project = project.unwrap_or_else(|| cwd.to_path_buf());
+    hotsheet_cli::setup::run_setup(store, &project, Some(tool), false)?;
+    let launch = hotsheet_cli::external_launch::prepare(
+        store,
+        tool,
+        args,
+        &hotsheet_plugins::hotsheet_home(),
+    )?;
+    let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)?;
+    let mut command = std::process::Command::new(&program);
+    command
+        .args(&launch.args)
+        .current_dir(&project)
+        .env("HOTSHEET_SERVER", &launch.server.url)
+        .env("HOTSHEET_SECRET", &launch.server.secret);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        Err(command.exec().into())
+    }
+    #[cfg(not(unix))]
+    {
+        let status = command.status()?;
+        if status.success() {
+            Ok(())
+        } else {
+            bail!("{} exited with {status}", program.display())
+        }
+    }
 }
 
 /// POST the ask to the server's `/permissions/ask`, returning its JSON reply.

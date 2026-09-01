@@ -85,6 +85,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
+      src/external_launch.rs #   capability-aware external-terminal launch preparation: per-store server-instance discovery + permission route-back data; Claude hook supported, native Codex rejected until adapted (HS2-C46G58)
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety
       src/workloop.rs        #   `work` loop pure helpers: Up Next queue signature + thrash-guard Stall counter
@@ -177,6 +178,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   `plugin` (list/install/remove external plugins), `settings` (get/set/list,
   global|shared|local), `key` (OS-keychain-backed set/get/list/delete),
   `import`, `doctor`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":
+  `launch <tool>` replaces itself with a hook-capable interactive tool in the caller's
+  terminal, discovering the store from `.hotsheet/store` and the permission route-back
+  from `${HOTSHEET_HOME}/instances` (Claude today — HS2-C46G58). `trigger` can
   drive a real AI tool for the project and stream one turn — HS2-109; HS2-103 launch
   safety baked in — HS2-117), `work` (the headless loop: `trigger` one turn at a time
   until Up Next drains, with a thrash guard — HS2-118).
