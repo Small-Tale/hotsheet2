@@ -359,7 +359,7 @@ delegate(root, 'click', '[data-action="close-ticket-inspector"]', () => { inspec
 delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => { inspectorOpen.value = true; recordCollectionEvent('Inspector opened'); });
 delegate(root, 'change', '[name="inspector-category"]', (_event, target) => { inspectorCategory.value = (target as FormControl).value; });
 delegate(root, 'change', '[name="inspector-priority"]', (_event, target) => { inspectorPriority.value = (target as FormControl).value as typeof inspectorPriority.value; });
-delegate(root, 'click', '[data-inspector-status]', (_event, target) => { inspectorStatus.value = (target as HTMLElement).dataset.inspectorStatus as typeof inspectorStatus.value; });
+delegate(root, 'change', '[name="inspector-status"]', (_event, target) => { inspectorStatus.value = (target as FormControl).value as typeof inspectorStatus.value; });
 const beginTitleEdit = () => { inspectorTitleDraft.value = inspectorTitle.value; inspectorTitleEditing.value = true; queueMicrotask(() => root.querySelector<HTMLElement>('[name="ticket-title"]')?.focus()); };
 delegate(root, 'dblclick', '[data-action="edit-ticket-title"]', () => { beginTitleEdit(); });
 delegate(root, 'keydown', '[data-action="edit-ticket-title"]', event => { if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return; event.preventDefault(); beginTitleEdit(); });

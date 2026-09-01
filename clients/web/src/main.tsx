@@ -176,7 +176,7 @@ delegate(document.body,'click','[data-action="remove-attachment"]',(_event,targe
 delegate(document.body,'click','[data-action="toggle-inspector-up-next"]',()=>{if(selectedTicket.value)void updateSelectedTracked({up_next:!selectedTicket.value.up_next})});
 delegate(document.body,'change','[name="inspector-category"]',(_event,target)=>{void updateSelectedTracked({category:(target as Control).value})});
 delegate(document.body,'change','[name="inspector-priority"]',(_event,target)=>{void updateSelectedTracked({priority:(target as Control).value})});
-delegate(document.body,'click','[data-inspector-status]',(_event,target)=>{void updateSelectedTracked({status:data(target).inspectorStatus})});
+delegate(document.body,'change','[name="inspector-status"]',(_event,target)=>{void updateSelectedTracked({status:(target as Control).value})});
 function beginTitleEdit(){if(!selectedTicket.value||!canUpdateSelected())return;titleDraft.value=selectedTicket.value.title;titleEditing.value=true;queueMicrotask(()=>document.querySelector<HTMLElement>('[name="ticket-title"]')?.focus())}
 delegate(document.body,'dblclick','[data-action="edit-ticket-title"]',()=>{beginTitleEdit()});
 delegate(document.body,'keydown','[data-action="edit-ticket-title"]',(event)=>{if(!['Enter',' '].includes((event as KeyboardEvent).key))return;event.preventDefault();beginTitleEdit()});
@@ -218,7 +218,7 @@ delegate(document.body,'dragstart','[data-action="select-ticket-row"]',(event,ta
 delegate(document.body,'dragover','[data-ticket-drop-status]',(event,target)=>{event.preventDefault();(target as HTMLElement).dataset.draggingTicket='true'});
 delegate(document.body,'dragleave','[data-ticket-drop-status]',(_event,target)=>{delete (target as HTMLElement).dataset.draggingTicket});
 delegate(document.body,'drop','[data-ticket-drop-status]',(event,target)=>{event.preventDefault();delete (target as HTMLElement).dataset.draggingTicket;const nextStatus=data(target).ticketDropStatus;if(nextStatus)void history().executeMany(draggedTicketSlugs.map(slug=>({slug,patch:{status:nextStatus}})));draggedTicketSlugs=[]});
-document.addEventListener('keydown',event=>{const command=event.metaKey||event.ctrlKey,key=event.key.toLowerCase();if(!command||isEditableTarget(event.target))return;if(key==='z'){event.preventDefault();void (event.shiftKey?history().redo():history().undo());return}if(key==='c'||key==='x'){if(!selectedTicketSlugs.value.length)return;event.preventDefault();copySelection(key==='x');return}if(key==='v'&&clipboard?.tickets.length){event.preventDefault();void pasteSelection()}});
+document.addEventListener('keydown',event=>{const command=event.metaKey||event.ctrlKey,key=event.key.toLowerCase();if(!command||isEditableTarget(event.target))return;if(key==='z'){event.preventDefault();void (event.shiftKey?history().redo():history().undo());return}if(key==='c'||key==='x'){if(!selectedTicketSlugs.value.length)return;event.preventDefault();copySelection(key==='x');return}if(key==='v'&&clipboard?.tickets.length){event.preventDefault();void pasteSelection()}},{capture:true});
 document.addEventListener('pointerdown',event=>{if(ticketContextMenu.value&&!(event.target as Element).closest('.ticket-context-menu,[data-action="select-ticket-row"]'))ticketContextMenu.value=undefined});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')ticketContextMenu.value=undefined});
 for(const root of JSON.parse(localStorage.getItem('hotsheet.open-projects')||'[]') as string[])void openProject(root,undefined,false);

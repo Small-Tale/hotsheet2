@@ -103,8 +103,8 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(featureRow.locator('.ticket-list-row__category--label')).toHaveCount(0);
   await page.getByText('Use real project tickets').click();
   await expect(page.getByText('The real ticket body.')).toBeVisible();
-  await page.getByRole('button',{name:/Change status/}).click();
-  await page.locator('[data-inspector-status="completed"]').click();
+  await page.locator('wa-select[name="inspector-status"]').click();
+  await page.locator('wa-select[name="inspector-status"] wa-option[value="completed"]').click();
   await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');
   await page.getByRole('button',{name:'Timeline'}).click();
   await expect(page.getByText('Connected the client')).toBeVisible();
@@ -231,7 +231,7 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const ticket=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await ticket.click();
   const nextPatch=()=>page.waitForResponse(response=>response.request().method()==='PATCH'&&new URL(response.url()).pathname.endsWith('/tickets/01'));
-  await page.getByRole('button',{name:/Change status/}).click();let response=nextPatch();await page.locator('[data-inspector-status="completed"]').click();await response;
+  await page.locator('wa-select[name="inspector-status"]').click();let response=nextPatch();await page.locator('wa-select[name="inspector-status"] wa-option[value="completed"]').click();await response;
   await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');await expect.poll(()=>patches.filter(patch=>patch.status==='completed').length).toBe(1);
   response=nextPatch();await page.keyboard.press('Control+z');await response;await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Started');await expect.poll(()=>patches.filter(patch=>patch.status==='started').length).toBe(1);await page.waitForTimeout(0);
   response=nextPatch();await page.keyboard.press('Control+Shift+z');await response;await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');await expect.poll(()=>patches.filter(patch=>patch.status==='completed').length).toBe(2);

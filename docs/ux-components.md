@@ -381,15 +381,17 @@ than substituting a hardcoded default.
     shared by ticket category and priority controls, including selected-value and
     popup-option icon/color projection with the same measured `0.5rem` icon/label
     gap used by custom-command `MenuItem`s;
-    the light-DOM icon margin explicitly overrides Web Awesome's slotted default
+    the light-DOM icon margin explicitly overrides Web Awesome's slotted default.
+    Consumers may supply a custom selected-value renderer while retaining the shared
+    option list, keyboard behavior, spacing, and typography
   - `TicketCategorySelect` — **demo built**: configured category icons and colors in
     both selected-value and popup-option presentations
   - `TicketPrioritySelect` — **demo built**: semantic priority icons in both
     selected-value and popup-option presentations
-  - `TicketStatusMenu` — **demo built**: the current `StatusBadge` is an actionable
-    popup trigger whose icon-bearing options update the controlled status value
-    while retaining the compact badge presentation; it intentionally has no redundant
-    dropdown caret
+  - `TicketStatusMenu` — **demo built**: a shared `Select` whose custom selected-value
+    renderer retains the compact `StatusBadge` presentation with lighter typography;
+    every normally weighted popup option carries its semantic Lucide icon, and the
+    selected control intentionally hides the redundant dropdown caret
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact

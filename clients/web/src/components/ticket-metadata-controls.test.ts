@@ -18,10 +18,12 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(priority).toContain('data-lucide="minus"');
     const status = String(TicketStatusMenu({ value: 'completed' }));
     expect(status).toContain('aria-label="Change status, Completed"');
-    expect(status).toContain('<button type="button" slot="trigger" class="status-badge');
-    expect(status).not.toContain('<wa-button');
-    expect(status).toContain('data-inspector-status="verified"');
-    expect(status).not.toContain('with-caret');
+    expect(status).toContain('select select--custom-selected ticket-status-menu');
+    expect(status).toContain('name="inspector-status"');
+    expect(status).toContain('<span slot="start" class="select__custom-selected"><span class="status-badge status-badge--completed');
+    expect(status).toContain('<wa-option value="verified"><span slot="start" class="select__icon"');
+    expect(status).toContain('data-lucide="badge-check"');
+    expect(status.match(/data-lucide=/g)).toHaveLength(6);
   });
 
   it('renders inspector sections independently of the inspector shell', () => {

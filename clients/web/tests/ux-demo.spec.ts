@@ -749,12 +749,17 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
-  const statusTrigger = inspector.locator('button.status-badge[aria-label="Change status, Started"]');
-  await expect(statusTrigger.locator('[data-component="status-badge"]')).toHaveCount(0);
+  const statusTrigger = inspector.locator('wa-select[name="inspector-status"]');
+  await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Started');
+  await expect(statusTrigger.locator('.select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
   await statusTrigger.click();
-  await inspector.locator('wa-dropdown-item[data-inspector-status="completed"]').click();
+  await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(5);
+  const popupFontWeight = await statusTrigger.locator('wa-option[value="completed"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="label"]')!).fontWeight);
+  expect(Number(popupFontWeight)).toBeLessThanOrEqual(500);
+  await statusTrigger.locator('wa-option[value="completed"]').click();
   await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
-  await expect(inspector.locator('button.status-badge[aria-label="Change status, Completed"]')).toBeVisible();
+  await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Completed');
+  await expect(statusTrigger.locator('.select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate(node =>
     [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
