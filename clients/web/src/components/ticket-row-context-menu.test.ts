@@ -4,11 +4,17 @@ import { COMPLETED_TICKET_CONTEXT_ACTIONS, TICKET_CONTEXT_ACTIONS, TicketRowCont
 
 describe('TicketRowContextMenu', () => {
   it('gives every action a distinct meaningful Lucide icon', () => {
-    expect(TICKET_CONTEXT_ACTIONS).toHaveLength(9);
+    expect(TICKET_CONTEXT_ACTIONS).toHaveLength(10);
     expect(new Set(TICKET_CONTEXT_ACTIONS.map(item => item.iconName)).size).toBe(TICKET_CONTEXT_ACTIONS.length);
     expect(TICKET_CONTEXT_ACTIONS.every(item => item.icon.length > 0)).toBe(true);
     const markup = String(TicketRowContextMenu({ x: 12, y: 24, category: 'bug', priority: 'high', status: 'started' }));
     for (const item of TICKET_CONTEXT_ACTIONS) expect(markup).toContain(`data-lucide="${item.iconName}"`);
+  });
+
+  it('offers Move to Backlog immediately before Archive (HS2-ZEQBMH)', () => {
+    const markup = String(TicketRowContextMenu({ x: 0, y: 0, status: 'started' }));
+    expect(markup).toContain('data-context-action="Move to Backlog"');
+    expect(markup.indexOf('data-context-action="Move to Backlog"')).toBeLessThan(markup.indexOf('data-context-action="Archive ticket"'));
   });
 
   it('renders checked metadata submenus with stable bulk mutation contracts', () => {

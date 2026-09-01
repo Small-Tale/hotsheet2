@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ticket-row-context-menu.css';
 
-import { Archive, BadgeCheck, CircleDot, CircleX, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Trash2 } from 'lucide';
+import { Archive, BadgeCheck, CircleDot, CircleX, Clock3, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Trash2 } from 'lucide';
 
 import { DEFAULT_TICKET_CATEGORIES } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
@@ -18,6 +18,7 @@ export const TICKET_CONTEXT_ACTIONS: ReadonlyArray<{ action: string; icon: IconN
   { action: 'Toggle Up Next', icon: Star, iconName: 'star' },
   { action: 'Add tag', icon: Tag, iconName: 'tag' },
   { action: 'Duplicate ticket', icon: Copy, iconName: 'copy' },
+  { action: 'Move to Backlog', icon: Clock3, iconName: 'clock-3' },
   { action: 'Archive ticket', icon: Archive, iconName: 'archive' },
   { action: 'Delete ticket', icon: Trash2, iconName: 'trash-2', danger: true },
 ];
