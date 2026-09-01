@@ -16,6 +16,10 @@
 .ticket-list-row--column .ticket-list-row__identity { max-height: 3.9em; }
 .ticket-list-row__identity strong { display: inline; white-space: normal; }
 .ticket-list-row:is([data-status="completed"], [data-status="verified"]) .ticket-list-row__identity strong { color: #6b7280; text-decoration: line-through; }
+/* HS2-AMBE59: in list mode, dim finished tickets so they read as done at a glance; restore full opacity on hover/selection for legibility. */
+.ticket-list-row--list:is([data-status="completed"], [data-status="verified"]) { opacity: .55; }
+.ticket-list-row--list:is([data-status="completed"], [data-status="verified"]):hover,
+.ticket-list-row--list:is([data-status="completed"], [data-status="verified"]).ticket-list-row--selected { opacity: 1; }
 .ticket-list-row__category { display: grid; width: 2rem; height: 2rem; place-items: center; }
 .ticket-list-row__category-icon { width: 1.65rem; height: 1.65rem; }
 .ticket-list-row__category--label { width: 2rem; overflow: visible; color: #686a73; font-size: .68rem; font-weight: 700; letter-spacing: .035em; text-transform: uppercase; white-space: nowrap; }

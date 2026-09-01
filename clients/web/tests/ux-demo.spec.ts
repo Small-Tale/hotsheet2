@@ -1386,3 +1386,20 @@ test('projects the feedback-needed indicator through list and board compositions
   await expect(page.getByRole('listbox', { name: 'Example status board' })
     .locator('[data-ticket-slug="HS2-R76MMW"] .ticket-list-row__feedback')).toContainText('Feedback');
 });
+
+test('dims finished tickets in the list and gives the add-tag control full width', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-list');
+  const list = page.getByRole('listbox', { name: 'Example ticket list' });
+  // Completed/verified rows are dimmed in list mode; active rows are not (HS2-AMBE59).
+  await expect(list.locator('[data-ticket-slug="HS2-K00QPZ"]')).toHaveCSS('opacity', '0.55');
+  await expect(list.locator('[data-ticket-slug="HS2-RPVFA4"]')).toHaveCSS('opacity', '0.55');
+  await expect(list.locator('[data-ticket-slug="HS2-R76MMW"]')).toHaveCSS('opacity', '1');
+
+  // The add-tag control spans the full width of the tag editor (HS2-MBX8MV).
+  await page.goto('/ux-demo?component=ticket-info-panel');
+  const [add, editor] = await Promise.all([
+    page.locator('.ticket-tag-editor__add').boundingBox(),
+    page.locator('.ticket-tag-editor').boundingBox(),
+  ]);
+  expect(add!.width).toBeCloseTo(editor!.width, 0);
+});
