@@ -53,6 +53,7 @@ export const demoCatalog: DemoCategory[] = [
     { id: 'content', name: 'Content', demos: [
       demo('ticket-reader', 'TicketReader', 'Large dialog presentation of the complete ticket inspector.', 'feature-floor', true, ['ticket-inspector']),
       demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
+      demo('not-working-dialog', 'NotWorkingDialog', 'Completed-ticket verification failure report with notes and evidence.', 'feature-floor', true, ['pending-attachment-picker']),
     ]},
     { id: 'notes', name: 'Notes and activity', demos: [
       demo('note-composer', 'NoteComposer', 'Create or cancel a provider-backed ticket note.', 'feature-floor', true),
@@ -80,6 +81,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('menu-header', 'MenuHeader', 'Aligned section heading and optional action for menu groups.', 'feature-floor', true),
     demo('toolbar-control-group', 'ToolbarControlGroup', 'Consistent rounded grouping for toolbar controls.', 'feature-floor', true),
     demo('toolbar-text', 'ToolbarText', 'Vertically aligned large, default, and small toolbar identity text.', 'feature-floor', true),
+    demo('pending-attachment-picker', 'PendingAttachmentPicker', 'Drop, browse, review, and remove evidence before submission.', 'feature-floor', true),
     demo('confirmation-dialog', 'ConfirmationDialog', 'Reusable consequential confirmation.'),
     demo('empty-state', 'EmptyState', 'Actionable absence of content.'),
     demo('loading-skeleton', 'LoadingSkeleton', 'Stable loading presentation.'),

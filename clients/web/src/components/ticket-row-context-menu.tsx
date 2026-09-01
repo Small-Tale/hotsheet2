@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ticket-row-context-menu.css';
 
-import { Archive, CircleDot, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Trash2 } from 'lucide';
+import { Archive, BadgeCheck, CircleDot, CircleX, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Trash2 } from 'lucide';
 
 import { DEFAULT_TICKET_CATEGORIES } from './category-presentation';
 import { LucideIcon } from './lucide-icon';
@@ -22,10 +22,15 @@ export const TICKET_CONTEXT_ACTIONS: ReadonlyArray<{ action: string; icon: IconN
   { action: 'Delete ticket', icon: Trash2, iconName: 'trash-2', danger: true },
 ];
 
-function ContextItem({ item }: { item: typeof TICKET_CONTEXT_ACTIONS[number] }) {
+export const COMPLETED_TICKET_CONTEXT_ACTIONS = [
+  { action: 'Verify ticket', label: 'Verified', icon: BadgeCheck, iconName: 'badge-check' },
+  { action: 'Report not working', label: 'Not Working…', icon: CircleX, iconName: 'circle-x' },
+] as const;
+
+function ContextItem({ item }: { item: { action: string; label?: string; icon: IconNode; iconName: string; danger?: boolean } }) {
   return <wa-dropdown-item data-context-action={item.action} variant={item.danger ? 'danger' : undefined}>
     <span slot="icon" class="ticket-context-menu__icon"><LucideIcon icon={item.icon} name={item.iconName} /></span>
-    {item.action}
+    {item.label ?? item.action}
   </wa-dropdown-item>;
 }
 
@@ -39,13 +44,14 @@ function MetadataSubmenu({ field, label, icon, iconName, choices, selected }: { 
   </wa-dropdown-item>;
 }
 
-export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean }
-export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true }: TicketRowContextMenuProps) {
+export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; verifyAction?: boolean; notWorkingAction?: boolean }
+export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, verifyAction = false, notWorkingAction = false }: TicketRowContextMenuProps) {
   const priorityChoices = PRIORITIES.map(choice => { const option = getPriorityPresentation(choice.value); return { ...choice, icon: option.icon, iconName: option.name, color: option.color }; });
   const statusChoices = STATUSES.map(value => ({ value, ...statusPresentation(value) }));
   return <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${x}px;top:${y}px`}>
     <wa-dropdown open placement="bottom-start" distance={0}>
       <span slot="trigger" class="ticket-context-menu__anchor" aria-hidden="true"></span>
+      {(verifyAction || notWorkingAction) && <>{verifyAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[0]} />}{notWorkingAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[1]} />}<wa-divider></wa-divider></>}
       <ContextItem item={TICKET_CONTEXT_ACTIONS[0]} />
       <wa-divider></wa-divider>
       <MetadataSubmenu field="category" label="Change category" icon={Shapes} iconName="shapes" choices={DEFAULT_TICKET_CATEGORIES} selected={category} />

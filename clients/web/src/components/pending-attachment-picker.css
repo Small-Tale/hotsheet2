@@ -1,0 +1,16 @@
+.pending-attachment-picker { display: grid; gap: .65rem; }
+.pending-attachment-picker header { display: flex; align-items: center; justify-content: space-between; }
+.pending-attachment-picker h3 { margin: 0; font-size: .86rem; }
+.pending-attachment-picker header label { display: inline-flex; min-height: 2rem; padding: 0 .5rem; border-radius: .4rem; color: #2563eb; cursor: pointer; align-items: center; gap: .3rem; font-size: .76rem; font-weight: 650; }
+.pending-attachment-picker header label:hover { background: #eaf2ff; }
+.pending-attachment-picker label svg { width: .9rem; height: .9rem; }
+.pending-attachment-picker input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.pending-attachment-picker__items { display: grid; gap: .35rem; }
+.pending-attachment-picker__item { display: flex; min-width: 0; min-height: 2.35rem; padding: .4rem .5rem; border-radius: .45rem; background: #f1f2f5; align-items: center; gap: .5rem; font-size: .78rem; }
+.pending-attachment-picker__item > svg { width: .9rem; height: .9rem; flex: none; color: #70737d; }
+.pending-attachment-picker__item > span { min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.pending-attachment-picker__item button { display: inline-grid; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: .35rem; background: transparent; color: #656873; cursor: pointer; place-items: center; }
+.pending-attachment-picker__item button:hover { background: #feecec; color: #b42318; }
+.pending-attachment-picker__item button svg { width: .9rem; height: .9rem; }
+.pending-attachment-picker__drop { display: grid; min-height: 5rem; padding: .75rem; border: 1px dashed #b9c0cc; border-radius: .55rem; color: #717581; cursor: pointer; place-items: center; align-content: center; gap: .35rem; font-size: .76rem; }
+.pending-attachment-picker__drop:hover, [data-dragging="true"].pending-attachment-picker { border-color: #3b82f6; background: #eff6ff; }

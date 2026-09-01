@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
+import { COMPLETED_TICKET_CONTEXT_ACTIONS, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
 
 describe('TicketRowContextMenu', () => {
   it('gives every action a distinct meaningful Lucide icon', () => {
@@ -24,5 +24,20 @@ describe('TicketRowContextMenu', () => {
 
   it('omits Up Next when the selected ticket set is ineligible', () => {
     expect(String(TicketRowContextMenu({ x: 0, y: 0, upNextEligible: false }))).not.toContain('data-context-action="Toggle Up Next"');
+  });
+
+  it('prepends icon-bearing completed actions only when explicitly eligible', () => {
+    const ordinary = String(TicketRowContextMenu({ x: 0, y: 0, status: 'started' }));
+    expect(ordinary).not.toContain('data-context-action="Verify ticket"');
+    const completed = String(TicketRowContextMenu({ x: 0, y: 0, status: 'completed', upNextEligible: false, verifyAction: true, notWorkingAction: true }));
+    for (const item of COMPLETED_TICKET_CONTEXT_ACTIONS) {
+      expect(completed).toContain(`data-context-action="${item.action}"`);
+      expect(completed).toContain(`data-lucide="${item.iconName}"`);
+    }
+    expect(completed.indexOf('data-context-action="Verify ticket"')).toBeLessThan(completed.indexOf('data-context-action="Open ticket"'));
+    expect(completed).not.toContain('data-context-action="Toggle Up Next"');
+    const verifyOnly = String(TicketRowContextMenu({ x: 0, y: 0, verifyAction: true }));
+    expect(verifyOnly).toContain('data-context-action="Verify ticket"');
+    expect(verifyOnly).not.toContain('data-context-action="Report not working"');
   });
 });

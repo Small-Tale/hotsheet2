@@ -271,7 +271,9 @@ selection where sensible.
   selection, and one shared right-click context menu. The real TicketList and TicketBoard
   compositions wire that same menu to reader, direct icon-rich category/priority/status
   submenus with bulk assignment, lifecycle-eligible Up Next, duplication, archive, and
-  delete handlers; the demo only substitutes deterministic effects.
+  delete handlers; the demo only substitutes deterministic effects. A single completed
+  selection prepends `Verified` and `Not Working…`; completed and verified selections
+  never expose Up Next.
   The left rail is reserved for special-state attention in HS1 precedence order:
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets
@@ -419,6 +421,12 @@ than substituting a hardcoded default.
   The embedded appearance reuses the same behavior in inspector and reader without a
   redundant standalone toolbar or save-status footer; the real inspector persists edits
   through its checkout.
+- `NotWorkingDialog` — **demo built**: an explicit completed-ticket failure report
+  accepting a note and/or pending evidence. It retains input after failures, prevents
+  accidental light dismissal, and reopens the ticket as Not Started + Up Next only
+  after evidence upload succeeds.
+- `PendingAttachmentPicker` — **demo built**: reusable browse/drop evidence staging
+  with long-name ellipsis and per-file removal before submission.
 - `InlineEditableField`
 - `ReaderButton`
 - `TicketReader` — **built in the demo and real web shell**: a large dialog

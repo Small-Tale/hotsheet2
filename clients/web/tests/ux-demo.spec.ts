@@ -205,6 +205,10 @@ test('round-trips StatusBadge controls through reset and a post-reset edit', asy
   await expect(badge.locator('[data-lucide="circle-check"]')).toHaveCount(1);
 });
 
+test('demonstrates the production Not Working dialog and pending evidence picker',async({page})=>{
+  await page.goto('/ux-demo?component=not-working-dialog');await page.getByRole('button',{name:'Open Not Working dialog'}).click();const dialog=page.getByRole('dialog',{name:'Not Working — HS2-DEMO'});await expect(dialog).toBeVisible();await expect(dialog.getByText('diagnostic screenshot with a deliberately long filename.png')).toBeVisible();await dialog.getByRole('textbox',{name:'What’s wrong?'}).fill('The verification failed.');await dialog.getByLabel('Browse evidence attachments').setInputFiles({name:'new-proof.txt',mimeType:'text/plain',buffer:Buffer.from('proof')});await expect(dialog.getByText('new-proof.txt')).toBeVisible();await dialog.getByRole('button',{name:'Remove new-proof.txt'}).click();await expect(dialog.getByText('new-proof.txt')).toHaveCount(0);await dialog.getByRole('button',{name:'Report Not Working'}).click();await expect(page.getByText('Ticket returned to Not Started and added to Up Next.')).toBeVisible();
+});
+
 test('round-trips every TicketRow setting and selection action', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-row');
   const row = page.locator('[data-component="ticket-list-row"]');

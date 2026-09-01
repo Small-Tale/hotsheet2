@@ -26,6 +26,7 @@ import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDem
 import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownSavedValue, markdownValue, NoteCardDemo, NoteComposerDemo, noteComposerValue, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, TicketReaderDemo } from './content-components-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
+import { notWorkingDemoEvent,notWorkingDemoFiles,notWorkingDemoNote,notWorkingDemoOpen,NotWorkingDialogDemo,PendingAttachmentPickerDemo } from './not-working-dialog-demo';
 import { NotificationCenterDemo, PermissionRequestDemo } from './permission-components-demo';
 import { clampProjectSidebarHeight, commandGroupExpanded, CommandNavigationDemo, DriveControlDemo, driveRunning, ProjectSidebarDemo, projectSidebarHeight, ProjectSummaryDemo, RepositorySummaryDemo, runningCommandId, selectedViewId, sidebarCommands, sidebarEvent, sidebarViews, ViewNavigationDemo } from './project-sidebar-demo';
 import { SelectDemo } from './select-demo';
@@ -130,6 +131,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'note-composer') return <NoteComposerDemo />;
   if (item.id === 'ticket-reader') return <TicketReaderDemo />;
   if (item.id === 'markdown-editor') return <MarkdownEditorDemo />;
+  if (item.id === 'not-working-dialog') return <NotWorkingDialogDemo />;
+  if (item.id === 'pending-attachment-picker') return <PendingAttachmentPickerDemo />;
   if (item.id === 'permission-request') return <PermissionRequestDemo />;
   if (item.id === 'notification-center') return <NotificationCenterDemo />;
   return <section class="planned-demo" aria-label={`${item.name} planned demo`}><span>Planned component</span><p>The catalog entry and navigation are ready. Its real component demo will be added in a later slice.</p></section>;
@@ -167,7 +170,7 @@ function DemoApp() {
         {selected.id === 'tag-chip' ? <TagChipSettings /> : selected.id === 'status-badge' ? <StatusBadgeSettings /> : selected.id === 'ticket-row' ? <TicketRowSettings /> : <p>This demo has no adjustable settings.</p>}
       </aside>}
       {hasSettings && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
-      {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} category={menuTicket?.category} priority={menuTicket?.priority} status={menuTicket?.status} />}
+      {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} category={menuTicket?.category} priority={menuTicket?.priority} status={menuTicket?.status} upNextEligible={menuTicket?.status==='not_started'||menuTicket?.status==='started'} verifyAction={menuTicket?.status==='completed'} notWorkingAction={menuTicket?.status==='completed'} />}
       {tabContextMenu.value && <ProjectTabContextMenu {...tabContextMenu.value} />}
     </main>
   );
@@ -526,6 +529,7 @@ delegate(root, 'click', '[data-context-action]', (_event, target) => {
   if (usesCollectionState() && contextMenu.value?.ticketSlug) {
     const slug = contextMenu.value.ticketSlug;
     if (action === 'Toggle Up Next') toggleCollectionTicketUpNext(slug);
+    if (action === 'Report not working') { selectDemo('not-working-dialog'); notWorkingDemoOpen.value = true; }
     recordCollectionEvent(`${action} selected for ${slug}`);
     contextMenu.value = undefined;
     return;
@@ -538,6 +542,16 @@ delegate(root, 'click', '[data-context-action]', (_event, target) => {
   ticketRowSettings.event.value = `${action} selected`;
   contextMenu.value = undefined;
 });
+delegate(root,'click','[data-action="open-not-working-demo"]',()=>{notWorkingDemoOpen.value=true;notWorkingDemoEvent.value='';queueMicrotask(()=>root.querySelector<HTMLTextAreaElement>('[name="not-working-note"]')?.focus())});
+delegate(root,'input','[name="not-working-note"]',(_event,target)=>{notWorkingDemoNote.value=(target as HTMLTextAreaElement).value});
+delegate(root,'change','input[name="not-working-attachments"]',(_event,target)=>{const input=target as HTMLInputElement;if(input.files?.length)notWorkingDemoFiles.value=[...notWorkingDemoFiles.value,...Array.from(input.files).map((file,index)=>({id:`demo-${Date.now()}-${index}`,name:file.name}))];input.value=''});
+delegate(root,'click','[data-action="remove-not-working-attachment"]',(_event,target)=>{notWorkingDemoFiles.value=notWorkingDemoFiles.value.filter(item=>item.id!==(target as HTMLElement).dataset.pendingAttachmentId)});
+delegate(root,'dragover','[data-not-working-dropzone="true"]',(event,target)=>{event.preventDefault();(target as HTMLElement).dataset.dragging='true'});
+delegate(root,'dragleave','[data-not-working-dropzone="true"]',(_event,target)=>{delete (target as HTMLElement).dataset.dragging});
+delegate(root,'drop','[data-not-working-dropzone="true"]',(event,target)=>{event.preventDefault();delete (target as HTMLElement).dataset.dragging;const files=(event as DragEvent).dataTransfer?.files;if(files?.length)notWorkingDemoFiles.value=[...notWorkingDemoFiles.value,...Array.from(files).map((file,index)=>({id:`drop-${Date.now()}-${index}`,name:file.name}))]});
+delegate(root,'submit','[data-action="submit-not-working"]',(event)=>{event.preventDefault();notWorkingDemoEvent.value='Ticket returned to Not Started and added to Up Next.';notWorkingDemoOpen.value=false});
+delegate(root,'click','[data-action="cancel-not-working"]',()=>{notWorkingDemoOpen.value=false;notWorkingDemoEvent.value='Report cancelled.'});
+delegate(root,'wa-request-close','[data-component="not-working-dialog"]',(event)=>{event.preventDefault()});
 addEventListener('pointerdown', event => {
   if (contextMenu.value && !(event.target as Element).closest('.ticket-context-menu')) contextMenu.value = undefined;
 });

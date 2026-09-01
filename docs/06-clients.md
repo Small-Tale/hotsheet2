@@ -33,7 +33,12 @@ editable controls and dialogs. Dragging an unselected ticket moves only it, whil
   Right-clicking either a list or board TicketRow preserves an existing multi-selection
   (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
   menu. Production handlers cover reader opening, metadata affordances, batch Up Next,
-  duplication, archive, and deletion; outside pointer-down and Escape dismiss it.
+  duplication, archive, and deletion; outside pointer-down and Escape dismiss it. A
+  single completed selection also exposes Verified and Not Working. The latter accepts
+  notes and/or attachments, compensates evidence uploads when reopening fails, and only
+  then returns the ticket to Not Started + Up Next. Provider capabilities independently
+  gate verification, notes, and attachments. Completed/verified selections never offer
+  Up Next.
 
 This is the clean client/service split the rewrite is chartered to create, made
 **absolute**: the server is a standalone process even for local use, so the client
