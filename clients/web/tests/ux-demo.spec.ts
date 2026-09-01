@@ -458,6 +458,9 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   expect(listTitleMetrics.maxHeight / listTitleMetrics.lineHeight).toBeCloseTo(2, 1);
   const listWidth = await listRow.evaluate(node => node.getBoundingClientRect().width);
   expect(listWidth).toBeGreaterThan(600);
+  const [listBox, listHostBox] = await Promise.all([list.boundingBox(), list.locator('xpath=..').boundingBox()]);
+  expect(listBox).not.toBeNull(); expect(listHostBox).not.toBeNull();
+  expect(listBox!.width).toBeCloseTo(listHostBox!.width, 0);
   await expect(listRows.first()).toHaveCSS('border-radius', '10.4px 10.4px 0px 0px');
   await expect(listRows.nth(1)).toHaveCSS('border-radius', '0px');
   await expect(listRows.last()).toHaveCSS('border-radius', '0px 0px 10.4px 10.4px');

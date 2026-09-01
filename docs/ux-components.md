@@ -250,7 +250,8 @@ selection where sensible.
 - `TicketList` — **demo built**: composes the production `TicketRow` at
   comfortable list width with platform-style replacement, Command/Ctrl toggle, Shift
   range, arrow-key range extension, and Select All semantics and no parallel row
-  markup; the list shell and its first/last rows share rounded outer corners
+  markup; it fills the width supplied by its host (which owns the standard workspace
+  margins), and the list shell and its first/last rows share rounded outer corners
   - later data integration: virtualization for exceptionally large result sets
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active

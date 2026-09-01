@@ -24,4 +24,11 @@ describe('TicketList', () => {
     expect(css).toContain(':has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected)');
     expect(css).toContain('margin-top: -1px');
   });
+
+  it('fills the width supplied by its host instead of imposing an internal cap', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
+    const listRule = css.match(/\.ticket-list \{([^}]*)\}/)?.[1] ?? '';
+    expect(listRule).toContain('width: 100%');
+    expect(listRule).not.toContain('max-width');
+  });
 });
