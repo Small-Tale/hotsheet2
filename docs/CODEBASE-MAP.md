@@ -37,7 +37,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
     src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding API proxy
     src/dev-server.ts        #   Hono local project bridge plus dev-only /ux-demo and review routes
-    src/dev-review/          #   Content-anchored capture/delete overlay, upload/removal review UI, and single-commit local-dev CLI submission adapter
+    src/dev-review/          #   Content-anchored capture/delete overlay, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)
     src/components/          #   Production domain UI components, including shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
     src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review

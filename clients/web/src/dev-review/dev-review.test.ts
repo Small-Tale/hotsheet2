@@ -63,4 +63,21 @@ describe('dev review tool', () => {
       expect(finalize).toHaveBeenCalledWith(resolve(temp, 'store'), 'HS2-REVIEW');
     } finally { await rm(temp, { recursive: true, force: true }); }
   });
+
+  it('surfaces a shell-quoted, copy-paste-runnable command when the CLI fails', async () => {
+    const temp = await mkdtemp(resolve(tmpdir(), 'dev-review-fail-'));
+    const cli = resolve(temp, 'fake-hotsheet');
+    await writeFile(cli, `#!/bin/sh\nprintf 'boom\\n' >&2\nexit 1\n`);
+    await chmod(cli, 0o755);
+    try {
+      const finalize = vi.fn(async () => undefined);
+      const run = createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'my store.hs2'), cliPath: cli, finalize });
+      await expect(run({ ...submission, notes: 'Cancel is too close to the countdown' })).rejects.toThrow(
+        // The store path and the space-bearing --title value stay single-quoted so the
+        // logged command re-parses to the same argv instead of splitting on spaces.
+        /Command failed: .*'\S.*my store\.hs2'.*'--title=UX feedback: Cancel is too close to the countdown'/,
+      );
+      expect(finalize).not.toHaveBeenCalled();
+    } finally { await rm(temp, { recursive: true, force: true }); }
+  });
 });

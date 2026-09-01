@@ -81,7 +81,11 @@ preserve the same compile-time exclusion; a runtime-hidden button is not suffici
 For this repository the adapter invokes `target/debug/hotsheet-cli`, creates a bug
 tagged `client` and `ux-feedback` in the sibling `hotsheet2.hs2` store, then attaches
 each decoded PNG. User-authored title and details are passed with option-bound values,
-so leading hyphens and other option-like text remain literal ticket content. The CLI
+so leading hyphens and other option-like text remain literal ticket content. When a CLI
+or git invocation fails, the adapter surfaces the failure with a *shell-quoted*,
+copy-paste-runnable command line (each argument POSIX-quoted) instead of Node's
+space-joined `Command failed:` message, so a maintainer can rerun the exact command from a
+terminal. The CLI
 mutations defer their individual autocommits so the complete
 ticket, captured images, and uploaded files receive one durable local commit; one best-effort remote push is
 launched asynchronously and does not hold the dialog open. Alternate paths can be supplied with:

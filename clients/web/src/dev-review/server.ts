@@ -1,12 +1,11 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, resolve } from 'node:path';
-import { promisify } from 'node:util';
 
 import type { DevReviewResult, DevReviewSubmission } from './index';
+import { runCommand } from './shell';
 
-const run = promisify(execFile);
 export type DevReviewSubmitter = (submission: DevReviewSubmission) => Promise<DevReviewResult>;
 
 export function validateDevReviewSubmission(value: unknown): DevReviewSubmission {
@@ -33,10 +32,10 @@ export function createCliDevReviewSubmitter(options: { repoRoot: string; storePa
   const repoRoot = resolve(options.repoRoot);
   const storePath = resolve(options.storePath ?? `${repoRoot}.hs2`);
   const cliPath = resolve(options.cliPath ?? resolve(repoRoot, 'target/debug/hotsheet-cli'));
-  const runCli = (args: string[]) => run(cliPath, args, { env: { ...process.env, HOTSHEET_NO_AUTOCOMMIT: '1' } });
+  const runCli = (args: string[]) => runCommand(cliPath, args, { env: { ...process.env, HOTSHEET_NO_AUTOCOMMIT: '1' } });
   const finalize = options.finalize ?? (async (store, slug) => {
-    await run('git', ['-C', store, 'add', '-A']);
-    await run('git', ['-C', store, 'commit', '-q', '-m', `${slug}: create UX feedback with captures`]);
+    await runCommand('git', ['-C', store, 'add', '-A']);
+    await runCommand('git', ['-C', store, 'commit', '-q', '-m', `${slug}: create UX feedback with captures`]);
     const push = spawn('git', ['-C', store, 'push', '--quiet'], { detached: true, stdio: 'ignore' });
     push.on('error', () => {});
     push.unref();
