@@ -52,11 +52,12 @@ describe('dev review tool', () => {
     await chmod(cli, 0o755);
     try {
       const finalize = vi.fn(async () => undefined);
-      const result = await createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'store'), cliPath: cli, finalize })(submission);
+      const result = await createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'store'), cliPath: cli, finalize })({ ...submission, notes: '- Cancel is too close to the countdown.' });
       expect(result).toEqual({ slug: 'HS2-REVIEW' });
       const calls = await readFile(log, 'utf8');
       expect(calls).toContain('-C');
-      expect(calls).toContain('new UX feedback: Button overlaps heading');
+      expect(calls).toContain('new --title=UX feedback: - Cancel is too close to the countdown.');
+      expect(calls).toContain('--details=- Cancel is too close to the countdown.');
       expect(calls).toContain('attach HS2-REVIEW');
       expect(calls.match(/attach HS2-REVIEW/g)).toHaveLength(2);
       expect(finalize).toHaveBeenCalledWith(resolve(temp, 'store'), 'HS2-REVIEW');

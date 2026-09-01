@@ -46,7 +46,7 @@ export function createCliDevReviewSubmitter(options: { repoRoot: string; storePa
     const firstLine = submission.notes.split('\n').find(line => line.trim())!.trim();
     const title = `UX feedback: ${firstLine}`.slice(0, 120);
     const details = `${submission.notes}\n\nCaptured from: ${submission.pageUrl}\nViewport: ${submission.viewport.width}×${submission.viewport.height}`;
-    const created = await runCli(['-C', storePath, 'new', title, '--category', 'bug', '--priority', 'default', '--tag', 'client', '--tag', 'ux-feedback', '--details', details]);
+    const created = await runCli(['-C', storePath, 'new', `--title=${title}`, '--category', 'bug', '--priority', 'default', '--tag', 'client', '--tag', 'ux-feedback', `--details=${details}`]);
     const slug = created.stdout.match(/Created\s+(HS2-[A-Z0-9]+)/)?.[1];
     if (!slug) throw new Error(`Hot Sheet did not return a ticket id: ${created.stdout.trim()}`);
     const temp = await mkdtemp(resolve(tmpdir(), 'hotsheet-dev-review-'));
