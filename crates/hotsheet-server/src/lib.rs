@@ -877,7 +877,10 @@ async fn require_secret(
 // ---- handlers --------------------------------------------------------------------
 
 async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
-    let count = state.store.list_tickets()?.len();
+    // Resilient enumeration (HS2-PRVPCQ): a single corrupt ticket file must not make the
+    // whole store un-openable. Count the healthy tickets and surface any unparseable files
+    // separately instead of hard-failing the project.
+    let listing = state.store.list_tickets_resilient()?;
     let metadata = state.store.metadata()?;
     Ok(Json(serde_json::json!({
         "status": "ok",
@@ -885,7 +888,13 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
         "api_version": 1,
         "ticket_prefix": metadata.ticket_prefix,
         "store_schema": metadata.schema_version,
-        "tickets": count
+        "tickets": listing.tickets.len(),
+        "corrupt": listing.corrupt.iter().map(|c| serde_json::json!({
+            "path": c.path.display().to_string(),
+            "id": c.id.map(|id| id.to_string()),
+            "slug": c.slug,
+            "error": c.error,
+        })).collect::<Vec<_>>()
     })))
 }
 

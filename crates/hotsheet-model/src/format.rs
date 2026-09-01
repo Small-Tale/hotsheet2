@@ -745,6 +745,119 @@ mod tests {
     }
 
     #[test]
+    fn serializer_output_always_reparses_across_body_and_note_shapes() {
+        // Prevention (HS2-TH0TYF): the serializer must NEVER emit a file that `parse_file`
+        // rejects, across the shape matrix that mattered for the store-scan bug: empty
+        // details, no notes, notes present, and marker-like/escaped content in either the
+        // body or a note. (The proptest covers this over random tickets; this pins the
+        // specific corners as an always-on regression.)
+        let base = || {
+            let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
+            Ticket::new(
+                id,
+                "HS-XXXXXX",
+                "t",
+                "issue",
+                "2026-08-19T00:00:00Z",
+                "2026-08-19T00:00:00Z",
+            )
+        };
+        let note = |text: &str| Note {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+            kind: NoteKind::Regular,
+            created_at: "2026-08-19T00:00:00Z".into(),
+            edited_at: "2026-08-19T00:00:00Z".into(),
+            text: text.into(),
+        };
+        // Content that looks exactly like the structural markers, which the writer must
+        // escape before placing inside its bounded blocks.
+        let marker_like = format!("{NOTES_BEGIN}\n{NOTES_END}\n{BODY_END}\n{NOTE_END}\n## Notes");
+
+        let mut cases: Vec<Ticket> = Vec::new();
+        cases.push(base()); // empty details, no notes
+        cases.push({
+            let mut t = base(); // empty details, notes present
+            t.notes = vec![note("a note")];
+            t
+        });
+        cases.push({
+            let mut t = base(); // details present, no notes
+            t.details = "some details".into();
+            t
+        });
+        cases.push({
+            let mut t = base(); // details present, notes present
+            t.details = "some details".into();
+            t.notes = vec![note("a note")];
+            t
+        });
+        cases.push({
+            let mut t = base(); // marker-like body, no notes
+            t.details = marker_like.clone();
+            t
+        });
+        cases.push({
+            let mut t = base(); // marker-like note content
+            t.details = "d".into();
+            t.notes = vec![note(&marker_like)];
+            t
+        });
+
+        for t in cases {
+            let text = to_file_string(&t);
+            let back = parse_file(&text)
+                .unwrap_or_else(|e| panic!("serializer emitted unparseable output: {e}\n{text}"));
+            assert_eq!(back, t, "round-trip mismatch for {text:?}");
+            assert_eq!(to_file_string(&back), text, "serialize is byte-idempotent");
+        }
+    }
+
+    #[test]
+    fn no_notes_ticket_never_emits_a_dangling_notes_marker() {
+        // Regression (HS2-PRVPCQ): a ticket with no *writable* notes must not emit a
+        // `NOTES_BEGIN`/`## Notes` header without its matching `NOTES_END`. That lopsided
+        // shape is precisely what parses to a hard `ParseError` and used to abort the whole
+        // store scan, hiding every healthy ticket. A dropped note (empty text or a local
+        // feedback draft) must also leave no header behind.
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        let mut t = Ticket::new(id, "HS-XXXXXX", "t", "issue", "t0", "t1");
+        t.details = "just a body".into();
+        t.notes = vec![Note {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+            kind: NoteKind::FeedbackDraft,
+            created_at: "t0".into(),
+            edited_at: "t0".into(),
+            text: "half-written".into(),
+        }];
+        let text = to_file_string(&t);
+        assert!(
+            !text.contains(NOTES_BEGIN),
+            "no dangling notes-begin marker"
+        );
+        assert!(!text.contains(NOTES_END));
+        assert!(!text.contains("## Notes"));
+        assert!(parse_file(&text).unwrap().notes.is_empty());
+    }
+
+    #[test]
+    fn a_notes_begin_without_its_end_marker_errors_cleanly_not_panics() {
+        // Pin the exact field-failure shape: a bounded body followed by a `NOTES_BEGIN`
+        // that is never closed by `NOTES_END`. The reader must return a deterministic
+        // `ParseError::TrailingContent` (never panic), so a resilient caller can skip the
+        // one bad file and keep loading the healthy tickets.
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        let malformed = format!(
+            "---\nid: {id}\nslug: HS-BROKEN\ntitle: t\ncategory: issue\n\
+             created_at: t0\nupdated_at: t1\nschema: 1\n---\n\n\
+             {BODY_BEGIN}\nbody\n{BODY_END}\n\n{NOTES_BEGIN}\n## Notes\n\nunterminated note\n"
+        );
+        assert!(matches!(
+            parse_file(&malformed),
+            Err(ParseError::TrailingContent)
+        ));
+    }
+
+    #[test]
     fn known_keys_cover_serialized_fields() {
         // Guard against KNOWN_KEYS drifting from the struct: every key a fully
         // populated ticket emits must be recognized.

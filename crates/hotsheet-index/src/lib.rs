@@ -332,7 +332,18 @@ impl Index {
         let mut count = 0;
         for path in ticket_files(store)? {
             let bytes = std::fs::read(&path)?;
-            let ticket = parse_ticket(&path, &bytes)?;
+            // Resilience (HS2-PRVPCQ): a corrupt file must not abort a full rebuild — the
+            // healthy tickets still index, the bad one is skipped with a warning.
+            let ticket = match parse_ticket(&path, &bytes) {
+                Ok(ticket) => ticket,
+                Err(error) => {
+                    eprintln!(
+                        "warning: skipping unparseable ticket {}: {error}",
+                        path.display()
+                    );
+                    continue;
+                }
+            };
             self.upsert(&ticket, &path.display().to_string(), &hash_bytes(&bytes))?;
             count += 1;
         }
@@ -393,7 +404,18 @@ impl Index {
                 let bytes = std::fs::read(&path)?;
                 let hash = hash_bytes(&bytes);
                 if self.content_hash(&id)?.as_deref() != Some(hash.as_str()) {
-                    let ticket = parse_ticket(&path, &bytes)?;
+                    // Resilience (HS2-PRVPCQ): skip a corrupt file rather than aborting
+                    // the delta reconcile; the healthy changed tickets still index.
+                    let ticket = match parse_ticket(&path, &bytes) {
+                        Ok(ticket) => ticket,
+                        Err(error) => {
+                            eprintln!(
+                                "warning: skipping unparseable ticket {}: {error}",
+                                path.display()
+                            );
+                            continue;
+                        }
+                    };
                     self.upsert(&ticket, &path.display().to_string(), &hash)?;
                     upserted += 1;
                 }
@@ -423,7 +445,20 @@ impl Index {
             let bytes = std::fs::read(&path)?;
             let hash = hash_bytes(&bytes);
             if self.content_hash(&id)?.as_deref() != Some(hash.as_str()) {
-                let ticket = parse_ticket(&path, &bytes)?;
+                // Resilience (HS2-PRVPCQ): a single unparseable ticket file must not abort
+                // the whole reconcile — that would leave the server unable to open the
+                // project at all. Skip the bad file (keeping any prior good row so it's not
+                // deleted) and keep indexing the healthy ones.
+                let ticket = match parse_ticket(&path, &bytes) {
+                    Ok(ticket) => ticket,
+                    Err(error) => {
+                        eprintln!(
+                            "warning: skipping unparseable ticket {}: {error}",
+                            path.display()
+                        );
+                        continue;
+                    }
+                };
                 self.upsert(&ticket, &path.display().to_string(), &hash)?;
                 upserted += 1;
             }

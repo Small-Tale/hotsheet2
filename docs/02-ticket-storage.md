@@ -154,6 +154,21 @@ scales to tens of thousands of tickets with bounded, evenly-filled directories (
 ULID's trailing random bits distribute uniformly across the 256 shard buckets),
 without a flat `tickets/` directory growing unwieldy.
 
+### 2.3.1 Corruption resilience — one bad file never hides the store
+
+A single unparseable ticket file must never make a whole project un-openable. Store
+enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns every
+healthy ticket **plus** a separate report of the files that failed to parse
+(`CorruptTicket { path, id, slug, error }`), and the index reconcile/rebuild that runs on
+project open skips an unparseable file (with a warning) instead of aborting. The server
+counts the healthy tickets and surfaces the corrupt files on `/health` (`corrupt[]`) so a
+client can show them for recovery rather than letting them silently vanish. The strict
+`list_tickets` (fail on first bad file) remains for callers that want it. Prevention: the
+serializer never emits output the parser rejects — in particular a ticket with no notes
+emits **no** notes block at all, so it can never leave a dangling
+`<!-- hotsheet:notes:begin -->` without its `…:end` marker (the exact shape that first
+triggered this). See `docs/TEST-COVERAGE.md` → `corruption-resilience`.
+
 ## 2.4 Ticket IDs — ULID, no central sequence
 
 The ticket requires IDs that are **UUID/random-based instead of linearly

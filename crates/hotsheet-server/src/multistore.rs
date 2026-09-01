@@ -152,7 +152,13 @@ impl StoreHost {
                     .metadata()
                     .map(|m| m.ticket_prefix)
                     .unwrap_or_default(),
-                tickets: e.store.list_tickets().map(|t| t.len()).unwrap_or(0),
+                // Resilient count (HS2-PRVPCQ): a corrupt file used to zero the whole
+                // store's ticket count; count the healthy tickets instead.
+                tickets: e
+                    .store
+                    .list_tickets_resilient()
+                    .map(|l| l.tickets.len())
+                    .unwrap_or(0),
             })
             .collect();
         out.sort_by(|a, b| a.id.cmp(&b.id));

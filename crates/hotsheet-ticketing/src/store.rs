@@ -59,6 +59,32 @@ pub enum StoreError {
     Git(String),
 }
 
+/// A ticket file that could not be parsed during a resilient enumeration
+/// ([`FsStore::list_tickets_resilient`]). Surfaced instead of aborting the whole
+/// scan so a single bad file can never hide every healthy ticket (HS2-PRVPCQ).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CorruptTicket {
+    /// The on-disk path of the unparseable file.
+    pub path: PathBuf,
+    /// The ticket id recovered from the filename stem (or, failing that, the
+    /// frontmatter `id:` line), if it is still a valid ULID.
+    pub id: Option<Ulid>,
+    /// The slug recovered from a readable frontmatter `slug:` line, if any.
+    pub slug: Option<String>,
+    /// A human-readable description of why the file could not be read/parsed.
+    pub error: String,
+}
+
+/// The result of a resilient store enumeration ([`FsStore::list_tickets_resilient`]):
+/// every healthy ticket plus a separate report of the files that failed to parse.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StoreListing {
+    /// The healthy tickets, sorted by id (≈ creation order).
+    pub tickets: Vec<Ticket>,
+    /// The files that could not be parsed, sorted by path. Empty for a clean store.
+    pub corrupt: Vec<CorruptTicket>,
+}
+
 /// A filesystem-backed store rooted at a directory.
 #[derive(Debug, Clone)]
 pub struct FsStore {
@@ -420,12 +446,14 @@ impl FsStore {
         Ok(())
     }
 
-    /// Read every ticket in the store, sorted by id (≈ creation order).
-    pub fn list_tickets(&self) -> Result<Vec<Ticket>, StoreError> {
-        let mut out = Vec::new();
+    /// Every `tickets/<shard>/<ULID>.md` file path in the store, unsorted. A
+    /// directory-level I/O error (e.g. an unreadable shard) is fatal; per-file
+    /// parse errors are the concern of the caller, not this walk.
+    fn ticket_file_paths(&self) -> Result<Vec<PathBuf>, StoreError> {
+        let mut paths = Vec::new();
         let tickets_dir = self.root.join("tickets");
         if !tickets_dir.is_dir() {
-            return Ok(out);
+            return Ok(paths);
         }
         for shard in fs::read_dir(&tickets_dir)? {
             let shard = shard?;
@@ -435,12 +463,53 @@ impl FsStore {
             for entry in fs::read_dir(shard.path())? {
                 let path = entry?.path();
                 if path.extension().and_then(|e| e.to_str()) == Some("md") {
-                    out.push(self.read_ticket_at(&path)?);
+                    paths.push(path);
                 }
             }
         }
+        Ok(paths)
+    }
+
+    /// Read every ticket in the store, sorted by id (≈ creation order). **Strict:**
+    /// the first unparseable file aborts the whole enumeration with its
+    /// [`StoreError::Parse`]. Callers that must survive a corrupt file (project open,
+    /// the server ticket list) use [`FsStore::list_tickets_resilient`] instead.
+    pub fn list_tickets(&self) -> Result<Vec<Ticket>, StoreError> {
+        let mut out = Vec::new();
+        for path in self.ticket_file_paths()? {
+            out.push(self.read_ticket_at(&path)?);
+        }
         out.sort_by_key(|t| t.id);
         Ok(out)
+    }
+
+    /// Enumerate the store **resiliently**: return every healthy ticket AND a separate
+    /// report of the files that failed to parse, rather than letting one bad file abort
+    /// the whole scan (HS2-PRVPCQ). A single unparseable `.md` — for example a ticket
+    /// whose notes block is missing its `<!-- hotsheet:notes:end -->` marker — must never
+    /// prevent the rest of a project from loading. Directory-level I/O errors (an
+    /// unreadable `tickets/` tree) are still fatal; a per-file read or parse failure is
+    /// captured as a [`CorruptTicket`] with its recoverable id/slug and error message.
+    pub fn list_tickets_resilient(&self) -> Result<StoreListing, StoreError> {
+        let mut tickets = Vec::new();
+        let mut corrupt = Vec::new();
+        for path in self.ticket_file_paths()? {
+            match self.read_ticket_at(&path) {
+                Ok(ticket) => tickets.push(ticket),
+                Err(error) => {
+                    let (id, slug) = recover_identity(&path);
+                    corrupt.push(CorruptTicket {
+                        path,
+                        id,
+                        slug,
+                        error: error.to_string(),
+                    });
+                }
+            }
+        }
+        tickets.sort_by_key(|t| t.id);
+        corrupt.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(StoreListing { tickets, corrupt })
     }
 
     // ---- git-diff fast path (docs/03 §3.4, HS2-90) --------------------------------
@@ -497,6 +566,49 @@ impl FsStore {
         ids.dedup();
         Ok(ids)
     }
+}
+
+// ---- resilient-enumeration helpers -------------------------------------------------
+
+/// Best-effort recovery of a failed file's identity for a [`CorruptTicket`]. The id
+/// comes from the filename stem (the canonical ULID); if the stem isn't a ULID we fall
+/// back to a frontmatter `id:` line. The slug comes from a frontmatter `slug:` line.
+/// Everything here degrades to `None` rather than erroring — the file is already known
+/// bad, so this only enriches the report.
+fn recover_identity(path: &Path) -> (Option<Ulid>, Option<String>) {
+    let stem_id = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .and_then(|s| Ulid::from_string(s).ok());
+    let text = fs::read_to_string(path).ok();
+    let slug = text.as_deref().and_then(|t| frontmatter_value(t, "slug"));
+    let id = stem_id.or_else(|| {
+        text.as_deref()
+            .and_then(|t| frontmatter_value(t, "id"))
+            .and_then(|v| Ulid::from_string(&v).ok())
+    });
+    (id, slug)
+}
+
+/// Pull a top-level scalar `key: value` from a file's leading `---` frontmatter block,
+/// tolerating a malformed body below it. Returns the trimmed, unquoted value, or `None`
+/// when there is no readable frontmatter or the key is absent/empty. Only exact,
+/// unindented top-level keys match (a nested/indented key is ignored).
+fn frontmatter_value(text: &str, key: &str) -> Option<String> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let normalized = text.replace("\r\n", "\n");
+    let rest = normalized.strip_prefix("---\n")?;
+    let frontmatter = rest.split_once("\n---").map_or(rest, |(fm, _)| fm);
+    for line in frontmatter.lines() {
+        let Some(after) = line.strip_prefix(key).and_then(|a| a.strip_prefix(':')) else {
+            continue;
+        };
+        let value = after.trim().trim_matches(['"', '\'']).trim();
+        if !value.is_empty() {
+            return Some(value.to_string());
+        }
+    }
+    None
 }
 
 // ---- git helpers (shell-based; the store IS a git repo, docs/02 §2.3) --------------
@@ -606,6 +718,133 @@ mod tests {
         assert_eq!(listed.len(), 2);
         assert_eq!(listed[0].id, a.id, "sorted by id (k-sortable)");
         assert_eq!(listed[1].id, b.id);
+    }
+
+    /// A malformed ticket file in the exact field-failure shape: a bounded body followed
+    /// by a `notes:begin` marker that is never closed by `notes:end` (parses to a hard
+    /// `ParseError::TrailingContent`).
+    fn missing_notes_end(id: &Ulid, slug: &str) -> String {
+        format!(
+            "---\nid: {id}\nslug: {slug}\ntitle: broken\ncategory: bug\n\
+             created_at: 2026-08-19T00:00:00Z\nupdated_at: 2026-08-19T00:00:00Z\nschema: 1\n---\n\n\
+             <!-- hotsheet:body:begin -->\nbody\n<!-- hotsheet:body:end -->\n\n\
+             <!-- hotsheet:notes:begin -->\n## Notes\n\nunterminated note\n"
+        )
+    }
+
+    /// Write raw bytes straight to a ticket's on-disk path (bypassing the serializer), so
+    /// tests can plant a corrupt file the writer would never produce.
+    fn plant_raw(store: &FsStore, id: &Ulid, content: &str) -> PathBuf {
+        let path = store.ticket_path(id);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, content).unwrap();
+        path
+    }
+
+    #[test]
+    fn list_tickets_resilient_returns_healthy_and_reports_the_corrupt_file() {
+        let (_dir, store) = temp_store();
+        let a = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        let b = sample(ulid("7ZARZ3NDEKTSV4RRFFQ69G5FAV"));
+        store.write_ticket(&a).unwrap();
+        store.write_ticket(&b).unwrap();
+
+        // The exact field-failure shape, written straight to disk.
+        let bad_id = ulid("3ZARZ3NDEKTSV4RRFFQ69G5FAV");
+        let bad_path = plant_raw(&store, &bad_id, &missing_notes_end(&bad_id, "HS-BROKEN"));
+
+        // Strict enumeration still hard-fails on the bad file (documents why the resilient
+        // variant exists) — this is the bug that hid the whole store.
+        assert!(matches!(
+            store.list_tickets(),
+            Err(StoreError::Parse { .. })
+        ));
+
+        // Resilient enumeration returns every healthy ticket AND reports exactly the one
+        // corrupt file, with its path, recovered id/slug, and a non-empty error.
+        let listing = store.list_tickets_resilient().unwrap();
+        assert_eq!(
+            listing.tickets.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![a.id, b.id],
+            "all healthy tickets, sorted by id"
+        );
+        assert_eq!(listing.corrupt.len(), 1);
+        let corrupt = &listing.corrupt[0];
+        assert_eq!(corrupt.path, bad_path);
+        assert_eq!(corrupt.id, Some(bad_id), "id recovered from the filename");
+        assert_eq!(
+            corrupt.slug.as_deref(),
+            Some("HS-BROKEN"),
+            "slug from frontmatter"
+        );
+        assert!(
+            !corrupt.error.is_empty(),
+            "a human-readable error is reported"
+        );
+    }
+
+    #[test]
+    fn list_tickets_resilient_survives_multiple_and_varied_bad_files() {
+        // Adversarial: several corrupt files of different failure modes, a stray non-.md
+        // file next to a corrupt one, an empty file, and truncated frontmatter. Healthy
+        // tickets still enumerate; every bad .md is reported exactly once; the non-.md
+        // file is ignored, not reported.
+        let (_dir, store) = temp_store();
+        store
+            .write_ticket(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+        store
+            .write_ticket(&sample(ulid("7ZARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+
+        let missing_end_id = ulid("2ZARZ3NDEKTSV4RRFFQ69G5FAV");
+        let missing_end = plant_raw(
+            &store,
+            &missing_end_id,
+            &missing_notes_end(&missing_end_id, "HS-ONE"),
+        );
+        let empty_id = ulid("3ZARZ3NDEKTSV4RRFFQ69G5FAV");
+        let empty = plant_raw(&store, &empty_id, "");
+        let truncated_id = ulid("4ZARZ3NDEKTSV4RRFFQ69G5FAV");
+        let truncated = plant_raw(
+            &store,
+            &truncated_id,
+            &format!("---\nid: {truncated_id}\ntitle: t\nno closing fence\n"),
+        );
+        // A stray non-ticket file beside a corrupt one must be ignored, not reported.
+        fs::write(store.root().join("tickets/3Z/notes.txt"), "just some notes").unwrap();
+
+        let listing = store.list_tickets_resilient().unwrap();
+        assert_eq!(listing.tickets.len(), 2, "both healthy tickets enumerate");
+
+        let paths: Vec<PathBuf> = listing.corrupt.iter().map(|c| c.path.clone()).collect();
+        assert_eq!(
+            paths,
+            {
+                let mut want = vec![missing_end, empty, truncated];
+                want.sort();
+                want
+            },
+            "each bad .md reported exactly once, sorted by path; non-.md ignored"
+        );
+        for corrupt in &listing.corrupt {
+            assert!(!corrupt.error.is_empty(), "{corrupt:?} has an error");
+            assert!(
+                corrupt.id.is_some(),
+                "{corrupt:?} recovers its id from the filename"
+            );
+        }
+    }
+
+    #[test]
+    fn list_tickets_resilient_is_clean_for_a_healthy_store() {
+        let (_dir, store) = temp_store();
+        store
+            .write_ticket(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+        let listing = store.list_tickets_resilient().unwrap();
+        assert_eq!(listing.tickets.len(), 1);
+        assert!(listing.corrupt.is_empty(), "no corrupt files reported");
     }
 
     #[test]

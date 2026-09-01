@@ -493,6 +493,69 @@ fn a_corrupt_index_file_is_deleted_and_rebuilt() {
     assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 1);
 }
 
+#[test]
+fn a_corrupt_ticket_file_is_skipped_not_fatal_on_rebuild_and_reconcile() {
+    // Resilience (HS2-PRVPCQ): the server's project-open path builds the index over the
+    // store. A single unparseable ticket file (here: a `notes:begin` with no `notes:end`)
+    // must not abort the whole index build — the healthy tickets still index and the bad
+    // one is skipped, so the web app can still open the project.
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    ops::create(
+        &store,
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+        "HS",
+        Timestamp::new("2026-08-19T00:00:00Z"),
+        NewTicket {
+            title: "survivor".into(),
+            category: "task".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // Plant a corrupt ticket file straight to disk (the writer would never produce it).
+    let bad_id = ulid("3ZARZ3NDEKTSV4RRFFQ69G5FAV");
+    let bad_path = store.ticket_path(&bad_id);
+    std::fs::create_dir_all(bad_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &bad_path,
+        format!(
+            "---\nid: {bad_id}\nslug: HS-BROKEN\ntitle: broken\ncategory: bug\n\
+             created_at: 2026-08-19T00:00:00Z\nupdated_at: 2026-08-19T00:00:00Z\nschema: 1\n---\n\n\
+             <!-- hotsheet:body:begin -->\nbody\n<!-- hotsheet:body:end -->\n\n\
+             <!-- hotsheet:notes:begin -->\n## Notes\n\nunterminated\n"
+        ),
+    )
+    .unwrap();
+
+    // Full rebuild indexes only the healthy ticket, and does not error.
+    let ix = Index::open_in_memory("s1").unwrap();
+    assert_eq!(ix.rebuild_from_store(&store).unwrap(), 1);
+    assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 1);
+
+    // The full "open the project" path (open + reconcile) also survives the bad file.
+    let db = dir.path().join("index.sqlite");
+    let ix = Index::open_reconciled(&db, &store).unwrap();
+    assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 1);
+
+    // Healing the file makes it index on the next reconcile — no restart needed.
+    ops::create(
+        &store,
+        bad_id,
+        "HS",
+        Timestamp::new("2026-08-19T00:00:00Z"),
+        NewTicket {
+            title: "healed".into(),
+            category: "bug".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ix.reconcile(&store).unwrap();
+    assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 2);
+}
+
 // ---- git-diff fast path (docs/03 §3.4, HS2-90) ------------------------------------
 
 /// A store that is a real git repo (as `hotsheet init` makes it), so autocommit + HEAD

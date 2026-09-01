@@ -3664,3 +3664,84 @@ async fn claim_next_release_renew_over_http() {
         "no claimable tickets → null"
     );
 }
+
+/// A single corrupt ticket file on disk must not stop the server from opening the
+/// project: the ticket list still returns every healthy ticket, and `/health` surfaces
+/// the unparseable file instead of hard-failing the whole store (HS2-PRVPCQ). This is
+/// the real startup path (`AppState::new` -> `rebuild_from_store`) that previously left
+/// the web app stuck on "Open a Hot Sheet project".
+#[tokio::test]
+async fn a_corrupt_ticket_file_does_not_block_opening_the_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+
+    // Two healthy tickets, created through the real server so they persist to the store.
+    {
+        let app = app(AppState::new(store.clone(), SECRET.into()).unwrap());
+        for body in [
+            r#"{"title":"first healthy"}"#,
+            r#"{"title":"second healthy"}"#,
+        ] {
+            let resp = app
+                .clone()
+                .oneshot(authed("POST", "/tickets", Some(body)))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::CREATED);
+        }
+    }
+
+    // Plant an unparseable file straight on disk: a notes block with no closing
+    // `<!-- hotsheet:notes:end -->` marker — exactly the shape that hid a whole project.
+    let bad = dir.path().join("tickets/01/01ARZ3NDEKTSV4RRFFQ69G5FAV.md");
+    std::fs::create_dir_all(bad.parent().unwrap()).unwrap();
+    std::fs::write(
+        &bad,
+        "---\nid: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nslug: HS-BROKEN\ntitle: broken\ncategory: bug\n\
+         priority: default\nstatus: not_started\ncreated_at: 2026-09-01T00:00:00Z\n\
+         updated_at: 2026-09-01T00:00:00Z\nschema: 1\n---\n\n<!-- hotsheet:body:begin -->\n\
+         broken\n<!-- hotsheet:body:end -->\n\n<!-- hotsheet:notes:begin -->\n",
+    )
+    .unwrap();
+
+    // Re-open the project over the now-corrupt store. Before the fix this errored out.
+    let reopened = app(AppState::new(FsStore::open(dir.path()).unwrap(), SECRET.into()).unwrap());
+
+    // The project opens: the ticket list still returns both healthy tickets.
+    let resp = reopened
+        .clone()
+        .oneshot(authed("GET", "/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let rows = body_json(resp).await;
+    assert_eq!(
+        rows.as_array().unwrap().len(),
+        2,
+        "both healthy tickets load despite the corrupt file"
+    );
+
+    // `/health` reports the healthy count and surfaces the corrupt file for recovery.
+    let resp = reopened
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let health = body_json(resp).await;
+    assert_eq!(health["tickets"], 2);
+    let corrupt = health["corrupt"].as_array().unwrap();
+    assert_eq!(corrupt.len(), 1);
+    assert_eq!(corrupt[0]["slug"], "HS-BROKEN");
+    assert!(
+        corrupt[0]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("01ARZ3NDEKTSV4RRFFQ69G5FAV.md")
+    );
+    assert!(!corrupt[0]["error"].as_str().unwrap().is_empty());
+}

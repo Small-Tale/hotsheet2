@@ -49,7 +49,7 @@ pub use secrets::{
     KeyMetadata, KeyRegistry, OsKeychain, SecretError, SecretStore, resolve_setting_secret,
 };
 pub use settings::{Scope, Settings, SettingsError};
-pub use store::{FsStore, StoreError, StoreMetadata};
+pub use store::{CorruptTicket, FsStore, StoreError, StoreListing, StoreMetadata};
 pub use sync::{SyncReport, sync_once};
 pub use wire::{ApiNote, ApiTicket, TicketRow};
 
