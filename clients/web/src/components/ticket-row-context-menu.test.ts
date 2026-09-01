@@ -26,6 +26,12 @@ describe('TicketRowContextMenu', () => {
     expect(String(TicketRowContextMenu({ x: 0, y: 0, upNextEligible: false }))).not.toContain('data-context-action="Toggle Up Next"');
   });
 
+  it('hides Open ticket when more than one ticket is selected (HS2-XRENF2)', () => {
+    expect(String(TicketRowContextMenu({ x: 0, y: 0 }))).toContain('data-context-action="Open ticket"');
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, selectionCount: 1 }))).toContain('data-context-action="Open ticket"');
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, selectionCount: 3 }))).not.toContain('data-context-action="Open ticket"');
+  });
+
   it('prepends icon-bearing completed actions only when explicitly eligible', () => {
     const ordinary = String(TicketRowContextMenu({ x: 0, y: 0, status: 'started' }));
     expect(ordinary).not.toContain('data-context-action="Verify ticket"');

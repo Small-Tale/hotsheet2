@@ -44,16 +44,16 @@ function MetadataSubmenu({ field, label, icon, iconName, choices, selected }: { 
   </wa-dropdown-item>;
 }
 
-export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; verifyAction?: boolean; notWorkingAction?: boolean }
-export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, verifyAction = false, notWorkingAction = false }: TicketRowContextMenuProps) {
+export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; verifyAction?: boolean; notWorkingAction?: boolean; selectionCount?: number }
+export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, verifyAction = false, notWorkingAction = false, selectionCount = 1 }: TicketRowContextMenuProps) {
   const priorityChoices = PRIORITIES.map(choice => { const option = getPriorityPresentation(choice.value); return { ...choice, icon: option.icon, iconName: option.name, color: option.color }; });
   const statusChoices = STATUSES.map(value => ({ value, ...statusPresentation(value) }));
   return <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${x}px;top:${y}px`}>
     <wa-dropdown open placement="bottom-start" distance={0}>
       <span slot="trigger" class="ticket-context-menu__anchor" aria-hidden="true"></span>
       {(verifyAction || notWorkingAction) && <>{verifyAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[0]} />}{notWorkingAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[1]} />}<wa-divider></wa-divider></>}
-      <ContextItem item={TICKET_CONTEXT_ACTIONS[0]} />
-      <wa-divider></wa-divider>
+      {/* "Open ticket" opens a single ticket, so hide it when several are selected (HS2-XRENF2). */}
+      {selectionCount <= 1 && <><ContextItem item={TICKET_CONTEXT_ACTIONS[0]} /><wa-divider></wa-divider></>}
       <MetadataSubmenu field="category" label="Change category" icon={Shapes} iconName="shapes" choices={DEFAULT_TICKET_CATEGORIES} selected={category} />
       <MetadataSubmenu field="priority" label="Change priority" icon={Gauge} iconName="gauge" choices={priorityChoices} selected={priority} />
       <MetadataSubmenu field="status" label="Change status" icon={CircleDot} iconName="circle-dot" choices={statusChoices} selected={status} />

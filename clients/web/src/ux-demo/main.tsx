@@ -170,7 +170,7 @@ function DemoApp() {
         {selected.id === 'tag-chip' ? <TagChipSettings /> : selected.id === 'status-badge' ? <StatusBadgeSettings /> : selected.id === 'ticket-row' ? <TicketRowSettings /> : <p>This demo has no adjustable settings.</p>}
       </aside>}
       {hasSettings && <wa-button class="settings-toggle" data-action="toggle-settings" aria-expanded={settingsOpen.value ? 'true' : 'false'}>{settingsOpen.value ? 'Close settings' : 'Settings'}</wa-button>}
-      {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} category={menuTicket?.category} priority={menuTicket?.priority} status={menuTicket?.status} upNextEligible={menuTicket?.status==='not_started'||menuTicket?.status==='started'} verifyAction={menuTicket?.status==='completed'} notWorkingAction={menuTicket?.status==='completed'} />}
+      {contextMenu.value && <TicketRowContextMenu x={contextMenu.value.x} y={contextMenu.value.y} category={menuTicket?.category} priority={menuTicket?.priority} status={menuTicket?.status} upNextEligible={menuTicket?.status==='not_started'||menuTicket?.status==='started'} verifyAction={menuTicket?.status==='completed'} notWorkingAction={menuTicket?.status==='completed'} selectionCount={collectionTickets.value.filter(ticket => ticket.selected).length || 1} />}
       {tabContextMenu.value && <ProjectTabContextMenu {...tabContextMenu.value} />}
     </main>
   );
