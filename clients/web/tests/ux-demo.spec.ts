@@ -254,8 +254,9 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Fix selection synchronization');
   await expect(row).toContainText('Verified');
   await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
-  await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'plain');
-  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  // Rows use the colored (filled) status variant like the inspector (HS2-Y3H2Z5).
+  await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'filled');
+  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'rgb(223, 235, 255)');
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
   await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
