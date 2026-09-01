@@ -5,7 +5,7 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
-import { ArrowDown, ArrowDownAZ, ArrowUp, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star } from 'lucide';
+import { ArrowDown, ArrowDownAZ, ArrowUp, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { ToolbarControlGroup } from './toolbar-control-group';
@@ -82,7 +82,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
         {searchOpen
-          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} disabled={projectActionsDisabled} autofocus clearable><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span></wa-input>
+          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} disabled={projectActionsDisabled} autofocus><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span>{searchQuery && <button type="button" slot="end" class="workspace-header__search-clear" data-action="clear-workspace-search" aria-label="Clear search" title="Clear search"><LucideIcon icon={X} name="x" /></button>}</wa-input>
           : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
       </ToolbarControlGroup>
     </div>;

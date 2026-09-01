@@ -179,6 +179,8 @@ delegate(document.body,'click','[data-action="resolve-permission"]',(_event,targ
 delegate(document.body,'change','[data-action="toggle-verified-column"]',(_event,target)=>{const id=selectedProjectId.value;if(!id)return;const checked=(target as HTMLInputElement).checked;hideVerifiedByProject.value={...hideVerifiedByProject.value,[id]:checked};localStorage.setItem(`hotsheet.project.${id}.hide-verified-column`,String(checked));});
 delegate(document.body,'click','[data-action="open-workspace-search"]',()=>{searchOpen.value=true;queueMicrotask(()=>document.querySelector<HTMLElement>('[name="workspace-search"]')?.focus())});
 delegate(document.body,'input','[name="workspace-search"]',(_event,target)=>{searchQuery.value=(target as Control).value});
+delegate(document.body,'mousedown','[data-action="clear-workspace-search"]',event=>{event.preventDefault()});
+delegate(document.body,'click','[data-action="clear-workspace-search"]',()=>{searchQuery.value='';const input=document.querySelector<Control>('[name="workspace-search"]');if(input)input.value='';queueMicrotask(()=>input?.focus())});
 delegate(document.body,'focusout','[name="workspace-search"]',(_event,target)=>{if(!(target as Control).value){searchOpen.value=false;searchQuery.value=''}});
 delegate(document.body,'click','[data-sort]',(_event,target)=>{const next=nextWorkspaceSort(sort.value,sortDirection.value,data(target).sort as WorkspaceSort);sort.value=next.sort;sortDirection.value=next.direction});
 delegate(document.body,'click','[data-action="expand-ticket-composer"]',()=>{composerExpanded.value=true;queueMicrotask(()=>focusQuickTicketComposerTitle(document))});

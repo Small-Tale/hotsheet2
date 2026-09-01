@@ -346,6 +346,8 @@ delegate(root, 'click', '[data-action="open-workspace-search"]', () => {
   queueMicrotask(() => { focusWorkspaceSearch(root); });
 });
 delegate(root, 'input', '[name="workspace-search"]', (_event, target) => { workspaceSearchQuery.value = (target as FormControl).value; });
+delegate(root, 'mousedown', '[data-action="clear-workspace-search"]', (event) => { event.preventDefault(); });
+delegate(root, 'click', '[data-action="clear-workspace-search"]', () => { workspaceSearchQuery.value = ''; const input = root.querySelector<FormControl>('[name="workspace-search"]'); if (input) input.value = ''; queueMicrotask(() => { focusWorkspaceSearch(root); }); });
 delegate(root, 'focusout', '[name="workspace-search"]', () => {
   queueMicrotask(() => {
     if (workspaceSearchQuery.value === '') workspaceSearchOpen.value = false;

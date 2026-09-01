@@ -586,6 +586,14 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   expect(Math.abs(openHeaderHeight - closedHeaderHeight)).toBeLessThanOrEqual(3);
   await search.fill('long-tag-example');
   await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(1);
+  // The X clear button empties the search and restores every row (HS2-Z7KP1Q).
+  const clearSearch = header.locator('[data-action="clear-workspace-search"]');
+  await expect(clearSearch).toBeVisible();
+  await clearSearch.click();
+  await expect(search).toHaveValue('');
+  await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
+  await expect(clearSearch).toHaveCount(0);
+  await search.fill('long-tag-example');
   await header.getByRole('button', { name: 'Columns view' }).focus();
   await expect(search).toBeVisible();
   await search.fill('');
