@@ -152,7 +152,11 @@ function DemoRelationships({ item }: { item: DemoDefinition }) {
 
 function DemoApp() {
   const selected = findDemo(selectedId.value) ?? findDemo(defaultDemo)!;
-  const menuTicket = contextMenu.value?.ticketSlug ? collectionTickets.value.find(ticket => ticket.slug === contextMenu.value?.ticketSlug) : undefined;
+  // The TicketRow demo row (HS2-D3M0) isn't a collection ticket, so resolve its context
+  // menu from the live demo settings; collection rows resolve from their fixtures (HS2-AFB17W).
+  const menuTicket = contextMenu.value?.ticketSlug === 'HS2-D3M0'
+    ? { category: ticketRowSettings.category.value, priority: ticketRowSettings.priority.value, status: ticketRowSettings.status.value }
+    : contextMenu.value?.ticketSlug ? collectionTickets.value.find(ticket => ticket.slug === contextMenu.value?.ticketSlug) : undefined;
   const hasSettings = selected.id === 'tag-chip' || selected.id === 'status-badge' || selected.id === 'ticket-row';
   return (
     <main class={settingsOpen.value ? 'demo-shell demo-shell--settings-open' : 'demo-shell'}>
@@ -506,7 +510,7 @@ delegate(root, 'contextmenu', '[data-action="select-ticket-row"]', (event, targe
   ticketRowSettings.event.value = 'Context menu opened';
   const selected = root.querySelector<FormControl>('[data-settings="ticket-list-row"] [name="selected"]');
   if (selected) selected.checked = true;
-  contextMenu.value = { x: pointer.clientX, y: pointer.clientY };
+  contextMenu.value = { x: pointer.clientX, y: pointer.clientY, ticketSlug: row.dataset.ticketSlug };
 });
 delegate(root, 'dblclick', '[data-action="select-ticket-row"]', (event, target) => {
   if ((event.target as Element).closest('button, input, textarea, select, a, [contenteditable="true"]')) return;

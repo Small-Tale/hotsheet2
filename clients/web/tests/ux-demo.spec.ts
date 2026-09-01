@@ -325,8 +325,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const menu = page.getByRole('menu', { name: 'Ticket actions' });
   await expect(menu).toBeVisible();
   const menuItems = menu.locator('wa-dropdown-item');
-  await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(9);
-  await expect(menuItems).toHaveCount(23);
+  await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(10);
+  await expect(menuItems).toHaveCount(24);
   expect(await menuItems.evaluateAll(items => items.every(item => item.querySelector('[data-lucide]') !== null))).toBe(true);
   await expect(row).toHaveAttribute('data-selected', 'true');
   await menu.getByText('Toggle Up Next', { exact: true }).click();
@@ -537,11 +537,16 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await page.keyboard.press('Enter');
   await expect(board.locator('[data-selected="true"]')).toHaveCount(1);
   await expect(narrowRow).toHaveAttribute('data-selected', 'true');
-  await narrowRow.click({ button: 'right' });
+  // Right-click an Up-Next-eligible (started) row: the context menu only offers
+  // "Toggle Up Next" for not_started/started tickets, so a backlog row (boardRows.first())
+  // correctly hides it — this must exercise an eligible row (HS2-AFB17W).
+  const eligibleRow = board.locator('[data-ticket-slug="HS2-R76MMW"]');
+  await expect(eligibleRow).toHaveAttribute('data-status', 'started');
+  await eligibleRow.click({ button: 'right' });
   const menu = page.getByRole('menu', { name: 'Ticket actions' });
   await expect(menu).toBeVisible();
   await menu.getByText('Toggle Up Next', { exact: true }).click();
-  await expect(page.getByText(/Toggle Up Next selected for HS2-/)).toBeVisible();
+  await expect(page.getByText(/Toggle Up Next selected for HS2-R76MMW/)).toBeVisible();
   await page.goto('/ux-demo?component=ticket-board-column');
   const columnStage = page.locator('.collection-demo--column');
   const columnDemo = page.locator('[data-component="ticket-board-column"]');
