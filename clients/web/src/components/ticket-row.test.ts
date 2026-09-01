@@ -67,7 +67,8 @@ describe('TicketRow', () => {
     expect(column).toContain('data-presentation="column"');
     expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 3\.9em/);
-    expect(css).toMatch(/ticket-list-row--column[^}]*box-shadow: none/);
+    // Rows carry no drop shadow in any presentation (HS2-VX9E4Z); only selection/focus insets/outlines remain.
+    expect(css).not.toContain('box-shadow: 0 .3rem .9rem');
   });
 
   it('floats the updated time first in the identity flow so long titles can wrap beneath it', () => {

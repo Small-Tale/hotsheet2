@@ -34,12 +34,15 @@ describe('TicketBoard', () => {
     expect(css).toMatch(/ticket-board-column__tickets[^}]*padding: \.1rem \.5rem 1rem/);
   });
 
-  it('uses matching 8px outer and inter-column gutters', () => {
+  it('matches the outer margin and inter-column spacing (HS2-VX9E4Z)', () => {
+    // Outer margin before the first column = board padding-inline (.5rem) + column padding (.5rem).
+    // With a 0 column-grid gap, inter-column spacing = column padding (.5rem) + 0 + column padding (.5rem),
+    // so the space between columns matches the space before the first / after the last column.
     const markup = String(TicketBoard({ columns: [{ id: 'one', title: 'One', tickets: [] }, { id: 'two', title: 'Two', tickets: [] }] }));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board.css'), 'utf8');
-    expect(markup).toContain('--ticket-board-min-width:508px');
+    expect(markup).toContain('--ticket-board-min-width:500px');
     expect(css).toMatch(/ticket-board[^}]*padding-inline: \.5rem/);
-    expect(css).toMatch(/ticket-board__columns[^}]*gap: \.5rem/);
+    expect(css).toMatch(/ticket-board__columns[^}]*gap: 0/);
   });
 
   it('projects one independently scrollable column with a derived count', () => {
