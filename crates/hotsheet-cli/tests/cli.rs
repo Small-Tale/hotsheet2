@@ -800,6 +800,38 @@ fn doctor_reports_ok_on_a_healthy_store() {
 }
 
 #[test]
+fn doctor_lists_corrupt_tickets_without_aborting_on_the_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    new_ticket(p, "healthy");
+
+    // Plant an unparseable file straight on disk: a notes block with no closing marker —
+    // the exact shape that used to make the whole store un-listable (HS2-9X9TZD).
+    let bad = p.join("tickets/01/01ARZ3NDEKTSV4RRFFQ69G5FAV.md");
+    std::fs::create_dir_all(bad.parent().unwrap()).unwrap();
+    std::fs::write(
+        &bad,
+        "---\nid: 01ARZ3NDEKTSV4RRFFQ69G5FAV\nslug: HS-BROKEN\ntitle: broken\ncategory: bug\n\
+         priority: default\nstatus: not_started\ncreated_at: 2026-09-01T00:00:00Z\n\
+         updated_at: 2026-09-01T00:00:00Z\nschema: 1\n---\n\n<!-- hotsheet:body:begin -->\n\
+         broken\n<!-- hotsheet:body:end -->\n\n<!-- hotsheet:notes:begin -->\n",
+    )
+    .unwrap();
+
+    // doctor reports the corrupt file as an issue (non-zero exit) yet still enumerates the
+    // healthy ticket rather than dying on the first bad file.
+    hs(p)
+        .arg("doctor")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Tickets: 1"))
+        .stdout(predicate::str::contains("Corrupt: 1"))
+        .stdout(predicate::str::contains("corrupt ticket"))
+        .stdout(predicate::str::contains("HS-BROKEN"));
+}
+
+#[test]
 fn claim_next_release_and_renew() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

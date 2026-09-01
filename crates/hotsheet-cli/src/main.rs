@@ -1684,8 +1684,11 @@ fn cmd_sync(path: &Path) -> Result<()> {
 fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
     let store = FsStore::open(path)?;
     let meta = store.metadata()?;
-    // list_tickets parses every file, so a parse error surfaces here.
-    let tickets = store.list_tickets()?;
+    // Enumerate resiliently so a single unparseable file is reported as an issue rather
+    // than aborting doctor on the first one — doctor is a diagnostic meant to surface
+    // every problem, including corruption (HS2-9X9TZD / HS2-PRVPCQ).
+    let listing = store.list_tickets_resilient()?;
+    let tickets = listing.tickets;
 
     println!(
         "Store: {} (prefix {}, {} sharding)",
@@ -1696,6 +1699,23 @@ fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
     println!("Tickets: {}", tickets.len());
 
     let mut issues = 0usize;
+
+    if !listing.corrupt.is_empty() {
+        println!("Corrupt: {}", listing.corrupt.len());
+        for c in &listing.corrupt {
+            let id =
+                c.id.map(|i| i.to_string())
+                    .unwrap_or_else(|| "unknown".into());
+            let slug = c.slug.as_deref().unwrap_or("unknown");
+            println!(
+                "  ! corrupt ticket {} (id {id}, slug {slug}): {}",
+                c.path.display(),
+                c.error
+            );
+            issues += 1;
+        }
+    }
+
     let ids: HashSet<Ulid> = tickets.iter().map(|t| t.id).collect();
 
     let mut slug_counts = std::collections::HashMap::<&str, usize>::new();
