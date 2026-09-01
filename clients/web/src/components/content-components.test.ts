@@ -17,10 +17,13 @@ describe('content components', () => {
     const ready = String(NoteComposer({ value: 'Ready' }));
     expect(ready).not.toContain('disabled');
   });
-  it('renders Markdown source, preview, dirty state, and expansion as explicit states', () => {
+  it('renders Markdown source, preview, and expansion as explicit states without a save footer', () => {
     const source = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true }));
     expect(source).toContain('textarea');
-    expect(source).toContain('Saving changes');
+    // No standalone save footer / autosave hint — editing autosaves silently (HS2-N7NBFG).
+    expect(source).not.toContain('<footer>');
+    expect(source).not.toContain('Saving changes');
+    expect(source).not.toContain('Changes saved');
     expect(source).not.toContain('data-action="save-markdown"');
     expect(source).not.toContain('data-action="cancel-markdown-edit"');
     expect(source).toContain('data-lucide="maximize-2"');

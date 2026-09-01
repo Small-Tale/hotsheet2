@@ -436,7 +436,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const source = editor.getByRole('textbox', { name: 'Markdown content' });
   await expect(source).toHaveValue(/Implementation notes/);
   await source.fill('## Revised goal\nA preserved draft.');
-  await expect(editor).toContainText('Saving changes');
+  await expect(editor.locator('footer')).toHaveCount(0);
   await editor.getByRole('button', { name: 'Expand editor' }).click();
   await expect(editor).toHaveAttribute('data-expanded', 'true');
   await expect(editor).toHaveCSS('position', 'fixed');

@@ -23,7 +23,9 @@ describe('NoteCard', () => {
     expect(markup).toContain('note-card--editing');
     expect(markup).toContain('aria-label="Note body"');
     expect(markup).toContain('Draft body');
-    expect(markup).toContain('Changes save automatically');
+    // A regular note editor autosaves silently — no redundant "Changes save automatically"
+    // hint and no Save/Cancel buttons (HS2-5NJRV9).
+    expect(markup).not.toContain('Changes save automatically');
     expect(markup).not.toContain('data-action="save-note-edit"');
     expect(markup).not.toContain('data-action="cancel-note-edit"');
   });
