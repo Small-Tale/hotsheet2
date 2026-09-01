@@ -1261,10 +1261,12 @@ test('exercises the application-shell component slice and responsive composition
   await expect(inspectorHandle).toHaveAttribute('aria-valuenow', '352');
   const inspectorHandleBox = await inspectorHandle.boundingBox();
   expect(inspectorHandleBox).not.toBeNull();
+  await shell.locator('[data-component="ticket-list-row"]').first().evaluate(node => { (node as HTMLElement).dataset.resizeStability = 'same-node'; });
   await page.mouse.move(inspectorHandleBox!.x + inspectorHandleBox!.width / 2, inspectorHandleBox!.y + 80);
   await page.mouse.down();
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(inspectorHandleBox!.x - 32, inspectorHandleBox!.y + 80);
+  await expect(shell.locator('[data-resize-stability="same-node"]')).toHaveCount(1);
   await page.mouse.up();
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).not.toHaveCSS('transition-duration', '0s');
   await expect.poll(async () => Number(await inspectorHandle.getAttribute('aria-valuenow'))).toBeGreaterThan(352);

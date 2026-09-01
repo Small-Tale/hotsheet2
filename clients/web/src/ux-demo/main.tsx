@@ -15,13 +15,13 @@ import { MenuHeader } from '../components/menu-header';
 import { MenuItem } from '../components/menu-item';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { focusQuickTicketComposerTitle } from '../components/quick-ticket-composer';
-import { type ResizableRegionEdge,resizeRegionFromPointer } from '../components/resizable-region';
+import { clampRegionSize,type ResizableRegionEdge,resizeRegionFromPointer } from '../components/resizable-region';
 import { Select } from '../components/select';
 import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
 import { createDebouncedAutosave } from '../debounced-autosave';
-import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
+import { addDemoProject, AppShellDemo, closeAllProjectTabs, closeOtherProjectTabs, closeProjectTab, closeProjectTabsToRight, ConnectionStateBannerDemo, ProjectTabBarDemo, ProjectTabDemo, projectTabs, regionBounds,regionSize, ResizableRegionDemo, resizeDemoCollapsed, selectProjectTab, setRegionSize, shellEvent, shellMode, shellSidebarVisible } from './app-shell-demo';
 import { demoCatalog, type DemoCategory, type DemoDefinition,demosUsing, findDemo } from './catalog';
 import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, MarkdownEditorDemo, markdownEvent, markdownExpanded, markdownMode, markdownSavedValue, markdownValue, NoteCardDemo, NoteComposerDemo, noteComposerValue, noteDemoNotes, noteDraft, readerAttachments, readerEditing, readerNotes, readerTab, TicketReaderDemo } from './content-components-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
@@ -55,7 +55,7 @@ const noteAutosave = createDebouncedAutosave(({ id, value }: { id: string; value
 const titleAutosave = createDebouncedAutosave((value: string) => { inspectorTitle.value = value.trim(); return Promise.resolve(true); });
 const tagsAutosave = createDebouncedAutosave((value: string[]) => { inspectorTags.value = value; return Promise.resolve(true); });
 let sidebarResizeDrag: { startY: number; startHeight: number } | undefined;
-let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; edge: ResizableRegionEdge; startPoint: number; startSize: number } | undefined;
+let regionResizeDrag: { id: string; axis: 'horizontal' | 'vertical'; edge: ResizableRegionEdge; startPoint: number; startSize: number; region: HTMLElement; handle: HTMLElement; pendingSize: number; frame?: number } | undefined;
 let devReviewController: { destroy(): void } | undefined;
 const usesCollectionState = () => ['ticket-list', 'ticket-board', 'workspace-header', 'quick-ticket-composer', 'app-shell'].includes(selectedId.value);
 
@@ -235,7 +235,8 @@ delegate(root, 'pointerdown', '[data-action="resize-region"]', (event, target) =
   const region = handle.closest<HTMLElement>('[data-component="resizable-region"]')!;
   const axis = region.dataset.axis as 'horizontal' | 'vertical';
   const id = handle.dataset.regionId!;
-  regionResizeDrag = { id, axis, edge: region.dataset.edge as ResizableRegionEdge, startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY, startSize: regionSize(id) };
+  const startSize = regionSize(id);
+  regionResizeDrag = { id, axis, edge: region.dataset.edge as ResizableRegionEdge, startPoint: axis === 'horizontal' ? (event as PointerEvent).clientX : (event as PointerEvent).clientY, startSize, region, handle, pendingSize: startSize };
   document.body.dataset.resizingRegion = axis;
 });
 delegate(root, 'keydown', '[data-action="resize-region"]', (event, target) => {
@@ -279,8 +280,10 @@ window.addEventListener('pointermove', event => {
 });
 window.addEventListener('pointermove', event => {
   if (!regionResizeDrag) return;
-  const point = regionResizeDrag.axis === 'horizontal' ? event.clientX : event.clientY;
-  setRegionSize(regionResizeDrag.id, resizeRegionFromPointer(regionResizeDrag.startSize, point - regionResizeDrag.startPoint, regionResizeDrag.edge));
+  const drag = regionResizeDrag,point = drag.axis === 'horizontal' ? event.clientX : event.clientY,bounds=regionBounds[drag.id];
+  drag.pendingSize=clampRegionSize(resizeRegionFromPointer(drag.startSize,point-drag.startPoint,drag.edge),bounds.min,bounds.max);
+  if(drag.frame!==undefined)return;
+  drag.frame=requestAnimationFrame(()=>{drag.frame=undefined;drag.region.style.setProperty('--resizable-region-size',`${drag.pendingSize}px`);drag.region.style.setProperty('--resizable-region-expanded-size',`${drag.pendingSize}px`);drag.handle.setAttribute('aria-valuenow',String(drag.pendingSize))});
 });
 window.addEventListener('pointerup', () => {
   if (!sidebarResizeDrag) return;
@@ -290,7 +293,10 @@ window.addEventListener('pointerup', () => {
 });
 window.addEventListener('pointerup', () => {
   if (!regionResizeDrag) return;
-  shellEvent.value = `Region resized to ${regionSize(regionResizeDrag.id)} pixels.`;
+  const drag=regionResizeDrag;
+  if(drag.frame!==undefined)cancelAnimationFrame(drag.frame);
+  setRegionSize(drag.id,drag.pendingSize);
+  shellEvent.value = `Region resized to ${drag.pendingSize} pixels.`;
   regionResizeDrag = undefined;
   delete document.body.dataset.resizingRegion;
 });
