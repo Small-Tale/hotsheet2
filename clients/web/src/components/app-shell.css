@@ -1,5 +1,10 @@
 .app-shell { display: flex; width: 100%; height: min(46rem, calc(100vh - 8rem)); min-height: 34rem; overflow: hidden; border: 1px solid #d7dae1; border-radius: .85rem; background: #fff; box-shadow: 0 1.25rem 3rem rgba(35, 32, 48, .1); }
-.app-shell > .resizable-region[data-region-id="app-sidebar"], .app-shell > .resizable-region[data-region-id="app-inspector"] { transition: width .2s ease, flex-basis .2s ease; }
+/* Collapsing/expanding a region changes its flex width, which reflows .app-shell__main and
+   every ticket row. Animating that width relayouts the whole list per frame (HS2-4KZBTT:
+   "very choppy when there are too many tickets"), so the width change is instant — one reflow,
+   not sixty. The fixed-width content still slides (transform only, composited off the main
+   thread, and clipped by .app-shell's overflow:hidden), so the collapse stays animated without
+   touching layout. The pointer-drag resize path stays un-animated via the data-resizing-region guard. */
 .app-shell > .resizable-region[data-region-id="app-sidebar"] { border-right: 1px solid #d7dae1; background: #fff; }
 .app-shell > .resizable-region[data-region-id="app-sidebar"]::after { position: absolute; z-index: 2; top: 0; right: -1px; bottom: 0; width: 1px; background: #cfd3dc; content: ''; pointer-events: none; }
 .app-shell > .resizable-region[data-region-id="app-sidebar"][data-collapsed="true"]::after { display: none; }

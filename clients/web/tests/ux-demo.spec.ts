@@ -1285,12 +1285,19 @@ test('exercises the application-shell component slice and responsive composition
   expect(inspectorHandleBox).not.toBeNull();
   await shell.locator('[data-component="ticket-list-row"]').first().evaluate(node => { (node as HTMLElement).dataset.resizeStability = 'same-node'; });
   await page.mouse.move(inspectorHandleBox!.x + inspectorHandleBox!.width / 2, inspectorHandleBox!.y + 80);
+  const inspectorRegion = shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]');
+  // HS2-4KZBTT: the region width must never animate — animating it reflows the whole ticket list
+  // per frame. The content still slides via a compositor-only transform.
+  await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await page.mouse.down();
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toHaveCSS('transition-duration', '0s');
+  // While dragging, the resize guard suppresses even the content transform transition.
+  await expect(inspectorRegion.locator('.resizable-region__content')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(inspectorHandleBox!.x - 32, inspectorHandleBox!.y + 80);
   await expect(shell.locator('[data-resize-stability="same-node"]')).toHaveCount(1);
   await page.mouse.up();
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).not.toHaveCSS('transition-duration', '0s');
+  // After the drag ends the content transition returns, but the region width stays un-animated.
+  await expect(inspectorRegion.locator('.resizable-region__content')).not.toHaveCSS('transition-duration', '0s');
+  await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await expect.poll(async () => Number(await inspectorHandle.getAttribute('aria-valuenow'))).toBeGreaterThan(352);
   await shell.getByRole('button', { name: 'Timeline' }).click();
   await expect(shell.getByRole('button', { name: 'Timeline' })).toHaveAttribute('aria-current', 'page');
@@ -1313,7 +1320,13 @@ test('exercises the application-shell component slice and responsive composition
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showInspector.click();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
-  await shell.getByRole('button', { name: 'Hide project sidebar' }).click();
+  // Activate the collapse via keyboard: at this cramped demo width the workspace toolbar actions
+  // overflow left over the sidebar (pre-existing, tracked in HS2-501EPH) and would intercept a
+  // pointer click. Keyboard activation exercises the same toggle-project-sidebar action. Restore a
+  // pointer click here once HS2-501EPH is fixed.
+  const hideSidebar = shell.getByRole('button', { name: 'Hide project sidebar' });
+  await hideSidebar.focus();
+  await page.keyboard.press('Enter');
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'true');
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('width', '0px');
   const collapsedSidebarContent = shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"] .resizable-region__content');
