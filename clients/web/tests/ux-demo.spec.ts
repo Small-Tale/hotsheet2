@@ -384,9 +384,12 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
   await expect(editableNote.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
   await reader.getByRole('button', { name: 'Edit ticket' }).click();
-  await expect(reader.getByRole('textbox', { name: 'Ticket details' })).toBeFocused();
+  const readerDetails = reader.getByRole('textbox', { name: 'Ticket details' });
+  await expect(readerDetails).toBeFocused();
+  await expect(readerDetails).toHaveCSS('resize', 'vertical');
   await editableNote.dblclick();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
+  await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toHaveCSS('resize', 'vertical');
   await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Edited note body');
   await editableNote.getByRole('textbox', { name: 'Note body' }).blur();
   await expect(editableNote).toContainText('Edited note body');

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { MarkdownEditor } from './markdown-editor';
@@ -23,6 +26,8 @@ describe('content components', () => {
     expect(source).toContain('data-lucide="maximize-2"');
     const embedded = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true, appearance: 'embedded' }));
     expect(embedded).not.toContain('<footer>');
+    const css = readFileSync(resolve(import.meta.dirname, 'markdown-editor.css'), 'utf8');
+    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface textarea[^}]*resize: vertical/);
     expect(embedded).not.toContain('Saving changes');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');

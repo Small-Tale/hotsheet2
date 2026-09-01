@@ -5,6 +5,7 @@
 .markdown-editor--embedded .markdown-editor__toolbar > span { display: none; }
 .markdown-editor--embedded .markdown-editor__surface { padding: 0; }
 .markdown-editor--embedded .markdown-editor__preview, .markdown-editor--embedded .markdown-editor__surface textarea { min-height: 3rem; }
+.markdown-editor--embedded .markdown-editor__surface textarea { height: auto; resize: vertical; }
 .markdown-editor--embedded footer { padding: .45rem 0 0; border: 0; }
 .markdown-editor__toolbar { display: flex; min-height: 2.75rem; padding: .35rem .45rem .35rem .8rem; border-bottom: 1px solid #e1e3e8; background: #f7f8fa; align-items: center; justify-content: space-between; }
 .markdown-editor__toolbar > span { color: #6c707b; font-size: .75rem; font-weight: 650; }

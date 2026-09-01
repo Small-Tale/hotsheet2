@@ -411,7 +411,7 @@ than substituting a hardcoded default.
   headings. Raw HTML is escaped and unsafe link/image protocols are rejected.
 - `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
   to edit non-empty content, single-click to add empty content, persistent controlled
-  draft, inline/expanded presentation, and 150 ms debounced autosave without routine
+  draft, vertically resizable embedded details, inline/expanded presentation, and 150 ms debounced autosave without routine
   Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
   The embedded appearance reuses the same behavior in inspector and reader without a
   redundant standalone toolbar or save-status footer; the real inspector persists edits
@@ -464,7 +464,7 @@ icons; structural separators do not require icons.
 
 - `NoteList`
 - `NoteCard` — **demo built** with distinct regular, status, feedback-needed,
-  feedback-draft, and activity presentations sharing stable author, timestamp, body,
+  feedback-draft, and activity presentations sharing stable author, timestamp, vertically resizable edit body,
   and note identity;
   double-click enters a controlled editor whose Save persists and Cancel restores.
   In reader mode, regular/status notes remain read-only until the top-level Edit action,
