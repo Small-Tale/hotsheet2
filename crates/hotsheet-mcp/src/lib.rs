@@ -126,6 +126,7 @@ fn tools_list() -> Value {
             "inputSchema": { "type": "object", "properties": {
                 "title": str_prop("required"),
                 "category": str_prop(""), "priority": str_prop(""),
+                "status": str_prop("not_started|started|backlog; defaults to not_started"),
                 "details": str_prop(""), "tags": { "type": "array", "items": { "type": "string" } },
                 "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "blocker tickets (slug or ULID)" }
@@ -549,7 +550,7 @@ fn tool_text(text: &str, is_error: bool) -> Value {
 
 mod core_backend {
     use super::{Backend, BackendError};
-    use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Ticket, Timestamp, Ulid};
+    use hotsheet_model::{NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid};
     use hotsheet_ticketing::{
         ApiTicket, FsStore, GitProvider, NewTicket, OpError, ProviderRegistry, Settings, SortKey,
         StoreError, StoreRegistry, TicketPatch, TicketProvider, TicketQuery, TicketRef, TicketRow,
@@ -779,11 +780,19 @@ mod core_backend {
                     let blocked_by =
                         ops::resolve_blockers(&self.store, None, &str_vec(body, "blocked_by"))
                             .map_err(op_err)?;
+                    let status = opt_enum(body, "status")?.unwrap_or_default();
+                    if !matches!(
+                        status,
+                        Status::NotStarted | Status::Started | Status::Backlog
+                    ) {
+                        return Err(bad_request("status cannot be used when creating a ticket"));
+                    }
                     let new = NewTicket {
                         title: str_field(body, "title")
                             .ok_or_else(|| bad_request("title is required"))?,
                         category: str_field(body, "category").unwrap_or_else(|| "issue".into()),
                         priority: opt_enum(body, "priority")?.unwrap_or_default(),
+                        status,
                         details: str_field(body, "details").unwrap_or_default(),
                         tags: str_vec(body, "tags"),
                         up_next: body
@@ -1985,6 +1994,27 @@ mod tests {
         );
         let open = call(&backend, "hotsheet_query", json!({ "open": true }));
         assert_eq!(open.as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn corebackend_create_preserves_backlog_and_rejects_terminal_initial_status() {
+        let (_d, backend) = core();
+        let created = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "Deferred", "status": "backlog", "up_next": true }),
+        );
+        assert_eq!(created["status"], "backlog");
+        assert_eq!(created["up_next"], false);
+
+        let error = backend
+            .send(
+                "POST",
+                "/tickets",
+                &json!({ "title": "Already done", "status": "completed" }),
+            )
+            .unwrap_err();
+        assert_eq!(error.status, Some(400));
     }
 
     #[test]

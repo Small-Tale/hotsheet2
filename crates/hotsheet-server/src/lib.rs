@@ -32,7 +32,7 @@ use axum::routing::{delete, get, patch, post};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
 use hotsheet_model::{
-    CloseReason, NoteKind, ReviewKind, ReviewRequest, Ticket, Timestamp, Ulid, parse_file,
+    CloseReason, NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid, parse_file,
     to_file_string,
 };
 use hotsheet_ticketing::wire::ApiAttachment;
@@ -1527,6 +1527,7 @@ async fn create_provider_ticket(
     Json(req): Json<CreateReq>,
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
     let priority = opt_parse(req.priority.as_deref())?.unwrap_or_default();
+    let status = initial_status(req.status.as_deref())?;
     let provider = provider_for(&state, &connection_id)?;
     let ticket = provider
         .create(
@@ -1538,6 +1539,7 @@ async fn create_provider_ticket(
                 title: req.title,
                 category: req.category.unwrap_or_else(|| "issue".into()),
                 priority,
+                status,
                 details: req.details.unwrap_or_default(),
                 tags: req.tags.unwrap_or_default(),
                 up_next: req.up_next.unwrap_or(false),
@@ -2127,6 +2129,7 @@ async fn create_corrupt_ticket_repair(
                 title: format!("Repair corrupt ticket {identity}"),
                 category: Some("bug".into()),
                 priority: Some("high".into()),
+                status: None,
                 details: Some(details),
                 tags: Some(vec!["corrupt-ticket".into(), "ai-repair".into()]),
                 up_next: Some(true),
@@ -2629,12 +2632,14 @@ async fn list_store_tickets(
 
 fn do_create(state: &AppState, entry: &StoreEntry, req: CreateReq) -> Result<ApiTicket, ApiError> {
     let prefix = entry.store.metadata()?.ticket_prefix;
+    let status = initial_status(req.status.as_deref())?;
     let blocked_by =
         ops::resolve_blockers(&entry.store, None, &req.blocked_by.unwrap_or_default())?;
     let new = NewTicket {
         title: req.title,
         category: req.category.unwrap_or_else(|| "issue".to_string()),
         priority: opt_parse(req.priority.as_deref())?.unwrap_or_default(),
+        status,
         details: req.details.unwrap_or_default(),
         tags: req.tags.unwrap_or_default(),
         up_next: req.up_next.unwrap_or(false),
@@ -4345,6 +4350,7 @@ struct CreateReq {
     title: String,
     category: Option<String>,
     priority: Option<String>,
+    status: Option<String>,
     details: Option<String>,
     tags: Option<Vec<String>>,
     up_next: Option<bool>,
@@ -4444,6 +4450,20 @@ fn opt_parse<T: serde::de::DeserializeOwned>(s: Option<&str>) -> Result<Option<T
         Some(s) => serde_json::from_value(serde_json::Value::String(s.to_string()))
             .map(Some)
             .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, format!("invalid value '{s}'"))),
+    }
+}
+
+fn initial_status(value: Option<&str>) -> Result<Status, ApiError> {
+    let status = opt_parse(value)?.unwrap_or_default();
+    match status {
+        Status::NotStarted | Status::Started | Status::Backlog => Ok(status),
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "status '{}' cannot be used when creating a ticket",
+                value.unwrap_or_default()
+            ),
+        )),
     }
 }
 

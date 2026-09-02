@@ -395,13 +395,15 @@ async fn providers_expose_capabilities_and_route_the_default_git_provider() {
             .oneshot(authed(
                 "POST",
                 &format!("/providers/{connection}/tickets"),
-                Some(r#"{"title":"provider route"}"#),
+                Some(r#"{"title":"provider route","status":"backlog","up_next":true}"#),
             ))
             .await
             .unwrap(),
     )
     .await;
     assert_eq!(created["connection_id"], connection);
+    assert_eq!(created["status"], "backlog");
+    assert_eq!(created["up_next"], false);
     assert_eq!(created["native_id"], created["id"]);
     assert_eq!(
         created["qualified_id"],
@@ -498,6 +500,7 @@ async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
     let checkout_id = opened["checkout"]["id"].as_str().unwrap();
 
     let created = app
+        .clone()
         .oneshot(authed(
             "POST",
             &format!("/checkouts/{checkout_id}/tickets"),
@@ -506,12 +509,39 @@ async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
         .await
         .unwrap();
     assert_eq!(created.status(), StatusCode::CREATED);
-    assert!(
-        body_json(created).await["slug"]
-            .as_str()
-            .unwrap()
-            .starts_with("APP-")
-    );
+    let created = body_json(created).await;
+    assert!(created["slug"].as_str().unwrap().starts_with("APP-"));
+    assert_eq!(created["status"], "not_started");
+
+    let backlog = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{checkout_id}/tickets"),
+            Some(r#"{"title":"Deferred through project onboarding","status":"backlog","up_next":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(backlog.status(), StatusCode::CREATED);
+    let backlog = body_json(backlog).await;
+    assert_eq!(backlog["status"], "backlog");
+    assert_eq!(backlog["up_next"], false);
+    let persisted = FsStore::open(&ticket_store)
+        .unwrap()
+        .read_ticket(&backlog["id"].as_str().unwrap().parse().unwrap())
+        .unwrap();
+    assert_eq!(persisted.status, hotsheet_model::Status::Backlog);
+    assert!(!persisted.up_next);
+
+    let invalid = app
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{checkout_id}/tickets"),
+            Some(r#"{"title":"Invalid initial state","status":"completed"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

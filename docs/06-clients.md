@@ -170,7 +170,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   discovers or detached-starts the local server and keeps its bearer credential out of
   browser state; Tauri will replace that bridge with its native lifecycle layer.
   Creating a ticket selects it and immediately opens and focuses its Details editor so
-  the user can continue writing without another pointer action.
+  the user can continue writing without another pointer action. Creation from Backlog
+  sends and persists `status=backlog`; an authoritative refresh therefore keeps the new
+  ticket in Backlog instead of moving it into Queue as `not_started`.
 
   The bridge performs the authenticated compatibility handshake when attaching to a
   discovered server. The client distinguishes compatible skew, client-too-old,

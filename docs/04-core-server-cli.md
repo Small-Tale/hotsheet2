@@ -294,6 +294,12 @@ is settable over the API and MCP: `blocked_by` (an array of slug/ULID strings) o
 update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. All
 surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
 resolved on close.
+Create requests may also carry an initial `status` of `not_started`, `started`, or
+`backlog`; omitting it remains backward-compatible and defaults to `not_started`.
+Backlog creation clears `up_next`, and terminal/archive statuses must be reached through
+an update so lifecycle timestamps and close behavior remain coherent. The server,
+serverless MCP backend, and git-backed provider boundary preserve the same initial-state
+contract; capability-aware GitLab/Jira behavior is tracked separately.
 These write ticket files directly and **auto-commit** each mutation to the store's git
 repo, then publish without holding the user-facing mutation open for network latency
 (HS2-VJD1W4, HS2-0RDWSW). Headless CLI/MCP writes launch a reaped best-effort push in the

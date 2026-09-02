@@ -517,7 +517,12 @@ impl TicketProvider for GitHubProvider {
                 json!({"operation":transfer.operation_id,"source":transfer.source.qualified()})
             ));
         }
-        let labels = mapped_labels(&draft.category, draft.priority, &draft.tags, None);
+        let labels = mapped_labels(
+            &draft.category,
+            draft.priority,
+            &draft.tags,
+            Some(draft.status),
+        );
         let response = self.request(
             "POST",
             &self.endpoint("issues"),
@@ -1046,6 +1051,7 @@ mod tests {
             title: "copied".into(),
             category: "task".into(),
             priority: Priority::Default,
+            status: hotsheet_model::Status::NotStarted,
             details: "body".into(),
             tags: vec![],
             up_next: false,
@@ -1146,6 +1152,7 @@ mod tests {
                     title: format!("Hot Sheet provider live test {}", hotsheet_model::Ulid::new()),
                     category: "test".into(),
                     priority: Priority::Default,
+                    status: hotsheet_model::Status::NotStarted,
                     details: "Created by an opt-in Hot Sheet provider validation; this issue will be closed automatically.".into(),
                     tags: vec![],
                     up_next: false,

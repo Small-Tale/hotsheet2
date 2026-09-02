@@ -221,6 +221,7 @@ pub struct ProviderDraft {
     pub title: String,
     pub category: String,
     pub priority: Priority,
+    pub status: Status,
     pub details: String,
     pub tags: Vec<String>,
     pub up_next: bool,
@@ -575,6 +576,7 @@ impl TicketProvider for GitProvider {
                 title: draft.title,
                 category: draft.category,
                 priority: draft.priority,
+                status: draft.status,
                 details: draft.details,
                 tags: draft.tags,
                 up_next: draft.up_next,
@@ -1068,6 +1070,7 @@ pub fn copy_between(
         title: ticket.title,
         category: ticket.category,
         priority: ticket.priority,
+        status: ticket.status,
         details: ticket.details,
         tags: ticket.tags,
         up_next: ticket.up_next && capabilities.up_next,
@@ -1182,6 +1185,7 @@ mod tests {
                     title: "provider ticket".into(),
                     category: "task".into(),
                     priority: Priority::High,
+                    status: Status::NotStarted,
                     details: "details".into(),
                     tags: vec!["provider".into()],
                     up_next: true,
@@ -1244,6 +1248,7 @@ mod tests {
                     title: "claimable".into(),
                     category: "task".into(),
                     priority: Priority::Default,
+                    status: Status::NotStarted,
                     details: String::new(),
                     tags: vec![],
                     up_next: true,
@@ -1281,6 +1286,34 @@ mod tests {
                 .unwrap()
                 .claimed_by
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn git_provider_preserves_initial_backlog_status() {
+        let (_dir, provider) = git_provider();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let created = provider
+            .create(
+                ctx(id, "2026-08-26T00:00:00Z"),
+                ProviderDraft {
+                    title: "deferred provider ticket".into(),
+                    category: "task".into(),
+                    priority: Priority::Default,
+                    status: Status::Backlog,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: true,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        assert_eq!(created.status, Status::Backlog);
+        assert!(!created.up_next);
+        assert_eq!(
+            provider.get(&id.to_string()).unwrap().status,
+            Status::Backlog
         );
     }
 
@@ -1443,6 +1476,7 @@ mod tests {
                     title: "transfer me".into(),
                     category: "task".into(),
                     priority: Priority::Default,
+                    status: Status::NotStarted,
                     details: "body".into(),
                     tags: vec!["cross-provider".into()],
                     up_next: true,
@@ -1563,6 +1597,7 @@ mod tests {
                     title: "recoverable move".into(),
                     category: "task".into(),
                     priority: Priority::Default,
+                    status: Status::NotStarted,
                     details: String::new(),
                     tags: vec![],
                     up_next: false,
@@ -1631,6 +1666,7 @@ mod tests {
                     title: "has unsupported note".into(),
                     category: "task".into(),
                     priority: Priority::Default,
+                    status: Status::NotStarted,
                     details: String::new(),
                     tags: vec![],
                     up_next: false,
@@ -1691,6 +1727,7 @@ mod tests {
                     title: "completed work".into(),
                     category: "bug".into(),
                     priority: Priority::Default,
+                    status: Status::NotStarted,
                     details: String::new(),
                     tags: vec![],
                     up_next: false,
@@ -1764,6 +1801,7 @@ mod tests {
                     title: "still in progress".into(),
                     category: "bug".into(),
                     priority: Priority::Default,
+                    status: Status::NotStarted,
                     details: String::new(),
                     tags: vec![],
                     up_next: false,
@@ -1805,6 +1843,7 @@ mod tests {
                     title: "completed".into(),
                     category: "bug".into(),
                     priority: Priority::Default,
+                    status: Status::NotStarted,
                     details: String::new(),
                     tags: vec![],
                     up_next: false,
@@ -1878,6 +1917,7 @@ mod tests {
                         title: format!("source {index}"),
                         category: "task".into(),
                         priority: Priority::Default,
+                        status: Status::NotStarted,
                         details: String::new(),
                         tags: vec![],
                         up_next: false,

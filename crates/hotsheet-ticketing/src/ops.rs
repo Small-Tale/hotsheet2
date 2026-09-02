@@ -286,6 +286,7 @@ pub struct NewTicket {
     pub title: String,
     pub category: String,
     pub priority: Priority,
+    pub status: Status,
     pub details: String,
     pub tags: Vec<String>,
     pub up_next: bool,
@@ -332,9 +333,10 @@ pub fn create(
         now,
     );
     t.priority = new.priority;
+    t.status = new.status;
     t.details = new.details;
     t.tags = new.tags;
-    t.up_next = new.up_next;
+    t.up_next = new.up_next && t.status.is_active();
     t.blocked_by = new.blocked_by;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -1270,6 +1272,31 @@ mod tests {
         .unwrap();
         assert_eq!(c.close_reason, Some(CloseReason::Completed));
         assert!(c.closed_at.is_some());
+    }
+
+    #[test]
+    fn create_persists_initial_backlog_status_and_normalizes_up_next() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let created = create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "Deferred work".into(),
+                category: "task".into(),
+                status: Status::Backlog,
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(created.status, Status::Backlog);
+        assert!(!created.up_next);
+        let persisted = store.read_ticket(&id).unwrap();
+        assert_eq!(persisted.status, Status::Backlog);
+        assert!(!persisted.up_next);
     }
 
     #[test]
