@@ -386,7 +386,10 @@ fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
     )
     .unwrap();
     ix.reconcile(&store).unwrap();
-    assert!(row(&ix).feedback_needed, "flag on after a feedback_needed note");
+    assert!(
+        row(&ix).feedback_needed,
+        "flag on after a feedback_needed note"
+    );
 
     // A plain add_note (regular) leaves it on; only when the feedback_needed note is
     // gone does it clear — remove every note and reconcile.

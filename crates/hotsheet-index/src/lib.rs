@@ -195,8 +195,7 @@ impl Index {
         content_hash: &str,
     ) -> Result<(), IndexError> {
         let id = t.id.to_string();
-        let feedback_needed =
-            t.notes.iter().any(|n| n.kind == NoteKind::FeedbackNeeded) as i64;
+        let feedback_needed = t.notes.iter().any(|n| n.kind == NoteKind::FeedbackNeeded) as i64;
         let tags_json = serde_json::to_string(&t.tags).unwrap_or_else(|_| "[]".into());
         let blocked_json = serde_json::to_string(
             &t.blocked_by
