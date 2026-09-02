@@ -1,4 +1,4 @@
 :root {
-  --ticket-state-feedback-needed: #8b5cf6;
+  --ticket-state-needs-review: #8b5cf6;
   --ticket-state-up-next: #eab308;
 }

@@ -384,15 +384,14 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   (ULID tie-breaker). Never collapse duplicate, repeated, or reversed transitions;
   each entry is historical context. Show `edited_at` when it differs from creation.
 
-**Ticket-level feedback-needed indicators.** Because a `feedback_needed` note means the
-ticket is waiting on the user, a ticket that carries at least one such note is flagged at
-the ticket level so it's findable without opening it: the server computes a
-`feedback_needed` boolean on the compact list row (`TicketRow`, mirrored as an index
-column), the ticket row renders a "Feedback" badge and purple leading rail (list and
-column presentations), and the inspector/reader shows the same purple rail plus a
-"Waiting on your feedback" banner. The feedback rail takes precedence over other row
-rails so the outstanding user decision is never hidden. This is detection + indication
-only; answering the ask still happens through the note's feedback editor (above).
+**Feedback needed is needs review.** These are one user-facing concept, not competing
+ticket states. A `feedback_needed` note and an explicit review request both project to
+the same "Needs review" badge and purple leading rail in list and column presentations.
+The inspector/reader uses that same rail and "Needs review" banner; the underlying note
+still carries the specific question and feedback editor. The unified needs-review rail
+takes precedence over blocked and Up Next rails so the outstanding decision is never
+hidden. The server's compact row continues to expose the source `feedback_needed`
+boolean (mirrored in the index), while the client normalizes it at presentation time.
 
 **Reader mode is a focus surface with an edit toggle.** Opening reader mode shows the
 ticket's details + notes on one large scrollable surface (per the rule above).

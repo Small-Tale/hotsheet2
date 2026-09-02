@@ -34,7 +34,7 @@ export interface TicketRowProps {
   presentation?: TicketRowPresentation;
 }
 
-export type TicketRowIndicator = 'feedback-needed' | 'needs-review' | 'blocked' | 'up-next' | undefined;
+export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
 
 const priorityPresentation: Record<TicketPriority, { icon: IconNode; name: string; color: string }> = {
   urgent: { icon: ChevronsUp, name: 'chevrons-up', color: '#ef4444' },
@@ -48,8 +48,7 @@ export function getPriorityPresentation(priority: TicketPriority) {
 }
 
 export function ticketRowIndicator(props: Pick<TicketRowProps, 'feedbackNeeded' | 'needsReview' | 'blocked' | 'upNext'>): TicketRowIndicator {
-  if (props.feedbackNeeded) return 'feedback-needed';
-  if (props.needsReview) return 'needs-review';
+  if (props.feedbackNeeded || props.needsReview) return 'needs-review';
   if (props.blocked) return 'blocked';
   if (props.upNext) return 'up-next';
   return undefined;
@@ -81,6 +80,7 @@ export function normalizeTicketRowProps(props: TicketRowProps): TicketRowProps {
 
 export function TicketRow(raw: TicketRowProps) {
   const props = normalizeTicketRowProps(raw);
+  const needsReview = props.needsReview || props.feedbackNeeded;
   const indicator = ticketRowIndicator(props);
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
@@ -120,7 +120,7 @@ export function TicketRow(raw: TicketRowProps) {
             <div class="ticket-list-row__metadata">
               {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>}
               <StatusBadge status={props.status} compact />
-              {props.feedbackNeeded && <span class="ticket-list-row__feedback" aria-label="Feedback needed" title="Waiting on your feedback"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-list-row__feedback-icon" />Feedback</span>}
+              {needsReview && <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-list-row__feedback-icon" />Needs review</span>}
               {props.blocked && <BlockedBadge compact />}
               <span class={`ticket-list-row__owner${props.busy ? ' ticket-list-row__owner--active' : ''}`} aria-label={props.busy ? `${props.agentName} working` : props.agentName}>{props.agentName}</span>
               {props.tags.length > 0 && <div class="ticket-list-row__tags">{props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}</div>}

@@ -11,8 +11,8 @@ const startedRow2 = { ...row, native_id:'08', qualified_id:'git-local:08', id:'0
 const startedRow3 = { ...row, native_id:'09', qualified_id:'git-local:09', id:'09', slug:'HS2-START03', title:'Third started ticket', status:'started', up_next:false };
 const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'},{id:'N3',kind:'regular',created_at:'2026-08-30T00:36:00Z',edited_at:'2026-08-30T00:36:00Z',text:'Editable note'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
 
-async function mockProject(page: import('@playwright/test').Page, canUpdate = true) {
-  let rows = [row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3];
+async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded = false) {
+  let rows = [{...row,feedback_needed:primaryFeedbackNeeded},backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3];
   let selectedFull = full;
   const evidenceByTicket = new Map<string,Array<{id:string;filename:string;created_at:string}>>();
   const patches: Record<string,unknown>[] = [];
@@ -42,6 +42,17 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   });
   return patches;
 }
+
+test('projects an indexed feedback-needed note into the real row and inspector rails',async({page})=>{
+  await mockProject(page,true,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');
+  await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color','rgb(139, 92, 246)');
+  await expect(ticket.locator('.ticket-list-row__feedback')).toContainText('Needs review');
+  await ticket.click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');
+  await expect(inspector).toHaveAttribute('data-needs-review','true');
+  await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
+});
 
 interface RenderMetricsSnapshot { passes:number;mutations:number }
 type InstrumentedWindow=typeof window&{__hotsheetRenderMetrics?:{reset():void;snapshot():RenderMetricsSnapshot}};

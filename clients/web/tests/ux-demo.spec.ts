@@ -1412,15 +1412,27 @@ test('projects the feedback-needed indicator through list and board compositions
   await page.goto('/ux-demo?component=ticket-list');
   const listFeedback = page.getByRole('listbox', { name: 'Example ticket list' })
     .locator('[data-ticket-slug="HS2-R76MMW"] .ticket-list-row__feedback');
-  await expect(listFeedback).toContainText('Feedback');
+  await expect(listFeedback).toContainText('Needs review');
   await expect(listFeedback.locator('[data-lucide="circle-alert"]')).toHaveCount(1);
+  const listRow = page.getByRole('listbox', { name: 'Example ticket list' }).locator('[data-ticket-slug="HS2-R76MMW"]');
+  await expect(listRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(139, 92, 246)');
   // A ticket without a feedback_needed note shows no indicator.
   await expect(page.getByRole('listbox', { name: 'Example ticket list' })
     .locator('[data-ticket-slug="HS2-RPVFA4"] .ticket-list-row__feedback')).toHaveCount(0);
 
   await page.goto('/ux-demo?component=ticket-board');
-  await expect(page.getByRole('listbox', { name: 'Example status board' })
-    .locator('[data-ticket-slug="HS2-R76MMW"] .ticket-list-row__feedback')).toContainText('Feedback');
+  const columnRow = page.getByRole('listbox', { name: 'Example status board' }).locator('[data-ticket-slug="HS2-R76MMW"]');
+  await expect(columnRow.locator('.ticket-list-row__feedback')).toContainText('Needs review');
+  await expect(columnRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(139, 92, 246)');
+
+  await page.goto('/ux-demo?component=ticket-inspector');
+  const inspector = page.locator('[data-component="ticket-inspector"]');
+  await expect(inspector).toHaveAttribute('data-needs-review', 'true');
+  await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
+  expect(await inspector.evaluate(node => {
+    const rail = getComputedStyle(node, '::before');
+    return { background: rail.backgroundColor, width: rail.width };
+  })).toEqual({ background: 'rgb(139, 92, 246)', width: '4px' });
 });
 
 test('dims finished tickets in the list and gives the add-tag control full width', async ({ page }) => {

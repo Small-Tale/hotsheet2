@@ -8,8 +8,7 @@
 .ticket-list-row__indicator { position: absolute; inset: 0 auto 0 0; width: .25rem; }
 .ticket-list-row__indicator--up-next { background: var(--ticket-state-up-next); }
 .ticket-list-row__indicator--blocked { background: #4b5563; }
-.ticket-list-row__indicator--needs-review { background: #8b5cf6; }
-.ticket-list-row__indicator--feedback-needed { background: var(--ticket-state-feedback-needed); }
+.ticket-list-row__indicator--needs-review { background: var(--ticket-state-needs-review); }
 .ticket-list-row__body { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: .75rem; min-width: 0; padding: .65rem .85rem; }
 .ticket-list-row__content { display: grid; gap: .3rem; min-width: 0; }
 .ticket-list-row__first-line { display: block; min-width: 0; }

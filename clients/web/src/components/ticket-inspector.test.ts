@@ -44,11 +44,11 @@ describe('TicketInspector', () => {
     expect(String(TicketInspector({ ...base }))).not.toContain('ticket-inspector__feedback');
     const waiting = String(TicketInspector({ ...base, feedbackNeeded: true }));
     expect(waiting).toContain('ticket-inspector__feedback');
-    expect(waiting).toContain('data-feedback-needed="true"');
-    expect(waiting).toContain('Waiting on your feedback');
+    expect(waiting).toContain('data-needs-review="true"');
+    expect(waiting).toContain('Needs review');
     expect(waiting).toContain('circle-alert');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
-    expect(css).toMatch(/data-feedback-needed="true"[^}]*var\(--ticket-state-feedback-needed\)/);
+    expect(css).toMatch(/data-needs-review="true"[^}]*var\(--ticket-state-needs-review\)/);
   });
 
   it('shows a derived attachment count on the attachments segment', () => {

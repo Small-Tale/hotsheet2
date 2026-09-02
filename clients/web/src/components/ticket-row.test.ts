@@ -17,7 +17,7 @@ describe('TicketRow', () => {
     });
   });
 
-  it('renders a feedback-needed indicator only when the ticket is waiting on the user', () => {
+  it('renders feedback-needed and explicit review signals as the same needs-review state', () => {
     const base = { slug: 'HS2-FB', title: 'Needs a decision', status: 'started' as const, priority: 'default' as const, category: 'task', tags: [] };
     const without = String(TicketRow({ ...base }));
     expect(without).not.toContain('ticket-list-row__feedback');
@@ -26,9 +26,9 @@ describe('TicketRow', () => {
     const withFlag = String(TicketRow({ ...base, feedbackNeeded: true }));
     expect(withFlag).toContain('ticket-list-row__feedback');
     expect(withFlag).toContain('circle-alert');
-    expect(withFlag).toContain('Feedback needed');
-    expect(withFlag).toContain('>Feedback<');
-    expect(withFlag).toContain('ticket-list-row__indicator--feedback-needed');
+    expect(withFlag).toContain('Needs review');
+    expect(withFlag).toContain('ticket-list-row__indicator--needs-review');
+    expect(String(TicketRow({ ...base, needsReview: true }))).toContain('>Needs review<');
   });
 
   it('uses the picker defaults for API rows while preserving explicit no-icon categories', () => {
@@ -44,7 +44,7 @@ describe('TicketRow', () => {
     expect(ticketRowIndicator({ upNext: true })).toBe('up-next');
     expect(ticketRowIndicator({ upNext: true, blocked: true })).toBe('blocked');
     expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true })).toBe('needs-review');
-    expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true, feedbackNeeded: true })).toBe('feedback-needed');
+    expect(ticketRowIndicator({ upNext: true, blocked: true, needsReview: true, feedbackNeeded: true })).toBe('needs-review');
   });
 
   it('uses one semantic color token for every Up Next presentation', () => {
@@ -52,7 +52,7 @@ describe('TicketRow', () => {
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(tokenCss).toContain('--ticket-state-up-next: #eab308');
-    expect(tokenCss).toContain('--ticket-state-feedback-needed: #8b5cf6');
+    expect(tokenCss).toContain('--ticket-state-needs-review: #8b5cf6');
     expect(rowCss.match(/var\(--ticket-state-up-next\)/g)).toHaveLength(3);
     expect(inspectorCss).toContain('color: var(--ticket-state-up-next)');
   });
