@@ -147,9 +147,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   the selected inspector ticket. Background reconciliation is silent: it does not toggle
   the foreground loading surface, and an open metadata select remains open across the
   inspector update. Project switches abort the previous poll. Network failure retries
-  with a fresh cursor without refreshing on every failure; the first successful
-  reconnect reconciles once. Activity/presence events are deliberately outside this
-  ticket-refresh lifecycle.
+  with a fresh cursor and bounded exponential backoff without refreshing on every
+  failure; the first successful reconnect reconciles once. The server-side project
+  bridge retains legacy query authentication for `/ws/poll`, so a newer browser client
+  does not spin on immediate authentication failures from an older running server.
+  Activity/presence events are deliberately outside this ticket-refresh lifecycle.
 
   The default `Queue` view is the active working set and intentionally excludes both
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit

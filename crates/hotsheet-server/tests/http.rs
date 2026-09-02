@@ -3327,16 +3327,19 @@ async fn long_poll_hands_back_a_cursor_then_replays_events_since_it() {
     assert_eq!(evs[0]["kind"], "created");
     assert!(evs[0]["slug"].as_str().unwrap().starts_with("HS-"));
 
-    // Caught up: a poll at the current cursor with a tiny timeout returns empty, same cursor.
+    // Caught up: the request actually remains pending until its timeout; it must not
+    // return immediately and make a client spin.
+    let started = tokio::time::Instant::now();
     let resp = app
         .clone()
         .oneshot(authed(
             "GET",
-            "/ws/poll?secret=test-secret&since=2&timeout_ms=1",
+            "/ws/poll?secret=test-secret&since=2&timeout_ms=40",
             None,
         ))
         .await
         .unwrap();
+    assert!(started.elapsed() >= std::time::Duration::from_millis(25));
     let caught_up = body_json(resp).await;
     assert_eq!(caught_up["cursor"], 2);
     assert_eq!(caught_up["events"].as_array().unwrap().len(), 0);

@@ -10,6 +10,7 @@ export interface ProjectChangePollOptions {
   refresh(): Promise<void>;
   onError?(reason: unknown): void;
   retryMs?: number;
+  maxRetryMs?: number;
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 }
 
@@ -28,9 +29,11 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
   const controller = new AbortController();
   const wait = options.wait ?? abortableWait;
   const retryMs = options.retryMs ?? 500;
+  const maxRetryMs = options.maxRetryMs ?? 30_000;
   void (async () => {
     let cursor: number | undefined;
     let reconnecting = false;
+    let retryDelay = retryMs;
     for (;;) {
       let response: PollResponse;
       try {
@@ -44,11 +47,13 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
         // the workspace on every retry.
         reconnecting = true;
         cursor = undefined;
-        await wait(retryMs, controller.signal);
+        await wait(retryDelay, controller.signal);
+        retryDelay = Math.min(Math.max(retryDelay * 2, retryMs), maxRetryMs);
         if (wasAborted(controller.signal)) return;
         continue;
       }
       if (controller.signal.aborted) return;
+      retryDelay = retryMs;
       const handshake = cursor === undefined;
       cursor = response.cursor;
       const reconcile = (handshake && reconnecting) || (!handshake && containsTicketChange(response));

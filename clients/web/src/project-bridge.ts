@@ -93,6 +93,16 @@ export async function proxyProjectRequest(projectId: string, path: string, reque
   headers.set('x-hotsheet-secret', target.secret);
   headers.delete('host');
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
-  const response = await fetch(`${target.url}${path}`, { method: request.method, headers, body, redirect: 'manual' });
+  const response = await fetch(authenticatedServerUrl(target.url, path, target.secret), { method: request.method, headers, body, redirect: 'manual' });
   return new Response(response.body, { status: response.status, headers: response.headers });
+}
+
+/** Build the loopback-only upstream URL, retaining poll auth for older HS2 servers. */
+export function authenticatedServerUrl(origin: string, path: string, secret: string): string {
+  const url = new URL(path, origin);
+  // Polling originally predated standard API header auth. Keep the legacy query form on
+  // this server-side hop so a new client bridge can long-poll an older running server.
+  // The browser-facing bridge URL never contains this secret.
+  if (url.pathname === '/ws/poll' && !url.searchParams.has('secret')) url.searchParams.set('secret', secret);
+  return url.toString();
 }

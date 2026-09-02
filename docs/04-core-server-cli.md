@@ -141,8 +141,10 @@ Responsibilities:
   terminal streams, permission prompts. `GET /ws/poll` is the cursor/replay
   fallback for environments without WS; it accepts the loopback secret through
   either the native query form or `X-Hotsheet-Secret`, allowing the web bridge to
-  authenticate without exposing credentials to browser JavaScript. Watcher events
-  enter the same replay ring as API mutations.
+  authenticate without exposing credentials to browser JavaScript. The bridge uses
+  both forms on its loopback-only hop so a newer client can still long-poll a running
+  pre-header-auth server during an unsynchronized rollout. Watcher events enter the
+  same replay ring as API mutations.
 - **MCP** endpoint(s): the `hotsheet_*` tool surface for AI tools
   ([05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.8).
 - **Owns the filesystem watcher** (→ incremental reindex) and the **terminal/PTY

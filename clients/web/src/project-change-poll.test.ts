@@ -78,9 +78,11 @@ describe('project change long polling', () => {
       .mockRejectedValueOnce(new Error('still unsupported'))
       .mockReturnValueOnce(pending.promise);
     const refresh = vi.fn().mockResolvedValue(undefined);
-    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, wait: vi.fn().mockResolvedValue(undefined) });
+    const wait = vi.fn().mockResolvedValue(undefined);
+    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, wait });
     await vi.waitFor(() => { expect(pollEvents).toHaveBeenCalledTimes(3); });
     expect(refresh).not.toHaveBeenCalled();
+    expect(wait.mock.calls.map(call => call[0])).toEqual([500, 1_000]);
     stop();
     pending.resolve(response(0));
   });
