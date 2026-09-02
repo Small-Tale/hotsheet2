@@ -370,6 +370,7 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
 
 - `InspectorHeader`
   - ticket identifier
+  - full multi-line title with no line-count cap in the inspector sidebar
   - capability-aware inline title editing with debounced persistence
   - up-next/star toggle
   - close/collapse action
