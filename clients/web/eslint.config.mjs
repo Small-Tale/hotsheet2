@@ -1,4 +1,5 @@
 import eslint from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import importX from 'eslint-plugin-import-x';
 import kerfjs from 'eslint-plugin-kerfjs';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
@@ -24,6 +25,7 @@ export default tseslint.config(
       },
     },
     plugins: {
+      '@stylistic': stylistic,
       'simple-import-sort': simpleImportSort,
       import: importX,
       tsdoc,
@@ -112,6 +114,34 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unnecessary-condition': 'off',
       '@typescript-eslint/switch-exhaustiveness-check': 'off',
+      '@stylistic/array-bracket-spacing': ['error', 'never'],
+      '@stylistic/arrow-spacing': 'error',
+      '@stylistic/block-spacing': 'error',
+      '@stylistic/comma-spacing': ['error', { before: false, after: true }],
+      '@stylistic/computed-property-spacing': ['error', 'never'],
+      '@stylistic/function-call-spacing': ['error', 'never'],
+      '@stylistic/indent': [
+        'error',
+        2,
+        {
+          SwitchCase: 1,
+          ignoredNodes: [
+            'ConditionalExpression',
+            'ConditionalExpression *',
+            'TSUnionType',
+            'TSUnionType *',
+          ],
+        },
+      ],
+      '@stylistic/key-spacing': 'error',
+      '@stylistic/keyword-spacing': 'error',
+      '@stylistic/max-statements-per-line': ['error', { max: 1 }],
+      '@stylistic/object-curly-spacing': ['error', 'always'],
+      '@stylistic/semi-spacing': 'error',
+      '@stylistic/space-before-blocks': 'error',
+      '@stylistic/space-in-parens': ['error', 'never'],
+      '@stylistic/space-infix-ops': 'error',
+      '@stylistic/template-curly-spacing': ['error', 'never'],
     },
   },
   {

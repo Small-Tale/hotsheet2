@@ -23,6 +23,7 @@
     "@eslint/js": "^10.0.1",
     "@hono/vite-dev-server": "^0.26.1",
     "@playwright/test": "1.62.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/node": "22.17.2",
     "domotion-svg": "^0.24.0",
     "eslint": "^10.9.1",
