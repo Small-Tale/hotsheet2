@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { MarkdownEditor } from './markdown-editor';
 import { MarkdownPreview } from './markdown-preview';
 import { NoteComposer } from './note-composer';
+import { TicketNotes } from './ticket-notes';
 import { TicketReader } from './ticket-reader';
 
 describe('content components', () => {
@@ -16,6 +17,12 @@ describe('content components', () => {
     expect(empty).toContain('disabled');
     const ready = String(NoteComposer({ value: 'Ready' }));
     expect(ready).not.toContain('disabled');
+  });
+  it('offers the visible Add note action when the note list is empty', () => {
+    const markup = String(TicketNotes({ notes: [] }));
+    expect(markup).toContain('No notes added.');
+    expect(markup).toContain('class="ticket-notes__add"');
+    expect(markup).toContain('>Add note</button>');
   });
   it('renders Markdown source, preview, and expansion as explicit states without a save footer', () => {
     const source = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true }));

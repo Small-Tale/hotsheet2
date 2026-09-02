@@ -330,6 +330,7 @@ impl GitHubProvider {
             moved_to_store: None,
             moved_at: None,
             claimed_by: None,
+            claim_lease_expires_at: None,
             worker_label: None,
             claim_count: 0,
             assignees: issue.assignees.into_iter().map(|user| user.login).collect(),

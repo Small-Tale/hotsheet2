@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   advancePermissionRequestDemoCountdown,
-  permissionDemoRemainingMs,
+  permissionDemoCountdownRemainingMs,
   PermissionRequestDemo,
   PermissionRequestSettings,
   permissionRequestSettings,
@@ -59,17 +59,18 @@ describe('PermissionRequestCard demo settings', () => {
   });
 
   it('ticks each second, reaches zero, and resets for continued catalog review', () => {
-    expect(permissionDemoRemainingMs.value).toBe(13_000);
+    expect(permissionDemoCountdownRemainingMs()).toBe(13_000);
     advancePermissionRequestDemoCountdown();
     expect(String(PermissionRequestDemo())).toContain('0:12');
-    permissionDemoRemainingMs.value = 1_000;
+    advancePermissionRequestDemoCountdown(11_000);
+    expect(String(PermissionRequestDemo())).toContain('0:01');
     advancePermissionRequestDemoCountdown();
     expect(String(PermissionRequestDemo())).toContain('0:00');
     advancePermissionRequestDemoCountdown();
     expect(String(PermissionRequestDemo())).toContain('0:13');
     permissionRequestSettings.automation.value = 'none';
     advancePermissionRequestDemoCountdown();
-    expect(permissionDemoRemainingMs.value).toBe(13_000);
+    expect(permissionDemoCountdownRemainingMs()).toBe(13_000);
   });
 
   it('resets every setting to the canonical review state', () => {

@@ -16,10 +16,10 @@ describe('TicketInspector', () => {
   });
 
   it('renders each public tab without changing ticket identity', () => {
-    for (const tab of ['info', 'timeline', 'attachments'] as const) {
+    for (const tab of ['info', 'timeline', 'code-review', 'attachments'] as const) {
       const markup = String(TicketInspector({ ...base, activeTab: tab }));
       expect(markup).toContain('HS2-TEST');
-      expect(markup).toContain(`data-inspector-tab="${tab}" aria-label="${tab === 'info' ? 'Info' : tab === 'timeline' ? 'Timeline' : 'Attachments'}" aria-current="page"`);
+      expect(markup).toContain(`data-inspector-tab="${tab}" aria-label="${tab === 'info' ? 'Info' : tab === 'timeline' ? 'Timeline' : tab === 'code-review' ? 'Code Review' : 'Attachments'}" aria-current="page"`);
       expect(markup).toContain('aria-label="Hide inspector"');
       expect(markup).toContain('data-lucide="panel-right-close"');
       expect(markup).toContain('data-component="toolbar-text" data-size="small">HS2-TEST');
@@ -78,7 +78,7 @@ describe('TicketInspector', () => {
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     const noteCss = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
     expect(inspectorCss).toMatch(/\.ticket-inspector \{[^}]*min-width: 0;[^}]*max-width: 100%/);
-    expect(inspectorCss).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(inspectorCss).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
     expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
     expect(panelCss).toContain('.ticket-inspector__metadata > .select { width: 100%; min-width: 0; }');

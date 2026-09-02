@@ -22,6 +22,7 @@ import {
   Filter,
   FolderGit2,
   GitBranch,
+  GitCommitHorizontal,
   type IconNode,
   Info,
   Kanban,
@@ -121,11 +122,11 @@ import {
 } from './not-working-dialog-demo';
 import {
   NotificationCenterDemo,
-  permissionDemoRemainingMs,
   PermissionRequestDemo,
   PermissionRequestSettings,
   permissionRequestSettings,
   resetPermissionRequestDemo,
+  resetPermissionRequestDemoCountdown,
   startPermissionRequestDemoCountdown,
   stopPermissionRequestDemoAutomation,
 } from './permission-components-demo';
@@ -172,6 +173,7 @@ import {
 import {
   TicketAttachmentsDemo,
   TicketCategorySelectDemo,
+  TicketCodeReviewDemo,
   TicketInfoPanelDemo,
   TicketPrioritySelectDemo,
   TicketStatusMenuDemo,
@@ -348,6 +350,7 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'ticket-inspector': { icon: PanelRight, name: 'panel-right' },
     'ticket-info-panel': { icon: Info, name: 'info' },
     'ticket-timeline': { icon: Activity, name: 'activity' },
+    'ticket-code-review': { icon: GitCommitHorizontal, name: 'git-commit-horizontal' },
     'ticket-attachments': { icon: Paperclip, name: 'paperclip' },
     'ticket-reader': { icon: BookOpen, name: 'book-open' },
     'markdown-editor': { icon: FilePenLine, name: 'file-pen-line' },
@@ -410,6 +413,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-status-menu') return <TicketStatusMenuDemo />;
   if (item.id === 'ticket-info-panel') return <TicketInfoPanelDemo />;
   if (item.id === 'ticket-timeline') return <TicketTimelineDemo />;
+  if (item.id === 'ticket-code-review') return <TicketCodeReviewDemo />;
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
@@ -603,7 +607,7 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
-startPermissionRequestDemoCountdown(() => selectedId.value === 'permission-request');
+startPermissionRequestDemoCountdown(root, () => selectedId.value === 'permission-request');
 if (import.meta.env.DEV)
   void fetch('/__hotsheet/demo-modified')
     .then((response) => response.json())
@@ -959,8 +963,8 @@ delegate(
         permissionRequestSettings.request.value = control.value as typeof permissionRequestSettings.request.value;
         break;
       case 'automation':
+        resetPermissionRequestDemoCountdown();
         permissionRequestSettings.automation.value = control.value as typeof permissionRequestSettings.automation.value;
-        permissionDemoRemainingMs.value = 13_000;
         break;
       case 'always-supported':
         permissionRequestSettings.alwaysSupported.value = control.checked;
@@ -1130,6 +1134,10 @@ delegate(
 delegate(root, 'click', '[data-action="close-ticket-inspector"]', () => {
   inspectorOpen.value = false;
   recordCollectionEvent('Inspector closed');
+});
+delegate(root, 'click', '[data-action="open-code-review"]', (_event, target) => {
+  const item = target as HTMLElement;
+  recordCollectionEvent(item.dataset.reviewMode === 'range' ? 'Commit range opened in Glassbox' : 'Commit opened in Glassbox');
 });
 delegate(root, 'click', '[data-action="open-ticket-inspector"]', () => {
   inspectorOpen.value = true;

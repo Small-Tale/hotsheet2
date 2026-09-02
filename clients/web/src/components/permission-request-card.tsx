@@ -1,6 +1,6 @@
 import './permission-request-card.css';
 
-import { Bot, Check, CircleAlert, Clock3, ExternalLink, ShieldCheck, X } from 'lucide';
+import { Bot, Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } from 'lucide';
 
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { LucideIcon } from './lucide-icon';
@@ -46,6 +46,18 @@ function relativeTime(timestamp: number): string {
   return `${Math.floor(elapsed / 86_400_000)}d ago`;
 }
 
+/** Update only the timer text so unrelated Kerf/Web Awesome state stays mounted. */
+export function updatePermissionCountdownText(root: ParentNode, key: string, value: string): boolean {
+  for (const countdown of root.querySelectorAll<HTMLElement>('[data-permission-countdown-key]')) {
+    if (countdown.dataset.permissionCountdownKey !== key) continue;
+    const output = countdown.querySelector<HTMLElement>('[data-permission-countdown-value]');
+    if (!output || output.textContent === value) return false;
+    output.textContent = value;
+    return true;
+  }
+  return false;
+}
+
 /** Shared permission presentation for floating prompts and notification history. */
 export function PermissionRequestCard({ item, presentation = 'list', state = 'pending', explanation, countdown, countdownAction = 'allow', error }: PermissionRequestCardProps) {
   const history = isHistory(item);
@@ -75,9 +87,9 @@ export function PermissionRequestCard({ item, presentation = 'list', state = 'pe
     {!history && <footer class="permission-request-card__footer">
       <button type="button" class="permission-request-card__quiet-action" data-action="ignore-permission" data-request-key={item.key}>Ignore</button>
       <div class="permission-request-card__decision-area">
-        {countdown && <div class="permission-request-card__countdown">
-          <span class="permission-request-card__timer" role="timer" aria-label={`Automatic ${countdownAction} countdown`}><LucideIcon icon={Clock3} name="clock-3" />Auto-{countdownAction} in <strong>{countdown}</strong></span>
-          <button type="button" class="permission-request-card__stop-automation" data-action="cancel-permission-automation" data-request-key={item.key} title={`Stop automatic ${countdownAction} for this request`}>Stop auto-{countdownAction}</button>
+        {countdown && <div class="permission-request-card__countdown" data-permission-countdown-key={item.key}>
+          <span class="permission-request-card__timer" role="timer" aria-label={`Automatic ${countdownAction} countdown`}>Auto-{countdownAction} in <strong data-permission-countdown-value>{countdown}</strong></span>
+          <button type="button" class="permission-request-card__stop-automation" data-action="cancel-permission-automation" data-request-key={item.key} aria-label={`Stop auto-${countdownAction} countdown`} title={`Stop auto-${countdownAction} countdown for this request`}><LucideIcon icon={Pause} name="pause" /></button>
         </div>}
         <div class="permission-request-card__buttons">
           <button type="button" data-action="resolve-permission" data-decision="deny" data-scope="once" data-request-key={item.key} disabled={state === 'resolving'}>Deny</button>

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { NotificationCenter } from './notification-center';
-import { PermissionRequestCard, PermissionRequestPopup } from './permission-request-card';
+import { PermissionRequestCard, PermissionRequestPopup, updatePermissionCountdownText } from './permission-request-card';
 
 const pending: PermissionItem = { id: 7, connection: 'claude-main', tool: 'Bash', action: 'npm run test\nnpm run lint', always_allow_supported: true, key: 'project:7', projectId: 'project', projectName: 'Hot Sheet 2', agent: 'Claude', role: 'main worker', receivedAt: 10, ignored: false };
 const history: PermissionHistoryItem = { ...pending, decision: 'external', resolvedAt: 20 };
@@ -20,8 +20,9 @@ describe('permission presentation components', () => {
     expect(markup).toContain('Allow Once');
     expect(markup).toContain('data-scope="always"');
     expect(markup).toContain('Auto-allow in');
-    expect(markup).toContain('Stop auto-allow');
-    expect(markup).toContain('title="Stop automatic allow for this request"');
+    expect(markup).toContain('aria-label="Stop auto-allow countdown"');
+    expect(markup).toContain('title="Stop auto-allow countdown for this request"');
+    expect(markup).toContain('data-lucide="pause"');
   });
 
   it('uses only the first action line as an edit target', () => {
@@ -39,7 +40,18 @@ describe('permission presentation components', () => {
   it('labels automatic denial explicitly', () => {
     const markup = String(PermissionRequestCard({ item: pending, countdown: '0:13', countdownAction: 'deny' }));
     expect(markup).toContain('Auto-deny in');
-    expect(markup).toContain('Stop auto-deny');
+    expect(markup).toContain('aria-label="Stop auto-deny countdown"');
+  });
+
+  it('updates only the matching countdown text and skips unchanged or absent output', () => {
+    const output = { textContent: '0:13' };
+    const matching = { dataset: { permissionCountdownKey: 'project:7' }, querySelector: () => output };
+    const other = { dataset: { permissionCountdownKey: 'project:8' }, querySelector: () => ({ textContent: '1:00' }) };
+    const root = { querySelectorAll: () => [other, matching] } as unknown as ParentNode;
+    expect(updatePermissionCountdownText(root, 'project:7', '0:12')).toBe(true);
+    expect(output.textContent).toBe('0:12');
+    expect(updatePermissionCountdownText(root, 'project:7', '0:12')).toBe(false);
+    expect(updatePermissionCountdownText(root, 'missing', '0:10')).toBe(false);
   });
 
   it('removes always scope when unsupported and exposes popup semantics', () => {

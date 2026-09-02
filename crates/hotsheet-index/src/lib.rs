@@ -633,7 +633,7 @@ impl Index {
         let sql = format!(
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
              t.tags_json,t.blocked_by_json,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
-             t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.worker_label,t.claim_count,\
+             t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
              t.feedback_needed \
              FROM {from} WHERE {} ORDER BY {order}, t.id{limit}",
             wheres.join(" AND ")
@@ -655,7 +655,7 @@ impl Index {
                     priority: r.get(5)?,
                     status: r.get(6)?,
                     up_next: r.get::<_, i64>(7)? != 0,
-                    feedback_needed: r.get::<_, i64>(20)? != 0,
+                    feedback_needed: r.get::<_, i64>(21)? != 0,
                     tags: json_vec(r.get::<_, String>(8)?),
                     blocked_by: json_vec(r.get::<_, String>(9)?),
                     created_at: r.get(10)?,
@@ -666,8 +666,9 @@ impl Index {
                     close_reason: r.get(15)?,
                     duplicate_of: r.get(16)?,
                     claimed_by: r.get(17)?,
-                    worker_label: r.get(18)?,
-                    claim_count: r.get::<_, i64>(19)? as u32,
+                    claim_lease_expires_at: r.get(18)?,
+                    worker_label: r.get(19)?,
+                    claim_count: r.get::<_, i64>(20)? as u32,
                     auto_context: Vec::new(),
                 })
             })?

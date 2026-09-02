@@ -103,6 +103,21 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   focus, scroll, or animation regressions. Development builds enable Kerf's
   value-only-render and list-rebind warnings plus throwing list invariants.
 
+- **Field-aware live editing.** A ticket refresh merges fields that the user is not
+  editing immediately. An active text draft adopts a remote-only update when still
+  untouched, preserves a local-only edit, and stays quiet when both sides converge.
+  Only divergent changes to that same active field open a reconciliation surface with
+  the remote and local versions plus an editable merged value. Whole-ticket concurrency
+  token failures use the same comparison: unrelated field drift retries once against
+  the fresh token instead of presenting a false conflict.
+
+- **Active ticket work.** Ticket rows show a slow yellow two-dot activity animation
+  directly after status only while a worker holds a non-expired claim lease. Started
+  tickets without a lease remain visually idle, and old `claim_count` values never
+  imply presence. A local one-shot expiry timer removes stale indicators without issuing
+  polling requests; claim/release changes otherwise arrive through the shared live-update
+  channel.
+
 - **Custom project commands.** The sidebar renders machine-local typed command
   definitions as collapsible groups with running feedback, stop confirmation, latest
   outcome, and press-and-hold output history. Definitions are edited in Project
@@ -166,16 +181,29 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   route-specific and does not loosen JSON request limits.
   When the selected provider advertises attachment support, each attachment exposes
   icon actions to open, download, copy its checkout-qualified reference, or remove it;
-  upload/removal progress and failures remain visible in the attachment panel. Browser
-  clients use download where a native Tauri host can later offer Reveal in Finder.
+  every icon action has an action-and-filename accessible name, matching hover title,
+  and visible hover/focus feedback. Double-clicking the attachment row invokes the same
+  open path as its Open icon, while double-clicks on the other action buttons remain
+  scoped to those buttons. Upload/removal progress and failures remain visible in the
+  attachment panel. Browser clients use download where a native Tauri host can later
+  offer Reveal in Finder.
+
+  The inspector includes a Code Review segment for ticket-associated code history. It
+  lists each matching commit subject, abbreviated SHA, and date even when no review tool
+  is configured. When the checkout has a Git `diff.tool`, each commit has an Open action
+  and each adjacent multi-commit run has a range action. Interleaved unrelated commits
+  divide ranges rather than being silently included. Loading and launch errors stay in
+  the segment and do not replace ticket content or use the foreground project-loading
+  indicator. All discovery, target validation, and process launch remain server-owned.
 
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. A malformed file therefore cannot suppress healthy rows: the workspace
-  remains usable and renders each unreadable file as an actionable warning row with the
-  recovered slug/id or filename, full path, and parser error. Linked-store diagnostics
-  retain server-provided store attribution. Each row can reveal its file through the
-  platform file manager; the local bridge revalidates that exact path against authenticated
-  live diagnostics before launching an argument-array OS command. “Queue AI repair” creates
+  remains usable and renders each unreadable file as a selectable warning row with the
+  recovered slug/id or filename and failure state. Selecting it opens the normal
+  inspector region with the complete error, exact file path, a platform-specific reveal
+  action, and an **Attempt AI repair** action. Linked-store diagnostics retain
+  server-provided store attribution. The local bridge revalidates that exact path against
+  authenticated live diagnostics before launching an argument-array OS command. AI repair creates
   an idempotent, high-priority Up Next repair ticket in the affected store with preservation
   and validation instructions. It does not edit the corrupt file immediately. A ticket from
   a newer schema offers reveal plus update guidance, not unsafe automatic downgrade.
@@ -203,7 +231,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   or column space clears the selection. Every selected row uses the same blue border
   and background component state in list and column layouts. The inspector remains
   available in both layouts: it shows ticket details only for exactly one selection,
-  otherwise showing the HS1-style zero- or multi-selection guidance placeholder.
+  otherwise showing the HS1-style zero- or multi-selection guidance placeholder. The
+  zero-selection placeholder keeps its close toolbar visually open to the guidance
+  area without an unnecessary divider; transitional loading and multi-selection
+  placeholders retain their intentional toolbar separator.
 
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it
@@ -298,10 +329,13 @@ durable Always Allow support, actions are Ignore, Deny, Always Allow, and Allow 
 otherwise the final action is simply Allow. Per-project localStorage settings can turn
 on auto-Allow or auto-Deny after 15 seconds or 1/2/5/15/60 minutes. The timer accumulates
 only while that request's popup is visibly presented, updates once per second, pauses when
-hidden or ignored, and can be stopped for one request with an explicit “Stop auto-allow”
-or “Stop auto-deny” action. Stopping automation leaves the request open for a manual
-decision. Automatic decisions use the same authenticated route as clicks and are
-distinguished in client history.
+hidden or ignored, and appears as flat text aligned with the decision buttons plus an
+icon-only pause control whose accessible label and tooltip name the automatic outcome.
+Stopping automation completely removes both the countdown and pause control for that
+request while leaving it open for a manual decision. Timer ticks update only that text
+node—not the application root—so an unrelated open Web Awesome select or popup retains
+its live element, open state, focus, and selection. Automatic decisions use the same
+authenticated route as clicks and are distinguished in client history.
 
 The long tail of HS1 UI (custom views/query builder, terminal dashboard, stats,
 Announcer, telemetry dashboards, print) is **deferred**, each its own ticket after
@@ -432,6 +466,10 @@ disconnects self-heal, and one arbiter means local and remote behave identically
 > concepts, but unify and enlarge them. Native-client parity and the local feedback-draft
 > overlay/submission lifecycle remain separately tracked.
 
+When the provider supports notes, the Notes section always presents a visible **Add
+note** action—even when the ticket has no existing notes. Creating the first note must
+not depend on recognizing an icon-only section-header shortcut.
+
 **Five note kinds, one rendering rule.** A note's `kind` ([02](02-ticket-storage.md)
 §2.6 — `regular` / `activity` / `feedback_needed` / `feedback_draft` / `status`) determines how
 it's shown, **not how the view was opened** (HS1's inconsistency: the same note
@@ -448,7 +486,10 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   durable activity notes. For tickets created before transition recording, clients also
   show the lifecycle timestamps the ticket still carries (`created_at`, `completed_at`,
   and `verified_at`) so the timeline is never blank. Show `edited_at` when it differs
-  from creation.
+  from creation. Render status-transition entries as the concise destination label
+  (`Started`, `Completed`, `Not Started`) while retaining the full durable note text.
+  Rich native tool events and distilled background/subtask milestones remain tracked by
+  HS2-SW655F and HS2-3GRNZW respectively.
 
 **Feedback needed is needs review.** These are one user-facing concept, not competing
 ticket states. A `feedback_needed` note and an explicit review request both project to

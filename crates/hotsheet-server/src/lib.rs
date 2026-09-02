@@ -5,6 +5,7 @@
 //! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
+pub mod code_review;
 pub mod commands;
 pub mod dist_work_loop;
 pub mod lifecycle;
@@ -757,6 +758,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/repository/status",
             get(checkout_repository_status),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/code-review",
+            get(get_checkout_code_review).post(open_checkout_code_review),
         )
         .route(
             "/checkouts/{reference}/tickets",
@@ -1819,6 +1824,70 @@ async fn checkout_repository_status(
     hotsheet_ticketing::repository_status::snapshot(FsPath::new(&checkout.root))
         .map(Json)
         .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))
+}
+
+async fn get_checkout_code_review(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<Json<code_review::CodeReview>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let root: std::path::PathBuf = checkout.root.into();
+    let slug = ticket.slug;
+    tokio::task::spawn_blocking(move || code_review::discover(&root, &slug))
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("code review discovery task failed: {error}"),
+            )
+        })?
+        .map(Json)
+        .map_err(code_review_api_error)
+}
+
+async fn open_checkout_code_review(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(target): Json<code_review::ReviewTarget>,
+) -> Result<StatusCode, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let root: std::path::PathBuf = checkout.root.into();
+    let slug = ticket.slug;
+    tokio::task::spawn_blocking(move || {
+        let review = code_review::discover(&root, &slug)?;
+        code_review::launch(&root, &review, &target)
+    })
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("code review launch task failed: {error}"),
+        )
+    })?
+    .map_err(code_review_api_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn code_review_api_error(error: code_review::CodeReviewError) -> ApiError {
+    let status = match error {
+        code_review::CodeReviewError::NotRepository => StatusCode::UNPROCESSABLE_ENTITY,
+        code_review::CodeReviewError::DifftoolNotConfigured => StatusCode::CONFLICT,
+        code_review::CodeReviewError::InvalidTarget => StatusCode::BAD_REQUEST,
+        code_review::CodeReviewError::Git(_) | code_review::CodeReviewError::Launch(_) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+    ApiError::new(status, error.to_string())
 }
 
 fn checkout_entries(

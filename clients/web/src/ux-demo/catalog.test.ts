@@ -10,7 +10,7 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'not-working-dialog', 'note-composer', 'note-card', 'permission-request', 'notification-center', 'select', 'toolbar', 'menu-item', 'menu-header', 'toolbar-control-group', 'toolbar-text', 'pending-attachment-picker']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'not-working-dialog', 'note-composer', 'note-card', 'permission-request', 'notification-center', 'select', 'toolbar', 'menu-item', 'menu-header', 'toolbar-control-group', 'toolbar-text', 'pending-attachment-picker']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
@@ -20,7 +20,7 @@ describe('UX demo catalog', () => {
     expect(demosUsing('toolbar-control-group').map(entry => entry.id)).toEqual(['app-shell', 'workspace-header', 'ticket-inspector', 'toolbar']);
     expect(findDemo('project-tabs')?.uses).toEqual(['project-tab']);
     expect(demosUsing('project-tab').map(entry => entry.id)).toEqual(['project-tabs']);
-    expect(findDemo('ticket-inspector')?.uses).toEqual(['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-attachments', 'note-card', 'note-composer']);
+    expect(findDemo('ticket-inspector')?.uses).toEqual(['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'note-card', 'note-composer']);
     expect(findDemo('ticket-reader')?.uses).toEqual(['ticket-inspector']);
     expect(demosUsing('note-card').map(entry => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);

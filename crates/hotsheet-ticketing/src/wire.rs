@@ -56,6 +56,7 @@ pub struct ApiTicket {
     /// When the move happened (tombstones only).
     pub moved_at: Option<String>,
     pub claimed_by: Option<String>,
+    pub claim_lease_expires_at: Option<String>,
     pub worker_label: Option<String>,
     pub claim_count: u32,
     pub assignees: Vec<String>,
@@ -124,6 +125,7 @@ impl ApiTicket {
             moved_to_store: t.moved_to_store.clone(),
             moved_at: ts(&t.moved_at),
             claimed_by: t.claimed_by.clone(),
+            claim_lease_expires_at: ts(&t.claim_lease_expires_at),
             worker_label: t.worker_label.clone(),
             claim_count: t.claim_count,
             assignees: t.assignees.clone(),
@@ -208,6 +210,7 @@ pub struct TicketRow {
     pub close_reason: Option<String>,
     pub duplicate_of: Option<String>,
     pub claimed_by: Option<String>,
+    pub claim_lease_expires_at: Option<String>,
     pub worker_label: Option<String>,
     pub claim_count: u32,
     /// Computed standing guidance; never persisted in the index or ticket file.
@@ -240,6 +243,7 @@ impl From<&Ticket> for TicketRow {
             close_reason: t.close_reason.as_ref().map(enum_str),
             duplicate_of: t.duplicate_of.map(|u| u.to_string()),
             claimed_by: t.claimed_by.clone(),
+            claim_lease_expires_at: ts(&t.claim_lease_expires_at),
             worker_label: t.worker_label.clone(),
             claim_count: t.claim_count,
             auto_context: Vec::new(),
@@ -335,12 +339,20 @@ mod tests {
 
     #[test]
     fn row_enum_fields_are_wire_strings() {
-        let row = TicketRow::from(&ticket());
+        let mut ticket = ticket();
+        ticket.claimed_by = Some("codex-1".into());
+        ticket.claim_lease_expires_at = Some(Timestamp::new("2026-08-20T00:30:00Z"));
+        let row = TicketRow::from(&ticket);
         assert_eq!(row.priority.as_deref(), Some("high"));
         assert_eq!(row.status.as_deref(), Some("started"));
         assert_eq!(row.category.as_deref(), Some("bug"));
         assert!(row.up_next);
         assert!(row.slug.starts_with("HS-"));
+        assert_eq!(row.claimed_by.as_deref(), Some("codex-1"));
+        assert_eq!(
+            row.claim_lease_expires_at.as_deref(),
+            Some("2026-08-20T00:30:00Z")
+        );
     }
 
     #[test]
@@ -447,10 +459,17 @@ mod tests {
 
     #[test]
     fn api_ticket_carries_typed_enums_and_body() {
-        let api = ApiTicket::from(&ticket());
+        let mut ticket = ticket();
+        ticket.claimed_by = Some("codex-1".into());
+        ticket.claim_lease_expires_at = Some(Timestamp::new("2026-08-20T00:30:00Z"));
+        let api = ApiTicket::from(&ticket);
         assert_eq!(api.priority, Priority::High);
         assert_eq!(api.status, Status::Started);
         assert_eq!(api.title, "Fix flicker");
-        assert_eq!(api.schema, ticket().schema);
+        assert_eq!(api.schema, ticket.schema);
+        assert_eq!(
+            api.claim_lease_expires_at.as_deref(),
+            Some("2026-08-20T00:30:00Z")
+        );
     }
 }

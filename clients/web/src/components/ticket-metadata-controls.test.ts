@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { TicketAttachments } from './ticket-attachments';
@@ -47,9 +50,14 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('aria-label="Browse and add attachments"');
     expect(attachments).toContain('aria-label="Drop or browse attachments"');
     expect(attachments).toContain('data-action="open-attachment"');
+    expect(attachments).toContain('data-action="open-attachment-row"');
     expect(attachments).toContain('data-action="download-attachment"');
     expect(attachments).toContain('data-action="copy-attachment-reference"');
     expect(attachments).toContain('data-action="remove-attachment"');
+    for (const label of ['Open one.png', 'Download one.png', 'Copy reference to one.png', 'Remove one.png']) {
+      expect(attachments).toContain(`aria-label="${label}" title="${label}"`);
+    }
+    expect(attachments).toContain('title="one.png — double-click to open"');
     expect(attachments).toContain('data-lucide="external-link"');
     expect(attachments).toContain('data-lucide="download"');
     expect(attachments).toContain('data-lucide="clipboard"');
@@ -58,5 +66,14 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(unsupported).toContain('does not support attachment actions');
     expect(unsupported).not.toContain('name="ticket-attachments"');
     expect(unsupported).not.toContain('data-action="remove-attachment"');
+    expect(unsupported).not.toContain('data-action="open-attachment-row"');
+  });
+
+  it('gives every attachment action visible hover and keyboard-focus feedback', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(css).toContain('.ticket-inspector__attachment[data-action="open-attachment-row"]:hover');
+    expect(css).toContain('.ticket-inspector__attachment-actions button:hover, .ticket-inspector__attachment-actions button:focus-visible');
+    expect(css).toContain('.ticket-inspector__attachment-actions button:last-child:hover, .ticket-inspector__attachment-actions button:last-child:focus-visible');
+    expect(css).toContain('outline: var(--wa-focus-ring)');
   });
 });

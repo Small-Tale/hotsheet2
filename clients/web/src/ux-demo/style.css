@@ -62,6 +62,10 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .toolbar-control-group-demo wa-button::part(caret) { margin-inline-start: 2px; }
 .metadata-control-demo { display: grid; width: min(24rem, 100%); margin: auto; padding: 3rem; }
 .inspector-panel-demo { width: min(27rem, 100%); margin: auto; overflow: hidden; border: 1px solid #d9dbe1; border-radius: .8rem; background: #fff; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .09); }
+.code-review-demo { display: grid; width: min(56rem, 100%); margin: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 1.5rem; }
+.code-review-demo article { display: grid; min-width: 0; gap: .5rem; }
+.code-review-demo h3 { margin: 0; font-size: .8rem; }
+@media (max-width: 45rem) { .code-review-demo { grid-template-columns: 1fr; } }
 .sidebar-component-demo { display: grid; width: min(32rem, 100%); min-height: 28rem; margin: auto; align-content: center; justify-items: center; gap: 1.5rem; }
 .sidebar-component-demo__rail { width: min(17rem, 100%); padding: .65rem; border: 1px solid #d9dbe1; border-radius: .85rem; background: #fafafd; box-shadow: 0 .75rem 2rem rgba(35, 32, 48, .08); }
 .menu-item-demo { display: grid; width: min(30rem, 100%); margin: auto; padding: 1rem; border: 1px solid #d9dbe1; border-radius: .85rem; background: #fafafd; gap: 1.25rem; }

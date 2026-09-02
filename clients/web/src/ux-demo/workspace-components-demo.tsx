@@ -1,5 +1,6 @@
 import { signal } from 'kerfjs';
 
+import type { CodeReview } from '../api';
 import { PageHeader } from '../components/page-header';
 import { QuickTicketComposer } from '../components/quick-ticket-composer';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
@@ -28,6 +29,15 @@ export const inspectorTitle = signal('Build TicketList and TicketBoard around sh
 export const inspectorTitleDraft = signal(inspectorTitle.value);
 export const inspectorTitleEditing = signal(false);
 export const inspectorTags = signal(['client', 'ux']);
+export const inspectorCodeReview: CodeReview = {
+  difftool: 'Glassbox',
+  truncated: false,
+  ranges: [{ from: '92ed71a', to: 'c4a38be', count: 2 }],
+  commits: [
+    { sha: 'c4a38be', short_sha: 'c4a38be', subject: 'HS2-DEMO: refine the responsive inspector layout', committed_at: '2026-09-02T06:14:00Z' },
+    { sha: '92ed71a', short_sha: '92ed71a', subject: 'HS2-DEMO: add ticket-associated commit discovery', committed_at: '2026-09-02T05:42:00Z' },
+  ],
+};
 let demoSequence = 1;
 
 export function focusWorkspaceSearch(root: ParentNode): boolean {
@@ -99,7 +109,7 @@ export function TicketInspectorDemo() {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   return <section class="inspector-demo" aria-label="TicketInspector demo">
     {inspectorOpen.value
-      ? <TicketInspector slug={ticket.slug} title={inspectorTitle.value} titleEditing={inspectorTitleEditing.value} titleDraft={inspectorTitleDraft.value} status={inspectorStatus.value} priority={inspectorPriority.value} category={inspectorCategory.value} tags={inspectorTags.value} tagSuggestions={['client', 'ux', 'server', 'regression', 'accessibility']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={inspectorTab.value} upNext={ticket.upNext} feedbackNeeded={readerNotes.value.some(note => note.kind === 'feedback_needed')} />
+      ? <TicketInspector slug={ticket.slug} title={inspectorTitle.value} titleEditing={inspectorTitleEditing.value} titleDraft={inspectorTitleDraft.value} status={inspectorStatus.value} priority={inspectorPriority.value} category={inspectorCategory.value} tags={inspectorTags.value} tagSuggestions={['client', 'ux', 'server', 'regression', 'accessibility']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={inspectorTab.value} upNext={ticket.upNext} feedbackNeeded={readerNotes.value.some(note => note.kind === 'feedback_needed')} codeReview={inspectorCodeReview} />
       : <wa-button data-action="open-ticket-inspector">Open ticket inspector</wa-button>}
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;

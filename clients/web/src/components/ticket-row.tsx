@@ -122,9 +122,10 @@ export function TicketRow(raw: TicketRowProps) {
             <div class="ticket-list-row__metadata">
               {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>}
               <StatusBadge status={props.status} compact />
+              {props.busy && <span class="ticket-list-row__active-work" role="img" aria-label={`${props.agentName} actively working`} title={`${props.agentName} is actively working on this ticket`}></span>}
               {needsReview && <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-list-row__feedback-icon" />Needs review</span>}
               {props.blocked && <BlockedBadge compact />}
-              <span class={`ticket-list-row__owner${props.busy ? ' ticket-list-row__owner--active' : ''}`} aria-label={props.busy ? `${props.agentName} working` : props.agentName}>{props.agentName}</span>
+              <span class="ticket-list-row__owner" aria-label={props.agentName}>{props.agentName}</span>
               {props.tags.length > 0 && <div class="ticket-list-row__tags">{props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}</div>}
             </div>
           </div>

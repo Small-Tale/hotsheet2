@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resizeDemoWidth, selectProjectTab, setRegionSize, shellMode } from '../ux-demo/app-shell-demo';
@@ -9,6 +11,11 @@ import { ProjectTabBar } from './project-tab-bar';
 import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from './resizable-region';
 
 describe('application shell components', () => {
+  it('defines the supported application floor as 640 by 480 CSS pixels', () => {
+    const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    expect(css).toMatch(/\.app-shell \{[^}]*min-width: 40rem/);
+    expect(css).toMatch(/\.app-shell \{[^}]*min-height: 30rem/);
+  });
   it('projects every ProjectTab state without nesting actions', () => {
     const markup = String(ProjectTab({ id: 'one', name: 'One', location: 'remote', selected: true, busy: true, disconnected: true, attention: true }));
     expect(markup).toContain('role="tab"');

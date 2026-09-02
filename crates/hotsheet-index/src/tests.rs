@@ -788,6 +788,11 @@ fn assignee_facet_and_claimed_filters() {
         fb0.to_string(),
         "claim_next took the Up Next ticket (FB0)"
     );
+    assert_eq!(claimed[0].claimed_by.as_deref(), Some("worker-a"));
+    assert_eq!(
+        claimed[0].claim_lease_expires_at.as_deref(),
+        Some("2026-08-22T01:00:00Z")
+    );
     let unclaimed = ix
         .query(&TicketQuery {
             claimed: Some(false),

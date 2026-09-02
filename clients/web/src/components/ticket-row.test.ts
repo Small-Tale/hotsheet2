@@ -53,7 +53,7 @@ describe('TicketRow', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(tokenCss).toContain('--hs-ticket-state-up-next: #eab308');
     expect(tokenCss).toContain('--hs-ticket-state-needs-review: #8b5cf6');
-    expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(3);
+    expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(4);
     expect(inspectorCss).toContain('color: var(--hs-ticket-state-up-next)');
   });
 
@@ -107,6 +107,19 @@ describe('TicketRow', () => {
     const markup = String(TicketRow({ slug: 'HS2-BLOCK', title: 'Blocked row', status: 'started', priority: 'high', category: 'bug', tags: [], blocked: true }));
     expect(markup).toContain('data-component="blocked-badge"');
     expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-component="blocked-badge"'));
+  });
+
+  it('shows slow yellow active work immediately after status without conflating started state', () => {
+    const inactive = String(TicketRow({ slug: 'HS2-STARTED', title: 'Started but idle', status: 'started', priority: 'default', category: 'task', tags: [], busy: false, agentName: 'Codex' }));
+    expect(inactive).not.toContain('ticket-list-row__active-work');
+    const active = String(TicketRow({ slug: 'HS2-ACTIVE', title: 'Being edited', status: 'not_started', priority: 'default', category: 'task', tags: [], busy: true, agentName: 'Codex' }));
+    expect(active).toContain('aria-label="Codex actively working"');
+    expect(active.indexOf('data-component="status-badge"')).toBeLessThan(active.indexOf('ticket-list-row__active-work'));
+    expect(active.indexOf('ticket-list-row__active-work')).toBeLessThan(active.indexOf('ticket-list-row__owner'));
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    expect(css).toContain('background: var(--hs-ticket-state-up-next)');
+    expect(css).toContain('animation: ticket-active-work 2.4s ease-in-out infinite');
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 
   it('marks completed and verified rows for readable title-only completion styling', () => {

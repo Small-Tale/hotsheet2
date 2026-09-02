@@ -266,6 +266,15 @@ declarative.
      seconds of silence ⇒ idle. This backstops a dropped Stop hook.
   The registry exposes `isBusy(connection)`; the UI shows "X working / X idle."
 
+**Ticket-level active work.** Connection busy state answers whether a tool connection is
+doing something, while a non-expired ticket claim lease answers which ticket a worker is
+actively holding. The ticket list projects that lease as an animated yellow indicator
+immediately after status. This is deliberately independent of the durable `started`
+status, and `claim_count` remains retry history rather than presence. The client schedules
+the nearest lease expiry locally so the indicator clears on time without network polling.
+Self-claim workers already communicate through claim/renew/release; exact-ticket claims
+for orchestrated assignments are tracked by HS2-J5WVMQ.
+
 ## 5.7 Permissions & user prompts (permission checks and other prompts)
 
 A **host-side permission bridge**: "ask the user, get a decision," with each

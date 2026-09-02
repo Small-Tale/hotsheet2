@@ -39,6 +39,8 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(commandRun&&request.method()==='GET')return route.fulfill({json:commandRuns.find(item=>item.id===commandRun[1])});
     if(path.endsWith('/ws/poll')&&request.method()==='GET'){await new Promise(resolve=>setTimeout(resolve,1_000));const since=Number(url.searchParams.get('since')??0);return route.fulfill({json:{cursor:since,events:[],overflow:false}})}
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
+    if(path.endsWith('/tickets/01/code-review')&&request.method()==='GET')return route.fulfill({json:{difftool:'Glassbox',truncated:false,ranges:[{from:'aaa',to:'bbb',count:2}],commits:[{sha:'bbb',short_sha:'bbbbbbb',subject:'HS2-DEMO01: finish the responsive review segment',committed_at:'2026-09-02T08:00:00Z'},{sha:'aaa',short_sha:'aaaaaaa',subject:'HS2-DEMO01: discover associated commits',committed_at:'2026-09-02T07:00:00Z'}]}});
+    if(path.endsWith('/tickets/01/code-review')&&request.method()==='POST'){patches.push({operation:'code-review',...request.postDataJSON()});return route.fulfill({status:204})}
     if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
     if(path.endsWith('/batch')&&request.method()==='POST'){const updates=request.postDataJSON().updates as Array<Record<string,unknown>&{id:string}>;const changed=updates.map(({id,...body})=>{patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);const ticket=rows.find(item=>item.id===id)!;return{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id)??[],concurrency_token:`next-${id}`}});return route.fulfill({json:changed})}
     if(path.endsWith('/tickets')&&request.method()==='GET'){if(url.searchParams.get('text')==='QQRY00'){await new Promise(resolve=>setTimeout(resolve,150));return route.fulfill({json:[searchSlugRow,searchDetailsRow]})}return route.fulfill({json:rows})}
@@ -56,7 +58,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.includes('/tickets/01/attachments/')&&request.method()==='GET')return route.fulfill({body:'attachment bytes',headers:{'content-type':'application/octet-stream','x-hotsheet-filename':'proof.png'}});
     if(path.includes('/tickets/01/attachments/')&&request.method()==='DELETE'){const attachmentId=path.split('/').pop();selectedFull={...selectedFull,attachments:selectedFull.attachments.filter(item=>item.id!==attachmentId)};return route.fulfill({json:{store:'git-local',...selectedFull}})}
     if(path.includes('/tickets/01/notes/')&&request.method()==='DELETE'){const noteId=path.split('/').pop();selectedFull={...selectedFull,notes:selectedFull.notes.filter(note=>{return note.id!==noteId})};return route.fulfill({json:{store:'git-local',...selectedFull}})}
-    if(path.includes('/tickets/')&&request.method()==='PATCH'){const id=path.split('/').pop(),body=request.postDataJSON();patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);if(id==='01'){selectedFull={...selectedFull,...body};return route.fulfill({json:{store:'git-local',...selectedFull}})}const changed=rows.find(item=>item.id===id)!;return route.fulfill({json:{store:'git-local',...changed,details:'',notes:[],attachments:evidenceByTicket.get(id!)??[]}})}
+    if(path.includes('/tickets/')&&request.method()==='PATCH'){const id=path.split('/').pop(),body=request.postDataJSON();patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);if(id==='01'){const label=(value:string)=>value.split('_').map(part=>part.charAt(0).toUpperCase()+part.slice(1)).join(' '),statusNote=typeof body.status==='string'&&body.status!==selectedFull.status?{id:`N-status-${patches.length}`,kind:'activity' as const,created_at:'2026-09-02T02:00:00Z',edited_at:'2026-09-02T02:00:00Z',text:`Status changed from ${label(selectedFull.status)} to ${label(body.status)}`}:undefined;selectedFull={...selectedFull,...body,notes:statusNote?[...selectedFull.notes,statusNote]:selectedFull.notes};return route.fulfill({json:{store:'git-local',...selectedFull}})}const changed=rows.find(item=>item.id===id)!;return route.fulfill({json:{store:'git-local',...changed,details:'',notes:[],attachments:evidenceByTicket.get(id!)??[]}})}
     return route.continue();
   });
   return patches;
@@ -90,12 +92,37 @@ test('clears needs review when a regular response follows the feedback-needed no
   await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
 });
 
+test('lists associated commits and opens a validated commit or range in the configured diff tool',async({page})=>{
+  const actions=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');await inspector.getByRole('button',{name:'Code Review'}).click();const review=inspector.locator('[data-component="ticket-code-review"]');
+  await expect(review).toContainText('Opens in Glassbox');await expect(review.locator('[data-commit-sha]')).toHaveCount(2);await expect(review).toContainText('HS2-DEMO01: finish the responsive review segment');
+  await review.getByRole('button',{name:'Open 2 commit range in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='aaa'&&action.to==='bbb')).toBe(true);
+  await review.getByRole('button',{name:'Open commit bbbbbbb in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='commit'&&action.commit==='bbb')).toBe(true);
+  await page.screenshot({path:'/private/tmp/hs2-pg1hkj-code-review-production-wide.png',fullPage:true});
+});
+
+test('shows active work only for the lifetime of a live ticket claim lease',async({page})=>{
+  await mockProject(page);const expires=new Date(Date.now()+5_000).toISOString(),active={...row,claimed_by:'codex-worker',worker_label:'Codex',claim_lease_expires_at:expires,claim_count:1},previouslyClaimed={...startedRow2,claim_count:4};
+  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:[active,previouslyClaimed]}):route.fallback());
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();await page.waitForTimeout(500);
+  const activeRow=page.locator('[data-ticket-slug="HS2-DEMO01"]'),idleRow=page.locator('[data-ticket-slug="HS2-START02"]'),indicator=activeRow.locator('.ticket-list-row__active-work');
+  await expect(indicator).toHaveAttribute('aria-label','Codex actively working');await expect(idleRow.locator('.ticket-list-row__active-work')).toHaveCount(0);expect(await activeRow.locator('.ticket-list-row__metadata').evaluate(node=>[...node.children].map(child=>child.className))).toEqual(expect.arrayContaining(['ticket-list-row__active-work']));
+  await page.screenshot({path:'/private/tmp/hs2-w77014-active-work-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(indicator).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-w77014-active-work-narrow.png',fullPage:true});
+  await expect(indicator).toHaveCount(0,{timeout:6_000});
+});
+
 test('keeps the visible inspector region mounted while a selected ticket loads',async({page})=>{
   await mockProject(page,true,false,300);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const region=page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');await expect(region).toBeVisible();const before=await region.evaluate(node=>node.getBoundingClientRect().width);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.waitForTimeout(75);
-  await expect(region).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();expect(await region.evaluate(node=>node.getBoundingClientRect().width)).toBe(before);
+  await expect(region).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder > .toolbar')).toHaveAttribute('data-divider','true');expect(await region.evaluate(node=>node.getBoundingClientRect().width)).toBe(before);
   await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
+});
+
+test('omits the separator below the empty ticket inspector toolbar',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();await page.waitForTimeout(500);
+  const placeholder=page.locator('.ticket-inspector-placeholder'),toolbar=placeholder.locator(':scope > .toolbar');await expect(placeholder).toContainText('Select a ticket to see and edit its details');await expect(toolbar).toHaveAttribute('data-divider','false');await expect(toolbar).toHaveCSS('border-bottom-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-gvk7zy-empty-inspector-wide.png',fullPage:true});
+  await page.setViewportSize({width:940,height:844});await expect(placeholder).toBeVisible();await expect(toolbar).toHaveCSS('border-bottom-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-gvk7zy-empty-inspector-narrow.png',fullPage:true});
 });
 
 test('resizes and persists both production shell sidebars',async({page})=>{
@@ -184,18 +211,22 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
 
   const corrupt=page.locator('[data-component="corrupt-ticket-row"]');
   await expect(corrupt).toContainText('HS2-QQRY00');
-  await expect(corrupt).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
-  await expect(corrupt).toContainText('unsupported content follows the bounded Notes section');
+  await expect(corrupt).toContainText('Ticket file could not be read');
   await expect(corrupt).toHaveAttribute('role','group');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
-  await corrupt.getByRole('button',{name:'Reveal in Finder'}).click();
-  await expect(corrupt).toContainText('Opened the file location.');
+  await corrupt.getByRole('button',{name:'Open recovery for HS2-QQRY00'}).click();
+  const inspector=page.locator('[data-component="corrupt-ticket-inspector"]');
+  await expect(inspector).toContainText('Ticket parsing error');
+  await expect(inspector).toContainText('unsupported content follows the bounded Notes section');
+  await expect(inspector).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
+  await inspector.getByRole('button',{name:'Reveal in Finder'}).click();
+  await expect(inspector).toContainText('Opened the file location.');
   expect(recoveryRequests.reveal).toEqual({path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md'});
-  await corrupt.getByRole('button',{name:'Queue AI repair'}).click();
-  await expect(corrupt).toContainText('Queued HS2-REPAIR for AI repair.');
+  await inspector.getByRole('button',{name:'Attempt AI repair'}).click();
+  await expect(inspector).toContainText('Queued HS2-REPAIR for AI repair.');
   expect(recoveryRequests.repair).toEqual({path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md'});
   await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-wide.png',fullPage:true});
-  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
+  await page.setViewportSize({width:940,height:844});await expect(inspector).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
 
   await page.getByText('Use real project tickets').click();
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
@@ -213,11 +244,10 @@ test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt'
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const newer=page.locator('[data-component="corrupt-ticket-row"]');
   await expect(newer).toContainText('Hot Sheet 2 update required');
-  await expect(newer).toContainText('created by a newer version');
   await expect(newer.locator('[data-lucide="refresh-cw"]')).toBeVisible();
   await expect(newer).not.toContainText('Ticket file could not be read');
-  await expect(newer.getByRole('button',{name:'Reveal in Finder'})).toBeVisible();
-  await expect(newer.getByRole('button',{name:'Queue AI repair'})).toHaveCount(0);
+  await newer.getByRole('button',{name:'Open recovery for HS2-NEWER'}).click();const inspector=page.locator('[data-component="corrupt-ticket-inspector"]');await expect(inspector).toContainText('created by a newer version');await expect(inspector.getByRole('button',{name:'Reveal in Finder'})).toBeVisible();
+  await expect(inspector.getByRole('button',{name:'Attempt AI repair'})).toHaveCount(0);
 });
 
 test('updates the open project after external ticket additions edits and deletion',async({page})=>{
@@ -244,6 +274,46 @@ test('updates the open project after external ticket additions edits and deletio
 
   liveRows=liveRows.filter(item=>item.id!=='01');await emit('deleted','01','');
   await expect(original).toHaveCount(0);await expect(page.getByRole('complementary',{name:'Ticket inspector'})).toContainText('Select a ticket to see and edit its details');
+});
+
+test('merges unrelated external ticket fields and offers an editable merge for the active field',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  await mockProject(page);
+  let liveRows=[row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3],liveFull={...full},cursor=0;
+  const polls:Array<import('@playwright/test').Route>=[],patches:Record<string,unknown>[]=[];
+  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:liveRows}):route.fallback());
+  await page.route('**/tickets/01',route=>{
+    const request=route.request();
+    if(request.method()==='GET')return route.fulfill({json:{store:'git-local',...liveFull}});
+    if(request.method()!=='PATCH')return route.fallback();
+    const patch=request.postDataJSON() as Record<string,unknown>;
+    patches.push(patch);
+    if(patch.expected_token!==liveFull.concurrency_token)return route.fulfill({status:409,json:{error:'ticket changed since it was read'}});
+    liveFull={...liveFull,...patch,concurrency_token:`committed-${patches.length}`};
+    liveRows=liveRows.map(item=>item.id==='01'?{...item,...patch,updated_at:'2026-09-02T03:00:00Z'}:item);
+    return route.fulfill({json:{store:'git-local',...liveFull}});
+  });
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
+  const emit=async()=>{await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'changed',id:'01',slug:'HS2-DEMO01'}],overflow:false}})};
+
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');await inspector.getByRole('button',{name:'Edit Ticket details'}).dblclick();let editor=inspector.getByRole('textbox',{name:'Ticket details'});
+
+  liveFull={...liveFull,details:'Remote-only details',concurrency_token:'remote-details'};await emit();
+  await expect(editor).toHaveValue('Remote-only details');await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+
+  liveFull={...liveFull,status:'completed',concurrency_token:'remote-status'};liveRows=liveRows.map(item=>item.id==='01'?{...item,status:'completed'}:item);await editor.fill('Local text after remote status');
+  await expect.poll(()=>patches.some(patch=>patch.details==='Local text after remote status'&&patch.expected_token==='remote-status')).toBe(true);
+  await expect(inspector.locator('wa-select[name="inspector-status"]')).toHaveJSProperty('value','completed');await expect(editor).toHaveValue('Local text after remote status');await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);await emit();
+
+  await inspector.getByRole('button',{name:'Open ticket reader'}).evaluate(node=>{(node as HTMLElement).click()});const reader=page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/});await expect(reader).toBeVisible();editor=reader.getByRole('textbox',{name:'Ticket details'});await editor.fill('My local wording');
+  liveFull={...liveFull,details:'Their newer wording',concurrency_token:'remote-conflict'};await emit();
+  const conflict=reader.locator('[data-component="ticket-field-conflict"]');await expect(conflict).toBeVisible();await expect(conflict).toContainText('Their newer wording');await expect(conflict).toContainText('My local wording');await expect(page.locator('.app-error')).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/hs2-0bp930-field-conflict-wide.png',fullPage:true});await page.setViewportSize({width:760,height:940});await expect(conflict).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-0bp930-field-conflict-narrow.png',fullPage:true});
+
+  const resolution=conflict.getByRole('textbox',{name:'Merged details'});await resolution.fill('My local wording\n\nTheir newer wording');await conflict.getByRole('button',{name:'Apply merged value'}).click();
+  await expect(conflict).toHaveCount(0);await expect(editor).toHaveValue('My local wording\n\nTheir newer wording');
+  await expect.poll(()=>patches.some(patch=>patch.details==='My local wording\n\nTheir newer wording'&&patch.expected_token==='remote-conflict')).toBe(true);
 });
 
 test('translates urgent priority through the canonical server contract',async({page})=>{
@@ -301,6 +371,11 @@ test('creates, cancels, edits, and deletes notes through the shared inspector an
   await inspector.getByRole('button',{name:'Open ticket reader'}).click();const reader=page.getByRole('dialog');await reader.getByRole('button',{name:'Add note'}).first().click();await expect(reader.locator('[data-component="note-composer"]')).toBeVisible();
 });
 
+test('offers a visible Add note action before the first note exists',async({page})=>{
+  await page.setViewportSize({width:1280,height:720});await mockProject(page);await page.route('**/tickets/01',route=>route.request().method()==='GET'?route.fulfill({json:{store:'git-local',...full,notes:[]}}):route.fallback());await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');const add=inspector.locator('.ticket-notes__add');await expect(add).toBeVisible();await expect(add).toHaveText(/Add note/);await page.screenshot({path:'/private/tmp/hs2-yn3x2j-empty-notes-wide.png',fullPage:true});await page.setViewportSize({width:940,height:844});await expect(add).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-yn3x2j-empty-notes-narrow.png',fullPage:true});await add.click();await expect(inspector.getByRole('textbox',{name:'New note'})).toBeFocused();
+});
+
 test('edits title and tags through controlled capability-aware inspector state',async({page})=>{
   const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
   const inspector=page.locator('[data-component="ticket-inspector"]');const title=inspector.getByRole('heading',{name:'Use real project tickets'});await title.dblclick();const titleInput=inspector.getByRole('textbox',{name:'Ticket title'});await titleInput.fill('Renamed ticket');await expect.poll(()=>patches.some(patch=>patch.title==='Renamed ticket')).toBe(true);await titleInput.blur();await expect(inspector.getByRole('heading',{name:'Renamed ticket'})).toBeVisible();
@@ -330,6 +405,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.getByRole('button',{name:'Timeline'}).click();
   await expect(page.getByText('Ticket created')).toBeVisible();
   await expect(page.getByText('Connected the client')).toBeVisible();
+  const timeline=page.locator('[data-component="ticket-timeline"]');await expect(timeline.getByText('Completed',{exact:true})).toBeVisible();await expect(timeline).not.toContainText('Status changed from Started to Completed');
   await page.screenshot({path:'/private/tmp/hs2-22gcky-timeline-wide.png'});
   await page.setViewportSize({width:940,height:900});
   await expect(page.locator('[data-component="ticket-timeline"]')).toBeVisible();
@@ -354,8 +430,12 @@ test('focuses the ticket title every time the real composer expands',async({page
 });
 
 test('renders attachment identity from a selected real ticket',async({page})=>{
-  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();await page.locator('[data-component="ticket-inspector"]').evaluate((node:HTMLElement)=>{node.style.width='250px'});await expect(page.getByRole('button',{name:'Attachments, 1'}).locator('.ticket-inspector__tab-count')).toHaveText('1');await page.getByRole('button',{name:'Attachments, 1'}).click();
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');await page.locator('[data-component="ticket-inspector"]').evaluate((node:HTMLElement)=>{node.style.width='250px'});await expect(page.getByRole('button',{name:'Attachments, 1'}).locator('.ticket-inspector__tab-count')).toHaveText('1');await page.getByRole('button',{name:'Attachments, 1'}).click();
   const item=page.locator('[data-attachment-id="A1"]');await expect(item).toContainText('proof.png');
+  const open=item.getByRole('button',{name:'Open proof.png'});for(const [name,title] of [['Open proof.png','Open proof.png'],['Download proof.png','Download proof.png'],['Copy reference to proof.png','Copy reference to proof.png'],['Remove proof.png','Remove proof.png']] as const)await expect(item.getByRole('button',{name})).toHaveAttribute('title',title);
+  await page.evaluate(()=>{const opened:string[]=[];(window as typeof window&{__attachmentOpenUrls:string[]}).__attachmentOpenUrls=opened;window.open=(url?:string|URL)=>{opened.push(String(url));return null}});
+  await open.click();const clickUrls=await page.evaluate(()=>(window as typeof window&{__attachmentOpenUrls:string[]}).__attachmentOpenUrls);expect(clickUrls).toHaveLength(1);await page.evaluate(()=>{(window as typeof window&{__attachmentOpenUrls:string[]}).__attachmentOpenUrls.length=0});await item.dblclick({position:{x:40,y:20}});const doubleClickUrls=await page.evaluate(()=>(window as typeof window&{__attachmentOpenUrls:string[]}).__attachmentOpenUrls);expect(doubleClickUrls).toEqual(clickUrls);
+  await open.hover();await expect(open).not.toHaveCSS('background-color','rgba(0, 0, 0, 0)');await page.locator('[data-component="ticket-inspector"]').screenshot({path:'/private/tmp/hs2-pngaw7-gwtr5e-attachment-actions-wide.png'});await page.setViewportSize({width:940,height:844});await item.scrollIntoViewIfNeeded();await item.getByRole('button',{name:'Copy reference to proof.png'}).hover();await page.locator('[data-component="ticket-inspector"]').screenshot({path:'/private/tmp/hs2-pngaw7-gwtr5e-attachment-actions-narrow.png'});await page.setViewportSize({width:1280,height:720});
   const filename=item.locator(':scope > span').first();await filename.evaluate(node=>{node.textContent='an-extremely-long-attachment-filename-that-must-ellipsis-before-the-actions.png'});const inspector=await page.locator('[data-component="ticket-inspector"]').elementHandle();await expect.poll(async()=>item.evaluate((node,container)=>node.getBoundingClientRect().right<=container.getBoundingClientRect().right,inspector)).toBe(true);await expect.poll(()=>filename.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(true);await expect(item.getByRole('button')).toHaveCount(4);
   await page.getByLabel('Browse and add attachments').setInputFiles({name:'new-proof.txt',mimeType:'text/plain',buffer:Buffer.from('proof')});
   await expect(page.locator('[data-attachment-id="A2"]')).toContainText('new-proof.txt');
@@ -545,7 +625,7 @@ test('counts permission automation only while its popup is visible',async({page}
   await page.route('**/permissions',route=>route.fulfill({json:pending}));
   await page.route('**/permissions/8',route=>{answers+=1;pending=[];return route.fulfill({json:{connection:'codex-session',decision:'allow',persisted:false}})});
   await page.goto('/');await page.evaluate(()=>{localStorage.setItem('hotsheet.project.demo-checkout.permission-automation',JSON.stringify({action:'allow',delayMs:15_000}))});await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  const popup=page.locator('[data-component="permission-request-popup"]');await expect(popup).toContainText('Auto-allow in');await page.clock.fastForward(10_000);await expect(popup).toContainText('0:05');await popup.getByRole('button',{name:'Stop auto-allow'}).click();await expect(popup.locator('.permission-request-card__countdown')).toHaveCount(0);await page.clock.fastForward(30_000);expect(answers).toBe(0);await popup.getByRole('button',{name:'Ignore'}).click();await expect(popup).toHaveCount(0);await page.getByRole('button',{name:/Notifications view/}).click();await page.locator('[data-component="notification-center"]').getByRole('button',{name:'Allow Once'}).click();await expect.poll(()=>answers).toBe(1);
+  const popup=page.locator('[data-component="permission-request-popup"]');await expect(popup).toContainText('Auto-allow in');await page.clock.fastForward(10_000);await expect(popup).toContainText('0:05');await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Permissions'}).click();const automation=page.locator('wa-select[name="permission-automation-action"]');await automation.click();await expect(automation).toHaveJSProperty('open',true);await resetRenderMetrics(page);await page.clock.fastForward(1_000);await expect(popup).toContainText('0:04');await expect(automation).toHaveJSProperty('open',true);expect((await renderMetrics(page))?.passes).toBe(0);await page.keyboard.press('Escape');await popup.getByRole('button',{name:'Stop auto-allow countdown'}).click();await expect(popup.locator('.permission-request-card__countdown')).toHaveCount(0);await page.clock.fastForward(30_000);expect(answers).toBe(0);await popup.getByRole('button',{name:'Ignore'}).click();await expect(popup).toHaveCount(0);await page.getByRole('button',{name:/Notifications view/}).click();await page.locator('[data-component="notification-center"]').getByRole('button',{name:'Allow Once'}).click();await expect.poll(()=>answers).toBe(1);
 });
 
 test('persists and restores per-project permission automation settings',async({page})=>{

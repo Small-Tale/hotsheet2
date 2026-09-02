@@ -56,6 +56,20 @@ describe('checkout bulk update transport',()=>{
   });
 });
 
+describe('ticket code review transport',()=>{
+  it('reads review targets and accepts an empty successful launch response',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({commits:[],ranges:[],truncated:false}),{status:200}))
+      .mockResolvedValueOnce(new Response(null,{status:204}));
+    const api=new Api('/api');
+    await api.codeReview('folder with spaces','ticket/1');
+    await expect(api.openCodeReview('folder with spaces','ticket/1',{mode:'commit',commit:'abc'})).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/checkouts/folder%20with%20spaces/tickets/ticket%2F1/code-review',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder%20with%20spaces/tickets/ticket%2F1/code-review',expect.objectContaining({method:'POST',body:'{"mode":"commit","commit":"abc"}'}));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('atomic Not Working transport',()=>{
   it('sends note, evidence, and concurrency token in one multipart request',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({status:'not_started',up_next:true}),{status:200}));

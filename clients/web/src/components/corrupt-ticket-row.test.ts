@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { corruptTicketIdentity,CorruptTicketRow,revealFileLabel } from './corrupt-ticket-row';
+import { corruptTicketIdentity,CorruptTicketInspector,CorruptTicketRow,revealFileLabel } from './corrupt-ticket-row';
 
 const corrupt = { store: 'local', store_path: '/project.hs2', path: '/project.hs2/tickets/01/01M1.md', id: '01M1', slug: 'HS2-BROKEN', error: 'unsupported content follows the bounded Notes section' };
 
@@ -13,12 +13,21 @@ describe('CorruptTicketRow', () => {
     expect(markup).toContain('role="group"');
     expect(markup).toContain('data-lucide="file-warning"');
     expect(markup).toContain('HS2-BROKEN');
-    expect(markup).toContain('/project.hs2/tickets/01/01M1.md');
+    expect(markup).toContain('data-corrupt-key="local:/project.hs2/tickets/01/01M1.md"');
+    expect(markup).not.toContain('unsupported content follows the bounded Notes section');
+    expect(markup).toContain('data-action="select-corrupt-ticket"');
+    expect(markup).not.toContain('data-action="reveal-corrupt-ticket"');
+    expect(markup).not.toContain('data-action="repair-corrupt-ticket"');
+  });
+
+  it('presents the full error and recovery actions in an inspector', () => {
+    const markup=String(CorruptTicketInspector({ticket:corrupt}));
+    expect(markup).toContain('data-component="corrupt-ticket-inspector"');
+    expect(markup).toContain('Ticket parsing error');
     expect(markup).toContain('unsupported content follows the bounded Notes section');
     expect(markup).toContain('data-action="reveal-corrupt-ticket"');
-    expect(markup).toContain('data-action="repair-corrupt-ticket"');
-    expect(markup).toContain('data-lucide="folder-open"');
-    expect(markup).toContain('data-lucide="bot"');
+    expect(markup).toContain('Attempt AI repair');
+    expect(markup).toContain('data-action="close-ticket-inspector"');
   });
 
   it('falls back through id, filename, and a generic label', () => {
@@ -36,7 +45,7 @@ describe('CorruptTicketRow', () => {
     expect(markup).toContain('Hot Sheet 2 update required');
     expect(markup).toContain('data-lucide="refresh-cw"');
     expect(markup).not.toContain('Ticket file could not be read');
-    expect(markup).toContain('data-action="reveal-corrupt-ticket"');
+    expect(markup).toContain('data-action="select-corrupt-ticket"');
     expect(markup).not.toContain('data-action="repair-corrupt-ticket"');
   });
 
@@ -50,10 +59,10 @@ describe('CorruptTicketRow', () => {
   });
 
   it('reports pending and completed recovery state accessibly', () => {
-    const pending=String(CorruptTicketRow({ticket:corrupt,recovery:{pending:'repair'}}));
+    const pending=String(CorruptTicketInspector({ticket:corrupt,recovery:{pending:'repair'}}));
     expect(pending).toContain('Queuing…');
     expect(pending.match(/disabled/g)).toHaveLength(2);
-    const completed=String(CorruptTicketRow({ticket:corrupt,recovery:{message:'Queued HS2-REPAIR for AI repair.'}}));
+    const completed=String(CorruptTicketInspector({ticket:corrupt,recovery:{message:'Queued HS2-REPAIR for AI repair.'}}));
     expect(completed).toContain('role="status"');
     expect(completed).toContain('Queued HS2-REPAIR for AI repair.');
   });

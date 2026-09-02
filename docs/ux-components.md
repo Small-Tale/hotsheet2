@@ -58,7 +58,10 @@ Rules for both clients:
 ### 2.1 `AppShell` — feature floor, demo built
 
 The **built demo** composes the current production sidebar, tabs, connection banner,
-header, ticket workspace, and inspector into a desktop shell. Sidebar and inspector
+header, ticket workspace, and inspector into a desktop shell. The supported AppShell
+floor is **640 × 480 CSS pixels**; native hosts must enforce the
+same minimum window content size rather than asking the shell to compress below it.
+Sidebar and inspector
 splitters are keyboard/pointer adjustable on wide displays; both secondary regions
 yield to the ticket workspace on compact displays. Sidebar regions never resize below
 250px. Production pointer drags update splitter geometry once per animation frame and
@@ -291,7 +294,9 @@ selection where sensible.
   The left rail is reserved for special-state attention in HS1 precedence order:
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets
-  additionally show a compact `Blocked` pill immediately after their status.
+  additionally show a compact `Blocked` pill immediately after their status. A live,
+  non-expired worker claim adds a slow yellow two-dot animation immediately after the
+  status badge; started-but-idle and previously claimed tickets do not show it.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon
@@ -375,12 +380,15 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 ### 4.1 `TicketInspector` — feature floor
 
 The trailing inspector shown in the wireframe. `TicketInspector` is **demo built**
-as a focused shell around separately demoed `TicketInfoPanel`, `TicketTimeline`, and
-`TicketAttachments` components, plus the Up Next toggle, close/reopen, and controlled
+as a focused shell around separately demoed `TicketInfoPanel`, `TicketTimeline`,
+`TicketCodeReview`, and `TicketAttachments` components, plus the Up Next toggle, close/reopen, and controlled
 tab routing. Its AppShell composition projects the same shared active-tab state rather
 than substituting a hardcoded default. When one row has been selected but its full ticket
 is still loading, AppShell keeps the visible inspector region mounted and shows the
 placeholder in place; it never removes and re-adds the sidebar during that transition.
+The zero-selection placeholder omits the otherwise-shared Toolbar divider so the empty
+navbar does not leave a stray rule above its centered guidance. Loading and
+multi-selection placeholders keep the divider to preserve their intentional state boundary.
 
 - `InspectorHeader`
   - ticket identifier
@@ -400,8 +408,15 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
   - `TicketTimeline` — **demo built**: chronological activity shown as time-ago,
     required title, and optional subtitle along a continuous dot/line track; its
     displayed event total is derived from the rendered entry collection
+  - `TicketCodeReview` — **demo built**: ticket-associated commit subjects, abbreviated
+    SHAs, dates, configured-tool status, individual commit actions, and adjacent-range
+    actions. The catalog exposes configured, unconfigured, empty, loading, and error
+    states; actions are disabled without a configured Git diff tool.
   - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
     derived from the rendered collection, plus native browse and drop entry points.
+    Open, download, copy-reference, and remove icon buttons have explicit accessible
+    names, hover titles, and visible hover/focus states. Double-clicking the row uses
+    the same Open action; action-button double-clicks do not bubble into the row action.
     The inspector and TicketRow are also attachment drop targets.
 - `TicketMetadataEditor`
   - `Select` — **demo built**: compact, icon-bearing Web Awesome select foundation
@@ -450,7 +465,11 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
   Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
   The embedded appearance reuses the same behavior in inspector and reader without a
   redundant standalone toolbar or save-status footer; the real inspector persists edits
-  through its checkout.
+  through its checkout. Live ticket refresh is field-aware: unrelated changes merge into
+  the inspector while the draft remains mounted, remote-only changes to an untouched
+  draft are adopted, and only a divergent edit to the same field opens the shared
+  side-by-side `TicketFieldConflict` editor for choosing the remote text or applying an
+  edited merge.
 - `NotWorkingDialog` — **demo built**: an explicit completed-ticket failure report
   accepting a note and/or pending evidence. It retains input after failures, prevents
   accidental light dismissal, and invokes one capability-gated atomic provider operation
@@ -497,9 +516,9 @@ icons; structural separators do not require icons.
 
 ### 4.4 Attachments — feature floor
 
-- `TicketAttachments` — the existing attachment-list surface, with browse/drop input;
-  it will gain durable row identity and remaining action capabilities rather than
-  being duplicated by a separate `AttachmentList` component
+- `TicketAttachments` — the existing attachment-list surface, with browse/drop input,
+  durable row identity, accessible icon actions, and row double-click-to-open behavior;
+  it remains shared rather than being duplicated by a separate `AttachmentList` component
 - `AttachmentRow`
 - `AttachmentPicker`
 - `AttachmentDropZone`
@@ -532,7 +551,10 @@ icons; structural separators do not require icons.
 
 Activity notes are durable ticket history. The separate rich AI activity stream can
 feed a live timeline and, under HS2-3GRNZW, later propose distilled activity notes;
-the two sources must remain visually and semantically distinguishable.
+the two sources must remain visually and semantically distinguishable. Status-change
+activity uses only its destination label in the timeline (for example `Completed`),
+while the durable note keeps the complete from/to transition for history and auditing.
+Native rich-event wiring remains tracked by HS2-SW655F.
 
 ### 4.6 Deliberate HS1 detail-panel parity
 
@@ -542,8 +564,7 @@ Markdown details, blocked reason, tags, attachments, notes, and provider/update
 provenance. Timeline and attachments move to dedicated tabs so the narrow Info view
 stays readable; the reader dialog exposes those same tabs at a comfortable width.
 
-Remaining editing capabilities are explicit follow-up work: attachment actions.
-Note composition/edit/delete is shipped with provider-capability gating and shared
+Attachment actions and note composition/edit/delete are shipped with provider-capability gating and shared
 Inspector/Reader state. Telemetry and review
 proof are deliberately not generic always-visible fields: they will appear as
 capability-aware sections when their underlying features and data contracts land.
@@ -564,9 +585,11 @@ capability-aware sections when their underlying features and data contracts land
 
 - `PermissionRequestCard` — shared list/popup presentation with project identity,
   operation details when non-empty (no blank framed details box), optional visible-time
-  automation countdown with a visually distinct, outcome-specific stop action, and
-  capability-aware Ignore/Deny/Always Allow/Allow Once actions. The one-second timer is
-  local UI state: stopping it leaves the request pending for a manual decision.
+  automation countdown rendered flat and vertically aligned with the decision buttons,
+  an icon-only Lucide pause action with an outcome-specific accessible tooltip, and
+  capability-aware Ignore/Deny/Always Allow/Allow Once actions. The one-second timer
+  updates only its own text node so settings popups retain identity and open state;
+  stopping it removes the complete automation presentation and leaves the request pending.
   Its UX demo settings preview popup/list presentations; pending, resolving, failed,
   disconnected, allowed, denied, and externally resolved states; command/edit/read/
   detail-free tool requests; allow/deny/no countdown; optional explanation; and the

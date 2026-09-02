@@ -3,15 +3,18 @@ import type { TicketTimelineEntry } from './components/ticket-timeline';
 
 export interface TimestampedTimelineEntry extends TicketTimelineEntry { timestamp: string }
 
+const statusTransition = /^Status changed from .+ to (.+)$/;
+
 function noteEntry(note: Note): TimestampedTimelineEntry {
   const [title, ...rest] = note.text.split('\n');
+  const conciseStatus = title.match(statusTransition)?.[1];
   return {
     id: note.id,
     timestamp: note.created_at,
     time: note.created_at,
-    title: title || 'Ticket updated',
+    title: conciseStatus || title || 'Ticket updated',
     subtitle: rest.join('\n').trim() || undefined,
-    emphasized: note.kind === 'status' || note.text.startsWith('Status changed from '),
+    emphasized: note.kind === 'status' || Boolean(conciseStatus),
   };
 }
 
@@ -30,7 +33,7 @@ export function ticketTimelineEntries(ticket: FullTicket): TimestampedTimelineEn
     entries.push({ id, timestamp, time: timestamp, title, emphasized: true });
   };
   addLifecycle(`${ticket.id}-created`, ticket.created_at, 'Ticket created');
-  addLifecycle(`${ticket.id}-completed`, ticket.completed_at, 'Status changed to Completed', true);
-  addLifecycle(`${ticket.id}-verified`, verifiedAt, 'Status changed to Verified', true);
+  addLifecycle(`${ticket.id}-completed`, ticket.completed_at, 'Completed', true);
+  addLifecycle(`${ticket.id}-verified`, verifiedAt, 'Verified', true);
   return entries.sort((left, right) => left.timestamp.localeCompare(right.timestamp) || left.id.localeCompare(right.id));
 }

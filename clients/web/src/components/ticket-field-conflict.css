@@ -1,0 +1,15 @@
+.ticket-field-conflict { display: grid; gap: .65rem; margin: .75rem 1rem 0; padding: .75rem; border: 1px solid var(--wa-color-warning-border-normal); border-radius: .65rem; color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-warning-fill-quiet); }
+.ticket-field-conflict > header { display: flex; gap: .55rem; align-items: flex-start; }
+.ticket-field-conflict > header > svg { flex: none; width: 1rem; height: 1rem; margin-top: .15rem; color: var(--wa-color-warning-on-quiet); }
+.ticket-field-conflict > header span { display: grid; gap: .1rem; min-width: 0; }
+.ticket-field-conflict > header strong { color: var(--wa-color-neutral-on-normal); font-size: .82rem; }
+.ticket-field-conflict > header small { color: var(--wa-color-neutral-on-quiet); font-size: .7rem; line-height: 1.35; }
+.ticket-field-conflict__versions { display: grid; gap: var(--wa-space-xs); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ticket-field-conflict__versions label, .ticket-field-conflict__merge { display: grid; gap: .25rem; min-width: 0; color: var(--wa-color-neutral-on-quiet); font-size: .68rem; font-weight: 650; }
+.ticket-field-conflict__versions output { display: block; min-height: 3rem; max-height: 7rem; padding: .45rem .5rem; overflow: auto; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .4rem; color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); font: 400 .72rem/1.4 var(--wa-font-family-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ticket-field-conflict__merge textarea { min-height: 4.5rem; padding: .45rem .5rem; resize: vertical; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .4rem; color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); font: 400 .75rem/1.4 var(--wa-font-family-body); }
+.ticket-field-conflict footer { display: flex; gap: .45rem; justify-content: flex-end; }
+.ticket-field-conflict button { display: inline-flex; min-height: 2rem; padding: .35rem .65rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .45rem; align-items: center; gap: .35rem; color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); cursor: pointer; font: inherit; font-size: .72rem; font-weight: 650; }
+.ticket-field-conflict button:last-child { border-color: var(--wa-color-brand-border-normal); color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); }
+.ticket-field-conflict button svg { width: .85rem; height: .85rem; }
+@container (max-width: 22rem) { .ticket-field-conflict__versions { grid-template-columns: 1fr; } .ticket-field-conflict footer { align-items: stretch; flex-direction: column; } .ticket-field-conflict button { justify-content: center; } }

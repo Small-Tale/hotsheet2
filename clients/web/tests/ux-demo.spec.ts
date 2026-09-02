@@ -839,6 +839,16 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('.ticket-inspector__timeline > li')).toHaveCount(4);
   await expect(inspector.getByText('4 events total')).toBeVisible();
   await expect(inspector.locator('.ticket-inspector__timeline > li').first()).toContainText('Claude started work');
+  await inspector.getByRole('button', { name: 'Code Review' }).click();
+  await expect(inspector.locator('[data-component="ticket-code-review"] [data-commit-sha]')).toHaveCount(2);
+  await inspector.getByRole('button', { name: 'Open 2 commit range in Glassbox' }).click();
+  await expect(page.getByText('Commit range opened in Glassbox')).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-pg1hkj-code-review-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(inspector.locator('[data-component="ticket-code-review"]')).toBeVisible();
+  await expect(inspector.locator('[data-commit-sha]').first().locator('strong')).toHaveCSS('overflow-wrap', 'anywhere');
+  await page.screenshot({ path: '/private/tmp/hs2-pg1hkj-code-review-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await inspector.getByRole('button', { name: 'Attachments' }).click();
   await expect(inspector.locator('[data-component="ticket-attachments"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
@@ -861,26 +871,32 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
 });
 
 test('renders standalone ticket metadata and inspector-section demos', async ({ page }) => {
-  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-status-menu', 'ticket-status-menu'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-attachments', 'ticket-attachments']] as const) {
+  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-status-menu', 'ticket-status-menu'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-code-review', 'ticket-code-review'], ['ticket-attachments', 'ticket-attachments']] as const) {
     await page.goto(`/ux-demo?component=${id}`);
-    await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`))).toBeVisible();
+    await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`)).first()).toBeVisible();
   }
   await page.goto('/ux-demo?component=ticket-attachments');
   const actions = page.locator('.ticket-inspector__attachment-actions button');
   await expect(actions).toHaveCount(4);
-  for (const button of await actions.all()) {
+  const labels = ['Open choppy.mov', 'Download choppy.mov', 'Copy reference to choppy.mov', 'Remove choppy.mov'];
+  for (const [index, button] of (await actions.all()).entries()) {
+    await expect(button).toHaveAttribute('aria-label', labels[index]);
+    await expect(button).toHaveAttribute('title', labels[index]);
     const icon = button.locator('svg');
     await expect(icon).toBeVisible();
     const [buttonBox, iconBox] = await Promise.all([button.boundingBox(), icon.boundingBox()]);
     expect(iconBox!.width).toBeLessThan(buttonBox!.width);
     expect(iconBox!.height).toBeLessThan(buttonBox!.height);
+    await button.hover();
+    await expect(button).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   }
-  await page.screenshot({ path: '/private/tmp/hs2-3y3bm3-attachment-icons-wide.png' });
+  await page.screenshot({ path: '/private/tmp/hs2-pngaw7-attachment-actions-ux-wide.png' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(actions).toHaveCount(4);
   await actions.first().scrollIntoViewIfNeeded();
+  await actions.first().hover();
   for (const button of await actions.all()) await expect(button.locator('svg')).toBeVisible();
-  await page.locator('[data-component="ticket-attachments"]').screenshot({ path: '/private/tmp/hs2-3y3bm3-attachment-icons-narrow.png' });
+  await page.locator('[data-component="ticket-attachments"]').screenshot({ path: '/private/tmp/hs2-pngaw7-attachment-actions-ux-narrow.png' });
 });
 
 test('opens the shared TicketReader intent when a composed row is double-clicked', async ({ page }) => {
@@ -1038,6 +1054,10 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await drive.click();
   await expect(drive).toHaveAttribute('aria-label', 'Start Codex');
   await expect(drive.locator('[data-lucide="play"]')).toHaveCount(1);
+});
+
+test('holds the AppShell at its 640 by 480 supported floor',async({page})=>{
+  await page.setViewportSize({width:640,height:480});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]');const bounds=await shell.boundingBox();expect(bounds?.width).toBeGreaterThanOrEqual(640);expect(bounds?.height).toBeGreaterThanOrEqual(480);await page.screenshot({path:'/private/tmp/hs2-501eph-shell-floor.png',fullPage:true});
 });
 
 test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {
@@ -1545,7 +1565,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
 });
 
 test('previews and resets important PermissionRequestCard variants', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=permission-request');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const settings = page.getByRole('complementary', { name: 'PermissionRequestCard settings' });
@@ -1565,11 +1585,28 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(card).toHaveAttribute('data-state', 'pending');
   await expect(card).toContainText('Wants permission to edit');
   await expect(card).toContainText('Auto-allow in');
+  await presentation.evaluate(node => { (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation = node; });
+  await presentation.click();
+  await expect(presentation).toHaveJSProperty('open', true);
   const initialCountdown = await card.locator('.permission-request-card__timer').textContent();
   await expect.poll(() => card.locator('.permission-request-card__timer').textContent()).not.toBe(initialCountdown);
-  await expect(card.getByRole('button', { name: 'Stop auto-allow' })).toHaveAttribute('title', 'Stop automatic allow for this request');
-  await page.screenshot({ path: '/private/tmp/hs2-04cq9y-permission-countdown-wide.png', fullPage: true });
-  await card.getByRole('button', { name: 'Stop auto-allow' }).click();
+  await expect(presentation).toHaveJSProperty('open', true);
+  expect(await presentation.evaluate(node => (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation === node)).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(presentation).toHaveJSProperty('open', false);
+  await choose(presentation, 'list');
+  await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
+  await choose(presentation, 'popup');
+  await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
+  const stopAutomation = card.getByRole('button', { name: 'Stop auto-allow countdown' });
+  await expect(stopAutomation).toHaveAttribute('title', 'Stop auto-allow countdown for this request');
+  await expect(stopAutomation.locator('[data-lucide="pause"]')).toBeVisible();
+  expect((await stopAutomation.textContent())?.trim()).toBe('');
+  await expect(card.locator('.permission-request-card__countdown')).toHaveCSS('border-top-style', 'none');
+  const [timerBox, denyBox] = await Promise.all([card.locator('.permission-request-card__timer').boundingBox(), card.getByRole('button', { name: 'Deny' }).boundingBox()]);
+  expect(Math.abs((timerBox!.y + timerBox!.height / 2) - (denyBox!.y + denyBox!.height / 2))).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: '/private/tmp/hs2-xrva64-permission-countdown-wide.png', fullPage: true });
+  await stopAutomation.click();
   await expect(card.locator('.permission-request-card__countdown')).toHaveCount(0);
   await expect(automation).toHaveJSProperty('value', 'none');
   await choose(automation, 'allow');
@@ -1625,7 +1662,7 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   await expect(card).toContainText('Auto-allow in');
   await page.setViewportSize({ width: 760, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-04cq9y-permission-countdown-narrow.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-xrva64-permission-countdown-narrow.png', fullPage: true });
   await choose(variant, 'external');
   await expect(card).toContainText('Decision made outside Hot Sheet');
   await expect(settings).toBeVisible();

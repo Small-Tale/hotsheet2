@@ -1130,6 +1130,112 @@ async fn repository_status_endpoint_reports_real_git_state() {
 }
 
 #[tokio::test]
+async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets() {
+    let (store, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let run = |args: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(checkout.path())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    run(&["init", "-q"]);
+    run(&["config", "user.name", "Test"]);
+    run(&["config", "user.email", "test@example.com"]);
+    run(&["config", "diff.tool", "hs2-test"]);
+    run(&["config", "difftool.hs2-test.cmd", "true"]);
+    std::fs::write(checkout.path().join("code.txt"), "base\n").unwrap();
+    run(&["add", "code.txt"]);
+    run(&["commit", "-qm", "initial"]);
+
+    let registry_home = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry_home.path().join("checkouts.json")));
+    let registration =
+        serde_json::json!({"root":checkout.path(),"alias":"review","stores":[store.path()]})
+            .to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/review/tickets",
+                Some(r#"{"title":"Review this work"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let slug = created["slug"].as_str().unwrap();
+
+    let commit = |contents: &str, message: &str| {
+        std::fs::write(checkout.path().join("code.txt"), contents).unwrap();
+        run(&["add", "code.txt"]);
+        run(&["commit", "-qm", message]);
+        run(&["rev-parse", "HEAD"])
+    };
+    let first = commit("one\n", &format!("{slug}: first part"));
+    let second = commit("two\n", &format!("{slug}: second part"));
+    commit("other\n", "unrelated change");
+    let third = commit("three\n", &format!("polish ({slug})"));
+    commit(
+        "cross reference\n",
+        &format!("different ticket\n\nFollow-up for {slug}"),
+    );
+
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/review/tickets/{id}/code-review"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let review = body_json(response).await;
+    assert_eq!(review["difftool"], "hs2-test");
+    assert_eq!(review["commits"].as_array().unwrap().len(), 3);
+    assert_eq!(review["commits"][0]["sha"], third);
+    assert_eq!(review["ranges"].as_array().unwrap().len(), 2);
+    assert_eq!(review["ranges"][1]["from"], first);
+    assert_eq!(review["ranges"][1]["to"], second);
+    assert_eq!(review["ranges"][1]["count"], 2);
+
+    let invalid = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/review/tickets/{id}/code-review"),
+            Some(r#"{"mode":"commit","commit":"--no-index"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    let launched = app
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/review/tickets/{id}/code-review"),
+            Some(&serde_json::json!({"mode":"range","from":first,"to":second}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(launched.status(), StatusCode::NO_CONTENT);
+}
+
+#[tokio::test]
 async fn analytics_endpoints_return_ticket_flow_and_usage_contracts() {
     let (_d, st) = state();
     let app = app(st);
@@ -4341,6 +4447,24 @@ async fn claim_next_release_renew_over_http() {
     let claimed = body_json(resp).await;
     assert_eq!(claimed["slug"], slug);
     assert_eq!(claimed["claimed_by"], "w1");
+    assert!(claimed["claim_lease_expires_at"].as_str().is_some());
+    let rows = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/tickets", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let claimed_row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["slug"] == slug)
+        .unwrap();
+    assert_eq!(
+        claimed_row["claim_lease_expires_at"],
+        claimed["claim_lease_expires_at"]
+    );
 
     // Renew (holder).
     let resp = app

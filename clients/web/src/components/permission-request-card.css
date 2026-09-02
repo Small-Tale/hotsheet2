@@ -13,7 +13,7 @@
 .permission-request-card__explanation, .permission-request-card__error { margin: .65rem 1rem 0; font-size: .76rem; line-height: 1.45; }
 .permission-request-card__explanation { color: #606674; }
 .permission-request-card__error { color: #b91c1c; }
-.permission-request-card__footer { display: flex; padding: .8rem 1rem 1rem; align-items: end; justify-content: space-between; gap: 1rem; }
+.permission-request-card__footer { display: flex; padding: .8rem 1rem 1rem; align-items: center; justify-content: space-between; gap: 1rem; }
 .permission-request-card button { min-height: 2rem; padding: 0 .8rem; border: 1px solid #c9ced8; border-radius: .65rem; color: #343945; background: var(--wa-color-surface-default); cursor: pointer; font: inherit; font-size: .76rem; font-weight: 600; }
 .permission-request-card button:hover { background: #f1f4f8; }
 .permission-request-card button:focus-visible { outline: 2px solid var(--wa-color-text-link); outline-offset: 2px; }
@@ -22,12 +22,13 @@
 .permission-request-card .permission-request-card__quiet-action:hover { color: #111827; background: transparent; text-decoration: underline; }
 .permission-request-card .permission-request-card__primary { border-color: var(--wa-color-brand-border-loud); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); }
 .permission-request-card .permission-request-card__primary:hover { background: var(--wa-color-brand-on-quiet); }
-.permission-request-card__decision-area { display: flex; min-width: 0; flex: 1; align-items: end; justify-content: flex-end; gap: .8rem; }
+.permission-request-card__decision-area { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: .8rem; }
 .permission-request-card__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
-.permission-request-card__countdown { display: flex; min-width: 0; padding: .35rem; border: 1px solid var(--wa-color-surface-border); border-radius: .7rem; align-items: center; gap: .55rem; color: #596170; background: #f8f9fb; font-size: .7rem; }
-.permission-request-card__timer { display: inline-flex; align-items: center; gap: .28rem; white-space: nowrap; }
-.permission-request-card__timer svg { width: .9rem; height: .9rem; color: #6b7280; }
-.permission-request-card .permission-request-card__stop-automation { min-height: 1.65rem; padding: 0 .55rem; border-color: #b8bec9; border-radius: .45rem; color: #434955; background: var(--wa-color-surface-default); font-size: inherit; white-space: nowrap; }
+.permission-request-card__countdown { display: flex; min-width: 0; align-items: center; gap: .2rem; color: #596170; font-size: .7rem; }
+.permission-request-card__timer { display: inline-flex; min-height: 2rem; align-items: center; white-space: nowrap; }
+.permission-request-card .permission-request-card__stop-automation { display: inline-grid; width: 2rem; min-width: 2rem; min-height: 2rem; padding: 0; border-color: transparent; border-radius: var(--wa-border-radius-pill); color: #596170; background: transparent; place-items: center; }
+.permission-request-card .permission-request-card__stop-automation:hover { color: #252833; background: var(--wa-color-neutral-fill-normal); }
+.permission-request-card__stop-automation svg { width: .9rem; height: .9rem; }
 .permission-request-card--list[data-state="allow"], .permission-request-card--list[data-state="deny"], .permission-request-card--list[data-state="external"] { box-shadow: none; }
 .permission-request-card--list[data-state="allow"] { --permission-accent: #168a52; }
 .permission-request-popup { position: absolute; z-index: 80; top: 3.5rem; right: 1rem; width: min(44rem, calc(100% - 2rem)); }

@@ -37,6 +37,16 @@ or other important subtask starts and when it finishes. Keep repeated and revers
 transitions as separate entries; they are history, not current-state fields. Ordinary
 commentary remains a `regular` note.
 
+## Active AI work
+
+Treat a live, renewable ticket claim lease as the authoritative signal that an AI is
+actively working on that ticket. `started` is durable workflow state and may remain set
+while nobody is working; `claim_count` is historical retry/poison metadata. Workers
+claim before active work, renew during long work, and release when they stop. Never
+derive live activity from status or claim count. The self-claim worker workflow already
+implements this lifecycle; exact-ticket claiming for orchestrated assignments is tracked
+by HS2-J5WVMQ.
+
 ## Client UI stack
 
 Use **Kerf (`kerfjs`) + Web Awesome Core** for the Tauri web UI. Kerf owns

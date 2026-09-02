@@ -9,12 +9,12 @@
 .ticket-inspector__star--active svg { fill: currentColor; }
 .ticket-inspector__feedback { display: flex; align-items: center; gap: .4rem; margin: 0 1rem .75rem; padding: .45rem .6rem; border: 1px solid var(--wa-color-warning-border-normal); border-radius: .5rem; color: var(--wa-color-warning-on-quiet); background: var(--wa-color-warning-fill-quiet); font-size: .8rem; font-weight: 600; }
 .ticket-inspector__feedback-icon { flex: none; width: 1rem; height: 1rem; }
-.ticket-inspector__tabs { display: grid; min-width: 0; margin: 0 1rem; padding: .2rem; border-radius: .55rem; background: #e7e9ed; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.ticket-inspector__tabs { display: grid; min-width: 0; margin: 0 1rem; padding: .2rem; border-radius: .55rem; background: #e7e9ed; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ticket-inspector__tabs button { display: flex; min-height: 2.25rem; border-radius: .4rem; font-size: .72rem; align-items: center; justify-content: center; gap: .35rem; }
 .ticket-inspector__tabs button[aria-current="page"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); }
 .ticket-inspector__tabs svg { width: .9rem; height: .9rem; }
 .ticket-inspector__tabs svg { flex: none; }
 .ticket-inspector__tab-count { display: inline-grid; min-width: 1rem; height: 1rem; padding: 0 .25rem; border-radius: var(--wa-border-radius-pill); color: #4f5665; background: #d4d8e0; place-items: center; font-size: .62rem; font-weight: 700; line-height: 1; }
 .ticket-inspector__tabs button[aria-current="page"] .ticket-inspector__tab-count { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-normal); }
-@container (max-width: 22rem) { .ticket-inspector__tabs button span { display: none; } }
-@container (max-width: 22rem) { .ticket-inspector__tabs button .ticket-inspector__tab-count { display: inline-grid; } }
+@container (max-width: 25rem) { .ticket-inspector__tabs button span { display: none; } }
+@container (max-width: 25rem) { .ticket-inspector__tabs button .ticket-inspector__tab-count { display: inline-grid; } }

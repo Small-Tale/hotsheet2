@@ -15,7 +15,7 @@ describe('ticketTimelineEntries', () => {
   it('backfills legacy lifecycle timestamps so an old ticket timeline is never empty', () => {
     expect(ticketTimelineEntries(ticket()).map(entry => entry.title)).toEqual([
       'Ticket created',
-      'Status changed to Completed',
+      'Completed',
     ]);
   });
 
@@ -28,6 +28,7 @@ describe('ticketTimelineEntries', () => {
     expect(entries.map(entry => entry.id)).toEqual(['01TEST-created', 'start', 'done']);
     expect(entries[1]).toMatchObject({ title: 'Claude started work', subtitle: 'Implement the fix.' });
     expect(entries[2].emphasized).toBe(true);
+    expect(entries[2].title).toBe('Completed');
   });
 
   it('deduplicates a persisted transition but not unrelated activity at the same time', () => {
@@ -37,8 +38,18 @@ describe('ticketTimelineEntries', () => {
     ] }));
     expect(entries.map(entry => entry.title)).toEqual([
       'Ticket created',
-      'Status changed from Started to Completed',
+      'Completed',
       'Finished implementation',
     ]);
+  });
+
+  it('keeps repeated and reversed transitions concise without collapsing history', () => {
+    const entries = ticketTimelineEntries(ticket({ completed_at: undefined, notes: [
+      note('one', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Not Started to Started'),
+      note('two', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
+      note('three', 'activity', '2026-09-02T04:00:00Z', 'Status changed from Completed to Not Started'),
+      note('four', 'activity', '2026-09-02T05:00:00Z', 'Status changed from Not Started to Started'),
+    ] }));
+    expect(entries.map(entry => entry.title)).toEqual(['Ticket created', 'Started', 'Completed', 'Not Started', 'Started']);
   });
 });

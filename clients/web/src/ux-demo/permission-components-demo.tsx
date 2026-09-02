@@ -1,7 +1,7 @@
 import { signal } from 'kerfjs';
 
 import { NotificationCenter } from '../components/notification-center';
-import { PermissionRequestCard, type PermissionRequestCardState,PermissionRequestPopup } from '../components/permission-request-card';
+import { PermissionRequestCard, type PermissionRequestCardState,PermissionRequestPopup, updatePermissionCountdownText } from '../components/permission-request-card';
 import { formatPermissionCountdown, type PermissionHistoryItem, type PermissionItem } from '../permission-notifications';
 import { syncSettingsControls } from './settings-controls';
 
@@ -28,29 +28,38 @@ export const permissionRequestSettings = {
   alwaysSupported: signal(true),
   explanation: signal(true),
 };
-export const permissionDemoRemainingMs = signal(13_000);
+let permissionDemoRemainingMs = 13_000;
+
+export const permissionDemoCountdownRemainingMs = () => permissionDemoRemainingMs;
 
 const isResolvedVariant = (variant: PermissionDemoVariant): variant is 'allowed' | 'denied' | 'external' =>
   variant === 'allowed' || variant === 'denied' || variant === 'external';
 
 /** Advance the catalog's real countdown without coupling component rendering to a clock. */
-export function advancePermissionRequestDemoCountdown(stepMs = 1_000): void {
-  if (permissionRequestSettings.automation.value === 'none' || isResolvedVariant(permissionRequestSettings.variant.value)) return;
-  permissionDemoRemainingMs.value = permissionDemoRemainingMs.value === 0
+export function advancePermissionRequestDemoCountdown(stepMs = 1_000): number {
+  if (permissionRequestSettings.automation.value === 'none' || isResolvedVariant(permissionRequestSettings.variant.value)) return permissionDemoRemainingMs;
+  permissionDemoRemainingMs = permissionDemoRemainingMs === 0
     ? 13_000
-    : Math.max(0, permissionDemoRemainingMs.value - stepMs);
+    : Math.max(0, permissionDemoRemainingMs - stepMs);
+  return permissionDemoRemainingMs;
 }
 
 /** Start the demo-only clock. It updates locally and never performs network polling. */
-export function startPermissionRequestDemoCountdown(isVisible: () => boolean): number {
+export function startPermissionRequestDemoCountdown(root: ParentNode, isVisible: () => boolean): number {
   return window.setInterval(() => {
-    if (isVisible()) advancePermissionRequestDemoCountdown();
+    if (!isVisible()) return;
+    const remaining = advancePermissionRequestDemoCountdown();
+    updatePermissionCountdownText(root, pending.key, formatPermissionCountdown(remaining));
   }, 1_000);
 }
 
+export function resetPermissionRequestDemoCountdown(): void {
+  permissionDemoRemainingMs = 13_000;
+}
+
 export function stopPermissionRequestDemoAutomation(root?: ParentNode): void {
+  resetPermissionRequestDemoCountdown();
   permissionRequestSettings.automation.value = 'none';
-  permissionDemoRemainingMs.value = 13_000;
   if (root) syncSettingsControls(root, 'permission-request', { values: { automation: 'none' } });
 }
 
@@ -76,13 +85,13 @@ function demoHistory(item: PermissionItem, variant: 'allowed' | 'denied' | 'exte
 }
 
 export function resetPermissionRequestDemo(root?: ParentNode): void {
+  resetPermissionRequestDemoCountdown();
   permissionRequestSettings.presentation.value = 'popup';
   permissionRequestSettings.variant.value = 'pending';
   permissionRequestSettings.request.value = 'edit';
   permissionRequestSettings.automation.value = 'allow';
   permissionRequestSettings.alwaysSupported.value = true;
   permissionRequestSettings.explanation.value = true;
-  permissionDemoRemainingMs.value = 13_000;
   if (root) syncSettingsControls(root, 'permission-request', {
     values: {
       presentation: permissionRequestSettings.presentation.value,
@@ -106,7 +115,7 @@ export function PermissionRequestDemo() {
   const props = {
     item: displayItem,
     state: resolved ? undefined : variant,
-    countdown: !resolved && automation !== 'none' ? formatPermissionCountdown(permissionDemoRemainingMs.value) : undefined,
+    countdown: !resolved && automation !== 'none' ? formatPermissionCountdown(permissionDemoRemainingMs) : undefined,
     countdownAction: automation === 'deny' ? 'deny' as const : 'allow' as const,
     explanation: permissionRequestSettings.explanation.value ? 'The agent is updating the notification surface requested for this project.' : undefined,
     error: variant === 'failed' ? 'The permission response could not be delivered.' : variant === 'disconnected' ? 'The agent disconnected before this request was answered.' : undefined,

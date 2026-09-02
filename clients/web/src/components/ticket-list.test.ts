@@ -28,7 +28,8 @@ describe('TicketList', () => {
     expect(markup.match(/data-component="corrupt-ticket-row"/g)).toHaveLength(1);
     expect(markup).toContain('role="group"');
     expect(markup).toContain('aria-label="Unreadable tickets"');
-    expect(markup).toContain('data-action="reveal-corrupt-ticket"');
+    expect(markup).toContain('data-action="select-corrupt-ticket"');
+    expect(markup).not.toContain('data-action="reveal-corrupt-ticket"');
   });
 
   it('overlaps only adjacent selected list-row borders into one seam', () => {
