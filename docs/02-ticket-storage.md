@@ -165,7 +165,10 @@ counts the healthy tickets and surfaces primary-store corrupt files on `/health`
 (`corrupt[]`). For a checkout linked to one or more stores,
 `GET /checkouts/{reference}/corrupt-tickets` aggregates the same diagnostics with store
 attribution (`store`, `store_path`, `path`, optional `id`/`slug`, and `error`) so clients
-can show them for recovery rather than letting them silently vanish. An authenticated
+can show them for recovery rather than letting them silently vanish. When a previously
+healthy indexed ticket becomes unparseable, the watcher retains its last healthy cache
+row but still emits a replayable `changed` invalidation; the client's resilient refresh
+then lets the diagnostic supersede that stale row immediately. An authenticated
 `POST /checkouts/{reference}/corrupt-tickets/repair` validates that the exact path is
 still corrupt and creates one idempotent, high-priority Up Next repair ticket in that
 same store; it never modifies the bad file itself. Newer-format diagnostics are excluded

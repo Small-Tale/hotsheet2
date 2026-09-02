@@ -2257,6 +2257,7 @@ async fn watcher_reindexes_an_external_write() {
     edited.title = "externally edited".into();
     edited.updated_at = Timestamp::new("2026-08-19T00:01:00Z");
     store.write_ticket(&edited).unwrap();
+    let mut saw_edit = false;
     for _ in 0..80 {
         let polled = body_json(
             app.clone()
@@ -2276,6 +2277,7 @@ async fn watcher_reindexes_an_external_write() {
             .any(|event| event["kind"] == "changed" && event["id"] == created.id.to_string());
         if changed {
             assert!(polled["cursor"].as_u64().unwrap() > cursor);
+            cursor = polled["cursor"].as_u64().unwrap();
             let rows = body_json(
                 app.clone()
                     .oneshot(authed("GET", "/tickets?text=externally%20edited", None))
@@ -2284,11 +2286,71 @@ async fn watcher_reindexes_an_external_write() {
             )
             .await;
             assert_eq!(rows.as_array().unwrap().len(), 1);
+            saw_edit = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        saw_edit,
+        "watcher did not replay the external edit within 8s"
+    );
+
+    // Corrupting an already-indexed file keeps the last healthy row in the cache, but
+    // must still invalidate clients so their resilient refresh discovers the diagnostic.
+    std::fs::write(
+        store.ticket_path(&created.id),
+        format!(
+            "{}unexpected trailing content\n",
+            hotsheet_model::to_file_string(&edited)
+        ),
+    )
+    .unwrap();
+    for _ in 0..80 {
+        let polled = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let invalidated = polled["events"].as_array().unwrap().iter().any(|event| {
+            event["kind"] == "changed"
+                && event["id"] == created.id.to_string()
+                && event["slug"] == created.slug
+        });
+        if invalidated {
+            let stale_rows = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/tickets?text=externally%20edited", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(stale_rows.as_array().unwrap().len(), 1);
+            let health = body_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri("/health")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(health["corrupt"][0]["id"], created.id.to_string());
+            assert_eq!(health["corrupt"][0]["slug"], created.slug);
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    panic!("watcher did not replay the external edit within 8s");
+    panic!("watcher did not replay corrupt-ticket invalidation within 8s");
 }
 
 /// The watcher also regenerates each consuming checkout's local worklist on change.

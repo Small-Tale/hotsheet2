@@ -255,7 +255,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. Live diagnostics supersede any stale indexed row with the same recovered
   slug, so selecting that visible ticket always opens recovery instead of retrying a doomed
-  ticket fetch. A malformed file therefore cannot suppress healthy rows: the workspace
+  ticket fetch. The server watcher emits the existing replayable `changed` event even
+  when a newly malformed file cannot be reindexed, so this replacement happens through
+  the normal long poll without manual reload. A malformed file therefore cannot suppress healthy rows: the workspace
   remains usable and renders each unreadable file as a selectable warning row with the
   recovered slug/id or filename and failure state. Selecting it opens the normal
   inspector region with the complete error, exact file path, a platform-specific reveal

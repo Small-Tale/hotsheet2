@@ -724,7 +724,7 @@ impl FsStore {
             match self.read_ticket_at(&path) {
                 Ok(ticket) => tickets.push(ticket),
                 Err(error) => {
-                    let (id, slug) = recover_identity(&path);
+                    let (id, slug) = recover_ticket_identity(&path);
                     let (error_code, message) = match &error {
                         StoreError::Parse { source, .. } => (source.code(), source.user_message()),
                         _ => ("invalid_ticket", error.to_string()),
@@ -807,7 +807,7 @@ impl FsStore {
 /// back to a frontmatter `id:` line. The slug comes from a frontmatter `slug:` line.
 /// Everything here degrades to `None` rather than erroring — the file is already known
 /// bad, so this only enriches the report.
-fn recover_identity(path: &Path) -> (Option<Ulid>, Option<String>) {
+pub fn recover_ticket_identity(path: &Path) -> (Option<Ulid>, Option<String>) {
     let stem_id = path
         .file_stem()
         .and_then(|s| s.to_str())

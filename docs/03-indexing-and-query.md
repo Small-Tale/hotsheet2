@@ -108,7 +108,9 @@ the same process. On change:
    content hash (or git blob OID when committed) against `content_hash` in the
    index. Unchanged → skip (this is what makes a `git pull` that rewrites mtimes
    cheap).
-3. **Re-parse only changed ticket files**, upsert their rows + FTS entries.
+3. **Re-parse only changed ticket files**, upsert their rows + FTS entries. A parse
+   failure keeps the last healthy indexed row for cache resilience but still emits a
+   `changed` invalidation so clients refresh the separate corrupt-ticket diagnostics.
 4. **Deletions:** a file that disappeared → delete its index rows (a soft-deleted
    ticket is a `status: deleted` file, not a missing file; a *missing* file means
    the ticket was hard-removed or moved).

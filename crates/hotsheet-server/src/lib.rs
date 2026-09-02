@@ -4747,6 +4747,10 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
     }
 
     let Ok(ticket) = parse_file(&String::from_utf8_lossy(&bytes)) else {
+        let (_, slug) = hotsheet_ticketing::recover_ticket_identity(path);
+        // Keep the last healthy indexed row available, but wake every client so its
+        // resilient refresh can replace that stale projection with recovery UI.
+        emit("changed", id.to_string(), slug.unwrap_or_default());
         return;
     };
     if let Ok(index) = index.lock() {

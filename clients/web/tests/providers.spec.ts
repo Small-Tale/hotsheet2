@@ -230,23 +230,31 @@ test('records externally resolved empty-action permissions in notification histo
 test('keeps healthy tickets usable and offers safe reveal plus AI repair recovery',async({page})=>{
   await mockProject(page);
   const recoveryRequests:{reveal?:unknown;repair?:unknown}={};
-  await page.route('**/__hotsheet/projects/*/corrupt-tickets/reveal',async route=>{recoveryRequests.reveal=route.request().postDataJSON();await route.fulfill({json:{revealed:true}})});
-  await page.route('**/corrupt-tickets/repair',async route=>{recoveryRequests.repair=route.request().postDataJSON();await route.fulfill({status:201,json:{...full,id:'repair-01',native_id:'repair-01',qualified_id:'git-local:repair-01',slug:'HS2-REPAIR',title:'Repair corrupt ticket HS2-QQRY00',category:'bug',priority:'high',up_next:true}})});
-  await page.route('**/corrupt-tickets',route=>{void route.fulfill({json:[{
+  const diagnostic={
     store:'git-local',
     store_path:'/work/demo.hs2',
     path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md',
     id:'01M1DNB977BK0NG7YJ77RVZXTV',
     slug:'HS2-QQRY00',
     error:'unsupported content follows the bounded Notes section',
-  }]});});
+  };
+  let corruptTickets:typeof diagnostic[]=[],cursor=0;
+  const polls:Array<import('@playwright/test').Route>=[];
+  await page.route('**/__hotsheet/projects/*/corrupt-tickets/reveal',async route=>{recoveryRequests.reveal=route.request().postDataJSON();await route.fulfill({json:{revealed:true}})});
+  await page.route('**/corrupt-tickets/repair',async route=>{recoveryRequests.repair=route.request().postDataJSON();await route.fulfill({status:201,json:{...full,id:'repair-01',native_id:'repair-01',qualified_id:'git-local:repair-01',slug:'HS2-REPAIR',title:'Repair corrupt ticket HS2-QQRY00',category:'bug',priority:'high',up_next:true}})});
+  await page.route('**/corrupt-tickets',route=>{void route.fulfill({json:corruptTickets})});
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
   await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
 
+  const stale=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-QQRY00"]');
+  await expect(stale).toBeVisible();
+  corruptTickets=[diagnostic];
+  await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'changed',id:diagnostic.id,slug:diagnostic.slug}],overflow:false}});
   const corrupt=page.locator('[data-component="corrupt-ticket-row"]');
   await expect(corrupt).toContainText('HS2-QQRY00');
-  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-QQRY00"]')).toHaveCount(0);
+  await expect(stale).toHaveCount(0);
   await expect(corrupt).toContainText('Ticket file could not be read');
   await expect(corrupt).toHaveAttribute('role','group');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
@@ -262,7 +270,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(inspector).toContainText('Queued HS2-REPAIR for AI repair.');
   expect(recoveryRequests.repair).toEqual({path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md'});
   await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-wide.png',fullPage:true});
-  await page.setViewportSize({width:940,height:844});await expect(inspector).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
+  await page.setViewportSize({width:1024,height:844});await expect(inspector).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
 
   await page.getByText('Use real project tickets').click();
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
