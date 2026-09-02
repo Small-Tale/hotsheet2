@@ -165,7 +165,11 @@ counts the healthy tickets and surfaces primary-store corrupt files on `/health`
 (`corrupt[]`). For a checkout linked to one or more stores,
 `GET /checkouts/{reference}/corrupt-tickets` aggregates the same diagnostics with store
 attribution (`store`, `store_path`, `path`, optional `id`/`slug`, and `error`) so clients
-can show them for recovery rather than letting them silently vanish. The strict
+can show them for recovery rather than letting them silently vanish. An authenticated
+`POST /checkouts/{reference}/corrupt-tickets/repair` validates that the exact path is
+still corrupt and creates one idempotent, high-priority Up Next repair ticket in that
+same store; it never modifies the bad file itself. Newer-format diagnostics are excluded
+from auto-repair because downgrading unknown fields could lose data. The strict
 `list_tickets` (fail on first bad file) remains for callers that want it. Prevention: the
 serializer never emits output the parser rejects — in particular a ticket with no notes
 emits **no** notes block at all, so it can never leave a dangling

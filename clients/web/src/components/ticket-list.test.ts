@@ -19,14 +19,16 @@ describe('TicketList', () => {
     expect(markup).not.toContain('ticket-card');
   });
 
-  it('includes disabled corrupt entries without replacing healthy ticket rows', () => {
+  it('keeps actionable corrupt diagnostics outside the healthy-ticket listbox', () => {
     const markup = String(TicketList({
       tickets: [ticket],
       corruptTickets: [{ store: 'local', store_path: '/tickets', path: '/tickets/bad.md', error: 'could not parse' }],
     }));
     expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
     expect(markup.match(/data-component="corrupt-ticket-row"/g)).toHaveLength(1);
-    expect(markup).toContain('aria-disabled="true"');
+    expect(markup).toContain('role="group"');
+    expect(markup).toContain('aria-label="Unreadable tickets"');
+    expect(markup).toContain('data-action="reveal-corrupt-ticket"');
   });
 
   it('overlaps only adjacent selected list-row borders into one seam', () => {

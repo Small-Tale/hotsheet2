@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import { openLocalProject, proxyProjectRequest } from './project-bridge';
+import { openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter): Hono {
+export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket): Hono {
   const app = new Hono();
   app.post('/__hotsheet/projects/open', async context => {
     if (!dev) return context.notFound();
@@ -22,6 +22,16 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter): H
     const prefix = `/__hotsheet/project-api/${encodeURIComponent(context.req.param('project'))}`;
     const path = context.req.path.slice(prefix.length) || '/';
     return proxyProjectRequest(context.req.param('project'), `${path}${new URL(context.req.url).search}`, context.req.raw);
+  });
+  app.post('/__hotsheet/projects/:project/corrupt-tickets/reveal', async context => {
+    if (!dev) return context.notFound();
+    try {
+      const body = await context.req.json<{path:string}>();
+      await reveal(context.req.param('project'), body.path);
+      return context.json({ revealed: true });
+    } catch (error) {
+      return context.json({ error: error instanceof Error ? error.message : 'Could not show the corrupt ticket file.' }, 400);
+    }
   });
   app.get('/ux-demo', (context) => {
     if (!dev) return context.notFound();

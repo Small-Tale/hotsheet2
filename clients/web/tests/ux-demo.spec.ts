@@ -466,7 +466,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const list = page.getByRole('listbox', { name: 'Example ticket list' });
   const listRows = list.locator('[data-component="ticket-list-row"]');
   await expect(listRows).toHaveCount(20);
-  await expect(list).toHaveCSS('border-radius', '10.4px');
+  await expect(list.locator('..')).toHaveCSS('border-radius', '10.4px');
   const listRow = listRows.first();
   await expect(listRow).toHaveAttribute('data-presentation', 'list');
   const listIdentity = listRow.locator('.ticket-list-row__identity');
@@ -1513,4 +1513,88 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   await expect(row).toBeVisible();
   await expect(feedback).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hotsheet-semantic-theme-narrow.png', fullPage: true });
+});
+
+test('previews and resets important PermissionRequestCard variants', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=permission-request');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('complementary', { name: 'PermissionRequestCard settings' });
+  const card = page.locator('[data-component="permission-request-card"]');
+  const presentation = settings.locator('[name="presentation"]');
+  const variant = settings.locator('[name="variant"]');
+  const request = settings.locator('[name="request"]');
+  const automation = settings.locator('[name="automation"]');
+  const alwaysSupported = settings.locator('wa-checkbox[name="always-supported"]');
+  const explanation = settings.locator('wa-checkbox[name="explanation"]');
+  const choose = async (control: typeof variant, value: string) => control.evaluate((node: HTMLElement & { value: string }, selected) => {
+    node.value = selected;
+    node.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+
+  await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
+  await expect(card).toHaveAttribute('data-state', 'pending');
+  await expect(card).toContainText('Wants permission to edit');
+  await expect(card).toContainText('Automatically allowed in');
+  await expect(card.getByRole('button', { name: 'Always Allow' })).toBeVisible();
+  await expect(card.locator('.permission-request-card__explanation')).toBeVisible();
+
+  await choose(presentation, 'list');
+  await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
+  await expect(card).toHaveClass(/permission-request-card--list/);
+  await choose(variant, 'resolving');
+  await expect(card).toHaveAttribute('data-state', 'resolving');
+  await expect(card.getByRole('button', { name: 'Deny' })).toBeDisabled();
+  await choose(variant, 'failed');
+  await expect(card).toContainText('could not be delivered');
+  await choose(variant, 'disconnected');
+  await expect(card).toContainText('disconnected before this request was answered');
+  await choose(variant, 'allowed');
+  await expect(card).toHaveAttribute('data-state', 'allow');
+  await expect(card).toContainText('allowed this kind of request');
+  await expect(card.getByRole('button', { name: 'Deny' })).toHaveCount(0);
+  await choose(variant, 'denied');
+  await expect(card).toHaveAttribute('data-state', 'deny');
+  await choose(variant, 'external');
+  await expect(card).toContainText('Decision made outside Hot Sheet');
+
+  await choose(variant, 'pending');
+  await choose(request, 'command');
+  await expect(card).toContainText('Wants permission to run a command');
+  await expect(card.locator('.permission-request-card__details')).toContainText('npm run test:unit');
+  await choose(request, 'read');
+  await expect(card).toContainText('Wants permission to read');
+  await choose(request, 'tool-without-details');
+  await expect(card).toContainText('Wants permission to use ToolSearch');
+  await expect(card.locator('.permission-request-card__details')).toHaveCount(0);
+  await choose(automation, 'deny');
+  await expect(card).toContainText('Automatically denied in');
+  await choose(automation, 'none');
+  await expect(card.locator('.permission-request-card__countdown')).toHaveCount(0);
+  await alwaysSupported.click();
+  await expect(card.getByRole('button', { name: 'Always Allow' })).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Allow', exact: true })).toBeVisible();
+  await explanation.click();
+  await expect(card.locator('.permission-request-card__explanation')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hotsheet-permission-settings-wide.png', fullPage: true });
+
+  await settings.getByRole('button', { name: 'Reset' }).click();
+  await expect(presentation).toHaveJSProperty('value', 'popup');
+  await expect(variant).toHaveJSProperty('value', 'pending');
+  await expect(request).toHaveJSProperty('value', 'edit');
+  await expect(automation).toHaveJSProperty('value', 'allow');
+  await expect(alwaysSupported).toHaveJSProperty('checked', true);
+  await expect(explanation).toHaveJSProperty('checked', true);
+  await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
+  await expect(card).toContainText('Automatically allowed in');
+  await choose(variant, 'external');
+  await expect(card).toContainText('Decision made outside Hot Sheet');
+
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(settings).toBeVisible();
+  await expect(card).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Close settings' })).toBeVisible();
+  const [cardBox, settingsBox] = await Promise.all([card.boundingBox(), settings.boundingBox()]);
+  expect(cardBox!.x + cardBox!.width).toBeLessThanOrEqual(settingsBox!.x);
+  await page.screenshot({ path: '/private/tmp/hotsheet-permission-settings-narrow.png', fullPage: true });
 });

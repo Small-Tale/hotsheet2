@@ -434,8 +434,8 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
   through its checkout.
 - `NotWorkingDialog` — **demo built**: an explicit completed-ticket failure report
   accepting a note and/or pending evidence. It retains input after failures, prevents
-  accidental light dismissal, and reopens the ticket as Not Started + Up Next only
-  after evidence upload succeeds.
+  accidental light dismissal, and invokes one capability-gated atomic provider operation
+  that publishes the complete report and reopens as Not Started + Up Next.
 - `PendingAttachmentPicker` — **demo built**: reusable browse/drop evidence staging
   with long-name ellipsis and per-file removal before submission.
 - `InlineEditableField`
@@ -545,22 +545,30 @@ capability-aware sections when their underlying features and data contracts land
 
 - `PermissionRequestCard` — shared list/popup presentation with project identity,
   operation details when non-empty (no blank framed details box), optional visible-time
-  automation countdown, and capability-aware Ignore/Deny/Always Allow/Allow Once actions
+  automation countdown, and capability-aware Ignore/Deny/Always Allow/Allow Once actions.
+  Its UX demo settings preview popup/list presentations; pending, resolving, failed,
+  disconnected, allowed, denied, and externally resolved states; command/edit/read/
+  detail-free tool requests; allow/deny/no countdown; optional explanation; and the
+  Always Allow capability, with a complete reset round trip.
 - `PermissionRequestPopup` — non-modal fixed presentation of the shared request card
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
 - allow/deny/session-scope actions
 - timeout, already-answered, disconnected, and competing-client states
 
-### 5.3 Custom commands — later, contracts already available
+### 5.3 Custom commands — built
 
-- `CommandButton`
-- `CommandGroup`
-- `CommandRunIndicator`
-- `CommandOutputViewer`
-- `CommandHistory`
-- `CommandCancellationDialog`
-- `CommandSettingsEditor`
+- `CommandNavigation` groups locally configured commands and projects running state
+  from the server event stream. A normal activation starts the command; activating a
+  running command opens an explicit stop confirmation.
+- Press-and-hold opens the latest bounded output/history view. The button hover title
+  exposes the latest run outcome without adding permanent sidebar chrome.
+- `CommandRunDialog` owns output and cancellation presentation. Completion and stop
+  changes arrive through the existing long poll; the client never interval-polls.
+- Project Settings contains a local-only JSON editor for the typed `{program,args}`
+  contract. Named AI prompts use the same safe contract by invoking an appropriate
+  configured CLI command. The retired worker target picker is deliberately absent;
+  drive targeting remains a separate control.
 
 ### 5.4 Notifications — presentation begins at feature floor
 

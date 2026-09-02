@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 
 const HISTORY_CAP: usize = 50;
 const OUTPUT_CAP: usize = 10_000;
+pub(crate) type ChangeCallback = Arc<dyn Fn(CommandRun) + Send + Sync>;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OutputLine {
@@ -36,23 +37,32 @@ struct LiveRun {
 
 #[derive(Clone)]
 pub struct CommandManager {
-    definitions: Arc<Vec<CommandDefinition>>,
+    definitions: Arc<Mutex<Vec<CommandDefinition>>>,
     root: PathBuf,
     runs: Arc<Mutex<HashMap<String, LiveRun>>>,
     order: Arc<Mutex<VecDeque<String>>>,
+    on_change: Option<ChangeCallback>,
 }
 
 impl CommandManager {
     pub fn new(root: PathBuf, definitions: Vec<CommandDefinition>) -> Self {
         Self {
-            definitions: Arc::new(definitions),
+            definitions: Arc::new(Mutex::new(definitions)),
             root,
             runs: Default::default(),
             order: Default::default(),
+            on_change: None,
         }
     }
+    pub(crate) fn with_on_change(mut self, callback: ChangeCallback) -> Self {
+        self.on_change = Some(callback);
+        self
+    }
     pub fn definitions(&self) -> Vec<CommandDefinition> {
-        self.definitions.as_ref().clone()
+        self.definitions.lock().unwrap().clone()
+    }
+    pub fn replace_definitions(&self, definitions: Vec<CommandDefinition>) {
+        *self.definitions.lock().unwrap() = definitions;
     }
     pub fn list(&self) -> Vec<CommandRun> {
         let runs = self.runs.lock().unwrap();
@@ -73,8 +83,11 @@ impl CommandManager {
     pub fn start(&self, command_id: &str) -> Result<CommandRun, String> {
         let def = self
             .definitions
+            .lock()
+            .unwrap()
             .iter()
             .find(|d| d.id == command_id)
+            .cloned()
             .ok_or_else(|| "unknown configured command".to_string())?;
         let mut child = Command::new(&def.program)
             .args(&def.args)
@@ -112,6 +125,9 @@ impl CommandManager {
                 }
             }
         }
+        if let Some(callback) = &self.on_change {
+            callback(view.clone());
+        }
         if let Some(out) = stdout {
             self.read_lines(id.clone(), "stdout", out);
         }
@@ -119,6 +135,7 @@ impl CommandManager {
             self.read_lines(id.clone(), "stderr", err);
         }
         let runs = self.runs.clone();
+        let on_change = self.on_change.clone();
         let run_id = id.clone();
         std::thread::spawn(move || {
             loop {
@@ -128,20 +145,32 @@ impl CommandManager {
                 };
                 match result {
                     Ok(Some(status)) => {
-                        if let Some(r) = runs.lock().unwrap().get_mut(&run_id) {
+                        let changed = if let Some(r) = runs.lock().unwrap().get_mut(&run_id) {
                             if r.view.state == "running" {
                                 r.view.state = "completed".into();
                             }
                             r.view.exit_code = status.code();
                             r.child = None;
+                            Some(r.view.clone())
+                        } else {
+                            None
+                        };
+                        if let (Some(callback), Some(run)) = (&on_change, changed) {
+                            callback(run);
                         }
                         break;
                     }
                     Ok(None) => std::thread::sleep(std::time::Duration::from_millis(20)),
                     Err(_) => {
-                        if let Some(r) = runs.lock().unwrap().get_mut(&run_id) {
+                        let changed = if let Some(r) = runs.lock().unwrap().get_mut(&run_id) {
                             r.view.state = "failed".into();
                             r.child = None;
+                            Some(r.view.clone())
+                        } else {
+                            None
+                        };
+                        if let (Some(callback), Some(run)) = (&on_change, changed) {
+                            callback(run);
                         }
                         break;
                     }
@@ -181,6 +210,11 @@ impl CommandManager {
         let mut runs = self.runs.lock().unwrap();
         let r = runs.get_mut(id).unwrap();
         r.view.state = "cancelled".into();
-        Ok(r.view.clone())
+        let view = r.view.clone();
+        drop(runs);
+        if let Some(callback) = &self.on_change {
+            callback(view.clone());
+        }
+        Ok(view)
     }
 }

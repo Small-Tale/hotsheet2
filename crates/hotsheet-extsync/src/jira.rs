@@ -589,6 +589,7 @@ fn capabilities() -> ProviderCapabilities {
         close_reasons: false,
         claims: false,
         atomic_batch: false,
+        not_working_report: false,
         offline_mutation: false,
         history: true,
         watch: true,

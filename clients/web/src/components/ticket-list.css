@@ -1,7 +1,8 @@
 .ticket-list { display: grid; width: 100%; overflow: hidden; border-radius: .65rem; background: var(--wa-color-surface-default); }
-.ticket-list > .corrupt-ticket-row:first-child { border-radius: .65rem .65rem 0 0; }
-.ticket-list > .corrupt-ticket-row:last-child { border-radius: 0 0 .65rem .65rem; }
-.ticket-list > .ticket-list-row-container:first-child .ticket-list-row { border-radius: .65rem .65rem 0 0; }
-.ticket-list > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 .65rem .65rem; }
-.ticket-list > .ticket-list-row-container:only-child .ticket-list-row { border-radius: .65rem; }
-.ticket-list > .ticket-list-row-container:has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected) { position: relative; margin-top: -1px; }
+.ticket-list__diagnostics, .ticket-list__tickets { display: grid; min-width: 0; }
+.ticket-list__diagnostics > .corrupt-ticket-row:first-child { border-radius: .65rem .65rem 0 0; }
+.ticket-list__diagnostics > .corrupt-ticket-row:last-child { border-radius: 0 0 .65rem .65rem; }
+.ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row { border-radius: .65rem .65rem 0 0; }
+.ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 .65rem .65rem; }
+.ticket-list__tickets > .ticket-list-row-container:only-child .ticket-list-row { border-radius: .65rem; }
+.ticket-list__tickets > .ticket-list-row-container:has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected) { position: relative; margin-top: -1px; }

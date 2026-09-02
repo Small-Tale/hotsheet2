@@ -1894,17 +1894,28 @@ mod tests {
         );
         assert_eq!(updated["status"], "started");
         assert_eq!(updated["tags"], json!(["ui", "urgent"]));
-        assert_eq!(updated["notes"][0]["text"], "picked this up");
-        assert_eq!(updated["notes"][0]["kind"], "activity");
-        let note_id = updated["notes"][0]["id"].as_str().unwrap();
-        let created_at = updated["notes"][0]["created_at"].clone();
+        let progress_note = updated["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["text"] == "picked this up")
+            .unwrap();
+        assert_eq!(progress_note["kind"], "activity");
+        let note_id = progress_note["id"].as_str().unwrap();
+        let created_at = progress_note["created_at"].clone();
         let edited = call(
             &backend,
             "hotsheet_update",
             json!({ "id": id, "note_id": note_id, "note": "investigation complete" }),
         );
-        assert_eq!(edited["notes"][0]["created_at"], created_at);
-        assert_eq!(edited["notes"][0]["text"], "investigation complete");
+        let edited_note = edited["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|note| note["id"] == note_id)
+            .unwrap();
+        assert_eq!(edited_note["created_at"], created_at);
+        assert_eq!(edited_note["text"], "investigation complete");
 
         // close → records the outcome AND settles status: a close_reason may never sit on
         // an active status, so closing the `started` ticket moves it to `completed`

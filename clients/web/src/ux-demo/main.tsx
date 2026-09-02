@@ -122,6 +122,9 @@ import {
 import {
   NotificationCenterDemo,
   PermissionRequestDemo,
+  PermissionRequestSettings,
+  permissionRequestSettings,
+  resetPermissionRequestDemo,
 } from './permission-components-demo';
 import {
   clampProjectSidebarHeight,
@@ -488,7 +491,8 @@ function DemoApp() {
   const hasSettings =
     selected.id === 'tag-chip' ||
     selected.id === 'status-badge' ||
-    selected.id === 'ticket-row';
+    selected.id === 'ticket-row' ||
+    selected.id === 'permission-request';
   return (
     <main
       class={
@@ -538,6 +542,13 @@ function DemoApp() {
               <p class="eyebrow">Demo settings</p>
               <h2>{selected.name}</h2>
             </div>
+            <wa-button
+              class="settings-toggle"
+              data-action="toggle-settings"
+              aria-expanded="true"
+            >
+              Close settings
+            </wa-button>
           </header>
           {selected.id === 'tag-chip' ? (
             <TagChipSettings />
@@ -545,12 +556,14 @@ function DemoApp() {
             <StatusBadgeSettings />
           ) : selected.id === 'ticket-row' ? (
             <TicketRowSettings />
+          ) : selected.id === 'permission-request' ? (
+            <PermissionRequestSettings />
           ) : (
             <p>This demo has no adjustable settings.</p>
           )}
         </aside>
       )}
-      {hasSettings && (
+      {hasSettings && !settingsOpen.value && (
         <wa-button
           class="settings-toggle"
           data-action="toggle-settings"
@@ -932,7 +945,36 @@ delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
   if (selectedId.value === 'ticket-row') resetTicketRowDemo(root);
+  if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
 });
+delegate(
+  root,
+  'change',
+  '[data-settings="permission-request"] [name]',
+  (_event, target) => {
+    const control = target as FormControl;
+    switch (control.getAttribute('name')) {
+      case 'presentation':
+        permissionRequestSettings.presentation.value = control.value as typeof permissionRequestSettings.presentation.value;
+        break;
+      case 'variant':
+        permissionRequestSettings.variant.value = control.value as typeof permissionRequestSettings.variant.value;
+        break;
+      case 'request':
+        permissionRequestSettings.request.value = control.value as typeof permissionRequestSettings.request.value;
+        break;
+      case 'automation':
+        permissionRequestSettings.automation.value = control.value as typeof permissionRequestSettings.automation.value;
+        break;
+      case 'always-supported':
+        permissionRequestSettings.alwaysSupported.value = control.checked;
+        break;
+      case 'explanation':
+        permissionRequestSettings.explanation.value = control.checked;
+        break;
+    }
+  },
+);
 delegate(
   root,
   'input',

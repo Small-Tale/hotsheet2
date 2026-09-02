@@ -38,10 +38,10 @@ pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use overlay::LocalOverlay;
 pub use ports::{Clock, Rng};
 pub use provider::{
-    GitProvider, MutationContext, ProviderCapabilities, ProviderConfigRegistry, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderRegistry,
-    TicketProvider, TicketRef, TransferError, TransferOutcome, TransferProvenance, copy_between,
-    git_connection_id, move_between,
+    GitProvider, MutationContext, NotWorkingReport, ProviderCapabilities, ProviderConfigRegistry,
+    ProviderConnection, ProviderDescriptor, ProviderDraft, ProviderError, ProviderEvidence,
+    ProviderPatch, ProviderRegistry, TicketProvider, TicketRef, TransferError, TransferOutcome,
+    TransferProvenance, copy_between, git_connection_id, move_between,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};
@@ -50,7 +50,8 @@ pub use secrets::{
 };
 pub use settings::{Scope, Settings, SettingsError};
 pub use store::{
-    CorruptTicket, FsStore, STORE_SCHEMA_VERSION, StoreError, StoreListing, StoreMetadata,
+    AtomicAttachment, CorruptTicket, FsStore, STORE_SCHEMA_VERSION, StoreError, StoreListing,
+    StoreMetadata,
 };
 pub use sync::{SyncReport, sync_once};
 pub use wire::{ApiNote, ApiTicket, TicketRow};

@@ -35,10 +35,12 @@ editable controls and dialogs. Dragging an unselected ticket moves only it, whil
   menu. Production handlers cover reader opening, metadata affordances, batch Up Next,
   duplication, archive, and deletion; outside pointer-down and Escape dismiss it. A
   single completed selection also exposes Verified and Not Working. The latter accepts
-  notes and/or attachments, compensates evidence uploads when reopening fails, and only
-  then returns the ticket to Not Started + Up Next. Provider capabilities independently
-  gate verification, notes, and attachments. Completed/verified selections never offer
-  Up Next.
+  notes and/or attachments and submits them through one provider-neutral operation that
+  atomically appends the note, publishes all evidence, and returns the ticket to Not
+  Started + Up Next. The explicit `not_working_report` capability hides the action for
+  providers that cannot guarantee all-or-nothing behavior; the client never emulates it
+  with uploads, patches, or compensating deletes. Completed/verified selections never
+  offer Up Next.
 
 This is the clean client/service split the rewrite is chartered to create, made
 **absolute**: the server is a standalone process even for local use, so the client
@@ -93,6 +95,13 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   focus, scroll, or animation regressions. Development builds enable Kerf's
   value-only-render and list-rebind warnings plus throwing list invariants.
 
+- **Custom project commands.** The sidebar renders machine-local typed command
+  definitions as collapsible groups with running feedback, stop confirmation, latest
+  outcome, and press-and-hold output history. Definitions are edited in Project
+  Settings and persisted to `hotsheet-settings.local.json`; commands always execute
+  as an exact program plus argument array. Run transitions use the shared WebSocket/
+  long-poll event channel and never introduce client interval polling.
+
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
   development catalog. The project-tab `+` action opens a code-checkout dialog. On first
@@ -142,9 +151,14 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
 
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. A malformed file therefore cannot suppress healthy rows: the workspace
-  remains usable and renders each unreadable file as a disabled warning row with the
+  remains usable and renders each unreadable file as an actionable warning row with the
   recovered slug/id or filename, full path, and parser error. Linked-store diagnostics
-  retain server-provided store attribution.
+  retain server-provided store attribution. Each row can reveal its file through the
+  platform file manager; the local bridge revalidates that exact path against authenticated
+  live diagnostics before launching an argument-array OS command. “Queue AI repair” creates
+  an idempotent, high-priority Up Next repair ticket in the affected store with preservation
+  and validation instructions. It does not edit the corrupt file immediately. A ticket from
+  a newer schema offers reveal plus update guidance, not unsafe automatic downgrade.
 
   While a project is selected, the browser keeps a cursor-based long poll open through
   the credential-hiding bridge. Ticket create/update/claim/move/delete events and replay

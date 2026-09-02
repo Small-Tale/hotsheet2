@@ -35,7 +35,7 @@ tempfile = "3"
 proptest = "1"
 assert_cmd = "2"
 predicates = "3"
-axum = { version = "0.8", features = ["ws"] }
+axum = { version = "0.8", features = ["ws", "multipart"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync"] }
 tokio-tungstenite = "0.29"
 futures-util = "0.3"

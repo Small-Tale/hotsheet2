@@ -176,6 +176,125 @@ async fn compatibility_reports_a_server_built_from_older_local_source() {
 }
 
 #[tokio::test]
+async fn provider_not_working_atomically_reopens_with_note_and_evidence() {
+    let (dir, state) = state();
+    let router = app(state);
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"completed"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+    let completed = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{id}"),
+                Some(r#"{"status":"completed"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let token = completed["updated_at"].as_str().unwrap();
+    let providers = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/providers", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let connection = providers[0]["connection_id"].as_str().unwrap();
+    assert_eq!(providers[0]["capabilities"]["not_working_report"], true);
+    let boundary = "hs2-not-working-boundary";
+    let multipart = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"expected_token\"\r\n\r\n{token}\r\n\
+         --{boundary}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nfailed after restart\r\n\
+         --{boundary}\r\nContent-Disposition: form-data; name=\"evidence\"; filename=\"proof.txt\"\r\nContent-Type: text/plain\r\n\r\nproof bytes\r\n\
+         --{boundary}--\r\n"
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/providers/{connection}/tickets/{id}/not-working"))
+                .header("x-hotsheet-secret", SECRET)
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(multipart))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let ticket = body_json(response).await;
+    assert_eq!(ticket["status"], "not_started");
+    assert_eq!(ticket["up_next"], true);
+    assert!(
+        ticket["notes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|note| note["text"] == "Not working: failed after restart")
+    );
+    assert_eq!(ticket["attachments"][0]["filename"], "proof.txt");
+    let attachment_id = ticket["attachments"][0]["id"].as_str().unwrap();
+    assert_eq!(
+        std::fs::read(
+            dir.path()
+                .join("attachments")
+                .join(id)
+                .join(attachment_id)
+                .join("proof.txt")
+        )
+        .unwrap(),
+        b"proof bytes"
+    );
+
+    let invalid = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/providers/{connection}/tickets/{id}/not-working"
+                ))
+                .header("x-hotsheet-secret", SECRET)
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(format!(
+                    "--{boundary}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\nagain\r\n--{boundary}--\r\n"
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::CONFLICT);
+    let unchanged = FsStore::open(dir.path())
+        .unwrap()
+        .read_ticket(&id.parse().unwrap())
+        .unwrap();
+    assert_eq!(
+        unchanged
+            .notes
+            .iter()
+            .filter(|note| note.text.starts_with("Not working:"))
+            .count(),
+        1
+    );
+    assert_eq!(unchanged.attachments.len(), 1);
+}
+
+#[tokio::test]
 async fn tickets_require_the_secret() {
     let (_d, st) = state();
     let resp = app(st)
@@ -776,6 +895,7 @@ async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_tic
     assert_eq!(body_json(listed).await.as_array().unwrap().len(), 2);
 
     let corrupt_response = router
+        .clone()
         .oneshot(authed("GET", "/checkouts/corrupt/corrupt-tickets", None))
         .await
         .unwrap();
@@ -816,6 +936,69 @@ async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_tic
     assert!(extra_report.get("slug").is_none());
     assert_eq!(extra_report["error_code"], "invalid_ticket");
     assert!(!extra_report["error"].as_str().unwrap().is_empty());
+
+    let repair_body = serde_json::json!({"path": extra_bad_path}).to_string();
+    let repair_response = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/corrupt/corrupt-tickets/repair",
+            Some(&repair_body),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(repair_response.status(), StatusCode::CREATED);
+    let repair = body_json(repair_response).await;
+    assert_eq!(repair["category"], "bug");
+    assert_eq!(repair["priority"], "high");
+    assert_eq!(repair["up_next"], true);
+    assert!(repair["title"].as_str().unwrap().contains("7ZARZ3N"));
+    assert!(
+        repair["details"]
+            .as_str()
+            .unwrap()
+            .contains(&extra_bad_path.display().to_string())
+    );
+    assert!(
+        repair["details"]
+            .as_str()
+            .unwrap()
+            .contains("Preserve all recoverable")
+    );
+    let repair_id = repair["id"].clone();
+
+    let duplicate = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/corrupt/corrupt-tickets/repair",
+            Some(&repair_body),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(duplicate.status(), StatusCode::OK);
+    assert_eq!(body_json(duplicate).await["id"], repair_id);
+
+    let upgrade = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/corrupt/corrupt-tickets/repair",
+            Some(&serde_json::json!({"path": primary_bad_path}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(upgrade.status(), StatusCode::CONFLICT);
+
+    let missing = router
+        .oneshot(authed(
+            "POST",
+            "/checkouts/corrupt/corrupt-tickets/repair",
+            Some(r#"{"path":"/tmp/not-a-corrupt-ticket.md"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -966,6 +1149,45 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
             .status(),
         StatusCode::BAD_REQUEST
     );
+}
+
+#[tokio::test]
+async fn configured_commands_can_be_replaced_in_local_settings() {
+    let (_d, st) = state();
+    let mut events = st.subscribe();
+    let app = app(st);
+    let definitions = r#"[{"id":"review","title":"Ask for review","program":"/bin/echo","args":["review"],"group":"AI"}]"#;
+    let saved = app
+        .clone()
+        .oneshot(authed("PUT", "/commands", Some(definitions)))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(body_json(saved).await[0]["group"], "AI");
+    let listed = app
+        .clone()
+        .oneshot(authed("GET", "/commands", None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(listed).await[0]["id"], "review");
+    let started = app
+        .clone()
+        .oneshot(authed("POST", "/commands/review/run", None))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::ACCEPTED);
+    let event = events.recv().await.unwrap();
+    assert_eq!(event.kind, "command_updated");
+    assert_eq!(event.slug, "review");
+    let invalid = app
+        .oneshot(authed(
+            "PUT",
+            "/commands",
+            Some(r#"[{"id":"same","title":"One","program":"true","args":[]},{"id":"same","title":"Two","program":"true","args":[]}]"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

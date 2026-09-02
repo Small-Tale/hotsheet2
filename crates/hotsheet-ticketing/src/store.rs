@@ -137,6 +137,26 @@ pub struct StoreListing {
     pub corrupt: Vec<CorruptTicket>,
 }
 
+/// Evidence payload prepared for an all-or-nothing ticket mutation.
+#[derive(Debug, Clone)]
+pub struct AtomicAttachment {
+    pub id: Ulid,
+    pub filename: String,
+    pub created_at: Timestamp,
+    pub bytes: Vec<u8>,
+}
+
+impl AtomicAttachment {
+    pub fn sanitized_filename(&self) -> String {
+        Path::new(&self.filename)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .unwrap_or("attachment")
+            .to_string()
+    }
+}
+
 /// A filesystem-backed store rooted at a directory.
 #[derive(Debug, Clone)]
 pub struct FsStore {
@@ -443,6 +463,86 @@ impl FsStore {
         ticket.updated_at = created_at;
         self.write_ticket_committing(&ticket)?;
         Ok((ticket, path))
+    }
+
+    /// Publish evidence payloads and their ticket metadata as one observable mutation.
+    /// Payload directories are staged first and the ticket file is renamed last, so
+    /// readers either see the old ticket or the complete report. Failures before that
+    /// final rename remove every staged/published payload and preserve the old ticket.
+    pub fn write_ticket_with_attachments_atomic(
+        &self,
+        ticket: &Ticket,
+        attachments: &[AtomicAttachment],
+    ) -> Result<(), StoreError> {
+        self.ensure_current_writer_format()?;
+        let ticket_path = self.ticket_path(&ticket.id);
+        let ticket_parent = ticket_path
+            .parent()
+            .ok_or_else(|| StoreError::Io(std::io::Error::other("ticket path has no parent")))?;
+        fs::create_dir_all(ticket_parent)?;
+        let attachment_root = self.attachment_dir(&ticket.id);
+        fs::create_dir_all(&attachment_root)?;
+
+        for item in attachments {
+            let final_dir = attachment_root.join(item.id.to_string());
+            if final_dir.exists() {
+                return Err(StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    format!("attachment {} already exists", item.id),
+                )));
+            }
+        }
+
+        let nonce = format!(
+            "{}-{}",
+            std::process::id(),
+            ticket.updated_at.as_str().replace([':', '/', '+'], "-")
+        );
+        let stage_root = attachment_root.join(format!(".not-working-{nonce}"));
+        let staged_ticket = ticket_parent.join(format!(".{}.not-working-{nonce}.tmp", ticket.id));
+        if stage_root.exists() || staged_ticket.exists() {
+            return Err(StoreError::Io(std::io::Error::new(
+                std::io::ErrorKind::AlreadyExists,
+                "a Not Working transaction with this timestamp is already staged",
+            )));
+        }
+        fs::create_dir(&stage_root)?;
+        let mut published = Vec::new();
+        let result = (|| {
+            for item in attachments {
+                let dir = stage_root.join(item.id.to_string());
+                fs::create_dir(&dir)?;
+                fs::write(dir.join(item.sanitized_filename()), &item.bytes)?;
+            }
+            let mut normalized = ticket.clone();
+            normalized.schema = SCHEMA_VERSION;
+            fs::write(&staged_ticket, to_file_string(&normalized))?;
+            for item in attachments {
+                let final_dir = attachment_root.join(item.id.to_string());
+                fs::rename(stage_root.join(item.id.to_string()), &final_dir)?;
+                published.push(final_dir);
+            }
+            fs::rename(&staged_ticket, &ticket_path)?;
+            Ok::<(), std::io::Error>(())
+        })();
+        let _ = fs::remove_dir_all(&stage_root);
+        let _ = fs::remove_file(&staged_ticket);
+        if let Err(error) = result {
+            for path in published {
+                let _ = fs::remove_dir_all(path);
+            }
+            return Err(StoreError::Io(error));
+        }
+        let status = serde_json::to_value(ticket.status)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_else(|| "update".into());
+        if let Err(error) =
+            self.autocommit(&format!("{}: {status} — {}", ticket.slug, ticket.title))
+        {
+            eprintln!("warning: hotsheet autocommit failed: {error}");
+        }
+        Ok(())
     }
 
     pub fn rename_attachment(

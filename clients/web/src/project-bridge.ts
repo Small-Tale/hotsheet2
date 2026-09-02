@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, readFile, realpath } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
 
@@ -17,8 +17,27 @@ export interface ProjectSession {
 
 interface InstanceInfo { pid:number; url:string; secret:string }
 interface SessionTarget { url:string; secret:string }
+interface CorruptDiagnostic { path:string }
+
+export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
 
 const sessions = new Map<string, SessionTarget>();
+
+export function revealCommand(path: string, hostPlatform = process.platform): {command:string;args:string[]} {
+  if (hostPlatform === 'darwin') return { command: 'open', args: ['-R', path] };
+  if (hostPlatform === 'win32') return { command: 'explorer.exe', args: [`/select,${path}`] };
+  return { command: 'xdg-open', args: [dirname(path)] };
+}
+
+export function requireReportedCorruptPath(diagnostics: CorruptDiagnostic[], path: string): void {
+  if (!diagnostics.some(item => item.path === path)) throw new Error('The corrupt ticket is no longer present in this checkout.');
+}
+
+const launchReveal: RevealLauncher = (command, args) => new Promise((resolveLaunch, reject) => {
+  const child = spawn(command, args, { detached: true, stdio: 'ignore' });
+  child.once('error', reject);
+  child.once('spawn', () => { child.unref(); resolveLaunch(); });
+});
 
 /** Refuse API use across a negotiated hard boundary. Unknown metadata stays usable
  * for pre-handshake development servers, but an explicit skew result is authoritative. */
@@ -107,6 +126,16 @@ export async function proxyProjectRequest(projectId: string, path: string, reque
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
   const response = await fetch(authenticatedServerUrl(target.url, path, target.secret), { method: request.method, headers, body, redirect: 'manual' });
   return new Response(response.body, { status: response.status, headers: response.headers });
+}
+
+/** Reveal only a path the authenticated server still reports as corrupt for this checkout. */
+export async function revealCorruptTicket(projectId: string, path: string, launch: RevealLauncher = launchReveal): Promise<void> {
+  const target = sessions.get(projectId);
+  if (!target) throw new Error('Project session is not open.');
+  const diagnostics = await serverRequest<CorruptDiagnostic[]>(target, `/checkouts/${encodeURIComponent(projectId)}/corrupt-tickets`);
+  requireReportedCorruptPath(diagnostics, path);
+  const command = revealCommand(path);
+  await launch(command.command, command.args);
 }
 
 /** Build the loopback-only upstream URL, retaining poll auth for older HS2 servers. */

@@ -23,7 +23,7 @@ use multistore::{StoreEntry, StoreHost, StoreInfo};
 
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
+use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -36,10 +36,10 @@ use hotsheet_model::{
 };
 use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
-    FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, OpError, OsKeychain,
-    ProviderConfigRegistry, ProviderConnection, ProviderDraft, ProviderPatch, ProviderRegistry,
-    Settings, SortKey, StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef,
-    auto_context, copy_between, move_between, ops,
+    FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
+    OsKeychain, ProviderConfigRegistry, ProviderConnection, ProviderDraft, ProviderEvidence,
+    ProviderPatch, ProviderRegistry, Settings, SortKey, StoreError, StoreRegistry, TicketPatch,
+    TicketQuery, TicketRef, auto_context, copy_between, move_between, ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -171,7 +171,24 @@ impl AppState {
         let command_defs =
             hotsheet_ticketing::commands::from_settings(&Settings::new(store.root()))
                 .unwrap_or_default();
-        let commands = commands::CommandManager::new(store.root().to_path_buf(), command_defs);
+        let command_event_log = event_log.clone();
+        let command_events = events.clone();
+        let commands = commands::CommandManager::new(store.root().to_path_buf(), command_defs)
+            .with_on_change(Arc::new(move |run| {
+                emit_change(
+                    &command_event_log,
+                    &command_events,
+                    ChangeEvent {
+                        store: String::new(),
+                        kind: "command_updated".into(),
+                        id: run.id,
+                        slug: run.command_id,
+                        message: Some(run.state),
+                        activity: None,
+                        assignment: None,
+                    },
+                );
+            }));
         Self {
             store,
             secret,
@@ -750,6 +767,10 @@ pub fn app(state: AppState) -> Router {
             get(list_checkout_corrupt_tickets),
         )
         .route(
+            "/checkouts/{reference}/corrupt-tickets/repair",
+            post(create_corrupt_ticket_repair),
+        )
+        .route(
             "/checkouts/{reference}/tickets/{id}",
             get(get_checkout_ticket).patch(update_checkout_ticket),
         )
@@ -813,6 +834,11 @@ pub fn app(state: AppState) -> Router {
             post(assign_provider_ticket),
         )
         .route(
+            "/providers/{connection_id}/tickets/{id}/not-working",
+            post(report_provider_ticket_not_working)
+                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
+        )
+        .route(
             "/provider-connections",
             get(list_provider_connections).post(create_provider_connection),
         )
@@ -838,7 +864,7 @@ pub fn app(state: AppState) -> Router {
         .route("/connections", get(list_connections))
         .route("/analytics/tickets", get(ticket_flow_summary))
         .route("/analytics/usage", get(usage_metrics_summary))
-        .route("/commands", get(list_commands))
+        .route("/commands", get(list_commands).put(save_commands))
         .route("/commands/{id}/run", post(run_command))
         .route("/command-runs", get(list_command_runs))
         .route("/command-runs/{id}", get(get_command_run))
@@ -1505,6 +1531,79 @@ async fn update_provider_ticket(
     Ok(Json(ticket))
 }
 
+async fn report_provider_ticket_not_working(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+    mut multipart: Multipart,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let provider = provider_for(&state, &connection_id)?;
+    if !provider.descriptor().capabilities.not_working_report {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!(
+                "provider connection '{connection_id}' does not support an atomic Not Working report"
+            ),
+        ));
+    }
+    let timestamp = now();
+    let mut note = None;
+    let mut expected_token = None;
+    let mut evidence = Vec::new();
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
+    {
+        match field.name() {
+            Some("note") => {
+                note =
+                    Some(field.text().await.map_err(|error| {
+                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                    })?);
+            }
+            Some("expected_token") => {
+                expected_token =
+                    Some(field.text().await.map_err(|error| {
+                        ApiError::new(StatusCode::BAD_REQUEST, error.to_string())
+                    })?);
+            }
+            Some("evidence") => {
+                let filename = field.file_name().unwrap_or("attachment").to_string();
+                let bytes = field
+                    .bytes()
+                    .await
+                    .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+                evidence.push(ProviderEvidence {
+                    id: Ulid::new(),
+                    filename,
+                    created_at: timestamp.clone(),
+                    bytes: bytes.to_vec(),
+                });
+            }
+            _ => {}
+        }
+    }
+    let note = note.and_then(|text| (!text.trim().is_empty()).then(|| (Ulid::new(), text)));
+    if note.is_none() && evidence.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "a Not Working report requires a note or at least one evidence attachment",
+        ));
+    }
+    provider
+        .report_not_working(
+            &id,
+            timestamp,
+            NotWorkingReport {
+                expected_token,
+                note,
+                evidence,
+            },
+        )
+        .map(Json)
+        .map_err(provider_transfer_error)
+}
+
 async fn delete_provider_ticket_note(
     State(state): State<AppState>,
     Path((connection_id, id, note_id)): Path<(String, String, String)>,
@@ -1833,6 +1932,83 @@ async fn list_checkout_corrupt_tickets(
 }
 
 #[derive(Deserialize)]
+struct CorruptTicketRepairReq {
+    path: String,
+}
+
+/// Create (or return) an Up Next work item that directs an AI worker to repair one
+/// currently-corrupt git ticket. The corrupt file itself is never modified by this API.
+async fn create_corrupt_ticket_repair(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(req): Json<CorruptTicketRepairReq>,
+) -> Result<Response, ApiError> {
+    let requested = std::path::PathBuf::from(&req.path);
+    for (_, entry) in checkout_entries(&state, &reference)? {
+        let listing = entry.store.list_tickets_resilient()?;
+        let Some(corrupt) = listing
+            .corrupt
+            .into_iter()
+            .find(|item| item.path == requested)
+        else {
+            continue;
+        };
+        if corrupt.error_code == "upgrade_required" {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "This ticket requires a newer Hot Sheet 2 version and cannot be safely auto-repaired.",
+            ));
+        }
+
+        let marker = format!(
+            "<!-- hotsheet:corrupt-repair {} -->",
+            serde_json::to_string(&req.path).unwrap_or_else(|_| "null".into())
+        );
+        if let Some(existing) = listing
+            .tickets
+            .iter()
+            .find(|ticket| ticket.details.contains(&marker) && ops::is_open(ticket))
+        {
+            return Ok((StatusCode::OK, Json(api_ticket(&entry, existing)?)).into_response());
+        }
+
+        let identity = corrupt
+            .slug
+            .clone()
+            .or_else(|| corrupt.id.map(|id| id.to_string()))
+            .or_else(|| {
+                corrupt
+                    .path
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .unwrap_or_else(|| "unreadable ticket".into());
+        let details = format!(
+            "Repair the corrupt Hot Sheet ticket file at `{}`.\n\nThe parser reported:\n\n```text\n{}\n```\n\nPreserve all recoverable ticket content, rewrite it with the current canonical ticket format, and verify that Hot Sheet can parse and list it. Do not delete the file or discard content merely to make parsing succeed.\n\n{}",
+            req.path, corrupt.error, marker
+        );
+        let created = do_create(
+            &state,
+            &entry,
+            CreateReq {
+                title: format!("Repair corrupt ticket {identity}"),
+                category: Some("bug".into()),
+                priority: Some("high".into()),
+                details: Some(details),
+                tags: Some(vec!["corrupt-ticket".into(), "ai-repair".into()]),
+                up_next: Some(true),
+                blocked_by: None,
+            },
+        )?;
+        return Ok((StatusCode::CREATED, Json(created)).into_response());
+    }
+    Err(ApiError::new(
+        StatusCode::NOT_FOUND,
+        "The corrupt ticket is no longer present in this checkout.",
+    ))
+}
+
+#[derive(Deserialize)]
 struct CheckoutStoreQuery {
     store: Option<String>,
 }
@@ -2062,6 +2238,35 @@ async fn list_commands(
     State(state): State<AppState>,
 ) -> Json<Vec<hotsheet_ticketing::commands::CommandDefinition>> {
     Json(state.commands.definitions())
+}
+
+async fn save_commands(
+    State(state): State<AppState>,
+    Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
+) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+    use std::collections::HashSet;
+    let mut ids = HashSet::new();
+    if definitions.iter().any(|definition| {
+        definition.id.trim().is_empty()
+            || definition.title.trim().is_empty()
+            || definition.program.trim().is_empty()
+            || !ids.insert(definition.id.as_str())
+    }) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "commands require unique non-empty id, title, and program values",
+        ));
+    }
+    Settings::new(state.store.root())
+        .set(
+            "commands",
+            serde_json::to_value(&definitions)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+            hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    state.commands.replace_definitions(definitions.clone());
+    Ok(Json(definitions))
 }
 
 async fn run_command(
@@ -4063,10 +4268,14 @@ impl From<OpError> for ApiError {
     fn from(e: OpError) -> Self {
         match e {
             OpError::Store(s) => ApiError::from(s),
-            other @ (OpError::WrongWorker { .. } | OpError::NotClaimed(_)) => {
+            other @ (OpError::WrongWorker { .. }
+            | OpError::NotClaimed(_)
+            | OpError::NotWorkingRequiresCompleted(_)) => {
                 ApiError::new(StatusCode::CONFLICT, other.to_string())
             }
-            other @ (OpError::DuplicateNeedsTarget | OpError::SelfBlock(_)) => {
+            other @ (OpError::DuplicateNeedsTarget
+            | OpError::SelfBlock(_)
+            | OpError::EmptyNotWorkingReport) => {
                 ApiError::new(StatusCode::BAD_REQUEST, other.to_string())
             }
             other @ OpError::UnknownTicket(_) => {

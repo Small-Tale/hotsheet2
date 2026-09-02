@@ -1,4 +1,6 @@
 .command-navigation { display: grid; gap: .25rem; }
+.command-navigation__group { display: grid; gap: var(--wa-space-2xs); }
+.command-navigation__group-label { padding: .15rem .6rem 0; color: #767983; font-size: .66rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .command-navigation__items { display: grid; gap: .3rem; }
 .command-navigation__command { min-height: 2.5rem; color: var(--command-text-color); background: var(--command-color); font-weight: 650; }
 .command-navigation__command:hover { color: var(--command-text-color); background: var(--command-color); filter: brightness(.9); }

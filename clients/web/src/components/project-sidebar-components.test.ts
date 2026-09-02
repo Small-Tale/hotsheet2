@@ -62,11 +62,13 @@ describe('ProjectSidebar component slice', () => {
   });
 
   it('renders expanded command state and running presentation', () => {
-    const markup = String(CommandNavigation({ label: 'Commands', expanded: true, commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test', running: true }] }));
+    const markup = String(CommandNavigation({ label: 'Commands', expanded: true, commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test', group: 'Checks', running: true, lastRun: 'completed (exit 0)' }] }));
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain('Running Test');
     expect(markup).toContain('data-lucide="test-tube-2"');
     expect(markup).toContain('data-command-color="#3b82f6"');
+    expect(markup).toContain('data-command-group="Checks"');
+    expect(markup).toContain('Last run: completed (exit 0). Press and hold for output.');
   });
 
   it('falls back to the HS1 neutral command color with dark contrast', () => {

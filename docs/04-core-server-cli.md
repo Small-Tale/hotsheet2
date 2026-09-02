@@ -90,6 +90,11 @@ only linked store or requires an explicit store id when several are linked. MCP 
 tools accept the same optional `checkout` target (and `store` for ambiguous creates) in
 both HTTP and serverless modes.
 
+Checkout corrupt diagnostics also expose a safe repair-ticket action. It revalidates the
+reported path, routes the generated work item to the affected store, and returns the
+existing open repair item on repeated requests. The API schedules recoverable work for an
+AI worker; it does not synchronously rewrite or delete an unreadable source file.
+
 `POST /projects/open` is the client onboarding transaction: it validates a code checkout,
 accepts explicit git-store paths or discovers an exact sibling `<checkout>.hs2` store,
 hosts those stores, and registers the checkout links. Discovery only accepts a directory

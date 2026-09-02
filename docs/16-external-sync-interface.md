@@ -98,6 +98,7 @@ trait TicketProvider {
 Capabilities are structured rather than a single “supported” flag. At minimum they
 cover create/update/delete, searchable/filterable fields, note create/edit/delete, attachments,
 assignment/review, dependencies, Up Next, close reasons, claims/leases, atomic batch,
+atomic Not Working report,
 offline mutation, history, watch/webhooks, and provider-side idempotency. A
 conformance suite verifies both implemented behavior and honest rejection of absent
 capabilities.
@@ -116,6 +117,8 @@ The existing implementation is extracted behind `TicketProvider` as the built-in
 - Git remains authoritative for that provider; SQLite remains a rebuildable cache.
 - semantic merges, store sync, cross-store copy/move, offline writes, and git-native
   claims remain git-provider capabilities;
+- Not Working stages evidence payloads and publishes the ticket metadata/status rename
+  last, so readers observe either the completed ticket or the whole reopened report;
 - existing CLI flags and `.hotsheet/store` links keep working as shorthand for one
   default git connection.
 

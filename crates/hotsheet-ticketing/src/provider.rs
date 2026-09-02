@@ -162,6 +162,9 @@ pub struct ProviderCapabilities {
     pub close_reasons: bool,
     pub claims: bool,
     pub atomic_batch: bool,
+    /// One all-or-nothing note/evidence/reopen operation.
+    #[serde(default)]
+    pub not_working_report: bool,
     pub offline_mutation: bool,
     pub history: bool,
     pub watch: bool,
@@ -186,6 +189,7 @@ impl ProviderCapabilities {
             close_reasons: true,
             claims: true,
             atomic_batch: true,
+            not_working_report: true,
             offline_mutation: true,
             history: true,
             watch: true,
@@ -248,6 +252,21 @@ pub struct ProviderPatch {
 pub struct MutationContext {
     pub now: Timestamp,
     pub generated_id: Ulid,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderEvidence {
+    pub id: Ulid,
+    pub filename: String,
+    pub created_at: Timestamp,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NotWorkingReport {
+    pub expected_token: Option<String>,
+    pub note: Option<(Ulid, String)>,
+    pub evidence: Vec<ProviderEvidence>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -314,6 +333,17 @@ pub trait TicketProvider: Send + Sync {
         kind: NoteKind,
         text: String,
     ) -> Result<ApiTicket, ProviderError>;
+    fn report_not_working(
+        &self,
+        _native_id: &str,
+        _now: Timestamp,
+        _report: NotWorkingReport,
+    ) -> Result<ApiTicket, ProviderError> {
+        Err(ProviderError::Unsupported {
+            connection_id: self.descriptor().connection_id,
+            capability: "not_working_report",
+        })
+    }
     fn edit_note(
         &self,
         _native_id: &str,
@@ -624,6 +654,69 @@ impl TicketProvider for GitProvider {
             &self.connection_id,
             None,
         ))
+    }
+
+    fn report_not_working(
+        &self,
+        native_id: &str,
+        now: Timestamp,
+        report: NotWorkingReport,
+    ) -> Result<ApiTicket, ProviderError> {
+        if !self.capabilities().not_working_report {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.connection_id.clone(),
+                capability: "not_working_report",
+            });
+        }
+        let mut ticket = self.ticket(native_id)?;
+        if report
+            .expected_token
+            .as_deref()
+            .is_some_and(|token| token != ticket.updated_at.as_str())
+        {
+            return Err(ProviderError::Conflict {
+                ticket: native_id.into(),
+                message: "ticket changed since it was read".into(),
+            });
+        }
+        if report.evidence.iter().any(|item| {
+            ticket
+                .attachments
+                .iter()
+                .any(|current| current.id == item.id)
+        }) {
+            return Err(ProviderError::Conflict {
+                ticket: native_id.into(),
+                message: "evidence attachment id already exists".into(),
+            });
+        }
+        ops::prepare_not_working(&mut ticket, now, report.note, !report.evidence.is_empty())?;
+        let evidence = report
+            .evidence
+            .into_iter()
+            .map(|item| crate::store::AtomicAttachment {
+                id: item.id,
+                filename: item.filename,
+                created_at: item.created_at,
+                bytes: item.bytes,
+            })
+            .collect::<Vec<_>>();
+        for item in &evidence {
+            ticket.attachments.push(hotsheet_model::Attachment {
+                id: item.id,
+                filename: item.sanitized_filename(),
+                created_at: item.created_at.clone(),
+            });
+        }
+        ticket.attachments.sort_by(|a, b| {
+            a.created_at
+                .chronological_cmp(&b.created_at)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.id.cmp(&b.id))
+        });
+        self.store
+            .write_ticket_with_attachments_atomic(&ticket, &evidence)?;
+        Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None))
     }
 
     fn edit_note(
@@ -1562,6 +1655,185 @@ mod tests {
             TransferError::UnsupportedField { field: "notes", .. }
         ));
         assert!(destination_store.list_tickets().unwrap().is_empty());
+    }
+
+    #[test]
+    fn git_provider_reports_not_working_with_note_evidence_and_reopen_in_one_write() {
+        let (_dir, provider) = git_provider();
+        let id = Ulid::new();
+        provider
+            .create(
+                ctx(id, "2026-08-26T04:00:00Z"),
+                ProviderDraft {
+                    title: "completed work".into(),
+                    category: "bug".into(),
+                    priority: Priority::Default,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        provider
+            .update(
+                &id.to_string(),
+                Timestamp::new("2026-08-26T04:01:00Z"),
+                ProviderPatch {
+                    status: Some(Status::Completed),
+                    ..ProviderPatch::default()
+                },
+            )
+            .unwrap();
+        let evidence_id = Ulid::new();
+        let result = provider
+            .report_not_working(
+                &id.to_string(),
+                Timestamp::new("2026-08-26T04:02:00Z"),
+                NotWorkingReport {
+                    expected_token: Some("2026-08-26T04:01:00Z".into()),
+                    note: Some((Ulid::new(), "regressed after restart".into())),
+                    evidence: vec![ProviderEvidence {
+                        id: evidence_id,
+                        filename: "../proof.txt".into(),
+                        created_at: Timestamp::new("2026-08-26T04:02:00Z"),
+                        bytes: b"proof".to_vec(),
+                    }],
+                },
+            )
+            .unwrap();
+        assert_eq!(result.status, Status::NotStarted);
+        assert!(result.up_next);
+        assert!(
+            result
+                .notes
+                .iter()
+                .any(|note| note.text == "Not working: regressed after restart")
+        );
+        assert!(
+            result
+                .notes
+                .iter()
+                .any(|note| note.text == "Status changed from Completed to Not Started")
+        );
+        assert_eq!(result.attachments[0].filename, "proof.txt");
+        assert_eq!(
+            provider
+                .attachment_bytes(&id.to_string(), &evidence_id.to_string())
+                .unwrap(),
+            b"proof"
+        );
+    }
+
+    #[test]
+    fn not_working_validation_failure_leaves_completed_ticket_and_files_unchanged() {
+        let (_dir, provider) = git_provider();
+        let id = Ulid::new();
+        provider
+            .create(
+                ctx(id, "2026-08-26T05:00:00Z"),
+                ProviderDraft {
+                    title: "still in progress".into(),
+                    category: "bug".into(),
+                    priority: Priority::Default,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        let error = provider
+            .report_not_working(
+                &id.to_string(),
+                Timestamp::new("2026-08-26T05:01:00Z"),
+                NotWorkingReport {
+                    expected_token: None,
+                    note: Some((Ulid::new(), "not done".into())),
+                    evidence: vec![],
+                },
+            )
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("only be reported for a completed ticket")
+        );
+        let unchanged = provider.get(&id.to_string()).unwrap();
+        assert_eq!(unchanged.status, Status::NotStarted);
+        assert!(unchanged.notes.is_empty());
+        assert!(unchanged.attachments.is_empty());
+    }
+
+    #[test]
+    fn not_working_publish_failure_leaves_completed_ticket_and_prior_files_unchanged() {
+        let (_dir, provider) = git_provider();
+        let id = Ulid::new();
+        provider
+            .create(
+                ctx(id, "2026-08-26T06:00:00Z"),
+                ProviderDraft {
+                    title: "completed".into(),
+                    category: "bug".into(),
+                    priority: Priority::Default,
+                    details: String::new(),
+                    tags: vec![],
+                    up_next: false,
+                    blocked_by: vec![],
+                    transfer: None,
+                },
+            )
+            .unwrap();
+        provider
+            .update(
+                &id.to_string(),
+                Timestamp::new("2026-08-26T06:01:00Z"),
+                ProviderPatch {
+                    status: Some(Status::Completed),
+                    ..ProviderPatch::default()
+                },
+            )
+            .unwrap();
+        let evidence_id = Ulid::new();
+        let conflict = provider
+            .store
+            .attachment_dir(&id)
+            .join(evidence_id.to_string());
+        std::fs::create_dir_all(&conflict).unwrap();
+        std::fs::write(conflict.join("existing.txt"), b"keep").unwrap();
+        let error = provider
+            .report_not_working(
+                &id.to_string(),
+                Timestamp::new("2026-08-26T06:02:00Z"),
+                NotWorkingReport {
+                    expected_token: None,
+                    note: Some((Ulid::new(), "regressed".into())),
+                    evidence: vec![ProviderEvidence {
+                        id: evidence_id,
+                        filename: "proof.txt".into(),
+                        created_at: Timestamp::new("2026-08-26T06:02:00Z"),
+                        bytes: b"new".to_vec(),
+                    }],
+                },
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("already exists"));
+        let unchanged = provider.get(&id.to_string()).unwrap();
+        assert_eq!(unchanged.status, Status::Completed);
+        assert!(!unchanged.up_next);
+        assert!(
+            unchanged
+                .notes
+                .iter()
+                .all(|note| !note.text.starts_with("Not working:"))
+        );
+        assert!(unchanged.attachments.is_empty());
+        assert_eq!(
+            std::fs::read(conflict.join("existing.txt")).unwrap(),
+            b"keep"
+        );
     }
 
     #[test]

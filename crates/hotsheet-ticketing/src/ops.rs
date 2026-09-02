@@ -36,6 +36,10 @@ pub enum OpError {
     UnknownTicket(String),
     #[error("a ticket cannot block itself ({0})")]
     SelfBlock(String),
+    #[error("Not Working can only be reported for a completed ticket (found {0:?})")]
+    NotWorkingRequiresCompleted(Status),
+    #[error("a Not Working report requires a note or at least one evidence attachment")]
+    EmptyNotWorkingReport,
 }
 
 // ---- query -----------------------------------------------------------------------
@@ -435,6 +439,44 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
             status_label(to)
         ),
     });
+}
+
+/// Prepare the single ticket mutation used by an atomic Not Working provider
+/// operation. Persistence and evidence payload staging remain provider-owned.
+pub fn prepare_not_working(
+    ticket: &mut Ticket,
+    now: Timestamp,
+    note: Option<(Ulid, String)>,
+    has_evidence: bool,
+) -> Result<(), OpError> {
+    if ticket.status != Status::Completed {
+        return Err(OpError::NotWorkingRequiresCompleted(ticket.status));
+    }
+    let note = note.and_then(|(id, text)| {
+        let text = text.trim().to_string();
+        (!text.is_empty()).then_some((id, text))
+    });
+    if note.is_none() && !has_evidence {
+        return Err(OpError::EmptyNotWorkingReport);
+    }
+    if let Some((id, text)) = note {
+        ticket.notes.push(Note {
+            id,
+            kind: NoteKind::Regular,
+            created_at: now.clone(),
+            edited_at: now.clone(),
+            text: format!("Not working: {text}"),
+        });
+    }
+    let previous = ticket.status;
+    ticket.status = Status::NotStarted;
+    ticket.up_next = true;
+    ticket.close_reason = None;
+    ticket.closed_at = None;
+    ticket.duplicate_of = None;
+    append_status_transition(ticket, previous, ticket.status, &now);
+    ticket.updated_at = now;
+    Ok(())
 }
 
 fn status_label(status: Status) -> &'static str {

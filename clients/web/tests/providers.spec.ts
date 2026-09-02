@@ -20,12 +20,23 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     : full;
   const evidenceByTicket = new Map<string,Array<{id:string;filename:string;created_at:string}>>();
   const patches: Record<string,unknown>[] = [];
+  let commandDefinitions=[{id:'check',title:'Run checks',program:'/usr/bin/true',args:[],group:'Quality'}];
+  let commandRuns:Array<{id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:Array<{seq:number;stream:string;text:string}>}>=[];
   await page.route('**/*', async route => {
     const request=route.request(), url=new URL(request.url()), path=url.pathname;
     if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:project});
-    if(path.endsWith('/providers')) return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:canUpdate,close:true,notes:true,note_edit:canUpdate,note_delete:canUpdate,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
+    if(path.endsWith('/providers')) return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:canUpdate,close:true,notes:true,note_edit:canUpdate,note_delete:canUpdate,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,not_working_report:canUpdate,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
     if(path.endsWith('/permissions')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/connections')&&request.method()==='GET')return route.fulfill({json:[]});
+    if(path.endsWith('/commands')&&request.method()==='GET')return route.fulfill({json:commandDefinitions});
+    if(path.endsWith('/commands')&&request.method()==='PUT'){commandDefinitions=request.postDataJSON();return route.fulfill({json:commandDefinitions})}
+    if(path.endsWith('/command-runs')&&request.method()==='GET')return route.fulfill({json:commandRuns});
+    const commandStart=path.match(/\/commands\/([^/]+)\/run$/);
+    if(commandStart&&request.method()==='POST'){const run={id:'run-1',command_id:commandStart[1],state:'running' as const,output:[]};commandRuns=[run,...commandRuns];return route.fulfill({status:202,json:run})}
+    const commandCancel=path.match(/\/command-runs\/([^/]+)\/cancel$/);
+    if(commandCancel&&request.method()==='POST'){const run={...(commandRuns.find(item=>item.id===commandCancel[1])!),state:'cancelled' as const,output:[{seq:1,stream:'stdout',text:'Stopped by user'}]};commandRuns=commandRuns.map(item=>item.id===run.id?run:item);return route.fulfill({json:run})}
+    const commandRun=path.match(/\/command-runs\/([^/]+)$/);
+    if(commandRun&&request.method()==='GET')return route.fulfill({json:commandRuns.find(item=>item.id===commandRun[1])});
     if(path.endsWith('/ws/poll')&&request.method()==='GET'){await new Promise(resolve=>setTimeout(resolve,1_000));const since=Number(url.searchParams.get('since')??0);return route.fulfill({json:{cursor:since,events:[],overflow:false}})}
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
     if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
@@ -37,6 +48,8 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(attachmentMatch&&attachmentMatch[1]!=='01'&&request.method()==='POST'){const id=attachmentMatch[1],items=evidenceByTicket.get(id)??[],filename=decodeURIComponent(request.headers()['x-hotsheet-filename']??'attachment'),attachment={id:`E${items.length+1}`,filename,created_at:'2026-08-30T01:10:00Z'},next=[...items,attachment];evidenceByTicket.set(id,next);const ticket=rows.find(item=>item.id===id)!;return route.fulfill({status:201,json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:next}})}
     const attachmentDeleteMatch=path.match(/\/tickets\/([^/]+)\/attachments\/([^/]+)$/);
     if(attachmentDeleteMatch&&attachmentDeleteMatch[1]!=='01'&&request.method()==='DELETE'){const [,id,attachmentId]=attachmentDeleteMatch,next=(evidenceByTicket.get(id)??[]).filter(item=>item.id!==attachmentId);evidenceByTicket.set(id,next);const ticket=rows.find(item=>item.id===id)!;return route.fulfill({json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:next}})}
+    const notWorkingMatch=path.match(/\/providers\/[^/]+\/tickets\/([^/]+)\/not-working$/);
+    if(notWorkingMatch&&request.method()==='POST'){const id=notWorkingMatch[1],raw=request.postData()??'',attachments=raw.includes('filename=')?[{id:'NW1',filename:'proof ünicode.png',created_at:'2026-08-30T01:10:00Z'}]:[];evidenceByTicket.set(id,attachments);rows=rows.map(item=>item.id===id?{...item,status:'not_started',up_next:true}:item);patches.push({operation:'not-working',status:'not_started',up_next:true,raw});const changed=rows.find(item=>item.id===id)!;return route.fulfill({json:{store:'git-local',...changed,details:'',blocked_reason:null,notes:[],attachments}})}
     if(path.includes('/tickets/')&&request.method()==='GET'){const id=path.split('/').pop(),ticket=rows.find(item=>item.id===id);if(ticket)return route.fulfill({json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id!)??[]}})}
     if(path.endsWith('/tickets/01/attachments')&&request.method()==='POST'){const filename=request.headers()['x-hotsheet-filename']??'attachment';selectedFull={...selectedFull,attachments:[...selectedFull.attachments,{id:`A${selectedFull.attachments.length+1}`,filename,created_at:'2026-08-30T01:10:00Z'}]};return route.fulfill({status:201,json:{store:'git-local',...selectedFull}})}
     if(path.includes('/tickets/01/attachments/')&&request.method()==='GET')return route.fulfill({body:'attachment bytes',headers:{'content-type':'application/octet-stream','x-hotsheet-filename':'proof.png'}});
@@ -91,6 +104,15 @@ test('makes no repeated permission requests or renders while an open project is 
   expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
 });
 
+test('runs grouped local commands, confirms stop, exposes history, and saves settings',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const command=page.getByRole('button',{name:'Run checks'});await expect(page.getByText('Quality',{exact:true})).toBeVisible();await expect(command).toHaveAttribute('title','Press and hold for command history.');
+  await command.click();await expect(page.getByRole('button',{name:'Running Run checks'})).toBeVisible();
+  await page.getByRole('button',{name:'Running Run checks'}).click();const stop=page.locator('[data-component="command-cancellation-dialog"]');await expect(stop).toBeVisible();await stop.getByRole('button',{name:'Stop command'}).click();await expect(page.getByRole('button',{name:'Run checks'})).toHaveAttribute('title',/Last run: cancelled/);
+  await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerdown');await page.waitForTimeout(600);await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerup');const history=page.locator('[data-component="command-run-dialog"]');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-wide.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:390,height:844});const hiddenNarrowCommand=page.locator('[data-action="run-command"]');await hiddenNarrowCommand.dispatchEvent('pointerdown');await page.waitForTimeout(600);await hiddenNarrowCommand.dispatchEvent('pointerup');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-narrow.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:1280,height:720});
+  await page.getByLabel('Settings view').click();const editor=page.locator('[name="command-settings"]');await editor.fill('[{"id":"review","title":"Review","program":"/usr/bin/true","args":[],"group":"AI"}]');await page.getByRole('button',{name:'Save commands'}).click();await expect(page.getByRole('status')).toContainText('Saved locally.');await expect(page.getByRole('button',{name:'Review'})).toBeVisible();
+});
+
 test('renders exactly once when the long poll announces a permission request',async({page})=>{
   await mockProject(page);let pending:Array<{id:number;connection:string;tool:string;action:string;always_allow_supported:boolean}>=[];
   await page.route('**/permissions',route=>route.fulfill({json:pending}));
@@ -103,8 +125,11 @@ test('renders exactly once when the long poll announces a permission request',as
   const metrics=await renderMetrics(page);expect(metrics?.passes).toBe(1);expect(metrics?.mutations).toBeGreaterThan(0);
 });
 
-test('keeps healthy tickets usable while identifying an unreadable ticket',async({page})=>{
+test('keeps healthy tickets usable and offers safe reveal plus AI repair recovery',async({page})=>{
   await mockProject(page);
+  const recoveryRequests:{reveal?:unknown;repair?:unknown}={};
+  await page.route('**/__hotsheet/projects/*/corrupt-tickets/reveal',async route=>{recoveryRequests.reveal=route.request().postDataJSON();await route.fulfill({json:{revealed:true}})});
+  await page.route('**/corrupt-tickets/repair',async route=>{recoveryRequests.repair=route.request().postDataJSON();await route.fulfill({status:201,json:{...full,id:'repair-01',native_id:'repair-01',qualified_id:'git-local:repair-01',slug:'HS2-REPAIR',title:'Repair corrupt ticket HS2-QQRY00',category:'bug',priority:'high',up_next:true}})});
   await page.route('**/corrupt-tickets',route=>{void route.fulfill({json:[{
     store:'git-local',
     store_path:'/work/demo.hs2',
@@ -121,9 +146,16 @@ test('keeps healthy tickets usable while identifying an unreadable ticket',async
   await expect(corrupt).toContainText('HS2-QQRY00');
   await expect(corrupt).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
   await expect(corrupt).toContainText('unsupported content follows the bounded Notes section');
-  await expect(corrupt).toHaveAttribute('aria-disabled','true');
+  await expect(corrupt).toHaveAttribute('role','group');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
-  await expect(corrupt.getByRole('button')).toHaveCount(0);
+  await corrupt.getByRole('button',{name:'Reveal in Finder'}).click();
+  await expect(corrupt).toContainText('Opened the file location.');
+  expect(recoveryRequests.reveal).toEqual({path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md'});
+  await corrupt.getByRole('button',{name:'Queue AI repair'}).click();
+  await expect(corrupt).toContainText('Queued HS2-REPAIR for AI repair.');
+  expect(recoveryRequests.repair).toEqual({path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md'});
+  await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-wide.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
 
   await page.getByText('Use real project tickets').click();
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
@@ -144,6 +176,8 @@ test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt'
   await expect(newer).toContainText('created by a newer version');
   await expect(newer.locator('[data-lucide="refresh-cw"]')).toBeVisible();
   await expect(newer).not.toContainText('Ticket file could not be read');
+  await expect(newer.getByRole('button',{name:'Reveal in Finder'})).toBeVisible();
+  await expect(newer.getByRole('button',{name:'Queue AI repair'})).toHaveCount(0);
 });
 
 test('updates the open project after external ticket additions edits and deletion',async({page})=>{
@@ -381,12 +415,12 @@ test('offers completed verification actions only for one completed ticket',async
   await verified.click();await completed.click({modifiers:['Meta']});await verified.click({button:'right'});await expect(menu.getByRole('menuitem',{name:'Verified',exact:true})).toHaveCount(0);await expect(menu.getByRole('menuitem',{name:'Not Working…',exact:true})).toHaveCount(0);await expect(menu.getByText('Toggle Up Next')).toHaveCount(0);
 });
 
-test('reports a completed ticket as not working with notes or pending evidence',async({page})=>{
-  const patches=await mockProject(page);const uploads:string[]=[];page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/tickets/06/attachments'))uploads.push(request.headers()['x-hotsheet-filename']??'')});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const completed=page.locator('[data-ticket-slug="HS2-DONE01"]');await completed.click({button:'right'});await page.locator('[data-context-action="Report not working"]').click();const dialog=page.getByRole('dialog',{name:'Not Working — HS2-DONE01'}),note=dialog.getByRole('textbox',{name:'What’s wrong?'});await expect(note).toBeFocused();await note.fill('The fix regressed after restart.');const input=dialog.getByLabel('Browse evidence attachments');await input.setInputFiles({name:'proof ünicode.png',mimeType:'image/png',buffer:Buffer.from('png')});await expect(dialog.getByText('proof ünicode.png')).toBeVisible();await dialog.getByRole('button',{name:'Remove proof ünicode.png'}).click();await expect(dialog.getByText('proof ünicode.png')).toHaveCount(0);await input.setInputFiles({name:'proof ünicode.png',mimeType:'image/png',buffer:Buffer.from('png')});await page.screenshot({path:'/private/tmp/hotsheet-not-working-dialog.png'});await dialog.getByRole('button',{name:'Report Not Working'}).click();await expect(dialog).toHaveCount(0);await expect.poll(()=>patches.some(patch=>patch.status==='not_started'&&patch.up_next===true&&patch.note==='Not working: The fix regressed after restart.'&&patch.note_kind==='regular')).toBe(true);expect(uploads).toEqual([encodeURIComponent('proof ünicode.png')]);await expect(page.locator('[data-ticket-slug="HS2-DONE01"] [data-action="toggle-row-up-next"]')).toHaveAttribute('aria-label','Remove from Up Next');
+test('reports a completed ticket with note and evidence through one atomic provider operation',async({page})=>{
+  const patches=await mockProject(page);const requests:string[]=[];page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/not-working'))requests.push(request.postData()??'')});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const completed=page.locator('[data-ticket-slug="HS2-DONE01"]');await completed.click({button:'right'});await page.locator('[data-context-action="Report not working"]').click();const dialog=page.getByRole('dialog',{name:'Not Working — HS2-DONE01'}),note=dialog.getByRole('textbox',{name:'What’s wrong?'});await expect(note).toBeFocused();await note.fill('The fix regressed after restart.');const input=dialog.getByLabel('Browse evidence attachments');await input.setInputFiles({name:'proof ünicode.png',mimeType:'image/png',buffer:Buffer.from('png')});await dialog.getByRole('button',{name:'Report Not Working'}).click();await expect(dialog).toHaveCount(0);await expect.poll(()=>patches.some(patch=>patch.operation==='not-working'&&patch.status==='not_started'&&patch.up_next===true)).toBe(true);expect(requests).toHaveLength(1);expect(requests[0]).toContain('The fix regressed after restart.');expect(requests[0]).toContain('proof ünicode.png');await expect(page.locator('[data-ticket-slug="HS2-DONE01"] [data-action="toggle-row-up-next"]')).toHaveAttribute('aria-label','Remove from Up Next');
 });
 
-test('keeps a failed Not Working report open and compensates uploaded evidence',async({page})=>{
-  await mockProject(page);const deletes:string[]=[];page.on('request',request=>{if(request.method()==='DELETE')deletes.push(new URL(request.url()).pathname)});await page.route('**/tickets/06',route=>route.request().method()==='PATCH'?route.fulfill({status:500,json:{error:'reopen failed'}}):route.fallback());await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DONE01"]').click({button:'right'});await page.getByRole('menu',{name:'Ticket actions'}).getByRole('menuitem',{name:'Not Working…',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Not Working — HS2-DONE01'});await dialog.getByLabel('Browse evidence attachments').setInputFiles({name:'failure.txt',mimeType:'text/plain',buffer:Buffer.from('failure')});await dialog.getByRole('button',{name:'Report Not Working'}).click();await expect(dialog.getByRole('textbox',{name:'What’s wrong?'})).toBeVisible();await expect(dialog.getByRole('alert')).toContainText('reopen failed');await expect(dialog.getByText('failure.txt')).toBeVisible();await expect.poll(()=>deletes.some(path=>path.endsWith('/tickets/06/attachments/E1'))).toBe(true);await expect(dialog.getByRole('button',{name:'Report Not Working'})).toBeEnabled();
+test('keeps a failed atomic Not Working report open without compensating requests',async({page})=>{
+  await mockProject(page);const deletes:string[]=[];page.on('request',request=>{if(request.method()==='DELETE')deletes.push(new URL(request.url()).pathname)});await page.route('**/not-working',route=>route.fulfill({status:500,json:{error:'atomic report failed'}}));await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DONE01"]').click({button:'right'});await page.getByRole('menu',{name:'Ticket actions'}).getByRole('menuitem',{name:'Not Working…',exact:true}).click();const dialog=page.getByRole('dialog',{name:'Not Working — HS2-DONE01'});await dialog.getByLabel('Browse evidence attachments').setInputFiles({name:'failure.txt',mimeType:'text/plain',buffer:Buffer.from('failure')});await dialog.getByRole('button',{name:'Report Not Working'}).click();await expect(dialog.getByRole('textbox',{name:'What’s wrong?'})).toBeVisible();await expect(dialog.getByRole('alert')).toContainText('atomic report failed');await expect(dialog.getByText('failure.txt')).toBeVisible();expect(deletes).toEqual([]);await expect(dialog.getByRole('button',{name:'Report Not Working'})).toBeEnabled();
 });
 
 test('opens the matching ticket reader on row double-click in list and columns',async({page})=>{
@@ -492,7 +526,7 @@ test('preserves workspace scroll position when the ticket context menu opens (HS
   const proj={id:'demo-checkout',root:'/work/demo',name:'demo',stores:['/work/demo.hs2'],apiPath:'/__hotsheet/project-api/demo-checkout'};
   await page.route('**/*',async route=>{const req=route.request(),path=new URL(req.url()).pathname;
     if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:proj});
-    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:true,close:true,notes:true,note_edit:true,note_delete:true,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
+    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:true,close:true,notes:true,note_edit:true,note_delete:true,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,not_working_report:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
     if(path.endsWith('/permissions')&&req.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/connections')&&req.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});

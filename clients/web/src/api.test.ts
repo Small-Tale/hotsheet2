@@ -12,9 +12,11 @@ describe('attachment filename transport',()=>{
 
 describe('corrupt ticket transport',()=>{
   it('requests the checkout-scoped corrupt ticket collection',async()=>{
-    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify([{store:'local',store_path:'/store',path:'/store/ticket.md',error:'bad ticket'}]),{status:200}));
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response(JSON.stringify([{store:'local',store_path:'/store',path:'/store/ticket.md',error:'bad ticket'}]),{status:200}));
     await expect(new Api('/api').checkoutCorruptTickets('folder with spaces')).resolves.toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/corrupt-tickets',expect.any(Object));
+    await new Api('/api').createCorruptTicketRepair('folder with spaces','/tmp/broken.md');
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/checkouts/folder%20with%20spaces/corrupt-tickets/repair',expect.objectContaining({method:'POST',body:'{"path":"/tmp/broken.md"}'}));
     fetchMock.mockRestore();
   });
 });
@@ -34,6 +36,24 @@ describe('ticket search transport',()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('[]',{status:200}));
     await new Api('/api').checkoutTickets('folder with spaces','  HS2-QQRY00  ');
     expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/tickets?text=HS2-QQRY00',expect.any(Object));
+    fetchMock.mockRestore();
+  });
+});
+
+describe('atomic Not Working transport',()=>{
+  it('sends note, evidence, and concurrency token in one multipart request',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({status:'not_started',up_next:true}),{status:200}));
+    const proof=new File(['proof'],'proof ünicode.txt',{type:'text/plain'});
+    await new Api('/api').reportNotWorking('git local','ticket/1',' regressed ',[proof],'token-1');
+    const [url,init]=fetchMock.mock.calls[0] as [string,RequestInit];
+    expect(url).toBe('/api/providers/git%20local/tickets/ticket%2F1/not-working');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBeInstanceOf(FormData);
+    const body=init.body as FormData;
+    expect(body.get('note')).toBe('regressed');
+    expect(body.get('expected_token')).toBe('token-1');
+    expect((body.get('evidence') as File).name).toBe('proof ünicode.txt');
+    expect((init.headers as Headers).has('Content-Type')).toBe(false);
     fetchMock.mockRestore();
   });
 });

@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { authenticatedServerUrl, developmentRepositoryRoot, requireCompatibleServer } from './project-bridge';
+import { createDevApp } from './dev-server';
+import { authenticatedServerUrl, developmentRepositoryRoot, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
 describe('developmentRepositoryRoot', () => {
   it('uses the explicit original repository root inside a stable snapshot', () => {
@@ -23,6 +24,29 @@ describe('authenticatedServerUrl', () => {
   it('does not put secrets into ordinary upstream request URLs', () => {
     expect(authenticatedServerUrl('http://127.0.0.1:55560', '/tickets?text=one', 'secret'))
       .toBe('http://127.0.0.1:55560/tickets?text=one');
+  });
+});
+
+describe('revealCommand',()=>{
+  it('uses argument arrays and the platform-native file location action without a shell',()=>{
+    expect(revealCommand('/tmp/broken ticket.md','darwin')).toEqual({command:'open',args:['-R','/tmp/broken ticket.md']});
+    expect(revealCommand('C:\\work\\broken.md','win32')).toEqual({command:'explorer.exe',args:['/select,C:\\work\\broken.md']});
+    expect(revealCommand('/work/tickets/broken.md','linux')).toEqual({command:'xdg-open',args:['/work/tickets']});
+  });
+
+  it('allows only an exact path from current authenticated corrupt diagnostics',()=>{
+    const diagnostics=[{path:'/work/store/tickets/broken.md'}];
+    expect(()=>{requireReportedCorruptPath(diagnostics,'/work/store/tickets/broken.md')}).not.toThrow();
+    expect(()=>{requireReportedCorruptPath(diagnostics,'/work/store/../secrets.txt')}).toThrow(/no longer present/);
+  });
+
+  it('routes a specific project and path through an injected launcher boundary',async()=>{
+    const reveal=vi.fn().mockResolvedValue(undefined);
+    const response=await createDevApp(true,undefined,reveal).request('/__hotsheet/projects/demo/corrupt-tickets/reveal',{method:'POST',headers:{'content-type':'application/json'},body:'{"path":"/work/broken.md"}'});
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({revealed:true});
+    expect(reveal).toHaveBeenCalledWith('demo','/work/broken.md');
+    expect((await createDevApp(false,undefined,reveal).request('/__hotsheet/projects/demo/corrupt-tickets/reveal',{method:'POST'})).status).toBe(404);
   });
 });
 
