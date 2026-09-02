@@ -128,6 +128,15 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
 });
 
+test('keeps an active editor stable when its already-selected ticket is clicked again',async({page})=>{
+  const patches=await mockProject(page);let detailReads=0;page.on('request',request=>{if(request.method()==='GET'&&new URL(request.url()).pathname.endsWith('/tickets/01'))detailReads+=1});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const row=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await row.click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');await inspector.getByRole('button',{name:'Edit Ticket details'}).dblclick();const editor=inspector.getByRole('textbox',{name:'Ticket details'});await editor.fill('Draft preserved across a redundant reselect');await expect.poll(()=>patches.some(patch=>patch.details==='Draft preserved across a redundant reselect')).toBe(true);await page.waitForTimeout(100);
+  const readsBefore=detailReads;await editor.evaluate(node=>{(node as HTMLElement&{reselectionMarker?:boolean}).reselectionMarker=true});await resetRenderMetrics(page);await row.click();
+  await expect(editor).toBeFocused();await expect(editor).toHaveValue('Draft preserved across a redundant reselect');expect(await editor.evaluate(node=>(node as HTMLElement&{reselectionMarker?:boolean}).reselectionMarker)).toBe(true);expect(detailReads).toBe(readsBefore);expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
+  await page.screenshot({path:'/private/tmp/hs2-e0mjm8-reselect-editor-wide.png',fullPage:true});await page.setViewportSize({width:940,height:844});await expect(editor).toBeFocused();await page.screenshot({path:'/private/tmp/hs2-e0mjm8-reselect-editor-narrow.png',fullPage:true});
+});
+
 test('omits the separator below the empty ticket inspector toolbar',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();await page.waitForTimeout(500);
   const placeholder=page.locator('.ticket-inspector-placeholder'),toolbar=placeholder.locator(':scope > .toolbar');await expect(placeholder).toContainText('Select a ticket to see and edit its details');await expect(toolbar).toHaveAttribute('data-divider','false');await expect(toolbar).toHaveCSS('border-bottom-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-gvk7zy-empty-inspector-wide.png',fullPage:true});

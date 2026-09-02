@@ -108,7 +108,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
 - **Render budgets.** Development builds expose root render-pass and DOM-mutation
   counters to browser tests. Polling responses that do not change observable state
   must cause zero render passes and zero DOM mutations; tests also budget intentional
-  transitions so broad Kerf render dependencies fail loudly instead of becoming
+  transitions and no-op interactions. In particular, activating an already-selected,
+  fully loaded ticket again performs no detail request, render pass, or DOM mutation and
+  preserves focus plus draft state in an active editor. This makes broad Kerf render
+  dependencies fail loudly instead of becoming
   focus, scroll, or animation regressions. Development builds enable Kerf's
   value-only-render and list-rebind warnings plus throwing list invariants.
 
@@ -275,7 +278,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   plain click replaces the selection, Command/Ctrl-click toggles one ticket, and
   Shift-click selects a contiguous range. Board ranges are deliberately column-local;
   Shift-clicking into another column becomes a single selection. Clicking unused list
-  or column space clears the selection. Every selected row uses the same blue border
+  or column space clears the selection. A plain click on the one already-selected,
+  fully loaded ticket is a no-op; when an inspector editor owns focus, that click also
+  leaves the editor focused instead of triggering a redundant blur/refetch cycle.
+  Modifier clicks and unloaded selections still follow their normal selection paths.
+  Every selected row uses the same blue border
   and background component state in list and column layouts. The inspector remains
   available in both layouts: it shows ticket details only for exactly one selection,
   otherwise showing the HS1-style zero- or multi-selection guidance placeholder. The

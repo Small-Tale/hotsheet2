@@ -8,6 +8,19 @@ export interface TicketSelectionIntent {
   toggle?: boolean;
 }
 
+/** A plain activation of the one fully loaded ticket already selected changes nothing. */
+export function isPlainTicketReselection(
+  selectedSlugs: readonly string[],
+  loadedSlug: string | undefined,
+  slug: string,
+  intent: TicketSelectionIntent = {},
+): boolean {
+  return !intent.range && !intent.toggle
+    && loadedSlug === slug
+    && selectedSlugs.length === 1
+    && selectedSlugs[0] === slug;
+}
+
 export function updateTicketSelection(
   orderedSlugs: readonly string[],
   state: TicketSelectionState,

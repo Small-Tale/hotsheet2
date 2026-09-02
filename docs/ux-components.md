@@ -301,7 +301,9 @@ always retain native clipboard behavior.
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or
   collapsing metadata at narrow widths. It also includes blue selection, keyboard
-  selection, and one shared right-click context menu. The real TicketList and TicketBoard
+  selection, and one shared right-click context menu. Plainly reactivating the one
+  already-selected, fully loaded row is inert, including while an inspector editor owns
+  focus; modifier selection and double-click reader opening remain active. The real TicketList and TicketBoard
   compositions wire that same menu to reader, direct icon-rich category/priority/status
   submenus with bulk assignment, lifecycle-eligible Up Next, duplication, archive, and
   delete handlers; the demo only substitutes deterministic effects. A single completed
