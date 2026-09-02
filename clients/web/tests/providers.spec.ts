@@ -11,7 +11,7 @@ const startedRow2 = { ...row, native_id:'08', qualified_id:'git-local:08', id:'0
 const startedRow3 = { ...row, native_id:'09', qualified_id:'git-local:09', id:'09', slug:'HS2-START03', title:'Third started ticket', status:'started', up_next:false };
 const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'},{id:'N3',kind:'regular',created_at:'2026-08-30T00:36:00Z',edited_at:'2026-08-30T00:36:00Z',text:'Editable note'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
 
-async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded = false) {
+async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded = false, ticketLoadDelay = 0) {
   let rows = [{...row,feedback_needed:primaryFeedbackNeeded},backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3];
   let selectedFull = primaryFeedbackNeeded
     ? {...full,notes:[...full.notes,{id:'N4',kind:'feedback_needed',created_at:'2026-08-30T00:37:00Z',edited_at:'2026-08-30T00:37:00Z',text:'One more decision is needed.'}]}
@@ -29,7 +29,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/tickets')&&request.method()==='GET') return route.fulfill({json:rows});
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
-    if(path.endsWith('/tickets/01')&&request.method()==='GET') return route.fulfill({json:{store:'git-local',...selectedFull}});
+    if(path.endsWith('/tickets/01')&&request.method()==='GET'){if(ticketLoadDelay)await new Promise(resolve=>setTimeout(resolve,ticketLoadDelay));return route.fulfill({json:{store:'git-local',...selectedFull}})}
     const attachmentMatch=path.match(/\/tickets\/([^/]+)\/attachments$/);
     if(attachmentMatch&&attachmentMatch[1]!=='01'&&request.method()==='POST'){const id=attachmentMatch[1],items=evidenceByTicket.get(id)??[],filename=decodeURIComponent(request.headers()['x-hotsheet-filename']??'attachment'),attachment={id:`E${items.length+1}`,filename,created_at:'2026-08-30T01:10:00Z'},next=[...items,attachment];evidenceByTicket.set(id,next);const ticket=rows.find(item=>item.id===id)!;return route.fulfill({status:201,json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:next}})}
     const attachmentDeleteMatch=path.match(/\/tickets\/([^/]+)\/attachments\/([^/]+)$/);
@@ -65,6 +65,14 @@ test('clears needs review when a regular response follows the feedback-needed no
   const inspector=page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toHaveAttribute('data-needs-review','false');
   await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
+});
+
+test('keeps the visible inspector region mounted while a selected ticket loads',async({page})=>{
+  await mockProject(page,true,false,300);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const region=page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');await expect(region).toBeVisible();const before=await region.evaluate(node=>node.getBoundingClientRect().width);
+  await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.waitForTimeout(75);
+  await expect(region).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();expect(await region.evaluate(node=>node.getBoundingClientRect().width)).toBe(before);
+  await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
 });
 
 interface RenderMetricsSnapshot { passes:number;mutations:number }

@@ -364,7 +364,9 @@ The trailing inspector shown in the wireframe. `TicketInspector` is **demo built
 as a focused shell around separately demoed `TicketInfoPanel`, `TicketTimeline`, and
 `TicketAttachments` components, plus the Up Next toggle, close/reopen, and controlled
 tab routing. Its AppShell composition projects the same shared active-tab state rather
-than substituting a hardcoded default.
+than substituting a hardcoded default. When one row has been selected but its full ticket
+is still loading, AppShell keeps the visible inspector region mounted and shows the
+placeholder in place; it never removes and re-adds the sidebar during that transition.
 
 - `InspectorHeader`
   - ticket identifier
