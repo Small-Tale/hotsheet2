@@ -139,6 +139,20 @@ installed. `RUSTC_WRAPPER` applies unchanged to the `cargo lint` alias,
 `sccache --show-stats`. CI continues to use its existing Cargo cache and does not
 enable sccache.
 
+### 12.6.2 Isolated Clippy artifacts
+
+The repository's `cargo lint` alias supplies the scoped Cargo config
+`build.target-dir="target/clippy"`. `cargo nextest run`, ordinary builds, and coverage
+retain the default `target` layout, so alternating lint and test runs no longer
+invalidate one another's incremental artifacts. Cargo's normal environment precedence
+still lets an explicit caller/CI `CARGO_TARGET_DIR` win.
+
+This intentionally spends additional local disk space and duplicates the first cold
+compile. The common edit → lint → nextest loop recovers that cost by keeping both warm;
+optional sccache remains complementary because it can reuse compiler outputs across the
+two target directories. `cargo clean` removes the nested Clippy directory along with the
+rest of `target`.
+
 ---
 
 ## 12.7 Testing strategy
