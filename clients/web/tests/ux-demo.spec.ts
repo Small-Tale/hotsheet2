@@ -545,6 +545,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('listbox', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
+  expect(await board.locator('.ticket-board-column__header').evaluateAll(headers => headers.map(header => header.getBoundingClientRect().height))).toEqual([32, 32, 32]);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
   await expect(board.locator('.ticket-board-column__tickets').first()).toHaveCSS('padding', '1.6px 8px 16px');
@@ -591,8 +592,11 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await board.getByRole('button', { name: 'Select all Backlog tickets' }).click();
   await expect(board.locator('[data-column-id="backlog"] [data-selected="true"]')).toHaveCount(6);
   await page.screenshot({ path: '/private/tmp/hs2-x91ssp-column-select-wide.png', fullPage: true });
+  await page.screenshot({ path: '/private/tmp/hs2-xrnsv0-column-header-wide.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-4gk04w-column-row-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
+  expect(await board.locator('.ticket-board-column__header').evaluateAll(headers => headers.map(header => header.getBoundingClientRect().height))).toEqual([32, 32, 32]);
+  await page.screenshot({ path: '/private/tmp/hs2-xrnsv0-column-header-narrow.png', fullPage: true });
   await page.screenshot({ path: '/private/tmp/hs2-4gk04w-column-row-narrow.png', fullPage: true });
   await page.setViewportSize({ width: 1600, height: 900 });
   await narrowRow.focus();
