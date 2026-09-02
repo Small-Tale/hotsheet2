@@ -367,6 +367,7 @@ impl AppState {
                 entry,
                 store_id: id,
                 events: self.events.clone(),
+                event_log: self.event_log.clone(),
                 checkout_registry: self.checkout_registry.clone(),
             },
             registered_watcher_backend(),
@@ -485,12 +486,7 @@ impl AppState {
     }
 
     fn emit(&self, event: ChangeEvent) {
-        // Record in the long-poll ring first (so a poller that races the broadcast still
-        // sees it by cursor), then push live to WebSocket subscribers.
-        if let Ok(mut log) = self.event_log.lock() {
-            log.push(event.clone());
-        }
-        let _ = self.events.send(event); // Err just means no subscribers
+        emit_change(&self.event_log, &self.events, event);
     }
 
     /// The current long-poll cursor (the last emitted event's seq; 0 if none).
@@ -608,6 +604,18 @@ struct EventLog {
     seq: u64,
     /// `(seq, event)`, oldest first, capped at [`EVENT_LOG_CAP`].
     ring: std::collections::VecDeque<(u64, ChangeEvent)>,
+}
+
+fn emit_change(
+    event_log: &Arc<Mutex<EventLog>>,
+    events: &broadcast::Sender<ChangeEvent>,
+    event: ChangeEvent,
+) {
+    // Record first so a long poll racing the broadcast can always replay by cursor.
+    if let Ok(mut log) = event_log.lock() {
+        log.push(event.clone());
+    }
+    let _ = events.send(event); // Err just means no live subscribers.
 }
 
 impl EventLog {
@@ -3684,11 +3692,21 @@ struct PollResponse {
 }
 
 /// `GET /ws/poll?secret=…&since=<seq>&timeout_ms=<n>` — the long-poll fallback to `/ws/sync`
-/// (HS2-P3P3CC). Returns immediately with any events after `since`; otherwise subscribes and
-/// waits up to `timeout_ms` for the next one, returning an empty list (with the current
-/// cursor) on timeout. The client re-polls with the returned `cursor`.
-async fn poll_events(State(state): State<AppState>, Query(params): Query<PollParams>) -> Response {
-    if params.secret.as_deref() != Some(state.secret.as_str()) {
+/// (HS2-P3P3CC). Authentication accepts either the legacy query secret or the standard
+/// `X-Hotsheet-Secret` header. Returns immediately with any events after `since`; otherwise
+/// subscribes and waits up to `timeout_ms` for the next one, returning an empty list (with
+/// the current cursor) on timeout. The client re-polls with the returned `cursor`.
+async fn poll_events(
+    State(state): State<AppState>,
+    Query(params): Query<PollParams>,
+    headers: HeaderMap,
+) -> Response {
+    let header_secret = headers
+        .get("x-hotsheet-secret")
+        .and_then(|value| value.to_str().ok());
+    if params.secret.as_deref() != Some(state.secret.as_str())
+        && header_secret != Some(state.secret.as_str())
+    {
         return (StatusCode::UNAUTHORIZED, "missing or invalid secret").into_response();
     }
     // No `since` → hand back the current cursor with no backlog (initial handshake).
@@ -4085,6 +4103,7 @@ struct WatchTarget {
     entry: StoreEntry,
     store_id: String,
     events: broadcast::Sender<ChangeEvent>,
+    event_log: Arc<Mutex<EventLog>>,
     checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
 }
 
@@ -4094,6 +4113,7 @@ pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
         entry: state.default_entry(),
         store_id: multistore::store_url_id(&state.store),
         events: state.events.clone(),
+        event_log: state.event_log.clone(),
         checkout_registry: state.checkout_registry.clone(),
     };
     spawn_watcher_for(target, WatcherBackend::Recommended)
@@ -4223,15 +4243,19 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
     };
     let index = &target.entry.index;
     let emit = |kind: &str, id: String, slug: String| {
-        let _ = target.events.send(ChangeEvent {
-            store: target.store_id.clone(),
-            kind: kind.to_string(),
-            id,
-            slug,
-            message: None,
-            activity: None,
-            assignment: None,
-        });
+        emit_change(
+            &target.event_log,
+            &target.events,
+            ChangeEvent {
+                store: target.store_id.clone(),
+                kind: kind.to_string(),
+                id,
+                slug,
+                message: None,
+                activity: None,
+                assignment: None,
+            },
+        );
     };
 
     if !path.exists() {

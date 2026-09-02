@@ -9,10 +9,12 @@ const completedRow = { ...row, native_id:'06', qualified_id:'git-local:06', id:'
 const verifiedRow = { ...row, native_id:'07', qualified_id:'git-local:07', id:'07', slug:'HS2-VERIFY01', title:'Verified ticket', status:'verified', up_next:false };
 const startedRow2 = { ...row, native_id:'08', qualified_id:'git-local:08', id:'08', slug:'HS2-START02', title:'Second started ticket', status:'started', up_next:false };
 const startedRow3 = { ...row, native_id:'09', qualified_id:'git-local:09', id:'09', slug:'HS2-START03', title:'Third started ticket', status:'started', up_next:false };
+const searchSlugRow = { ...row, native_id:'10', qualified_id:'git-local:10', id:'10', slug:'HS2-QQRY00', title:'Parser boundary bug', status:'started', up_next:false };
+const searchDetailsRow = { ...row, native_id:'11', qualified_id:'git-local:11', id:'11', slug:'HS2-SHG7YS', title:'Unrelated visible title', status:'started', up_next:false };
 const full = { ...row, details:'The real ticket body.', blocked_reason:null, concurrency_token:'token', notes:[{id:'N1',kind:'activity',created_at:'2026-08-30T00:30:00Z',edited_at:'2026-08-30T00:30:00Z',text:'Connected the client\nLoaded checkout-scoped tickets.'},{id:'N2',kind:'feedback_needed',created_at:'2026-08-30T00:35:00Z',edited_at:'2026-08-30T00:35:00Z',text:'Should this reader preserve the current draft?'},{id:'N3',kind:'regular',created_at:'2026-08-30T00:36:00Z',edited_at:'2026-08-30T00:36:00Z',text:'Editable note'}], attachments:[{id:'A1',filename:'proof.png',created_at:'2026-08-30T00:40:00Z'}] };
 
 async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded = false, ticketLoadDelay = 0) {
-  let rows = [{...row,feedback_needed:primaryFeedbackNeeded},backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3];
+  let rows = [{...row,feedback_needed:primaryFeedbackNeeded},backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
   let selectedFull = primaryFeedbackNeeded
     ? {...full,notes:[...full.notes,{id:'N4',kind:'feedback_needed',created_at:'2026-08-30T00:37:00Z',edited_at:'2026-08-30T00:37:00Z',text:'One more decision is needed.'}]}
     : full;
@@ -24,9 +26,10 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/providers')) return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:canUpdate,close:true,notes:true,note_edit:canUpdate,note_delete:canUpdate,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
     if(path.endsWith('/permissions')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/connections')&&request.method()==='GET')return route.fulfill({json:[]});
+    if(path.endsWith('/ws/poll')&&request.method()==='GET'){await new Promise(resolve=>setTimeout(resolve,1_000));const since=Number(url.searchParams.get('since')??0);return route.fulfill({json:{cursor:since,events:[],overflow:false}})}
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
     if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
-    if(path.endsWith('/tickets')&&request.method()==='GET') return route.fulfill({json:rows});
+    if(path.endsWith('/tickets')&&request.method()==='GET'){if(url.searchParams.get('text')==='QQRY00'){await new Promise(resolve=>setTimeout(resolve,150));return route.fulfill({json:[searchSlugRow,searchDetailsRow]})}return route.fulfill({json:rows})}
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
     if(path.endsWith('/tickets/01')&&request.method()==='GET'){if(ticketLoadDelay)await new Promise(resolve=>setTimeout(resolve,ticketLoadDelay));return route.fulfill({json:{store:'git-local',...selectedFull}})}
@@ -119,6 +122,32 @@ test('keeps healthy tickets usable while identifying an unreadable ticket',async
 
   await page.getByText('Use real project tickets').click();
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
+});
+
+test('updates the open project after external ticket additions edits and deletion',async({page})=>{
+  await mockProject(page);
+  let liveRows=[row,backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3],liveFull={...full},cursor=0;
+  const polls:Array<import('@playwright/test').Route>=[];
+  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:liveRows}):route.fallback());
+  await page.route('**/tickets/01',route=>route.request().method()==='GET'?route.fulfill({json:{store:'git-local',...liveFull}}):route.fallback());
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
+  const emit=async(kind:string,id:string,slug:string)=>{await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind,id,slug}],overflow:false}})};
+
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const original=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await original.click();await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
+
+  const openSelect=page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"]');await openSelect.click();await expect(openSelect).toHaveJSProperty('open',true);
+  liveRows=liveRows.map(item=>item.id==='01'?{...item,title:'Externally edited ticket'}:item);liveFull={...liveFull,title:'Externally edited ticket'};await emit('changed','01','HS2-DEMO01');
+  await expect(original).toContainText('Externally edited ticket');await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Externally edited ticket');
+  await expect(page.locator('.app-loading')).toBeHidden();await expect(openSelect).toHaveJSProperty('open',true);await page.keyboard.press('Escape');
+
+  const external={...row,id:'10',native_id:'10',qualified_id:'git-local:10',slug:'HS2-EXTERNAL',title:'Externally added ticket',status:'not_started',up_next:false};liveRows=[external,...liveRows];await emit('changed','10','HS2-EXTERNAL');
+  await expect(page.locator('[data-ticket-slug="HS2-EXTERNAL"]')).toContainText('Externally added ticket');
+  await page.screenshot({path:'/private/tmp/hs2-9d4hcq-live-wide.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/private/tmp/hs2-9d4hcq-live-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
+
+  liveRows=liveRows.filter(item=>item.id!=='01');await emit('deleted','01','');
+  await expect(original).toHaveCount(0);await expect(page.getByRole('complementary',{name:'Ticket inspector'})).toContainText('Select a ticket to see and edit its details');
 });
 
 test('translates urgent priority through the canonical server contract',async({page})=>{
@@ -259,6 +288,14 @@ test('keeps backlog and archived tickets out of the active Queue',async({page})=
   await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.getByText('Archived ticket')).toHaveCount(0);
   await page.getByRole('button',{name:/Backlog/}).click();await expect(page.getByText('Deferred backlog ticket')).toBeVisible();await expect(page.getByText('Use real project tickets')).toHaveCount(0);
   await page.getByRole('button',{name:/Archive/}).click();await expect(page.getByText('Archived ticket')).toBeVisible();await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);
+});
+
+test('searches indexed ticket details and notes without discarding the full project list',async({page})=>{
+  const searchRequests:string[]=[];await mockProject(page);page.on('request',request=>{const url=new URL(request.url());if(url.pathname.endsWith('/tickets')&&url.searchParams.has('text'))searchRequests.push(url.searchParams.get('text')!)});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Search tickets'}).click();await page.getByRole('textbox',{name:'Search tickets'}).fill('QQRY00');
+  await expect(page.locator('[data-ticket-slug="HS2-QQRY00"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-SHG7YS"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toHaveCount(0);await expect.poll(()=>searchRequests).toContain('QQRY00');
+  await page.getByRole('button',{name:'Clear search'}).click();await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-SHG7YS"]')).toBeVisible();
+  const pending=page.waitForRequest(request=>new URL(request.url()).searchParams.get('text')==='QQRY00');await page.getByRole('textbox',{name:'Search tickets'}).fill('QQRY00');await pending;await page.getByRole('button',{name:'Clear search'}).click();await page.waitForTimeout(200);await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
 });
 
 test('derives board columns from the selected view and merges Verified by project setting',async({page})=>{

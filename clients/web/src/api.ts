@@ -14,6 +14,8 @@ export interface FullTicket extends TicketRow {details:string;blocked_reason?:st
 export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number}
 export interface PermissionRequest {id:number;connection:string;tool:string;action:string;always_allow_supported?:boolean}
 export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}
+export interface ChangeEvent {store:string;kind:string;id:string;slug:string}
+export interface PollResponse {cursor:number;events:ChangeEvent[];overflow:boolean}
 export const encodeAttachmentFilename=(filename:string)=>encodeURIComponent(filename);
 export class Api {
   constructor(private origin='',private secret=''){}
@@ -27,7 +29,7 @@ export class Api {
   deleteConnection=(id:string)=>this.request<void>(`/provider-connections/${encodeURIComponent(id)}`,{method:'DELETE'});
   transfer=(kind:'copy'|'move',source:Ticket,destination_connection:string)=>this.request(`/provider-transfers/${kind}`,{method:'POST',body:JSON.stringify({source:{connection_id:source.connection_id,native_id:source.native_id},destination_connection,operation_id:crypto.randomUUID(),confirm:kind==='move'})});
   copyAttachment=(source:{connection_id:string;native_id:string;attachment_id:string},destination:{connection_id:string;native_id:string})=>this.request<FullTicket>('/provider-attachments/copy',{method:'POST',body:JSON.stringify({source,destination})});
-  checkoutTickets=(checkout:string)=>this.request<TicketRow[]>(`/checkouts/${encodeURIComponent(checkout)}/tickets`);
+  checkoutTickets=(checkout:string,text?:string)=>this.request<TicketRow[]>(`/checkouts/${encodeURIComponent(checkout)}/tickets${text?.trim()?`?text=${encodeURIComponent(text.trim())}`:''}`);
   checkoutCorruptTickets=(checkout:string)=>this.request<CorruptTicket[]>(`/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
   checkoutTicket=(checkout:string,id:string)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(ticket=>({store:ticket.store,ticket}));
   createCheckoutTicket=(checkout:string,value:{title:string;details?:string;category:string;priority?:string;status?:string;up_next?:boolean;tags?:string[]})=>this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`,{method:'POST',body:JSON.stringify(prioritiesToWire(value))});
@@ -39,5 +41,6 @@ export class Api {
   repositoryStatus=(checkout:string)=>this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
   activeToolConnections=()=>this.request<ToolConnection[]>('/connections');
+  pollEvents=(since?:number,signal?:AbortSignal,timeoutMs=25_000)=>this.request<PollResponse>(`/ws/poll?timeout_ms=${timeoutMs}${since===undefined?'':`&since=${since}`}`,{signal});
   resolvePermission=(id:number,decision:'allow'|'deny',scope:'once'|'always')=>this.request<{connection:string;decision:'allow'|'deny';persisted:boolean}>(`/permissions/${id}`,{method:'POST',body:JSON.stringify({decision,scope})});
 }

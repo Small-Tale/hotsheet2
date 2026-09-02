@@ -114,6 +114,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   references). Full multi-source editing in the real Settings view is tracked separately;
   the initial view reports the active source paths and their storage model.
 
+  Workspace search delegates to the checkout index rather than filtering compact rows
+  in the browser. It therefore matches slug, title, tags, Markdown details, and note text
+  while retaining the full local ticket collection for project counts, mutations, and an
+  immediate return to the unfiltered view when search is cleared.
+
   The real inspector's attachment surface materializes ordinary-sized browsed and
   dropped files before upload, so a macOS promised screenshot cannot disappear while
   `fetch` lazily reads it. Empty, unreadable, and short-read files are rejected with
@@ -135,6 +140,16 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   remains usable and renders each unreadable file as a disabled warning row with the
   recovered slug/id or filename, full path, and parser error. Linked-store diagnostics
   retain server-provided store attribution.
+
+  While a project is selected, the browser keeps a cursor-based long poll open through
+  the credential-hiding bridge. Ticket create/update/claim/move/delete events and replay
+  overflow coalesce into an authoritative project refresh, including reconciliation of
+  the selected inspector ticket. Background reconciliation is silent: it does not toggle
+  the foreground loading surface, and an open metadata select remains open across the
+  inspector update. Project switches abort the previous poll. Network failure retries
+  with a fresh cursor without refreshing on every failure; the first successful
+  reconnect reconciles once. Activity/presence events are deliberately outside this
+  ticket-refresh lifecycle.
 
   The default `Queue` view is the active working set and intentionally excludes both
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit

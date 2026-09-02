@@ -396,6 +396,101 @@ async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
 }
 
 #[tokio::test]
+async fn checkout_search_matches_slug_details_and_notes() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+
+    let details_ticket = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Details reference","details":"Depends on HS2-QQRY00"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let note_ticket = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Note reference"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    app.clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!(
+                "/checkouts/{checkout_id}/tickets/{}",
+                note_ticket["id"].as_str().unwrap()
+            ),
+            Some(r#"{"note":"Also references HS2-QQRY00"}"#),
+        ))
+        .await
+        .unwrap();
+
+    let matches = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?text=QQRY00"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let slugs = matches
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["slug"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(slugs.len(), 2);
+    assert!(slugs.contains(&details_ticket["slug"].as_str().unwrap()));
+    assert!(slugs.contains(&note_ticket["slug"].as_str().unwrap()));
+
+    let slug_matches = body_json(
+        app.oneshot(authed(
+            "GET",
+            &format!(
+                "/checkouts/{checkout_id}/tickets?text={}",
+                details_ticket["slug"].as_str().unwrap()
+            ),
+            None,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(slug_matches.as_array().unwrap().len(), 1);
+    assert_eq!(slug_matches[0]["id"], details_ticket["id"]);
+}
+
+#[tokio::test]
 async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();
@@ -1563,8 +1658,20 @@ async fn watcher_reindexes_an_external_write() {
     let _watch = hotsheet_server::spawn_watcher(state.clone()).unwrap();
     let app = app(state);
 
+    // The same-origin project bridge injects the secret as a header. Long polling accepts
+    // that without exposing credentials to browser JavaScript.
+    let handshake = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let mut cursor = handshake["cursor"].as_u64().unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
     // Write a ticket to disk WITHOUT going through the server (a CLI/git-style edit).
-    ops::create(
+    let created = ops::create(
         &store,
         Ulid::new(),
         "HS",
@@ -1577,19 +1684,79 @@ async fn watcher_reindexes_an_external_write() {
     )
     .unwrap();
 
-    // The watcher should reindex it; poll the HTTP query until it appears.
-    for _ in 0..40 {
+    // The watcher should reindex it and make its event replayable through long polling.
+    let mut saw_create = false;
+    for _ in 0..80 {
         let resp = app
             .clone()
             .oneshot(authed("GET", "/tickets?text=external", None))
             .await
             .unwrap();
-        if body_json(resp).await.as_array().unwrap().len() == 1 {
+        let indexed = body_json(resp).await.as_array().unwrap().len() == 1;
+        let polled = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if polled["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["kind"] == "changed" && event["id"] == created.id.to_string())
+        {
+            saw_create = true;
+            cursor = polled["cursor"].as_u64().unwrap();
+        }
+        if indexed && saw_create {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(saw_create, "watcher event was not replayable within 8s");
+
+    // An external edit advances the cursor again and updates the indexed projection.
+    let mut edited = store.read_ticket(&created.id).unwrap();
+    edited.title = "externally edited".into();
+    edited.updated_at = Timestamp::new("2026-08-19T00:01:00Z");
+    store.write_ticket(&edited).unwrap();
+    for _ in 0..80 {
+        let polled = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let changed = polled["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|event| event["kind"] == "changed" && event["id"] == created.id.to_string());
+        if changed {
+            assert!(polled["cursor"].as_u64().unwrap() > cursor);
+            let rows = body_json(
+                app.clone()
+                    .oneshot(authed("GET", "/tickets?text=externally%20edited", None))
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert_eq!(rows.as_array().unwrap().len(), 1);
             return;
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    panic!("watcher did not reindex the external write within 4s");
+    panic!("watcher did not replay the external edit within 8s");
 }
 
 /// The watcher also regenerates each consuming checkout's local worklist on change.
@@ -3176,13 +3343,38 @@ async fn long_poll_hands_back_a_cursor_then_replays_events_since_it() {
 }
 
 #[tokio::test]
-async fn long_poll_requires_the_secret() {
+async fn long_poll_accepts_query_or_header_secret_and_rejects_invalid_auth() {
     let (_d, st) = state();
-    let resp = app(st)
-        .oneshot(authed("GET", "/ws/poll?secret=wrong&since=0", None))
+    let app = app(st);
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/ws/poll?secret=wrong&since=0")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+    let query = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/ws/poll?secret=test-secret&timeout_ms=0")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(query.status(), StatusCode::OK);
+
+    let header = app
+        .oneshot(authed("GET", "/ws/poll?timeout_ms=0", None))
+        .await
+        .unwrap();
+    assert_eq!(header.status(), StatusCode::OK);
 }
 
 #[tokio::test]

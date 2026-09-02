@@ -4,7 +4,7 @@
 //! full-text search so the UI never walks the store to draw a list.
 //!
 //! Indexes the queryable ticket fields + `tags`/`assignees`/`reviews` facet tables + an
-//! FTS5 table over title/details/notes, plus blocked/unblocked (via `json_each` over
+//! FTS5 table over slug/title/tags/details/notes, plus blocked/unblocked (via `json_each` over
 //! `blocked_by_json` against the done set), created/updated date-range filters, and keyset
 //! pagination through `TicketQuery::page_after` (HS2-89/HS2-T84F9F/HS2-TCDTCH).
 
@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -52,7 +52,7 @@ CREATE INDEX idx_assignees ON assignees(store_id, assignee);
 CREATE TABLE reviews (store_id TEXT, ticket_id TEXT, who TEXT, requested_by TEXT);
 CREATE INDEX idx_reviews ON reviews(store_id, who);
 CREATE INDEX idx_reviews_requested_by ON reviews(store_id, requested_by);
-CREATE VIRTUAL TABLE tickets_fts USING fts5(title, details, notes);
+CREATE VIRTUAL TABLE tickets_fts USING fts5(slug, title, tags, details, notes);
 CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);
 "#;
 
@@ -285,8 +285,8 @@ impl Index {
         self.conn
             .execute("DELETE FROM tickets_fts WHERE rowid=?1", params![rowid])?;
         self.conn.execute(
-            "INSERT INTO tickets_fts(rowid,title,details,notes) VALUES(?1,?2,?3,?4)",
-            params![rowid, t.title, t.details, notes],
+            "INSERT INTO tickets_fts(rowid,slug,title,tags,details,notes) VALUES(?1,?2,?3,?4,?5,?6)",
+            params![rowid, t.slug, t.title, t.tags.join(" "), t.details, notes],
         )?;
         Ok(())
     }
@@ -742,12 +742,8 @@ fn json_vec(s: String) -> Vec<String> {
 fn fts_query(text: Option<&str>) -> Option<String> {
     let text = text?;
     let q = text
-        .split_whitespace()
-        .map(|t| {
-            t.chars()
-                .filter(char::is_ascii_alphanumeric)
-                .collect::<String>()
-        })
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .map(str::to_string)
         .filter(|t| !t.is_empty())
         .map(|t| format!("{t}*"))
         .collect::<Vec<_>>()

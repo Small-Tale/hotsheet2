@@ -74,7 +74,7 @@ pub struct TicketQuery {
     pub category: Option<String>,
     /// A ticket must carry every one of these tags.
     pub tags: Vec<String>,
-    /// Case-insensitive substring across title, details, and note text.
+    /// Case-insensitive substring across slug, title, tags, details, and note text.
     pub text: Option<String>,
     pub up_next_only: bool,
     /// Exclude terminal/hidden statuses (completed/verified/deleted/archive/moved).
@@ -200,7 +200,11 @@ pub fn resolve(store: &FsStore, needle: &str) -> Result<Option<Ticket>, StoreErr
 }
 
 fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
-    t.title.to_lowercase().contains(needle_lower)
+    t.slug.to_lowercase().contains(needle_lower)
+        || t.title.to_lowercase().contains(needle_lower)
+        || t.tags
+            .iter()
+            .any(|tag| tag.to_lowercase().contains(needle_lower))
         || t.details.to_lowercase().contains(needle_lower)
         || t.notes
             .iter()
@@ -989,6 +993,7 @@ mod tests {
             NewTicket {
                 title: "Fix flicker".into(),
                 category: "bug".into(),
+                tags: vec!["client-search".into()],
                 up_next: true,
                 ..Default::default()
             },
@@ -1003,6 +1008,30 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(query(&store, &q).unwrap().len(), 1);
+        assert_eq!(
+            query(
+                &store,
+                &TicketQuery {
+                    text: Some(t.slug.clone()),
+                    ..Default::default()
+                }
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        assert_eq!(
+            query(
+                &store,
+                &TicketQuery {
+                    text: Some("CLIENT-SEARCH".into()),
+                    ..Default::default()
+                }
+            )
+            .unwrap()
+            .len(),
+            1
+        );
         assert!(
             query(
                 &store,

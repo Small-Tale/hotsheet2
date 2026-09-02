@@ -40,8 +40,8 @@ Why SQLite:
 - **Embedded, zero-config, transactional** — no server, single file, mature.
 - **Both query shapes in one store.** Structured filtering/sorting (status,
   priority, category, tags, up_next, claim state, blocked_by) *and* full-text
-  search (FTS5 over title + body + notes) in the same database, joined in one
-  query. No second system to keep in sync.
+  search (FTS5 over slug + title + tags + body + notes) in the same database,
+  joined in one query. No second system to keep in sync.
 - **Excellent bindings in both candidate core languages** (`rusqlite` for Rust,
   `mattn/go-sqlite3`/`modernc.org/sqlite` for Go).
 - **Fast cold start.** On first run (or after `reindex`), we walk the store once
@@ -83,7 +83,7 @@ CREATE TABLE assignees  (store_id TEXT, ticket_id TEXT, person TEXT);        -- 
 CREATE TABLE reviews    (store_id TEXT, ticket_id TEXT, person TEXT, kind TEXT); -- review_requests (kind: work|feedback|review|fyi) — §10.2
 
 CREATE VIRTUAL TABLE tickets_fts USING fts5(
-  title, details, notes,
+  slug, title, tags, details, notes,
   content='',                          -- external-content or contentless; tuned at build
   tokenize='unicode61 remove_diacritics 2'
 );
@@ -91,8 +91,9 @@ CREATE VIRTUAL TABLE tickets_fts USING fts5(
 CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT);   -- schema version, last full reindex, watermark
 ```
 
-Notes are indexed into the FTS `notes` column (concatenated) so text search hits
-note bodies; the authoritative note entries live in the ticket file.
+Tags and notes are indexed into concatenated FTS columns so one query covers ticket
+identity, visible metadata, Markdown details, and note bodies; the authoritative values
+remain in the ticket file.
 
 ## 3.4 Incremental reindex
 
@@ -111,7 +112,11 @@ the same process. On change:
 4. **Deletions:** a file that disappeared → delete its index rows (a soft-deleted
    ticket is a `status: deleted` file, not a missing file; a *missing* file means
    the ticket was hard-removed or moved).
-5. **Emit a change event** on the WebSocket bus so every attached client redraws.
+5. **Record and emit a change event.** The server appends it to the bounded replay
+   ring before broadcasting it, so both WebSocket subscribers and cursor-based
+   long-poll clients observe external CLI/git writes without a race. A client that
+   reconnects after its cursor fell out of the ring receives `overflow` and performs
+   an authoritative project refresh.
 
 **Git-aware fast path.** When a store is a git repo and HEAD moved (a commit,
 pull, checkout, or worktree switch), we diff `old-HEAD..new-HEAD` to get the exact
@@ -136,7 +141,7 @@ query(filter, sort, text?, paging) -> TicketRow[]
   filter on the new fields (store / close_reason / assignment).
 - **sort:** priority-then-recency (the worklist order), created, updated, title;
   ULID gives a free chronological default.
-- **text:** an FTS5 `MATCH` over title/details/notes, joined with the structured
+- **text:** an FTS5 `MATCH` over slug/title/tags/details/notes, joined with the structured
   filter in one SQL statement.
 - **projection:** a query returns compact `TicketRow`s. The Markdown `details` body
   is the one large field, so a list is **compact by default** — the body is omitted

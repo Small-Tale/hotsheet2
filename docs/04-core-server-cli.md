@@ -138,8 +138,11 @@ embedded-in-client mode). One instance per machine serves all local projects.
 Responsibilities:
 - **HTTP REST** for CRUD + query (JSON, not HTML — the client/service split).
 - **WebSocket** (`/ws/sync`) for live push: index changes, claim/lease events,
-  terminal streams, permission prompts. Long-poll fallback for environments
-  without WS.
+  terminal streams, permission prompts. `GET /ws/poll` is the cursor/replay
+  fallback for environments without WS; it accepts the loopback secret through
+  either the native query form or `X-Hotsheet-Secret`, allowing the web bridge to
+  authenticate without exposing credentials to browser JavaScript. Watcher events
+  enter the same replay ring as API mutations.
 - **MCP** endpoint(s): the `hotsheet_*` tool surface for AI tools
   ([05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.8).
 - **Owns the filesystem watcher** (→ incremental reindex) and the **terminal/PTY

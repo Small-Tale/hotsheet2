@@ -330,16 +330,35 @@ fn blocked_review_moved_and_date_filters_match_the_file_scan() {
 }
 
 #[test]
-fn fts_matches_a_prefix_across_the_body() {
-    let (_d, _s, ix) = seeded();
-    let rows = ix
-        .query(&TicketQuery {
-            text: Some("flick".into()), // prefix of "flicker"
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].title, "Dashboard flicker");
+fn fts_matches_prefixes_across_identity_and_content() {
+    let (_d, store, ix) = seeded();
+    let first = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let updated = ops::add_note(
+        &store,
+        &first,
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"),
+        Timestamp::new("2026-08-19T00:01:00Z"),
+        hotsheet_model::NoteKind::Regular,
+        "Mentions HS2-QQRY00 in a note".into(),
+    )
+    .unwrap();
+    ix.upsert(&updated, "first.md", "updated").unwrap();
+
+    for (text, expected_title) in [
+        ("flick", "Dashboard flicker"),
+        (&updated.slug, "Dashboard flicker"),
+        ("ui", "Dashboard flicker"),
+        ("QQRY00", "Dashboard flicker"),
+    ] {
+        let rows = ix
+            .query(&TicketQuery {
+                text: Some(text.into()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(rows.len(), 1, "query {text}");
+        assert_eq!(rows[0].title, expected_title);
+    }
 }
 
 #[test]

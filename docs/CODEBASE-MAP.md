@@ -31,6 +31,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers plus checkout-scoped real ticket/repository operations
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, and cross-project permission polling/resolution
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
+    src/project-change-poll.ts # Replay-safe selected-project long poll; coalesced ticket refresh, overflow/reconnect recovery, and abortable lifecycle
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/not-working-workflow.ts # Compensating evidence upload + completed-ticket reopen workflow
     src/ticket-views.ts      #   Disjoint active Queue, Backlog, and Archive view semantics
