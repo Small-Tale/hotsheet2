@@ -852,6 +852,22 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
     await page.goto(`/ux-demo?component=${id}`);
     await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`))).toBeVisible();
   }
+  await page.goto('/ux-demo?component=ticket-attachments');
+  const actions = page.locator('.ticket-inspector__attachment-actions button');
+  await expect(actions).toHaveCount(4);
+  for (const button of await actions.all()) {
+    const icon = button.locator('svg');
+    await expect(icon).toBeVisible();
+    const [buttonBox, iconBox] = await Promise.all([button.boundingBox(), icon.boundingBox()]);
+    expect(iconBox!.width).toBeLessThan(buttonBox!.width);
+    expect(iconBox!.height).toBeLessThan(buttonBox!.height);
+  }
+  await page.screenshot({ path: '/private/tmp/hs2-3y3bm3-attachment-icons-wide.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(actions).toHaveCount(4);
+  await actions.first().scrollIntoViewIfNeeded();
+  for (const button of await actions.all()) await expect(button.locator('svg')).toBeVisible();
+  await page.locator('[data-component="ticket-attachments"]').screenshot({ path: '/private/tmp/hs2-3y3bm3-attachment-icons-narrow.png' });
 });
 
 test('opens the shared TicketReader intent when a composed row is double-clicked', async ({ page }) => {

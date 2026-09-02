@@ -50,6 +50,10 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('data-action="download-attachment"');
     expect(attachments).toContain('data-action="copy-attachment-reference"');
     expect(attachments).toContain('data-action="remove-attachment"');
+    expect(attachments).toContain('data-lucide="external-link"');
+    expect(attachments).toContain('data-lucide="download"');
+    expect(attachments).toContain('data-lucide="clipboard"');
+    expect(attachments).toContain('data-lucide="trash-2"');
     const unsupported = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }], enabled: false }));
     expect(unsupported).toContain('does not support attachment actions');
     expect(unsupported).not.toContain('name="ticket-attachments"');
