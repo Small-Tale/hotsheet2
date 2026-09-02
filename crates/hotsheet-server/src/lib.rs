@@ -350,12 +350,15 @@ impl AppState {
         };
         self.host.register(entry.clone());
         let store_root = store.root().to_path_buf();
-        match spawn_watcher_for(WatchTarget {
-            entry,
-            store_id: id,
-            events: self.events.clone(),
-            checkout_registry: self.checkout_registry.clone(),
-        }) {
+        match spawn_watcher_for(
+            WatchTarget {
+                entry,
+                store_id: id,
+                events: self.events.clone(),
+                checkout_registry: self.checkout_registry.clone(),
+            },
+            registered_watcher_backend(),
+        ) {
             Ok(handle) => {
                 if let Ok(mut w) = self.watchers.lock() {
                     w.push(handle);
@@ -4004,7 +4007,18 @@ impl From<OpError> for ApiError {
 
 /// Keeps the watcher alive; dropping it stops watching.
 pub struct WatchHandle {
-    _watcher: notify::RecommendedWatcher,
+    _watcher: HeldWatcher,
+}
+
+enum HeldWatcher {
+    Recommended(notify::RecommendedWatcher),
+    Poll(notify::PollWatcher),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WatcherBackend {
+    Recommended,
+    Poll,
 }
 
 /// Watch the store's `tickets/` dir and keep the index + WS bus in sync with changes
@@ -4030,7 +4044,18 @@ pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
         events: state.events.clone(),
         checkout_registry: state.checkout_registry.clone(),
     };
-    spawn_watcher_for(target)
+    spawn_watcher_for(target, WatcherBackend::Recommended)
+}
+
+/// FSEvents can stop delivering changes when a process creates a second watcher for a
+/// sibling temporary/store directory. Dynamically registered stores therefore use the
+/// deterministic polling backend on macOS; other platforms retain their native backend.
+fn registered_watcher_backend() -> WatcherBackend {
+    if cfg!(target_os = "macos") {
+        WatcherBackend::Poll
+    } else {
+        WatcherBackend::Recommended
+    }
 }
 
 /// Whether two paths point at the same store root (canonicalized; lexical fallback).
@@ -4041,17 +4066,32 @@ fn same_path(a: &FsPath, b: &FsPath) -> bool {
 
 /// Watch one store (any hosted store). The returned [`WatchHandle`] must be kept alive
 /// for the watcher to run.
-fn spawn_watcher_for(target: WatchTarget) -> anyhow::Result<WatchHandle> {
+fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Result<WatchHandle> {
     use notify::{RecursiveMode, Watcher};
 
     let tickets_dir = target.entry.store.root().join("tickets");
     std::fs::create_dir_all(&tickets_dir)?;
 
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = notify::recommended_watcher(move |res| {
-        let _ = tx.send(res);
-    })?;
-    watcher.watch(&tickets_dir, RecursiveMode::Recursive)?;
+    let mut watcher = match backend {
+        WatcherBackend::Recommended => {
+            HeldWatcher::Recommended(notify::recommended_watcher(move |res| {
+                let _ = tx.send(res);
+            })?)
+        }
+        WatcherBackend::Poll => HeldWatcher::Poll(notify::PollWatcher::new(
+            move |res| {
+                let _ = tx.send(res);
+            },
+            notify::Config::default().with_poll_interval(Duration::from_millis(250)),
+        )?),
+    };
+    match &mut watcher {
+        HeldWatcher::Recommended(watcher) => {
+            watcher.watch(&tickets_dir, RecursiveMode::Recursive)?
+        }
+        HeldWatcher::Poll(watcher) => watcher.watch(&tickets_dir, RecursiveMode::Recursive)?,
+    }
 
     std::thread::spawn(move || watch_loop(rx, target));
     Ok(WatchHandle { _watcher: watcher })
@@ -4175,7 +4215,17 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
 
 #[cfg(test)]
 mod watcher_tests {
-    use super::expand_ticket_files;
+    use super::{WatcherBackend, expand_ticket_files, registered_watcher_backend};
+
+    #[test]
+    fn registered_store_watcher_avoids_a_second_fsevents_stream() {
+        let expected = if cfg!(target_os = "macos") {
+            WatcherBackend::Poll
+        } else {
+            WatcherBackend::Recommended
+        };
+        assert_eq!(registered_watcher_backend(), expected);
+    }
 
     #[test]
     fn expands_a_new_shard_dir_to_its_ticket_file() {

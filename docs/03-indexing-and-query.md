@@ -97,7 +97,10 @@ note bodies; the authoritative note entries live in the ticket file.
 ## 3.4 Incremental reindex
 
 The server owns a **filesystem watcher** (`notify` in Rust / `fsnotify` in Go)
-over every store path. On change:
+over every store path. The primary store uses the platform-native watcher. Additional
+stores registered at runtime use the native watcher too, except on macOS where they use
+a short-interval polling watcher to avoid missed events from a second FSEvents stream in
+the same process. On change:
 
 1. **Debounce** rapid bursts (an editor save, a git checkout touching many files).
 2. **Detect what actually changed.** For each candidate file, compare its current
