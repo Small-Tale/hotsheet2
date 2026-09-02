@@ -21,6 +21,10 @@
 .ticket-list-row__category { display: grid; width: 2rem; height: 2rem; place-items: center; }
 .ticket-list-row__category-icon { width: 1.65rem; height: 1.65rem; }
 .ticket-list-row__category--label { width: 2rem; overflow: visible; color: #686a73; font-size: .68rem; font-weight: 700; letter-spacing: .035em; text-transform: uppercase; white-space: nowrap; }
+.ticket-list-row--column .ticket-list-row__body { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.ticket-list-row--column .ticket-list-row__category { display: inline-grid; width: 1.1rem; height: 1.1rem; margin-right: .35rem; vertical-align: -.2em; }
+.ticket-list-row--column .ticket-list-row__category-icon { width: .95rem; height: .95rem; }
+.ticket-list-row--column .ticket-list-row__category--label { width: auto; font-size: .55rem; }
 .ticket-list-row__priority { display: inline; margin-right: .5em; }
 .ticket-list-row__priority-icon { display: inline; width: 1rem; height: 1rem; vertical-align: -.15em; }
 .ticket-list-row__metadata, .ticket-list-row__tags { display: flex; align-items: center; min-width: 0; flex-wrap: wrap; gap: .4rem; color: #73747d; font-size: .74rem; }

@@ -84,6 +84,9 @@ export function TicketRow(raw: TicketRowProps) {
   const indicator = ticketRowIndicator(props);
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
+  const category = categoryIcon
+    ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
+    : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`} title={props.category}>{categoryAbbreviation(props.category, props.categoryShortLabel)}</span>;
   return (
     <div class="ticket-list-row-container" data-component="ticket-list-row-container">
       <article
@@ -105,13 +108,12 @@ export function TicketRow(raw: TicketRowProps) {
       >
         {indicator && <span class={`ticket-list-row__indicator ticket-list-row__indicator--${indicator}`} aria-label={indicator.replace('-', ' ')}></span>}
         <div class="ticket-list-row__body">
-          {categoryIcon
-            ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
-            : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`} title={props.category}>{categoryAbbreviation(props.category, props.categoryShortLabel)}</span>}
+          {props.presentation === 'list' && category}
           <div class="ticket-list-row__content">
             <div class="ticket-list-row__first-line">
               <div class="ticket-list-row__identity">
                 <span class="ticket-list-row__updated">{props.updatedLabel}</span>
+                {props.presentation === 'column' && category}
                 <span class="ticket-list-row__slug">{props.slug}</span>
                 <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} class="ticket-list-row__priority-icon" /></span>
                 <strong title={props.title}>{props.title}</strong>
