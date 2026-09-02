@@ -181,8 +181,12 @@ guarded `schema: hotsheet/v2-bounded-notes` marker, which stops a stale edit eve
 the transitional migration. The first current write to a schema-1 store rewrites every
 healthy legacy ticket to the guarded bounded form, preserving its body and complete note
 history, and only then advances `hotsheet-store.json` to the guarded schema-2 marker. A
-transitional numeric `schemaVersion: 2` is accepted and guarded on its next current
-write. A current writer rejects a store schema newer than it supports. See
+transitional numeric `schemaVersion: 2` is accepted and deliberately preserved by
+ordinary ticket writes so installing a new CLI cannot break an older server that is
+already running against the store. Guard activation for such an existing store must be
+a deliberate lifecycle migration after its owning processes have stopped; it is never
+an incidental consequence of editing a ticket. A current writer rejects a store schema
+newer than it supports. See
 `docs/TEST-COVERAGE.md` → `corruption-resilience`.
 
 ## 2.4 Ticket IDs — ULID, no central sequence

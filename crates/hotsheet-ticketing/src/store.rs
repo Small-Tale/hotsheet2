@@ -219,14 +219,11 @@ impl FsStore {
             });
         }
         if metadata.schema_version == STORE_SCHEMA_VERSION {
-            // Canonicalize a transitional numeric schema-2 metadata file. The guarded
-            // string is intentionally unreadable to pre-schema-2 writers, blocking
-            // stale creates before they can emit a new legacy ticket.
-            let path = self.root.join(STORE_METADATA_FILE);
-            let guarded = format!("{}\n", serde_json::to_string_pretty(&metadata)?);
-            if fs::read_to_string(&path)? != guarded {
-                fs::write(path, guarded)?;
-            }
+            // Numeric schema 2 is an intentional compatibility window for a store
+            // already owned by a running pre-guard process. Ordinary ticket writes
+            // must not silently replace its metadata with the guarded string and
+            // break that process underneath the user. New stores and actual
+            // schema-1 migrations still write the guarded marker.
             return Ok(());
         }
 
@@ -777,7 +774,7 @@ mod tests {
     }
 
     #[test]
-    fn a_transitional_numeric_schema_two_is_guarded_on_the_next_write() {
+    fn an_ordinary_write_preserves_a_numeric_schema_two_compatibility_window() {
         let (_dir, store) = temp_store();
         let raw = r#"{
   "schemaVersion": 2,
@@ -789,8 +786,8 @@ mod tests {
         fs::write(store.root().join(STORE_METADATA_FILE), raw).unwrap();
         let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
         store.write_ticket(&ticket).unwrap();
-        let guarded = fs::read_to_string(store.root().join(STORE_METADATA_FILE)).unwrap();
-        assert!(guarded.contains(r#""schemaVersion": "hotsheet/v2-guarded-tickets""#));
+        let preserved = fs::read_to_string(store.root().join(STORE_METADATA_FILE)).unwrap();
+        assert_eq!(preserved, raw);
     }
 
     #[test]
