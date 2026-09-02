@@ -36,6 +36,10 @@ clap.workspace = true
 ulid.workspace = true
 time.workspace = true
 notify.workspace = true
+sha2.workspace = true
+
+[build-dependencies]
+sha2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

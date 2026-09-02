@@ -202,7 +202,13 @@ application API. It reports the HS2 generation, semantic application version, op
 build revision, inclusive API-protocol and store-schema ranges, server start time when
 available, and lifecycle capabilities. Hard compatibility is based on protocol-range
 intersection, not exact version or revision equality, so rolling compatible builds can
-coexist. Missing or invalid metadata is an explicit unknown state. The server currently
+coexist. Local development builds also hash their build-relevant server source at compile
+time and cheaply monitor that same source tree at runtime. The handshake reports the
+built and current source revisions plus `source_stale`; the client can therefore warn
+that the detached server needs a rebuild/restart without treating unrelated monorepo Git
+commits as staleness. Release/explicit-revision builds omit local source probing, and an
+unavailable source tree is not reported as stale. Missing or invalid metadata is an
+explicit unknown state. The server currently
 advertises lifecycle restart and quiescence as unsupported: clients must not offer an
 automatic restart until the server can account for active commands, AI work, mutations,
 terminals, and other connected clients. Remote restart likewise requires a future explicit

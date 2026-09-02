@@ -2,6 +2,7 @@
 
 use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
+use hotsheet_server::source_revision::{SourceRevisionMonitor, revision_for_source_root};
 use hotsheet_server::{AppState, MAX_ATTACHMENT_BODY_BYTES, app};
 use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, StoreMetadata};
 use http_body_util::BodyExt;
@@ -130,8 +131,48 @@ async fn compatibility_is_authenticated_and_reports_ranges_without_promising_res
     );
     assert_eq!(value["capabilities"]["lifecycle_restart"], false);
     assert_eq!(value["capabilities"]["lifecycle_quiescence"], false);
-    assert!(value.get("build_revision").is_some());
+    assert!(value["build_revision"].is_string());
+    assert_eq!(value["source_revision"], value["build_revision"]);
+    assert_eq!(value["source_stale"], false);
     assert!(value.get("started_at").is_some());
+}
+
+#[tokio::test]
+async fn compatibility_reports_a_server_built_from_older_local_source() {
+    let source = tempfile::tempdir().unwrap();
+    std::fs::create_dir(source.path().join("src")).unwrap();
+    std::fs::write(
+        source.path().join("Cargo.toml"),
+        "[package]\nname='server'\n",
+    )
+    .unwrap();
+    std::fs::write(
+        source.path().join("src/lib.rs"),
+        "pub const VALUE: u8 = 1;\n",
+    )
+    .unwrap();
+    let built = revision_for_source_root(source.path()).unwrap();
+    std::fs::write(
+        source.path().join("src/lib.rs"),
+        "pub const VALUE: u16 = 22;\n",
+    )
+    .unwrap();
+
+    let (_d, st) = state();
+    let response = app(
+        st.with_source_revision_monitor(SourceRevisionMonitor::for_source_root(
+            &built,
+            source.path(),
+        )),
+    )
+    .oneshot(authed("GET", "/compatibility", None))
+    .await
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let value = body_json(response).await;
+    assert_eq!(value["build_revision"], built);
+    assert!(value["source_revision"].as_str().is_some());
+    assert_eq!(value["source_stale"], true);
 }
 
 #[tokio::test]

@@ -10,6 +10,7 @@ pub mod dist_work_loop;
 pub mod lifecycle;
 pub mod multistore;
 pub mod notifications;
+pub mod source_revision;
 pub mod sync_loop;
 pub mod terminal_broker;
 pub mod tls;
@@ -119,6 +120,7 @@ pub struct AppState {
     commands: commands::CommandManager,
     notifications: notifications::NotificationHub,
     tts: tts::TtsProviders,
+    source_revision: source_revision::SourceRevisionMonitor,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -201,6 +203,7 @@ impl AppState {
             commands,
             notifications: Default::default(),
             tts: Default::default(),
+            source_revision: source_revision::SourceRevisionMonitor::current_build(),
         }
     }
 
@@ -220,6 +223,15 @@ impl AppState {
 
     pub fn with_tts_providers(mut self, providers: Vec<Arc<dyn tts::TtsProvider>>) -> Self {
         self.tts = tts::TtsProviders::new(providers);
+        self
+    }
+
+    /// Override local-build source monitoring (primarily for embedders and tests).
+    pub fn with_source_revision_monitor(
+        mut self,
+        monitor: source_revision::SourceRevisionMonitor,
+    ) -> Self {
+        self.source_revision = monitor;
         self
     }
 
@@ -916,10 +928,13 @@ async fn compatibility(State(state): State<AppState>) -> Json<serde_json::Value>
         .lock()
         .ok()
         .and_then(|instance| instance.as_ref().map(|value| value.started_at.clone()));
+    let source = state.source_revision.status();
     Json(serde_json::json!({
         "generation": "hs2",
         "application_version": env!("CARGO_PKG_VERSION"),
-        "build_revision": option_env!("HOT_SHEET_BUILD_REVISION"),
+        "build_revision": source.build_revision,
+        "source_revision": source.source_revision,
+        "source_stale": source.source_stale,
         "protocol": { "min": API_PROTOCOL_MIN, "max": API_PROTOCOL_MAX },
         "store_schema": { "min": 1, "max": 1 },
         "capabilities": {

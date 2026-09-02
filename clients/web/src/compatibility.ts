@@ -3,6 +3,8 @@ export interface ServerCompatibility {
   generation: string;
   application_version?: string;
   build_revision?: string | null;
+  source_revision?: string | null;
+  source_stale?: boolean;
   protocol?: CompatibilityRange;
   store_schema?: CompatibilityRange;
   capabilities?: { lifecycle_restart?: boolean; lifecycle_quiescence?: boolean };
@@ -14,6 +16,7 @@ export interface CompatibilityAssessment {
   kind: CompatibilityKind;
   detail?: string;
   revisionMismatch: boolean;
+  sourceStale: boolean;
   canRestartServer: boolean;
 }
 
@@ -29,22 +32,25 @@ export function assessCompatibility(
   client: CompatibilityRange = WEB_PROTOCOL_RANGE,
   clientRevision?: string,
 ): CompatibilityAssessment {
-  const unknown = (detail: string): CompatibilityAssessment => ({ kind: 'unknown', detail, revisionMismatch: false, canRestartServer: false });
+  const unknown = (detail: string): CompatibilityAssessment => ({ kind: 'unknown', detail, revisionMismatch: false, sourceStale: false, canRestartServer: false });
   if (!server) return unknown('The server did not provide compatibility metadata.');
   if (server.generation !== 'hs2') return unknown(`Expected an HS2 server, received ${server.generation || 'an unknown generation'}.`);
   if (!validRange(server.protocol) || !validRange(client)) return unknown('The server or client reported an invalid protocol range.');
-  const revisionMismatch = Boolean(clientRevision && server.build_revision && clientRevision !== server.build_revision);
+  const sourceStale = server.source_stale === true || Boolean(server.build_revision && server.source_revision && server.build_revision !== server.source_revision);
+  const revisionMismatch = sourceStale || Boolean(clientRevision && server.build_revision && clientRevision !== server.build_revision);
   if (server.protocol.max < client.min) return {
     kind: 'server_too_old',
     detail: `Server protocol ${server.protocol.min}–${server.protocol.max} is older than client protocol ${client.min}–${client.max}.`,
     revisionMismatch,
+    sourceStale,
     canRestartServer: server.capabilities?.lifecycle_restart === true && server.capabilities.lifecycle_quiescence === true,
   };
   if (client.max < server.protocol.min) return {
     kind: 'client_too_old',
     detail: `Client protocol ${client.min}–${client.max} is older than server protocol ${server.protocol.min}–${server.protocol.max}.`,
     revisionMismatch,
+    sourceStale,
     canRestartServer: false,
   };
-  return { kind: 'compatible', revisionMismatch, canRestartServer: false };
+  return { kind: 'compatible', revisionMismatch, sourceStale, canRestartServer: false };
 }

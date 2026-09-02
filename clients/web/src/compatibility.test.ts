@@ -27,6 +27,9 @@ describe('assessCompatibility', () => {
 
   it('treats revision differences as warnings and requires both restart safeguards', () => {
     expect(assessCompatibility(server(1, 1, { build_revision: 'server' }), { min: 1, max: 1 }, 'client')).toMatchObject({ kind: 'compatible', revisionMismatch: true });
+    expect(assessCompatibility(server(1, 1, { build_revision: 'built', source_revision: 'current' }))).toMatchObject({ kind: 'compatible', revisionMismatch: true, sourceStale: true });
+    expect(assessCompatibility(server(1, 1, { source_stale: true }))).toMatchObject({ kind: 'compatible', revisionMismatch: true, sourceStale: true });
+    expect(assessCompatibility(server(1, 1, { build_revision: 'release', source_revision: null, source_stale: false }))).toMatchObject({ kind: 'compatible', revisionMismatch: false, sourceStale: false });
     expect(assessCompatibility(server(1, 1, { capabilities: { lifecycle_restart: true } }), { min: 2, max: 2 }).canRestartServer).toBe(false);
     expect(assessCompatibility(server(1, 1, { capabilities: { lifecycle_restart: true, lifecycle_quiescence: true } }), { min: 2, max: 2 }).canRestartServer).toBe(true);
   });
