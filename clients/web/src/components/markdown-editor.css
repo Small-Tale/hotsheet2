@@ -1,11 +1,12 @@
 .markdown-editor { display: grid; width: min(42rem, 100%); min-width: 0; max-width: 100%; min-height: 20rem; overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .85rem; background: var(--wa-color-surface-default); grid-template-rows: auto minmax(0, 1fr); }
 .markdown-editor--expanded { position: fixed; z-index: 40; inset: 2rem; width: auto; min-height: 0; box-shadow: 0 1.5rem 5rem rgba(25, 28, 38, .22); }
-.markdown-editor--embedded { width: 100%; min-height: 0; border: 0; border-radius: 0; background: transparent; }
+.markdown-editor--embedded { width: 100%; min-height: 0; border: 0; border-radius: 0; background: transparent; grid-template-rows: minmax(0, 1fr); gap: 0; }
 .markdown-editor--embedded .markdown-editor__toolbar { min-height: 2rem; padding: 0; border: 0; background: transparent; }
 .markdown-editor--embedded .markdown-editor__toolbar > span { display: none; }
-.markdown-editor--embedded .markdown-editor__surface { padding: 0; }
+.markdown-editor--embedded .markdown-editor__surface { display: grid; padding: 0; overflow: visible; }
 .markdown-editor--embedded .markdown-editor__preview, .markdown-editor--embedded .markdown-editor__surface textarea { min-height: 3rem; }
-.markdown-editor--embedded .markdown-editor__surface textarea { height: auto; resize: vertical; }
+.markdown-editor--embedded .markdown-editor__preview { padding: .75rem; }
+.markdown-editor--embedded .markdown-editor__surface textarea { display: block; box-sizing: border-box; height: auto; padding: .75rem; resize: vertical; }
 .markdown-editor__toolbar { display: flex; min-height: 2.75rem; padding: .35rem .45rem .35rem .8rem; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); background: var(--wa-color-surface-lowered); align-items: center; justify-content: space-between; }
 .markdown-editor__toolbar > span { color: #6c707b; font-size: .75rem; font-weight: 650; }
 .markdown-editor__toolbar button { display: inline-flex; height: 2rem; padding: 0 .65rem; border: 0; border-radius: var(--wa-border-radius-pill); color: #656975; background: transparent; cursor: pointer; align-items: center; gap: .35rem; font: inherit; font-size: .78rem; }

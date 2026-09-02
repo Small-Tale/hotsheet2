@@ -273,6 +273,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   available in Queue and Backlog but hidden in Archive; creation from Backlog defaults
   the new ticket to backlog status. Column presentation always gives TicketRows a
   rounded visible border, including the wide single-column Backlog and Archive boards.
+  The composer owns its bottom spacing; while it is rendered, both list and edge-to-edge
+  board workspaces remove their otherwise-normal top inset so only one vertical gap is
+  present. Composer-free views retain the workspace inset. Likewise, inspector tabs own
+  the gap above their content instead of stacking it with content padding.
 
   Ticket selection follows the native HS1 interaction model in both presentations:
   plain click replaces the selection, Command/Ctrl-click toggles one ticket, and

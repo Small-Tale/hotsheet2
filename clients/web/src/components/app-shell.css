@@ -20,7 +20,7 @@
 body[data-resizing-region] .app-shell > .resizable-region, body[data-resizing-region] .app-shell > .resizable-region .resizable-region__content { transition: none; }
 .app-shell__work-area { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: var(--wa-color-surface-lowered); outline: 0 solid transparent; outline-offset: -2px; transition: outline-color .12s ease; }
 .app-shell__work-area:focus, .app-shell__work-area:focus-within { z-index: 1; outline: 2px solid var(--wa-color-focus); }
-.app-shell__composer { position: relative; z-index: 3; padding: .75rem 1rem 0; flex: none; }
+.app-shell__composer { position: relative; z-index: 3; padding: .75rem 1rem; flex: none; }
 .app-shell__workspace { min-width: 0; min-height: 0; padding: 1rem; overflow: auto; flex: 1; background: var(--wa-color-surface-lowered); }
 .app-shell__workspace[data-presentation="edge-to-edge"] { padding: 1rem 0 0; overflow: hidden; }
 .app-shell > .resizable-region[data-region-id="app-inspector"] { border-left: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
@@ -30,6 +30,7 @@ body[data-resizing-region] .app-shell > .resizable-region, body[data-resizing-re
 .app-shell > .resizable-region[data-region-id="app-inspector"] .ticket-inspector { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
 @media (max-width: 42rem) {
   .app-shell__workspace { padding: .7rem; }
-  .app-shell__composer { padding: .7rem .7rem 0; }
+  .app-shell__composer { padding: .7rem; }
 }
+.app-shell__work-area[data-has-composer="true"] > .app-shell__workspace { padding-top: 0; }
 @media (prefers-reduced-motion: reduce) { .app-shell > .resizable-region, .app-shell > .resizable-region .resizable-region__content { transition: none; } }

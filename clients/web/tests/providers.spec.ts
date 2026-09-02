@@ -514,13 +514,13 @@ test('edits non-empty details on double click and empty details on one click',as
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
   const preview=page.getByRole('button',{name:'Edit Ticket details'});
   await preview.dblclick();
-  const source=page.getByRole('textbox',{name:'Ticket details'});await expect(source).toBeFocused();await source.fill('Carried into the larger editor');await page.getByRole('button',{name:'Open ticket reader'}).click();
+  const source=page.getByRole('textbox',{name:'Ticket details'});await expect(source).toBeFocused();await source.fill('Carried into the larger editor');const detailsSurface=page.locator('.ticket-inspector__details-surface');const editorGeometry=await detailsSurface.evaluate((surface)=>{const editor=surface.querySelector<HTMLTextAreaElement>('textarea[name="markdown-source"]')!,outer=surface.getBoundingClientRect(),inner=editor.getBoundingClientRect(),style=getComputedStyle(editor);return{left:inner.left-outer.left,top:inner.top-outer.top,right:outer.right-inner.right,bottom:outer.bottom-inner.bottom,padding:style.padding,resize:style.resize}});expect(editorGeometry).toEqual({left:1,top:1,right:1,bottom:1,padding:'12px',resize:'vertical'});await detailsSurface.screenshot({path:'/private/tmp/hs2-7nzkyc-details-editor-wide.png'});await page.getByRole('button',{name:'Open ticket reader'}).click();
   const reader=page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/});await expect(reader).toBeVisible();await expect(reader.getByRole('textbox',{name:'Ticket details'})).toHaveValue('Carried into the larger editor');await expect(reader.getByRole('textbox',{name:'Feedback response'})).toBeVisible();await reader.getByRole('button',{name:'Close ticket reader'}).click();
   await source.fill('');await source.blur();
   await expect(page.getByText('Click to add Markdown.')).toBeVisible();
   await page.getByRole('button',{name:'Edit Ticket details'}).click();
   await expect(source).toBeFocused();await source.fill('Added from an empty ticket');await source.blur();
-  await expect(page.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText('Added from an empty ticket');
+  await expect(page.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText('Added from an empty ticket');await page.getByRole('button',{name:'Edit Ticket details'}).dblclick();await page.setViewportSize({width:1024,height:600});await detailsSurface.screenshot({path:'/private/tmp/hs2-7nzkyc-details-editor-narrow.png'});
 });
 
 test('keeps backlog and archived tickets out of the active Queue',async({page})=>{

@@ -94,6 +94,13 @@ describe('TicketInspector', () => {
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
   });
 
+  it('puts the tab-to-content gap on the segmented control without duplicate content padding', () => {
+    const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
+    const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 1rem 1rem;/);
+    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 1rem 1rem;/);
+  });
+
   it('hides the Up Next action for ineligible lifecycle states', () => {
     expect(String(TicketInspector({ ...base }))).toContain('data-action="toggle-inspector-up-next"');
     expect(String(TicketInspector({ ...base, status: 'completed' }))).not.toContain('data-action="toggle-inspector-up-next"');

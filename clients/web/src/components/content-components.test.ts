@@ -41,7 +41,12 @@ describe('content components', () => {
     const embedded = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true, appearance: 'embedded' }));
     expect(embedded).not.toContain('<footer>');
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-editor.css'), 'utf8');
-    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface textarea[^}]*resize: vertical/);
+    expect(css).toMatch(/markdown-editor--embedded \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*gap: 0;/);
+    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface \{[^}]*display: grid;[^}]*padding: 0;[^}]*overflow: visible;/);
+    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__preview \{[^}]*padding: \.75rem;/);
+    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface textarea \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: auto;[^}]*padding: \.75rem;[^}]*resize: vertical/);
+    const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: 0;/);
     expect(embedded).not.toContain('Saving changes');
     const preview = String(MarkdownEditor({ value: '## Goal', mode: 'preview', expanded: true }));
     expect(preview).toContain('data-component="markdown-preview"');

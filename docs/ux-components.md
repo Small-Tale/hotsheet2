@@ -80,6 +80,11 @@ header controls pending their dedicated wireframes. It owns the top-level arrang
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
 immediately above its ticket collection, matching the wireframe; settings and global
 dashboard modes omit it.
+The composer wrapper owns equal top and bottom inset around the creation surface. When
+it is present, the scrolling workspace removes its own top padding so list and board
+presentations receive one gap rather than two; composer-free settings, Archive, and
+global surfaces retain the workspace's normal top inset. The board remains edge-to-edge
+on its horizontal and bottom edges.
 The composed project sidebar uses the same white surface as the inspector, while the
 ProjectTabBar adds no redundant background or top separator. Busy indicators preserve
 their visual center throughout rotation. The composer title input and category select
@@ -465,7 +470,9 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   - capability-aware validation and unsupported-field explanation
 - `TicketDetailsSection` — section header remains outside its visually distinct
   bordered Markdown surface, matching Notes hierarchy; double-click non-empty details,
-  single-click the empty prompt, or use its keyboard action to begin editing
+  single-click the empty prompt, or use its keyboard action to begin editing. In write
+  mode the textarea owns the complete bordered surface, with content inset by internal
+  padding and the native vertical resize handle at the surface's outer corner.
 - `TicketTagsSection` — **built**: controlled chips with capability-aware removal,
   duplicate-safe creation, and native autocomplete suggestions shared by inspector
   and reader
@@ -481,7 +488,8 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   scrollable rather than widening an inspector or reader.
 - `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
   to edit non-empty content, single-click to add empty content, persistent controlled
-  draft, vertically resizable embedded details, inline/expanded presentation, and 150 ms debounced autosave without routine
+  draft, full-surface vertically resizable embedded details with padded text and an
+  outer-corner resize handle, inline/expanded presentation, and 150 ms debounced autosave without routine
   Save/Cancel actions. Internal editor controls preserve editing; external blur flushes.
   The embedded appearance reuses the same behavior in inspector and reader without a
   redundant standalone toolbar or save-status footer; the real inspector persists edits
@@ -585,6 +593,10 @@ the two sources must remain visually and semantically distinguishable. Status-ch
 activity uses only its destination label in the timeline (for example `Completed`),
 while the durable note keeps the complete from/to transition for history and auditing.
 Native rich-event wiring remains tracked by HS2-SW655F.
+
+The inspector's segmented tabs own the one-rem gap below the control. The scrolling tab
+content starts with zero top padding and keeps its side/bottom inset, preventing the tabs
+and content container from stacking duplicate vertical space.
 
 ### 4.6 Deliberate HS1 detail-panel parity
 
