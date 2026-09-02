@@ -534,6 +534,153 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
 }
 
 #[tokio::test]
+async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_ticket_list() {
+    let (primary, st) = state();
+    let extra = tempfile::tempdir().unwrap();
+    let extra_store = FsStore::init(extra.path(), &StoreMetadata::new("EX")).unwrap();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+
+    let denied = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/checkouts/corrupt/corrupt-tickets")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+
+    let extra_info = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/stores",
+                Some(&serde_json::json!({"path": extra.path()}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let extra_id = extra_info["id"].as_str().unwrap();
+    let stores = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/stores", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let primary_root = primary.path().display().to_string();
+    let primary_id = stores
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|store| store["root"] == primary_root)
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+
+    let registration = serde_json::json!({
+        "root": checkout.path(),
+        "alias": "corrupt",
+        "stores": [primary.path(), extra.path()]
+    })
+    .to_string();
+    let registered = router
+        .clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    assert_eq!(registered.status(), StatusCode::CREATED);
+
+    for store_id in [primary_id, extra_id] {
+        let created = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/corrupt/tickets?store={store_id}"),
+                Some(r#"{"title":"Healthy ticket"}"#),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(created.status(), StatusCode::CREATED);
+    }
+
+    let primary_bad_id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    let primary_bad_path = primary
+        .path()
+        .join("tickets/01")
+        .join(format!("{primary_bad_id}.md"));
+    std::fs::create_dir_all(primary_bad_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &primary_bad_path,
+        format!("---\nid: {primary_bad_id}\nslug: HS-BROKEN\n---\ninvalid ticket"),
+    )
+    .unwrap();
+
+    let extra_bad_path = extra_store.ticket_path(
+        &"7ZARZ3NDEKTSV4RRFFQ69G5FAV"
+            .parse()
+            .expect("valid test ULID"),
+    );
+    std::fs::create_dir_all(extra_bad_path.parent().unwrap()).unwrap();
+    std::fs::write(&extra_bad_path, "not a ticket").unwrap();
+
+    let listed = router
+        .clone()
+        .oneshot(authed("GET", "/checkouts/corrupt/tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    assert_eq!(body_json(listed).await.as_array().unwrap().len(), 2);
+
+    let corrupt_response = router
+        .oneshot(authed("GET", "/checkouts/corrupt/corrupt-tickets", None))
+        .await
+        .unwrap();
+    assert_eq!(corrupt_response.status(), StatusCode::OK);
+    let corrupt = body_json(corrupt_response).await;
+    let corrupt = corrupt.as_array().unwrap();
+    assert_eq!(corrupt.len(), 2);
+
+    let primary_report = corrupt
+        .iter()
+        .find(|report| report["store"] == primary_id)
+        .unwrap();
+    assert_eq!(primary_report["store_path"], primary_root);
+    assert_eq!(
+        primary_report["path"],
+        primary_bad_path.display().to_string()
+    );
+    assert_eq!(primary_report["id"], primary_bad_id);
+    assert_eq!(primary_report["slug"], "HS-BROKEN");
+    assert!(
+        primary_report["error"]
+            .as_str()
+            .unwrap()
+            .contains("parsing ticket")
+    );
+
+    let extra_report = corrupt
+        .iter()
+        .find(|report| report["store"] == extra_id)
+        .unwrap();
+    assert_eq!(
+        extra_report["store_path"],
+        extra.path().display().to_string()
+    );
+    assert_eq!(extra_report["path"], extra_bad_path.display().to_string());
+    assert_eq!(extra_report["id"], "7ZARZ3NDEKTSV4RRFFQ69G5FAV");
+    assert!(extra_report.get("slug").is_none());
+    assert!(!extra_report["error"].as_str().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn repository_status_endpoint_reports_real_git_state() {
     let (_d, st) = state();
     let checkout = tempfile::tempdir().unwrap();

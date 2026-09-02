@@ -19,6 +19,16 @@ describe('TicketList', () => {
     expect(markup).not.toContain('ticket-card');
   });
 
+  it('includes disabled corrupt entries without replacing healthy ticket rows', () => {
+    const markup = String(TicketList({
+      tickets: [ticket],
+      corruptTickets: [{ store: 'local', store_path: '/tickets', path: '/tickets/bad.md', error: 'could not parse' }],
+    }));
+    expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
+    expect(markup.match(/data-component="corrupt-ticket-row"/g)).toHaveLength(1);
+    expect(markup).toContain('aria-disabled="true"');
+  });
+
   it('overlaps only adjacent selected list-row borders into one seam', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
     expect(css).toContain(':has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected)');

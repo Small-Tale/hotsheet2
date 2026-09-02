@@ -23,6 +23,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/permissions')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/connections')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
+    if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
     if(path.endsWith('/tickets')&&request.method()==='GET') return route.fulfill({json:rows});
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
@@ -60,6 +61,32 @@ test('renders exactly once when permission polling discovers a request',async({p
   await page.waitForTimeout(100);await resetRenderMetrics(page);pending=[{id:77,connection:'codex-session',tool:'Bash',action:'cargo test',always_allow_supported:true}];
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   const metrics=await renderMetrics(page);expect(metrics?.passes).toBe(1);expect(metrics?.mutations).toBeGreaterThan(0);
+});
+
+test('keeps healthy tickets usable while identifying an unreadable ticket',async({page})=>{
+  await mockProject(page);
+  await page.route('**/corrupt-tickets',route=>route.fulfill({json:[{
+    store:'git-local',
+    store_path:'/work/demo.hs2',
+    path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md',
+    id:'01M1DNB977BK0NG7YJ77RVZXTV',
+    slug:'HS2-QQRY00',
+    error:'unsupported content follows the bounded Notes section',
+  }]}));
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+
+  const corrupt=page.locator('[data-component="corrupt-ticket-row"]');
+  await expect(corrupt).toContainText('HS2-QQRY00');
+  await expect(corrupt).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
+  await expect(corrupt).toContainText('unsupported content follows the bounded Notes section');
+  await expect(corrupt).toHaveAttribute('aria-disabled','true');
+  await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
+  await expect(corrupt.getByRole('button')).toHaveCount(0);
+
+  await page.getByText('Use real project tickets').click();
+  await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
 });
 
 test('translates urgent priority through the canonical server contract',async({page})=>{

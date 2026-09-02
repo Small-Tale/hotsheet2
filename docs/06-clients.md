@@ -129,6 +129,12 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   upload/removal progress and failures remain visible in the attachment panel. Browser
   clients use download where a native Tauri host can later offer Reveal in Finder.
 
+  Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
+  independently. A malformed file therefore cannot suppress healthy rows: the workspace
+  remains usable and renders each unreadable file as a disabled warning row with the
+  recovered slug/id or filename, full path, and parser error. Linked-store diagnostics
+  retain server-provided store attribution.
+
   The default `Queue` view is the active working set and intentionally excludes both
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit
   views with counts derived from those same predicates.

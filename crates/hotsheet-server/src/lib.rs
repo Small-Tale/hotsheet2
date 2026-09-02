@@ -726,6 +726,10 @@ pub fn app(state: AppState) -> Router {
             get(list_checkout_tickets).post(create_checkout_ticket),
         )
         .route(
+            "/checkouts/{reference}/corrupt-tickets",
+            get(list_checkout_corrupt_tickets),
+        )
+        .route(
             "/checkouts/{reference}/tickets/{id}",
             get(get_checkout_ticket).patch(update_checkout_ticket),
         )
@@ -1764,6 +1768,39 @@ async fn list_checkout_tickets(
                 obj.insert("store".into(), serde_json::Value::String(store_id.clone()));
             }
             result.push(value);
+        }
+    }
+    Ok(Json(result))
+}
+
+#[derive(Serialize)]
+struct CheckoutCorruptTicket {
+    store: String,
+    store_path: String,
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slug: Option<String>,
+    error: String,
+}
+
+async fn list_checkout_corrupt_tickets(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<CheckoutCorruptTicket>>, ApiError> {
+    let mut result = Vec::new();
+    for (store_id, entry) in checkout_entries(&state, &reference)? {
+        let store_path = entry.store.root().display().to_string();
+        for corrupt in entry.store.list_tickets_resilient()?.corrupt {
+            result.push(CheckoutCorruptTicket {
+                store: store_id.clone(),
+                store_path: store_path.clone(),
+                path: corrupt.path.display().to_string(),
+                id: corrupt.id.map(|id| id.to_string()),
+                slug: corrupt.slug,
+                error: corrupt.error,
+            });
         }
     }
     Ok(Json(result))

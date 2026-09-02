@@ -9,6 +9,7 @@ export interface Attachment {id:string;filename:string;created_at:string}
 export interface Ticket {qualified_id:string;native_id:string;native_url?:string;title:string;status:string;connection_id:string;notes?:Note[];attachments?:Attachment[]}
 export interface Checkout {id:string;root:string;alias:string;repository?:string;stores:string[]}
 export interface TicketRow {connection_id:string;native_id:string;qualified_id:string;id:string;slug:string;title:string;category?:string;priority?:string;status?:string;up_next:boolean;feedback_needed:boolean;tags:string[];blocked_by:string[];claimed_by?:string;worker_label?:string;claim_count:number;created_at?:string;updated_at?:string;completed_at?:string}
+export interface CorruptTicket {store:string;store_path:string;path:string;id?:string;slug?:string;error:string}
 export interface FullTicket extends TicketRow {details:string;blocked_reason?:string;notes:Note[];attachments:Attachment[];concurrency_token?:string}
 export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number}
 export interface PermissionRequest {id:number;connection:string;tool:string;action:string;always_allow_supported?:boolean}
@@ -27,6 +28,7 @@ export class Api {
   transfer=(kind:'copy'|'move',source:Ticket,destination_connection:string)=>this.request(`/provider-transfers/${kind}`,{method:'POST',body:JSON.stringify({source:{connection_id:source.connection_id,native_id:source.native_id},destination_connection,operation_id:crypto.randomUUID(),confirm:kind==='move'})});
   copyAttachment=(source:{connection_id:string;native_id:string;attachment_id:string},destination:{connection_id:string;native_id:string})=>this.request<FullTicket>('/provider-attachments/copy',{method:'POST',body:JSON.stringify({source,destination})});
   checkoutTickets=(checkout:string)=>this.request<TicketRow[]>(`/checkouts/${encodeURIComponent(checkout)}/tickets`);
+  checkoutCorruptTickets=(checkout:string)=>this.request<CorruptTicket[]>(`/checkouts/${encodeURIComponent(checkout)}/corrupt-tickets`);
   checkoutTicket=(checkout:string,id:string)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(ticket=>({store:ticket.store,ticket}));
   createCheckoutTicket=(checkout:string,value:{title:string;details?:string;category:string;priority?:string;status?:string;up_next?:boolean;tags?:string[]})=>this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`,{method:'POST',body:JSON.stringify(prioritiesToWire(value))});
   updateCheckoutTicket=(checkout:string,id:string,value:Record<string,unknown>)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(prioritiesToWire(value))}).then(ticket=>({store:ticket.store,ticket}));

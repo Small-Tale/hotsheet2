@@ -161,8 +161,11 @@ enumeration is therefore resilient: `FsStore::list_tickets_resilient` returns ev
 healthy ticket **plus** a separate report of the files that failed to parse
 (`CorruptTicket { path, id, slug, error }`), and the index reconcile/rebuild that runs on
 project open skips an unparseable file (with a warning) instead of aborting. The server
-counts the healthy tickets and surfaces the corrupt files on `/health` (`corrupt[]`) so a
-client can show them for recovery rather than letting them silently vanish. The strict
+counts the healthy tickets and surfaces primary-store corrupt files on `/health`
+(`corrupt[]`). For a checkout linked to one or more stores,
+`GET /checkouts/{reference}/corrupt-tickets` aggregates the same diagnostics with store
+attribution (`store`, `store_path`, `path`, optional `id`/`slug`, and `error`) so clients
+can show them for recovery rather than letting them silently vanish. The strict
 `list_tickets` (fail on first bad file) remains for callers that want it. Prevention: the
 serializer never emits output the parser rejects — in particular a ticket with no notes
 emits **no** notes block at all, so it can never leave a dangling
