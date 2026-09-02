@@ -388,8 +388,10 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
 ticket is waiting on the user, a ticket that carries at least one such note is flagged at
 the ticket level so it's findable without opening it: the server computes a
 `feedback_needed` boolean on the compact list row (`TicketRow`, mirrored as an index
-column), the ticket row renders a "Feedback" badge (list and column presentations), and
-the inspector shows a "Waiting on your feedback" banner. This is detection + indication
+column), the ticket row renders a "Feedback" badge and purple leading rail (list and
+column presentations), and the inspector/reader shows the same purple rail plus a
+"Waiting on your feedback" banner. The feedback rail takes precedence over other row
+rails so the outstanding user decision is never hidden. This is detection + indication
 only; answering the ask still happens through the note's feedback editor (above).
 
 **Reader mode is a focus surface with an edit toggle.** Opening reader mode shows the

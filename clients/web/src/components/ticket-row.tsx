@@ -34,7 +34,7 @@ export interface TicketRowProps {
   presentation?: TicketRowPresentation;
 }
 
-export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
+export type TicketRowIndicator = 'feedback-needed' | 'needs-review' | 'blocked' | 'up-next' | undefined;
 
 const priorityPresentation: Record<TicketPriority, { icon: IconNode; name: string; color: string }> = {
   urgent: { icon: ChevronsUp, name: 'chevrons-up', color: '#ef4444' },
@@ -47,7 +47,8 @@ export function getPriorityPresentation(priority: TicketPriority) {
   return priorityPresentation[priority];
 }
 
-export function ticketRowIndicator(props: Pick<TicketRowProps, 'needsReview' | 'blocked' | 'upNext'>): TicketRowIndicator {
+export function ticketRowIndicator(props: Pick<TicketRowProps, 'feedbackNeeded' | 'needsReview' | 'blocked' | 'upNext'>): TicketRowIndicator {
+  if (props.feedbackNeeded) return 'feedback-needed';
   if (props.needsReview) return 'needs-review';
   if (props.blocked) return 'blocked';
   if (props.upNext) return 'up-next';
