@@ -2,6 +2,6 @@
 .command-navigation__items { display: grid; gap: .3rem; }
 .command-navigation__command { min-height: 2.5rem; color: var(--command-text-color); background: var(--command-color); font-weight: 650; }
 .command-navigation__command:hover { color: var(--command-text-color); background: var(--command-color); filter: brightness(.9); }
-.command-navigation__command i { width: .5rem; height: .5rem; border: 2px solid rgba(255,255,255,.45); border-top-color: #fff; border-radius: 50%; animation: command-spin .8s linear infinite; }
+.command-navigation__command i { width: .5rem; height: .5rem; border: 2px solid rgba(255,255,255,.45); border-top-color: var(--wa-color-neutral-on-loud); border-radius: 50%; animation: command-spin .8s linear infinite; }
 @keyframes command-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .command-navigation__command i { animation: none; border-color: #fff; } }
+@media (prefers-reduced-motion: reduce) { .command-navigation__command i { animation: none; border-color: var(--wa-color-neutral-on-loud); } }

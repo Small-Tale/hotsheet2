@@ -1,4 +1,4 @@
-.drive-control { display: flex; width: 100%; min-height: 2.75rem; padding: .55rem .8rem; border: 0; border-radius: .65rem; color: #fff; background: #22c55e; cursor: pointer; align-items: center; justify-content: center; gap: .55rem; font-weight: 700; }
+.drive-control { display: flex; width: 100%; min-height: 2.75rem; padding: .55rem .8rem; border: 0; border-radius: .65rem; color: var(--wa-color-neutral-on-loud); background: #22c55e; cursor: pointer; align-items: center; justify-content: center; gap: .55rem; font-weight: 700; }
 .drive-control:hover { background: #16a34a; }
 .drive-control[data-running="true"] { background: #374151; }
 .drive-control[data-running="true"]:hover { background: #1f2937; }

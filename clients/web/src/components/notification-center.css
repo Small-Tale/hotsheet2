@@ -3,10 +3,10 @@
 .notification-center__header > span { display: flex; align-items: center; gap: .55rem; }
 .notification-center__header svg { width: 1.25rem; height: 1.25rem; color: #596170; }
 .notification-center__header h1 { margin: 0; font-size: 1.4rem; letter-spacing: -.025em; }
-.notification-center__header > strong { min-width: 1.55rem; padding: .2rem .45rem; border-radius: 999px; color: #fff; background: #2563eb; text-align: center; font-size: .72rem; }
+.notification-center__header > strong { min-width: 1.55rem; padding: .2rem .45rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); text-align: center; font-size: .72rem; }
 .notification-center__section + .notification-center__section { margin-top: 1.7rem; }
 .notification-center__section > h2 { display: flex; margin: 0 0 .6rem; align-items: center; gap: .4rem; color: #656c79; font-size: .76rem; letter-spacing: .055em; text-transform: uppercase; }
-.notification-center__section > h2 span { min-width: 1.2rem; padding: .08rem .34rem; border-radius: 999px; color: #4b5563; background: #e9ecf1; text-align: center; font-size: .66rem; }
+.notification-center__section > h2 span { min-width: 1.2rem; padding: .08rem .34rem; border-radius: var(--wa-border-radius-pill); color: #4b5563; background: #e9ecf1; text-align: center; font-size: .66rem; }
 .notification-center__items { display: grid; gap: .7rem; }
 .notification-center__empty { margin: 0; padding: 2rem 1rem; border: 1px dashed #d4d8e0; border-radius: .9rem; color: #777e8b; background: #fbfbfc; text-align: center; font-size: .82rem; }
 @media (max-width: 42rem) { .notification-center { padding-right: .55rem; padding-left: .55rem; } }

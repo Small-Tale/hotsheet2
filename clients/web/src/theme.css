@@ -1,0 +1,33 @@
+/*
+ * Shared client theme contract.
+ *
+ * Generic UI styling uses Web Awesome's --wa-* tokens directly. Keep --hs-*
+ * aliases limited to Hot Sheet domain concepts that Web Awesome cannot name.
+ */
+:root {
+  /* Hot Sheet's existing light palette, expressed through Web Awesome semantics. */
+  --wa-color-surface-default: #fff;
+  --wa-color-surface-border: #d7dae1;
+  --wa-color-text-normal: #25262b;
+  --wa-color-text-link: #2563eb;
+  --wa-color-focus: #3b82f6;
+  --wa-color-brand-fill-quiet: #eff6ff;
+  --wa-color-brand-fill-normal: #dbeafe;
+  --wa-color-brand-fill-loud: #2563eb;
+  --wa-color-brand-border-loud: #2563eb;
+  --wa-color-brand-on-quiet: #1d4ed8;
+  --wa-color-neutral-fill-normal: #eceef2;
+  --wa-color-neutral-on-loud: #fff;
+  --wa-color-warning-fill-quiet: #fff9e8;
+  --wa-color-warning-border-normal: #f0c86a;
+  --wa-color-warning-on-quiet: #8a5a08;
+  --wa-color-danger-fill-loud: #b42318;
+  --wa-color-danger-on-quiet: #b42318;
+  --wa-border-radius-pill: 999px;
+  --wa-shadow-s: 0 1px 3px rgba(35, 32, 48, .14);
+  --wa-shadow-l: 0 .75rem 2rem rgba(35, 32, 48, .09);
+
+  /* Hot Sheet domain states have no generic Web Awesome equivalent. */
+  --hs-ticket-state-needs-review: #8b5cf6;
+  --hs-ticket-state-up-next: #eab308;
+}

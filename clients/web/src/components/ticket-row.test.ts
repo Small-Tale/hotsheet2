@@ -48,13 +48,13 @@ describe('TicketRow', () => {
   });
 
   it('uses one semantic color token for every Up Next presentation', () => {
-    const tokenCss = readFileSync(resolve(import.meta.dirname, 'ticket-state-colors.css'), 'utf8');
+    const tokenCss = readFileSync(resolve(import.meta.dirname, '../theme.css'), 'utf8');
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
-    expect(tokenCss).toContain('--ticket-state-up-next: #eab308');
-    expect(tokenCss).toContain('--ticket-state-needs-review: #8b5cf6');
-    expect(rowCss.match(/var\(--ticket-state-up-next\)/g)).toHaveLength(3);
-    expect(inspectorCss).toContain('color: var(--ticket-state-up-next)');
+    expect(tokenCss).toContain('--hs-ticket-state-up-next: #eab308');
+    expect(tokenCss).toContain('--hs-ticket-state-needs-review: #8b5cf6');
+    expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(3);
+    expect(inspectorCss).toContain('color: var(--hs-ticket-state-up-next)');
   });
 
   it('maps HS2 priorities onto the HS1 icon and color semantics', () => {

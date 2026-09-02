@@ -2,6 +2,7 @@ import '@awesome.me/webawesome/dist/styles/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
+import './theme.css';
 import './style.css';
 
 import { delegate, mount, signal } from 'kerfjs';

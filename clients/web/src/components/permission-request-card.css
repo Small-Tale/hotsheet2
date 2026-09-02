@@ -1,9 +1,9 @@
-.permission-request-card { --permission-accent: #2563eb; overflow: hidden; border: 1px solid #d5d9e1; border-radius: 1rem; color: #252833; background: #fff; box-shadow: 0 .35rem 1.2rem rgba(15, 23, 42, .06); container-type: inline-size; }
+.permission-request-card { --permission-accent: var(--wa-color-brand-fill-loud); overflow: hidden; border: 1px solid #d5d9e1; border-radius: 1rem; color: #252833; background: var(--wa-color-surface-default); box-shadow: 0 .35rem 1.2rem rgba(15, 23, 42, .06); container-type: inline-size; }
 .permission-request-card__header { display: grid; min-width: 0; padding: .8rem 1rem .3rem; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .65rem; color: #6b7280; font-size: .76rem; }
 .permission-request-card__identity { display: flex; min-width: 0; align-items: center; gap: .3rem; color: #555b68; }
 .permission-request-card__identity strong { overflow: hidden; color: #252833; text-overflow: ellipsis; white-space: nowrap; }
 .permission-request-card__identity svg { width: 1rem; height: 1rem; color: #16a05d; }
-.permission-request-card__project { overflow: hidden; max-width: 14rem; padding: .18rem .55rem; border-radius: 999px; color: #4b5563; background: #f1f3f6; text-overflow: ellipsis; white-space: nowrap; }
+.permission-request-card__project { overflow: hidden; max-width: 14rem; padding: .18rem .55rem; border-radius: var(--wa-border-radius-pill); color: #4b5563; background: #f1f3f6; text-overflow: ellipsis; white-space: nowrap; }
 .permission-request-card__summary { display: grid; padding: .75rem 1rem .55rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .55rem; }
 .permission-request-card__summary strong { min-width: 0; overflow-wrap: anywhere; }
 .permission-request-card__summary svg { width: 1.1rem; height: 1.1rem; color: var(--permission-accent); }
@@ -14,14 +14,14 @@
 .permission-request-card__explanation { color: #606674; }
 .permission-request-card__error { color: #b91c1c; }
 .permission-request-card__footer { display: flex; padding: .8rem 1rem 1rem; align-items: end; justify-content: space-between; gap: 1rem; }
-.permission-request-card button { min-height: 2rem; padding: 0 .8rem; border: 1px solid #c9ced8; border-radius: .65rem; color: #343945; background: #fff; cursor: pointer; font: inherit; font-size: .76rem; font-weight: 600; }
+.permission-request-card button { min-height: 2rem; padding: 0 .8rem; border: 1px solid #c9ced8; border-radius: .65rem; color: #343945; background: var(--wa-color-surface-default); cursor: pointer; font: inherit; font-size: .76rem; font-weight: 600; }
 .permission-request-card button:hover { background: #f1f4f8; }
-.permission-request-card button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.permission-request-card button:focus-visible { outline: 2px solid var(--wa-color-text-link); outline-offset: 2px; }
 .permission-request-card button:disabled { opacity: .55; cursor: not-allowed; }
 .permission-request-card .permission-request-card__quiet-action, .permission-request-card__countdown button { padding: 0; border: 0; color: #596170; background: transparent; }
 .permission-request-card .permission-request-card__quiet-action:hover, .permission-request-card__countdown button:hover { color: #111827; background: transparent; text-decoration: underline; }
-.permission-request-card .permission-request-card__primary { border-color: #2563eb; color: #fff; background: #2563eb; }
-.permission-request-card .permission-request-card__primary:hover { background: #1d4ed8; }
+.permission-request-card .permission-request-card__primary { border-color: var(--wa-color-brand-border-loud); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); }
+.permission-request-card .permission-request-card__primary:hover { background: var(--wa-color-brand-on-quiet); }
 .permission-request-card__decision-area { display: flex; min-width: 0; flex: 1; align-items: end; justify-content: flex-end; gap: .8rem; }
 .permission-request-card__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
 .permission-request-card__countdown { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .3rem; color: #767d89; font-size: .7rem; }

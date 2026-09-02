@@ -10,7 +10,7 @@
 .resizable-region[data-axis="vertical"] .resizable-region__handle { right: 0; left: 0; height: .7rem; cursor: row-resize; }
 .resizable-region[data-axis="vertical"][data-edge="end"] .resizable-region__handle { bottom: -.35rem; }
 .resizable-region[data-axis="vertical"][data-edge="start"] .resizable-region__handle { top: -.35rem; }
-.resizable-region__handle:hover, .resizable-region__handle:focus-visible { color: #2563eb; }
-.resizable-region__handle:focus-visible { border-radius: .3rem; outline: 2px solid #3b82f6; outline-offset: -2px; }
+.resizable-region__handle:hover, .resizable-region__handle:focus-visible { color: var(--wa-color-text-link); }
+.resizable-region__handle:focus-visible { border-radius: .3rem; outline: var(--wa-focus-ring); outline-offset: -2px; }
 .resizable-region__handle svg { width: .9rem; height: .9rem; opacity: 0; }
 .resizable-region__handle:hover svg, .resizable-region__handle:focus-visible svg { opacity: 1; }

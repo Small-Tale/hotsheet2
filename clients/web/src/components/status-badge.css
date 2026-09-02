@@ -1,4 +1,4 @@
-.status-badge { display: inline-flex; align-items: center; gap: .3rem; width: max-content; padding: .22rem .5rem; border-radius: 999px; color: #555762; background: #eeeef2; font-size: .72rem; font-weight: 700; white-space: nowrap; }
+.status-badge { display: inline-flex; align-items: center; gap: .3rem; width: max-content; padding: .22rem .5rem; border-radius: var(--wa-border-radius-pill); color: #555762; background: #eeeef2; font-size: .72rem; font-weight: 700; white-space: nowrap; }
 .status-badge__icon { width: .85rem; height: .85rem; flex: none; }
 .status-badge--started { color: #60450b; background: #fff0c9; }
 .status-badge--completed { color: #17623c; background: #dff4e8; }
@@ -11,6 +11,6 @@
 .status-badge--compact .status-badge__icon { width: .75rem; height: .75rem; }
 .status-badge--interactive { border: 0; appearance: none; font-family: inherit; cursor: pointer; }
 .status-badge--interactive:hover { filter: brightness(.97); }
-.status-badge--interactive:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
-.blocked-badge { display: inline-flex; width: max-content; padding: .2rem .5rem; border-radius: 999px; color: #fff; background: #59606d; align-items: center; font-size: .7rem; font-weight: 700; white-space: nowrap; }
+.status-badge--interactive:focus-visible { outline: var(--wa-focus-ring); outline-offset: 2px; }
+.blocked-badge { display: inline-flex; width: max-content; padding: .2rem .5rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-loud); background: #59606d; align-items: center; font-size: .7rem; font-weight: 700; white-space: nowrap; }
 .blocked-badge--compact { padding: .12rem .4rem; font-size: .68rem; }

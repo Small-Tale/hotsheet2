@@ -248,10 +248,12 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await selected.click();
   await busy.click();
   const feedbackNeeded = inspector.locator('wa-checkbox[name="feedback-needed"]');
-  await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
+  await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await feedbackNeeded.click();
-  await expect(row.locator('.ticket-list-row__feedback')).toContainText('Feedback');
+  await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await expect(row.locator('.ticket-list-row__feedback [data-lucide="circle-alert"]')).toHaveCount(1);
+  await needsReview.click();
+  await expect(row.locator('.ticket-list-row__feedback')).toContainText('Needs review');
   await feedbackNeeded.click();
   await expect(row.locator('.ticket-list-row__feedback')).toHaveCount(0);
   await feedbackNeeded.click();
@@ -331,7 +333,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(menu).toBeVisible();
   const menuItems = menu.locator('wa-dropdown-item');
   await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(10);
-  await expect(menuItems).toHaveCount(24);
+  await expect(menuItems).toHaveCount(26);
   expect(await menuItems.evaluateAll(items => items.every(item => item.querySelector('[data-lucide]') !== null))).toBe(true);
   await expect(row).toHaveAttribute('data-selected', 'true');
   await menu.getByText('Toggle Up Next', { exact: true }).click();
@@ -1467,4 +1469,48 @@ test('dims finished tickets in the list and gives the add-tag control full width
     page.locator('.ticket-tag-editor').boundingBox(),
   ]);
   expect(add!.width).toBeCloseTo(editor!.width, 0);
+});
+
+test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-list');
+  const row = page.locator('[data-ticket-slug="HS2-R76MMW"]');
+  const feedback = row.locator('.ticket-list-row__feedback');
+  await expect(row).toBeVisible();
+  await expect(feedback).toBeVisible();
+
+  expect(await row.evaluate(node => {
+    const root = getComputedStyle(document.documentElement);
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--wa-color-surface-default)';
+    document.body.append(probe);
+    const surface = getComputedStyle(probe).backgroundColor;
+    probe.style.backgroundColor = 'var(--wa-color-warning-fill-quiet)';
+    const warning = getComputedStyle(probe).backgroundColor;
+    probe.style.backgroundColor = 'var(--hs-ticket-state-needs-review)';
+    const review = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const feedbackNode = node.querySelector('.ticket-list-row__feedback');
+    const railNode = node.querySelector('.ticket-list-row__indicator--needs-review');
+    return {
+      aliases: [
+        root.getPropertyValue('--hs-ticket-state-needs-review').trim(),
+        root.getPropertyValue('--hs-ticket-state-up-next').trim(),
+      ],
+      reviewMatches: railNode !== null && getComputedStyle(railNode).backgroundColor === review,
+      surfaceMatches: getComputedStyle(node).backgroundColor === surface,
+      warningMatches: feedbackNode !== null && getComputedStyle(feedbackNode).backgroundColor === warning,
+    };
+  })).toEqual({
+    aliases: ['#8b5cf6', '#eab308'],
+    reviewMatches: true,
+    surfaceMatches: true,
+    warningMatches: true,
+  });
+  await page.screenshot({ path: '/private/tmp/hotsheet-semantic-theme-wide.png', fullPage: true });
+
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(row).toBeVisible();
+  await expect(feedback).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hotsheet-semantic-theme-narrow.png', fullPage: true });
 });

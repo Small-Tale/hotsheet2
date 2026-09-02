@@ -465,6 +465,12 @@ meaning and each option uses the same evocative component icon as the catalog si
 Production web component CSS is colocated in `clients/web/src/components/` and imported
 by its component module. The `/ux-demo` stylesheet owns only catalog shell, inspector,
 and stage presentation, ensuring the demo exercises the same CSS the real app imports.
+Both the real app and `/ux-demo` load `clients/web/src/theme.css` after Web Awesome's
+theme. Generic surface, text, brand, success/warning/danger, spacing, radius, focus,
+and shadow concepts use Web Awesome's `--wa-*` vocabulary directly. The shared theme
+defines `--hs-*` only for Hot Sheet domain concepts that Web Awesome cannot name—today,
+the Up Next and Needs Review ticket-state rails. One-off layout geometry and
+user/provider category colors remain local data rather than design tokens.
 Actionable context-menu entries consistently pair their text with meaningful Lucide
 icons; structural separators do not require icons.
 - `TicketTagEditor` — **built**: shared tag list, compact add control, autocomplete,

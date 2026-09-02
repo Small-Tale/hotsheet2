@@ -1,4 +1,4 @@
-.project-tab-context-menu { position: fixed; z-index: 60; display: grid; width: 16rem; padding: .35rem; border: 1px solid #d9d9de; border-radius: .6rem; background: #fff; box-shadow: 0 .75rem 2rem rgba(25, 32, 45, .2); }
+.project-tab-context-menu { position: fixed; z-index: 60; display: grid; width: 16rem; padding: .35rem; border: 1px solid #d9d9de; border-radius: .6rem; background: var(--wa-color-surface-default); box-shadow: 0 .75rem 2rem rgba(25, 32, 45, .2); }
 .project-tab-context-menu wa-divider { --spacing: .25rem; }
 .project-tab-context-menu wa-dropdown-item { cursor: pointer; }
 .project-tab-context-menu [slot="icon"] { display: inline-flex; color: #656873; }

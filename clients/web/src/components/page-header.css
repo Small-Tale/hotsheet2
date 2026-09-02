@@ -1,2 +1,2 @@
-.page-header { padding: .75rem 1rem; border-bottom: 1px solid #e3e4e8; background: #fff; }
+.page-header { padding: .75rem 1rem; border-bottom: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
 .page-header h1 { margin: 0; font-size: clamp(1.35rem, 2.3vw, 2rem); letter-spacing: -.025em; }

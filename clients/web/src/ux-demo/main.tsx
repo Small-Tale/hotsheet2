@@ -5,6 +5,7 @@ import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
+import '../theme.css';
 import './style.css';
 
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
