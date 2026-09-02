@@ -101,7 +101,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   project bridge still resolves the real `target/debug/hotsheet-server` rather than a
   nonexistent temporary `target` directory. Use `npm run dev:hot` only when actively developing the web UI and immediate
   HMR is desired. Browser tests use `dev:hot` on a separate default port and never reuse
-  an already-running maintainer server.
+  an already-running maintainer server. On shutdown, the stable launcher first waits for
+  its Vite child to exit, then removes the private snapshot before the launcher itself
+  exits; this prevents concurrent Vite writes from racing snapshot cleanup.
 
 - **Render budgets.** Development builds expose root render-pass and DOM-mutation
   counters to browser tests. Polling responses that do not change observable state

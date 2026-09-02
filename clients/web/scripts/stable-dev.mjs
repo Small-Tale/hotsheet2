@@ -1,4 +1,3 @@
-import { rmSync } from 'node:fs';
 import { cp, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -57,16 +56,12 @@ async function main() {
   console.log(`Stable dev snapshot: ${snapshotRoot}`);
   console.log('Workspace edits will be visible after this command is restarted.');
 
-  let stopping = false;
+  let stoppingSignal;
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.on(signal, () => {
-      if (stopping) return;
-      stopping = true;
+      if (stoppingSignal) return;
+      stoppingSignal = signal;
       child.kill(signal);
-      // Signal handlers are not promise-aware. Remove synchronously so the parent cannot
-      // observe process exit before this process's private snapshot has disappeared.
-      rmSync(snapshotRoot, { recursive: true, force: true });
-      process.exit(signal === 'SIGINT' ? 130 : 143);
     });
   }
   child.on('error', error => {
@@ -74,9 +69,9 @@ async function main() {
     process.exitCode = 1;
   });
   child.on('close', async (code, signal) => {
-    if (stopping) return;
     await removeStableSnapshot(snapshotRoot);
-    process.exitCode = code ?? (signal === 'SIGINT' ? 130 : 143);
+    const exitSignal = stoppingSignal ?? signal;
+    process.exitCode = code ?? (exitSignal === 'SIGINT' ? 130 : 143);
   });
 }
 
