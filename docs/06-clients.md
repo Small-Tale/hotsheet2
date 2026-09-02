@@ -105,6 +105,16 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   its Vite child to exit, then removes the private snapshot before the launcher itself
   exits; this prevents concurrent Vite writes from racing snapshot cleanup.
 
+- **Startup delivery budget.** Vite development intentionally serves the source module
+  graph as separate requests: a cold local profile on 2026-09-03 loaded 175 scripts
+  (176 requests including the document), with first contentful paint at 148–348 ms.
+  This request count is development tooling, not the desktop delivery shape. The same
+  code from `vite build` loaded as one JavaScript bundle and one stylesheet: three
+  requests including the document, with local first contentful paint at 20–72 ms.
+  `npm run build` rejects a production entry point requiring more than four initial
+  assets. The future Tauri host must embed this production output and must never ship
+  or connect to Vite; Tauri startup itself remains to be measured once that host exists.
+
 - **Render budgets.** Development builds expose root render-pass and DOM-mutation
   counters to browser tests. Polling responses that do not change observable state
   must cause zero render passes and zero DOM mutations; tests also budget intentional
