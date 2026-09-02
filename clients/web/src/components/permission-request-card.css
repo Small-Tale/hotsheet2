@@ -30,7 +30,7 @@
 .permission-request-card .permission-request-card__stop-automation { display: inline-grid; width: 2rem; min-width: 2rem; min-height: 2rem; padding: 0; border-color: transparent; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; place-items: center; }
 .permission-request-card .permission-request-card__stop-automation:hover { color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); }
 .permission-request-card__stop-automation svg { width: .9rem; height: .9rem; }
-.permission-request-card--list[data-state="allow"], .permission-request-card--list[data-state="deny"], .permission-request-card--list[data-state="external"] { box-shadow: none; }
+.permission-request-card--list[data-resolved="true"] { padding-bottom: 1rem; box-shadow: none; }
 .permission-request-card--list[data-state="allow"] { --permission-accent: #168a52; }
 .permission-request-popup { position: absolute; z-index: 80; top: 3.5rem; right: 1rem; width: min(44rem, calc(100% - 2rem)); }
 .permission-request-popup .permission-request-card { border-color: var(--wa-color-neutral-border-loud); box-shadow: 0 1rem 3rem rgba(15, 23, 42, .2); }

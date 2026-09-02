@@ -76,6 +76,16 @@ describe('permission presentation components', () => {
     expect(markup).toContain('1:00');
   });
 
+  it('marks responded list items for footer-equivalent bottom padding even without details or actions', () => {
+    const resolvedWithoutAction: PermissionHistoryItem = { ...history, action: '' };
+    const markup = String(PermissionRequestCard({ item: resolvedWithoutAction }));
+    const css = readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8');
+    expect(markup).toContain('data-resolved="true"');
+    expect(markup).not.toContain('permission-request-card__details');
+    expect(markup).not.toContain('permission-request-card__footer');
+    expect(css).toMatch(/permission-request-card--list\[data-resolved="true"\][^{]*\{[^}]*padding-bottom: 1rem/);
+  });
+
   it('renders explicit empty states', () => {
     const markup = String(NotificationCenter({ pending: [], history: [] }));
     expect(markup).toContain('No requests need your attention.');

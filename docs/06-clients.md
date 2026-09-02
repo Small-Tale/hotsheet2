@@ -379,7 +379,9 @@ control and project tabs, and a non-modal popup appears even when another projec
 selected. The global Notifications view
 keeps pending requests above newest-first machine-local client history; a request that
 disappears without this client resolving it is labeled “Decision made outside Hot
-Sheet.” The right inspector region remains present and manually collapsible in this
+Sheet.” Responded history cards retain the same full bottom inset when their action is
+empty and no decision-button footer is rendered, so the final summary cannot sit against
+the card edge. The right inspector region remains present and manually collapsible in this
 view rather than changing the workspace width.
 
 Ignore is client-only and hides the popup without answering. When the server advertises

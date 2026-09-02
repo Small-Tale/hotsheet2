@@ -1721,6 +1721,10 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(card).toHaveAttribute('data-state', 'allow');
   await expect(card).toContainText('allowed this kind of request');
   await expect(card.getByRole('button', { name: 'Deny' })).toHaveCount(0);
+  await choose(request, 'tool-without-details');
+  await expect(card.locator('.permission-request-card__details')).toHaveCount(0);
+  await expect(card.locator('.permission-request-card__footer')).toHaveCount(0);
+  await expect(card).toHaveCSS('padding-bottom', '16px');
   await choose(variant, 'denied');
   await expect(card).toHaveAttribute('data-state', 'deny');
   await choose(variant, 'external');

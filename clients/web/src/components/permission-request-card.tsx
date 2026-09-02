@@ -71,7 +71,7 @@ export function PermissionRequestCard({ item, presentation = 'list', state = 'pe
     ? item.decision === 'allow' ? 'check' : item.decision === 'deny' ? 'x' : 'external-link'
     : state === 'failed' || state === 'disconnected' ? 'circle-alert' : state === 'resolving' ? 'clock-3' : 'shield-check';
 
-  return <article class={`permission-request-card permission-request-card--${presentation}`} data-component="permission-request-card" data-state={history ? item.decision : state} data-request-key={item.key}>
+  return <article class={`permission-request-card permission-request-card--${presentation}`} data-component="permission-request-card" data-state={history ? item.decision : state} data-resolved={history ? 'true' : undefined} data-request-key={item.key}>
     <header class="permission-request-card__header">
       <span class="permission-request-card__identity"><LucideIcon icon={Bot} name="bot" /><strong>{item.agent}</strong><span aria-hidden="true">·</span><span>{item.role}</span></span>
       <span class="permission-request-card__project" title={item.projectName}>{item.projectName}</span>
