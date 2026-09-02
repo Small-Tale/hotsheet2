@@ -75,7 +75,10 @@ export function PermissionRequestCard({ item, presentation = 'list', state = 'pe
     {!history && <footer class="permission-request-card__footer">
       <button type="button" class="permission-request-card__quiet-action" data-action="ignore-permission" data-request-key={item.key}>Ignore</button>
       <div class="permission-request-card__decision-area">
-        {countdown && <span class="permission-request-card__countdown">Automatically {countdownAction === 'allow' ? 'allowed' : 'denied'} in <strong>{countdown}</strong><button type="button" data-action="cancel-permission-automation" data-request-key={item.key}>Cancel</button></span>}
+        {countdown && <div class="permission-request-card__countdown">
+          <span class="permission-request-card__timer" role="timer" aria-label={`Automatic ${countdownAction} countdown`}><LucideIcon icon={Clock3} name="clock-3" />Auto-{countdownAction} in <strong>{countdown}</strong></span>
+          <button type="button" class="permission-request-card__stop-automation" data-action="cancel-permission-automation" data-request-key={item.key} title={`Stop automatic ${countdownAction} for this request`}>Stop auto-{countdownAction}</button>
+        </div>}
         <div class="permission-request-card__buttons">
           <button type="button" data-action="resolve-permission" data-decision="deny" data-scope="once" data-request-key={item.key} disabled={state === 'resolving'}>Deny</button>
           {alwaysSupported && <button type="button" data-action="resolve-permission" data-decision="allow" data-scope="always" data-request-key={item.key} disabled={state === 'resolving'}>Always Allow</button>}

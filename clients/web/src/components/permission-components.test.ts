@@ -19,8 +19,9 @@ describe('permission presentation components', () => {
     expect(markup).toContain('Always Allow');
     expect(markup).toContain('Allow Once');
     expect(markup).toContain('data-scope="always"');
-    expect(markup).toContain('Automatically allowed in');
-    expect(markup).toContain('Cancel');
+    expect(markup).toContain('Auto-allow in');
+    expect(markup).toContain('Stop auto-allow');
+    expect(markup).toContain('title="Stop automatic allow for this request"');
   });
 
   it('uses only the first action line as an edit target', () => {
@@ -37,7 +38,8 @@ describe('permission presentation components', () => {
 
   it('labels automatic denial explicitly', () => {
     const markup = String(PermissionRequestCard({ item: pending, countdown: '0:13', countdownAction: 'deny' }));
-    expect(markup).toContain('Automatically denied in');
+    expect(markup).toContain('Auto-deny in');
+    expect(markup).toContain('Stop auto-deny');
   });
 
   it('removes always scope when unsupported and exposes popup semantics', () => {

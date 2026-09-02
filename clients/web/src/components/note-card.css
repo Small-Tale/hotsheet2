@@ -1,4 +1,4 @@
-.note-card { display: grid; padding: .85rem 1rem; border: 1px solid #dfe1e6; border-radius: .75rem; color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); gap: .55rem; }
+.note-card { display: grid; min-width: 0; max-width: 100%; padding: .85rem 1rem; border: 1px solid #dfe1e6; border-radius: .75rem; color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); gap: .55rem; }
 .note-card__header { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 1rem; }
 .note-card__kind { display: inline-flex; min-width: 0; align-items: center; gap: .4rem; font-size: .75rem; font-weight: 700; }
 .note-card__kind svg { width: .95rem; height: .95rem; flex: none; }
@@ -10,10 +10,10 @@
 .note-card__actions button { display: inline-grid; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: #656a75; background: transparent; cursor: pointer; place-items: center; }
 .note-card__actions button:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .note-card__actions svg { width: .8rem; height: .8rem; }
-.note-card__body { margin: 0; font-size: .88rem; line-height: 1.5; white-space: pre-wrap; }
+.note-card__body { min-width: 0; margin: 0; font-size: .88rem; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
 .note-card:not(.note-card--editing) { cursor: text; }
-.note-card__editor { display: grid; gap: var(--wa-space-xs); }
-.note-card__editor textarea { width: 100%; min-height: 5rem; padding: .55rem .65rem; resize: vertical; border: 1px solid #aeb4c0; border-radius: .45rem; color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.5; }
+.note-card__editor { display: grid; min-width: 0; gap: var(--wa-space-xs); }
+.note-card__editor textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 5rem; padding: .55rem .65rem; resize: vertical; border: 1px solid #aeb4c0; border-radius: .45rem; color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.5; }
 .note-card__editor > div { display: flex; justify-content: flex-end; gap: .35rem; }
 .note-card[data-kind="status"], .note-card[data-kind="activity"] { border-color: transparent; background: var(--wa-color-neutral-fill-normal); }
 .note-card[data-kind="status"] .note-card__kind { color: var(--wa-color-text-link); }

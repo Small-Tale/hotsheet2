@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  advancePermissionRequestDemoCountdown,
+  permissionDemoRemainingMs,
   PermissionRequestDemo,
   PermissionRequestSettings,
   permissionRequestSettings,
@@ -45,7 +47,7 @@ describe('PermissionRequestCard demo settings', () => {
     let markup = String(PermissionRequestDemo());
     expect(markup).toContain('permission-request-card--list');
     expect(markup).toContain('Wants permission to run a command');
-    expect(markup).toContain('Automatically denied in');
+    expect(markup).toContain('Auto-deny in');
 
     permissionRequestSettings.request.value = 'tool-without-details';
     permissionRequestSettings.alwaysSupported.value = false;
@@ -54,6 +56,20 @@ describe('PermissionRequestCard demo settings', () => {
     expect(markup).not.toContain('permission-request-card__details');
     expect(markup).not.toContain('Always Allow');
     expect(markup).not.toContain('permission-request-card__explanation');
+  });
+
+  it('ticks each second, reaches zero, and resets for continued catalog review', () => {
+    expect(permissionDemoRemainingMs.value).toBe(13_000);
+    advancePermissionRequestDemoCountdown();
+    expect(String(PermissionRequestDemo())).toContain('0:12');
+    permissionDemoRemainingMs.value = 1_000;
+    advancePermissionRequestDemoCountdown();
+    expect(String(PermissionRequestDemo())).toContain('0:00');
+    advancePermissionRequestDemoCountdown();
+    expect(String(PermissionRequestDemo())).toContain('0:13');
+    permissionRequestSettings.automation.value = 'none';
+    advancePermissionRequestDemoCountdown();
+    expect(permissionDemoRemainingMs.value).toBe(13_000);
   });
 
   it('resets every setting to the canonical review state', () => {

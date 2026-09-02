@@ -4,7 +4,7 @@ import { COMPLETED_TICKET_CONTEXT_ACTIONS, TICKET_CONTEXT_ACTIONS, TicketRowCont
 
 describe('TicketRowContextMenu', () => {
   it('gives every action a distinct meaningful Lucide icon', () => {
-    expect(TICKET_CONTEXT_ACTIONS).toHaveLength(10);
+    expect(TICKET_CONTEXT_ACTIONS).toHaveLength(11);
     expect(new Set(TICKET_CONTEXT_ACTIONS.map(item => item.iconName)).size).toBe(TICKET_CONTEXT_ACTIONS.length);
     expect(TICKET_CONTEXT_ACTIONS.every(item => item.icon.length > 0)).toBe(true);
     const markup = String(TicketRowContextMenu({ x: 12, y: 24, category: 'bug', priority: 'high', status: 'started' }));
@@ -32,6 +32,15 @@ describe('TicketRowContextMenu', () => {
 
   it('omits Up Next when the selected ticket set is ineligible', () => {
     expect(String(TicketRowContextMenu({ x: 0, y: 0, upNextEligible: false }))).not.toContain('data-context-action="Toggle Up Next"');
+  });
+
+  it('capability-disables every mutating bulk action while preserving duplication', () => {
+    const markup = String(TicketRowContextMenu({ x: 0, y: 0, canBulkUpdate: false }));
+    expect(markup).toContain('data-context-action="Add tag" disabled');
+    expect(markup).toContain('data-context-action="Remove tag" disabled');
+    expect(markup).toContain('data-context-action="Delete ticket" variant="danger" disabled');
+    expect(markup).toContain('data-context-action="Duplicate ticket"');
+    expect(markup).not.toContain('data-context-action="Duplicate ticket" disabled');
   });
 
   it('hides Open ticket when more than one ticket is selected (HS2-XRENF2)', () => {

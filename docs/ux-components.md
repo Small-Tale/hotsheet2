@@ -61,12 +61,16 @@ The **built demo** composes the current production sidebar, tabs, connection ban
 header, ticket workspace, and inspector into a desktop shell. Sidebar and inspector
 splitters are keyboard/pointer adjustable on wide displays; both secondary regions
 yield to the ticket workspace on compact displays. Sidebar regions never resize below
-250px. Both sidebars animate between visible and collapsed states; their restore
+250px. Production pointer drags update splitter geometry once per animation frame and
+commit a single render when released; pointer and keyboard sizes persist locally across
+reloads. Both sidebars animate between visible and collapsed states; their restore
 controls live at the matching leading/trailing edges of the center-column toolbar,
 never in ProjectTabBar. Start-edge inspector resizing correctly mirrors end-edge sidebar resizing. Composed
 WorkspaceHeader search retains its expand/autofocus/filter/empty-blur
-contract. Project settings retain the sidebar but hide the inspector and disable
-ticket-view actions. Global Terminal Dashboard and Cross-project Stats modes hide
+contract. Project settings replace the project-summary sidebar with an HS1-style
+category navigator for Ticket sources, Commands, Permissions, and Column view; the
+selected category alone occupies the workspace. Settings still hide the inspector and
+disable ticket-view actions. Global Terminal Dashboard and Cross-project Stats modes hide
 both project-scoped regions, replace the project identity, and temporarily suppress
 header controls pending their dedicated wireframes. It owns the top-level arrangement
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
@@ -154,7 +158,10 @@ scrolling content region can be reviewed without moving the Drive control.
 - `WorkspaceHeader` — **demo built**: responsive project identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   sort menu whose selected option remains highlighted and toggles ascending/descending
-  direction when reselected, and a connected list/column/settings workspace. Settings disables sort,
+  direction when reselected, and a connected list/column/settings workspace. When its owning
+  toolbar narrows, lower-priority utility and sort controls yield first; search and then the view
+  switcher yield only at otherwise unusable widths. Actions remain contained without clipping
+  downward-opening popovers. Settings disables sort,
   favorite, overflow, and search actions; global shell modes omit project controls.
 - `Toolbar` — **demo built**: shared 56px-high leading/optional-center/trailing layout
   with consistent horizontal padding across the project sidebar, center column, and
@@ -266,9 +273,11 @@ selection where sensible.
   square-cornered, flat, separator-led row that reads as one continuous list; the same component becomes a lightly elevated, rounded card at
   narrow column widths. Its primary line treats qualified slug and title as one normal
   inline formatting flow, with an explicit two-line limit in lists and three-line
-  limit in board columns. The flow is ordered slug → priority → title so
-  bounded priority remains visible before an arbitrarily long title (the slug is a
-  stable-width inline block). Updated time is the first item in that identity flow and
+  limit in board columns. The comfortable list keeps the category in its dedicated
+  leading slot; compact board rows remove that empty left gutter and place a reduced
+  category icon inline immediately before the slug. The remaining flow is ordered
+  slug → priority → title so bounded priority remains visible before an arbitrarily
+  long title (the slug is a stable-width inline block). Updated time is the first item in that identity flow and
   floats right, allowing later lines of a long title to use the space beneath it. A quieter, vertically
   centered secondary flow holds the persistent independently operable outline/filled
   Up Next star, status, short owner name, and all tags; it wraps without hiding or
@@ -347,12 +356,15 @@ coverage.
 Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 `ViewEditor` without replacing the basic search components.
 
-### 3.5 Selection and batch actions — later
+### 3.5 Selection and batch actions — partial
 
 - `SelectionBar`
-- `BatchActionMenu`
+- `BatchActionMenu` — the selected-row context menu currently supplies the shipped batch
+  surface; a persistent selection bar remains later work.
 - `TicketContextMenu` — **built**: shared list/board menu with Lucide icons, checked
-  metadata submenus, stable field/value action contracts, and selection-aware bulk updates.
+  metadata submenus, stable field/value action contracts, capability-aware category/status/
+  priority changes, add/remove tag dialogs, and confirmed soft deletion. Bulk writes use
+  fresh provider concurrency tokens and participate in field-aware Undo.
 - `CopyMoveTicketDialog`
 - `UndoToast` / `UndoHistory`
 
@@ -378,7 +390,10 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
 - `TicketInfoPanel` — **demo built**: metadata; safe Markdown details on a white
   basic-note-like surface; blocked reason before Details with its header outside the
   gray reason box; tags; notes with collection-derived counts; and provider/update
-  provenance. An unblocked ticket exposes a small secondary `Block ticket` action;
+  provenance. Its intrinsic-width boundaries keep both metadata columns, long
+  unbroken details, and long note bodies inside the inspector at narrow widths;
+  wide Markdown tables and code blocks scroll within their own content surface.
+  An unblocked ticket exposes a small secondary `Block ticket` action;
   its controlled editor creates the reason and the adjacent status `Blocked` pill.
   - `TicketTimeline` — **demo built**: chronological activity shown as time-ago,
     required title, and optional subtitle along a continuous dot/line track; its
@@ -424,7 +439,9 @@ placeholder in place; it never removes and re-adds the sidebar during that trans
 
 - `MarkdownPreview` — **built**: HS1-parity `marked` rendering with GFM tables and
   task lists, line breaks, links, images, fenced/inline code, blockquotes, lists, and
-  headings. Raw HTML is escaped and unsafe link/image protocols are rejected.
+  headings. Raw HTML is escaped and unsafe link/image protocols are rejected. Long
+  tokens wrap, while intrinsically wide tables and code blocks remain locally
+  scrollable rather than widening an inspector or reader.
 - `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
   to edit non-empty content, single-click to add empty content, persistent controlled
   draft, vertically resizable embedded details, inline/expanded presentation, and 150 ms debounced autosave without routine
@@ -493,7 +510,7 @@ icons; structural separators do not require icons.
 - `NoteList`
 - `NoteCard` — **demo built** with distinct regular, status, feedback-needed,
   feedback-draft, and activity presentations sharing stable author, timestamp, vertically resizable edit body,
-  and note identity;
+  contained long-token wrapping, and note identity;
   double-click enters a controlled editor whose Save persists and Cancel restores.
   In reader mode, regular/status notes remain read-only until the top-level Edit action,
   while feedback-needed and feedback-draft notes always render their Respond/Submit
@@ -545,11 +562,14 @@ capability-aware sections when their underlying features and data contracts land
 
 - `PermissionRequestCard` — shared list/popup presentation with project identity,
   operation details when non-empty (no blank framed details box), optional visible-time
-  automation countdown, and capability-aware Ignore/Deny/Always Allow/Allow Once actions.
+  automation countdown with a visually distinct, outcome-specific stop action, and
+  capability-aware Ignore/Deny/Always Allow/Allow Once actions. The one-second timer is
+  local UI state: stopping it leaves the request pending for a manual decision.
   Its UX demo settings preview popup/list presentations; pending, resolving, failed,
   disconnected, allowed, denied, and externally resolved states; command/edit/read/
   detail-free tool requests; allow/deny/no countdown; optional explanation; and the
-  Always Allow capability, with a complete reset round trip.
+  Always Allow capability, with a live 13-second countdown that reaches zero and resets
+  for continued review, plus a complete settings reset round trip.
 - `PermissionRequestPopup` — non-modal fixed presentation of the shared request card
 - `PermissionSummary`
 - `PermissionDetailDisclosure`

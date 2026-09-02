@@ -332,8 +332,8 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   const menu = page.getByRole('menu', { name: 'Ticket actions' });
   await expect(menu).toBeVisible();
   const menuItems = menu.locator('wa-dropdown-item');
-  await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(10);
-  await expect(menuItems).toHaveCount(26);
+  await expect(menu.locator(':scope > wa-dropdown > wa-dropdown-item')).toHaveCount(11);
+  await expect(menuItems).toHaveCount(27);
   expect(await menuItems.evaluateAll(items => items.every(item => item.querySelector('[data-lucide]') !== null))).toBe(true);
   await expect(row).toHaveAttribute('data-selected', 'true');
   await menu.getByText('Toggle Up Next', { exact: true }).click();
@@ -527,6 +527,13 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   expect(await board.locator('.ticket-board-column__header').first().evaluate(node => node.getBoundingClientRect().top)).toBeCloseTo(firstHeaderTop, 0);
   const narrowRow = boardRows.first();
   await expect(narrowRow).toHaveAttribute('data-presentation', 'column');
+  const inlineCategory = narrowRow.locator('.ticket-list-row__category');
+  const inlineCategorySize = await inlineCategory.evaluate(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }));
+  expect(inlineCategorySize.width).toBeCloseTo(17.6, 1);
+  expect(inlineCategorySize.height).toBeCloseTo(17.6, 1);
+  const inlineOrder = await narrowRow.locator('.ticket-list-row__identity').evaluate(node => [...node.children].map(child => child.className));
+  expect(inlineOrder[1]).toContain('ticket-list-row__category');
+  expect(inlineOrder[2]).toContain('ticket-list-row__slug');
   const columnIdentity = narrowRow.locator('.ticket-list-row__identity');
   const columnTitleMetrics = await columnIdentity.evaluate(node => {
     const style = getComputedStyle(node);
@@ -538,6 +545,10 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(narrowRow).toHaveCSS('border-radius', '10.4px');
   await expect(narrowRow).toHaveCSS('box-shadow', 'none');
   await expect(page.locator('[data-component="ticket-card"]')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-4gk04w-column-row-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.screenshot({ path: '/private/tmp/hs2-4gk04w-column-row-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1600, height: 900 });
   await narrowRow.focus();
   await page.keyboard.press('Meta+A');
   await expect(board.locator('[data-selected="true"]')).toHaveCount(20);
@@ -1270,6 +1281,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: '/private/tmp/hs2-501eph-toolbar-wide.png', fullPage: true });
   await expect(shell.getByRole('button', { name: 'Hide inspector' }).locator('[data-lucide="panel-right-close"]')).toHaveCount(1);
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
@@ -1348,13 +1360,30 @@ test('exercises the application-shell component slice and responsive composition
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
   await showInspector.click();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
-  // Activate the collapse via keyboard: at this cramped demo width the workspace toolbar actions
-  // overflow left over the sidebar (pre-existing, tracked in HS2-501EPH) and would intercept a
-  // pointer click. Keyboard activation exercises the same toggle-project-sidebar action. Restore a
-  // pointer click here once HS2-501EPH is fixed.
   const hideSidebar = shell.getByRole('button', { name: 'Hide project sidebar' });
-  await hideSidebar.focus();
-  await page.keyboard.press('Enter');
+  const crampedToolbar = await shell.locator('.app-shell__main > [data-component="toolbar"]').evaluate(toolbar => {
+    const toolbarRect = toolbar.getBoundingClientRect();
+    const actionsRect = toolbar.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
+    return {
+      toolbarLeft: toolbarRect.left,
+      toolbarRight: toolbarRect.right,
+      actionsLeft: actionsRect.left,
+      actionsRight: actionsRect.right,
+    };
+  });
+  expect(crampedToolbar.actionsLeft).toBeGreaterThanOrEqual(crampedToolbar.toolbarLeft);
+  expect(crampedToolbar.actionsRight).toBeLessThanOrEqual(crampedToolbar.toolbarRight);
+  const sidebarCollapseHit = await hideSidebar.evaluate(button => {
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return {
+      ownsHit: hit?.closest('[aria-label="Hide project sidebar"]') === button,
+      hitLabel: hit?.closest('[aria-label]')?.getAttribute('aria-label'),
+    };
+  });
+  expect(sidebarCollapseHit).toEqual({ ownsHit: true, hitLabel: 'Hide project sidebar' });
+  await page.screenshot({ path: '/private/tmp/hs2-501eph-toolbar-narrow.png', fullPage: true });
+  await hideSidebar.click();
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'true');
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('width', '0px');
   const collapsedSidebarContent = shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"] .resizable-region__content');
@@ -1535,7 +1564,15 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   await expect(card).toHaveAttribute('data-state', 'pending');
   await expect(card).toContainText('Wants permission to edit');
-  await expect(card).toContainText('Automatically allowed in');
+  await expect(card).toContainText('Auto-allow in');
+  const initialCountdown = await card.locator('.permission-request-card__timer').textContent();
+  await expect.poll(() => card.locator('.permission-request-card__timer').textContent()).not.toBe(initialCountdown);
+  await expect(card.getByRole('button', { name: 'Stop auto-allow' })).toHaveAttribute('title', 'Stop automatic allow for this request');
+  await page.screenshot({ path: '/private/tmp/hs2-04cq9y-permission-countdown-wide.png', fullPage: true });
+  await card.getByRole('button', { name: 'Stop auto-allow' }).click();
+  await expect(card.locator('.permission-request-card__countdown')).toHaveCount(0);
+  await expect(automation).toHaveJSProperty('value', 'none');
+  await choose(automation, 'allow');
   await expect(card.getByRole('button', { name: 'Always Allow' })).toBeVisible();
   await expect(card.locator('.permission-request-card__explanation')).toBeVisible();
 
@@ -1568,7 +1605,7 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(card).toContainText('Wants permission to use ToolSearch');
   await expect(card.locator('.permission-request-card__details')).toHaveCount(0);
   await choose(automation, 'deny');
-  await expect(card).toContainText('Automatically denied in');
+  await expect(card).toContainText('Auto-deny in');
   await choose(automation, 'none');
   await expect(card.locator('.permission-request-card__countdown')).toHaveCount(0);
   await alwaysSupported.click();
@@ -1586,11 +1623,11 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(alwaysSupported).toHaveJSProperty('checked', true);
   await expect(explanation).toHaveJSProperty('checked', true);
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
-  await expect(card).toContainText('Automatically allowed in');
+  await expect(card).toContainText('Auto-allow in');
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.screenshot({ path: '/private/tmp/hs2-04cq9y-permission-countdown-narrow.png', fullPage: true });
   await choose(variant, 'external');
   await expect(card).toContainText('Decision made outside Hot Sheet');
-
-  await page.setViewportSize({ width: 760, height: 900 });
   await expect(settings).toBeVisible();
   await expect(card).toBeVisible();
   await expect(page.getByRole('button', { name: 'Close settings' })).toBeVisible();

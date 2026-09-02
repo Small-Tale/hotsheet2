@@ -47,7 +47,7 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .workspace-settings-preview { display: grid; max-width: 38rem; margin: 2rem auto; padding: 2rem; border: 1px solid #d9dbe1; border-radius: 1rem; background: #fff; box-shadow: 0 .5rem 1.5rem rgba(35, 32, 48, .07); gap: 1rem; }
 .workspace-settings-preview h2, .workspace-settings-preview p { margin: 0; }
 .inspector-demo { display: grid; min-height: 36rem; place-items: center; gap: 1rem; }
-.permission-request-demo { position: relative; width: 100%; max-width: 70rem; min-height: 32rem; margin: auto; }
+.permission-request-demo { position: relative; width: 100%; max-width: 70rem; min-height: 40rem; margin: auto; }
 .permission-request-demo > .permission-request-popup { top: 0; right: 0; }
 .permission-request-demo > .permission-request-card { width: min(44rem, 100%); margin: auto; }
 .demo-detail__footer { display: flex; width: 100%; max-width: 70rem; min-height: 2.5rem; margin: auto auto 0 0; padding-top: 1.5rem; align-items: flex-end; }

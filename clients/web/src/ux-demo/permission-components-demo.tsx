@@ -2,7 +2,7 @@ import { signal } from 'kerfjs';
 
 import { NotificationCenter } from '../components/notification-center';
 import { PermissionRequestCard, type PermissionRequestCardState,PermissionRequestPopup } from '../components/permission-request-card';
-import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
+import { formatPermissionCountdown, type PermissionHistoryItem, type PermissionItem } from '../permission-notifications';
 import { syncSettingsControls } from './settings-controls';
 
 const pending: PermissionItem = {
@@ -28,6 +28,31 @@ export const permissionRequestSettings = {
   alwaysSupported: signal(true),
   explanation: signal(true),
 };
+export const permissionDemoRemainingMs = signal(13_000);
+
+const isResolvedVariant = (variant: PermissionDemoVariant): variant is 'allowed' | 'denied' | 'external' =>
+  variant === 'allowed' || variant === 'denied' || variant === 'external';
+
+/** Advance the catalog's real countdown without coupling component rendering to a clock. */
+export function advancePermissionRequestDemoCountdown(stepMs = 1_000): void {
+  if (permissionRequestSettings.automation.value === 'none' || isResolvedVariant(permissionRequestSettings.variant.value)) return;
+  permissionDemoRemainingMs.value = permissionDemoRemainingMs.value === 0
+    ? 13_000
+    : Math.max(0, permissionDemoRemainingMs.value - stepMs);
+}
+
+/** Start the demo-only clock. It updates locally and never performs network polling. */
+export function startPermissionRequestDemoCountdown(isVisible: () => boolean): number {
+  return window.setInterval(() => {
+    if (isVisible()) advancePermissionRequestDemoCountdown();
+  }, 1_000);
+}
+
+export function stopPermissionRequestDemoAutomation(root?: ParentNode): void {
+  permissionRequestSettings.automation.value = 'none';
+  permissionDemoRemainingMs.value = 13_000;
+  if (root) syncSettingsControls(root, 'permission-request', { values: { automation: 'none' } });
+}
 
 function demoItem(): PermissionItem {
   const request = permissionRequestSettings.request.value;
@@ -57,6 +82,7 @@ export function resetPermissionRequestDemo(root?: ParentNode): void {
   permissionRequestSettings.automation.value = 'allow';
   permissionRequestSettings.alwaysSupported.value = true;
   permissionRequestSettings.explanation.value = true;
+  permissionDemoRemainingMs.value = 13_000;
   if (root) syncSettingsControls(root, 'permission-request', {
     values: {
       presentation: permissionRequestSettings.presentation.value,
@@ -74,13 +100,13 @@ export function resetPermissionRequestDemo(root?: ParentNode): void {
 export function PermissionRequestDemo() {
   const item = demoItem();
   const variant = permissionRequestSettings.variant.value;
-  const resolved = variant === 'allowed' || variant === 'denied' || variant === 'external';
+  const resolved = isResolvedVariant(variant);
   const displayItem = resolved ? demoHistory(item, variant) : item;
   const automation = permissionRequestSettings.automation.value;
   const props = {
     item: displayItem,
     state: resolved ? undefined : variant,
-    countdown: !resolved && automation !== 'none' ? '0:13' : undefined,
+    countdown: !resolved && automation !== 'none' ? formatPermissionCountdown(permissionDemoRemainingMs.value) : undefined,
     countdownAction: automation === 'deny' ? 'deny' as const : 'allow' as const,
     explanation: permissionRequestSettings.explanation.value ? 'The agent is updating the notification surface requested for this project.' : undefined,
     error: variant === 'failed' ? 'The permission response could not be delivered.' : variant === 'disconnected' ? 'The agent disconnected before this request was answered.' : undefined,

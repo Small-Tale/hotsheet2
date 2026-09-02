@@ -1,5 +1,5 @@
-.ticket-notes { display: grid; gap: .6rem; }
-.ticket-notes__list { display: grid; gap: .55rem; }
+.ticket-notes { display: grid; min-width: 0; gap: .6rem; }
+.ticket-notes__list { display: grid; min-width: 0; gap: .55rem; }
 .ticket-notes .note-card { padding: .7rem .75rem; border-radius: .6rem; }
 .ticket-notes__empty { color: #858893 !important; font-style: italic; }
 .ticket-notes__add { display: inline-flex; min-height: 2rem; width: 100%; border: 1px dashed #cdd1d9; border-radius: .5rem; color: #686c77; background: transparent; cursor: pointer; align-items: center; justify-content: center; gap: .35rem; font: inherit; font-size: .76rem; }

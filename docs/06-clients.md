@@ -32,8 +32,12 @@ editable controls and dialogs. Dragging an unselected ticket moves only it, whil
   destinations apply the corresponding status and visibly highlight during dragover.
   Right-clicking either a list or board TicketRow preserves an existing multi-selection
   (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
-  menu. Production handlers cover reader opening, metadata affordances, batch Up Next,
-  duplication, archive, and deletion; outside pointer-down and Escape dismiss it. A
+  menu. Production handlers cover reader opening, category/status/priority changes, batch
+  Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. Every bulk
+  metadata/tag/delete write is provider-capability gated and carries the freshly read opaque
+  concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
+  The complete selection remains one field-aware Undo transaction. Outside pointer-down and
+  Escape dismiss the menu. A
   single completed selection also exposes Verified and Not Working. The latter accepts
   notes and/or attachments and submits them through one provider-neutral operation that
   atomically appends the note, publishes all evidence, and returns the ticket to Not
@@ -101,6 +105,16 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Settings and persisted to `hotsheet-settings.local.json`; commands always execute
   as an exact program plus argument array. Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling.
+
+- **Project settings navigation.** Entering Settings replaces the ticket-oriented
+  project sidebar with a persistent category navigator, following the HS1 settings-tab
+  pattern. Ticket sources, Commands, Permissions, and Column view each render as a
+  separate workspace so unrelated controls do not become one long settings page.
+
+- **Persistent shell splitters.** The project sidebar and ticket inspector are
+  independently resizable by pointer or keyboard. Dragging updates only splitter
+  geometry until release, then persists the bounded width locally so a reload restores
+  the layout without creating broad render churn.
 
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
@@ -274,9 +288,11 @@ Ignore is client-only and hides the popup without answering. When the server adv
 durable Always Allow support, actions are Ignore, Deny, Always Allow, and Allow Once;
 otherwise the final action is simply Allow. Per-project localStorage settings can turn
 on auto-Allow or auto-Deny after 15 seconds or 1/2/5/15/60 minutes. The timer accumulates
-only while that request's popup is visibly presented, pauses when hidden or ignored, and
-can be cancelled for one request. Automatic decisions use the same authenticated route
-as clicks and are distinguished in client history.
+only while that request's popup is visibly presented, updates once per second, pauses when
+hidden or ignored, and can be stopped for one request with an explicit “Stop auto-allow”
+or “Stop auto-deny” action. Stopping automation leaves the request open for a manual
+decision. Automatic decisions use the same authenticated route as clicks and are
+distinguished in client history.
 
 The long tail of HS1 UI (custom views/query builder, terminal dashboard, stats,
 Announcer, telemetry dashboards, print) is **deferred**, each its own ticket after

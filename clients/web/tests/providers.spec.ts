@@ -50,7 +50,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(attachmentDeleteMatch&&attachmentDeleteMatch[1]!=='01'&&request.method()==='DELETE'){const [,id,attachmentId]=attachmentDeleteMatch,next=(evidenceByTicket.get(id)??[]).filter(item=>item.id!==attachmentId);evidenceByTicket.set(id,next);const ticket=rows.find(item=>item.id===id)!;return route.fulfill({json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:next}})}
     const notWorkingMatch=path.match(/\/providers\/[^/]+\/tickets\/([^/]+)\/not-working$/);
     if(notWorkingMatch&&request.method()==='POST'){const id=notWorkingMatch[1],raw=request.postData()??'',attachments=raw.includes('filename=')?[{id:'NW1',filename:'proof ünicode.png',created_at:'2026-08-30T01:10:00Z'}]:[];evidenceByTicket.set(id,attachments);rows=rows.map(item=>item.id===id?{...item,status:'not_started',up_next:true}:item);patches.push({operation:'not-working',status:'not_started',up_next:true,raw});const changed=rows.find(item=>item.id===id)!;return route.fulfill({json:{store:'git-local',...changed,details:'',blocked_reason:null,notes:[],attachments}})}
-    if(path.includes('/tickets/')&&request.method()==='GET'){const id=path.split('/').pop(),ticket=rows.find(item=>item.id===id);if(ticket)return route.fulfill({json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id!)??[]}})}
+    if(path.includes('/tickets/')&&request.method()==='GET'){const id=path.split('/').pop(),ticket=rows.find(item=>item.id===id);if(ticket)return route.fulfill({json:{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id!)??[],concurrency_token:`token-${id}`}})}
     if(path.endsWith('/tickets/01/attachments')&&request.method()==='POST'){const filename=request.headers()['x-hotsheet-filename']??'attachment';selectedFull={...selectedFull,attachments:[...selectedFull.attachments,{id:`A${selectedFull.attachments.length+1}`,filename,created_at:'2026-08-30T01:10:00Z'}]};return route.fulfill({status:201,json:{store:'git-local',...selectedFull}})}
     if(path.includes('/tickets/01/attachments/')&&request.method()==='GET')return route.fulfill({body:'attachment bytes',headers:{'content-type':'application/octet-stream','x-hotsheet-filename':'proof.png'}});
     if(path.includes('/tickets/01/attachments/')&&request.method()==='DELETE'){const attachmentId=path.split('/').pop();selectedFull={...selectedFull,attachments:selectedFull.attachments.filter(item=>item.id!==attachmentId)};return route.fulfill({json:{store:'git-local',...selectedFull}})}
@@ -91,6 +91,21 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
 });
 
+test('resizes and persists both production shell sidebars',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const sidebar=page.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]'),inspector=page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');
+  const sidebarHandle=sidebar.getByRole('separator',{name:'Resize Project sidebar'}),inspectorHandle=inspector.getByRole('separator',{name:'Resize Ticket inspector'});
+  const initialSidebar=await sidebar.evaluate(node=>node.getBoundingClientRect().width),initialInspector=await inspector.evaluate(node=>node.getBoundingClientRect().width);
+  const sidebarBox=(await sidebarHandle.boundingBox())!,dragPoint={x:sidebarBox.x+sidebarBox.width/2,y:sidebarBox.y+300};await expect.poll(()=>page.evaluate(point=>(document.elementFromPoint(point.x,point.y) as HTMLElement|null)?.closest<HTMLElement>('[data-action]')?.dataset.action,dragPoint)).toBe('resize-region');await page.mouse.move(dragPoint.x,dragPoint.y);await page.mouse.down();await page.mouse.move(dragPoint.x+32,dragPoint.y);await page.mouse.up();
+  await expect.poll(()=>sidebar.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialSidebar+32);
+  await inspectorHandle.press('ArrowLeft');
+  await expect.poll(()=>inspector.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialInspector+16);
+  await page.screenshot({path:'/private/tmp/hs2-qgg6pf-resizable-sidebars.png',fullPage:true});
+  await page.reload();
+  await expect.poll(()=>sidebar.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialSidebar+32);
+  await expect.poll(()=>inspector.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialInspector+16);
+});
+
 interface RenderMetricsSnapshot { passes:number;mutations:number }
 type InstrumentedWindow=typeof window&{__hotsheetRenderMetrics?:{reset():void;snapshot():RenderMetricsSnapshot}};
 const resetRenderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>{(window as InstrumentedWindow).__hotsheetRenderMetrics?.reset()});
@@ -110,7 +125,16 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await command.click();await expect(page.getByRole('button',{name:'Running Run checks'})).toBeVisible();
   await page.getByRole('button',{name:'Running Run checks'}).click();const stop=page.locator('[data-component="command-cancellation-dialog"]');await expect(stop).toBeVisible();await stop.getByRole('button',{name:'Stop command'}).click();await expect(page.getByRole('button',{name:'Run checks'})).toHaveAttribute('title',/Last run: cancelled/);
   await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerdown');await page.waitForTimeout(600);await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerup');const history=page.locator('[data-component="command-run-dialog"]');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-wide.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:390,height:844});const hiddenNarrowCommand=page.locator('[data-action="run-command"]');await hiddenNarrowCommand.dispatchEvent('pointerdown');await page.waitForTimeout(600);await hiddenNarrowCommand.dispatchEvent('pointerup');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-narrow.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:1280,height:720});
-  await page.getByLabel('Settings view').click();const editor=page.locator('[name="command-settings"]');await editor.fill('[{"id":"review","title":"Review","program":"/usr/bin/true","args":[],"group":"AI"}]');await page.getByRole('button',{name:'Save commands'}).click();await expect(page.getByRole('status')).toContainText('Saved locally.');await expect(page.getByRole('button',{name:'Review'})).toBeVisible();
+  await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();const editor=page.locator('[name="command-settings"]');await editor.fill('[{"id":"review","title":"Review","program":"/usr/bin/true","args":[],"group":"AI"}]');await page.getByRole('button',{name:'Save commands'}).click();await expect(page.getByRole('status')).toContainText('Saved locally.');await page.getByLabel('List view').click();await expect(page.getByRole('button',{name:'Review'})).toBeVisible();
+});
+
+test('switches settings categories from the project sidebar',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByLabel('Settings view').click();const navigation=page.getByRole('complementary',{name:'Settings categories'});await expect(navigation).toBeVisible();await expect(page.getByRole('heading',{name:'Ticket sources'})).toBeVisible();await expect(page.locator('[data-component="project-sidebar"]')).toHaveCount(0);
+  await navigation.getByRole('button',{name:'Commands',exact:true}).click();await expect(page.getByRole('heading',{name:'Commands'})).toBeVisible();await expect(page.locator('[name="command-settings"]')).toBeVisible();await expect(navigation.getByRole('button',{name:'Commands',exact:true})).toHaveAttribute('aria-current','page');
+  await navigation.getByRole('button',{name:'Permissions'}).click();await expect(page.getByRole('heading',{name:'Permissions'})).toBeVisible();await expect(page.locator('[name="permission-automation-action"]')).toBeVisible();await expect(page.locator('[name="command-settings"]')).toHaveCount(0);
+  await navigation.getByRole('button',{name:'Column view'}).click();await expect(page.getByRole('heading',{name:'Column view'})).toBeVisible();await expect(page.getByText('Hide Verified column')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-wsmx7c-settings-sidebar-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(page.getByRole('heading',{name:'Column view'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-wsmx7c-settings-sidebar-narrow.png',fullPage:true});
 });
 
 test('renders exactly once when the long poll announces a permission request',async({page})=>{
@@ -229,7 +253,7 @@ test('moves tickets to Backlog and Archive from every shipped status menu',async
 test('projects Up Next immediately and reconciles without a full project refresh',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const row=page.locator('[data-component="ticket-list-row"]',{hasText:'Not started ticket'});const requests:string[]=[];page.on('request',request=>{requests.push(`${request.method()} ${new URL(request.url()).pathname}`)});
-  await page.route('**/tickets/05',async route=>{if(route.request().method()!=='PATCH')return route.continue();await new Promise(resolve=>setTimeout(resolve,250));const body=route.request().postDataJSON();return route.fulfill({json:{store:'git-local',...notStartedRow,...body,details:'',notes:[],attachments:[]}})});
+  await page.route('**/tickets/05',async route=>{if(route.request().method()!=='PATCH')return route.fallback();await new Promise(resolve=>setTimeout(resolve,250));const body=route.request().postDataJSON();return route.fulfill({json:{store:'git-local',...notStartedRow,...body,details:'',notes:[],attachments:[]}})});
   await page.evaluate(()=>{document.addEventListener('click',()=>{const started=performance.now();requestAnimationFrame(()=>{(window as typeof window&{mutationRenderMs?:number}).mutationRenderMs=performance.now()-started})},{once:true,capture:true})});
   await row.getByRole('button',{name:'Add to Up Next'}).click();
   await expect(row.getByRole('button',{name:'Remove from Up Next'})).toBeVisible();await expect.poll(()=>page.evaluate(()=>(window as typeof window&{mutationRenderMs?:number}).mutationRenderMs)).toBeLessThan(100);
@@ -369,6 +393,7 @@ test('derives board columns from the selected view and merges Verified by projec
   await expect(board.locator('[data-column-id="verified"]')).toContainText('Verified ticket');
 
   await page.getByLabel('Settings view').click();
+  await page.getByRole('button',{name:'Column view'}).click();
   await page.getByLabel('Hide Verified column').check();
   await expect.poll(()=>page.evaluate(()=>localStorage.getItem('hotsheet.project.demo-checkout.hide-verified-column'))).toBe('true');
   await page.getByLabel('Columns view').click();
@@ -377,6 +402,7 @@ test('derives board columns from the selected view and merges Verified by projec
   await expect(board.locator('[data-column-id="completed"]')).toContainText('Verified ticket');
 
   await page.getByLabel('Settings view').click();
+  await page.getByRole('button',{name:'Column view'}).click();
   await page.getByLabel('Hide Verified column').uncheck();
   await page.getByLabel('Columns view').click();
   await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Not Started','Started','Completed','Verified']);
@@ -433,8 +459,17 @@ test('ships TicketRow context-menu behavior through real list and board composit
   const choose=async(field:'category'|'priority'|'status',value:string)=>{await first.click({button:'right'});await menu.locator(`wa-dropdown-item:not([slot="submenu"])`,{hasText:`Change ${field}`}).hover();const option=menu.locator(`[data-context-field="${field}"][data-context-value="${value}"]`);await expect(option).toBeVisible();if(field==='category'){await page.waitForTimeout(200);await page.screenshot({path:'/private/tmp/hotsheet-real-context-submenu.png'})}await option.click();await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(2);await expect.poll(()=>patches.filter(patch=>patch[field]===value).length).toBe(2)};
   // "Open ticket" is hidden while multiple tickets are selected (HS2-XRENF2), so collapse to a
   // single selection before opening the reader from the menu.
-  await choose('category','bug');await choose('priority','low');await choose('status','verified');await first.click();await first.click({button:'right'});await menu.getByText('Open ticket').click();await expect(page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/})).toBeVisible();await page.getByRole('button',{name:'Close ticket reader'}).click();
+  await choose('category','bug');await choose('priority','low');await choose('status','verified');
+  expect(patches.filter(patch=>patch.category==='bug'||patch.priority==='normal'||patch.status==='verified').every(patch=>typeof patch.expected_token==='string')).toBe(true);
+  await first.click();await first.click({button:'right'});await menu.getByText('Open ticket').click();await expect(page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/})).toBeVisible();await page.getByRole('button',{name:'Close ticket reader'}).click();
   await page.getByLabel('Columns view').click();const boardRow=page.locator('[data-column-id="verified"] [data-ticket-slug="HS2-DEMO01"]');await boardRow.click({button:'right'});await expect(menu).toBeVisible();await page.screenshot({path:'/private/tmp/hotsheet-real-context-menu.png'});await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);
+});
+
+test('adds and removes tags and confirms deletion for a real multi-selection',async({page})=>{
+  const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const first=page.locator('[data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-ticket-slug="HS2-START02"]'),menu=page.getByRole('menu',{name:'Ticket actions'});const selectBoth=async()=>{await first.click();await second.click({modifiers:['Meta']});await expect(page.locator('[data-action="select-ticket-row"][data-selected="true"]')).toHaveCount(2)};
+  await selectBoth();await first.click({button:'right'});await menu.locator('[data-context-action="Add tag"]').click();let dialog=page.locator('[data-component="bulk-tag-dialog"]');await expect(dialog).toContainText('Add tag — 2 selected');await page.getByRole('textbox',{name:'Tag to add *'}).fill('regression');await dialog.getByRole('button',{name:'Add tag'}).click();await expect.poll(()=>patches.filter(patch=>Array.isArray(patch.tags)&&(patch.tags as string[]).includes('regression')).length).toBe(2);
+  await selectBoth();await first.click({button:'right'});await menu.locator('[data-context-action="Remove tag"]').click();dialog=page.locator('[data-component="bulk-tag-dialog"]');await expect(dialog).toContainText('Remove tag — 2 selected');await dialog.getByRole('button',{name:'client'}).click();await dialog.getByRole('button',{name:'Remove tag'}).click();await expect.poll(()=>patches.filter(patch=>Array.isArray(patch.tags)&&!(patch.tags as string[]).includes('client')).length).toBe(2);
+  await selectBoth();await first.click({button:'right'});await menu.locator('[data-context-action="Delete ticket"]').click();const deletion=page.locator('[data-component="bulk-delete-dialog"]');await expect(deletion).toContainText('Delete 2 tickets?');await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-x7vkyj-bulk-delete-wide.png'});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-x7vkyj-bulk-delete-narrow.png',fullPage:true});await deletion.getByRole('button',{name:'Delete 2 tickets'}).click();await expect.poll(()=>patches.filter(patch=>patch.status==='deleted').length).toBe(2);await expect(first).toHaveCount(0);expect(patches.filter(patch=>Array.isArray(patch.tags)||patch.status==='deleted').every(patch=>typeof patch.expected_token==='string')).toBe(true);
 });
 
 test('undoes, redoes, copies, pastes, and drags ticket mutations through the real shell',async({page})=>{
@@ -482,14 +517,14 @@ test('counts permission automation only while its popup is visible',async({page}
   await page.route('**/permissions',route=>route.fulfill({json:pending}));
   await page.route('**/permissions/8',route=>{answers+=1;pending=[];return route.fulfill({json:{connection:'codex-session',decision:'allow',persisted:false}})});
   await page.goto('/');await page.evaluate(()=>{localStorage.setItem('hotsheet.project.demo-checkout.permission-automation',JSON.stringify({action:'allow',delayMs:15_000}))});await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  const popup=page.locator('[data-component="permission-request-popup"]');await expect(popup).toContainText('Automatically allowed in');await page.clock.fastForward(10_000);await expect(popup).toContainText('0:05');await popup.getByRole('button',{name:'Ignore'}).click();await expect(popup).toHaveCount(0);await page.clock.fastForward(30_000);expect(answers).toBe(0);await page.getByRole('button',{name:/Notifications view/}).click();await page.locator('[data-component="notification-center"]').getByRole('button',{name:'Allow Once'}).click();await expect.poll(()=>answers).toBe(1);
+  const popup=page.locator('[data-component="permission-request-popup"]');await expect(popup).toContainText('Auto-allow in');await page.clock.fastForward(10_000);await expect(popup).toContainText('0:05');await popup.getByRole('button',{name:'Stop auto-allow'}).click();await expect(popup.locator('.permission-request-card__countdown')).toHaveCount(0);await page.clock.fastForward(30_000);expect(answers).toBe(0);await popup.getByRole('button',{name:'Ignore'}).click();await expect(popup).toHaveCount(0);await page.getByRole('button',{name:/Notifications view/}).click();await page.locator('[data-component="notification-center"]').getByRole('button',{name:'Allow Once'}).click();await expect.poll(()=>answers).toBe(1);
 });
 
 test('persists and restores per-project permission automation settings',async({page})=>{
-  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Permissions'}).click();
   const action=page.locator('wa-select[name="permission-automation-action"]'),delay=page.locator('wa-select[name="permission-automation-delay"]');await expect(action).toHaveJSProperty('value','off');await expect(delay).toHaveJSProperty('disabled',true);
   await action.evaluate((node:HTMLElement&{value:string})=>{node.value='deny';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(delay).toHaveJSProperty('disabled',false);await delay.evaluate((node:HTMLElement&{value:string})=>{node.value='120000';node.dispatchEvent(new Event('change',{bubbles:true}))});
-  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'))).toBe('{"action":"deny","delayMs":120000}');await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await expect(action).toHaveJSProperty('value','deny');await expect(delay).toHaveJSProperty('value','120000');
+  await expect.poll(()=>page.evaluate(()=>localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'))).toBe('{"action":"deny","delayMs":120000}');await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Permissions'}).click();await expect(action).toHaveJSProperty('value','deny');await expect(delay).toHaveJSProperty('value','120000');
 });
 
 test('live project visual review',async({page})=>{

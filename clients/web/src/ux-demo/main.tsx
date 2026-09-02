@@ -121,10 +121,13 @@ import {
 } from './not-working-dialog-demo';
 import {
   NotificationCenterDemo,
+  permissionDemoRemainingMs,
   PermissionRequestDemo,
   PermissionRequestSettings,
   permissionRequestSettings,
   resetPermissionRequestDemo,
+  startPermissionRequestDemoCountdown,
+  stopPermissionRequestDemoAutomation,
 } from './permission-components-demo';
 import {
   clampProjectSidebarHeight,
@@ -600,6 +603,7 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
+startPermissionRequestDemoCountdown(() => selectedId.value === 'permission-request');
 if (import.meta.env.DEV)
   void fetch('/__hotsheet/demo-modified')
     .then((response) => response.json())
@@ -965,6 +969,7 @@ delegate(
         break;
       case 'automation':
         permissionRequestSettings.automation.value = control.value as typeof permissionRequestSettings.automation.value;
+        permissionDemoRemainingMs.value = 13_000;
         break;
       case 'always-supported':
         permissionRequestSettings.alwaysSupported.value = control.checked;
@@ -975,6 +980,10 @@ delegate(
     }
   },
 );
+delegate(root, 'click', '[data-action="cancel-permission-automation"]', (event) => {
+  event.stopImmediatePropagation();
+  stopPermissionRequestDemoAutomation(root);
+});
 delegate(
   root,
   'input',

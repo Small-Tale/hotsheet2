@@ -2465,6 +2465,16 @@ fn do_update(
     req: UpdateReq,
 ) -> Result<ApiTicket, ApiError> {
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    if req
+        .expected_token
+        .as_deref()
+        .is_some_and(|token| token != ticket.updated_at.as_str())
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("ticket '{}' changed since it was read", ticket.slug),
+        ));
+    }
     let edit_note_id = req
         .note_id
         .as_deref()

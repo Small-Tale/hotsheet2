@@ -1,0 +1,4 @@
+.bulk-ticket-dialog__actions { display: flex; justify-content: flex-end; gap: var(--wa-space-s); }
+.bulk-ticket-dialog__choices { display: flex; flex-wrap: wrap; gap: var(--wa-space-xs); margin-block: var(--wa-space-m); }
+.bulk-ticket-dialog__choices button { cursor: pointer; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: 999px; background: var(--wa-color-surface-default); padding: .25rem .65rem; color: inherit; }
+.bulk-ticket-dialog__choices button:hover { background: var(--wa-color-neutral-fill-quiet); }

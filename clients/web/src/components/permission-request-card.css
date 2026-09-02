@@ -18,14 +18,16 @@
 .permission-request-card button:hover { background: #f1f4f8; }
 .permission-request-card button:focus-visible { outline: 2px solid var(--wa-color-text-link); outline-offset: 2px; }
 .permission-request-card button:disabled { opacity: .55; cursor: not-allowed; }
-.permission-request-card .permission-request-card__quiet-action, .permission-request-card__countdown button { padding: 0; border: 0; color: #596170; background: transparent; }
-.permission-request-card .permission-request-card__quiet-action:hover, .permission-request-card__countdown button:hover { color: #111827; background: transparent; text-decoration: underline; }
+.permission-request-card .permission-request-card__quiet-action { padding: 0; border: 0; color: #596170; background: transparent; }
+.permission-request-card .permission-request-card__quiet-action:hover { color: #111827; background: transparent; text-decoration: underline; }
 .permission-request-card .permission-request-card__primary { border-color: var(--wa-color-brand-border-loud); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); }
 .permission-request-card .permission-request-card__primary:hover { background: var(--wa-color-brand-on-quiet); }
 .permission-request-card__decision-area { display: flex; min-width: 0; flex: 1; align-items: end; justify-content: flex-end; gap: .8rem; }
 .permission-request-card__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
-.permission-request-card__countdown { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .3rem; color: #767d89; font-size: .7rem; }
-.permission-request-card__countdown button { min-height: auto; margin-left: .2rem; font-size: inherit; }
+.permission-request-card__countdown { display: flex; min-width: 0; padding: .35rem; border: 1px solid var(--wa-color-surface-border); border-radius: .7rem; align-items: center; gap: .55rem; color: #596170; background: #f8f9fb; font-size: .7rem; }
+.permission-request-card__timer { display: inline-flex; align-items: center; gap: .28rem; white-space: nowrap; }
+.permission-request-card__timer svg { width: .9rem; height: .9rem; color: #6b7280; }
+.permission-request-card .permission-request-card__stop-automation { min-height: 1.65rem; padding: 0 .55rem; border-color: #b8bec9; border-radius: .45rem; color: #434955; background: var(--wa-color-surface-default); font-size: inherit; white-space: nowrap; }
 .permission-request-card--list[data-state="allow"], .permission-request-card--list[data-state="deny"], .permission-request-card--list[data-state="external"] { box-shadow: none; }
 .permission-request-card--list[data-state="allow"] { --permission-accent: #168a52; }
 .permission-request-popup { position: absolute; z-index: 80; top: 3.5rem; right: 1rem; width: min(44rem, calc(100% - 2rem)); }
@@ -38,6 +40,6 @@
   .permission-request-card .permission-request-card__quiet-action { width: fit-content; align-self: flex-start; }
   .permission-request-card__buttons { display: grid; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .permission-request-card__buttons > button:last-child:nth-child(3) { grid-column: 1 / -1; }
-  .permission-request-card__countdown { justify-content: flex-start; }
+  .permission-request-card__countdown { width: fit-content; max-width: 100%; justify-content: flex-start; }
 }
 @media (max-width: 42rem) { .permission-request-popup { right: .55rem; width: calc(100% - 1.1rem); } }

@@ -73,6 +73,18 @@ describe('TicketInspector', () => {
     expect(css).toContain('.ticket-inspector__attachment-actions { display: inline-flex; margin-left: auto; flex: none;');
   });
 
+  it('contains metadata and ticket content within narrow inspector bounds', () => {
+    const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
+    const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    const noteCss = readFileSync(resolve(import.meta.dirname, 'note-card.css'), 'utf8');
+    expect(inspectorCss).toMatch(/\.ticket-inspector \{[^}]*min-width: 0;[^}]*max-width: 100%/);
+    expect(inspectorCss).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*min-width: 0;[^}]*overflow-x: hidden/);
+    expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(panelCss).toContain('.ticket-inspector__metadata > .select { width: 100%; min-width: 0; }');
+    expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
+  });
+
   it('hides the Up Next action for ineligible lifecycle states', () => {
     expect(String(TicketInspector({ ...base }))).toContain('data-action="toggle-inspector-up-next"');
     expect(String(TicketInspector({ ...base, status: 'completed' }))).not.toContain('data-action="toggle-inspector-up-next"');

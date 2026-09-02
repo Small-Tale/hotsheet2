@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { applyWorkspaceSortDirection, nextWorkspaceSort, WorkspaceHeader } from './workspace-header';
@@ -43,5 +46,16 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('data-controls-visible="false"');
     expect(markup).not.toContain('workspace-header__actions');
     expect(markup).not.toContain('Search tickets');
+  });
+
+  it('progressively removes lower-priority actions when its owning toolbar narrows', () => {
+    const toolbarCss = readFileSync(resolve(import.meta.dirname, 'toolbar.css'), 'utf8');
+    const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
+    expect(toolbarCss).toContain('container: toolbar / inline-size');
+    expect(headerCss).toContain('@container toolbar (max-width: 30rem) { .workspace-header__actions > .workspace-header__utility-group { display: none; } }');
+    expect(headerCss).toContain('@container toolbar (max-width: 26rem) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }');
+    expect(headerCss).toContain('@container toolbar (max-width: 14rem) { .workspace-header__actions > .workspace-header__search-group { display: none; } }');
+    expect(headerCss).toContain('@container toolbar (max-width: 11rem) { .workspace-header__actions > .view-mode-switcher { display: none; } }');
+    expect(headerCss).not.toContain('overflow: hidden; } .workspace-header__actions');
   });
 });

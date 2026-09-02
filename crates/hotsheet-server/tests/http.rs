@@ -775,17 +775,39 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     )
     .await;
     assert_eq!(removed["attachments"].as_array().unwrap().len(), 0);
+    let current = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/combo/tickets/{slug}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let token = current["concurrency_token"].as_str().unwrap();
     let updated = body_json(
-        app.oneshot(authed(
-            "PATCH",
-            &format!("/checkouts/combo/tickets/{slug}"),
-            Some(r#"{"title":"Updated"}"#),
-        ))
-        .await
-        .unwrap(),
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/combo/tickets/{slug}"),
+                Some(&serde_json::json!({"title":"Updated","expected_token":token}).to_string()),
+            ))
+            .await
+            .unwrap(),
     )
     .await;
     assert_eq!(updated["title"], "Updated");
+    let stale = app
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/combo/tickets/{slug}"),
+            Some(&serde_json::json!({"title":"Lost update","expected_token":token}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
 }
 
 #[tokio::test]
