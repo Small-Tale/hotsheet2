@@ -61,6 +61,8 @@ The **built demo** composes the current production sidebar, tabs, connection ban
 header, ticket workspace, and inspector into a desktop shell. The supported AppShell
 floor is **1024 × 600 CSS pixels**; native hosts must enforce the
 same minimum window content size rather than asking the shell to compress below it.
+The production browser shell inherits that floor from the shared AppShell stylesheet;
+screen-level CSS must not replace it with a smaller minimum.
 Sidebar and inspector splitters are keyboard/pointer adjustable, remain present until
 the user explicitly collapses them, and never auto-hide at viewport breakpoints. Sidebar
 regions never resize below 250px. Production pointer drags update splitter geometry once per animation frame and

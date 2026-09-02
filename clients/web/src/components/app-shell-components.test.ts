@@ -13,8 +13,10 @@ import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from './resi
 describe('application shell components', () => {
   it('defines the supported application floor as 1024 by 600 CSS pixels', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    const productionCss=readFileSync(new URL('../style.css',import.meta.url),'utf8');
     expect(css).toMatch(/\.app-shell \{[^}]*min-width: 64rem/);
     expect(css).toMatch(/\.app-shell \{[^}]*min-height: 37\.5rem/);
+    expect(productionCss).not.toMatch(/\.app-shell\[data-component="app-shell"\] \{[^}]*(?:min-width|min-height):/);
     expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.resizable-region[^{}]*display: none/);
   });
   it('draws one continuous focus outline around the ticket work area', () => {
