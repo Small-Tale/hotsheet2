@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from '../dev-server';
+import { createFrameBatcher } from './frame-batcher';
 import { clampRectToViewport, intersectRectWithViewport, normalizeRect, resizeRect, translateAnchoredRect } from './geometry';
 import { createCliDevReviewSubmitter, validateDevReviewSubmission } from './server';
 
@@ -13,6 +14,24 @@ const attachment = { id: 'file-1', filename: '../notes.txt', dataUrl: `data:text
 const submission = { notes: 'Button overlaps heading', captures: [capture], attachments: [attachment], pageUrl: 'http://localhost/ux-demo', viewport: { width: 1200, height: 800 } };
 
 describe('dev review tool', () => {
+  it('coalesces bursty pointer geometry work into one animation-frame update', () => {
+    let callback: FrameRequestCallback | undefined;
+    const host = {
+      requestAnimationFrame: vi.fn((next: FrameRequestCallback) => { callback = next; return 7; }),
+      cancelAnimationFrame: vi.fn(),
+    };
+    const update = vi.fn();
+    const batch = createFrameBatcher(host, update);
+    batch.schedule(); batch.schedule(); batch.schedule();
+    expect(host.requestAnimationFrame).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
+    callback?.(16);
+    expect(update).toHaveBeenCalledTimes(1);
+    batch.schedule(); batch.flush();
+    expect(host.cancelAnimationFrame).toHaveBeenCalledWith(7);
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
   it('normalizes, resizes, and clamps capture geometry', () => {
     expect(normalizeRect('a', 80, 70, 20, 10)).toEqual({ id: 'a', x: 20, y: 10, width: 60, height: 60 });
     expect(resizeRect({ id: 'a', x: 20, y: 10, width: 60, height: 60 }, 'se', 100, 90)).toEqual({ id: 'a', x: 20, y: 10, width: 80, height: 80 });

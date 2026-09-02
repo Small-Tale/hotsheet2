@@ -307,6 +307,9 @@ fn drive_one_ticket(
                 hotsheet_ticketing::ActivityKind::Permission,
                 serde_json::json!({ "name": req.tool, "text": req.summary }),
             ),
+            hotsheet_aitools::TurnEvent::NativeActivity { source, payload } => {
+                emit_native_activity(ctx, store, id, tool, &conn, source, payload)
+            }
             _ => {}
         },
     );
@@ -383,6 +386,39 @@ fn emit_coarse_activity(
     event.ticket = Some(ticket.to_string());
     event.session = Some(session.to_string());
     sink(store, event);
+}
+
+/// Map one transport-captured native payload through its declared activity adapter, then
+/// add the live drive's authoritative project/ticket/session attribution before sending it
+/// to the same persistence+broadcast sink as coarse events. Unknown sources/items degrade
+/// to no event; they never fail the driven turn.
+fn emit_native_activity(
+    ctx: &LiveDriveCtx,
+    store: &FsStore,
+    ticket: &hotsheet_model::Ulid,
+    tool: &str,
+    session: &str,
+    source: &str,
+    payload: &serde_json::Value,
+) {
+    let Some(sink) = &ctx.activity_sink else {
+        return;
+    };
+    let id = hotsheet_model::Ulid::new().to_string();
+    let ts = crate::now().as_str().to_string();
+    let mut event = match source {
+        "codex-transcript" => hotsheet_ticketing::activity::codex_activity(payload, &id, &ts),
+        "claude-hooks" => hotsheet_ticketing::activity::claude_activity(payload, &id, &ts),
+        _ => None,
+    };
+    let Some(event) = event.as_mut() else {
+        return;
+    };
+    event.tool = tool.to_string();
+    event.project = Some(crate::multistore::store_url_id(store));
+    event.ticket = Some(ticket.to_string());
+    event.session = Some(session.to_string());
+    sink(store, event.clone());
 }
 
 /// Keeps the driving-loop thread alive; **dropping it stops the loop** after its current
@@ -697,5 +733,74 @@ mod tests {
         assert_eq!(events[0].session.as_deref(), Some("srv-test"));
         assert_eq!(events[0].kind, hotsheet_ticketing::ActivityKind::Permission);
         assert_eq!(events[0].detail["name"], "shell");
+    }
+
+    #[test]
+    fn native_activity_maps_and_reuses_the_attributed_live_sink() {
+        let dir = tempfile::tempdir().unwrap();
+        let store =
+            FsStore::init(dir.path(), &hotsheet_ticketing::StoreMetadata::new("HS")).unwrap();
+        let captured = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink_events = captured.clone();
+        let ctx = LiveDriveCtx {
+            activity_sink: Some(std::sync::Arc::new(move |_store, event| {
+                sink_events.lock().unwrap().push(event);
+            })),
+            ..Default::default()
+        };
+        let ticket = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+
+        emit_native_activity(
+            &ctx,
+            &store,
+            &ticket,
+            "codex",
+            "srv-test",
+            "codex-transcript",
+            &serde_json::json!({"type":"commandExecution","command":"cargo test"}),
+        );
+        emit_native_activity(
+            &ctx,
+            &store,
+            &ticket,
+            "claude",
+            "srv-test",
+            "claude-hooks",
+            &serde_json::json!({
+                "hook_event_name":"PreToolUse",
+                "tool_name":"Edit",
+                "tool_input":{"file_path":"src/main.rs"},
+                "session_id":"native-session"
+            }),
+        );
+        emit_native_activity(
+            &ctx,
+            &store,
+            &ticket,
+            "unknown",
+            "srv-test",
+            "unsupported-source",
+            &serde_json::json!({}),
+        );
+
+        let events = captured.lock().unwrap();
+        assert_eq!(events.len(), 2, "unknown native sources are ignored");
+        assert_eq!(events[0].tool, "codex");
+        assert_eq!(
+            events[0].project,
+            Some(crate::multistore::store_url_id(&store))
+        );
+        assert_eq!(events[0].ticket, Some(ticket.to_string()));
+        assert_eq!(events[0].session.as_deref(), Some("srv-test"));
+        assert_eq!(events[0].kind, hotsheet_ticketing::ActivityKind::Command);
+        assert_eq!(events[0].detail["command"], "cargo test");
+        assert_eq!(events[1].tool, "claude");
+        assert_eq!(events[1].kind, hotsheet_ticketing::ActivityKind::Edit);
+        assert_eq!(events[1].detail["path"], "src/main.rs");
+        assert_eq!(
+            events[1].session.as_deref(),
+            Some("srv-test"),
+            "the live connection overrides an untrusted native session id"
+        );
     }
 }

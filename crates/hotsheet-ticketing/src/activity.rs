@@ -315,22 +315,38 @@ pub fn claude_activity(hook: &Value, id: &str, ts: &str) -> Option<ActivityEvent
 }
 
 /// Map a **codex** app-server transcript item (`type` + kind-specific fields) into an activity
-/// event (`docs/15` §15.3). Lenient about the `type` string (the exact codex vocabulary should
-/// be confirmed against a live tool); an unrecognized item yields `None`.
+/// event (`docs/15` §15.3). The camelCase variants are pinned to Codex 0.152.1's generated
+/// protocol schema; legacy aliases remain lenient for older app servers. Unknown items are
+/// skipped rather than failing the turn.
 pub fn codex_activity(item: &Value, id: &str, ts: &str) -> Option<ActivityEvent> {
     let ty = item.get("type").or_else(|| item.get("item_type"));
     let ty = ty.and_then(Value::as_str)?;
     let (kind, detail) = match ty {
-        "command" | "exec" | "shell" => (
+        "command" | "exec" | "shell" | "commandExecution" => (
             ActivityKind::Command,
             serde_json::json!({ "command": item.get("command").and_then(Value::as_str).unwrap_or("") }),
         ),
-        "edit" | "patch" | "file_change" => (
+        "edit" | "patch" | "file_change" | "fileChange" => (
             ActivityKind::Edit,
-            serde_json::json!({ "path": item.get("path").and_then(Value::as_str).unwrap_or("") }),
+            serde_json::json!({ "path": item.get("path").and_then(Value::as_str).or_else(|| {
+                item.get("changes").and_then(Value::as_array)?.first()?.get("path")?.as_str()
+            }).unwrap_or("") }),
         ),
         "reasoning" | "decision" | "plan" => {
-            let text = item.get("text").and_then(Value::as_str).unwrap_or("");
+            let text = item
+                .get("text")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    item.get("summary").and_then(Value::as_array).map(|parts| {
+                        parts
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                })
+                .unwrap_or_default();
             (
                 if ty == "plan" {
                     ActivityKind::Plan
@@ -341,6 +357,20 @@ pub fn codex_activity(item: &Value, id: &str, ts: &str) -> Option<ActivityEvent>
             )
         }
         "turn_end" | "completed" => (ActivityKind::TurnEnd, Value::Null),
+        "mcpToolCall" | "dynamicToolCall" | "collabAgentToolCall" => {
+            let tool = item.get("tool").and_then(Value::as_str).unwrap_or("");
+            let server = item.get("server").and_then(Value::as_str);
+            let name = server.map_or_else(|| tool.to_string(), |server| format!("{server}.{tool}"));
+            (ActivityKind::ToolCall, serde_json::json!({ "name": name }))
+        }
+        "webSearch" => (
+            ActivityKind::ToolCall,
+            serde_json::json!({ "name": "web search", "query": item.get("query").and_then(Value::as_str).unwrap_or("") }),
+        ),
+        "imageView" => (
+            ActivityKind::ToolCall,
+            serde_json::json!({ "name": "image view", "path": item.get("path").and_then(Value::as_str).unwrap_or("") }),
+        ),
         _ => return None,
     };
     Some(ActivityEvent::new(id, ts, "codex", kind, detail))

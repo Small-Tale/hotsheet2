@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
+
 test('navigates the catalog and preserves URL-addressable selection', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
@@ -167,6 +169,17 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   expect(submitted).toMatchObject({ notes: 'The selected row spacing is inconsistent.', captures: [{ filename: expect.stringMatching(/^ux-feedback-\d+\.png$/) }], attachments: [{ filename: 'context.txt', mimeType: 'text/plain' }] });
   expect((submitted!.captures as Array<{ dataUrl: string }>)[0].dataUrl).toMatch(/^data:image\/png;base64,/);
   await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
+});
+
+test('keeps feedback rectangle input within its frame budget in the UX demo', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-row&dev-review=1');
+  const measurement = await measureFeedbackRectangle(page, { x: 460, y: 260 }, { x: 780, y: 460 });
+  await testInfo.attach('feedback-performance.json', { body: JSON.stringify(measurement, null, 2), contentType: 'application/json' });
+  expectResponsiveFeedbackRectangle(measurement);
+  await page.screenshot({ path: '/private/tmp/hs2-6ppvjc-ux-demo-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/private/tmp/hs2-6ppvjc-ux-demo-narrow.png', fullPage: true });
 });
 
 test('round-trips StatusBadge controls through reset and a post-reset edit', async ({ page }) => {
@@ -841,7 +854,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('.ticket-inspector__timeline > li').first()).toContainText('Claude started work');
   await inspector.getByRole('button', { name: 'Code Review' }).click();
   await expect(inspector.locator('[data-component="ticket-code-review"] [data-commit-sha]')).toHaveCount(2);
-  await inspector.getByRole('button', { name: 'Open 2 commit range in Glassbox' }).click();
+  await inspector.getByRole('button', { name: 'Open 2 commit bundle 92ed71a through c4a38be in Glassbox' }).click();
   await expect(page.getByText('Commit range opened in Glassbox')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-pg1hkj-code-review-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

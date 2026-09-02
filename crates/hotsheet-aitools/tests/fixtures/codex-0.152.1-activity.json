@@ -1,0 +1,73 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "item/completed",
+    "params": {
+      "threadId": "thread-redacted",
+      "turnId": "turn-redacted",
+      "item": {
+        "id": "item-command-redacted",
+        "type": "commandExecution",
+        "command": "cargo test",
+        "cwd": "/workspace/project",
+        "status": "completed",
+        "commandActions": [],
+        "aggregatedOutput": null,
+        "durationMs": 12,
+        "exitCode": 0,
+        "processId": null,
+        "source": null,
+        "scriptPath": null,
+        "pluginId": null
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "item/completed",
+    "params": {
+      "threadId": "thread-redacted",
+      "turnId": "turn-redacted",
+      "item": {
+        "id": "item-file-redacted",
+        "type": "fileChange",
+        "status": "completed",
+        "changes": [
+          {"path": "src/main.rs", "kind": "update", "diff": "diff-redacted"}
+        ]
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "item/completed",
+    "params": {
+      "threadId": "thread-redacted",
+      "turnId": "turn-redacted",
+      "item": {"id": "item-plan-redacted", "type": "plan", "text": "Run tests, then report."}
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "method": "item/completed",
+    "params": {
+      "threadId": "thread-redacted",
+      "turnId": "turn-redacted",
+      "item": {
+        "id": "item-tool-redacted",
+        "type": "mcpToolCall",
+        "server": "example",
+        "tool": "lookup",
+        "arguments": {},
+        "status": "completed",
+        "result": null,
+        "error": null,
+        "durationMs": 4,
+        "readOnlyHint": true,
+        "appContext": null,
+        "mcpAppResourceUri": null,
+        "pluginId": null
+      }
+    }
+  }
+]

@@ -10,3 +10,12 @@ tests remain ignored and credentials-gated.
 
 The OpenCode cassette pins ACP v1 initialize/session/update/prompt landmarks; its opt-in
 live test exercises the same contract against `opencode acp`.
+
+HS2-SW655F adds sanitized activity cassettes for Codex 0.152.1 and Claude Code
+2.1.258. The Codex cassette pins the generated `item/completed` schema and its
+`commandExecution`, `fileChange`, `plan`, and `mcpToolCall` item vocabulary. The Claude
+cassette pins the `PreToolUse` hook stdin contract used by the installed permission hook;
+the channel projects authoritative assistant `tool_use` blocks into that same contract.
+Paths, ids, tool inputs, output, and diffs are synthetic or redacted. Credentialed drift
+checks remain the ignored `HOTSHEET_CODEX_LIVE=1` and `HOTSHEET_CLAUDE_LIVE=1` tests;
+ordinary gates never launch a model.

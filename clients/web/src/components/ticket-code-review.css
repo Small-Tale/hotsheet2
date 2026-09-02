@@ -2,6 +2,7 @@
 .ticket-code-review__header span { color: var(--wa-color-neutral-on-quiet); font-size: .68rem; white-space: nowrap; }
 .ticket-code-review__range { display: flex; width: 100%; min-height: 2.4rem; padding: .5rem .65rem; border: 1px solid var(--wa-color-brand-border-normal); border-radius: .5rem; color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); cursor: pointer; align-items: center; gap: .45rem; font: inherit; font-size: .76rem; font-weight: 650; }
 .ticket-code-review__range span { min-width: 0; flex: 1; text-align: left; }
+.ticket-code-review__range small { display: block; margin-top: .1rem; opacity: .72; font-family: var(--wa-font-family-mono); font-size: .64rem; font-weight: 500; }
 .ticket-code-review__range svg, .ticket-code-review__commits button svg { width: .9rem; height: .9rem; flex: none; }
 .ticket-code-review__range:disabled, .ticket-code-review__commits button:disabled { opacity: .55; cursor: not-allowed; }
 .ticket-code-review__commits { display: grid; min-width: 0; margin: 0; padding: 0; list-style: none; }

@@ -79,6 +79,12 @@ pub trait AppServerTurn {
     fn wait(&mut self) -> AppServerOutcome;
     /// `turn/interrupt` the running turn.
     fn interrupt(&mut self);
+    /// Pull the next native streamed event, when this app-server exposes one. A handle
+    /// without streaming support returns `None` and the generic drive falls back to
+    /// [`wait`](Self::wait).
+    fn next_event(&mut self) -> Option<crate::drive::TurnEvent> {
+        None
+    }
     /// Token usage the turn reported on `turn/completed`, if any (`docs/14`, HS2-0WCRZY).
     /// Default `None` — a fake/non-reporting turn contributes no metrics.
     fn usage(&mut self) -> Option<crate::drive::Usage> {

@@ -162,6 +162,13 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   as corrupt files (see [19](19-format-compatibility.md)).
   an old client offers reload/update, while an old server is surfaced without an unsafe
   restart action unless both restart and quiescence capabilities are explicitly present.
+  Every compatibility warning's **View details** action opens an accessible build-details
+  dialog. It reports the running server application version, build revision, current local
+  source revision, client revision, both protocol ranges, and server start time when the
+  authenticated handshake supplied them. Missing values are labeled rather than guessed.
+  Recovery guidance distinguishes safe compatible skew, stale local source, old client,
+  old server, and unavailable metadata; it never offers automatic restart without the
+  same explicit restart plus quiescence capability gate.
   Ticket-provider connections are not stored in `hotsheet-settings.json` or
   `hotsheet-settings.local.json`: those remain shared/local preferences. Git sources are
   checkout/store links in the machine registry, while external provider connections are
@@ -185,6 +192,14 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Attachment upload endpoints accept bodies up to 100 MiB so ordinary screen recordings
   are not rejected by the framework's smaller default body limit; the larger allowance is
   route-specific and does not loosen JSON request limits.
+  New-ticket attachment evidence follows the same safety policy before a ticket exists:
+  users can drop files on the collapsed New ticket launcher or anywhere on the expanded
+  composer, inspect and remove the staged filenames, and cancel to discard the entire
+  pending set. Creation first persists the ticket and then uploads each staged file in
+  order. A create failure leaves the draft and evidence available to retry; partial upload
+  failures keep the created ticket, continue valid siblings, and direct the user to retry
+  failed files from that ticket's Attachments tab. Providers must advertise both create
+  and attachment capabilities before the composer accepts evidence.
   When the selected provider advertises attachment support, each attachment exposes
   icon actions to open, download, copy its checkout-qualified reference, or remove it;
   every icon action has an action-and-filename accessible name, matching hover title,
@@ -197,8 +212,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   The inspector includes a Code Review segment for ticket-associated code history. It
   lists each matching commit subject, abbreviated SHA, and date even when no review tool
   is configured. When the checkout has a Git `diff.tool`, each commit has an Open action
-  and each adjacent multi-commit run has a range action. Interleaved unrelated commits
-  divide ranges rather than being silently included. Loading and launch errors stay in
+  and each adjacent multi-commit run has its own bundle action with explicit oldest/newest
+  boundaries. Multiple disjoint runs therefore remain separately reviewable; interleaved
+  unrelated commits are never silently included. The inspector tab uses the Lucide
+  `message-square-code` icon while individual commit and range actions retain their
+  established icons. Loading and launch errors stay in
   the segment and do not replace ticket content or use the foreground project-loading
   indicator. All discovery, target validation, and process launch remain server-owned.
 
@@ -229,7 +247,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
 
   The default `Queue` view is the active working set and intentionally excludes both
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit
-  views with counts derived from those same predicates.
+  views with counts derived from those same predicates. The new-ticket composer is
+  available in Queue and Backlog but hidden in Archive; creation from Backlog defaults
+  the new ticket to backlog status. Column presentation always gives TicketRows a
+  rounded visible border, including the wide single-column Backlog and Archive boards.
 
   Ticket selection follows the native HS1 interaction model in both presentations:
   plain click replaces the selection, Command/Ctrl-click toggles one ticket, and

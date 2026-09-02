@@ -29,7 +29,17 @@ describe('TicketInspector', () => {
         expect(markup).toContain('data-component="ticket-notes"');
         expect(markup).toContain('data-component="markdown-preview"');
       }
+      if (tab === 'code-review') expect(markup).toContain('data-lucide="message-square-code"');
     }
+  });
+
+  it('changes only the Code Review segment icon', () => {
+    const markup = String(TicketInspector({ ...base, activeTab: 'code-review', codeReview: { difftool: 'Glassbox', truncated: false, ranges: [], commits: [{ sha: 'abcdef', short_sha: 'abcdef', subject: 'Review action', committed_at: '2026-09-02T08:00:00Z' }] } }));
+    expect(markup).toContain('data-inspector-tab="code-review"');
+    expect(markup).toContain('data-lucide="message-square-code"');
+    expect(markup).toContain('ticket-code-review__graph');
+    expect(markup).toContain('data-lucide="git-commit-horizontal"');
+    expect(markup).toContain('data-lucide="external-link"');
   });
 
   it('uses the same capability surface at reader scale with dialog close semantics', () => {

@@ -960,6 +960,9 @@ fn stream_to_stdout(ev: &hotsheet_aitools::TurnEvent) {
         TurnEvent::Usage(u) => {
             eprintln!("\n[usage] {} in / {} out", u.tokens_in, u.tokens_out)
         }
+        // Native activity is for the attributed server sink. Do not dump raw tool inputs
+        // into a CLI transcript; assistant output remains the human-facing stream.
+        TurnEvent::NativeActivity { .. } => {}
         TurnEvent::Done(_) => {}
     }
 }

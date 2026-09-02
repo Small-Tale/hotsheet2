@@ -217,6 +217,11 @@ The interface is only real if the tool it was **not** designed around fits. Chec
   `Result<TurnHandle>` whose `next_event()` streams `Output`/`PermissionAsked`/`Done`; the
   spawn/app-server drives are sync under the same signature (they return `None` from
   `next_event` and callers use `wait`). **Verified by construction (HS2-116).**
+- `TurnEvent::NativeActivity` carries an exact narratable protocol payload plus its
+  declared activity-source id. Codex emits completed app-server transcript items; Claude
+  emits tool-use payloads in its verified hook contract. Mapping and ticket/project/session
+  attribution remain host responsibilities, so the drive crate stays independent of the
+  ticket activity model.
 - **Codex** needs **`interrupt`** and a **backing service**; Claude declares neither,
   and nothing breaks — absence is the signal.
 - **ACP** needs permission-*as-a-response* (not a hook) → the `PermissionSink` adapter

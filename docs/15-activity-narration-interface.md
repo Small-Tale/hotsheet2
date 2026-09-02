@@ -1,6 +1,6 @@
 # 15. Cross-Tool Activity / Narration Interface
 
-> **Status: Core stream built (HS2-KP31ZE/HS2-4C68Y8).** A **tool-agnostic activity event stream** — the common
+> **Status: Rich native stream built (HS2-KP31ZE/HS2-4C68Y8/HS2-SW655F).** A **tool-agnostic activity event stream** — the common
 > interface the **Announcer** (narration + TTS) and a **timeline** consume, so
 > narration isn't Claude-only like HS1's (which rode Claude's OTLP stream). Part of
 > the "generalize a concern across every tool via a capability" theme (with `drive`
@@ -119,9 +119,17 @@ The `activity` capability turns native signals → events; the host owns the str
   long-poll fallback. The server-hosted drive emits coarse `turn_start`, `permission`,
   and `turn_end` events attributed to the active store, ticket, tool, and session; the
   same event is persisted before broadcast, so live and digest consumers cannot drift.
-- **Deferred:** richer native Codex transcript / Claude hook wiring and deliberate live
-  vocabulary verification are HS2-SW655F. The full Announcer UI/TTS remains the
-  post-floor HS2-17 consumer; neither is required for the standalone core stream.
+- **Shipped (HS2-SW655F) — rich native drive events:** Codex 0.152.1
+  `item/completed` notifications stream their completed `commandExecution`, `fileChange`,
+  `plan`/`reasoning`, MCP/dynamic/collaboration tool, web-search, and image-view items.
+  Claude Code 2.1.258 runs with hook lifecycle events enabled and projects authoritative
+  assistant `tool_use` blocks into the same `PreToolUse` payload contract consumed by
+  `claude_activity`. Both become tool-neutral `NativeActivity` turn events, then the
+  server maps, attributes, persists, and broadcasts them through the existing activity
+  sink. Sanitized version-pinned cassettes replay in ordinary CI; credentialed drift
+  checks remain explicitly ignored and environment-gated. Native payload capture does
+  not create durable ticket notes or summarize content (HS2-3GRNZW owns that policy).
+- **Deferred:** the full Announcer UI/TTS remains the post-floor HS2-17 consumer.
 
 ## 15.9 Cross-references
 - The `activity` plugin capability: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.3

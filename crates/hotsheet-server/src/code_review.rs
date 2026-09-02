@@ -300,10 +300,11 @@ mod tests {
     #[test]
     fn adjacent_matches_form_reviewable_ranges_without_crossing_unrelated_commits() {
         let all = vec![
-            commit("dddddddd", "HS2-X: polish", "cccccccc"),
-            commit("cccccccc", "HS2-X: implement", "bbbbbbbb"),
-            commit("bbbbbbbb", "unrelated", "aaaaaaaa"),
-            commit("aaaaaaaa", "HS2-X: start", "rootroot"),
+            commit("eeeeeeee", "HS2-X: later polish", "dddddddd"),
+            commit("dddddddd", "HS2-X: later implementation", "cccccccc"),
+            commit("cccccccc", "unrelated", "bbbbbbbb"),
+            commit("bbbbbbbb", "HS2-X: initial polish", "aaaaaaaa"),
+            commit("aaaaaaaa", "HS2-X: initial implementation", "rootroot"),
         ];
         let matched = all
             .iter()
@@ -314,14 +315,14 @@ mod tests {
             contiguous_ranges(&all, &matched),
             vec![
                 CodeReviewRange {
-                    from: "cccccccc".into(),
-                    to: "dddddddd".into(),
+                    from: "dddddddd".into(),
+                    to: "eeeeeeee".into(),
                     count: 2
                 },
                 CodeReviewRange {
                     from: "aaaaaaaa".into(),
-                    to: "aaaaaaaa".into(),
-                    count: 1
+                    to: "bbbbbbbb".into(),
+                    count: 2
                 },
             ]
         );

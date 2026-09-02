@@ -20,7 +20,7 @@ export function TicketCodeReview({ review, loading = false, message = '' }: Tick
       {!loading && review && review.commits.length === 0 && <div class="ticket-code-review__empty"><LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" /><p>No commits with this ticket in the subject were found.</p></div>}
       {!loading && review && review.commits.length > 0 && <>
         {!enabled && <p class="ticket-code-review__notice" role="status">No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.</p>}
-        {review.ranges.filter(range => range.count > 1).map(range => <button type="button" class="ticket-code-review__range" data-action="open-code-review" data-review-mode="range" data-review-from={range.from} data-review-to={range.to} disabled={!enabled} aria-label={`Open ${range.count} commit range in ${review.difftool ?? 'configured diff tool'}`}><LucideIcon icon={GitCompareArrows} name="git-compare-arrows" /><span>Open {range.count}-commit range</span><LucideIcon icon={ExternalLink} name="external-link" /></button>)}
+        {review.ranges.filter(range => range.count > 1).map(range => <button type="button" class="ticket-code-review__range" data-action="open-code-review" data-review-mode="range" data-review-from={range.from} data-review-to={range.to} disabled={!enabled} aria-label={`Open ${range.count} commit bundle ${shortSha(range.from)} through ${shortSha(range.to)} in ${review.difftool ?? 'configured diff tool'}`}><LucideIcon icon={GitCompareArrows} name="git-compare-arrows" /><span>Open {range.count}-commit bundle<small>{shortSha(range.from)} → {shortSha(range.to)}</small></span><LucideIcon icon={ExternalLink} name="external-link" /></button>)}
         <ol class="ticket-code-review__commits">{review.commits.map(commit => <li data-commit-sha={commit.sha}>
           <span class="ticket-code-review__graph" aria-hidden="true"><LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" /></span>
           <div><strong>{commit.subject}</strong><span><code>{commit.short_sha}</code><time dateTime={commit.committed_at}>{formatCommitDate(commit.committed_at)}</time></span></div>
@@ -43,4 +43,8 @@ function formatCommitDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+}
+
+function shortSha(value: string): string {
+  return value.slice(0, 7);
 }

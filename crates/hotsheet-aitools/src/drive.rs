@@ -91,6 +91,13 @@ pub enum TurnEvent {
     /// Token usage the turn reported (`docs/14`, HS2-0WCRZY) — emitted just before `Done`
     /// when the tool exposes it, so the host can record a `UsageEvent`.
     Usage(Usage),
+    /// A tool-native, narratable activity payload. The transport captures the exact
+    /// protocol object and identifies its declared plugin activity source; the host maps
+    /// it into the shared activity vocabulary and supplies project/ticket attribution.
+    NativeActivity {
+        source: String,
+        payload: serde_json::Value,
+    },
     /// The turn finished; terminal.
     Done(DoneReason),
 }

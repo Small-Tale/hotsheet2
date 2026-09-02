@@ -2,20 +2,27 @@ import './dev-review.css';
 
 import html2canvas from 'html2canvas';
 
+import { createFrameBatcher } from './frame-batcher';
 import { clampRectToViewport, intersectRectWithViewport, normalizeRect, type ResizeHandle, resizeRect, type ReviewRect,translateAnchoredRect } from './geometry';
 
 export interface ReviewCapture { id: string; filename: string; dataUrl: string; width: number; height: number }
 export interface ReviewAttachment { id: string; filename: string; dataUrl: string; mimeType: string; size: number }
 export interface DevReviewSubmission { notes: string; captures: ReviewCapture[]; attachments: ReviewAttachment[]; pageUrl: string; viewport: { width: number; height: number } }
 export interface DevReviewResult { slug: string; url?: string }
-export interface DevReviewOptions { submit: (submission: DevReviewSubmission) => Promise<DevReviewResult>; captureDebounceMs?: number; hintDurationMs?: number; document?: Document }
-interface Selection extends ReviewRect { capture?: ReviewCapture; captureTimer?: number; capturePromise?: Promise<void>; revision: number; anchor?: { element: Element; point: { x: number; y: number } } }
+export interface DevReviewOptions {
+  submit: (submission: DevReviewSubmission) => Promise<DevReviewResult>;
+  /** @deprecated Captures are lazy so they cannot contend with pointer input. */
+  captureDebounceMs?: number;
+  hintDurationMs?: number;
+  document?: Document;
+}
+export interface DevReviewPerformanceMetrics { pointerMoves: number; geometryWrites: number; captureStarts: number; captureStartsDuringGesture: number; maxPointerMoveMs: number }
+interface Selection extends ReviewRect { capture?: ReviewCapture; capturePromise?: Promise<void>; revision: number; anchor?: { element: Element; point: { x: number; y: number } }; element?: HTMLElement }
 type Gesture = { kind: 'draw'; startX: number; startY: number; id: string } | { kind: 'move'; id: string; startX: number; startY: number; origin: ReviewRect } | { kind: 'resize'; id: string; handle: ResizeHandle };
 
 export function installDevReview(options: DevReviewOptions): { destroy(): void } {
   const doc = options.document ?? document;
   const view = doc.defaultView ?? window;
-  const debounceMs = options.captureDebounceMs ?? 350;
   const selections: Selection[] = [];
   let enabled = false;
   let gesture: Gesture | undefined;
@@ -27,10 +34,13 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   let modifierHeld = false;
   let deleteModifierHeld = false;
   let scrollFrame: number | undefined;
+  const dirtySelectionIds = new Set<string>();
+  const performanceMetrics: DevReviewPerformanceMetrics = { pointerMoves: 0, geometryWrites: 0, captureStarts: 0, captureStartsDuringGesture: 0, maxPointerMoveMs: 0 };
 
   const root = doc.createElement('div');
   root.className = 'hs-dev-review';
   root.dataset.hotsheetDevReview = 'true';
+  Object.defineProperty(root, 'performanceMetrics', { value: performanceMetrics });
   root.innerHTML = '<div class="hs-dev-review__toolbar"><button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button></div>';
   doc.body.append(root);
   const toolbar = root.querySelector<HTMLElement>('.hs-dev-review__toolbar')!;
@@ -53,6 +63,23 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     }, options.hintDurationMs ?? 3000);
   };
 
+  const updateSelectionElement = (selection: Selection) => {
+    if (!selection.element?.isConnected) return;
+    selection.element.style.cssText = `left:${selection.x}px;top:${selection.y}px;width:${selection.width}px;height:${selection.height}px`;
+    performanceMetrics.geometryWrites += 1;
+  };
+  const geometryBatch = createFrameBatcher(view, () => {
+    for (const id of dirtySelectionIds) {
+      const selection = selections.find(item => item.id === id);
+      if (selection) updateSelectionElement(selection);
+    }
+    dirtySelectionIds.clear();
+  });
+  const scheduleSelectionElementUpdate = (selection: Selection) => {
+    dirtySelectionIds.add(selection.id);
+    geometryBatch.schedule();
+  };
+
   const leaveFeedback = () => {
     if (hintTimer) { view.clearTimeout(hintTimer); hintTimer = undefined; }
     hintVisible = false;
@@ -63,6 +90,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   };
 
   const render = () => {
+    geometryBatch.cancel();
+    dirtySelectionIds.clear();
     toolbar.innerHTML = enabled
       ? '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>'
       : '<button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button>';
@@ -78,14 +107,10 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       box.dataset.selectionId = selection.id;
       box.dataset.index = String(index + 1);
       box.style.cssText = `left:${selection.x}px;top:${selection.y}px;width:${selection.width}px;height:${selection.height}px`;
+      selection.element = box;
       for (const handle of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const) box.insertAdjacentHTML('beforeend', `<button class="hs-dev-review__handle" type="button" data-handle="${handle}" aria-label="Resize capture ${index + 1} from ${handle}"></button>`);
       root.append(box);
     });
-  };
-
-  const updateSelectionElement = (selection: Selection) => {
-    const box = root.querySelector<HTMLElement>(`.hs-dev-review__rect[data-selection-id="${selection.id}"]`);
-    if (box) box.style.cssText = `left:${selection.x}px;top:${selection.y}px;width:${selection.width}px;height:${selection.height}px`;
   };
 
   const anchorSelection = (selection: Selection) => {
@@ -108,6 +133,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   };
 
   const captureSelections = (targets: Selection[]): Promise<void> => {
+    performanceMetrics.captureStarts += 1;
+    if (gesture) performanceMetrics.captureStartsDuringGesture += 1;
     const revisions = new Map(targets.map(selection => [selection.id, selection.revision]));
     const promise = (async () => {
       for (const selection of targets) {
@@ -128,13 +155,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     return promise;
   };
 
-  const scheduleCapture = (selection: Selection) => {
-    if (selection.captureTimer) view.clearTimeout(selection.captureTimer);
-    selection.captureTimer = view.setTimeout(() => { selection.captureTimer = undefined; void captureSelections([selection]); }, debounceMs);
-  };
-
   const flushCaptures = async () => {
-    for (const selection of selections) if (selection.captureTimer) { view.clearTimeout(selection.captureTimer); selection.captureTimer = undefined; }
     await Promise.all([...new Set(selections.flatMap(selection => selection.capturePromise ? [selection.capturePromise] : []))]);
     const missing = selections.filter(selection => !selection.capture);
     if (missing.length > 0) await captureSelections(missing);
@@ -240,8 +261,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       event.preventDefault(); event.stopPropagation();
       const index = selections.findIndex(item => item.id === box.dataset.selectionId);
       if (index >= 0) {
-        const [removed] = selections.splice(index, 1);
-        if (removed.captureTimer) view.clearTimeout(removed.captureTimer);
+        selections.splice(index, 1);
         render();
       }
       return;
@@ -257,7 +277,6 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     if (box) {
       event.preventDefault(); event.stopPropagation();
       const selection = selections.find(item => item.id === box.dataset.selectionId)!;
-      if (selection.captureTimer) { view.clearTimeout(selection.captureTimer); selection.captureTimer = undefined; }
       const handle = target.closest<HTMLElement>('[data-handle]')?.dataset.handle as ResizeHandle | undefined;
       gesture = handle ? { kind: 'resize', id: selection.id, handle } : { kind: 'move', id: selection.id, startX: event.clientX, startY: event.clientY, origin: { ...selection } };
       return;
@@ -265,7 +284,9 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   };
 
   const onPointerMove = (event: PointerEvent) => {
+    const startedAt = view.performance.now();
     if (!gesture) return;
+    performanceMetrics.pointerMoves += 1;
     event.preventDefault();
     const index = selections.findIndex(item => item.id === gesture!.id);
     if (index < 0) return;
@@ -274,7 +295,8 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       : gesture.kind === 'resize' ? resizeRect(current, gesture.handle, event.clientX, event.clientY)
         : { ...gesture.origin, x: gesture.origin.x + event.clientX - gesture.startX, y: gesture.origin.y + event.clientY - gesture.startY };
     selections[index] = { ...current, ...clampRectToViewport(next, view.innerWidth, view.innerHeight), capture: undefined, revision: current.revision + 1 };
-    updateSelectionElement(selections[index]);
+    scheduleSelectionElementUpdate(selections[index]);
+    performanceMetrics.maxPointerMoveMs = Math.max(performanceMetrics.maxPointerMoveMs, view.performance.now() - startedAt);
   };
 
   const onPointerUp = () => {
@@ -283,7 +305,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     gesture = undefined;
     if (!selection) return;
     if (selection.width < 12 || selection.height < 12) { selections.splice(selections.indexOf(selection), 1); render(); }
-    else { anchorSelection(selection); scheduleCapture(selection); updateSelectionElement(selection); }
+    else { geometryBatch.flush(); anchorSelection(selection); }
   };
   doc.addEventListener('pointerdown', onPointerDown, true);
   const onKeyChange = (event: KeyboardEvent) => { setModifiers(event.altKey, event.shiftKey); };
@@ -298,5 +320,5 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   view.addEventListener('resize', onScroll);
   render();
 
-  return { destroy() { if (hintTimer) view.clearTimeout(hintTimer); if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame); setModifiers(false); root.removeEventListener('click', onRootClick); doc.removeEventListener('pointerdown', onPointerDown, true); doc.removeEventListener('keydown', onKeyChange, true); doc.removeEventListener('keyup', onKeyChange, true); doc.removeEventListener('scroll', onScroll, true); view.removeEventListener('resize', onScroll); view.removeEventListener('blur', onWindowBlur); view.removeEventListener('pointermove', onPointerMove, true); view.removeEventListener('pointerup', onPointerUp, true); root.remove(); } };
+  return { destroy() { if (hintTimer) view.clearTimeout(hintTimer); if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame); geometryBatch.cancel(); setModifiers(false); root.removeEventListener('click', onRootClick); doc.removeEventListener('pointerdown', onPointerDown, true); doc.removeEventListener('keydown', onKeyChange, true); doc.removeEventListener('keyup', onKeyChange, true); doc.removeEventListener('scroll', onScroll, true); view.removeEventListener('resize', onScroll); view.removeEventListener('blur', onWindowBlur); view.removeEventListener('pointermove', onPointerMove, true); view.removeEventListener('pointerup', onPointerUp, true); root.remove(); } };
 }

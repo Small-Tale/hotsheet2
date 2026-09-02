@@ -121,6 +121,17 @@ impl TurnHandle for AppServerTurnHandle {
         }
     }
 
+    fn next_event(&mut self) -> Option<crate::drive::TurnEvent> {
+        if self.done.is_some() {
+            return None;
+        }
+        let event = self.turn.next_event()?;
+        if let crate::drive::TurnEvent::Done(reason) = &event {
+            self.done = Some(*reason);
+        }
+        Some(event)
+    }
+
     fn usage(&mut self) -> Option<crate::drive::Usage> {
         self.turn.usage()
     }

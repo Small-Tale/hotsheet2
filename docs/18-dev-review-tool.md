@@ -27,7 +27,11 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 - A rectangle anchors to the underlying content at its top-left pixel. Window or
   nested-container scrolling moves the overlay with that content, including when the
   rectangle was first drawn after the interface had already scrolled.
-- Creation, movement, and resizing debounce PNG recapture through `html2canvas`.
+- Creation, movement, and resizing only update overlay geometry. Raw pointer-event
+  bursts are coalesced into one DOM write per animation frame, and each rectangle
+  keeps a direct reference to its overlay node rather than querying the DOM during
+  input. PNG capture is intentionally lazy and starts only after `New Ticket` opens;
+  eager full-document `html2canvas` work must never compete with another gesture.
   Each capture renders its bounded document region directly at CSS-pixel scale using
   the current window scroll offset; this avoids device-pixel-ratio crop drift and
   keeps scrolled and unscrolled captures aligned with their rectangles. Pointer

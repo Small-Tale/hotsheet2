@@ -1,5 +1,7 @@
 import { expect,test } from '@playwright/test';
 
+import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
+
 const project = { id:'demo-checkout', root:'/work/demo', name:'demo', stores:['/work/demo.hs2'], apiPath:'/__hotsheet/project-api/demo-checkout' };
 const row = { connection_id:'git-local', native_id:'01', qualified_id:'git-local:01', id:'01', slug:'HS2-DEMO01', title:'Use real project tickets', category:'feature', priority:'high', status:'started', up_next:true, tags:['client'], blocked_by:[], claim_count:0, created_at:'2026-08-30T00:00:00Z', updated_at:'2026-08-30T01:00:00Z' };
 const backlogRow = { ...row, native_id:'03', qualified_id:'git-local:03', id:'03', slug:'HS2-BACK01', title:'Deferred backlog ticket', status:'backlog', up_next:false };
@@ -39,12 +41,12 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(commandRun&&request.method()==='GET')return route.fulfill({json:commandRuns.find(item=>item.id===commandRun[1])});
     if(path.endsWith('/ws/poll')&&request.method()==='GET'){await new Promise(resolve=>setTimeout(resolve,1_000));const since=Number(url.searchParams.get('since')??0);return route.fulfill({json:{cursor:since,events:[],overflow:false}})}
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
-    if(path.endsWith('/tickets/01/code-review')&&request.method()==='GET')return route.fulfill({json:{difftool:'Glassbox',truncated:false,ranges:[{from:'aaa',to:'bbb',count:2}],commits:[{sha:'bbb',short_sha:'bbbbbbb',subject:'HS2-DEMO01: finish the responsive review segment',committed_at:'2026-09-02T08:00:00Z'},{sha:'aaa',short_sha:'aaaaaaa',subject:'HS2-DEMO01: discover associated commits',committed_at:'2026-09-02T07:00:00Z'}]}});
+    if(path.endsWith('/tickets/01/code-review')&&request.method()==='GET')return route.fulfill({json:{difftool:'Glassbox',truncated:false,ranges:[{from:'aaa1111',to:'bbb2222',count:2},{from:'ccc3333',to:'ddd4444',count:2}],commits:[{sha:'ddd4444',short_sha:'ddd4444',subject:'HS2-DEMO01: finish the later review bundle',committed_at:'2026-09-02T10:00:00Z'},{sha:'ccc3333',short_sha:'ccc3333',subject:'HS2-DEMO01: start the later review bundle',committed_at:'2026-09-02T09:00:00Z'},{sha:'bbb2222',short_sha:'bbb2222',subject:'HS2-DEMO01: finish the responsive review segment',committed_at:'2026-09-02T08:00:00Z'},{sha:'aaa1111',short_sha:'aaa1111',subject:'HS2-DEMO01: discover associated commits',committed_at:'2026-09-02T07:00:00Z'}]}});
     if(path.endsWith('/tickets/01/code-review')&&request.method()==='POST'){patches.push({operation:'code-review',...request.postDataJSON()});return route.fulfill({status:204})}
     if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
     if(path.endsWith('/batch')&&request.method()==='POST'){const updates=request.postDataJSON().updates as Array<Record<string,unknown>&{id:string}>;const changed=updates.map(({id,...body})=>{patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);const ticket=rows.find(item=>item.id===id)!;return{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id)??[],concurrency_token:`next-${id}`}});return route.fulfill({json:changed})}
     if(path.endsWith('/tickets')&&request.method()==='GET'){if(url.searchParams.get('text')==='QQRY00'){await new Promise(resolve=>setTimeout(resolve,150));return route.fulfill({json:[searchSlugRow,searchDetailsRow]})}return route.fulfill({json:rows})}
-    if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
+    if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,status:body.status??'not_started',up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
     if(path.endsWith('/tickets/01')&&request.method()==='GET'){if(ticketLoadDelay)await new Promise(resolve=>setTimeout(resolve,ticketLoadDelay));return route.fulfill({json:{store:'git-local',...selectedFull}})}
     const attachmentMatch=path.match(/\/tickets\/([^/]+)\/attachments$/);
@@ -68,6 +70,12 @@ test('activates Dev Review from the main app query only in explicit development 
   await page.goto('/?dev-review=1');await expect(page.locator('.hs-dev-review')).toBeVisible();await expect(page.getByRole('button',{name:'Feedback'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-wide.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});await expect(page.locator('.hs-dev-review')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-narrow.png',fullPage:true});
   await page.goto('/?dev-review=0');await expect(page.locator('.hs-dev-review')).toHaveCount(0);
+});
+
+test('keeps feedback rectangle input within its frame budget in the populated main app',async({page},testInfo)=>{
+  await page.setViewportSize({width:1280,height:900});await mockProject(page);await page.goto('/?dev-review=1');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const measurement=await measureFeedbackRectangle(page,{x:440,y:220},{x:820,y:520});await testInfo.attach('feedback-performance.json',{body:JSON.stringify(measurement,null,2),contentType:'application/json'});expectResponsiveFeedbackRectangle(measurement);
+  await page.screenshot({path:'/private/tmp/hs2-6ppvjc-main-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.screenshot({path:'/private/tmp/hs2-6ppvjc-main-narrow.png',fullPage:true});
 });
 
 test('projects an indexed feedback-needed note into the real row and inspector rails',async({page})=>{
@@ -95,10 +103,11 @@ test('clears needs review when a regular response follows the feedback-needed no
 test('lists associated commits and opens a validated commit or range in the configured diff tool',async({page})=>{
   const actions=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const inspector=page.locator('[data-component="ticket-inspector"]');await inspector.getByRole('button',{name:'Code Review'}).click();const review=inspector.locator('[data-component="ticket-code-review"]');
-  await expect(review).toContainText('Opens in Glassbox');await expect(review.locator('[data-commit-sha]')).toHaveCount(2);await expect(review).toContainText('HS2-DEMO01: finish the responsive review segment');
-  await review.getByRole('button',{name:'Open 2 commit range in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='aaa'&&action.to==='bbb')).toBe(true);
-  await review.getByRole('button',{name:'Open commit bbbbbbb in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='commit'&&action.commit==='bbb')).toBe(true);
-  await page.screenshot({path:'/private/tmp/hs2-pg1hkj-code-review-production-wide.png',fullPage:true});
+  await expect(inspector.getByRole('button',{name:'Code Review'}).locator('[data-lucide="message-square-code"]')).toBeVisible();await expect(review).toContainText('Opens in Glassbox');await expect(review.locator('[data-commit-sha]')).toHaveCount(4);await expect(review.locator('.ticket-code-review__range')).toHaveCount(2);await expect(review).toContainText('HS2-DEMO01: finish the responsive review segment');
+  await review.getByRole('button',{name:'Open 2 commit bundle aaa1111 through bbb2222 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='aaa1111'&&action.to==='bbb2222')).toBe(true);await review.getByRole('button',{name:'Open 2 commit bundle ccc3333 through ddd4444 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='ccc3333'&&action.to==='ddd4444')).toBe(true);
+  await review.getByRole('button',{name:'Open commit bbb2222 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='commit'&&action.commit==='bbb2222')).toBe(true);
+  await page.screenshot({path:'/private/tmp/hs2-jztfr5-pvqztw-code-review-wide.png',fullPage:true});
+  await page.setViewportSize({width:940,height:844});await expect(review.locator('.ticket-code-review__range')).toHaveCount(2);await page.screenshot({path:'/private/tmp/hs2-jztfr5-pvqztw-code-review-narrow.png',fullPage:true});
 });
 
 test('shows active work only for the lifetime of a live ticket claim lease',async({page})=>{
@@ -452,6 +461,13 @@ test('focuses the ticket title every time the real composer expands',async({page
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const launcher=page.getByRole('button',{name:'New ticket…'});await launcher.click();const title=page.locator('wa-input[name="new-ticket-title"]');await expect(title).toBeFocused();await page.getByRole('button',{name:'Cancel'}).click();await launcher.click();await expect(title).toBeFocused();
 });
 
+test('stages safe attachment drops from the collapsed and expanded new-ticket composer',async({page})=>{
+  await mockProject(page);const uploads:string[]=[];page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.match(/\/tickets\/02\/attachments$/))uploads.push(decodeURIComponent(request.headers()['x-hotsheet-filename']??''))});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const launcher=page.getByRole('button',{name:'New ticket…'});
+  await launcher.evaluate(node=>{const transfer=new DataTransfer();transfer.items.add(new File(['first proof'],'first-proof.txt',{type:'text/plain'}));node.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer}));});await expect(launcher).toHaveAttribute('data-dragging','true');await launcher.evaluate(node=>{const transfer=new DataTransfer();transfer.items.add(new File(['first proof'],'first-proof.txt',{type:'text/plain'}));node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));});const form=page.locator('[data-action="create-ticket-form"]');await expect(form.getByText('first-proof.txt')).toBeVisible();await form.screenshot({path:'/private/tmp/hs2-v1xn4t-new-ticket-drop-wide.png'});
+  await form.evaluate(node=>{const transfer=new DataTransfer();transfer.items.add(new File(['second proof'],'second-proof.txt',{type:'text/plain'}));node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));});await expect(form.getByText('second-proof.txt')).toBeVisible();await form.getByRole('button',{name:'Remove first-proof.txt'}).click();await expect(form.getByText('first-proof.txt')).toHaveCount(0);await page.setViewportSize({width:940,height:844});await form.screenshot({path:'/private/tmp/hs2-v1xn4t-new-ticket-drop-narrow.png'});
+  await form.getByRole('button',{name:'Cancel'}).click();await launcher.click();await expect(form.getByText('second-proof.txt')).toHaveCount(0);await form.getByLabel('Browse attachments for new ticket',{exact:true}).setInputFiles({name:'final-proof.txt',mimeType:'text/plain',buffer:Buffer.from('final proof')});await expect(form.getByText('final-proof.txt')).toBeVisible();await form.locator('wa-input[name="new-ticket-title"]').evaluate((node:HTMLElement&{value:string})=>{node.value='Created with dropped evidence';node.dispatchEvent(new Event('input',{bubbles:true}))});await form.getByRole('button',{name:'Create ticket'}).click();await expect.poll(()=>uploads).toEqual(['final-proof.txt']);await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('HS2-NEW001');await page.getByRole('button',{name:'Attachments, 1'}).click();await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('final-proof.txt');
+});
+
 test('renders attachment identity from a selected real ticket',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');await page.locator('[data-component="ticket-inspector"]').evaluate((node:HTMLElement)=>{node.style.width='250px'});await expect(page.getByRole('button',{name:'Attachments, 1'}).locator('.ticket-inspector__tab-count')).toHaveText('1');await page.getByRole('button',{name:'Attachments, 1'}).click();
   const item=page.locator('[data-attachment-id="A1"]');await expect(item).toContainText('proof.png');
@@ -492,8 +508,8 @@ test('keeps backlog and archived tickets out of the active Queue',async({page})=
   await expect(page.locator('[data-project-dialog]')).not.toBeVisible();
   await expect(page.getByText('Use real project tickets')).toBeVisible();
   await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.getByText('Archived ticket')).toHaveCount(0);
-  await page.getByRole('button',{name:/Backlog/}).click();await expect(page.getByText('Deferred backlog ticket')).toBeVisible();await expect(page.getByText('Use real project tickets')).toHaveCount(0);
-  await page.getByRole('button',{name:/Archive/}).click();await expect(page.getByText('Archived ticket')).toBeVisible();await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);
+  await page.getByRole('button',{name:/Backlog/}).click();await expect(page.getByText('Deferred backlog ticket')).toBeVisible();await expect(page.getByText('Use real project tickets')).toHaveCount(0);await page.getByRole('button',{name:'New ticket…'}).click();await page.getByRole('textbox',{name:'Ticket title'}).fill('Created directly in backlog');await page.getByRole('button',{name:'Create ticket'}).click();const created=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');await expect(created).toBeVisible();await expect(created).toHaveAttribute('data-status','backlog');
+  await page.getByRole('button',{name:/Archive/}).click();await expect(page.getByText('Archived ticket')).toBeVisible();await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
 });
 
 test('searches indexed ticket details and notes without discarding the full project list',async({page})=>{
@@ -531,9 +547,11 @@ test('derives board columns from the selected view and merges Verified by projec
   await page.getByRole('button',{name:/Backlog/}).click();
   await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Backlog']);
   await expect(board.locator('[data-column-id="backlog"]')).toContainText('Deferred backlog ticket');
+  const backlogCard=board.locator('[data-column-id="backlog"] [data-component="ticket-list-row"]');expect(await backlogCard.evaluate(node=>parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);await expect(backlogCard).toHaveCSS('border-style','solid');await page.screenshot({path:'/private/tmp/hs2-rzd9d4-backlog-column.png',fullPage:true});
   await page.getByRole('button',{name:/Archive/}).click();
   await expect(board.locator('.ticket-board-column__header h2')).toHaveText(['Archive']);
   await expect(board.locator('[data-column-id="archive"]')).toContainText('Archived ticket');
+  const archiveCard=board.locator('[data-column-id="archive"] [data-component="ticket-list-row"]');expect(await archiveCard.evaluate(node=>parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);await expect(archiveCard).toHaveCSS('border-style','solid');await page.screenshot({path:'/private/tmp/hs2-rzd9d4-archive-column.png',fullPage:true});
 });
 
 test('matches HS1 multi-selection semantics and selected outlines in list and column views',async({page})=>{

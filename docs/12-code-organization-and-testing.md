@@ -323,6 +323,10 @@ that makes adding a tool boring instead of painful.
 > **Built:** sanitized, version-pinned Codex 0.148 and Claude 2.1.241 usage cassettes
 > captured by the deliberate HS2-CQ6B96 live verification replay through the production
 > parsers in fast CI. The ignored, credentials-gated live tests remain the drift oracle.
+> HS2-SW655F adds Codex 0.152.1 completed-item and Claude Code 2.1.258 PreToolUse
+> activity cassettes, replayed through the production activity mappers and transport
+> event adapters; their live vocabulary checks require the explicit
+> `HOTSHEET_CODEX_LIVE=1` / `HOTSHEET_CLAUDE_LIVE=1` opt-ins.
 > ACP/OpenCode now joins this gate via the ACP v1 contract cassette and the ignored,
 > credentials-gated `HOTSHEET_OPENCODE_LIVE=1` smoke test (HS2-PEQ6Q8).
 

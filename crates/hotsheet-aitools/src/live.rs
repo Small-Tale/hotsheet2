@@ -252,7 +252,28 @@ fn drive_and_stream(
     let start = std::time::Instant::now();
     let base = t.now_ms;
     let mut clock = move || base + start.elapsed().as_millis() as u64;
-    let reason = pump_turn(turn.as_mut(), &conn_id, registry, &mut clock, on_event);
+    // A native payload is observable only when the plugin declares the activity
+    // capability. The manifest's source is authoritative, keeping custom plugins and
+    // capability omission honest even when they reuse a built-in transport.
+    let activity_source = plugin.manifest.activity.as_ref().map(|spec| &spec.source);
+    let mut capability_event = |event: &TurnEvent| match event {
+        TurnEvent::NativeActivity { payload, .. } => {
+            if let Some(source) = activity_source {
+                on_event(&TurnEvent::NativeActivity {
+                    source: source.clone(),
+                    payload: payload.clone(),
+                });
+            }
+        }
+        _ => on_event(event),
+    };
+    let reason = pump_turn(
+        turn.as_mut(),
+        &conn_id,
+        registry,
+        &mut clock,
+        &mut capability_event,
+    );
     // Surface the session/thread id so the caller can resume the same session next turn
     // (HS2-3C1XK3): claude reports it from `system/init`, codex from `thread/start|resume`.
     let session_id = ctx

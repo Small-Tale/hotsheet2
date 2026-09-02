@@ -1,7 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './ticket-inspector.css';
 
-import { BookOpen, CircleAlert, GitCommitHorizontal, Info, ListTree, PanelRightClose, Paperclip, Pencil, Star, X } from 'lucide';
+import { BookOpen, CircleAlert, Info, ListTree, MessageSquareCode, PanelRightClose, Paperclip, Pencil, Star, X } from 'lucide';
 
 import type { CodeReview } from '../api';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
@@ -69,7 +69,7 @@ export interface TicketInspectorProps {
 const tabs = [
   { id: 'info', label: 'Info', icon: Info, iconName: 'info' },
   { id: 'timeline', label: 'Timeline', icon: ListTree, iconName: 'list-tree' },
-  { id: 'code-review', label: 'Code Review', icon: GitCommitHorizontal, iconName: 'git-commit-horizontal' },
+  { id: 'code-review', label: 'Code Review', icon: MessageSquareCode, iconName: 'message-square-code' },
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
 

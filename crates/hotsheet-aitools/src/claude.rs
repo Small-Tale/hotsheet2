@@ -134,6 +134,7 @@ impl ClaudeChannelClient for ClaudeChannel {
             cursor,
             done: None,
             usage: None,
+            pending: std::collections::VecDeque::new(),
         }))
     }
 }
@@ -148,6 +149,7 @@ struct ClaudeTurn {
     done: Option<DoneReason>,
     /// Token usage captured from the final `result` event, if it reported any (HS2-TJ8FGR).
     usage: Option<crate::drive::Usage>,
+    pending: std::collections::VecDeque<TurnEvent>,
 }
 
 /// Extract token usage from a Claude stream-json `result` event (`docs/14`, the
@@ -186,23 +188,51 @@ pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
     })
 }
 
-/// Map one output event to a user-visible [`TurnEvent`], or `None` to skip it.
-fn map_event(v: &Value) -> Option<TurnEvent> {
+/// Map one output event to zero or more user-visible/native [`TurnEvent`] values.
+fn map_events(v: &Value) -> Vec<TurnEvent> {
     match v.get("type").and_then(Value::as_str) {
         Some("assistant") => {
             let text = assistant_text(v);
-            (!text.is_empty()).then_some(TurnEvent::Output(text))
+            let mut events = Vec::new();
+            if !text.is_empty() {
+                events.push(TurnEvent::Output(text));
+            }
+            let session = v.get("session_id").and_then(Value::as_str);
+            if let Some(blocks) = v
+                .get("message")
+                .and_then(|message| message.get("content"))
+                .and_then(Value::as_array)
+            {
+                for block in blocks {
+                    if block.get("type").and_then(Value::as_str) != Some("tool_use") {
+                        continue;
+                    }
+                    let mut payload = json!({
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": block.get("name").and_then(Value::as_str).unwrap_or(""),
+                        "tool_input": block.get("input").cloned().unwrap_or(Value::Null),
+                    });
+                    if let Some(session) = session {
+                        payload["session_id"] = Value::String(session.to_string());
+                    }
+                    events.push(TurnEvent::NativeActivity {
+                        source: "claude-hooks".into(),
+                        payload,
+                    });
+                }
+            }
+            events
         }
         Some("result") => {
             let is_error = v.get("is_error").and_then(Value::as_bool).unwrap_or(false);
             let ok = !is_error && v.get("subtype").and_then(Value::as_str) == Some("success");
-            Some(TurnEvent::Done(if ok {
+            vec![TurnEvent::Done(if ok {
                 DoneReason::Completed
             } else {
                 DoneReason::Failed(1)
-            }))
+            })]
         }
-        _ => None, // system/init, rate_limit_event, tool-result user echoes, …
+        _ => Vec::new(), // system/init, rate_limit_event, tool-result user echoes, …
     }
 }
 
@@ -232,6 +262,9 @@ impl ClaudeTurn {
         if self.done.is_some() {
             return None;
         }
+        if let Some(event) = self.pending.pop_front() {
+            return Some(event);
+        }
         let deadline = Instant::now() + TURN_TIMEOUT;
         let mut events = self.inner.events.lock().unwrap();
         loop {
@@ -241,9 +274,10 @@ impl ClaudeTurn {
                 if ev.get("type").and_then(Value::as_str) == Some("result") {
                     self.usage = claude_result_usage(ev);
                 }
-                let mapped = map_event(ev);
+                let mapped = map_events(ev);
                 self.cursor += 1;
-                if let Some(te) = mapped {
+                self.pending.extend(mapped);
+                if let Some(te) = self.pending.pop_front() {
                     if let TurnEvent::Done(r) = &te {
                         self.done = Some(*r);
                     }
@@ -352,6 +386,7 @@ impl ClaudeStreamTransport {
             "--output-format",
             "stream-json",
             "--verbose",
+            "--include-hook-events",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -401,6 +436,8 @@ pub(crate) mod scripted {
         Success,
         /// Emit an assistant message then a `result` (`error_during_execution`).
         Failure,
+        /// Emit text plus a tool-use block, then a successful result.
+        RichSuccess,
     }
 
     pub struct ScriptedClaude {
@@ -452,10 +489,16 @@ pub(crate) mod scripted {
                     .unwrap_or("");
                 self.push(json!({ "type": "assistant",
                     "message": { "role": "assistant",
-                                 "content": [{ "type": "text", "text": format!("done: {content}") }] },
+                                 "content": if matches!(self.mode, ClaudeMode::RichSuccess) {
+                                     json!([{ "type": "text", "text": format!("done: {content}") },
+                                         { "type": "tool_use", "id": "tool-redacted",
+                                           "name": "Bash", "input": { "command": "cargo test" } }])
+                                 } else {
+                                     json!([{ "type": "text", "text": format!("done: {content}") }])
+                                 } },
                     "session_id": "sess-abc" }));
                 let (subtype, is_error, result) = match self.mode {
-                    ClaudeMode::Success => ("success", false, "done"),
+                    ClaudeMode::Success | ClaudeMode::RichSuccess => ("success", false, "done"),
                     ClaudeMode::Failure => ("error_during_execution", true, ""),
                 };
                 self.push(

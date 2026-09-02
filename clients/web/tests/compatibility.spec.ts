@@ -45,8 +45,23 @@ test('surfaces a compatible detached server from another development revision', 
 });
 
 test('tells development users to restart a server built from older local source', async ({ page }) => {
-  await openWithCompatibility(page, { kind: 'compatible', revisionMismatch: true, sourceStale: true, canRestartServer: false });
+  await openWithCompatibility(page, { kind: 'compatible', detail: 'The running server build differs from this checkout.', revisionMismatch: true, sourceStale: true, canRestartServer: false, clientProtocol: { min: 1, max: 1 }, clientRevision: 'source-sha256:client', server: { generation: 'hs2', application_version: '0.1.0', build_revision: 'source-sha256:old', source_revision: 'source-sha256:current', source_stale: true, protocol: { min: 1, max: 1 }, started_at: '2026-09-02T08:00:00Z' } });
   const banner = page.locator('[data-component="connection-state-banner"]');
   await expect(banner).toContainText('Different server build is running');
   await expect(banner).toContainText('Rebuild if needed, then restart it to pick up your latest build');
+  await banner.getByRole('button', { name: 'View details' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Server build details' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('term')).toHaveText(['Running server version', 'Running server build', 'Current server source', 'Client build', 'Protocol ranges', 'Server started']);
+  await expect(dialog).toContainText('0.1.0');
+  await expect(dialog).toContainText('source-sha256:old');
+  await expect(dialog).toContainText('source-sha256:current');
+  await expect(dialog).toContainText('source-sha256:client');
+  await expect(dialog).toContainText('Client 1–1 · Server 1–1');
+  await expect(dialog).toContainText('cargo build -p hotsheet-server');
+  await page.screenshot({ path: '/private/tmp/hs2-f6e6py-server-details-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/private/tmp/hs2-f6e6py-server-details-narrow.png', fullPage: true });
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveCount(0);
 });

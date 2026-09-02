@@ -1,0 +1,23 @@
+[
+  {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {"command": "cargo test"},
+    "session_id": "session-redacted",
+    "tool_use_id": "tool-redacted"
+  },
+  {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Edit",
+    "tool_input": {"file_path": "src/main.rs", "old_string": "redacted", "new_string": "redacted"},
+    "session_id": "session-redacted",
+    "tool_use_id": "tool-redacted"
+  },
+  {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {"file_path": "README.md"},
+    "session_id": "session-redacted",
+    "tool_use_id": "tool-redacted"
+  }
+]

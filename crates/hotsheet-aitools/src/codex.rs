@@ -355,6 +355,8 @@ impl AppServerClient for CodexAppServer {
             cursor,
             done: None,
             usage: None,
+            pending: std::collections::VecDeque::new(),
+            done_emitted: false,
         }))
     }
 }
@@ -372,6 +374,10 @@ struct CodexTurn {
     done: Option<AppServerOutcome>,
     /// Token usage captured from `turn/completed`, if the turn reported any (HS2-0WCRZY).
     usage: Option<crate::drive::Usage>,
+    /// Rich, turn-scoped transcript items captured from `item/completed` in protocol
+    /// order. `is_running` may poll ahead, so queue rather than dropping them.
+    pending: std::collections::VecDeque<crate::drive::TurnEvent>,
+    done_emitted: bool,
 }
 
 /// If `n` is this turn's `turn/completed`, map its status to an outcome.
@@ -484,18 +490,48 @@ pub fn notification_usage(notification: &Value) -> Option<crate::drive::Usage> {
     })
 }
 
+/// Extract one completed transcript item belonging to this turn. Codex 0.152.1's
+/// generated app-server schema defines the rich item vocabulary under this notification.
+fn completed_item(notification: &Value, thread_id: &str, turn_id: Option<&str>) -> Option<Value> {
+    if notification.get("method").and_then(Value::as_str) != Some("item/completed") {
+        return None;
+    }
+    let params = notification.get("params")?;
+    if params.get("threadId").and_then(Value::as_str) != Some(thread_id) {
+        return None;
+    }
+    if let Some(want) = turn_id
+        && params.get("turnId").and_then(Value::as_str) != Some(want)
+    {
+        return None;
+    }
+    params.get("item").cloned()
+}
+
+fn codex_done_reason(outcome: &AppServerOutcome) -> crate::drive::DoneReason {
+    match outcome {
+        AppServerOutcome::Completed => crate::drive::DoneReason::Completed,
+        AppServerOutcome::Failed(_) => crate::drive::DoneReason::Failed(1),
+    }
+}
+
 impl CodexTurn {
-    /// Non-blocking scan of newly-arrived notifications for this turn's completion.
+    /// Non-blocking scan of newly-arrived notifications for this turn's rich items,
+    /// usage, and completion.
     fn poll(&mut self) {
-        if self.done.is_some() {
-            return;
-        }
         let notes = self.inner.notes.lock().unwrap();
         while self.cursor < notes.len() {
             let n = &notes[self.cursor];
             self.cursor += 1;
             if let Some(usage) = token_usage_updated(n, &self.thread_id, self.turn_id.as_deref()) {
                 self.usage = Some(usage);
+            }
+            if let Some(payload) = completed_item(n, &self.thread_id, self.turn_id.as_deref()) {
+                self.pending
+                    .push_back(crate::drive::TurnEvent::NativeActivity {
+                        source: "codex-transcript".into(),
+                        payload,
+                    });
             }
             if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
                 self.usage = self.usage.clone().or_else(|| {
@@ -520,43 +556,15 @@ impl AppServerTurn for CodexTurn {
     }
 
     fn wait(&mut self) -> AppServerOutcome {
-        if let Some(o) = &self.done {
-            return o.clone();
-        }
-        let deadline = Instant::now() + TURN_TIMEOUT;
-        let mut notes = self.inner.notes.lock().unwrap();
         loop {
-            while self.cursor < notes.len() {
-                let n = &notes[self.cursor];
-                self.cursor += 1;
-                if let Some(usage) =
-                    token_usage_updated(n, &self.thread_id, self.turn_id.as_deref())
-                {
-                    self.usage = Some(usage);
-                }
-                if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
-                    self.usage = self.usage.clone().or_else(|| {
-                        n.get("params")
-                            .and_then(|p| p.get("turn"))
-                            .and_then(turn_usage)
+            match self.next_event() {
+                Some(crate::drive::TurnEvent::Done(_)) | None => {
+                    return self.done.clone().unwrap_or_else(|| {
+                        AppServerOutcome::Failed("app-server event stream ended".into())
                     });
-                    self.done = Some(o.clone());
-                    return o;
                 }
+                Some(_) => {}
             }
-            if self.inner.closed.load(Ordering::SeqCst) {
-                let o = AppServerOutcome::Failed("app-server connection closed".into());
-                self.done = Some(o.clone());
-                return o;
-            }
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                let o = AppServerOutcome::Failed("timeout waiting for turn/completed".into());
-                self.done = Some(o.clone());
-                return o;
-            }
-            let (g, _) = self.inner.cvar.wait_timeout(notes, remaining).unwrap();
-            notes = g;
         }
     }
 
@@ -573,6 +581,41 @@ impl AppServerTurn for CodexTurn {
         // The drive's TurnHandle records `Interrupted`; keep our own state terminal so a
         // later `wait()` can't block on a `turn/completed` that may never arrive.
         self.done = Some(AppServerOutcome::Failed("interrupted".into()));
+    }
+
+    fn next_event(&mut self) -> Option<crate::drive::TurnEvent> {
+        let deadline = Instant::now() + TURN_TIMEOUT;
+        loop {
+            self.poll();
+            if let Some(event) = self.pending.pop_front() {
+                return Some(event);
+            }
+            if let Some(outcome) = &self.done {
+                if self.done_emitted {
+                    return None;
+                }
+                self.done_emitted = true;
+                return Some(crate::drive::TurnEvent::Done(codex_done_reason(outcome)));
+            }
+            if self.inner.closed.load(Ordering::SeqCst) {
+                self.done = Some(AppServerOutcome::Failed(
+                    "app-server connection closed".into(),
+                ));
+                continue;
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                self.done = Some(AppServerOutcome::Failed(
+                    "timeout waiting for turn/completed".into(),
+                ));
+                continue;
+            }
+            let notes = self.inner.notes.lock().unwrap();
+            if self.cursor < notes.len() {
+                continue;
+            }
+            let _ = self.inner.cvar.wait_timeout(notes, remaining).unwrap();
+        }
     }
 
     fn usage(&mut self) -> Option<crate::drive::Usage> {
@@ -1011,6 +1054,16 @@ pub(crate) mod scripted {
                             json!({ "id": "turn-1", "status": "failed",
                                     "error": { "message": "boom" } })
                         } else {
+                            // Codex 0.152.1 rich transcript item, emitted before usage and
+                            // terminal completion exactly like the generated protocol schema.
+                            self.push(json!({ "jsonrpc": "2.0", "method": "item/completed",
+                                "params": { "threadId": thread_id, "turnId": "turn-1",
+                                    "item": { "id": "item-1", "type": "commandExecution",
+                                        "command": "cargo test", "cwd": "/tmp/project",
+                                        "status": "completed", "commandActions": [],
+                                        "aggregatedOutput": null, "durationMs": 12,
+                                        "exitCode": 0, "processId": null, "source": null,
+                                        "scriptPath": null, "pluginId": null } } }));
                             // Codex 0.148 reports usage immediately before completion in a
                             // separate notification (live-verified by HS2-CQ6B96).
                             self.push(json!({ "jsonrpc": "2.0",

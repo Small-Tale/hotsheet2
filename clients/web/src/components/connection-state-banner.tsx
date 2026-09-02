@@ -23,6 +23,6 @@ export function ConnectionStateBanner({ state, detail }: ConnectionStateBannerPr
   return <section class="connection-state-banner" data-component="connection-state-banner" data-state={state} role={state === 'connecting' ? 'status' : 'alert'}>
     <LucideIcon icon={item.icon} name={item.iconName} class={state === 'connecting' ? 'connection-state-banner__spinner' : undefined} />
     <div><strong>{item.label}</strong>{detail && <span>{detail}</span>}</div>
-    {item.action && <button type="button" data-action={item.action}>{item.actionLabel}</button>}
+    {item.action && <button type="button" data-action={item.action === 'show-connection-details' ? undefined : item.action} popoverTarget={item.action === 'show-connection-details' ? 'connection-details-dialog' : undefined}>{item.actionLabel}</button>}
   </section>;
 }

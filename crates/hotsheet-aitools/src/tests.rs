@@ -363,6 +363,26 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
 }
 
 #[test]
+fn codex_client_streams_completed_native_items_before_done() {
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
+    let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
+    let mut turn = cx.start_turn(&thread, "work").unwrap();
+    match turn.next_event() {
+        Some(TurnEvent::NativeActivity { source, payload }) => {
+            assert_eq!(source, "codex-transcript");
+            assert_eq!(payload["type"], "commandExecution");
+            assert_eq!(payload["command"], "cargo test");
+        }
+        other => panic!("expected native activity, got {other:?}"),
+    }
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Done(DoneReason::Completed))
+    );
+    assert_eq!(turn.next_event(), None);
+}
+
+#[test]
 fn codex_client_resumes_a_thread_by_id() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
     // Resuming echoes the requested thread id back (thread/resume by threadId).
@@ -454,10 +474,31 @@ fn codex_live_turn_against_the_daemon() {
     let thread = cx.open_thread(None, &cwd).expect("thread/start");
     eprintln!("live: opened thread {thread}");
     let mut turn = cx
-        .start_turn(&thread, "Reply with only the word: pong")
+        .start_turn(&thread, "Run `pwd`, then reply with only the word: pong")
         .expect("turn/start");
-    let outcome = turn.wait();
+    let mut saw_native = false;
+    let outcome = loop {
+        match turn.next_event() {
+            Some(TurnEvent::NativeActivity { source, payload }) => {
+                eprintln!(
+                    "live: native activity source={source} type={:?}",
+                    payload.get("type")
+                );
+                saw_native = true;
+            }
+            Some(TurnEvent::Done(DoneReason::Completed)) => break AppServerOutcome::Completed,
+            Some(TurnEvent::Done(reason)) => {
+                break AppServerOutcome::Failed(format!("{reason:?}"));
+            }
+            Some(_) => {}
+            None => break turn.wait(),
+        }
+    };
     eprintln!("live: turn outcome = {outcome:?}");
+    assert!(
+        saw_native,
+        "live turn captures at least one completed transcript item"
+    );
     assert_eq!(
         outcome,
         AppServerOutcome::Completed,
@@ -667,6 +708,27 @@ fn claude_channel_streams_output_then_done() {
 }
 
 #[test]
+fn claude_channel_projects_native_tool_use_as_the_verified_hook_contract() {
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::RichSuccess));
+    let mut turn = ch.start_turn("work").unwrap();
+    assert!(matches!(turn.next_event(), Some(TurnEvent::Output(_))));
+    match turn.next_event() {
+        Some(TurnEvent::NativeActivity { source, payload }) => {
+            assert_eq!(source, "claude-hooks");
+            assert_eq!(payload["hook_event_name"], "PreToolUse");
+            assert_eq!(payload["tool_name"], "Bash");
+            assert_eq!(payload["tool_input"]["command"], "cargo test");
+            assert_eq!(payload["session_id"], "sess-abc");
+        }
+        other => panic!("expected native activity, got {other:?}"),
+    }
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Done(DoneReason::Completed))
+    );
+}
+
+#[test]
 fn claude_channel_captures_the_session_id_and_maps_failure() {
     let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::Failure));
     let mut turn = ch.start_turn("x").unwrap();
@@ -780,10 +842,11 @@ fn claude_live_turn_over_the_channel() {
             .expect("claude spawn");
     let ch = ClaudeChannel::connect(transport);
     let mut turn = ch
-        .start_turn("Reply with only the word: pong")
+        .start_turn("Use Glob with the pattern '*' once, then reply with only the word: pong")
         .expect("start_turn");
     // Stream the events, then assert the terminal reason.
     let mut saw_output = false;
+    let mut saw_native = false;
     let reason = loop {
         match turn.next_event() {
             Some(TurnEvent::Output(t)) => {
@@ -792,12 +855,23 @@ fn claude_live_turn_over_the_channel() {
             }
             Some(TurnEvent::PermissionAsked(p)) => eprintln!("live: permission {p:?}"),
             Some(TurnEvent::Usage(u)) => eprintln!("live: nested usage {u:?}"),
+            Some(TurnEvent::NativeActivity { source, payload }) => {
+                eprintln!(
+                    "live: native activity source={source} type={:?}",
+                    payload.get("type")
+                );
+                saw_native = true;
+            }
             Some(TurnEvent::Done(r)) => break r,
             None => break turn.wait(),
         }
     };
     eprintln!("live: done {reason:?}, session={:?}", ch.session_id());
     assert!(saw_output, "streamed at least one assistant output");
+    assert!(
+        saw_native,
+        "streamed at least one native tool-use activity event"
+    );
     let usage = turn
         .usage()
         .expect("live result must expose parseable token usage");
