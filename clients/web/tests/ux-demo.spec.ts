@@ -1248,6 +1248,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(shellHierarchy.toolbarRight - shellHierarchy.trailingRight).toBeCloseTo(16, 0);
   expect(shellHierarchy.toolbarGap).toBe('0px');
   await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveAttribute('data-has-center', 'false');
+  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveCSS('border-bottom-color', 'rgba(0, 0, 0, 0)');
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);

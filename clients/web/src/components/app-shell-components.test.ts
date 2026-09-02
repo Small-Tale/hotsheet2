@@ -77,6 +77,7 @@ describe('application shell components', () => {
     expect(markup).toContain('data-component="page-header"');
     expect(markup).toContain('class="toolbar__leading">head');
     expect(markup).toContain('class="toolbar__trailing">actions');
+    expect(markup).toContain('data-component="toolbar" data-divider="false"');
     expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
     expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));
     expect(markup.indexOf('head')).toBeLessThan(markup.indexOf('data-component="project-tab-bar"'));
