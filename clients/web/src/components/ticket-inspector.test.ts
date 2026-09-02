@@ -48,13 +48,12 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-action="close-ticket-reader"');
     expect(markup).toContain('data-lucide="x"');
     expect(markup).toContain('data-component="note-card"');
-    expect(markup).toContain('data-action="edit-ticket-reader"');
-    expect(markup).not.toContain('data-action="edit-markdown"');
-    const editing = String(TicketInspector({ ...base, presentation: 'reader', readerEditing: true, detailsMode: 'write', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
+    expect(markup).not.toContain('data-action="edit-ticket-reader"');
+    expect(markup).toContain('data-action="edit-markdown"');
+    expect(markup).toContain('data-action="edit-note"');
+    const editing = String(TicketInspector({ ...base, presentation: 'reader', detailsMode: 'write', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
     expect(editing).toContain('name="markdown-source"');
     expect(editing).toContain('data-edit-on-double-click="true"');
-    expect(editing).toContain('aria-label="Editing ticket"');
-    expect(editing).toContain('aria-pressed disabled');
   });
 
   it('shows a feedback-needed banner only when the ticket is waiting on the user', () => {

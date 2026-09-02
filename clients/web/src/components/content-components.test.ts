@@ -24,6 +24,10 @@ describe('content components', () => {
     expect(markup).toContain('class="ticket-notes__add"');
     expect(markup).toContain('>Add note</button>');
   });
+  it('places a focused new-note composer after existing notes', () => {
+    const markup=String(TicketNotes({ notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }], composing: true }));
+    expect(markup.indexOf('data-component="note-card"')).toBeLessThan(markup.indexOf('data-component="note-composer"'));
+  });
   it('renders Markdown source, preview, and expansion as explicit states without a save footer', () => {
     const source = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true }));
     expect(source).toContain('textarea');

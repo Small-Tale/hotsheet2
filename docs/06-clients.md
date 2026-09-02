@@ -134,7 +134,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
 - **Project settings navigation.** Entering Settings replaces the ticket-oriented
   project sidebar with a persistent category navigator, following the HS1 settings-tab
   pattern. Ticket sources, Commands, Permissions, and Column view each render as a
-  separate workspace so unrelated controls do not become one long settings page.
+  separate workspace so unrelated controls do not become one long settings page. The
+  selected category names the shared page header; the workspace does not repeat that
+  heading, and the right region uses the same empty inspector placeholder as Notifications.
 
 - **Persistent shell splitters.** The project sidebar and ticket inspector are
   independently resizable by pointer or keyboard. Dragging updates only splitter
@@ -508,7 +510,8 @@ disconnects self-heal, and one arbiter means local and remote behave identically
 
 When the provider supports notes, the Notes section always presents a visible **Add
 note** action—even when the ticket has no existing notes. Creating the first note must
-not depend on recognizing an icon-only section-header shortcut.
+not depend on recognizing an icon-only section-header shortcut. Activating it appends
+the focused composer after the existing note list, beside the bottom action that opened it.
 
 **Five note kinds, one rendering rule.** A note's `kind` ([02](02-ticket-storage.md)
 §2.6 — `regular` / `activity` / `feedback_needed` / `feedback_draft` / `status`) determines how
@@ -518,8 +521,8 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
 
 - **`feedback_needed` and `feedback_draft` notes always render in the feedback-editor
   style** (you can answer the ask / continue your draft) — wherever they appear.
-- **`regular` and `status` notes, and the ticket `details`, render in the reader
-  (read-only) style.**
+- **`regular` and `status` notes, and the ticket `details`, use the same direct editing
+  affordances in the reader as they do in the inspector.**
 - **`activity` notes render as a chronological timeline** ordered by `created_at`
   (ULID tie-breaker). Never collapse duplicate, repeated, or reversed transitions;
   each entry is historical context. Every actual status change appends one of these
@@ -544,13 +547,10 @@ For note-driven feedback, only an unanswered ask is active: among regular and
 the response and clears Needs review; activity/status notes are neutral, and a later
 `feedback_needed` note opens it again.
 
-**Reader mode is a focus surface with an edit toggle.** Opening reader mode shows the
-ticket's details + notes on one large scrollable surface (per the rule above).
-
-- An **"Edit" button in reader mode** turns it into a **larger editing surface** for
-  details/notes — because editing in the cramped detail panel sometimes isn't enough
-  room.
-- While editing details/notes **in the detail panel**, the **reader button stays
+**Reader mode is a directly editable focus surface.** Opening reader mode shows the
+ticket's details + notes on one large scrollable surface with no separate top-level edit
+mode. Details and ordinary notes expose their normal edit interactions immediately.
+While editing details/notes **in the detail panel**, the **reader button stays
   available**; clicking it **launches directly into the larger reader/editing mode**,
   carrying the in-progress edit — so you can escalate from the tight inline editor to
   the roomy one without losing your place.

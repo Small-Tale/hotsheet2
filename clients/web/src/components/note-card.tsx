@@ -7,7 +7,7 @@ import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
 
 export type NoteKind = 'regular' | 'status' | 'feedback_needed' | 'feedback_draft' | 'activity';
-export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editable?: boolean; deletable?: boolean; editing?: boolean; draft?: string; readerMode?: boolean; readerEditing?: boolean }
+export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editable?: boolean; deletable?: boolean; editing?: boolean; draft?: string; readerMode?: boolean }
 
 const presentations = {
   regular: { label: 'Note', icon: MessageSquareText, iconName: 'message-square-text' },
@@ -17,11 +17,10 @@ const presentations = {
   activity: { label: 'Activity', icon: Activity, iconName: 'activity' },
 } as const;
 
-export function NoteCard({ id, kind, author, time, body, title, editable: editCapability = true, deletable = true, editing = false, draft, readerMode = false, readerEditing = false }: NoteCardProps) {
+export function NoteCard({ id, kind, author, time, body, title, editable = true, deletable = true, editing = false, draft, readerMode = false }: NoteCardProps) {
   const presentation = presentations[kind];
   const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
   const editorOpen = editing || feedbackEditor;
-  const editable = editCapability && (!readerMode || readerEditing);
   const source = draft ?? (kind === 'feedback_needed' ? '' : body);
   return <article class={`note-card${editorOpen ? ' note-card--editing' : ''}`} data-component="note-card" data-note-id={id} data-kind={kind} data-edit-on-double-click={editable && !editorOpen ? 'true' : undefined} title={editable && !editorOpen ? 'Double-click to edit' : undefined}>
     <header class="note-card__header">

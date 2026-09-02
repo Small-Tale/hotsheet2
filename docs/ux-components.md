@@ -71,8 +71,10 @@ never in ProjectTabBar. Start-edge inspector resizing correctly mirrors end-edge
 WorkspaceHeader search retains its expand/autofocus/filter/empty-blur
 contract. Project settings replace the project-summary sidebar with an HS1-style
 category navigator for Ticket sources, Commands, Permissions, and Column view; the
-selected category alone occupies the workspace. Settings still hide the inspector and
-disable ticket-view actions. Global Terminal Dashboard and Cross-project Stats modes hide
+selected category alone occupies the workspace and names the shared page header without
+a duplicate workspace title. Settings shows the standard empty inspector placeholder and
+disables ticket-view actions.
+Global Terminal Dashboard and Cross-project Stats modes hide
 both project-scoped regions, replace the project identity, and temporarily suppress
 header controls pending their dedicated wireframes. It owns the top-level arrangement
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
@@ -497,9 +499,9 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   `TicketInspector`, preserving its metadata editing, tabs, attachments, timeline,
   Markdown details, notes, and controlled state rather than maintaining a reduced
   parallel reader implementation. The inspector exposes a Reader action, reader content
-  uses its full available width, and the Edit action gates read-only details/notes.
-- `ReaderEditMode` — **built**: carries an in-progress inline details edit and draft into
-  the larger surface without losing focus or content
+  uses its full available width, and details/notes retain their normal direct editing
+  affordances without a separate reader-wide Edit mode. In-progress inline details
+  drafts carry into the larger surface without losing focus or content.
 - `UnsavedChangesGuard`
 
 ### 4.3 Tags — feature floor
@@ -557,9 +559,9 @@ icons; structural separators do not require icons.
   feedback-draft, and activity presentations sharing stable author, timestamp, vertically resizable edit body,
   contained long-token wrapping, and note identity;
   double-click enters a controlled editor whose Save persists and Cancel restores.
-  In reader mode, regular/status notes remain read-only until the top-level Edit action,
-  while feedback-needed and feedback-draft notes always render their Respond/Submit
-  editor style. Hover/focus reveals an explicit Edit action outside reader mode, while
+  In reader mode, regular/status notes remain directly editable, while feedback-needed
+  and feedback-draft notes always render their Respond/Submit editor style. Hover/focus
+  reveals an explicit Edit action in both inspector and reader, while
   the inspector toolbar provides the single Reader entry point from every inspector tab.
 - `RegularNote`
 - `StatusNote`

@@ -32,7 +32,6 @@ export const READER_NOTES = [
 export const readerNotes = signal(READER_NOTES);
 export const readerTab = signal<InspectorTab>('info');
 export const readerAttachments = signal([{ id: 'wireframe', name: 'reader-wireframe.png' }, { id: 'notes', name: 'reader-notes.md' }]);
-export const readerEditing = signal(false);
 export const editingNoteId = signal<string | undefined>(undefined);
 export const noteDraft = signal('');
 export const inspectorBlockedReason = signal('');
@@ -40,7 +39,7 @@ export const inspectorBlockedReasonDraft = signal(inspectorBlockedReason.value);
 export const inspectorBlockedReasonEditing = signal(false);
 
 export function TicketReaderDemo() {
-  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={readerAttachments.value} timelineEntries={[{ id: 'started', time: '1h ago', title: 'Development started', subtitle: 'The reader composition work is underway.', emphasized: true }, { id: 'reviewed', time: 'Now', title: 'Reader composition reviewed', subtitle: 'Shared inspector behavior is ready for review.', emphasized: true }]} readerEditing={readerEditing.value} /></section>;
+  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={readerAttachments.value} timelineEntries={[{ id: 'started', time: '1h ago', title: 'Development started', subtitle: 'The reader composition work is underway.', emphasized: true }, { id: 'reviewed', time: 'Now', title: 'Reader composition reviewed', subtitle: 'Shared inspector behavior is ready for review.', emphasized: true }]} /></section>;
 }
 
 export const MARKDOWN_INITIAL = `## Implementation notes
@@ -65,7 +64,7 @@ export const markdownMode = signal<MarkdownEditorMode>('preview');
 export const markdownExpanded = signal(false);
 export const markdownEvent = signal('Edit the source, preview it, or expand the editor.');
 
-export function saveMarkdown(): void { markdownSavedValue.value = markdownValue.value; markdownMode.value = 'preview'; readerEditing.value = false; markdownEvent.value = 'Markdown saved.'; }
+export function saveMarkdown(): void { markdownSavedValue.value = markdownValue.value; markdownMode.value = 'preview'; markdownEvent.value = 'Markdown saved.'; }
 export function cancelMarkdown(): void { markdownValue.value = markdownSavedValue.value; markdownMode.value = 'preview'; markdownEvent.value = 'Edits cancelled.'; }
 
 export function MarkdownEditorDemo() {

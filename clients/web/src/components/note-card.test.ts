@@ -42,10 +42,10 @@ describe('NoteCard', () => {
     expect(markup).toContain('href="/docs/runbook" target="_blank" rel="noopener noreferrer"');
   });
 
-  it('uses kind-driven reader behavior instead of launch-point editing', () => {
+  it('keeps regular reader notes directly editable while preserving feedback response behavior', () => {
     const regular = String(NoteCard({ id: 'regular', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read only', readerMode: true }));
-    expect(regular).not.toContain('data-edit-on-double-click');
-    expect(regular).not.toContain('aria-label="Edit note"');
+    expect(regular).toContain('data-edit-on-double-click="true"');
+    expect(regular).toContain('aria-label="Edit note"');
     const needed = String(NoteCard({ id: 'needed', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Please answer', readerMode: true }));
     expect(needed).toContain('Please answer');
     expect(needed).toContain('aria-label="Feedback response"');

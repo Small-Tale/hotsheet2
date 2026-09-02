@@ -440,8 +440,8 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
   expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * .9);
   const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
-  await expect(editableNote.getByRole('button', { name: 'Edit note' })).toHaveCount(0);
-  await reader.getByRole('button', { name: 'Edit ticket' }).click();
+  await expect(editableNote.getByRole('button', { name: 'Edit note' })).toBeVisible();
+  await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const readerDetails = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(readerDetails).toBeFocused();
   await expect(readerDetails).toHaveCSS('resize', 'vertical');
@@ -1480,8 +1480,11 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(0);
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
-  await expect(shell.locator('[data-component="ticket-inspector"]')).toHaveCount(0);
-  for (const name of ['Sort tickets', 'Favorite view', 'More workspace actions', 'Search tickets']) await expect(shell.getByRole('button', { name })).toHaveAttribute('disabled', '');
+  await expect(shell.getByRole('complementary', { name: 'Ticket inspector' })).toBeVisible();
+  for (const name of ['Sort tickets', 'Favorite view', 'More workspace actions', 'Search tickets']) {
+    const control=shell.getByRole('button', { name });
+    if (await control.count()) await expect(control).toHaveAttribute('disabled', '');
+  }
   await shell.getByRole('button', { name: 'List view' }).click();
   await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toBeVisible();

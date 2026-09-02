@@ -105,7 +105,6 @@ import {
   noteDemoNotes,
   noteDraft,
   readerAttachments,
-  readerEditing,
   readerNotes,
   readerTab,
   TicketReaderDemo,
@@ -1316,7 +1315,6 @@ delegate(root, 'click', '[data-action="save-note-edit"]', (_event, target) => {
   recordCollectionEvent('Note edit saved');
 });
 delegate(root, 'click', '[data-action="open-ticket-reader"]', () => {
-  readerEditing.value = markdownMode.value === 'write';
   recordCollectionEvent('Ticket reader requested');
   selectDemo('ticket-reader');
 });
@@ -1367,15 +1365,7 @@ delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => {
     ? 'Expanded editor opened.'
     : 'Inline editor restored.';
 });
-delegate(root, 'click', '[data-action="edit-ticket-reader"]', () => {
-  readerEditing.value = true;
-  markdownMode.value = 'write';
-  queueMicrotask(() =>
-    root.querySelector<HTMLElement>('[name="markdown-source"]')?.focus(),
-  );
-});
 delegate(root, 'click', '[data-action="close-ticket-reader"]', () => {
-  readerEditing.value = false;
   selectDemo('ticket-info-panel');
 });
 const addMockAttachments = (files: FileList | File[], target: HTMLElement) => {
