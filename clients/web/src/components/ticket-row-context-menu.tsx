@@ -38,10 +38,10 @@ function ContextItem({ item, disabled = false }: { item: { action: string; label
 }
 
 const PRIORITIES: readonly { value: TicketPriority; label: string }[] = [{ value: 'urgent', label: 'Urgent' }, { value: 'high', label: 'High' }, { value: 'default', label: 'Default' }, { value: 'low', label: 'Low' }];
-function MetadataSubmenu({ field, label, icon, iconName, choices, selected, disabled = false }: { field: 'category' | 'priority' | 'status'; label: string; icon: IconNode; iconName: string; choices: readonly { value: string; label: string; icon: IconNode; iconName: string; color?: string; separatorBefore?: boolean }[]; selected?: string; disabled?: boolean }) {
+function MetadataSubmenu({ field, label, icon, iconName, choices, selected, disabled = false }: { field: 'category' | 'priority' | 'status'; label: string; icon: IconNode; iconName: string; choices: readonly { value: string; label: string; icon?: IconNode; iconName?: string; color?: string; separatorBefore?: boolean }[]; selected?: string; disabled?: boolean }) {
   return <wa-dropdown-item disabled={disabled} title={disabled ? 'One or more selected ticket providers do not support updates.' : undefined}>
     <span slot="icon" class="ticket-context-menu__icon"><LucideIcon icon={icon} name={iconName} /></span>{label}
-    {choices.map(choice => <>{choice.separatorBefore && <wa-divider slot="submenu"></wa-divider>}<wa-dropdown-item slot="submenu" type="checkbox" checked={choice.value === selected} data-context-field={field} data-context-value={choice.value} value={choice.value}><span slot="icon" class="ticket-context-menu__icon" style={choice.color ? `color:${choice.color}` : undefined}><LucideIcon icon={choice.icon} name={choice.iconName} /></span>{choice.label}</wa-dropdown-item></>)}
+    {choices.map(choice => <>{choice.separatorBefore && <wa-divider slot="submenu"></wa-divider>}<wa-dropdown-item slot="submenu" type="checkbox" checked={choice.value === selected} data-context-field={field} data-context-value={choice.value} value={choice.value}>{choice.icon && choice.iconName ? <span slot="icon" class="ticket-context-menu__icon" style={choice.color ? `color:${choice.color}` : undefined}><LucideIcon icon={choice.icon} name={choice.iconName} /></span> : null}{choice.label}</wa-dropdown-item></>)}
   </wa-dropdown-item>;
 }
 

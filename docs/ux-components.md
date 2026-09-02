@@ -166,7 +166,8 @@ does not introduce polling or another network request.
 
 - `WorkspaceHeader` — **demo built**: responsive project identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
-  sort menu whose selected option remains highlighted and toggles ascending/descending
+  compact shared `Select` sort control whose current option carries the direction icon
+  and toggles ascending/descending
   direction when reselected, and a connected list/column/settings workspace. When its owning
   toolbar narrows, lower-priority utility and sort controls yield first; search and then the view
   switcher yield only at otherwise unusable widths. Actions remain contained without clipping
@@ -193,10 +194,9 @@ does not introduce polling or another network request.
 - `ViewModeSwitcher` — **built for list, columns, and project settings** with
   accessible pressed state. Settings replaces ticket content while active rather
   than opening a transient popover; later dashboard/analytics modes join the control.
-- `SortControl` — popup menu with a persistent current-sort highlight and ascending or
-  descending Lucide arrow; reselecting the current field reverses its direction. This
-  intentionally remains an action menu rather than `Select`: a value-only select does
-  not emit the same-value activation needed to reverse the current ordering.
+- `SortControl` — shared compact `Select` with aligned option labels and an ascending or
+  descending Lucide arrow on the current field; activating the current option again
+  reverses its direction.
 - `SavedOrCommandMenu`
 - `SearchButton` and `SearchField` expansion — the magnifier button is replaced by
   an animated, wider field carrying the same icon and automatic focus. An empty
@@ -293,7 +293,8 @@ always retain native clipboard behavior.
   inline formatting flow, with an explicit two-line limit in lists and three-line
   limit in board columns. The comfortable list keeps the category in its dedicated
   leading slot; compact board rows remove that empty left gutter and place a reduced
-  category icon inline immediately before the slug. The remaining flow is ordered
+  category icon inline immediately before and vertically centered against the slug's
+  first line. The remaining flow is ordered
   slug → priority → title so bounded priority remains visible before an arbitrarily
   long title (the slug is a stable-width inline block). Updated time is the first item in that identity flow and
   floats right, allowing later lines of a long title to use the space beneath it. A quieter, vertically
@@ -346,7 +347,8 @@ always retain native clipboard behavior.
   appropriate.
 - `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
   collection, fixed header, independently scrolling ticket region, visible scroll
-  affordance, a standalone demo that preserves the 250px production minimum, and shared
+  affordance, and a full-width heading control that selects every ticket in that column.
+  It also has a standalone demo that preserves the 250px production minimum and shared
   responsive `TicketRow` composition. Loading and empty states
   remain future variants.
 - The real Queue board uses `Not Started`, `Started`, `Completed`, and `Verified`

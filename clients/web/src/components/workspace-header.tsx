@@ -1,13 +1,12 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
-import { ArrowDown, ArrowDownAZ, ArrowUp, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
+import { ArrowDown, ArrowUp, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
+import { Select, type SelectChoice } from './select';
 import { ToolbarControlGroup } from './toolbar-control-group';
 import { ToolbarText } from './toolbar-text';
 
@@ -56,6 +55,8 @@ export function applyWorkspaceSortDirection(comparison: number, direction: Works
 
 export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
+  const directionIcon=sortDirection==='ascending'?ArrowUp:ArrowDown,directionName=sortDirection==='ascending'?'arrow-up':'arrow-down';
+  const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=sortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
   return <div class="workspace-header__actions" data-component="workspace-controls">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
@@ -64,17 +65,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
         <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__sort-group" single>
-        <wa-dropdown class="workspace-header__sort" placement="bottom-end">
-          <wa-button slot="trigger" appearance="plain" with-caret disabled={projectActionsDisabled} aria-label="Sort tickets" title="Sort tickets"><LucideIcon icon={ArrowDownAZ} name="arrow-down-a-z" /></wa-button>
-          {sortOptions.map(option => {
-            const selected = sort === option.value;
-            const directionLabel = sortDirection === 'ascending' ? 'ascending' : 'descending';
-            return <wa-dropdown-item aria-current={selected ? 'true' : undefined} aria-label={selected ? `${option.label}, ${directionLabel}` : option.label} data-sort={option.value} value={option.value}>
-              {selected && <span slot="icon" class="workspace-header__sort-direction"><LucideIcon icon={sortDirection === 'ascending' ? ArrowUp : ArrowDown} name={sortDirection === 'ascending' ? 'arrow-up' : 'arrow-down'} /></span>}
-              {option.label}
-            </wa-dropdown-item>;
-          })}
-        </wa-dropdown>
+        <Select className="workspace-header__sort" name="workspace-sort" ariaLabel="Sort tickets" value={sort} choices={sortChoices} disabled={projectActionsDisabled} />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
         <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="toggle-favorite" aria-label="Favorite view" title="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>

@@ -450,6 +450,7 @@ pub fn prepare_not_working(
     now: Timestamp,
     note: Option<(Ulid, String)>,
     has_evidence: bool,
+    reporter: Option<&str>,
 ) -> Result<(), OpError> {
     if ticket.status != Status::Completed {
         return Err(OpError::NotWorkingRequiresCompleted(ticket.status));
@@ -461,6 +462,10 @@ pub fn prepare_not_working(
     if note.is_none() && !has_evidence {
         return Err(OpError::EmptyNotWorkingReport);
     }
+    let summary = note
+        .as_ref()
+        .map(|(_, text)| summarize_not_working(text))
+        .unwrap_or_else(|| "Evidence attached for review.".into());
     if let Some((id, text)) = note {
         ticket.notes.push(Note {
             id,
@@ -470,6 +475,25 @@ pub fn prepare_not_working(
             text: format!("Not working: {text}"),
         });
     }
+    let mut entropy = DefaultHasher::new();
+    ticket.id.hash(&mut entropy);
+    ticket.notes.len().hash(&mut entropy);
+    "not-working-report".hash(&mut entropy);
+    now.as_str().hash(&mut entropy);
+    let timestamp_ms = now
+        .instant()
+        .map(|instant| instant.unix_timestamp_nanos().max(0) as u64 / 1_000_000)
+        .unwrap_or_default();
+    ticket.notes.push(Note {
+        id: Ulid::from_parts(timestamp_ms, entropy.finish() as u128),
+        kind: NoteKind::Activity,
+        created_at: now.clone(),
+        edited_at: now.clone(),
+        text: reporter
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| format!("{} reported as not working\n{summary}", value.trim()))
+            .unwrap_or_else(|| format!("Reported as not working\n{summary}")),
+    });
     let previous = ticket.status;
     ticket.status = Status::NotStarted;
     ticket.up_next = true;
@@ -479,6 +503,17 @@ pub fn prepare_not_working(
     append_status_transition(ticket, previous, ticket.status, &now);
     ticket.updated_at = now;
     Ok(())
+}
+
+fn summarize_not_working(text: &str) -> String {
+    let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut chars = compact.chars();
+    let summary = chars.by_ref().take(140).collect::<String>();
+    if chars.next().is_some() {
+        format!("{}…", summary.trim_end())
+    } else {
+        summary
+    }
 }
 
 fn status_label(status: Status) -> &'static str {

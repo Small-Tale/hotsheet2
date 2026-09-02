@@ -693,7 +693,14 @@ impl TicketProvider for GitProvider {
                 message: "evidence attachment id already exists".into(),
             });
         }
-        ops::prepare_not_working(&mut ticket, now, report.note, !report.evidence.is_empty())?;
+        let reporter = crate::current_user_name(self.store.root());
+        ops::prepare_not_working(
+            &mut ticket,
+            now,
+            report.note,
+            !report.evidence.is_empty(),
+            reporter.as_deref(),
+        )?;
         let evidence = report
             .evidence
             .into_iter()
@@ -1149,6 +1156,7 @@ pub fn move_between(
 mod tests {
     use super::*;
     use crate::StoreMetadata;
+    use std::process::Command;
 
     fn git_provider() -> (tempfile::TempDir, GitProvider) {
         let dir = tempfile::tempdir().unwrap();
@@ -1663,6 +1671,18 @@ mod tests {
     #[test]
     fn git_provider_reports_not_working_with_note_evidence_and_reopen_in_one_write() {
         let (_dir, provider) = git_provider();
+        Command::new("git")
+            .arg("-C")
+            .arg(provider.store.root())
+            .arg("init")
+            .output()
+            .unwrap();
+        Command::new("git")
+            .arg("-C")
+            .arg(provider.store.root())
+            .args(["config", "user.name", "Hot Sheet"])
+            .output()
+            .unwrap();
         let id = Ulid::new();
         provider
             .create(
@@ -1714,6 +1734,10 @@ mod tests {
                 .iter()
                 .any(|note| note.text == "Not working: regressed after restart")
         );
+        assert!(result.notes.iter().any(|note| {
+            note.kind == NoteKind::Activity
+                && note.text == "Hot Sheet reported as not working\nregressed after restart"
+        }));
         assert!(
             result
                 .notes

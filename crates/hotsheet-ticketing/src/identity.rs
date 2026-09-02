@@ -15,17 +15,26 @@ pub const ME: &str = "me";
 /// The store's configured git `user.email`, or `None` if git is unavailable, the value is
 /// unset, or it's empty. Cheap (`git config user.email`); callers may cache per request.
 pub fn current_user_email(store_root: &Path) -> Option<String> {
+    current_git_config(store_root, "user.email")
+}
+
+/// The store's configured git `user.name`, used only for human-readable activity text.
+pub fn current_user_name(store_root: &Path) -> Option<String> {
+    current_git_config(store_root, "user.name")
+}
+
+fn current_git_config(store_root: &Path, key: &str) -> Option<String> {
     let out = Command::new("git")
         .arg("-C")
         .arg(store_root)
-        .args(["config", "user.email"])
+        .args(["config", key])
         .output()
         .ok()?;
     if !out.status.success() {
         return None;
     }
-    let email = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!email.is_empty()).then_some(email)
+    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!value.is_empty()).then_some(value)
 }
 
 /// Resolve a person-valued filter argument: the case-insensitive sentinel [`ME`] becomes the
@@ -71,6 +80,18 @@ mod tests {
             current_user_email(dir.path()).as_deref(),
             Some("dev@example.com")
         );
+    }
+
+    #[test]
+    fn current_user_name_reads_git_config() {
+        let dir = git_repo_with_email(Some("dev@example.com"));
+        Command::new("git")
+            .arg("-C")
+            .arg(dir.path())
+            .args(["config", "user.name", "Brian"])
+            .output()
+            .unwrap();
+        assert_eq!(current_user_name(dir.path()).as_deref(), Some("Brian"));
     }
 
     #[test]

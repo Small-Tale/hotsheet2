@@ -1080,11 +1080,11 @@ delegate(root, 'focusout', '[name="workspace-search"]', () => {
     if (workspaceSearchQuery.value === '') workspaceSearchOpen.value = false;
   });
 });
-delegate(root, 'click', '[data-sort]', (_event, target) => {
+delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
   const next = nextWorkspaceSort(
     workspaceSort.value,
     workspaceSortDirection.value,
-    (target as HTMLElement).dataset.sort as typeof workspaceSort.value,
+    (target as FormControl).value as typeof workspaceSort.value,
   );
   workspaceSort.value = next.sort;
   workspaceSortDirection.value = next.direction;
@@ -1507,6 +1507,14 @@ delegate(
     if (selected) selected.checked = ticketRowSettings.selected.value;
   },
 );
+delegate(root, 'click', '[data-action="select-ticket-column"]', (event, target) => {
+  event.stopImmediatePropagation();
+  const column = (target as HTMLElement).closest<HTMLElement>('[data-component="ticket-board-column"]');
+  if (!column || !usesCollectionState()) return;
+  const slugs = new Set([...column.querySelectorAll<HTMLElement>('[data-ticket-slug]')].map(row => row.dataset.ticketSlug));
+  collectionTickets.value = collectionTickets.value.map(ticket => ({ ...ticket, selected: slugs.has(ticket.slug) }));
+  recordCollectionEvent(`${slugs.size} tickets selected`);
+});
 function toggleRowUpNext(target?: Element): void {
   if (usesCollectionState()) {
     const row = target?.closest(

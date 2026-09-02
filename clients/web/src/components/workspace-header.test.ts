@@ -14,8 +14,9 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
     expect(markup).toContain('name="workspace-search"');
     expect(markup).toContain('value="client"');
-    expect(markup).toContain('slot="trigger" appearance="plain" with-caret');
-    expect(markup).toContain('aria-current="true" aria-label="Priority, descending" data-sort="priority"');
+    expect(markup).toContain('name="workspace-sort"');
+    expect(markup).toContain('aria-label="Sort tickets"');
+    expect(markup).toContain('<wa-option value="priority"');
     expect(markup).toContain('data-lucide="arrow-down"');
     expect(markup).not.toContain('type="checkbox"');
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);

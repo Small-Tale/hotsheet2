@@ -49,6 +49,8 @@ describe('TicketBoard', () => {
     const markup = String(TicketBoardColumn({ id: 'active', title: 'Active', tickets: [ticket] }));
     expect(markup).toContain('data-component="ticket-board-column"');
     expect(markup).toContain('aria-label="1 tickets"');
+    expect(markup).toContain('data-action="select-ticket-column"');
+    expect(markup).toContain('aria-label="Select all Active tickets"');
     expect(markup).toContain('aria-label="Active tickets"');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board-column.css'), 'utf8');
     expect(css).toMatch(/ticket-board-column__tickets[^}]*overflow-y: auto/);

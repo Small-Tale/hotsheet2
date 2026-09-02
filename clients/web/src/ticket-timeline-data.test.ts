@@ -52,4 +52,11 @@ describe('ticketTimelineEntries', () => {
     ] }));
     expect(entries.map(entry => entry.title)).toEqual(['Ticket created', 'Started', 'Completed', 'Not Started', 'Started']);
   });
+
+  it('renders a Not Working report as attributed activity with a concise summary', () => {
+    const entries=ticketTimelineEntries(ticket({notes:[
+      note('report','activity','2026-09-02T04:00:00Z','Brian reported as not working\nThe select popup closes during refresh.'),
+    ]}));
+    expect(entries.at(-1)).toMatchObject({title:'Brian reported as not working',subtitle:'The select popup closes during refresh.'});
+  });
 });
