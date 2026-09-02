@@ -25,6 +25,19 @@ pub struct Note {
     pub text: String,
 }
 
+impl Note {
+    /// Whether this note opens a feedback exchange.
+    ///
+    /// Early HS2 automation wrote the historical `FEEDBACK NEEDED:` convention as a
+    /// regular note. Keep those files meaningful while new writes use the first-class
+    /// `feedback_needed` kind.
+    pub fn is_feedback_needed_request(&self) -> bool {
+        self.kind == NoteKind::FeedbackNeeded
+            || (self.kind == NoteKind::Regular
+                && self.text.trim_start().starts_with("FEEDBACK NEEDED:"))
+    }
+}
+
 /// Durable metadata for one attachment payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attachment {
@@ -183,7 +196,7 @@ impl Ticket {
                     .unwrap_or_else(|| a.created_at.as_str().cmp(b.created_at.as_str()))
                     .then(a.id.cmp(&b.id))
             })
-            .is_some_and(|note| note.kind == NoteKind::FeedbackNeeded)
+            .is_some_and(Note::is_feedback_needed_request)
     }
 }
 
@@ -239,5 +252,32 @@ mod tests {
             "2026-08-20T00:03:00Z",
         ));
         assert!(ticket.feedback_needed());
+    }
+
+    #[test]
+    fn legacy_feedback_prefix_participates_in_the_feedback_exchange() {
+        let mut ticket = Ticket::default();
+        let mut legacy = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+            NoteKind::Regular,
+            "2026-08-20T00:00:00Z",
+        );
+        legacy.text = "  FEEDBACK NEEDED: which behavior should we use?".into();
+        ticket.notes.push(legacy);
+        assert!(ticket.feedback_needed());
+
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::Activity,
+            "2026-08-20T00:01:00Z",
+        ));
+        assert!(ticket.feedback_needed());
+
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+            NoteKind::Regular,
+            "2026-08-20T00:02:00Z",
+        ));
+        assert!(!ticket.feedback_needed());
     }
 }

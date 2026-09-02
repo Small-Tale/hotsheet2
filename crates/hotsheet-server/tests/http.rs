@@ -610,6 +610,77 @@ async fn checkout_search_matches_slug_details_and_notes() {
 }
 
 #[tokio::test]
+async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    let created = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Needs a decision"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let id = created["id"].as_str().unwrap();
+
+    let updated = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/{checkout_id}/tickets/{id}"),
+                Some(r#"{"note":"FEEDBACK NEEDED: choose one"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(updated["notes"][0]["kind"], "feedback_needed");
+
+    let rows = body_json(
+        router
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let row = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == id)
+        .unwrap();
+    assert_eq!(row["feedback_needed"], true);
+}
+
+#[tokio::test]
 async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();

@@ -540,6 +540,11 @@ pub fn add_note(
     text: String,
 ) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
+    let kind = if kind == NoteKind::Regular && text.trim_start().starts_with("FEEDBACK NEEDED:") {
+        NoteKind::FeedbackNeeded
+    } else {
+        kind
+    };
     t.notes.push(Note {
         id: note_id,
         kind,
@@ -1388,6 +1393,33 @@ mod tests {
         assert_eq!(deleted.notes[0].id, n2);
         assert_eq!(deleted.updated_at.as_str(), "2026-08-19T04:00:00Z");
         assert!(delete_note(&store, &id, &n1, ts("t5")).is_err());
+    }
+
+    #[test]
+    fn add_note_promotes_the_legacy_feedback_prefix_to_the_typed_kind() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+
+        let ticket = add_note(
+            &store,
+            &id,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap(),
+            ts("2026-08-19T01:00:00Z"),
+            NoteKind::Regular,
+            "FEEDBACK NEEDED: choose a layout".into(),
+        )
+        .unwrap();
+
+        assert_eq!(ticket.notes[0].kind, NoteKind::FeedbackNeeded);
+        assert!(store.read_ticket(&id).unwrap().feedback_needed());
     }
 
     #[test]

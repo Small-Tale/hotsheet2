@@ -428,6 +428,34 @@ fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
 }
 
 #[test]
+fn legacy_feedback_prefix_sets_the_indexed_flag() {
+    use hotsheet_model::{Note, NoteKind};
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+
+    // Reproduce an early HS2 file exactly: it persisted the marker as a regular note,
+    // before core writes promoted the convention to the typed kind.
+    let mut ticket = store.read_ticket(&id).unwrap();
+    ticket.notes.push(Note {
+        id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"),
+        created_at: Timestamp::new("2026-08-19T01:00:00Z"),
+        edited_at: Timestamp::new("2026-08-19T01:00:00Z"),
+        kind: NoteKind::Regular,
+        text: "FEEDBACK NEEDED: choose one".into(),
+    });
+    store.write_ticket(&ticket).unwrap();
+    ix.reconcile(&store).unwrap();
+
+    let indexed = ix
+        .query(&TicketQuery::default())
+        .unwrap()
+        .into_iter()
+        .find(|row| row.id == id.to_string())
+        .unwrap();
+    assert!(indexed.feedback_needed);
+}
+
+#[test]
 fn a_stale_schema_version_triggers_a_rebuild() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("i.sqlite");

@@ -136,7 +136,11 @@ impl ApiTicket {
                 .iter()
                 .map(|n| ApiNote {
                     id: n.id.to_string(),
-                    kind: n.kind,
+                    kind: if n.is_feedback_needed_request() {
+                        NoteKind::FeedbackNeeded
+                    } else {
+                        n.kind
+                    },
                     created_at: n.created_at.as_str().to_string(),
                     edited_at: n.edited_at.as_str().to_string(),
                     text: n.text.clone(),
@@ -401,6 +405,25 @@ mod tests {
             "2026-08-20T00:02:00Z",
         ));
         assert!(!TicketRow::from(&waiting).feedback_needed);
+    }
+
+    #[test]
+    fn legacy_feedback_prefix_is_normalized_on_full_and_compact_wire_shapes() {
+        use hotsheet_model::Note;
+        let mut waiting = ticket();
+        waiting.notes.push(Note {
+            id: Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
+            kind: NoteKind::Regular,
+            created_at: Timestamp::new("2026-08-20T00:00:00Z"),
+            edited_at: Timestamp::new("2026-08-20T00:00:00Z"),
+            text: "FEEDBACK NEEDED: choose one".into(),
+        });
+
+        assert!(TicketRow::from(&waiting).feedback_needed);
+        assert_eq!(
+            ApiTicket::from(&waiting).notes[0].kind,
+            NoteKind::FeedbackNeeded
+        );
     }
 
     #[test]

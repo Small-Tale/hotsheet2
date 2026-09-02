@@ -79,6 +79,7 @@ test('keeps feedback rectangle input within its frame budget in the populated ma
 });
 
 test('projects an indexed feedback-needed note into the real row and inspector rails',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});
   await mockProject(page,true,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color','rgb(139, 92, 246)');
@@ -87,6 +88,11 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   const inspector=page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toHaveAttribute('data-needs-review','true');
   await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
+  await page.screenshot({path:'/private/tmp/hs2-vwphrd-feedback-needed-wide.png',fullPage:true});
+  await page.setViewportSize({width:760,height:900});
+  await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color','rgb(139, 92, 246)');
+  await expect(inspector).toHaveAttribute('data-needs-review','true');
+  await page.screenshot({path:'/private/tmp/hs2-vwphrd-feedback-needed-narrow.png',fullPage:true});
 });
 
 test('clears needs review when a regular response follows the feedback-needed note',async({page})=>{
