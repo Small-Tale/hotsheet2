@@ -1,10 +1,10 @@
 import './status-badge.css';
 
-import { Archive, BadgeCheck, Circle, CircleCheck, Clock, type IconNode } from 'lucide';
+import { Archive, BadgeCheck, Circle, CircleCheck, Clock, Clock3, type IconNode } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 
-export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog';
+export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive';
 export type StatusBadgeAppearance = 'filled' | 'plain';
 
 export interface StatusBadgeProps {
@@ -22,7 +22,8 @@ const presentation: Record<TicketStatus, { icon: IconNode; iconName: string; lab
   started: { icon: Clock, iconName: 'clock', label: 'Started' },
   completed: { icon: CircleCheck, iconName: 'circle-check', label: 'Completed' },
   verified: { icon: BadgeCheck, iconName: 'badge-check', label: 'Verified' },
-  backlog: { icon: Archive, iconName: 'archive', label: 'Backlog' },
+  backlog: { icon: Clock3, iconName: 'clock-3', label: 'Backlog' },
+  archive: { icon: Archive, iconName: 'archive', label: 'Archive' },
 };
 
 export function statusPresentation(status: TicketStatus) {

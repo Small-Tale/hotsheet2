@@ -4,12 +4,12 @@ import { StatusBadge, statusPresentation, type TicketStatus } from './status-bad
 
 describe('StatusBadge', () => {
   it('maps every supported status to stable readable presentation', () => {
-    const statuses: TicketStatus[] = ['not_started', 'started', 'completed', 'verified', 'backlog'];
+    const statuses: TicketStatus[] = ['not_started', 'started', 'completed', 'verified', 'backlog', 'archive'];
     expect(statuses.map(status => statusPresentation(status).label)).toEqual([
-      'Not started', 'Started', 'Completed', 'Verified', 'Backlog',
+      'Not started', 'Started', 'Completed', 'Verified', 'Backlog', 'Archive',
     ]);
     expect(statuses.map(status => statusPresentation(status).iconName)).toEqual([
-      'circle', 'clock', 'circle-check', 'badge-check', 'archive',
+      'circle', 'clock', 'circle-check', 'badge-check', 'clock-3', 'archive',
     ]);
     expect(statuses.every(status => statusPresentation(status).icon.length > 0)).toBe(true);
   });

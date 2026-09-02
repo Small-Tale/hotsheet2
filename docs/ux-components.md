@@ -398,7 +398,10 @@ than substituting a hardcoded default.
   - `TicketStatusMenu` — **demo built**: a shared `Select` whose custom selected-value
     renderer retains the compact `StatusBadge` presentation with lighter typography;
     every normally weighted popup option carries its semantic Lucide icon, and the
-    selected control intentionally hides the redundant dropdown caret
+    selected control intentionally hides the redundant dropdown caret. Inspector and
+    row-context status menus share one canonical order: Not started, Started,
+    Completed, Verified, then a separator before Backlog and Archive. Backlog uses the
+    clock metaphor; Archive uses the archive-box metaphor.
   - `StatusPicker`
   - `StatusBadge` — **built**: readable status text with status-specific tone,
     optional reinforcing Lucide icon, filled/plain appearances, and regular/compact

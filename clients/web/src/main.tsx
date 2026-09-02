@@ -95,7 +95,7 @@ const permissionCount=(projectId?:string)=>pendingPermissions().filter(item=>!pr
 const permissionAutomation=(projectId:string)=>permissionAutomationByProject.value[projectId]??DEFAULT_PERMISSION_AUTOMATION;
 const persistPermissionHistory=()=>{localStorage.setItem('hotsheet.permission-history',JSON.stringify(permissionInbox.history()))};
 const api = () => new Api(project()?.apiPath ?? '');
-const status = (value?:string):TicketStatus => ['not_started','started','completed','verified','backlog'].includes(value ?? '') ? value as TicketStatus : 'not_started';
+const status = (value?:string):TicketStatus => ['not_started','started','completed','verified','backlog','archive'].includes(value ?? '') ? value as TicketStatus : 'not_started';
 const priority = (value?:string):TicketPriority => priorityFromWire(value);
 const ticketSnapshot = (slug:string) => tickets.value.find(item=>item.slug===slug) as TicketSnapshot|undefined;
 const ago = (value?:string) => { if (!value) return 'Recently'; const seconds=Math.max(0,(Date.now()-Date.parse(value))/1000); if(seconds<60)return 'Now';if(seconds<3600)return `${Math.floor(seconds/60)}m ago`;if(seconds<86400)return `${Math.floor(seconds/3600)}h ago`;return `${Math.floor(seconds/86400)}d ago`; };

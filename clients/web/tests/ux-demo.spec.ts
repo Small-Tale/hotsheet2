@@ -783,7 +783,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Started');
   await expect(statusTrigger.locator('.select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
   await statusTrigger.click();
-  await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(5);
+  await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(6);
+  await expect(statusTrigger.locator('wa-divider')).toHaveCount(1);
+  expect(await statusTrigger.locator('wa-option').evaluateAll(options => options.map(option => option.getAttribute('value')))).toEqual(['not_started', 'started', 'completed', 'verified', 'backlog', 'archive']);
   const popupFontWeight = await statusTrigger.locator('wa-option[value="completed"]').evaluate(node => getComputedStyle(node.shadowRoot!.querySelector('[part~="label"]')!).fontWeight);
   expect(Number(popupFontWeight)).toBeLessThanOrEqual(500);
   await statusTrigger.locator('wa-option[value="completed"]').click();

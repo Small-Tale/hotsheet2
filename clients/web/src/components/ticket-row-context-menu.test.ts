@@ -26,6 +26,8 @@ describe('TicketRowContextMenu', () => {
     expect(markup).toContain('data-lucide="sparkles"');
     expect(markup).toContain('data-lucide="chevrons-up"');
     expect(markup).toContain('data-lucide="badge-check"');
+    expect(markup).toContain('<wa-divider slot="submenu"></wa-divider><wa-dropdown-item slot="submenu" type="checkbox" data-context-field="status" data-context-value="backlog"');
+    expect(markup).toContain('data-context-field="status" data-context-value="archive"');
   });
 
   it('omits Up Next when the selected ticket set is ineligible', () => {

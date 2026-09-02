@@ -4,6 +4,7 @@
 .status-badge--completed { color: #17623c; background: #dff4e8; }
 .status-badge--verified { color: #27508f; background: #dfebff; }
 .status-badge--backlog { color: #6c6473; background: #eeeaf1; }
+.status-badge--archive { color: #5c5363; background: #e5e0e8; }
 .status-badge--plain { padding: 0; border: 0; border-radius: 0; color: #686a73; background: transparent; }
 .status-badge--compact { gap: .25rem; padding: .15rem .4rem; font-size: .7rem; font-weight: 600; }
 .status-badge--plain.status-badge--compact { padding: 0; }

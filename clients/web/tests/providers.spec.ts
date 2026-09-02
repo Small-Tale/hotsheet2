@@ -97,6 +97,18 @@ test('translates urgent priority through the canonical server contract',async({p
   await expect(page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"] .select__icon--selected [data-lucide="chevrons-up"]')).toBeVisible();
 });
 
+test('moves tickets to Backlog and Archive from every shipped status menu',async({page})=>{
+  const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:/Archive/}).click();const archived=page.locator('[data-ticket-slug="HS2-ARCH01"]');await archived.click();
+  const inspector=page.locator('[data-component="ticket-inspector"]'),status=inspector.locator('wa-select[name="inspector-status"]');
+  await expect(status).toHaveJSProperty('value','archive');await expect(status).toHaveAttribute('aria-label','Change status, Archive');await expect(status.locator('.select__custom-selected [data-lucide="archive"]')).toBeVisible();
+  await status.click();await expect(status.locator('wa-option')).toHaveCount(6);await expect(status.locator('wa-divider')).toHaveCount(1);await status.locator('wa-option[value="backlog"]').click();
+  await expect.poll(()=>patches.some(patch=>patch.status==='backlog')).toBe(true);await page.getByRole('button',{name:/Backlog/}).click();const backlogged=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"]');await expect(backlogged).toBeVisible();
+  await backlogged.click({button:'right'});const menu=page.getByRole('menu',{name:'Ticket actions'});await menu.locator('wa-dropdown-item:not([slot="submenu"])',{hasText:'Change status'}).hover();
+  const choices=menu.locator('[data-context-field="status"]');await expect(choices).toHaveCount(6);await expect(menu.locator('wa-divider[slot="submenu"]')).toHaveCount(1);await choices.filter({hasText:'Archive'}).click();
+  await expect.poll(()=>patches.some(patch=>patch.status==='archive')).toBe(true);await page.getByRole('button',{name:/Archive/}).click();await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ARCH01"]')).toBeVisible();
+});
+
 test('projects Up Next immediately and reconciles without a full project refresh',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const row=page.locator('[data-component="ticket-list-row"]',{hasText:'Not started ticket'});const requests:string[]=[];page.on('request',request=>{requests.push(`${request.method()} ${new URL(request.url()).pathname}`)});

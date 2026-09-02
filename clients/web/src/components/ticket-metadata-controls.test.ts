@@ -22,8 +22,10 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(status).toContain('name="inspector-status"');
     expect(status).toContain('<span slot="start" class="select__custom-selected"><span class="status-badge status-badge--completed');
     expect(status).toContain('<wa-option value="verified"><span slot="start" class="select__icon"');
+    expect(status).toContain('<wa-divider></wa-divider><wa-option value="backlog"');
+    expect(status).toContain('<wa-option value="archive"');
     expect(status).toContain('data-lucide="badge-check"');
-    expect(status.match(/data-lucide=/g)).toHaveLength(6);
+    expect(status.match(/data-lucide=/g)).toHaveLength(7);
   });
 
   it('renders inspector sections independently of the inspector shell', () => {
