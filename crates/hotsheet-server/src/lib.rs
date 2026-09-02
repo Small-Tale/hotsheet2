@@ -763,6 +763,10 @@ pub fn app(state: AppState) -> Router {
             get(list_checkout_tickets).post(create_checkout_ticket),
         )
         .route(
+            "/checkouts/{reference}/batch",
+            post(batch_update_checkout_tickets),
+        )
+        .route(
             "/checkouts/{reference}/corrupt-tickets",
             get(list_checkout_corrupt_tickets),
         )
@@ -2088,6 +2092,60 @@ async fn update_checkout_ticket(
         store: multistore::store_url_id(&entry.store),
         ticket: do_update(&state, &entry, &id, req)?,
     }))
+}
+
+#[derive(Deserialize)]
+struct CheckoutBatchUpdateReq {
+    id: String,
+    #[serde(flatten)]
+    update: UpdateReq,
+}
+
+#[derive(Deserialize)]
+struct CheckoutBatchReq {
+    updates: Vec<CheckoutBatchUpdateReq>,
+}
+
+/// Apply a multi-selection update through one checkout-scoped request. All optimistic
+/// concurrency tokens are validated before the first write, so a stale selection cannot
+/// partially apply while the client still sees one logical bulk operation.
+async fn batch_update_checkout_tickets(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(req): Json<CheckoutBatchReq>,
+) -> Result<Json<Vec<ResolvedTicket>>, ApiError> {
+    if req.updates.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "bulk update requires at least one ticket",
+        ));
+    }
+    let mut resolved = Vec::with_capacity(req.updates.len());
+    for item in req.updates {
+        let entry = checkout_entry_for_ticket(&state, &reference, &item.id)?;
+        let ticket =
+            ops::resolve(&entry.store, &item.id)?.ok_or_else(|| ApiError::not_found(&item.id))?;
+        if item
+            .update
+            .expected_token
+            .as_deref()
+            .is_some_and(|token| token != ticket.updated_at.as_str())
+        {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                format!("ticket {} changed since it was read", item.id),
+            ));
+        }
+        resolved.push((entry, item));
+    }
+    let mut updated = Vec::with_capacity(resolved.len());
+    for (entry, item) in resolved {
+        updated.push(ResolvedTicket {
+            store: multistore::store_url_id(&entry.store),
+            ticket: do_update(&state, &entry, &item.id, item.update)?,
+        });
+    }
+    Ok(Json(updated))
 }
 async fn delete_checkout_ticket_note(
     State(state): State<AppState>,
@@ -3645,6 +3703,15 @@ async fn resolve_permission(
     Path(id): Path<u64>,
     Json(body): Json<PermissionAnswer>,
 ) -> Result<Json<PermissionResolved>, ApiError> {
+    let event_decision = match body.decision {
+        hotsheet_aitools::PermissionDecision::Allow => "allow",
+        hotsheet_aitools::PermissionDecision::Deny => "deny",
+    };
+    let event_scope = match body.scope {
+        hotsheet_aitools::PermissionScope::Once => "once",
+        hotsheet_aitools::PermissionScope::Session => "session",
+        hotsheet_aitools::PermissionScope::Always => "always",
+    };
     let resolved = state
         .permissions
         .resolve(id, body.decision, body.scope)
@@ -3657,6 +3724,17 @@ async fn resolve_permission(
             Err(e) => eprintln!("failed to persist permission rule: {e}"),
         }
     }
+    // Resolution can happen through another client or transport. Publish a replayable
+    // nudge so every notification inbox reconciles the now-absent request into history.
+    state.emit(ChangeEvent {
+        store: String::new(),
+        kind: "permission_resolved".to_string(),
+        id: id.to_string(),
+        slug: String::new(),
+        message: Some(format!("{event_decision}:{event_scope}")),
+        activity: None,
+        assignment: None,
+    });
     Ok(Json(PermissionResolved {
         connection: resolved.connection,
         decision: resolved.decision,

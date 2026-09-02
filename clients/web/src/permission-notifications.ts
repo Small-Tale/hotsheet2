@@ -26,6 +26,12 @@ export function parsePermissionHistory(raw:unknown):PermissionHistoryItem[] {
 
 export function formatPermissionCountdown(milliseconds:number):string {const total=Math.ceil(Math.max(0,milliseconds)/1000);return `${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`}
 
+export function parsePermissionResolution(message?:string):{decision:PermissionDecision;scope:PermissionScope}|undefined {
+  const [decision,scope]=message?.split(':')??[];
+  if(decision!=='allow'&&decision!=='deny')return undefined;
+  return {decision,scope:scope==='always'?'always':'once'};
+}
+
 export class PermissionInbox {
   private pendingItems=new Map<string,PermissionItem>();
   private historyItems:PermissionHistoryItem[];

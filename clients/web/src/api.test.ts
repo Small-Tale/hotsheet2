@@ -40,6 +40,22 @@ describe('ticket search transport',()=>{
   });
 });
 
+describe('checkout bulk update transport',()=>{
+  it('sends every selected ticket through one batch request',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('[]',{status:200}));
+    await new Api('/api').batchUpdateCheckoutTickets('folder with spaces',[
+      {id:'one',patch:{status:'verified',expected_token:'token-1'}},
+      {id:'two',patch:{priority:'urgent',expected_token:'token-2'}},
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/batch',expect.objectContaining({
+      method:'POST',
+      body:'{"updates":[{"id":"one","status":"verified","expected_token":"token-1"},{"id":"two","priority":"highest","expected_token":"token-2"}]}',
+    }));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('atomic Not Working transport',()=>{
   it('sends note, evidence, and concurrency token in one multipart request',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({status:'not_started',up_next:true}),{status:200}));

@@ -55,7 +55,7 @@ import {
   resizeRegionFromPointer,
 } from '../components/resizable-region';
 import { Select } from '../components/select';
-import { TicketRowContextMenu } from '../components/ticket-row-context-menu';
+import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
 import { createDebouncedAutosave } from '../debounced-autosave';
@@ -933,15 +933,6 @@ window.addEventListener('pointerup', () => {
   regionResizeDrag = undefined;
   delete document.body.dataset.resizingRegion;
 });
-window.addEventListener('pointerdown', (event) => {
-  if (
-    tabContextMenu.value &&
-    !(event.target as HTMLElement).closest(
-      '.project-tab-context-menu,[data-component="project-tab"]',
-    )
-  )
-    tabContextMenu.value = undefined;
-});
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') tabContextMenu.value = undefined;
 });
@@ -1807,12 +1798,9 @@ delegate(
   },
 );
 addEventListener('pointerdown', (event) => {
-  if (
-    contextMenu.value &&
-    !(event.target as Element).closest('.ticket-context-menu')
-  )
-    contextMenu.value = undefined;
-});
+  if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
+  if (tabContextMenu.value && !eventTargetsContextMenu(event, '.project-tab-context-menu')) tabContextMenu.value = undefined;
+}, { capture: true });
 addEventListener('keydown', (event) => {
   if (event.key === 'Escape') contextMenu.value = undefined;
 });

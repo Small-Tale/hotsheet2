@@ -7,13 +7,14 @@ const ticket = (slug: string, connection_id = 'git', tags: string[] = []): Ticke
   connection_id, native_id: slug, qualified_id: `${connection_id}:${slug}`, id: slug, slug, title: slug,
   up_next: false, feedback_needed: false, tags, blocked_by: [], claim_count: 0,
 });
-const capabilities = (update: boolean) => ({ update } as Capabilities);
+const capabilities = (update: boolean, atomic_batch = update) => ({ update, atomic_batch } as Capabilities);
 
 describe('bulk ticket operations', () => {
-  it('requires update support from every selected provider', () => {
+  it('requires atomic batch update support from every selected provider', () => {
     const selected = [ticket('ONE', 'git'), ticket('TWO', 'jira')];
     expect(canBulkUpdate(selected, id => capabilities(id === 'git'))).toBe(false);
     expect(canBulkUpdate(selected, () => capabilities(true))).toBe(true);
+    expect(canBulkUpdate(selected, () => capabilities(true, false))).toBe(false);
     expect(canBulkUpdate([], () => capabilities(true))).toBe(false);
   });
 

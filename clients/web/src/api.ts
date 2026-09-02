@@ -17,7 +17,7 @@ export interface ToolConnection {id:string;tool:string;project:string;role:'main
 export interface CommandDefinition {id:string;title:string;program:string;args:string[];group?:string;confirmation?:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}
 export interface CommandRun {id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:CommandOutputLine[]}
-export interface ChangeEvent {store:string;kind:string;id:string;slug:string}
+export interface ChangeEvent {store:string;kind:string;id:string;slug:string;message?:string}
 export interface PollResponse {cursor:number;events:ChangeEvent[];overflow:boolean}
 export const encodeAttachmentFilename=(filename:string)=>encodeURIComponent(filename);
 export class Api {
@@ -39,6 +39,7 @@ export class Api {
   checkoutTicket=(checkout:string,id:string)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`).then(ticket=>({store:ticket.store,ticket}));
   createCheckoutTicket=(checkout:string,value:{title:string;details?:string;category:string;priority?:string;status?:string;up_next?:boolean;tags?:string[]})=>this.request<FullTicket>(`/checkouts/${encodeURIComponent(checkout)}/tickets`,{method:'POST',body:JSON.stringify(prioritiesToWire(value))});
   updateCheckoutTicket=(checkout:string,id:string,value:Record<string,unknown>)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(prioritiesToWire(value))}).then(ticket=>({store:ticket.store,ticket}));
+  batchUpdateCheckoutTickets=(checkout:string,updates:Array<{id:string;patch:Record<string,unknown>}>)=>this.request<Array<FullTicket&{store:string}>>(`/checkouts/${encodeURIComponent(checkout)}/batch`,{method:'POST',body:JSON.stringify({updates:updates.map(({id,patch})=>({id,...prioritiesToWire(patch)}))})});
   deleteCheckoutNote=(checkout:string,id:string,noteId:string)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/notes/${encodeURIComponent(noteId)}`,{method:'DELETE'}).then(ticket=>({store:ticket.store,ticket}));
   addCheckoutAttachment=(checkout:string,id:string,file:File)=>this.request<FullTicket&{store:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments`,{method:'POST',headers:{'Content-Type':file.type||'application/octet-stream','X-Hotsheet-Filename':encodeAttachmentFilename(file.name),'X-Hotsheet-Filename-Encoding':'percent'},body:file}).then(ticket=>({store:ticket.store,ticket}));
   checkoutAttachmentUrl=(checkout:string,id:string,attachmentId:string)=>`${this.origin}/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`;

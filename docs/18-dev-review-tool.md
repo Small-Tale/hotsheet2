@@ -63,15 +63,16 @@ server, Tauri command, test fake, or another ticket-provider-aware bridge.
 
 ## UX demo and security boundary
 
-Open `/ux-demo?dev-review=1` (additional query parameters are fine) while running the
-Vite development server. The UX demo adapter posts to
+Open either `/?dev-review=1` for the main application or
+`/ux-demo?dev-review=1` for the component catalog (additional query parameters are
+fine) while running the Vite development server. Both development entry points post to
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.
 The catalog sidebar also exposes a development-only `Dev Review On/Off` toggle that
 updates the same query-backed state, so reviewers do not need to edit the URL.
 
-The browser entry point is guarded by Vite's compile-time `import.meta.env.DEV` value
-and loads the tool through a dynamic import only after the query flag is present.
+Each browser entry point is guarded by Vite's compile-time `import.meta.env.DEV` value
+and loads the tool through a dynamic import only after the exact query flag is present.
 `html2canvas` is therefore a development dependency and is not linked into normal
 Hot Sheet clients. Every production web build runs
 `scripts/check-production-bundle.mjs` and fails if emitted JS or CSS contains a Dev

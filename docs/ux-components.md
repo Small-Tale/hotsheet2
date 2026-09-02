@@ -364,7 +364,9 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 - `TicketContextMenu` — **built**: shared list/board menu with Lucide icons, checked
   metadata submenus, stable field/value action contracts, capability-aware category/status/
   priority changes, add/remove tag dialogs, and confirmed soft deletion. Bulk writes use
-  fresh provider concurrency tokens and participate in field-aware Undo.
+  fresh provider concurrency tokens and participate in field-aware Undo. Capture-phase
+  composed-path containment keeps shadow-DOM menu interactions open and dismisses on every
+  true outside pointer-down or Escape.
 - `CopyMoveTicketDialog`
 - `UndoToast` / `UndoHistory`
 

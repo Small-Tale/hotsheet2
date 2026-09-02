@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-import { COMPLETED_TICKET_CONTEXT_ACTIONS, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
+import { COMPLETED_TICKET_CONTEXT_ACTIONS, eventTargetsContextMenu, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
 
 describe('TicketRowContextMenu', () => {
+  it('uses the composed path so shadow-menu interactions are inside and rows are outside', () => {
+    const shadowPart = { matches: () => false };
+    const menu = { matches: (selector: string) => selector === '.ticket-context-menu' };
+    expect(eventTargetsContextMenu({ composedPath: () => [shadowPart, menu] })).toBe(true);
+    expect(eventTargetsContextMenu({ composedPath: () => [{ matches: (selector: string) => selector === '[data-action="select-ticket-row"]' }] })).toBe(false);
+    expect(eventTargetsContextMenu({ composedPath: () => [{}] })).toBe(false);
+  });
   it('gives every action a distinct meaningful Lucide icon', () => {
     expect(TICKET_CONTEXT_ACTIONS).toHaveLength(11);
     expect(new Set(TICKET_CONTEXT_ACTIONS.map(item => item.iconName)).size).toBe(TICKET_CONTEXT_ACTIONS.length);

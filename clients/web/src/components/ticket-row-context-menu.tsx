@@ -46,6 +46,15 @@ function MetadataSubmenu({ field, label, icon, iconName, choices, selected, disa
 }
 
 export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; verifyAction?: boolean; notWorkingAction?: boolean; selectionCount?: number; canBulkUpdate?: boolean }
+
+/** Shadow-DOM-safe containment check for capture-phase context-menu dismissal. */
+export function eventTargetsContextMenu(event: { composedPath(): unknown[] }, selector = '.ticket-context-menu'): boolean {
+  return event.composedPath().some(node => {
+    const candidate = node as { matches?: (value: string) => boolean };
+    return typeof candidate.matches === 'function' && candidate.matches(selector);
+  });
+}
+
 export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, verifyAction = false, notWorkingAction = false, selectionCount = 1, canBulkUpdate = true }: TicketRowContextMenuProps) {
   const priorityChoices = PRIORITIES.map(choice => { const option = getPriorityPresentation(choice.value); return { ...choice, icon: option.icon, iconName: option.name, color: option.color }; });
   return <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${x}px;top:${y}px`}>

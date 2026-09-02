@@ -799,6 +799,65 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     )
     .await;
     assert_eq!(updated["title"], "Updated");
+    let second = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/combo/tickets?store={store_id}"),
+                Some(r#"{"title":"Second"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let second_slug = second["slug"].as_str().unwrap();
+    let current_first = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/combo/tickets/{slug}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let current_second = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/combo/tickets/{second_slug}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let batch = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/combo/batch",
+                Some(
+                    &serde_json::json!({"updates":[
+                        {"id":slug,"category":"bug","expected_token":current_first["concurrency_token"]},
+                        {"id":second_slug,"category":"bug","expected_token":current_second["concurrency_token"]}
+                    ]})
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(batch.as_array().unwrap().len(), 2);
+    assert!(
+        batch
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|ticket| ticket["category"] == "bug")
+    );
     let stale = app
         .oneshot(authed(
             "PATCH",
@@ -3412,6 +3471,15 @@ async fn permission_round_trip_lists_answers_and_unblocks_the_tool() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     };
+    let cursor = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/ws/poll?timeout_ms=1", None))
+            .await
+            .unwrap(),
+    )
+    .await["cursor"]
+        .as_u64()
+        .unwrap();
 
     // Answer it — allow, once (no rule persisted).
     let resp = app
@@ -3428,6 +3496,21 @@ async fn permission_round_trip_lists_answers_and_unblocks_the_tool() {
     assert_eq!(ack["connection"], "conn-1");
     assert_eq!(ack["decision"], "allow");
     assert_eq!(ack["persisted"], false);
+
+    let resolution = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/ws/poll?since={cursor}&timeout_ms=1"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(resolution["events"][0]["kind"], "permission_resolved");
+    assert_eq!(resolution["events"][0]["id"], id.to_string());
+    assert_eq!(resolution["events"][0]["message"], "allow:once");
 
     // The blocked tool received the human's answer.
     assert_eq!(format!("{:?}", waiter.join().unwrap()), "Allow");

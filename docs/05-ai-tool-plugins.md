@@ -279,6 +279,11 @@ command:
    user allows/denies (with allow-once/always mapping onto persisted allow-rules).
 4. The answer routes back to the connection that raised it.
 
+Both enqueue and resolution publish replayable event nudges. Resolution nudges matter when
+another client or transport answers: every attached client refetches pending requests and
+retains the disappeared request in notification history, including generic tools such as
+`ToolSearch` whose action/details string is empty.
+
 `Always Allow` rules are personal machine state, stored per primary project under
 `${HOTSHEET_HOME}/permissions/<store-id>.json`; they are never written to the code or
 ticket repository. `GET /permissions` advertises `always_allow_supported` on each

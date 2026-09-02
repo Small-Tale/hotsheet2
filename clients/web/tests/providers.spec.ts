@@ -40,6 +40,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/ws/poll')&&request.method()==='GET'){await new Promise(resolve=>setTimeout(resolve,1_000));const since=Number(url.searchParams.get('since')??0);return route.fulfill({json:{cursor:since,events:[],overflow:false}})}
     if(path.endsWith('/repository/status')) return route.fulfill({json:{branch:'main',ahead:1,behind:0,staged:0,unstaged:1,untracked:0,conflicted:0,clean:false}});
     if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
+    if(path.endsWith('/batch')&&request.method()==='POST'){const updates=request.postDataJSON().updates as Array<Record<string,unknown>&{id:string}>;const changed=updates.map(({id,...body})=>{patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);const ticket=rows.find(item=>item.id===id)!;return{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id)??[],concurrency_token:`next-${id}`}});return route.fulfill({json:changed})}
     if(path.endsWith('/tickets')&&request.method()==='GET'){if(url.searchParams.get('text')==='QQRY00'){await new Promise(resolve=>setTimeout(resolve,150));return route.fulfill({json:[searchSlugRow,searchDetailsRow]})}return route.fulfill({json:rows})}
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON();const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:body.title,category:body.category,up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
@@ -60,6 +61,12 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   });
   return patches;
 }
+
+test('activates Dev Review from the main app query only in explicit development review mode',async({page})=>{
+  await page.goto('/?dev-review=1');await expect(page.locator('.hs-dev-review')).toBeVisible();await expect(page.getByRole('button',{name:'Feedback'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-wide.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});await expect(page.locator('.hs-dev-review')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-narrow.png',fullPage:true});
+  await page.goto('/?dev-review=0');await expect(page.locator('.hs-dev-review')).toHaveCount(0);
+});
 
 test('projects an indexed feedback-needed note into the real row and inspector rails',async({page})=>{
   await mockProject(page,true,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
@@ -147,6 +154,15 @@ test('renders exactly once when the long poll announces a permission request',as
   await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'',kind:'permission_asked',id:'77',slug:'Bash'}],overflow:false}});
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   const metrics=await renderMetrics(page);expect(metrics?.passes).toBe(1);expect(metrics?.mutations).toBeGreaterThan(0);
+});
+
+test('records externally resolved empty-action permissions in notification history',async({page})=>{
+  await mockProject(page);let pending=[{id:81,connection:'claude-tool-search',tool:'ToolSearch',action:'',always_allow_supported:true}],cursor=0;const polls:Array<import('@playwright/test').Route>=[];
+  await page.route('**/permissions',route=>route.fulfill({json:pending}));
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const popup=page.locator('[data-component="permission-request-popup"]');await expect(popup).toContainText('Wants permission to use ToolSearch');await expect(popup.locator('.permission-request-card__details')).toHaveCount(0);
+  pending=[];await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'',kind:'permission_resolved',id:'81',slug:'',message:'allow:once'}],overflow:false}});await expect(popup).toHaveCount(0);
+  await page.getByRole('button',{name:/Notifications view/}).click();const previous=page.locator('[data-component="notification-center"] .permission-request-card--list').filter({hasText:'ToolSearch'});await expect(previous).toContainText('allowed permission');await expect(previous.locator('.permission-request-card__details')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-kbvn36-toolsearch-history-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(previous).toBeInViewport();await page.screenshot({path:'/private/tmp/hs2-kbvn36-toolsearch-history-narrow.png',fullPage:true});
 });
 
 test('keeps healthy tickets usable and offers safe reveal plus AI repair recovery',async({page})=>{
@@ -326,6 +342,8 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(createdRow).toContainText('Created from the real shell');
   await expect(createdRow).toHaveAttribute('data-selected','true');
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('HS2-NEW001');
+  await expect(page.locator('[data-component="ticket-inspector"] [data-component="markdown-editor"]')).toHaveAttribute('data-mode','write');
+  await expect(page.getByRole('textbox',{name:'Details'})).toBeFocused();
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(1);
   await page.getByLabel('Settings view').click();
   await expect(page.getByText('/work/demo.hs2')).toBeVisible();
@@ -466,10 +484,20 @@ test('ships TicketRow context-menu behavior through real list and board composit
 });
 
 test('adds and removes tags and confirms deletion for a real multi-selection',async({page})=>{
-  const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const first=page.locator('[data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-ticket-slug="HS2-START02"]'),menu=page.getByRole('menu',{name:'Ticket actions'});const selectBoth=async()=>{await first.click();await second.click({modifiers:['Meta']});await expect(page.locator('[data-action="select-ticket-row"][data-selected="true"]')).toHaveCount(2)};
+  const patches=await mockProject(page),mutationRequests:string[]=[];page.on('request',request=>{if(request.method()!=='GET')mutationRequests.push(`${request.method()} ${new URL(request.url()).pathname}`)});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const first=page.locator('[data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-ticket-slug="HS2-START02"]'),menu=page.getByRole('menu',{name:'Ticket actions'});const selectBoth=async()=>{await first.click();await second.click({modifiers:['Meta']});await expect(page.locator('[data-action="select-ticket-row"][data-selected="true"]')).toHaveCount(2)};
   await selectBoth();await first.click({button:'right'});await menu.locator('[data-context-action="Add tag"]').click();let dialog=page.locator('[data-component="bulk-tag-dialog"]');await expect(dialog).toContainText('Add tag — 2 selected');await page.getByRole('textbox',{name:'Tag to add *'}).fill('regression');await dialog.getByRole('button',{name:'Add tag'}).click();await expect.poll(()=>patches.filter(patch=>Array.isArray(patch.tags)&&(patch.tags as string[]).includes('regression')).length).toBe(2);
   await selectBoth();await first.click({button:'right'});await menu.locator('[data-context-action="Remove tag"]').click();dialog=page.locator('[data-component="bulk-tag-dialog"]');await expect(dialog).toContainText('Remove tag — 2 selected');await dialog.getByRole('button',{name:'client'}).click();await dialog.getByRole('button',{name:'Remove tag'}).click();await expect.poll(()=>patches.filter(patch=>Array.isArray(patch.tags)&&!(patch.tags as string[]).includes('client')).length).toBe(2);
-  await selectBoth();await first.click({button:'right'});await menu.locator('[data-context-action="Delete ticket"]').click();const deletion=page.locator('[data-component="bulk-delete-dialog"]');await expect(deletion).toContainText('Delete 2 tickets?');await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-x7vkyj-bulk-delete-wide.png'});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-x7vkyj-bulk-delete-narrow.png',fullPage:true});await deletion.getByRole('button',{name:'Delete 2 tickets'}).click();await expect.poll(()=>patches.filter(patch=>patch.status==='deleted').length).toBe(2);await expect(first).toHaveCount(0);expect(patches.filter(patch=>Array.isArray(patch.tags)||patch.status==='deleted').every(patch=>typeof patch.expected_token==='string')).toBe(true);
+  await selectBoth();await first.click({button:'right'});await menu.locator('[data-context-action="Delete ticket"]').click();const deletion=page.locator('[data-component="bulk-delete-dialog"]');await expect(deletion).toContainText('Delete 2 tickets?');await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-x7vkyj-bulk-delete-wide.png'});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-x7vkyj-bulk-delete-narrow.png',fullPage:true});await deletion.getByRole('button',{name:'Delete 2 tickets'}).click();await expect.poll(()=>patches.filter(patch=>patch.status==='deleted').length).toBe(2);await expect(first).toHaveCount(0);expect(patches.filter(patch=>Array.isArray(patch.tags)||patch.status==='deleted').every(patch=>typeof patch.expected_token==='string')).toBe(true);expect(mutationRequests.filter(value=>value.endsWith('/batch'))).toHaveLength(3);expect(mutationRequests.filter(value=>value.includes('/tickets/'))).toEqual([]);
+});
+
+test('dismisses ticket context menus on every true outside pointerdown',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const first=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]'),menu=page.getByRole('menu',{name:'Ticket actions'});
+  await first.click({button:'right'});await expect(menu).toBeVisible();
+  await menu.locator('wa-dropdown-item',{hasText:'Change status'}).dispatchEvent('pointerdown');await expect(menu).toBeVisible();
+  await page.getByRole('button',{name:'Search tickets'}).click();await expect(menu).toHaveCount(0);
+  await first.click({button:'right'});await expect(menu).toBeVisible();await second.dispatchEvent('pointerdown');await expect(menu).toHaveCount(0);await second.click();
+  await first.click({button:'right'});await expect(menu).toBeVisible();await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);
 });
 
 test('undoes, redoes, copies, pastes, and drags ticket mutations through the real shell',async({page})=>{

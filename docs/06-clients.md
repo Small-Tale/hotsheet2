@@ -34,10 +34,14 @@ editable controls and dialogs. Dragging an unselected ticket moves only it, whil
   (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
   menu. Production handlers cover reader opening, category/status/priority changes, batch
   Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. Every bulk
+  metadata operation is submitted as one checkout-scoped atomic batch request (never one
+  request per selected ticket), with all concurrency tokens validated before any write.
   metadata/tag/delete write is provider-capability gated and carries the freshly read opaque
   concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
-  The complete selection remains one field-aware Undo transaction. Outside pointer-down and
-  Escape dismiss the menu. A
+  The complete selection remains one field-aware Undo transaction. A capture-phase,
+  composed-path-aware outside pointer-down dismisses the menu reliably across native and
+  Web Awesome shadow-DOM controls (including an ordinary click on another ticket row),
+  while interactions inside the menu remain open; Escape also dismisses it. A
   single completed selection also exposes Verified and Not Working. The latter accepts
   notes and/or attachments and submits them through one provider-neutral operation that
   atomically appends the note, publishes all evidence, and returns the ticket to Not
@@ -124,6 +128,8 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   an explicit git-store path when the convention does not apply. The Vite-only bridge
   discovers or detached-starts the local server and keeps its bearer credential out of
   browser state; Tauri will replace that bridge with its native lifecycle layer.
+  Creating a ticket selects it and immediately opens and focuses its Details editor so
+  the user can continue writing without another pointer action.
 
   The bridge performs the authenticated compatibility handshake when attaching to a
   discovered server. The client distinguishes compatible skew, client-too-old,
@@ -275,7 +281,10 @@ view layer is new work.
 
 The web client now implements the permission portion of that floor for Claude and
 Codex. Every open project has a replay-safe long poll; a `permission_asked` event
-triggers one fetch of that project's authenticated permission and connection state.
+triggers one fetch of that project's authenticated permission and connection state. A
+replayable `permission_resolved` event triggers the same reconciliation, so decisions made
+by another client or transport become history entries instead of silently disappearing;
+empty-action generic requests such as `ToolSearch` follow the same lifecycle.
 There is no fixed-interval network polling. Pending counts appear in the main segmented
 control and project tabs, and a non-modal popup appears even when another project is
 selected. The global Notifications view
