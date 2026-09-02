@@ -20,6 +20,10 @@ interface SessionTarget { url:string; secret:string }
 
 const sessions = new Map<string, SessionTarget>();
 
+export function developmentRepositoryRoot(cwd = process.cwd(), environment = process.env) {
+  return resolve(environment.HOTSHEET_REPO_ROOT ?? resolve(cwd, '../..'));
+}
+
 function hotsheetHome() {
   return process.env.HOTSHEET_HOME || resolve(homedir(), '.hotsheet2');
 }
@@ -47,7 +51,7 @@ async function instanceFor(store: string): Promise<InstanceInfo | undefined> {
 async function ensureServer(store: string): Promise<InstanceInfo> {
   const existing = await instanceFor(store);
   if (existing) return existing;
-  const repoRoot = resolve(process.cwd(), '../..');
+  const repoRoot = developmentRepositoryRoot();
   const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
   if (!await exists(binary)) throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
   const child = spawn(binary, ['-C', store, '--bind', '127.0.0.1:0'], { cwd: repoRoot, detached: true, stdio: 'ignore' });

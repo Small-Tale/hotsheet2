@@ -80,7 +80,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   package into a temporary snapshot and starts Vite there. The running app retains the
   development bridge and `/ux-demo`, but concurrent edits in the checkout cannot trigger
   HMR or expose a partially edited multi-file state; restart the command to load a new
-  snapshot. Use `npm run dev:hot` only when actively developing the web UI and immediate
+  snapshot. The launcher passes the original repository root into the snapshot so the
+  project bridge still resolves the real `target/debug/hotsheet-server` rather than a
+  nonexistent temporary `target` directory. Use `npm run dev:hot` only when actively developing the web UI and immediate
   HMR is desired. Browser tests use `dev:hot` on a separate default port and never reuse
   an already-running maintainer server.
 

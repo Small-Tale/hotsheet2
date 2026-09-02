@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createStableSnapshot, removeStableSnapshot } from './stable-dev.mjs';
+import { createStableSnapshot, removeStableSnapshot, stableDevEnvironment } from './stable-dev.mjs';
 
 const cleanup = [];
 afterEach(async () => {
@@ -28,5 +28,18 @@ describe('stable dev snapshot', () => {
     expect(await readFile(resolve(snapshot, 'src/main.ts'), 'utf8')).toBe('before');
     expect((await lstat(resolve(snapshot, 'node_modules'))).isSymbolicLink()).toBe(true);
     await expect(stat(resolve(snapshot, 'dist'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('preserves the original repository root for every snapshot-side bridge', () => {
+    const environment = stableDevEnvironment('/work/hotsheet2/clients/web', {});
+    expect(environment.HOTSHEET_REPO_ROOT).toBe('/work/hotsheet2');
+    expect(environment.HOTSHEET_DEV_REVIEW_REPO_ROOT).toBe('/work/hotsheet2');
+
+    const overridden = stableDevEnvironment('/snapshot/web', {
+      HOTSHEET_REPO_ROOT: '/real/repository',
+      HOTSHEET_DEV_REVIEW_REPO_ROOT: '/review/repository',
+    });
+    expect(overridden.HOTSHEET_REPO_ROOT).toBe('/real/repository');
+    expect(overridden.HOTSHEET_DEV_REVIEW_REPO_ROOT).toBe('/review/repository');
   });
 });
