@@ -72,11 +72,15 @@ mod tests {
         assert!(claude_md.contains("<!-- BEGIN hotsheet:claude -->"));
         assert!(claude_md.contains("<!-- END hotsheet:claude -->"));
         assert!(claude_md.contains("hotsheet-cli ls --up-next"));
+        assert!(claude_md.contains("Create every follow-up immediately, without asking"));
+        assert!(claude_md.contains("`FEEDBACK NEEDED` is only"));
 
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
         assert!(skill.contains("name: hotsheet"));
         assert!(skill.contains("not a stopping condition"));
         assert!(skill.contains("Priority is an important guidance signal"));
+        assert!(skill.contains("Completion checklist"));
+        assert!(skill.contains("FEEDBACK NEEDED is not deferred-work tracking"));
 
         let mcp: serde_json::Value = serde_json::from_str(&read(d.path(), ".mcp.json")).unwrap();
         let hs = &mcp["mcpServers"]["hotsheet"];
@@ -145,6 +149,8 @@ mod tests {
         let agents = read(d.path(), "AGENTS.md");
         assert!(agents.contains("<!-- BEGIN hotsheet:codex -->"));
         assert!(agents.contains("hotsheet-cli ls --up-next"));
+        assert!(agents.contains("Create every follow-up immediately, without asking"));
+        assert!(agents.contains("`FEEDBACK NEEDED` is only"));
         assert!(!d.path().join(".claude").exists());
         assert!(reports[0].wrote.iter().all(|w| !w.contains("SKILL")));
 

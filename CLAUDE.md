@@ -1,13 +1,13 @@
-<!-- hotsheet:begin section=ticket-driven-work v=1 -->
+<!-- hotsheet:begin section=ticket-driven-work v=2 -->
 ## Ticket-Driven Work
 
 When the user gives you work directly (not via the Hot Sheet channel or events), create Hot Sheet tickets before starting implementation — especially for substantial or multi-step work.
 
 - **Do create tickets** for: features, bug fixes, refactoring, multi-step tasks, anything changing code. **Don't** for: simple questions, git commits, quick lookups, trivial one-liners. **When in doubt, create them.**
 - Create via the Hot Sheet API (prefer the `hotsheet_*` MCP tools), mark Up Next, then work through them: set status `started` → implement → set `completed` with notes.
-- **Always create follow-up tickets — without asking** for incomplete work (unfinished steps, open design questions, known gaps, designed-but-unbuilt features). Never pause to ask the user whether to file a follow-up, and never say you "will file" one and wait — just create it immediately, then continue. If it's not in a ticket, it's forgotten. (Open design questions still get a ticket; capture the decision in that ticket rather than blocking on it.)
-- **Incomplete-work checklist** — before marking a ticket `completed`, file follow-ups for any: (1) UI placeholder text ("coming soon"), (2) TODO/FIXME comments, (3) documented-but-unimplemented requirements, (4) empty/stub functions returning mock data.
-- **Use FEEDBACK NEEDED before deferring or asking about follow-ups.** When about to (a) defer a ticket needing more work, (b) ask whether to file follow-ups, or (c) close with a question buried in notes — DON'T. Leave the ticket `started`, add a `FEEDBACK NEEDED:` note (per `.hotsheet/worklist.md`), signal channel done, and wait. It's the only reliable way to surface a question.
+- **Create every follow-up immediately — without asking.** As soon as you identify unfinished steps, open design questions, known gaps, out-of-scope work, or designed-but-unbuilt behavior, create a follow-up ticket. Do not ask permission, wait for confirmation, promise to file it later, or leave it only in a comment/TODO/note. Reference every follow-up slug in the current ticket's completing note, then continue.
+- **FEEDBACK NEEDED is for a blocker on the current ticket, not deferred work.** Use it only when the current ticket cannot proceed without a user decision or unavailable external state. Leave that ticket `started`, add a `FEEDBACK NEEDED:` note with the specific decision or state required, and wait after continuing any independent work. This does not replace a follow-up: create tickets first for every independently describable gap or later step.
+- **Completion checklist** — before marking a ticket `completed`: (1) finish and verify its scope; (2) update required tests, coverage, and docs; (3) scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-unimplemented behavior, open questions, and known gaps; (4) immediately create a follow-up for every incomplete item; (5) include the result, verification, and all follow-up slugs in the completing note.
 <!-- hotsheet:end section=ticket-driven-work -->
 
 ## Identity terminology

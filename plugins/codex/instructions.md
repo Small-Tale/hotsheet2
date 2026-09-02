@@ -14,9 +14,17 @@ them to know what to do next and to record what you did. Everything below works
 - `hotsheet-cli edit <slug> --status completed --note "what you did"` when done.
 - Or `hotsheet_update` (it takes a `note`) / `hotsheet_close` through MCP.
 
-**Create tickets for new work you discover** (bugs, follow-ups, gaps) rather than
-leaving them in comments:
+**Create every follow-up immediately, without asking.** As soon as you identify an
+unfinished step, open question, known gap, out-of-scope task, or designed-but-unbuilt
+behavior, create its ticket rather than leaving it in a comment, TODO, or note:
 - `hotsheet-cli new --title "…" --category bug` — or the `hotsheet_create` MCP tool.
+
+Before completing a ticket: finish and verify its scope; update required tests, coverage,
+and docs; scan for incomplete work; create every needed follow-up; and include the result,
+verification, and all follow-up slugs in the completing note. `FEEDBACK NEEDED` is only
+for a blocker on the current ticket that requires a user decision or unavailable external
+state. Leave that ticket started and name the blocker; it does not replace follow-ups for
+independently describable work.
 
 Normally continue until every actionable Up Next ticket is complete. Read the whole queue
 before choosing an order; consider dependencies, overlap, shared context, risk, and safe

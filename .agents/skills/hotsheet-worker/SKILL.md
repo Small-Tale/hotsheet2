@@ -2,7 +2,7 @@
 name: hotsheet-worker
 description: Run as a self-claim worker — continuously claim, work, and release Up Next tickets
 ---
-<!-- hotsheet-skill-version: 29 -->
+<!-- hotsheet-skill-version: 30 -->
 
 You are an HS2 self-claim worker. Work one ready ticket at a time using the git-backed
 store. Pick one stable worker id for the session and use it for every claim, renewal,
@@ -21,9 +21,13 @@ and release.
    If renewal fails, stop; another worker may now own the lease.
 4. Run proportionate checks and commit only this ticket's changes. Never push without
    explicit maintainer permission.
-5. Complete it with `hotsheet_update` using `status: "completed"` and a required
-   `note`, or `hotsheet-cli edit <id> --status completed --note "what changed"`.
-   File follow-up tickets before completion for known unfinished work.
+5. Before completion, finish and verify scope; update required tests, coverage, and docs;
+   scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-
+   unimplemented behavior, open questions, and known gaps. Immediately create a ticket
+   for every incomplete item without asking, waiting, or leaving it only in a note/TODO.
+   Then complete with `hotsheet_update` using `status: "completed"` and a required note,
+   or `hotsheet-cli edit <id> --status completed --note "what changed"`; include the
+   result, verification, and every follow-up slug in that note.
 6. Release with `hotsheet_release` using `id` and `worker`, or
    `hotsheet-cli release <id> --worker <id>`, then return to step 1.
 
@@ -40,6 +44,10 @@ and release.
 - If MCP identity is uncertain, use `hotsheet-cli -C <HS2-store>`. A direct
   `hotsheet-store.json` or `.hotsheet/store` link identifies HS2;
   `.hotsheet/db/PG_VERSION` identifies HS1.
+- `FEEDBACK NEEDED` is only for a blocker that prevents the current ticket from
+  proceeding without a user decision or unavailable external state. Leave that ticket
+  started and name the needed decision/state. It never replaces follow-up tickets for
+  independently describable gaps; create those first and continue independent work.
 
 When the queue is drained, leave the branch committed and report the handoff. HS2 has no
 `hotsheet_signal_done` tool; simply stop after reporting completion.

@@ -45,7 +45,21 @@ pub fn render_with_auto_context(tickets: &[Ticket], entries: &[AutoContextEntry]
     out.push_str("# Hot Sheet — Up Next\n\n");
     out.push_str("_Local projection of the current priority queue. Regenerated automatically; do not edit._\n\n");
     out.push_str("## Workflow\n\n");
-    out.push_str("Work these tickets in priority order, where reasonable. Before starting, read the ticket in full and set it to `started`. When finished, set it to `completed` and add a note describing the result and verification. Then run the repository's required gates, commit the coherent ticket-sized change, and push it before starting another ticket. File follow-up tickets for discovered work rather than leaving loose TODOs. Do not set `verified`; that is reserved for human review.\n\n");
+    out.push_str(
+        "Work these tickets in priority order, where reasonable. Before starting, read \
+         the ticket in full and set it to `started`. Before completion, finish and verify \
+         its scope, update required tests/coverage/docs, and scan for incomplete work. \
+         Create every follow-up immediately, without asking: unfinished steps, open \
+         questions, known gaps, out-of-scope work, and designed-but-unbuilt behavior each \
+         get a ticket as soon as identified, never only a comment/TODO/note. Set the \
+         current ticket to `completed` with a note containing the result, verification, \
+         and every follow-up slug. Then run the repository's required gates, commit the \
+         coherent ticket-sized change, and push it before starting another ticket. Use \
+         `FEEDBACK NEEDED` only when a user decision or unavailable external state blocks \
+         the current ticket; leave it `started` and name the blocker. FEEDBACK NEEDED \
+         never replaces follow-ups for independently describable work. Do not set \
+         `verified`; that is reserved for human review.\n\n",
+    );
     out.push_str("Use `hotsheet-cli show <slug>` and `hotsheet-cli edit <slug> --status started|completed --note \"…\"`, or the equivalent Hot Sheet MCP tools. If neither is available, report that status could not be updated rather than silently skipping it.\n\n");
     out.push_str("## Tickets\n\n");
     if up_next.is_empty() {
@@ -314,6 +328,16 @@ mod tests {
         assert!(!md.contains("low open"));
         assert!(!md.contains("stale backlog flag"));
         assert!(!md.contains("## Open"));
+    }
+
+    #[test]
+    fn render_requires_immediate_follow_ups_and_reserves_feedback_for_blockers() {
+        let md = render(&[]);
+
+        assert!(md.contains("Create every follow-up immediately, without asking"));
+        assert!(md.contains("every follow-up slug"));
+        assert!(md.contains("`FEEDBACK NEEDED` only when"));
+        assert!(md.contains("FEEDBACK NEEDED never replaces follow-ups"));
     }
 
     #[test]

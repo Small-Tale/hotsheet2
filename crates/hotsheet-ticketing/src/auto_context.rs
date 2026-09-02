@@ -55,7 +55,7 @@ pub fn defaults() -> Vec<AutoContextEntry> {
     vec![
         category(
             "issue",
-            "Clarify the problem and its impact before acting. If it turns out to be a defect, add a test that guards against regressions; if it needs a larger change, file follow-up tickets for the work.",
+            "Clarify the problem and its impact before acting. If it turns out to be a defect, add a test that guards against regressions; if it needs a larger change, immediately create follow-up tickets for the work without asking.",
         ),
         category(
             "bug",
@@ -63,7 +63,7 @@ pub fn defaults() -> Vec<AutoContextEntry> {
         ),
         category(
             "feature",
-            "Understand the existing architecture and conventions before implementing (read any overview / summary docs first). Add or update documentation for the new behavior. Add tests covering it. Ask clarifying questions if anything is ambiguous, and file follow-up tickets for anything left out of scope.",
+            "Understand the existing architecture and conventions before implementing (read any overview / summary docs first). Add or update documentation for the new behavior. Add tests covering it. Use FEEDBACK NEEDED if ambiguity blocks the current ticket, and immediately create follow-up tickets without asking for anything left out of scope.",
         ),
         category(
             "requirement_change",
@@ -71,11 +71,11 @@ pub fn defaults() -> Vec<AutoContextEntry> {
         ),
         category(
             "task",
-            "Make sure you understand the surrounding context before starting. Note anything left incomplete as a follow-up ticket.",
+            "Make sure you understand the surrounding context before starting. Immediately create a follow-up ticket without asking for anything left incomplete.",
         ),
         category(
             "investigation",
-            "Investigate and write up your findings; recommend concrete next steps. Don't implement the change yet — file follow-up tickets for the work you'd propose.",
+            "Investigate and write up your findings; recommend concrete next steps. Don't implement the change yet — immediately create follow-up tickets without asking for the work you propose.",
         ),
         category(
             "concept",
@@ -95,7 +95,7 @@ pub fn defaults() -> Vec<AutoContextEntry> {
         ),
         category(
             "research",
-            "Investigate and write up your findings with concrete recommendations. Don't start production work yet — file follow-up tickets for the work you'd propose.",
+            "Investigate and write up your findings with concrete recommendations. Don't start production work yet — immediately create follow-up tickets without asking for the work you propose.",
         ),
         category(
             "design",
@@ -207,6 +207,24 @@ mod tests {
             got.iter().map(|x| x.text.as_str()).collect::<Vec<_>>(),
             ["category", "a", "z"]
         );
+    }
+
+    #[test]
+    fn unfinished_work_defaults_require_immediate_follow_ups_without_asking() {
+        let entries = defaults();
+        for category in ["issue", "feature", "task", "investigation", "research"] {
+            let guidance = resolve(&ticket(category, &[]), &entries);
+            assert_eq!(guidance.len(), 1, "missing {category} guidance");
+            let text = guidance[0].text.to_ascii_lowercase();
+            assert!(
+                text.contains("immediately create") && text.contains("follow-up"),
+                "{category} guidance must require immediate follow-ups"
+            );
+            assert!(
+                text.contains("without asking"),
+                "{category} guidance must forbid asking first"
+            );
+        }
     }
 
     #[test]

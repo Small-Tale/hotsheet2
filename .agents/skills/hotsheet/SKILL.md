@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 31 -->
+<!-- hotsheet-skill-version: 32 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -20,10 +20,13 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    bounded investigations in parallel. Do not parallelize tickets that edit the same
    surfaces or depend on unresolved decisions. The primary agent owns integration,
    ticket status, verification, and publishing.
-3. **Work each ticket end to end.** Mark it started, implement and verify its scope, then
-   mark it completed with a result and verification note.
-4. **File follow-ups** for discovered work that is not completed. Do not leave loose ends
-   only in comments or TODOs.
+3. **Work each ticket end to end.** Mark it started, implement and verify its scope, run
+   the completion checklist below, then mark it completed with a result and verification note.
+4. **Create every follow-up immediately, without asking.** As soon as you identify an
+   unfinished step, open question, known gap, out-of-scope task, or designed-but-unbuilt
+   behavior, create its ticket. Do not ask permission, wait, promise to file it later, or
+   leave it only in a comment/TODO/note. Reference every follow-up slug in the current
+   ticket's completing note, then continue.
 5. **Publish at ticket boundaries.** Run required gates, review the diff, make one commit
    for that ticket, and push before beginning the next sequential ticket. Combine tickets
    only when their implementations overlap so strongly that separation would be unsafe
@@ -31,10 +34,18 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
 6. **Re-read the queue after every completion.** Concurrent work and new findings can
    change the plan. Continue until no actionable Up Next ticket remains.
 
+**Completion checklist:** finish and verify scope; update required tests, coverage, and
+docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-
+unimplemented behavior, open questions, and known gaps; immediately create tickets for
+every incomplete item; include result, verification, and all follow-up slugs in the
+completing note.
+
 Stop early only for an explicit user ticket/time/budget limit, an empty queue, or a
-genuine blocker requiring user input or unavailable external state. Exhaust safe
-in-scope alternatives, record the blocker, leave status accurate, and continue other
-independent Up Next work before stopping.
+genuine blocker requiring user input or unavailable external state. For that current-
+ticket blocker, leave the ticket started and add a `FEEDBACK NEEDED:` note naming the
+specific decision or state required. FEEDBACK NEEDED is not deferred-work tracking:
+create follow-ups first for independently describable gaps, exhaust safe alternatives,
+and continue other independent Up Next work before stopping.
 
 Notes:
 - The CLI (`hotsheet-cli …`) and `hotsheet_*` MCP tools use the same engine and work
