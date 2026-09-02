@@ -237,7 +237,12 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.locator('wa-select[name="inspector-status"] wa-option[value="completed"]').click();
   await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');
   await page.getByRole('button',{name:'Timeline'}).click();
+  await expect(page.getByText('Ticket created')).toBeVisible();
   await expect(page.getByText('Connected the client')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-22gcky-timeline-wide.png'});
+  await page.setViewportSize({width:940,height:900});
+  await expect(page.locator('[data-component="ticket-timeline"]')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-22gcky-timeline-narrow.png'});
   await page.getByRole('button',{name:'Info'}).click();
   await page.getByRole('button',{name:'New ticket…'}).click();
   await page.locator('wa-input[name="new-ticket-title"]').evaluate((node:HTMLElement&{value:string})=>{node.value='Created from the real shell';node.dispatchEvent(new Event('input',{bubbles:true}))});

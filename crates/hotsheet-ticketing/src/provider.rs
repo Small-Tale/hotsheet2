@@ -1121,7 +1121,16 @@ mod tests {
             )
             .unwrap();
         assert_eq!(closed.close_reason, Some(CloseReason::Completed));
-        assert_eq!(closed.notes.len(), 1);
+        assert_eq!(closed.notes.len(), 3);
+        assert_eq!(
+            closed.notes[0].text,
+            "Status changed from Not Started to Started"
+        );
+        assert_eq!(closed.notes[1].text, "worked");
+        assert_eq!(
+            closed.notes[2].text,
+            "Status changed from Started to Completed"
+        );
 
         let claim_id = Ulid::new();
         provider

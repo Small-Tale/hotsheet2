@@ -291,7 +291,8 @@ should the fix also cover the dashboard dedicated view?
   - `status` — a system-generated event note (e.g. "claim expired — reclaimed",
     "QUARANTINED"). **Shared** (committed), informational for the team.
   - `activity` — a durable chronological account of meaningful work and lifecycle
-    transitions. Repeated and reversed transitions remain separate entries. **Shared**.
+    transitions. Every actual status change automatically appends an activity note;
+    repeated and reversed transitions remain separate entries. **Shared**.
   The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
   get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store

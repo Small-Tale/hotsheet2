@@ -7,6 +7,7 @@
 
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::str::FromStr;
 
 use hotsheet_model::{
@@ -358,6 +359,7 @@ pub fn update(
     patch: TicketPatch,
 ) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
+    let previous_status = t.status;
     if let Some(v) = patch.title {
         t.title = v;
     }
@@ -386,6 +388,9 @@ pub fn update(
             Status::Verified if t.verified_at.is_none() => t.verified_at = Some(now.clone()),
             _ => {}
         }
+        if s != previous_status {
+            append_status_transition(&mut t, previous_status, s, &now);
+        }
         // Leaving the active set (not_started/started) drops it off Up Next — applied after
         // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
         if !s.is_active() {
@@ -406,6 +411,43 @@ pub fn update(
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
+}
+
+fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: &Timestamp) {
+    let mut entropy = DefaultHasher::new();
+    ticket.id.hash(&mut entropy);
+    ticket.notes.len().hash(&mut entropy);
+    (from as u8).hash(&mut entropy);
+    (to as u8).hash(&mut entropy);
+    now.as_str().hash(&mut entropy);
+    let timestamp_ms = now
+        .instant()
+        .map(|instant| instant.unix_timestamp_nanos().max(0) as u64 / 1_000_000)
+        .unwrap_or_default();
+    ticket.notes.push(Note {
+        id: Ulid::from_parts(timestamp_ms, entropy.finish() as u128),
+        kind: NoteKind::Activity,
+        created_at: now.clone(),
+        edited_at: now.clone(),
+        text: format!(
+            "Status changed from {} to {}",
+            status_label(from),
+            status_label(to)
+        ),
+    });
+}
+
+fn status_label(status: Status) -> &'static str {
+    match status {
+        Status::NotStarted => "Not Started",
+        Status::Started => "Started",
+        Status::Completed => "Completed",
+        Status::Verified => "Verified",
+        Status::Backlog => "Backlog",
+        Status::Archive => "Archive",
+        Status::Deleted => "Deleted",
+        Status::Moved => "Moved",
+    }
 }
 
 /// Append a note to a ticket. The caller mints the note id (a timestamp-ordered
@@ -502,10 +544,12 @@ pub fn close(
     // already in another terminal status keeps it). This is the write-side half of the
     // invariant `update` enforces from the other direction (HS2-3XHT9P).
     if t.status.is_active() {
+        let previous_status = t.status;
         t.status = Status::Completed;
         if t.completed_at.is_none() {
             t.completed_at = Some(now.clone());
         }
+        append_status_transition(&mut t, previous_status, Status::Completed, &now);
     }
     // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
     t.up_next = false;
@@ -590,7 +634,11 @@ pub fn move_ticket(
 
     // Source: a tombstone/redirect the UI hides (status = moved).
     let mut tombstone = orig;
+    let previous_status = tombstone.status;
     tombstone.status = Status::Moved;
+    if previous_status != Status::Moved {
+        append_status_transition(&mut tombstone, previous_status, Status::Moved, &now);
+    }
     tombstone.moved_to_store = Some(dest_id.to_string());
     tombstone.moved_at = Some(now.clone());
     tombstone.updated_at = now;
@@ -1070,6 +1118,67 @@ mod tests {
         .unwrap();
         assert_eq!(c.close_reason, Some(CloseReason::Completed));
         assert!(c.closed_at.is_some());
+    }
+
+    #[test]
+    fn status_changes_append_durable_activity_timeline_entries() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+
+        let started = update(
+            &store,
+            &id,
+            ts("2026-08-19T00:01:00Z"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(started.notes.len(), 1);
+        assert_eq!(started.notes[0].kind, NoteKind::Activity);
+        assert_eq!(
+            started.notes[0].text,
+            "Status changed from Not Started to Started"
+        );
+
+        let unchanged = update(
+            &store,
+            &id,
+            ts("2026-08-19T00:02:00Z"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            unchanged.notes.len(),
+            1,
+            "same-state patches are not events"
+        );
+
+        let closed = close(
+            &store,
+            &id,
+            ts("2026-08-19T00:03:00Z"),
+            CloseReason::Completed,
+            None,
+        )
+        .unwrap();
+        assert_eq!(closed.notes.len(), 2);
+        assert_eq!(
+            closed.notes[1].text,
+            "Status changed from Started to Completed"
+        );
     }
 
     #[test]

@@ -1148,6 +1148,11 @@ async fn create_get_update_close_and_query() {
     assert_eq!(updated["status"], "completed");
     assert_eq!(updated["details"], "root-caused");
     assert!(updated["completed_at"].is_string());
+    assert_eq!(updated["notes"][0]["kind"], "activity");
+    assert_eq!(
+        updated["notes"][0]["text"],
+        "Status changed from Not Started to Completed"
+    );
 
     // close
     let resp = app
@@ -1860,11 +1865,21 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
     )
     .await;
     assert_eq!(updated["status"], "started");
-    assert_eq!(updated["notes"][0]["kind"], "activity");
-    assert_eq!(updated["notes"][0]["text"], "completed");
-    let note_id = updated["notes"][0]["id"].as_str().unwrap();
-    let created_at = updated["notes"][0]["created_at"].as_str().unwrap();
-    assert_eq!(updated["notes"][0]["edited_at"], created_at);
+    assert_eq!(updated["notes"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        updated["notes"][0]["text"],
+        "Status changed from Not Started to Started"
+    );
+    let progress = updated["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["text"] == "completed")
+        .unwrap();
+    assert_eq!(progress["kind"], "activity");
+    let note_id = progress["id"].as_str().unwrap();
+    let created_at = progress["created_at"].as_str().unwrap();
+    assert_eq!(progress["edited_at"], created_at);
 
     let edit = serde_json::json!({"note":"completed initial investigation","note_id":note_id});
     let edited = body_json(
@@ -1878,11 +1893,14 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
             .unwrap(),
     )
     .await;
-    assert_eq!(edited["notes"][0]["created_at"], created_at);
-    assert_eq!(
-        edited["notes"][0]["text"],
-        "completed initial investigation"
-    );
+    let edited_progress = edited["notes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|note| note["id"] == note_id)
+        .unwrap();
+    assert_eq!(edited_progress["created_at"], created_at);
+    assert_eq!(edited_progress["text"], "completed initial investigation");
 
     for (status, note) in [
         ("started", "marked not working"),
@@ -1914,7 +1932,7 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
             .unwrap(),
     )
     .await;
-    assert_eq!(deleted["notes"].as_array().unwrap().len(), 2);
+    assert_eq!(deleted["notes"].as_array().unwrap().len(), 4);
 
     let got = body_json(
         app.oneshot(authed("GET", &format!("/tickets/{id}"), None))
@@ -1922,9 +1940,17 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
             .unwrap(),
     )
     .await;
-    assert_eq!(got["notes"].as_array().unwrap().len(), 2);
-    assert_eq!(got["notes"][0]["text"], "marked not working");
-    assert_eq!(got["notes"][1]["text"], "completed again");
+    assert_eq!(got["notes"].as_array().unwrap().len(), 4);
+    assert_eq!(
+        got["notes"][0]["text"],
+        "Status changed from Not Started to Started"
+    );
+    assert_eq!(got["notes"][1]["text"], "marked not working");
+    assert_eq!(
+        got["notes"][2]["text"],
+        "Status changed from Started to Completed"
+    );
+    assert_eq!(got["notes"][3]["text"], "completed again");
 }
 
 #[tokio::test]

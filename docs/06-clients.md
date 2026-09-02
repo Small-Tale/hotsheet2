@@ -400,7 +400,11 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   (read-only) style.**
 - **`activity` notes render as a chronological timeline** ordered by `created_at`
   (ULID tie-breaker). Never collapse duplicate, repeated, or reversed transitions;
-  each entry is historical context. Show `edited_at` when it differs from creation.
+  each entry is historical context. Every actual status change appends one of these
+  durable activity notes. For tickets created before transition recording, clients also
+  show the lifecycle timestamps the ticket still carries (`created_at`, `completed_at`,
+  and `verified_at`) so the timeline is never blank. Show `edited_at` when it differs
+  from creation.
 
 **Feedback needed is needs review.** These are one user-facing concept, not competing
 ticket states. A `feedback_needed` note and an explicit review request both project to
