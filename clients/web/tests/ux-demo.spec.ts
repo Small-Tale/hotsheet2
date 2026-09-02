@@ -1081,7 +1081,10 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-component="project-tab"]');
   await expect(tabStates).toHaveCount(6);
-  await expect(tabStates.filter({ hasText: 'Selected local' })).toHaveAttribute('data-selected', 'true');
+  const selectedLocal = tabStates.filter({ hasText: 'Selected local' });
+  await expect(selectedLocal).toHaveAttribute('data-selected', 'true');
+  await expect(selectedLocal.locator('[data-lucide="folder-git-2"]')).toHaveCount(0);
+  await expect(tabStates.filter({ hasText: 'Remote project' }).locator('[data-lucide="cloud"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .loading-spinner')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Disconnected' }).locator('[data-lucide="wifi-off"]')).toHaveCount(1);

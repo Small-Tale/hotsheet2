@@ -193,8 +193,10 @@ scrolling content region can be reviewed without moving the Drive control.
   component itself, with selected, remote/local, busy, disconnected, attention,
   closable, and fixed states plus roving focus and arrow/Home/End keyboard navigation
   when composed in the bar. Fine-pointer devices reveal close affordances on hover or
-  keyboard focus; touch-oriented devices retain the visible close control. The close
-  affordance is a compact, highlight-free leading control with balanced trailing space
+  keyboard focus; touch-oriented devices retain the visible close control. Local tabs
+  omit the redundant folder/branch icon, while remote tabs retain their cloud marker.
+  The close affordance is a compact, highlight-free leading control with balanced
+  trailing space
   so the tab identity remains visually centered; transient trailing indicators such as
   busy, offline, and attention occupy that reserved balance space instead of widening
   the tab or displacing its label. Busy uses a full-ring CSS spinner: its statically

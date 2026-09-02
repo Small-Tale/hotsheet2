@@ -20,6 +20,7 @@ describe('application shell components', () => {
     expect(markup).not.toContain('data-lucide="wifi-off"');
     expect(markup.indexOf('</button><button')).toBeGreaterThan(0);
     const notificationMarkup = String(ProjectTab({ id: 'one', name: 'One', location: 'local', notificationCount: 2 }));
+    expect(notificationMarkup).not.toContain('data-lucide="folder-git-2"');
     expect(notificationMarkup).toContain('aria-label="2 pending notifications"');
     expect(notificationMarkup).toContain('data-lucide="bell"');
   });
