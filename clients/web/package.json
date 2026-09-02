@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "node scripts/stable-dev.mjs",
+    "dev:hot": "vite --host 127.0.0.1",
     "build": "vite build && node scripts/check-production-bundle.mjs",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",

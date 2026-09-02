@@ -48,7 +48,7 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter): H
     try {
       const submission = validateDevReviewSubmission(await context.req.json());
       const submit = submitFeedback ?? createCliDevReviewSubmitter({
-        repoRoot: resolve(process.cwd(), '../..'),
+        repoRoot: process.env.HOTSHEET_DEV_REVIEW_REPO_ROOT ?? resolve(process.cwd(), '../..'),
         storePath: process.env.HOTSHEET_DEV_REVIEW_STORE,
         cliPath: process.env.HOTSHEET_DEV_REVIEW_CLI,
       });
