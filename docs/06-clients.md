@@ -241,9 +241,11 @@ view layer is new work.
 - Search (FTS) and filtered views.
 
 The web client now implements the permission portion of that floor for Claude and
-Codex. It polls every open project's authenticated permission and connection routes,
-shows pending counts in the main segmented control and project tabs, and presents a
-non-modal popup even when another project is selected. The global Notifications view
+Codex. Every open project has a replay-safe long poll; a `permission_asked` event
+triggers one fetch of that project's authenticated permission and connection state.
+There is no fixed-interval network polling. Pending counts appear in the main segmented
+control and project tabs, and a non-modal popup appears even when another project is
+selected. The global Notifications view
 keeps pending requests above newest-first machine-local client history; a request that
 disappears without this client resolving it is labeled “Decision made outside Hot
 Sheet.” The right inspector region remains present and manually collapsible in this

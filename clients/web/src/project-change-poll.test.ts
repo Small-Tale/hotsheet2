@@ -71,6 +71,22 @@ describe('project change long polling', () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it('delivers non-ticket events without forcing a project refresh', async () => {
+    const pending = deferred<PollResponse>();
+    const pollEvents = vi.fn()
+      .mockResolvedValueOnce(response(2))
+      .mockResolvedValueOnce(response(3, 'permission_asked'))
+      .mockReturnValueOnce(pending.promise);
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const onEvents = vi.fn().mockResolvedValue(undefined);
+    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, onEvents });
+    await vi.waitFor(() => { expect(pollEvents).toHaveBeenCalledTimes(3); });
+    expect(onEvents).toHaveBeenCalledWith(response(3, 'permission_asked'));
+    expect(refresh).not.toHaveBeenCalled();
+    stop();
+    pending.resolve(response(3));
+  });
+
   it('does not reconcile repeatedly while a polling outage continues', async () => {
     const pending = deferred<PollResponse>();
     const pollEvents = vi.fn()

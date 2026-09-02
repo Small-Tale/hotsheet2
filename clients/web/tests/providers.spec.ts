@@ -83,17 +83,22 @@ type InstrumentedWindow=typeof window&{__hotsheetRenderMetrics?:{reset():void;sn
 const resetRenderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>{(window as InstrumentedWindow).__hotsheetRenderMetrics?.reset()});
 const renderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>(window as InstrumentedWindow).__hotsheetRenderMetrics?.snapshot());
 
-test('rejects render churn from unchanged permission polling',async({page})=>{
+test('makes no repeated permission requests or renders while an open project is idle',async({page})=>{
+  const permissionRequests:string[]=[];page.on('request',request=>{const path=new URL(request.url()).pathname;if(path.endsWith('/permissions')||path.endsWith('/connections'))permissionRequests.push(path)});
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await page.waitForTimeout(1_000);await resetRenderMetrics(page);await page.waitForTimeout(1_700);
+  await page.waitForTimeout(1_000);permissionRequests.length=0;await resetRenderMetrics(page);await page.waitForTimeout(1_700);
+  expect(permissionRequests).toEqual([]);
   expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
 });
 
-test('renders exactly once when permission polling discovers a request',async({page})=>{
+test('renders exactly once when the long poll announces a permission request',async({page})=>{
   await mockProject(page);let pending:Array<{id:number;connection:string;tool:string;action:string;always_allow_supported:boolean}>=[];
   await page.route('**/permissions',route=>route.fulfill({json:pending}));
+  const polls:Array<import('@playwright/test').Route>=[];let cursor=0;
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await page.waitForTimeout(100);await resetRenderMetrics(page);pending=[{id:77,connection:'codex-session',tool:'Bash',action:'cargo test',always_allow_supported:true}];
+  await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'',kind:'permission_asked',id:'77',slug:'Bash'}],overflow:false}});
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   const metrics=await renderMetrics(page);expect(metrics?.passes).toBe(1);expect(metrics?.mutations).toBeGreaterThan(0);
 });

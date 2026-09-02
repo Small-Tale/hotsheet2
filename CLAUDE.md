@@ -46,6 +46,15 @@ controls, dialogs, drawers, and menus. Build custom components only for Hot
 Sheet-specific interactions that those primitives do not cover; Web Awesome Pro is
 optional and requires a separate decision/license.
 
+Never use fixed-interval, timer-based, or immediate-repeat network polling for
+application state. Live updates must use WebSockets or genuine long polling: an idle
+long-poll request remains pending until an event or bounded server timeout, then the
+client reconnects with replay/cursor semantics and bounded failure backoff. Local-only
+UI timers such as countdown rendering are allowed, but they must not issue network
+requests. Cover idle request rate, timeout blocking, reconnect, and client/server
+version skew in integration tests so an authentication or protocol error cannot turn
+into a tight request loop.
+
 Import only the Web Awesome components the client uses, style them primarily through
 their documented theme tokens and parts, and keep application state outside custom
 elements. Form controls such as `<wa-input>` emit standard host-level `input` and

@@ -8,6 +8,7 @@ const TICKET_CHANGE_KINDS = new Set([
 export interface ProjectChangePollOptions {
   client: Pick<Api, 'pollEvents'>;
   refresh(): Promise<void>;
+  onEvents?(response: PollResponse): Promise<void>;
   onError?(reason: unknown): void;
   retryMs?: number;
   maxRetryMs?: number;
@@ -56,6 +57,7 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
       retryDelay = retryMs;
       const handshake = cursor === undefined;
       cursor = response.cursor;
+      if (!handshake && response.events.length && options.onEvents) await options.onEvents(response).catch((reason: unknown) => { options.onError?.(reason); });
       const reconcile = (handshake && reconnecting) || (!handshake && containsTicketChange(response));
       reconnecting = false;
       if (reconcile) await options.refresh().catch((reason: unknown) => { options.onError?.(reason); });
