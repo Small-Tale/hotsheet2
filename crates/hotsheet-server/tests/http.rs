@@ -3,7 +3,7 @@
 use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
 use hotsheet_server::{AppState, MAX_ATTACHMENT_BODY_BYTES, app};
-use hotsheet_ticketing::{FsStore, StoreMetadata};
+use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, StoreMetadata};
 use http_body_util::BodyExt;
 use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
@@ -96,7 +96,7 @@ async fn health_needs_no_secret() {
     assert_eq!(health["generation"], "hs2");
     assert_eq!(health["api_version"], 1);
     assert_eq!(health["ticket_prefix"], "HS");
-    assert_eq!(health["store_schema"], 1);
+    assert_eq!(health["store_schema"], STORE_SCHEMA_VERSION);
 }
 
 #[tokio::test]

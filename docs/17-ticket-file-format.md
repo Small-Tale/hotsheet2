@@ -59,7 +59,7 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | `transfer_operation_id` | string | no | shared | Stable idempotency key for an explicit provider transfer ([16](16-external-sync-interface.md) §16.7) |
 | `transferred_from` | qualified ticket ref | no | shared | Source connection + native id (`connection:native-id`) for that transfer |
 | **Schema** | | | | |
-| `schema` | int | yes | shared | Frontmatter format version (forward migration) |
+| `schema` | guarded string (`hotsheet/v2-bounded-notes`) | yes | shared | Current on-disk writer/version guard; normalized to model/API schema integer 2 after parse. Legacy numeric `1` remains read-compatible. |
 
 **Not in the file (Local / Derived):**
 
@@ -100,7 +100,12 @@ should the fix also cover the dashboard dedicated view?
 
 The reader remains backward-compatible with schema-1 files that use `## Notes`
 followed by one-sided `<!-- note: … -->` markers through EOF. Every canonical write
-upgrades that layout to bounded blocks. A line of user-authored Markdown that looks
+upgrades every healthy ticket in that store to bounded blocks and the guarded
+`schema: hotsheet/v2-bounded-notes` marker before advancing the store metadata to
+schema 2. That string is intentionally incompatible with the old `schema: u32`
+deserializer, so a stale pre-bounded-notes CLI/MCP fails before it can rewrite and drop
+history. Current writers likewise refuse store/schema guards newer than they understand.
+A line of user-authored Markdown that looks
 like a reserved `<!-- hotsheet:… -->` marker is backslash-escaped on disk and restored
 on read. Content after `hotsheet:notes:end` is rejected by current readers rather
 than swallowed or discarded; a future schema can define such a section explicitly.
@@ -130,8 +135,8 @@ ticket's own `created_at`; filesystem modification time is never authoritative.
 
 - **Round-trip stable:** parse → serialize is byte-idempotent for a canonical file
   (the migrator conformance test, [07](07-migration.md) §7.2.1, depends on this).
-- **Unknown frontmatter keys are preserved** (forward-compat: a newer `schema`
-  writes a key an older reader doesn't know — don't drop it).
+- **Unknown frontmatter keys are preserved** within a supported schema. An unknown
+  guarded schema is rejected instead of being silently downgraded.
 - **Field ordering** is canonical (stable key order) so diffs are clean and merges
   are predictable.
 - **Markdown boundaries are explicit and collision-safe:** details and shared note

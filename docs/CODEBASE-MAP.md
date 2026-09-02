@@ -71,7 +71,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/reviews-union-by-ULID/body) behind `hotsheet merge-driver` (HS2-18, HS2-20)
       src/sync.rs            #   sync_once: one fetch → rebase-through-merge-driver → push cycle (offline/conflict-tolerant) behind `hotsheet sync` (HS2-19)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
-      src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; list_tickets_resilient -> StoreListing{tickets,corrupt:Vec<CorruptTicket>} so one unparseable file never blocks project open (HS2-PRVPCQ); git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
+      src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; schema-1 first-write migration to the stale-writer-resistant guarded schema 2; list_tickets_resilient -> StoreListing{tickets,corrupt:Vec<CorruptTicket>} so one unparseable file never blocks project open (HS2-PRVPCQ); git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)

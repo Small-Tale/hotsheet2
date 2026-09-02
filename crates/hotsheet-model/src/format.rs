@@ -17,6 +17,8 @@ use crate::ids::Ulid;
 use crate::ticket::{Note, Ticket};
 use crate::timestamp::Timestamp;
 
+const GUARDED_SCHEMA_V2: &str = "hotsheet/v2-bounded-notes";
+
 /// Frontmatter keys the current schema defines. Anything else parsed from a file's
 /// frontmatter is retained in [`Ticket::extra`]. Kept in sync with `Ticket`'s fields
 /// by the `known_keys_cover_serialized_fields` test.
@@ -73,6 +75,10 @@ pub enum ParseError {
     /// schema may define such sections; this reader refuses to silently discard it.
     #[error("unsupported content follows the bounded Notes section")]
     TrailingContent,
+    /// A newer writer guard is intentionally unreadable to older serializers, and a
+    /// current reader must likewise refuse markers it does not understand.
+    #[error("unsupported ticket schema marker '{0}'")]
+    UnsupportedSchema(String),
 }
 
 const BODY_BEGIN: &str = "<!-- hotsheet:body:begin -->";
@@ -137,10 +143,13 @@ pub fn parse_file(text: &str) -> Result<Ticket, ParseError> {
     };
 
     let value: Value = serde_yaml::from_str(frontmatter)?;
-    let mapping = value
+    let mut mapping = value
         .as_mapping()
         .ok_or(ParseError::FrontmatterNotMapping)?
         .clone();
+
+    normalize_schema_marker(&mut mapping)?;
+    let value = Value::Mapping(mapping.clone());
 
     let mut ticket: Ticket = serde_yaml::from_value(value)?;
 
@@ -183,7 +192,27 @@ fn frontmatter_to_string(t: &Ticket) -> String {
     for (k, v) in &t.extra {
         mapping.insert(Value::String(k.clone()), v.clone());
     }
+    if t.schema == crate::SCHEMA_VERSION {
+        mapping.insert(
+            Value::String("schema".into()),
+            Value::String(GUARDED_SCHEMA_V2.into()),
+        );
+    }
     serde_yaml::to_string(&Value::Mapping(mapping)).expect("a YAML mapping always serializes")
+}
+
+fn normalize_schema_marker(mapping: &mut Mapping) -> Result<(), ParseError> {
+    let key = Value::String("schema".into());
+    let Some(value) = mapping.get(&key) else {
+        return Ok(());
+    };
+    if let Value::String(marker) = value {
+        if marker != GUARDED_SCHEMA_V2 {
+            return Err(ParseError::UnsupportedSchema(marker.clone()));
+        }
+        mapping.insert(key, Value::Number(crate::SCHEMA_VERSION.into()));
+    }
+    Ok(())
 }
 
 // ---- body / notes split ----------------------------------------------------------
@@ -547,6 +576,39 @@ mod tests {
     }
 
     #[test]
+    fn guarded_schema_is_current_readable_but_rejected_by_a_legacy_deserializer() {
+        let ticket = sample();
+        let text = to_file_string(&ticket);
+        assert!(text.contains("schema: hotsheet/v2-bounded-notes"));
+        assert_eq!(parse_file(&text).unwrap(), ticket);
+
+        let frontmatter = text
+            .strip_prefix("---\n")
+            .unwrap()
+            .split_once("\n---\n")
+            .unwrap()
+            .0;
+        let legacy_error = serde_yaml::from_str::<Ticket>(frontmatter).unwrap_err();
+        assert!(
+            legacy_error.to_string().contains("schema"),
+            "the pre-guard derived deserializer must fail before it can rewrite the ticket"
+        );
+    }
+
+    #[test]
+    fn unknown_guarded_schema_is_rejected_instead_of_downgraded() {
+        let text = to_file_string(&sample()).replacen(
+            "schema: hotsheet/v2-bounded-notes",
+            "schema: hotsheet/v99-future",
+            1,
+        );
+        assert!(matches!(
+            parse_file(&text),
+            Err(ParseError::UnsupportedSchema(marker)) if marker == "hotsheet/v99-future"
+        ));
+    }
+
+    #[test]
     fn minimal_ticket_round_trips_without_body_or_notes() {
         let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
         let t = Ticket::new(id, "HS-XXXXXX", "t", "issue", "t0", "t1");
@@ -560,7 +622,11 @@ mod tests {
     #[test]
     fn retired_hs1_number_is_read_but_not_retained() {
         let canonical = to_file_string(&sample());
-        let old = canonical.replacen("schema: 1", "legacy_number: HS-1234\nschema: 1", 1);
+        let old = canonical.replacen(
+            "schema: hotsheet/v2-bounded-notes",
+            "legacy_number: HS-1234\nschema: hotsheet/v2-bounded-notes",
+            1,
+        );
         let parsed = parse_file(&old).unwrap();
         assert!(!parsed.extra.contains_key("legacy_number"));
         assert!(!to_file_string(&parsed).contains("legacy_number"));

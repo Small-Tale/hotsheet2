@@ -49,7 +49,9 @@ pub use secrets::{
     KeyMetadata, KeyRegistry, OsKeychain, SecretError, SecretStore, resolve_setting_secret,
 };
 pub use settings::{Scope, Settings, SettingsError};
-pub use store::{CorruptTicket, FsStore, StoreError, StoreListing, StoreMetadata};
+pub use store::{
+    CorruptTicket, FsStore, STORE_SCHEMA_VERSION, StoreError, StoreListing, StoreMetadata,
+};
 pub use sync::{SyncReport, sync_once};
 pub use wire::{ApiNote, ApiTicket, TicketRow};
 

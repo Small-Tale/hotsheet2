@@ -142,7 +142,7 @@ one **live** ticket (see the move tombstones in §2.13).
 `hotsheet-store.json`:
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "ticketPrefix": "HS",       // display prefix; the dash is added automatically
   "idStrategy": "ulid",
   "shard": "id-prefix-2"      // 2-char id-prefix sharding (confirmed 2026-08-19)
@@ -170,7 +170,16 @@ can show them for recovery rather than letting them silently vanish. The strict
 serializer never emits output the parser rejects — in particular a ticket with no notes
 emits **no** notes block at all, so it can never leave a dangling
 `<!-- hotsheet:notes:begin -->` without its `…:end` marker (the exact shape that first
-triggered this). See `docs/TEST-COVERAGE.md` → `corruption-resilience`.
+triggered this).
+
+Store schema 2 also prevents an already-built, pre-bounded-notes CLI or MCP process from
+silently downgrading a ticket. Current canonical files write the intentionally guarded
+`schema: hotsheet/v2-bounded-notes` marker. Current readers normalize it to numeric model
+schema 2, while the old derived deserializer rejects it before mutation. The first write
+to a schema-1 store rewrites every healthy legacy ticket to the guarded bounded form,
+preserving its body and complete note history, and only then advances
+`hotsheet-store.json` to schema 2. A current writer rejects a store schema newer than it
+supports. See `docs/TEST-COVERAGE.md` → `corruption-resilience`.
 
 ## 2.4 Ticket IDs — ULID, no central sequence
 
@@ -230,12 +239,15 @@ duplicate_of: null            # a ticket ULID, required when close_reason == dup
 claimed_by: worker-1
 claim_lease_expires_at: 2026-08-19T15:50:44Z
 worker_label: worktree-2
-schema: 1
+schema: hotsheet/v2-bounded-notes
 ---
 
+<!-- hotsheet:body:begin -->
 The dashboard flashes white for one frame when switching projects because the
 terminal gutter paints `var(--bg)` before the theme is applied.
+<!-- hotsheet:body:end -->
 
+<!-- hotsheet:notes:begin -->
 ## Notes
 
 <!-- hotsheet:note:begin 01J9ZK4A0R… created_at: 2026-08-19T15:20:44Z edited_at: 2026-08-19T15:20:44Z -->
@@ -245,10 +257,11 @@ Reproduced on macOS; root cause is the pre-theme paint.
 <!-- hotsheet:note:begin 01J9ZK5B1S… kind: feedback_needed created_at: 2026-08-19T15:31:02Z edited_at: 2026-08-19T15:31:02Z -->
 should the fix also cover the dashboard dedicated view?
 <!-- hotsheet:note:end -->
+<!-- hotsheet:notes:end -->
 ```
 
-- **Frontmatter = structured fields** (validated by a schema; `schema:` versions
-  the format for forward migration).
+- **Frontmatter = structured fields** (validated by a schema; the guarded `schema:`
+  marker versions the format and prevents stale writers from downgrading it).
 - **Body = the ticket `details`** as Markdown.
 - **Notes** are a `## Notes` section where **each note carries its own
   timestamp-ordered UUID (a ULID)** in a leading HTML comment. The ULID id is what

@@ -20,5 +20,5 @@ pub use ids::{Ulid, derive_slug};
 pub use ticket::{Attachment, ExternalLink, Note, ReviewRequest, Ticket};
 pub use timestamp::Timestamp;
 
-/// Frontmatter format version written to `schema:` (forward-migration marker).
-pub const SCHEMA_VERSION: u32 = 1;
+/// Frontmatter format version represented by the guarded `schema:` marker.
+pub const SCHEMA_VERSION: u32 = 2;

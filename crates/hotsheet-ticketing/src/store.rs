@@ -14,12 +14,16 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use hotsheet_model::{Attachment, ParseError, Ticket, Timestamp, Ulid, parse_file, to_file_string};
+use hotsheet_model::{
+    Attachment, ParseError, SCHEMA_VERSION, Ticket, Timestamp, Ulid, parse_file, to_file_string,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// The store metadata file at a store root.
 pub const STORE_METADATA_FILE: &str = "hotsheet-store.json";
+/// Store version whose ticket files carry the stale-writer schema guard.
+pub const STORE_SCHEMA_VERSION: u32 = 2;
 
 /// Store metadata (`hotsheet-store.json`, `docs/02` §2.3). camelCase on disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,7 +40,7 @@ impl StoreMetadata {
     /// Default metadata for a new store with the given display prefix.
     pub fn new(ticket_prefix: impl Into<String>) -> Self {
         Self {
-            schema_version: 1,
+            schema_version: STORE_SCHEMA_VERSION,
             ticket_prefix: ticket_prefix.into(),
             id_strategy: "ulid".to_string(),
             shard: "id-prefix-2".to_string(),
@@ -55,6 +59,10 @@ pub enum StoreError {
     Metadata(#[from] serde_json::Error),
     #[error("parsing ticket {path}: {source}")]
     Parse { path: PathBuf, source: ParseError },
+    #[error(
+        "store schema {found} is newer than this writer supports ({supported}); update Hot Sheet before modifying it"
+    )]
+    UnsupportedStoreSchema { found: u32, supported: u32 },
     #[error("git {0}")]
     Git(String),
 }
@@ -147,8 +155,20 @@ impl FsStore {
     }
 
     /// Write a ticket file (creating its shard directory), returning the path.
+    ///
+    /// Opening a version-1 store remains read-compatible. Its first current write
+    /// upgrades every healthy ticket to the guarded schema before applying the
+    /// requested mutation. The guard is deliberately not parseable by pre-bounded-
+    /// notes binaries, so an already-built stale CLI/MCP fails before it can discard
+    /// note history.
     pub fn write_ticket(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
+        self.ensure_current_writer_format()?;
+        self.write_ticket_unchecked(ticket)
+    }
+
+    fn write_ticket_unchecked(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
         let mut normalized = ticket.clone();
+        normalized.schema = SCHEMA_VERSION;
         if !normalized.status.is_active() {
             normalized.up_next = false;
         }
@@ -158,6 +178,30 @@ impl FsStore {
         }
         fs::write(&path, to_file_string(&normalized))?;
         Ok(path)
+    }
+
+    fn ensure_current_writer_format(&self) -> Result<(), StoreError> {
+        let mut metadata = self.metadata()?;
+        if metadata.schema_version > STORE_SCHEMA_VERSION {
+            return Err(StoreError::UnsupportedStoreSchema {
+                found: metadata.schema_version,
+                supported: STORE_SCHEMA_VERSION,
+            });
+        }
+        if metadata.schema_version == STORE_SCHEMA_VERSION {
+            return Ok(());
+        }
+
+        // Write guarded tickets first and the store-version marker last. An
+        // interrupted migration is safely repeatable, while marking the store first
+        // could strand still-legacy files as falsely protected.
+        for ticket in self.list_tickets_resilient()?.tickets {
+            self.write_ticket_unchecked(&ticket)?;
+        }
+        metadata.schema_version = STORE_SCHEMA_VERSION;
+        let json = serde_json::to_string_pretty(&metadata)?;
+        fs::write(self.root.join(STORE_METADATA_FILE), format!("{json}\n"))?;
+        Ok(())
     }
 
     /// Write a ticket, then **auto-commit** the change to the store's git repo and
@@ -692,6 +736,67 @@ mod tests {
         let path = store.write_ticket(&t).unwrap();
         assert!(path.ends_with("tickets/01/01ARZ3NDEKTSV4RRFFQ69G5FAV.md"));
         assert_eq!(store.read_ticket(&t.id).unwrap(), t);
+    }
+
+    #[test]
+    fn first_write_migrates_legacy_tickets_and_preserves_note_history() {
+        let (_dir, store) = temp_store();
+        let mut metadata = store.metadata().unwrap();
+        metadata.schema_version = 1;
+        fs::write(
+            store.root().join(STORE_METADATA_FILE),
+            format!("{}\n", serde_json::to_string_pretty(&metadata).unwrap()),
+        )
+        .unwrap();
+
+        let ids = [
+            ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+            ulid("7ZARZ3NDEKTSV4RRFFQ69G5FAV"),
+        ];
+        for (index, id) in ids.iter().enumerate() {
+            let legacy = format!(
+                "---\nid: {id}\nslug: HS-LEGACY{index}\ntitle: Legacy {index}\ncategory: bug\n\
+                 created_at: 2026-08-19T00:00:00Z\nupdated_at: 2026-08-19T00:00:00Z\nschema: 1\n---\n\n\
+                 legacy body {index}\n\n## Notes\n\n<!-- note: 01ARZ3NDEKTSV4RRFFQ69G5FB{index} -->\n\
+                 2026-08-19T01:00:00Z — original note {index}\n"
+            );
+            plant_raw(&store, id, &legacy);
+        }
+
+        let mut changed = store.read_ticket(&ids[0]).unwrap();
+        changed.title = "Current writer mutation".into();
+        store.write_ticket(&changed).unwrap();
+
+        assert_eq!(
+            store.metadata().unwrap().schema_version,
+            STORE_SCHEMA_VERSION
+        );
+        for (index, id) in ids.iter().enumerate() {
+            let raw = fs::read_to_string(store.ticket_path(id)).unwrap();
+            assert!(raw.contains("schema: hotsheet/v2-bounded-notes"));
+            let reparsed = store.read_ticket(id).unwrap();
+            assert_eq!(reparsed.notes.len(), 1);
+            assert_eq!(reparsed.notes[0].text, format!("original note {index}"));
+        }
+    }
+
+    #[test]
+    fn newer_store_schema_is_rejected_before_writing() {
+        let (_dir, store) = temp_store();
+        let mut metadata = store.metadata().unwrap();
+        metadata.schema_version = STORE_SCHEMA_VERSION + 1;
+        fs::write(
+            store.root().join(STORE_METADATA_FILE),
+            format!("{}\n", serde_json::to_string_pretty(&metadata).unwrap()),
+        )
+        .unwrap();
+
+        let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        assert!(matches!(
+            store.write_ticket(&ticket),
+            Err(StoreError::UnsupportedStoreSchema { .. })
+        ));
+        assert!(!store.ticket_path(&ticket.id).exists());
     }
 
     #[test]
