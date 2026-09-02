@@ -76,6 +76,13 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 
+- **Render budgets.** Development builds expose root render-pass and DOM-mutation
+  counters to browser tests. Polling responses that do not change observable state
+  must cause zero render passes and zero DOM mutations; tests also budget intentional
+  transitions so broad Kerf render dependencies fail loudly instead of becoming
+  focus, scroll, or animation regressions. Development builds enable Kerf's
+  value-only-render and list-rebind warnings plus throwing list invariants.
+
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
   development catalog. The project-tab `+` action opens a code-checkout dialog. On first

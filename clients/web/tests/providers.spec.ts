@@ -42,6 +42,26 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   return patches;
 }
 
+interface RenderMetricsSnapshot { passes:number;mutations:number }
+type InstrumentedWindow=typeof window&{__hotsheetRenderMetrics?:{reset():void;snapshot():RenderMetricsSnapshot}};
+const resetRenderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>{(window as InstrumentedWindow).__hotsheetRenderMetrics?.reset()});
+const renderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>(window as InstrumentedWindow).__hotsheetRenderMetrics?.snapshot());
+
+test('rejects render churn from unchanged permission polling',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.waitForTimeout(1_000);await resetRenderMetrics(page);await page.waitForTimeout(1_700);
+  expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
+});
+
+test('renders exactly once when permission polling discovers a request',async({page})=>{
+  await mockProject(page);let pending:Array<{id:number;connection:string;tool:string;action:string;always_allow_supported:boolean}>=[];
+  await page.route('**/permissions',route=>route.fulfill({json:pending}));
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.waitForTimeout(100);await resetRenderMetrics(page);pending=[{id:77,connection:'codex-session',tool:'Bash',action:'cargo test',always_allow_supported:true}];
+  await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
+  const metrics=await renderMetrics(page);expect(metrics?.passes).toBe(1);expect(metrics?.mutations).toBeGreaterThan(0);
+});
+
 test('translates urgent priority through the canonical server contract',async({page})=>{
   const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
   await page.locator('wa-select[name="inspector-priority"]').evaluate((node:HTMLElement&{value:string})=>{node.value='urgent';node.dispatchEvent(new Event('change',{bubbles:true}))});

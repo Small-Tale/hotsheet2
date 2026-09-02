@@ -34,9 +34,11 @@ export class PermissionInbox {
   history(){return [...this.historyItems].sort((a,b)=>b.resolvedAt-a.resolvedAt)}
   visible(){return this.pending().find(item=>!item.ignored)}
   reconcile(project:PermissionProject,requests:WirePermissionRequest[],connections:ToolConnection[],now=Date.now()){
+    let changed=false;
     const currentKeys=new Set(requests.map(request=>`${project.id}:${request.id}`));
-    for(const item of this.pending())if(item.projectId===project.id&&!currentKeys.has(item.key)){this.pendingItems.delete(item.key);this.record({...item,decision:'external',resolvedAt:now})}
-    for(const request of requests){const key=`${project.id}:${request.id}`,existing=this.pendingItems.get(key),connection=connections.find(item=>item.id===request.connection);if(!existing)this.pendingItems.set(key,{...request,key,projectId:project.id,projectName:project.name,agent:connection?.tool||friendlyAgent(request.tool),role:connection?.role==='worker'?'worker':'main worker',receivedAt:now,ignored:false});else this.pendingItems.set(key,{...existing,...request,projectName:project.name,agent:connection?.tool||existing.agent,role:connection?.role==='worker'?'worker':existing.role})}
+    for(const item of this.pending())if(item.projectId===project.id&&!currentKeys.has(item.key)){this.pendingItems.delete(item.key);this.record({...item,decision:'external',resolvedAt:now});changed=true}
+    for(const request of requests){const key=`${project.id}:${request.id}`,existing=this.pendingItems.get(key),connection=connections.find(item=>item.id===request.connection);if(!existing){this.pendingItems.set(key,{...request,key,projectId:project.id,projectName:project.name,agent:connection?.tool||friendlyAgent(request.tool),role:connection?.role==='worker'?'worker':'main worker',receivedAt:now,ignored:false});changed=true;continue}const next={...existing,...request,projectName:project.name,agent:connection?.tool||existing.agent,role:connection?.role==='worker'?'worker':existing.role};if(existing.connection!==next.connection||existing.tool!==next.tool||existing.action!==next.action||existing.always_allow_supported!==next.always_allow_supported||existing.projectName!==next.projectName||existing.agent!==next.agent||existing.role!==next.role){this.pendingItems.set(key,next);changed=true}}
+    return changed;
   }
   ignore(key:string){const item=this.pendingItems.get(key);if(item)this.pendingItems.set(key,{...item,ignored:true})}
   present(key:string){const item=this.pendingItems.get(key);if(item)this.pendingItems.set(key,{...item,ignored:false})}
