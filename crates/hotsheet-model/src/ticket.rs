@@ -169,6 +169,22 @@ impl Ticket {
             ..Self::default()
         }
     }
+
+    /// Whether the ticket's latest feedback exchange is still waiting for a response.
+    /// A regular note answers the preceding feedback request; activity/status notes do
+    /// not change that state, and a later feedback request opens it again.
+    pub fn feedback_needed(&self) -> bool {
+        self.notes
+            .iter()
+            .filter(|note| matches!(note.kind, NoteKind::Regular | NoteKind::FeedbackNeeded))
+            .max_by(|a, b| {
+                a.created_at
+                    .chronological_cmp(&b.created_at)
+                    .unwrap_or_else(|| a.created_at.as_str().cmp(b.created_at.as_str()))
+                    .then(a.id.cmp(&b.id))
+            })
+            .is_some_and(|note| note.kind == NoteKind::FeedbackNeeded)
+    }
 }
 
 fn is_false(b: &bool) -> bool {
@@ -177,4 +193,51 @@ fn is_false(b: &bool) -> bool {
 
 fn is_zero(n: &u32) -> bool {
     *n == 0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn note(id: &str, kind: NoteKind, created_at: &str) -> Note {
+        Note {
+            id: Ulid::from_string(id).unwrap(),
+            kind,
+            created_at: Timestamp::new(created_at),
+            edited_at: Timestamp::new(created_at),
+            text: String::new(),
+        }
+    }
+
+    #[test]
+    fn latest_regular_or_feedback_note_controls_feedback_needed() {
+        let mut ticket = Ticket::default();
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:00:00Z",
+        ));
+        assert!(ticket.feedback_needed());
+
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::Activity,
+            "2026-08-20T00:01:00Z",
+        ));
+        assert!(ticket.feedback_needed());
+
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+            NoteKind::Regular,
+            "2026-08-20T00:02:00Z",
+        ));
+        assert!(!ticket.feedback_needed());
+
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA4",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:03:00Z",
+        ));
+        assert!(ticket.feedback_needed());
+    }
 }

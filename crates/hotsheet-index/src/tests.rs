@@ -391,16 +391,20 @@ fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
         "flag on after a feedback_needed note"
     );
 
-    // A plain add_note (regular) leaves it on; only when the feedback_needed note is
-    // gone does it clear — remove every note and reconcile.
-    let mut t = store.read_ticket(&id).unwrap();
-    t.notes.retain(|n| n.kind != NoteKind::FeedbackNeeded);
-    t.updated_at = Timestamp::new("2026-08-19T02:00:00Z");
-    store.write_ticket_committing(&t).unwrap();
+    // A later regular note is the response and clears the unresolved feedback state.
+    ops::add_note(
+        &store,
+        &id,
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1"),
+        Timestamp::new("2026-08-19T02:00:00Z"),
+        NoteKind::Regular,
+        "confirmed".into(),
+    )
+    .unwrap();
     ix.reconcile(&store).unwrap();
     assert!(
         !row(&ix).feedback_needed,
-        "flag clears once the feedback_needed note is removed"
+        "flag clears after a later regular response"
     );
 }
 

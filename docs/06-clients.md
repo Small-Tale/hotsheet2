@@ -107,7 +107,6 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   server-too-old, and unknown metadata. Compatible revision differences do not block use;
   an old client offers reload/update, while an old server is surfaced without an unsafe
   restart action unless both restart and quiescence capabilities are explicitly present.
-
   Ticket-provider connections are not stored in `hotsheet-settings.json` or
   `hotsheet-settings.local.json`: those remain shared/local preferences. Git sources are
   checkout/store links in the machine registry, while external provider connections are
@@ -392,6 +391,10 @@ still carries the specific question and feedback editor. The unified needs-revie
 takes precedence over blocked and Up Next rails so the outstanding decision is never
 hidden. The server's compact row continues to expose the source `feedback_needed`
 boolean (mirrored in the index), while the client normalizes it at presentation time.
+For note-driven feedback, only an unanswered ask is active: among regular and
+`feedback_needed` notes, the most recent one controls the state. A later regular note is
+the response and clears Needs review; activity/status notes are neutral, and a later
+`feedback_needed` note opens it again.
 
 **Reader mode is a focus surface with an edit toggle.** Opening reader mode shows the
 ticket's details + notes on one large scrollable surface (per the rule above).

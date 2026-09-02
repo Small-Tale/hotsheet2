@@ -194,9 +194,9 @@ pub struct TicketRow {
     pub priority: Option<String>,
     pub status: Option<String>,
     pub up_next: bool,
-    /// True when the ticket carries at least one `feedback_needed` note — it is waiting
-    /// on the user. Computed here (a compact row has no notes) so a list can show a
-    /// ticket-level indicator without loading every ticket's notes.
+    /// True when the latest regular/feedback exchange ends in `feedback_needed` — it is
+    /// waiting on the user. A later regular note clears the state. Computed here (a
+    /// compact row has no notes) so lists need not load every ticket's notes.
     pub feedback_needed: bool,
     pub tags: Vec<String>,
     pub blocked_by: Vec<String>,
@@ -229,7 +229,7 @@ impl From<&Ticket> for TicketRow {
             priority: Some(enum_str(&t.priority)),
             status: Some(enum_str(&t.status)),
             up_next: t.up_next,
-            feedback_needed: t.notes.iter().any(|n| n.kind == NoteKind::FeedbackNeeded),
+            feedback_needed: t.feedback_needed(),
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             created_at: Some(t.created_at.as_str().to_string()),
@@ -346,11 +346,11 @@ mod tests {
     #[test]
     fn feedback_needed_row_flag_tracks_a_feedback_needed_note() {
         use hotsheet_model::Note;
-        let note = |kind| Note {
-            id: Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
+        let note = |id, kind, created_at| Note {
+            id: Ulid::from_string(id).unwrap(),
             kind,
-            created_at: Timestamp::new("2026-08-20T00:00:00Z"),
-            edited_at: Timestamp::new("2026-08-20T00:00:00Z"),
+            created_at: Timestamp::new(created_at),
+            edited_at: Timestamp::new(created_at),
             text: "please confirm".into(),
         };
 
@@ -359,17 +359,36 @@ mod tests {
 
         // A regular note alone doesn't raise the flag.
         let mut regular = ticket();
-        regular.notes.push(note(NoteKind::Regular));
+        regular.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+            NoteKind::Regular,
+            "2026-08-20T00:00:00Z",
+        ));
         assert!(!TicketRow::from(&regular).feedback_needed);
 
         // A feedback_needed note does — including on the compact list row and its JSON.
         let mut waiting = ticket();
-        waiting.notes.push(note(NoteKind::Regular));
-        waiting.notes.push(note(NoteKind::FeedbackNeeded));
+        waiting.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB1",
+            NoteKind::Regular,
+            "2026-08-20T00:00:00Z",
+        ));
+        waiting.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB2",
+            NoteKind::FeedbackNeeded,
+            "2026-08-20T00:01:00Z",
+        ));
         assert!(TicketRow::from(&waiting).feedback_needed);
         assert!(TicketRow::compact(&waiting).feedback_needed);
         let json = serde_json::to_value(TicketRow::compact(&waiting)).unwrap();
         assert_eq!(json["feedback_needed"], true);
+
+        waiting.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FB3",
+            NoteKind::Regular,
+            "2026-08-20T00:02:00Z",
+        ));
+        assert!(!TicketRow::from(&waiting).feedback_needed);
     }
 
     #[test]

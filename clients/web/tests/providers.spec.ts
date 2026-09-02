@@ -13,7 +13,9 @@ const full = { ...row, details:'The real ticket body.', blocked_reason:null, con
 
 async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded = false) {
   let rows = [{...row,feedback_needed:primaryFeedbackNeeded},backlogRow,archiveRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3];
-  let selectedFull = full;
+  let selectedFull = primaryFeedbackNeeded
+    ? {...full,notes:[...full.notes,{id:'N4',kind:'feedback_needed',created_at:'2026-08-30T00:37:00Z',edited_at:'2026-08-30T00:37:00Z',text:'One more decision is needed.'}]}
+    : full;
   const evidenceByTicket = new Map<string,Array<{id:string;filename:string;created_at:string}>>();
   const patches: Record<string,unknown>[] = [];
   await page.route('**/*', async route => {
@@ -52,6 +54,17 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   const inspector=page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toHaveAttribute('data-needs-review','true');
   await expect(inspector.locator('.ticket-inspector__feedback')).toContainText('Needs review');
+});
+
+test('clears needs review when a regular response follows the feedback-needed note',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');
+  await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCount(0);
+  await expect(ticket.locator('.ticket-list-row__feedback')).toHaveCount(0);
+  await ticket.click();
+  const inspector=page.locator('[data-component="ticket-inspector"]');
+  await expect(inspector).toHaveAttribute('data-needs-review','false');
+  await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
 });
 
 interface RenderMetricsSnapshot { passes:number;mutations:number }

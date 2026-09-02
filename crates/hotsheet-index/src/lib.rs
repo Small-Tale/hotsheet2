@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use hotsheet_model::{NoteKind, Ticket, Ulid, parse_file};
+use hotsheet_model::{Ticket, Ulid, parse_file};
 use hotsheet_ticketing::{FsStore, SortKey, TicketQuery};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
@@ -195,7 +195,7 @@ impl Index {
         content_hash: &str,
     ) -> Result<(), IndexError> {
         let id = t.id.to_string();
-        let feedback_needed = t.notes.iter().any(|n| n.kind == NoteKind::FeedbackNeeded) as i64;
+        let feedback_needed = t.feedback_needed() as i64;
         let tags_json = serde_json::to_string(&t.tags).unwrap_or_else(|_| "[]".into());
         let blocked_json = serde_json::to_string(
             &t.blocked_by
