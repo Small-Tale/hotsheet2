@@ -1,8 +1,15 @@
+import { readFileSync } from 'node:fs';
+
 import { describe, expect, it } from 'vitest';
 
 import { QuickTicketComposer } from './quick-ticket-composer';
 
 describe('QuickTicketComposer', () => {
+  it('gives the title the available width while keeping category compact', () => {
+    const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8');
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem)');
+    expect(css).toMatch(/@media \(max-width: 38rem\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
+  });
   it('has distinct collapsed, editable, and provider-disabled presentations', () => {
     const collapsed = String(QuickTicketComposer({}));
     expect(collapsed).toContain('data-action="expand-ticket-composer"');

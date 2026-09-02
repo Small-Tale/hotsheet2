@@ -1097,8 +1097,8 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(drive.locator('[data-lucide="play"]')).toHaveCount(1);
 });
 
-test('holds the AppShell at its 640 by 480 supported floor',async({page})=>{
-  await page.setViewportSize({width:640,height:480});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]');const bounds=await shell.boundingBox();expect(bounds?.width).toBeGreaterThanOrEqual(640);expect(bounds?.height).toBeGreaterThanOrEqual(480);await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-501eph-shell-floor.png',fullPage:true});
+test('holds the AppShell at its 1024 by 600 supported floor',async({page})=>{
+  await page.setViewportSize({width:1024,height:600});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]');const bounds=await shell.boundingBox();expect(bounds?.width).toBeGreaterThanOrEqual(1024);expect(bounds?.height).toBeGreaterThanOrEqual(600);await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-501eph-shell-floor.png',fullPage:true});
 });
 
 test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {

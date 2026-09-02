@@ -3,7 +3,7 @@
 .quick-ticket-composer__launcher[data-dragging="true"] { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
 .quick-ticket-composer__launcher:focus-visible { outline: 3px solid rgba(37, 99, 235, .24); }
 .quick-ticket-composer__launcher svg { width: 1rem; height: 1rem; }
-.quick-ticket-composer { display: grid; width: 100%; padding: 1rem; border: 1px solid #93b4f5; border-radius: .7rem; background: var(--wa-color-surface-default); box-shadow: 0 .5rem 1.5rem rgba(35, 32, 48, .08); grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr)); gap: var(--wa-space-s); }
+.quick-ticket-composer { display: grid; width: 100%; padding: 1rem; border: 1px solid #93b4f5; border-radius: .7rem; background: var(--wa-color-surface-default); box-shadow: 0 .5rem 1.5rem rgba(35, 32, 48, .08); grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem); gap: var(--wa-space-s); }
 .quick-ticket-composer wa-input::part(base) { height: 2.5rem; min-height: 2.5rem; }
 .quick-ticket-composer[data-dragging="true"] { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
 .quick-ticket-composer__attachments { display: grid; grid-column: 1 / -1; gap: .45rem; }

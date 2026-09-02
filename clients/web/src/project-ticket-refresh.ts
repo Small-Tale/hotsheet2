@@ -15,8 +15,10 @@ export async function loadProjectTicketRefresh(client: Pick<Api, 'checkoutCorrup
     client.checkoutTickets(checkout),
     client.checkoutCorruptTickets(checkout),
   ]);
+  const diagnostics=corruptTickets.status === 'fulfilled' ? corruptTickets.value : undefined;
+  const corruptSlugs=new Set(diagnostics?.flatMap(item=>item.slug?[item.slug]:[])??[]);
   return {
-    ...(tickets.status === 'fulfilled' ? { tickets: tickets.value } : { ticketsError: message(tickets.reason) }),
+    ...(tickets.status === 'fulfilled' ? { tickets: tickets.value.filter(ticket=>!corruptSlugs.has(ticket.slug)) } : { ticketsError: message(tickets.reason) }),
     ...(corruptTickets.status === 'fulfilled' ? { corruptTickets: corruptTickets.value } : { corruptTicketsError: message(corruptTickets.reason) }),
   };
 }

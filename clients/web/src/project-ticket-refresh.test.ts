@@ -22,4 +22,16 @@ describe('loadProjectTicketRefresh', () => {
 
     expect(result).toEqual({ ticketsError: 'healthy index unavailable', corruptTickets: [corrupt] });
   });
+
+  it('removes a stale healthy row when live diagnostics identify the same slug as corrupt', async () => {
+    const healthy = { id: '01', slug: 'HS2-OK', title: 'Healthy', tags: [] };
+    const stale = { id: '02', slug: 'HS2-BAD', title: 'Stale indexed title', tags: [] };
+    const corrupt = { store: 'local', store_path: '/tickets', path: '/tickets/02.md', slug: 'HS2-BAD', error: 'invalid notes' };
+    const result = await loadProjectTicketRefresh({
+      checkoutTickets: vi.fn().mockResolvedValue([healthy,stale]),
+      checkoutCorruptTickets: vi.fn().mockResolvedValue([corrupt]),
+    }, 'checkout');
+
+    expect(result).toEqual({ tickets: [healthy], corruptTickets: [corrupt] });
+  });
 });

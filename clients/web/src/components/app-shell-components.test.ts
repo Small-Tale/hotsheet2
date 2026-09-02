@@ -11,10 +11,10 @@ import { ProjectTabBar } from './project-tab-bar';
 import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from './resizable-region';
 
 describe('application shell components', () => {
-  it('defines the supported application floor as 640 by 480 CSS pixels', () => {
+  it('defines the supported application floor as 1024 by 600 CSS pixels', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
-    expect(css).toMatch(/\.app-shell \{[^}]*min-width: 40rem/);
-    expect(css).toMatch(/\.app-shell \{[^}]*min-height: 30rem/);
+    expect(css).toMatch(/\.app-shell \{[^}]*min-width: 64rem/);
+    expect(css).toMatch(/\.app-shell \{[^}]*min-height: 37\.5rem/);
     expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.resizable-region[^{}]*display: none/);
   });
   it('draws one continuous focus outline around the ticket work area', () => {

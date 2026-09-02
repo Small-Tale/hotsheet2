@@ -59,7 +59,7 @@ Rules for both clients:
 
 The **built demo** composes the current production sidebar, tabs, connection banner,
 header, ticket workspace, and inspector into a desktop shell. The supported AppShell
-floor is **640 × 480 CSS pixels**; native hosts must enforce the
+floor is **1024 × 600 CSS pixels**; native hosts must enforce the
 same minimum window content size rather than asking the shell to compress below it.
 Sidebar and inspector splitters are keyboard/pointer adjustable, remain present until
 the user explicitly collapses them, and never auto-hide at viewport breakpoints. Sidebar

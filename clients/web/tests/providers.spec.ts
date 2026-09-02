@@ -231,6 +231,7 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
 
   const corrupt=page.locator('[data-component="corrupt-ticket-row"]');
   await expect(corrupt).toContainText('HS2-QQRY00');
+  await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-QQRY00"]')).toHaveCount(0);
   await expect(corrupt).toContainText('Ticket file could not be read');
   await expect(corrupt).toHaveAttribute('role','group');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
