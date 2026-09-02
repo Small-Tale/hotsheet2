@@ -69,7 +69,7 @@ export function PermissionRequestCard({ item, presentation = 'list', state = 'pe
       <LucideIcon icon={stateIcon} name={iconName} />
       <strong>{statusLabel}</strong>
     </div>
-    <pre class="permission-request-card__details"><code>{item.action}</code></pre>
+    {item.action.trim() && <pre class="permission-request-card__details"><code>{item.action}</code></pre>}
     {explanation && <p class="permission-request-card__explanation">{explanation}</p>}
     {error && <p class="permission-request-card__error" role="alert">{error}</p>}
     {!history && <footer class="permission-request-card__footer">

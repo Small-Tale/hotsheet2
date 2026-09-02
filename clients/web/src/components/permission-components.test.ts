@@ -29,6 +29,12 @@ describe('permission presentation components', () => {
     expect(markup).not.toContain('edit /tmp/file.ts\nA detailed');
   });
 
+  it('omits the details box when the permission action is empty', () => {
+    const markup = String(PermissionRequestCard({ item: { ...pending, tool: 'ToolSearch', action: '  \n ' } }));
+    expect(markup).toContain('Wants permission to use ToolSearch');
+    expect(markup).not.toContain('permission-request-card__details');
+  });
+
   it('labels automatic denial explicitly', () => {
     const markup = String(PermissionRequestCard({ item: pending, countdown: '0:13', countdownAction: 'deny' }));
     expect(markup).toContain('Automatically denied in');

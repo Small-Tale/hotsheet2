@@ -537,8 +537,8 @@ capability-aware sections when their underlying features and data contracts land
 ### 5.2 Permission flow — feature floor
 
 - `PermissionRequestCard` — shared list/popup presentation with project identity,
-  operation details, optional visible-time automation countdown, and capability-aware
-  Ignore/Deny/Always Allow/Allow Once actions
+  operation details when non-empty (no blank framed details box), optional visible-time
+  automation countdown, and capability-aware Ignore/Deny/Always Allow/Allow Once actions
 - `PermissionRequestPopup` — non-modal fixed presentation of the shared request card
 - `PermissionSummary`
 - `PermissionDetailDisclosure`
