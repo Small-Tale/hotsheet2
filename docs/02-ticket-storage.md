@@ -142,7 +142,7 @@ one **live** ticket (see the move tombstones in §2.13).
 `hotsheet-store.json`:
 ```jsonc
 {
-  "schemaVersion": 2,
+  "schemaVersion": "hotsheet/v2-guarded-tickets",
   "ticketPrefix": "HS",       // display prefix; the dash is added automatically
   "idStrategy": "ulid",
   "shard": "id-prefix-2"      // 2-char id-prefix sharding (confirmed 2026-08-19)
@@ -172,14 +172,18 @@ emits **no** notes block at all, so it can never leave a dangling
 `<!-- hotsheet:notes:begin -->` without its `…:end` marker (the exact shape that first
 triggered this).
 
-Store schema 2 also prevents an already-built, pre-bounded-notes CLI or MCP process from
-silently downgrading a ticket. Current canonical files write the intentionally guarded
-`schema: hotsheet/v2-bounded-notes` marker. Current readers normalize it to numeric model
-schema 2, while the old derived deserializer rejects it before mutation. The first write
-to a schema-1 store rewrites every healthy legacy ticket to the guarded bounded form,
-preserving its body and complete note history, and only then advances
-`hotsheet-store.json` to schema 2. A current writer rejects a store schema newer than it
-supports. See `docs/TEST-COVERAGE.md` → `corruption-resilience`.
+Store schema 2 also prevents an already-built, pre-bounded-notes CLI, MCP, or server
+process from silently creating or downgrading a ticket. Current metadata writes the
+intentionally guarded `schemaVersion: "hotsheet/v2-guarded-tickets"`; current readers
+normalize it to numeric store schema 2, while an old `schemaVersion: u32` deserializer
+rejects it before a stale create. Current canonical ticket files independently write the
+guarded `schema: hotsheet/v2-bounded-notes` marker, which stops a stale edit even during
+the transitional migration. The first current write to a schema-1 store rewrites every
+healthy legacy ticket to the guarded bounded form, preserving its body and complete note
+history, and only then advances `hotsheet-store.json` to the guarded schema-2 marker. A
+transitional numeric `schemaVersion: 2` is accepted and guarded on its next current
+write. A current writer rejects a store schema newer than it supports. See
+`docs/TEST-COVERAGE.md` → `corruption-resilience`.
 
 ## 2.4 Ticket IDs — ULID, no central sequence
 

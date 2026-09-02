@@ -17,23 +17,53 @@ use std::process::{Command, Stdio};
 use hotsheet_model::{
     Attachment, ParseError, SCHEMA_VERSION, Ticket, Timestamp, Ulid, parse_file, to_file_string,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
 
 /// The store metadata file at a store root.
 pub const STORE_METADATA_FILE: &str = "hotsheet-store.json";
 /// Store version whose ticket files carry the stale-writer schema guard.
 pub const STORE_SCHEMA_VERSION: u32 = 2;
+const GUARDED_STORE_SCHEMA_V2: &str = "hotsheet/v2-guarded-tickets";
 
 /// Store metadata (`hotsheet-store.json`, `docs/02` §2.3). camelCase on disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StoreMetadata {
+    #[serde(
+        serialize_with = "serialize_store_schema",
+        deserialize_with = "deserialize_store_schema"
+    )]
     pub schema_version: u32,
     /// Display prefix for derived slugs (e.g. `HS`); the dash is added by the slug.
     pub ticket_prefix: String,
     pub id_strategy: String,
     pub shard: String,
+}
+
+fn serialize_store_schema<S: Serializer>(version: &u32, serializer: S) -> Result<S::Ok, S::Error> {
+    if *version == STORE_SCHEMA_VERSION {
+        serializer.serialize_str(GUARDED_STORE_SCHEMA_V2)
+    } else {
+        serializer.serialize_u32(*version)
+    }
+}
+
+fn deserialize_store_schema<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u32, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum DiskSchema {
+        Number(u32),
+        Guard(String),
+    }
+
+    match DiskSchema::deserialize(deserializer)? {
+        DiskSchema::Number(version) => Ok(version),
+        DiskSchema::Guard(guard) if guard == GUARDED_STORE_SCHEMA_V2 => Ok(STORE_SCHEMA_VERSION),
+        DiskSchema::Guard(guard) => Err(de::Error::custom(format!(
+            "unsupported store schema marker '{guard}'"
+        ))),
+    }
 }
 
 impl StoreMetadata {
@@ -189,6 +219,14 @@ impl FsStore {
             });
         }
         if metadata.schema_version == STORE_SCHEMA_VERSION {
+            // Canonicalize a transitional numeric schema-2 metadata file. The guarded
+            // string is intentionally unreadable to pre-schema-2 writers, blocking
+            // stale creates before they can emit a new legacy ticket.
+            let path = self.root.join(STORE_METADATA_FILE);
+            let guarded = format!("{}\n", serde_json::to_string_pretty(&metadata)?);
+            if fs::read_to_string(&path)? != guarded {
+                fs::write(path, guarded)?;
+            }
             return Ok(());
         }
 
@@ -725,8 +763,34 @@ mod tests {
     fn init_open_and_metadata_round_trip() {
         let (dir, store) = temp_store();
         assert_eq!(store.metadata().unwrap(), StoreMetadata::new("HS"));
+        let raw = fs::read_to_string(dir.path().join(STORE_METADATA_FILE)).unwrap();
+        assert!(raw.contains(r#""schemaVersion": "hotsheet/v2-guarded-tickets""#));
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct LegacyMetadata {
+            #[allow(dead_code)]
+            schema_version: u32,
+        }
+        assert!(serde_json::from_str::<LegacyMetadata>(&raw).is_err());
         // A second open of the same dir succeeds.
         assert!(FsStore::open(dir.path()).is_ok());
+    }
+
+    #[test]
+    fn a_transitional_numeric_schema_two_is_guarded_on_the_next_write() {
+        let (_dir, store) = temp_store();
+        let raw = r#"{
+  "schemaVersion": 2,
+  "ticketPrefix": "HS",
+  "idStrategy": "ulid",
+  "shard": "id-prefix-2"
+}
+"#;
+        fs::write(store.root().join(STORE_METADATA_FILE), raw).unwrap();
+        let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        store.write_ticket(&ticket).unwrap();
+        let guarded = fs::read_to_string(store.root().join(STORE_METADATA_FILE)).unwrap();
+        assert!(guarded.contains(r#""schemaVersion": "hotsheet/v2-guarded-tickets""#));
     }
 
     #[test]

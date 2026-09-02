@@ -102,9 +102,12 @@ The reader remains backward-compatible with schema-1 files that use `## Notes`
 followed by one-sided `<!-- note: … -->` markers through EOF. Every canonical write
 upgrades every healthy ticket in that store to bounded blocks and the guarded
 `schema: hotsheet/v2-bounded-notes` marker before advancing the store metadata to
-schema 2. That string is intentionally incompatible with the old `schema: u32`
-deserializer, so a stale pre-bounded-notes CLI/MCP fails before it can rewrite and drop
-history. Current writers likewise refuse store/schema guards newer than they understand.
+the guarded `schemaVersion: "hotsheet/v2-guarded-tickets"` marker. Those strings are
+intentionally incompatible with the old numeric deserializers: the store marker blocks
+stale creates, while the per-ticket marker blocks stale edits during the transitional
+migration. A stale pre-bounded-notes CLI/MCP/server therefore fails before it can create
+legacy data or rewrite and drop history. Current writers likewise refuse store/schema
+guards newer than they understand.
 A line of user-authored Markdown that looks
 like a reserved `<!-- hotsheet:… -->` marker is backslash-escaped on disk and restored
 on read. Content after `hotsheet:notes:end` is rejected by current readers rather
