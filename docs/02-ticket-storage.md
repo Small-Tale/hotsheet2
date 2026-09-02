@@ -178,9 +178,12 @@ intentionally guarded `schemaVersion: "hotsheet/v2-guarded-tickets"`; current re
 normalize it to numeric store schema 2, while an old `schemaVersion: u32` deserializer
 rejects it before a stale create. Current canonical ticket files independently write the
 guarded `schema: hotsheet/v2-bounded-notes` marker, which stops a stale edit even during
-the transitional migration. The first current write to a schema-1 store rewrites every
-healthy legacy ticket to the guarded bounded form, preserving its body and complete note
-history, and only then advances `hotsheet-store.json` to the guarded schema-2 marker. A
+the transitional migration. An ordinary write to a schema-1 store is rejected with
+explicit activation guidance. `hotsheet-cli activate-format
+--acknowledge-pre-release-breakage` rewrites every healthy legacy ticket to the guarded
+bounded form, preserving its body and complete note history, and only then advances
+`hotsheet-store.json` to the guarded schema-2 marker. It announces the boundary before
+modifying bytes and requires older processes to be stopped. A
 transitional numeric `schemaVersion: 2` is accepted and deliberately preserved by
 ordinary ticket writes so installing a new CLI cannot break an older server that is
 already running against the store. Guard activation for such an existing store must be
@@ -188,6 +191,8 @@ a deliberate lifecycle migration after its owning processes have stopped; it is 
 an incidental consequence of editing a ticket. A current writer rejects a store schema
 newer than it supports. See
 `docs/TEST-COVERAGE.md` → `corruption-resilience`.
+
+The complete lifecycle contract is in [19](19-format-compatibility.md).
 
 ## 2.4 Ticket IDs — ULID, no central sequence
 

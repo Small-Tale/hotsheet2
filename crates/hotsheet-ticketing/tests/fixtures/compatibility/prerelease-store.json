@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "ticketPrefix": "HS",
+  "idStrategy": "ulid",
+  "shard": "id-prefix-2"
+}

@@ -81,6 +81,27 @@ pub enum ParseError {
     UnsupportedSchema(String),
 }
 
+impl ParseError {
+    /// Stable machine classification for callers that must distinguish a newer
+    /// writer from damaged content. Never show an unsupported schema as corruption.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::UnsupportedSchema(_) => "upgrade_required",
+            _ => "invalid_ticket",
+        }
+    }
+
+    /// User-facing recovery guidance suitable for CLI, server, and clients.
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::UnsupportedSchema(marker) => format!(
+                "This ticket was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (ticket schema: {marker})."
+            ),
+            _ => self.to_string(),
+        }
+    }
+}
+
 const BODY_BEGIN: &str = "<!-- hotsheet:body:begin -->";
 const BODY_END: &str = "<!-- hotsheet:body:end -->";
 const NOTES_BEGIN: &str = "<!-- hotsheet:notes:begin -->";
@@ -602,10 +623,16 @@ mod tests {
             "schema: hotsheet/v99-future",
             1,
         );
-        assert!(matches!(
-            parse_file(&text),
-            Err(ParseError::UnsupportedSchema(marker)) if marker == "hotsheet/v99-future"
-        ));
+        let error = parse_file(&text).unwrap_err();
+        assert!(
+            matches!(&error, ParseError::UnsupportedSchema(marker) if marker == "hotsheet/v99-future")
+        );
+        assert_eq!(error.code(), "upgrade_required");
+        assert!(
+            error
+                .user_message()
+                .contains("newer version of Hot Sheet 2")
+        );
     }
 
     #[test]

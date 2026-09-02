@@ -20,6 +20,17 @@ interface SessionTarget { url:string; secret:string }
 
 const sessions = new Map<string, SessionTarget>();
 
+/** Refuse API use across a negotiated hard boundary. Unknown metadata stays usable
+ * for pre-handshake development servers, but an explicit skew result is authoritative. */
+export function requireCompatibleServer(assessment: CompatibilityAssessment): void {
+  if (assessment.kind === 'client_too_old') {
+    throw new Error(`Hot Sheet 2 update required. This project cannot be opened because its server requires a newer HS2 client. ${assessment.detail ?? ''}`.trim());
+  }
+  if (assessment.kind === 'server_too_old') {
+    throw new Error(`Hot Sheet 2 server update required. This client cannot open the project through the older server. ${assessment.detail ?? ''}`.trim());
+  }
+}
+
 export function developmentRepositoryRoot(cwd = process.cwd(), environment = process.env) {
   return resolve(environment.HOTSHEET_REPO_ROOT ?? resolve(cwd, '../..'));
 }
@@ -78,6 +89,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const target = { url: instance.url, secret: instance.secret };
   const metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
   const compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
+  requireCompatibleServer(compatibility);
   const opened = await serverRequest<{checkout:{id:string;root:string;alias:string;stores:string[]}}>(target, '/projects/open', {
     method: 'POST',
     body: JSON.stringify({ root, ...(ticketStoreInput?.trim() ? { stores: [ticketStore] } : {}) }),

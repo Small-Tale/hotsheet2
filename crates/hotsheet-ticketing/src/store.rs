@@ -87,6 +87,18 @@ pub enum StoreError {
     NotAStore(PathBuf),
     #[error("invalid hotsheet-store.json: {0}")]
     Metadata(#[from] serde_json::Error),
+    #[error(
+        "This {format} was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (found {found}, supported through {supported})."
+    )]
+    UpgradeRequired {
+        format: &'static str,
+        found: String,
+        supported: String,
+    },
+    #[error(
+        "store format activation required: schema {found} must be explicitly migrated to {target} before writing; stop older Hot Sheet 2 processes, announce the compatibility break, then run `hotsheet-cli activate-format --acknowledge-pre-release-breakage`"
+    )]
+    FormatActivationRequired { found: u32, target: u32 },
     #[error("parsing ticket {path}: {source}")]
     Parse { path: PathBuf, source: ParseError },
     #[error(
@@ -111,6 +123,8 @@ pub struct CorruptTicket {
     pub slug: Option<String>,
     /// A human-readable description of why the file could not be read/parsed.
     pub error: String,
+    /// Stable recovery class. An upgrade boundary is not damaged content.
+    pub error_code: &'static str,
 }
 
 /// The result of a resilient store enumeration ([`FsStore::list_tickets_resilient`]):
@@ -172,7 +186,21 @@ impl FsStore {
     /// Read the store metadata.
     pub fn metadata(&self) -> Result<StoreMetadata, StoreError> {
         let text = fs::read_to_string(self.root.join(STORE_METADATA_FILE))?;
-        Ok(serde_json::from_str(&text)?)
+        let value: serde_json::Value = serde_json::from_str(&text)?;
+        if let Some(version) = value.get("schemaVersion") {
+            let supported = GUARDED_STORE_SCHEMA_V2.to_string();
+            let known = version.as_u64() == Some(1)
+                || version.as_u64() == Some(STORE_SCHEMA_VERSION.into())
+                || version.as_str() == Some(GUARDED_STORE_SCHEMA_V2);
+            if !known {
+                return Err(StoreError::UpgradeRequired {
+                    format: "ticket store",
+                    found: version.to_string(),
+                    supported,
+                });
+            }
+        }
+        Ok(serde_json::from_value(value)?)
     }
 
     /// The on-disk path for a ticket id: `tickets/<2-char shard>/<ULID>.md`.
@@ -211,7 +239,7 @@ impl FsStore {
     }
 
     fn ensure_current_writer_format(&self) -> Result<(), StoreError> {
-        let mut metadata = self.metadata()?;
+        let metadata = self.metadata()?;
         if metadata.schema_version > STORE_SCHEMA_VERSION {
             return Err(StoreError::UnsupportedStoreSchema {
                 found: metadata.schema_version,
@@ -224,6 +252,26 @@ impl FsStore {
             // must not silently replace its metadata with the guarded string and
             // break that process underneath the user. New stores and actual
             // schema-1 migrations still write the guarded marker.
+            return Ok(());
+        }
+
+        Err(StoreError::FormatActivationRequired {
+            found: metadata.schema_version,
+            target: STORE_SCHEMA_VERSION,
+        })
+    }
+
+    /// Explicitly activate the current pre-release format after the caller has
+    /// announced the compatibility boundary and stopped older writers.
+    pub fn activate_current_format(&self) -> Result<(), StoreError> {
+        let mut metadata = self.metadata()?;
+        if metadata.schema_version > STORE_SCHEMA_VERSION {
+            return Err(StoreError::UnsupportedStoreSchema {
+                found: metadata.schema_version,
+                supported: STORE_SCHEMA_VERSION,
+            });
+        }
+        if metadata.schema_version == STORE_SCHEMA_VERSION {
             return Ok(());
         }
 
@@ -577,11 +625,16 @@ impl FsStore {
                 Ok(ticket) => tickets.push(ticket),
                 Err(error) => {
                     let (id, slug) = recover_identity(&path);
+                    let (error_code, message) = match &error {
+                        StoreError::Parse { source, .. } => (source.code(), source.user_message()),
+                        _ => ("invalid_ticket", error.to_string()),
+                    };
                     corrupt.push(CorruptTicket {
                         path,
                         id,
                         slug,
-                        error: error.to_string(),
+                        error: message,
+                        error_code,
                     });
                 }
             }
@@ -800,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn first_write_migrates_legacy_tickets_and_preserves_note_history() {
+    fn explicit_activation_migrates_legacy_tickets_and_preserves_note_history() {
         let (_dir, store) = temp_store();
         let mut metadata = store.metadata().unwrap();
         metadata.schema_version = 1;
@@ -826,6 +879,11 @@ mod tests {
 
         let mut changed = store.read_ticket(&ids[0]).unwrap();
         changed.title = "Current writer mutation".into();
+        assert!(matches!(
+            store.write_ticket(&changed),
+            Err(StoreError::FormatActivationRequired { .. })
+        ));
+        store.activate_current_format().unwrap();
         store.write_ticket(&changed).unwrap();
 
         assert_eq!(
@@ -853,11 +911,27 @@ mod tests {
         .unwrap();
 
         let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        let error = store.write_ticket(&ticket).unwrap_err();
         assert!(matches!(
-            store.write_ticket(&ticket),
-            Err(StoreError::UnsupportedStoreSchema { .. })
+            error,
+            StoreError::UpgradeRequired {
+                format: "ticket store",
+                ..
+            }
         ));
         assert!(!store.ticket_path(&ticket.id).exists());
+    }
+
+    #[test]
+    fn newer_named_store_schema_is_an_upgrade_boundary_not_corruption() {
+        let (_dir, store) = temp_store();
+        fs::write(
+            store.root().join(STORE_METADATA_FILE),
+            r#"{"schemaVersion":"hotsheet/v99-future","ticketPrefix":"HS","idStrategy":"ulid","shard":"id-prefix-2"}"#,
+        ).unwrap();
+        let error = store.metadata().unwrap_err().to_string();
+        assert!(error.contains("newer version of Hot Sheet 2"));
+        assert!(error.contains("Update Hot Sheet 2"));
     }
 
     #[test]

@@ -18,6 +18,9 @@ use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 
+const SETTINGS_SCHEMA_KEY: &str = "$hotsheetSchema";
+const SETTINGS_SCHEMA_VERSION: u64 = 1;
+
 /// A settings I/O or parse failure.
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
@@ -32,6 +35,14 @@ pub enum SettingsError {
     Invalid {
         key: String,
         source: serde_json::Error,
+    },
+    #[error(
+        "This {scope} settings file was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (found schema {found}, supported through {supported})."
+    )]
+    UpgradeRequired {
+        scope: &'static str,
+        found: String,
+        supported: u64,
     },
 }
 
@@ -100,7 +111,17 @@ impl Settings {
                         path: path.display().to_string(),
                         source,
                     })?;
-                Ok(value.as_object().cloned().unwrap_or_default())
+                let mut map = value.as_object().cloned().unwrap_or_default();
+                if let Some(version) = map.remove(SETTINGS_SCHEMA_KEY) {
+                    if version.as_u64().is_none_or(|v| v > SETTINGS_SCHEMA_VERSION) {
+                        return Err(SettingsError::UpgradeRequired {
+                            scope: scope.label(),
+                            found: version.to_string(),
+                            supported: SETTINGS_SCHEMA_VERSION,
+                        });
+                    }
+                }
+                Ok(map)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Map::new()),
             Err(e) => Err(e.into()),
@@ -150,7 +171,9 @@ impl Settings {
     }
 
     fn write(&self, scope: Scope, map: &Map<String, Value>) -> Result<(), SettingsError> {
-        let text = serde_json::to_string_pretty(&Value::Object(map.clone()))
+        let mut persisted = map.clone();
+        persisted.insert(SETTINGS_SCHEMA_KEY.into(), SETTINGS_SCHEMA_VERSION.into());
+        let text = serde_json::to_string_pretty(&Value::Object(persisted))
             .unwrap_or_else(|_| "{}".to_string());
         let path = self.path(scope);
         // Global lives under ${HOTSHEET_HOME}, which may not exist yet.
@@ -182,6 +205,16 @@ impl Settings {
         out.push('\n');
         std::fs::write(&gi, out)?;
         Ok(())
+    }
+}
+
+impl Scope {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Shared => "shared",
+            Self::Local => "local",
+        }
     }
 }
 
@@ -283,6 +316,27 @@ mod tests {
         assert!(s.map(Scope::Shared).unwrap().is_empty());
         assert!(s.effective().unwrap().is_empty());
         assert_eq!(s.get_effective("x").unwrap(), None);
+    }
+
+    #[test]
+    fn legacy_unversioned_settings_remain_readable_and_future_settings_require_upgrade() {
+        let d = root();
+        std::fs::write(
+            d.path().join("hotsheet-settings.json"),
+            r#"{"theme":"dark"}"#,
+        )
+        .unwrap();
+        let s = Settings::new(d.path());
+        assert_eq!(s.get("theme", Scope::Shared).unwrap(), Some(json!("dark")));
+
+        std::fs::write(
+            d.path().join("hotsheet-settings.json"),
+            r#"{"$hotsheetSchema":99,"theme":"dark"}"#,
+        )
+        .unwrap();
+        let error = s.map(Scope::Shared).unwrap_err().to_string();
+        assert!(error.contains("newer version of Hot Sheet 2"));
+        assert!(error.contains("Update Hot Sheet 2"));
     }
 
     #[test]

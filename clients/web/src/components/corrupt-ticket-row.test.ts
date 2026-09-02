@@ -24,6 +24,17 @@ describe('CorruptTicketRow', () => {
     expect(corruptTicketIdentity({ ...corrupt, slug: undefined, id: undefined, path: '' })).toBe('Unreadable ticket');
   });
 
+  it('presents a newer ticket as upgrade-required rather than corrupt', () => {
+    const markup = String(CorruptTicketRow({ ticket: {
+      ...corrupt,
+      error_code: 'upgrade_required',
+      error: 'This ticket was created by a newer version of Hot Sheet 2. Update Hot Sheet 2 to open it.',
+    } }));
+    expect(markup).toContain('Hot Sheet 2 update required');
+    expect(markup).toContain('data-lucide="refresh-cw"');
+    expect(markup).not.toContain('Ticket file could not be read');
+  });
+
   it('uses a visibly distinct disabled treatment', () => {
     const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
     expect(css).toMatch(/border-left: \.25rem solid/);

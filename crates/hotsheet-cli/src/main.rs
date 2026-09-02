@@ -55,6 +55,13 @@ enum Cmd {
         /// Path to the existing standalone ticket store.
         store: PathBuf,
     },
+    /// Explicitly activate the current pre-release store/ticket format.
+    ActivateFormat {
+        /// Confirm that older pre-release HS2 processes have been stopped and the
+        /// compatibility break has been announced.
+        #[arg(long)]
+        acknowledge_pre_release_breakage: bool,
+    },
     /// Create a new ticket.
     New {
         /// Ticket title (positional). Alternatively pass --title.
@@ -677,6 +684,26 @@ fn main() -> Result<()> {
             remote.as_deref(),
         ),
         Cmd::Link { store } => cmd_link(&store),
+        Cmd::ActivateFormat {
+            acknowledge_pre_release_breakage,
+        } => {
+            if !acknowledge_pre_release_breakage {
+                bail!(
+                    "format activation can break older pre-release HS2 processes; announce the change, stop them, then rerun with --acknowledge-pre-release-breakage"
+                );
+            }
+            println!(
+                "Activating a pre-release HS2 format boundary. Older HS2 processes may no longer open this store."
+            );
+            use std::io::Write as _;
+            std::io::stdout().flush()?;
+            FsStore::open(&cli.path)?.activate_current_format()?;
+            println!(
+                "Activated store format {}.",
+                hotsheet_ticketing::STORE_SCHEMA_VERSION
+            );
+            Ok(())
+        }
         Cmd::New {
             title,
             title_flag,

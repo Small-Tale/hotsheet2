@@ -105,6 +105,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   The bridge performs the authenticated compatibility handshake when attaching to a
   discovered server. The client distinguishes compatible skew, client-too-old,
   server-too-old, and unknown metadata. Compatible revision differences do not block use;
+  explicit non-intersecting protocol ranges stop before project API use and name the side
+  that must be updated. Rollout is always assumed unsynchronized; no client behavior may
+  depend on a server or app-store release becoming available simultaneously. Newer
+  incompatible ticket diagnostics are presented as “Hot Sheet 2 update required,” never
+  as corrupt files (see [19](19-format-compatibility.md)).
   an old client offers reload/update, while an old server is surfaced without an unsafe
   restart action unless both restart and quiescence capabilities are explicitly present.
   Ticket-provider connections are not stored in `hotsheet-settings.json` or

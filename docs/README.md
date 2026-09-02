@@ -166,6 +166,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Capability | Where | Status |
 |---|---|---|
 | Git-repo file-per-ticket storage | 02, 17 | Confirmed; **parser + FsStore built** (`hotsheet-model::format`, `hotsheet-ticketing::store`) |
+| Persisted-format and unsynchronized-rollout compatibility | 19 | Shipped pre-release policy/guards: explicit format activation, retained ticket/store/project/settings fixtures, upgrade-required classification for newer formats, and protocol-range gating before project API use; first public release freezes permanent backward-readability fixtures |
 | Pluggable authoritative ticket providers (git default; direct GitHub/Jira/GitLab) | 16 | Shipped: provider contract/capabilities/qualified wire identity/config registry + git adapter + CLI/server/MCP discovery/routes (HS2-ZVZP80); idempotent transfer (HS2-A90JRH); direct GitHub with real credential-gated CRUD validation (HS2-JAXS4Z); GitLab/Jira adapters (HS2-0RK4YC); Kerf client connection/default/filter/capability/copy-move UX (HS2-VFXFFP) |
 | Standalone foreground server launch | 04 §4.3 | Shipped: `hotsheet-cli serve` resolves a sibling/PATH server, rejects version drift, and forwards start/stop; detached supervision remains client-owned |
 | Multiple ticket stores per project (mixed permissions/locality) | 02 | Confirmed |

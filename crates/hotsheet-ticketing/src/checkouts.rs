@@ -19,10 +19,26 @@ pub struct Checkout {
     pub stores: Vec<String>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct RegistryFile {
+    #[serde(default = "registry_schema_version", rename = "schemaVersion")]
+    schema_version: u64,
     #[serde(default)]
     checkouts: Vec<Checkout>,
+}
+
+const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 1;
+const fn registry_schema_version() -> u64 {
+    CHECKOUT_REGISTRY_SCHEMA_VERSION
+}
+
+impl Default for RegistryFile {
+    fn default() -> Self {
+        Self {
+            schema_version: CHECKOUT_REGISTRY_SCHEMA_VERSION,
+            checkouts: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -35,6 +51,10 @@ pub enum CheckoutError {
     Ambiguous(String),
     #[error("invalid checkout registry: {0}")]
     Invalid(String),
+    #[error(
+        "This project registry was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it (found schema {found}, supported through {supported})."
+    )]
+    UpgradeRequired { found: u64, supported: u64 },
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -171,7 +191,15 @@ impl CheckoutRegistry {
             }
             Err(e) => return Err(e.into()),
         };
-        serde_json::from_str(&text).map_err(|e| CheckoutError::Invalid(e.to_string()))
+        let file: RegistryFile =
+            serde_json::from_str(&text).map_err(|e| CheckoutError::Invalid(e.to_string()))?;
+        if file.schema_version > CHECKOUT_REGISTRY_SCHEMA_VERSION {
+            return Err(CheckoutError::UpgradeRequired {
+                found: file.schema_version,
+                supported: CHECKOUT_REGISTRY_SCHEMA_VERSION,
+            });
+        }
+        Ok(file)
     }
 
     fn write(&self, file: &RegistryFile) -> Result<(), CheckoutError> {
@@ -226,6 +254,19 @@ mod tests {
         assert_eq!(registry.resolve("frontend").unwrap(), saved);
         assert_eq!(registry.resolve(&saved.id[..8]).unwrap(), saved);
         assert_eq!(registry.resolve(checkout.to_str().unwrap()).unwrap(), saved);
+    }
+
+    #[test]
+    fn unversioned_registry_remains_readable_and_future_registry_requires_upgrade() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("checkouts.json");
+        std::fs::write(&path, r#"{"checkouts":[]}"#).unwrap();
+        let registry = CheckoutRegistry::new(&path);
+        assert!(registry.list().unwrap().is_empty());
+        std::fs::write(&path, r#"{"schemaVersion":99,"checkouts":[]}"#).unwrap();
+        let error = registry.list().unwrap_err().to_string();
+        assert!(error.contains("newer version of Hot Sheet 2"));
+        assert!(error.contains("Update Hot Sheet 2"));
     }
 
     #[test]

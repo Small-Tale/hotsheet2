@@ -127,7 +127,7 @@ async fn compatibility_is_authenticated_and_reports_ranges_without_promising_res
     assert_eq!(value["protocol"], serde_json::json!({"min": 1, "max": 1}));
     assert_eq!(
         value["store_schema"],
-        serde_json::json!({"min": 1, "max": 1})
+        serde_json::json!({"min": 1, "max": STORE_SCHEMA_VERSION})
     );
     assert_eq!(value["capabilities"]["lifecycle_restart"], false);
     assert_eq!(value["capabilities"]["lifecycle_quiescence"], false);
@@ -755,7 +755,7 @@ async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_tic
     std::fs::create_dir_all(primary_bad_path.parent().unwrap()).unwrap();
     std::fs::write(
         &primary_bad_path,
-        format!("---\nid: {primary_bad_id}\nslug: HS-BROKEN\n---\ninvalid ticket"),
+        format!("---\nid: {primary_bad_id}\nslug: HS-NEWER\ntitle: Newer ticket\ncategory: bug\ncreated_at: 2026-09-02T00:00:00Z\nupdated_at: 2026-09-02T00:00:00Z\nschema: hotsheet/v99-future\n---\n"),
     )
     .unwrap();
 
@@ -794,12 +794,13 @@ async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_tic
         primary_bad_path.display().to_string()
     );
     assert_eq!(primary_report["id"], primary_bad_id);
-    assert_eq!(primary_report["slug"], "HS-BROKEN");
+    assert_eq!(primary_report["slug"], "HS-NEWER");
+    assert_eq!(primary_report["error_code"], "upgrade_required");
     assert!(
         primary_report["error"]
             .as_str()
             .unwrap()
-            .contains("parsing ticket")
+            .contains("newer version of Hot Sheet 2")
     );
 
     let extra_report = corrupt
@@ -813,6 +814,7 @@ async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_tic
     assert_eq!(extra_report["path"], extra_bad_path.display().to_string());
     assert_eq!(extra_report["id"], "7ZARZ3NDEKTSV4RRFFQ69G5FAV");
     assert!(extra_report.get("slug").is_none());
+    assert_eq!(extra_report["error_code"], "invalid_ticket");
     assert!(!extra_report["error"].as_str().unwrap().is_empty());
 }
 

@@ -921,6 +921,7 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
             "id": c.id.map(|id| id.to_string()),
             "slug": c.slug,
             "error": c.error,
+            "error_code": c.error_code,
         })).collect::<Vec<_>>()
     })))
 }
@@ -944,7 +945,7 @@ async fn compatibility(State(state): State<AppState>) -> Json<serde_json::Value>
         "source_revision": source.source_revision,
         "source_stale": source.source_stale,
         "protocol": { "min": API_PROTOCOL_MIN, "max": API_PROTOCOL_MAX },
-        "store_schema": { "min": 1, "max": 1 },
+        "store_schema": { "min": 1, "max": hotsheet_ticketing::STORE_SCHEMA_VERSION },
         "capabilities": {
             "lifecycle_restart": false,
             "lifecycle_quiescence": false
@@ -1806,6 +1807,7 @@ struct CheckoutCorruptTicket {
     #[serde(skip_serializing_if = "Option::is_none")]
     slug: Option<String>,
     error: String,
+    error_code: &'static str,
 }
 
 async fn list_checkout_corrupt_tickets(
@@ -1823,6 +1825,7 @@ async fn list_checkout_corrupt_tickets(
                 id: corrupt.id.map(|id| id.to_string()),
                 slug: corrupt.slug,
                 error: corrupt.error,
+                error_code: corrupt.error_code,
             });
         }
     }

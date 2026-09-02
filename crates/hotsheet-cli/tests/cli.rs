@@ -45,6 +45,41 @@ fn providers_reports_default_git_connection_and_capabilities() {
 }
 
 #[test]
+fn format_activation_requires_an_explicit_pre_release_acknowledgement() {
+    let dir = tempfile::tempdir().unwrap();
+    hs(dir.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    std::fs::write(
+        dir.path().join("hotsheet-store.json"),
+        r#"{"schemaVersion":1,"ticketPrefix":"HS","idStrategy":"ulid","shard":"id-prefix-2"}"#,
+    )
+    .unwrap();
+
+    hs(dir.path())
+        .arg("activate-format")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("announce the change"));
+    hs(dir.path())
+        .args(["activate-format", "--acknowledge-pre-release-breakage"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Older HS2 processes may no longer open this store",
+        ));
+    assert_eq!(
+        hotsheet_ticketing::FsStore::open(dir.path())
+            .unwrap()
+            .metadata()
+            .unwrap()
+            .schema_version,
+        hotsheet_ticketing::STORE_SCHEMA_VERSION,
+    );
+}
+
+#[test]
 fn provider_copy_retries_use_one_destination_ticket() {
     let source = tempfile::tempdir().unwrap();
     let destination = tempfile::tempdir().unwrap();

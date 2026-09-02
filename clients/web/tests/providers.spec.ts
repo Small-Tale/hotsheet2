@@ -105,14 +105,14 @@ test('renders exactly once when the long poll announces a permission request',as
 
 test('keeps healthy tickets usable while identifying an unreadable ticket',async({page})=>{
   await mockProject(page);
-  await page.route('**/corrupt-tickets',route=>route.fulfill({json:[{
+  await page.route('**/corrupt-tickets',route=>{void route.fulfill({json:[{
     store:'git-local',
     store_path:'/work/demo.hs2',
     path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md',
     id:'01M1DNB977BK0NG7YJ77RVZXTV',
     slug:'HS2-QQRY00',
     error:'unsupported content follows the bounded Notes section',
-  }]}));
+  }]});});
   await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
@@ -127,6 +127,23 @@ test('keeps healthy tickets usable while identifying an unreadable ticket',async
 
   await page.getByText('Use real project tickets').click();
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
+});
+
+test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt',async({page})=>{
+  await mockProject(page);
+  await page.route('**/corrupt-tickets',route=>route.fulfill({json:[{
+    store:'git-local',store_path:'/work/demo.hs2',path:'/work/demo.hs2/tickets/01/new.md',
+    slug:'HS2-NEWER',error_code:'upgrade_required',
+    error:'This ticket was created by a newer version of Hot Sheet 2 and cannot be opened by this version. Update Hot Sheet 2 to open it.',
+  }]}));
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const newer=page.locator('[data-component="corrupt-ticket-row"]');
+  await expect(newer).toContainText('Hot Sheet 2 update required');
+  await expect(newer).toContainText('created by a newer version');
+  await expect(newer.locator('[data-lucide="refresh-cw"]')).toBeVisible();
+  await expect(newer).not.toContainText('Ticket file could not be read');
 });
 
 test('updates the open project after external ticket additions edits and deletion',async({page})=>{

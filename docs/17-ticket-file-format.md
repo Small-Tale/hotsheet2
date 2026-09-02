@@ -99,15 +99,17 @@ should the fix also cover the dashboard dedicated view?
 ```
 
 The reader remains backward-compatible with schema-1 files that use `## Notes`
-followed by one-sided `<!-- note: … -->` markers through EOF. Every canonical write
-upgrades every healthy ticket in that store to bounded blocks and the guarded
+followed by one-sided `<!-- note: … -->` markers through EOF. Explicit store-format
+activation upgrades every healthy ticket in that store to bounded blocks and the guarded
 `schema: hotsheet/v2-bounded-notes` marker before advancing the store metadata to
 the guarded `schemaVersion: "hotsheet/v2-guarded-tickets"` marker. Those strings are
 intentionally incompatible with the old numeric deserializers: the store marker blocks
 stale creates, while the per-ticket marker blocks stale edits during the transitional
 migration. A stale pre-bounded-notes CLI/MCP/server therefore fails before it can create
 legacy data or rewrite and drop history. Current writers likewise refuse store/schema
-guards newer than they understand.
+guards newer than they understand. Unsupported ticket guards carry the stable
+`upgrade_required` classification and explicit update guidance rather than being
+presented as corruption. See [19](19-format-compatibility.md).
 A line of user-authored Markdown that looks
 like a reserved `<!-- hotsheet:… -->` marker is backslash-escaped on disk and restored
 on read. Content after `hotsheet:notes:end` is rejected by current readers rather

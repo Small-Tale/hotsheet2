@@ -1,6 +1,6 @@
 import './corrupt-ticket-row.css';
 
-import { FileWarning } from 'lucide';
+import { FileWarning, RefreshCw } from 'lucide';
 
 import type { CorruptTicket } from '../api';
 import { LucideIcon } from './lucide-icon';
@@ -14,11 +14,12 @@ export function corruptTicketIdentity(ticket: CorruptTicket) {
 /** A deliberately non-interactive placeholder for a ticket that could not be parsed. */
 export function CorruptTicketRow({ ticket }: { ticket: CorruptTicket }) {
   const identity = corruptTicketIdentity(ticket);
+  const upgradeRequired = ticket.error_code === 'upgrade_required';
   return <article class="corrupt-ticket-row" data-component="corrupt-ticket-row" role="option" aria-disabled="true" aria-selected="false">
-    <LucideIcon icon={FileWarning} name="file-warning" class="corrupt-ticket-row__icon" />
+    <LucideIcon icon={upgradeRequired ? RefreshCw : FileWarning} name={upgradeRequired ? 'refresh-cw' : 'file-warning'} class="corrupt-ticket-row__icon" />
     <div class="corrupt-ticket-row__content">
       <strong>{identity}</strong>
-      <span>Ticket file could not be read</span>
+      <span>{upgradeRequired ? 'Hot Sheet 2 update required' : 'Ticket file could not be read'}</span>
       <code title={ticket.path}>{ticket.path}</code>
       <p>{ticket.error}</p>
     </div>

@@ -219,6 +219,13 @@ automatic restart until the server can account for active commands, AI work, mut
 terminals, and other connected clients. Remote restart likewise requires a future explicit
 authenticated capability.
 
+Protocol ranges assume unsynchronized rollout. A non-intersecting range stops project API
+use and identifies which side requires an update; exact build differences remain
+informational. Persisted-format compatibility is independently governed by
+[19](19-format-compatibility.md): released readers permanently accept older released
+ticket/store/project/settings fixtures, while newer incompatible markers produce a
+specific upgrade-required result.
+
 ## 4.4 The CLI (`hotsheet-cli`)
 
 A thin binary that wraps the same core for **direct-to-disk** operations, usable
