@@ -243,6 +243,12 @@ icons never shrink, and compact inspectors switch to icon-only labels.
 Routes the selected project and view to one major content surface while retaining
 selection where sensible.
 
+The shell's focusable work-area wrapper owns ticket clipboard shortcuts for its list and
+column presentations. Its `:focus-within` outline is continuous around the composer and
+scrolling workspace instead of outlining an individual row. Clicking or selecting text
+outside the work area releases shortcut ownership; selected text and editable descendants
+always retain native clipboard behavior.
+
 - `ListWorkspace`
 - `ColumnWorkspace`
 - `SearchResultsWorkspace`
@@ -508,7 +514,13 @@ theme. Generic surface, text, brand, success/warning/danger, spacing, radius, fo
 and shadow concepts use Web Awesome's `--wa-*` vocabulary directly. The shared theme
 defines `--hs-*` only for Hot Sheet domain concepts that Web Awesome cannot name—today,
 the Up Next and Needs Review ticket-state rails. One-off layout geometry and
-user/provider category colors remain local data rather than design tokens.
+user/provider category colors remain local data rather than design tokens. In
+particular, the former repeated `#f8f9fb` work-area/details/drop-surface literal is now
+the shared `--wa-color-surface-lowered`; repeated neutral fills, borders, and muted text
+likewise use Web Awesome's `neutral-fill-*`, `neutral-border-*`, and `neutral-on-*`
+semantics. Unit policy scans reject those retired literals in production CSS and allow
+repetition only for reviewed Hot Sheet state palettes (such as status/category/corrupt
+ticket colors) and genuine component geometry.
 Actionable context-menu entries consistently pair their text with meaningful Lucide
 icons; structural separators do not require icons.
 - `TicketTagEditor` — **built**: shared tag list, compact add control, autocomplete,

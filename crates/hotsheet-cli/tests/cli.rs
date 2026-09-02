@@ -924,6 +924,52 @@ fn claim_next_release_and_renew() {
 }
 
 #[test]
+fn exact_claim_accepts_slug_and_ulid_without_changing_status_or_retry_count() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "assigned exact ticket");
+    let shown = hs(p).args(["show", &slug]).output().unwrap();
+    let text = String::from_utf8(shown.stdout).unwrap();
+    let id = text
+        .lines()
+        .find_map(|line| line.strip_prefix("id: "))
+        .unwrap()
+        .to_string();
+
+    hs(p)
+        .args(["claim", &slug, "--worker", "agent-1", "--label", "Codex"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "Claimed {slug} for agent-1"
+        )));
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: not_started"))
+        .stdout(predicate::str::contains("claimed_by: agent-1"))
+        .stdout(predicate::str::contains("worker_label: Codex"))
+        .stdout(predicate::str::contains("claim_count: 1"));
+
+    hs(p)
+        .args(["claim", &id, "--worker", "agent-1", "--lease-minutes", "60"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("claim_count: 1"));
+    hs(p)
+        .args(["claim", &slug, "--worker", "agent-2"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("claimed by 'agent-1'"));
+}
+
+#[test]
 fn new_accepts_positional_title_up_next_and_tags() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

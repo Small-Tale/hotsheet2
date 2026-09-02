@@ -1556,11 +1556,29 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
     surfaceMatches: true,
     warningMatches: true,
   });
+
+  await page.goto('/ux-demo?component=app-shell');
+  const workArea = page.locator('.app-shell__work-area');
+  await expect(workArea).toBeVisible();
+  expect(await workArea.evaluate(node => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';
+    document.body.append(probe);
+    const matches = getComputedStyle(node).backgroundColor === getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return matches;
+  })).toBe(true);
+
+  await page.goto('/ux-demo?component=permission-request');
+  const details = page.locator('.permission-request-card__details');
+  await expect(details).toBeVisible();
+  await expect(details).toHaveCSS('background-color', await page.evaluate(() => {
+    const probe = document.createElement('span');probe.style.backgroundColor = 'var(--wa-color-surface-lowered)';document.body.append(probe);const color = getComputedStyle(probe).backgroundColor;probe.remove();return color;
+  }));
   await page.screenshot({ path: '/private/tmp/hotsheet-semantic-theme-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(row).toBeVisible();
-  await expect(feedback).toBeVisible();
+  await expect(details).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hotsheet-semantic-theme-narrow.png', fullPage: true });
 });
 

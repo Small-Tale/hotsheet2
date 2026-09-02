@@ -29,4 +29,17 @@ describe('debounced autosave', () => {
     await vi.runAllTimersAsync();
     expect(save).toHaveBeenCalledOnce();
   });
+
+  it('serializes a newer edit behind an active save', async () => {
+    vi.useFakeTimers();
+    let resolveFirst:(saved:boolean)=>void=()=>undefined;
+    const first=new Promise<boolean>(resolve=>{resolveFirst=resolve});
+    const save=vi.fn<(value:string)=>Promise<boolean>>().mockImplementationOnce(()=>first).mockResolvedValue(true);
+    const autosave=createDebouncedAutosave(save);
+    autosave.schedule('partial');await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    autosave.schedule('complete');await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(save).toHaveBeenCalledOnce();expect(autosave.pending()).toBe(true);
+    resolveFirst(true);await vi.runAllTimersAsync();
+    expect(save).toHaveBeenCalledTimes(2);expect(save).toHaveBeenLastCalledWith('complete');expect(autosave.pending()).toBe(false);
+  });
 });

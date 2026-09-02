@@ -391,6 +391,19 @@ enum Cmd {
         #[arg(long, default_value_t = 30)]
         lease_minutes: i64,
     },
+    /// Claim one exact open, unblocked ticket by slug or ULID (local lease).
+    Claim {
+        id: String,
+        /// Worker id recorded on the claim.
+        #[arg(long, default_value = "worker")]
+        worker: String,
+        /// Human-readable worker label.
+        #[arg(long)]
+        label: Option<String>,
+        /// Lease length in minutes.
+        #[arg(long, default_value_t = 30)]
+        lease_minutes: i64,
+    },
     /// Release a claim (only the holding worker, unless --force).
     Release {
         id: String,
@@ -870,6 +883,12 @@ fn main() -> Result<()> {
             label,
             lease_minutes,
         } => cmd_claim_next(&cli.path, &worker, label, lease_minutes),
+        Cmd::Claim {
+            id,
+            worker,
+            label,
+            lease_minutes,
+        } => cmd_claim(&cli.path, &id, &worker, label, lease_minutes),
         Cmd::Release { id, worker, force } => cmd_release(&cli.path, &id, &worker, force),
         Cmd::Renew {
             id,
@@ -2359,6 +2378,26 @@ fn cmd_claim_next(
         ),
         None => println!("No claimable tickets."),
     }
+    Ok(())
+}
+
+fn cmd_claim(
+    path: &PathBuf,
+    id: &str,
+    worker: &str,
+    label: Option<String>,
+    lease_minutes: i64,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, id)?;
+    let now_dt = OffsetDateTime::now_utc();
+    let now = Timestamp::from_datetime(now_dt);
+    let lease = lease_until(now_dt, lease_minutes);
+    let claimed = ops::claim(&store, &ticket.id, &now, lease, worker, label)?;
+    println!(
+        "Claimed {} for {worker} (lease {lease_minutes}m)",
+        claimed.slug
+    );
     Ok(())
 }
 

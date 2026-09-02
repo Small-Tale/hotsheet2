@@ -153,6 +153,17 @@ test('makes no repeated permission requests or renders while an open project is 
   expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
 });
 
+test('defers ticket refresh without hiding an open select popup',async({page})=>{
+  await mockProject(page);let rows=[row,notStartedRow],cursor=0;const polls:Array<import('@playwright/test').Route>=[];
+  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:rows}):route.fallback());
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const select=page.locator('wa-select[name="inspector-status"]');await select.click();await expect.poll(()=>select.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(true);await resetRenderMetrics(page);
+  const incoming={...startedRow2,slug:'HS2-INCOMING',title:'Incoming while choosing'};rows=[...rows,incoming];await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'created',id:incoming.id,slug:incoming.slug}],overflow:false}});
+  await page.waitForTimeout(300);await expect.poll(()=>select.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(true);await expect(page.locator('[data-ticket-slug="HS2-INCOMING"]')).toHaveCount(0);expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
+  await page.keyboard.press('Escape');await expect.poll(()=>select.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(false);await expect(page.locator('[data-ticket-slug="HS2-INCOMING"]')).toBeVisible();
+});
+
 test('runs grouped local commands, confirms stop, exposes history, and saves settings',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const command=page.getByRole('button',{name:'Run checks'});await expect(page.getByText('Quality',{exact:true})).toBeVisible();await expect(command).toHaveAttribute('title','Press and hold for command history.');
@@ -264,8 +275,8 @@ test('updates the open project after external ticket additions edits and deletio
 
   const openSelect=page.locator('[data-component="ticket-inspector"] wa-select[name="inspector-priority"]');await openSelect.click();await expect(openSelect).toHaveJSProperty('open',true);
   liveRows=liveRows.map(item=>item.id==='01'?{...item,title:'Externally edited ticket'}:item);liveFull={...liveFull,title:'Externally edited ticket'};await emit('changed','01','HS2-DEMO01');
+  await page.waitForTimeout(200);await expect(original).toContainText('Use real project tickets');await expect(page.locator('.app-loading')).toBeHidden();await expect(openSelect).toHaveJSProperty('open',true);await page.keyboard.press('Escape');
   await expect(original).toContainText('Externally edited ticket');await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Externally edited ticket');
-  await expect(page.locator('.app-loading')).toBeHidden();await expect(openSelect).toHaveJSProperty('open',true);await page.keyboard.press('Escape');
 
   const external={...row,id:'10',native_id:'10',qualified_id:'git-local:10',slug:'HS2-EXTERNAL',title:'Externally added ticket',status:'not_started',up_next:false};liveRows=[external,...liveRows];await emit('changed','10','HS2-EXTERNAL');
   await expect(page.locator('[data-ticket-slug="HS2-EXTERNAL"]')).toContainText('Externally added ticket');
@@ -306,14 +317,26 @@ test('merges unrelated external ticket fields and offers an editable merge for t
   await expect.poll(()=>patches.some(patch=>patch.details==='Local text after remote status'&&patch.expected_token==='remote-status')).toBe(true);
   await expect(inspector.locator('wa-select[name="inspector-status"]')).toHaveJSProperty('value','completed');await expect(editor).toHaveValue('Local text after remote status');await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);await emit();
 
-  await inspector.getByRole('button',{name:'Open ticket reader'}).evaluate(node=>{(node as HTMLElement).click()});const reader=page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/});await expect(reader).toBeVisible();editor=reader.getByRole('textbox',{name:'Ticket details'});await editor.fill('My local wording');
-  liveFull={...liveFull,details:'Their newer wording',concurrency_token:'remote-conflict'};await emit();
-  const conflict=reader.locator('[data-component="ticket-field-conflict"]');await expect(conflict).toBeVisible();await expect(conflict).toContainText('Their newer wording');await expect(conflict).toContainText('My local wording');await expect(page.locator('.app-error')).toHaveCount(0);
+  await inspector.getByRole('button',{name:'Open ticket reader'}).evaluate(node=>{(node as HTMLElement).click()});const reader=page.getByRole('dialog',{name:/Read and edit HS2-DEMO01/});await expect(reader).toBeVisible();editor=reader.getByRole('textbox',{name:'Ticket details'});await editor.fill('My local wording');await expect.poll(()=>patches.some(patch=>patch.details==='My local wording')).toBe(true);
+  liveFull={...liveFull,details:'Their newer wording',concurrency_token:'remote-conflict'};await editor.fill('My revised local wording');
+  const conflict=reader.locator('[data-component="ticket-field-conflict"]');await expect(conflict).toBeVisible();await expect(conflict).toContainText('Their newer wording');await expect(conflict).toContainText('My revised local wording');await expect(page.locator('.app-error')).toHaveCount(0);
   await page.screenshot({path:'/private/tmp/hs2-0bp930-field-conflict-wide.png',fullPage:true});await page.setViewportSize({width:760,height:940});await expect(conflict).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-0bp930-field-conflict-narrow.png',fullPage:true});
 
   const resolution=conflict.getByRole('textbox',{name:'Merged details'});await resolution.fill('My local wording\n\nTheir newer wording');await conflict.getByRole('button',{name:'Apply merged value'}).click();
   await expect(conflict).toHaveCount(0);await expect(editor).toHaveValue('My local wording\n\nTheir newer wording');
   await expect.poll(()=>patches.some(patch=>patch.details==='My local wording\n\nTheir newer wording'&&patch.expected_token==='remote-conflict')).toBe(true);
+});
+
+test('does not report this clients own in-flight autosave as a merge conflict',async({page})=>{
+  await mockProject(page);let liveFull={...full},liveRows=[row],cursor=0;const polls:Array<import('@playwright/test').Route>=[],writes:Array<import('@playwright/test').Route>=[];
+  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:liveRows}):route.fallback());
+  await page.route('**/tickets/01',route=>{if(route.request().method()==='GET')return route.fulfill({json:{store:'git-local',...liveFull}});if(route.request().method()==='PATCH'){writes.push(route);return}return route.fallback()});
+  await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
+  const emit=async()=>{await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'changed',id:'01',slug:'HS2-DEMO01'}],overflow:false}})};
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();const inspector=page.locator('[data-component="ticket-inspector"]');await inspector.getByRole('button',{name:'Edit Ticket details'}).dblclick();const editor=inspector.getByRole('textbox',{name:'Ticket details'});
+  const partial='they should have round borders and outl',complete='they should have round borders and outlines';await editor.fill(partial);await expect.poll(()=>writes.length).toBe(1);await editor.fill(complete);await page.waitForTimeout(300);expect(writes).toHaveLength(1);
+  const first=writes.shift()!;liveFull={...liveFull,details:partial,concurrency_token:'partial-token'};liveRows=liveRows.map(item=>({...item,details:partial}));await first.fulfill({json:{store:'git-local',...liveFull}});await expect.poll(()=>writes.length).toBe(1);const second=writes.shift()!;expect(second.request().postDataJSON().expected_token).toBe('partial-token');await emit();await expect(editor).toHaveValue(complete);await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
+  liveFull={...liveFull,details:complete,concurrency_token:'complete-token'};await second.fulfill({json:{store:'git-local',...liveFull}});await expect(editor).toHaveValue(complete);await expect(inspector.locator('[data-component="ticket-field-conflict"]')).toHaveCount(0);
 });
 
 test('translates urgent priority through the canonical server contract',async({page})=>{
@@ -523,8 +546,8 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
 
 test('styles completed and verified titles consistently in list and column rows',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  const completed=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"] strong');await expect(completed).toHaveCSS('text-decoration-line','line-through');await expect(completed).toHaveCSS('color','rgb(107, 114, 128)');
-  await page.getByLabel('Columns view').click();const verified=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"] strong');await expect(verified).toHaveCSS('text-decoration-line','line-through');await expect(verified).toHaveCSS('color','rgb(107, 114, 128)');
+  const completed=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"] strong');await expect(completed).toHaveCSS('text-decoration-line','line-through');const quietColor=await completed.evaluate(node=>{const probe=document.createElement('span');probe.style.color='var(--wa-color-neutral-on-quiet)';node.append(probe);const color=getComputedStyle(probe).color;probe.remove();return color});await expect(completed).toHaveCSS('color',quietColor);
+  await page.getByLabel('Columns view').click();const verified=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-VERIFY01"] strong');await expect(verified).toHaveCSS('text-decoration-line','line-through');await expect(verified).toHaveCSS('color',quietColor);
 });
 
 test('offers Up Next only on active tickets across rows and inspector',async({page})=>{
@@ -586,19 +609,29 @@ test('undoes, redoes, copies, pastes, and drags ticket mutations through the rea
   const nextPatch=()=>page.waitForResponse(response=>response.request().method()==='PATCH'&&new URL(response.url()).pathname.endsWith('/tickets/01'));
   await page.locator('wa-select[name="inspector-status"]').click();let response=nextPatch();await page.locator('wa-select[name="inspector-status"] wa-option[value="completed"]').click();await response;
   await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');await expect.poll(()=>patches.filter(patch=>patch.status==='completed').length).toBe(1);
-  response=nextPatch();await page.keyboard.press('Control+z');await response;await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Started');await expect.poll(()=>patches.filter(patch=>patch.status==='started').length).toBe(1);await page.waitForTimeout(0);
-  response=nextPatch();await page.keyboard.press('Control+Shift+z');await response;await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');await expect.poll(()=>patches.filter(patch=>patch.status==='completed').length).toBe(2);
-  await page.keyboard.press('Control+c');await page.keyboard.press('Control+v');await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
+  await page.locator('.app-shell__work-area').focus();response=nextPatch();await page.keyboard.press('Control+z');await response;await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Started');await expect.poll(()=>patches.filter(patch=>patch.status==='started').length).toBe(1);await page.waitForTimeout(0);
+  await page.locator('.app-shell__work-area').focus();response=nextPatch();await page.keyboard.press('Control+Shift+z');await response;await expect(page.locator('[data-component="ticket-inspector"] [data-component="status-badge"]')).toContainText('Completed');await expect.poll(()=>patches.filter(patch=>patch.status==='completed').length).toBe(2);
+  await ticket.focus();await page.keyboard.press('Control+c');await page.locator('.app-shell__work-area').focus();await page.keyboard.press('Control+v');await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
   await ticket.evaluate(node=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));document.querySelector<HTMLElement>('[data-ticket-drop-status="backlog"]')!.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer}))});
   await expect(page.locator('[data-ticket-drop-status="backlog"]')).toHaveAttribute('data-dragging-ticket','true');
   await page.locator('[data-ticket-drop-status="backlog"]').dispatchEvent('drop');
   await page.locator('[data-ticket-drop-status="backlog"]').click();await expect(page.locator('[data-component="ticket-list-row"]',{hasText:'Use real project tickets'})).toBeVisible();
 });
 
+test('scopes ticket clipboard shortcuts to the focused work area and preserves native text copy and paste',async({page,context})=>{
+  await context.grantPermissions(['clipboard-read','clipboard-write']);const creates:string[]=[];page.on('request',request=>{const path=new URL(request.url()).pathname;if(request.method()==='POST'&&path.endsWith('/tickets'))creates.push(path)});await mockProject(page);await page.goto('/');await page.evaluate(()=>{(window as typeof window&{shortcutDefaults?:boolean[]}).shortcutDefaults=[];document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&['c','v'].includes(event.key.toLowerCase()))queueMicrotask(()=>{(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.push(event.defaultPrevented)})})});await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const workArea=page.locator('.app-shell__work-area'),ticket=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await ticket.click();await expect(workArea).toHaveCSS('outline-width','2px');await expect(workArea).toHaveCSS('outline-color','rgb(59, 130, 246)');
+  await page.keyboard.press('Control+c');await expect.poll(()=>page.evaluate(()=>(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.at(-1))).toBe(true);
+  const inspectorSlug=page.locator('[data-component="ticket-inspector"] [data-component="toolbar-text"]');await inspectorSlug.click();await inspectorSlug.evaluate(node=>{const range=document.createRange();range.selectNodeContents(node);const selection=getSelection()!;selection.removeAllRanges();selection.addRange(range)});await expect(workArea).toHaveCSS('outline-width','0px');await page.keyboard.press('Control+c');await expect.poll(()=>page.evaluate(()=>(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.at(-1))).toBe(false);expect(creates).toHaveLength(0);
+  await page.getByRole('button',{name:'Search tickets'}).click();const search=page.getByRole('textbox',{name:'Search tickets'});await search.focus();await expect(search).toBeFocused();await page.evaluate(()=>navigator.clipboard.writeText('QQRY00'));await page.keyboard.press('Control+v');await expect.poll(()=>page.evaluate(()=>(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.at(-1))).toBe(false);expect(creates).toHaveLength(0);
+  await page.evaluate(()=>getSelection()?.removeAllRanges());await workArea.focus();await expect(workArea).toHaveCSS('outline-width','2px');await page.keyboard.press('Control+v');await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();expect(creates).toHaveLength(1);
+  await page.screenshot({path:'/private/tmp/hs2-rg612c-work-area-focus-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await workArea.focus();await expect(workArea).toHaveCSS('outline-width','2px');await page.screenshot({path:'/private/tmp/hs2-rg612c-work-area-focus-narrow.png',fullPage:true});
+});
+
 test('preserves attachments and atomically undoes and redoes cut-paste',async({page})=>{
   const copyRequests:unknown[]=[];page.on('request',request=>{if(new URL(request.url()).pathname.endsWith('/provider-attachments/copy'))copyRequests.push(request.postDataJSON())});
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  const source=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await source.click();await page.getByRole('button',{name:'Attachments'}).click();await expect(page.locator('[data-attachment-id="A1"]')).toBeVisible();await page.keyboard.press('Control+x');await page.keyboard.press('Control+v');
+  const source=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await source.click();await page.getByRole('button',{name:'Attachments'}).click();await expect(page.locator('[data-attachment-id="A1"]')).toBeVisible();await source.focus();await page.keyboard.press('Control+x');await page.locator('.app-shell__work-area').focus();await page.keyboard.press('Control+v');
   await expect(page.getByText('Use real project tickets (Copy)')).toBeVisible();
   await expect.poll(()=>copyRequests.length).toBe(1);
   expect(copyRequests[0]).toEqual({source:{connection_id:'git-local',native_id:'01',attachment_id:'A1'},destination:{connection_id:'git-local',native_id:'02'}});

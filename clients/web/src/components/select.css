@@ -14,4 +14,4 @@
 .select--custom-selected::part(display-input) { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
 .select__group { display: grid; padding: .25rem 0; }
 .select__group--separated { margin-top: .25rem; padding-top: .5rem; border-top: 1px solid #dfe2e8; }
-.select__group-title { padding: .2rem .75rem .3rem; color: #777b86; font-size: .65rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }
+.select__group-title { padding: .2rem .75rem .3rem; color: var(--wa-color-neutral-on-quiet); font-size: .65rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; }

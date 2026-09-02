@@ -199,6 +199,16 @@ fn tools_list() -> Value {
             }, "required": ["reference"] }
         },
         {
+            "name": "hotsheet_claim",
+            "description": "Claim one exact open, unblocked ticket by slug or ULID. A live same-worker retry is idempotent. Returns the claimed ticket without changing its durable status.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("slug or ULID"),
+                "worker": str_prop("worker id recorded on the claim (default: worker)"),
+                "label": str_prop("human-readable worker label"),
+                "lease_minutes": { "type": "integer", "description": "lease length in minutes (default 30)" }
+            }, "required": ["id"] }
+        },
+        {
             "name": "hotsheet_claim_next",
             "description": "Atomically claim the next available ticket (open, unblocked, unclaimed/expired; prefers Up Next). Returns the claimed ticket, or null if nothing is claimable.",
             "inputSchema": { "type": "object", "properties": {
@@ -368,6 +378,16 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
         "hotsheet_resolve_checkout" => backend
             .get(&format!("/checkouts/{}", arg_str(args, "reference")?), &[])
             .map_err(be_msg),
+        "hotsheet_claim" => {
+            let id = arg_str(args, "id")?;
+            backend
+                .send(
+                    "POST",
+                    &format!("/tickets/{id}/claim"),
+                    &without(args, "id"),
+                )
+                .map_err(be_msg)
+        }
         "hotsheet_claim_next" => backend.send("POST", "/claim-next", args).map_err(be_msg),
         "hotsheet_release" => {
             let id = arg_str(args, "id")?;
@@ -922,7 +942,7 @@ mod core_backend {
                     }
                     Ok(serde_json::json!({ "updated": updated, "errors": errors }))
                 }
-                // Coordination (HS2-86): claim the next available ticket / release / renew.
+                // Coordination: claim next or one exact ticket / release / renew.
                 "POST" if path == "/claim-next" => {
                     let now = (self.now)();
                     let lease = now.plus_minutes(lease_minutes(body));
@@ -934,6 +954,16 @@ mod core_backend {
                         Some(t) => self.api(&t)?,
                         None => Value::Null,
                     })
+                }
+                "POST" if claim_id(path).is_some() => {
+                    let t = self.resolve(claim_id(path).unwrap())?;
+                    let now = (self.now)();
+                    let lease = now.plus_minutes(lease_minutes(body));
+                    let worker = str_field(body, "worker").unwrap_or_else(|| "worker".into());
+                    let label = str_field(body, "label");
+                    let claimed = ops::claim(&self.store, &t.id, &now, lease, &worker, label)
+                        .map_err(op_err)?;
+                    self.api(&claimed)
                 }
                 "POST"
                     if matches!(
@@ -1095,6 +1125,11 @@ mod core_backend {
 
     fn assign_id(path: &str) -> Option<&str> {
         path.strip_prefix("/tickets/")?.strip_suffix("/assign")
+    }
+
+    /// `/tickets/{id}/claim` → the id.
+    fn claim_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?.strip_suffix("/claim")
     }
 
     /// `/tickets/{id}/release` → the id.
@@ -1566,6 +1601,7 @@ mod tests {
             "hotsheet_create",
             "hotsheet_update",
             "hotsheet_close",
+            "hotsheet_claim",
         ] {
             assert!(names.contains(&want), "missing {want}");
         }
@@ -2044,6 +2080,39 @@ mod tests {
     #[test]
     fn corebackend_claim_release_renew_over_mcp() {
         let (_d, backend) = core();
+        let assigned = call(
+            &backend,
+            "hotsheet_create",
+            json!({ "title": "assigned exact" }),
+        );
+        let assigned_slug = assigned["slug"].as_str().unwrap().to_string();
+        let assigned_id = assigned["id"].as_str().unwrap().to_string();
+        let exact = call(
+            &backend,
+            "hotsheet_claim",
+            json!({ "id": assigned_slug.clone(), "worker": "orchestrator", "label": "Codex" }),
+        );
+        assert_eq!(exact["claimed_by"], "orchestrator");
+        assert_eq!(exact["worker_label"], "Codex");
+        assert_eq!(exact["status"], "not_started");
+        assert_eq!(exact["claim_count"], 1);
+        let retry = call(
+            &backend,
+            "hotsheet_claim",
+            json!({ "id": assigned_id.clone(), "worker": "orchestrator", "lease_minutes": 60 }),
+        );
+        assert_eq!(retry["claim_count"], 1);
+        call(
+            &backend,
+            "hotsheet_release",
+            json!({ "id": assigned_slug, "worker": "orchestrator" }),
+        );
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": assigned_id, "status": "completed" }),
+        );
+
         let created = call(
             &backend,
             "hotsheet_create",

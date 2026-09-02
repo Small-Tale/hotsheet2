@@ -4527,6 +4527,63 @@ async fn claim_next_release_renew_over_http() {
     );
 }
 
+#[tokio::test]
+async fn exact_ticket_claim_accepts_slug_and_rejects_a_live_second_worker() {
+    let (_d, st) = state();
+    let app = app(st);
+    let created = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/tickets", Some(r#"{"title":"assigned"}"#)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let slug = created["slug"].as_str().unwrap();
+    let id = created["id"].as_str().unwrap();
+
+    let claimed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/tickets/{slug}/claim"),
+                Some(r#"{"worker":"orchestrator-1","label":"Codex","lease_minutes":15}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(claimed["claimed_by"], "orchestrator-1");
+    assert_eq!(claimed["worker_label"], "Codex");
+    assert_eq!(
+        claimed["status"], "not_started",
+        "claim does not start the ticket"
+    );
+    assert_eq!(claimed["claim_count"], 1);
+
+    let retry = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/tickets/{id}/claim"),
+                Some(r#"{"worker":"orchestrator-1","lease_minutes":30}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(retry["claim_count"], 1, "same-holder retry is idempotent");
+
+    let denied = app
+        .oneshot(authed(
+            "POST",
+            &format!("/tickets/{slug}/claim"),
+            Some(r#"{"worker":"orchestrator-2"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::CONFLICT);
+}
+
 /// A single corrupt ticket file on disk must not stop the server from opening the
 /// project: the ticket list still returns every healthy ticket, and `/health` surfaces
 /// the unparseable file instead of hard-failing the whole store (HS2-PRVPCQ). This is

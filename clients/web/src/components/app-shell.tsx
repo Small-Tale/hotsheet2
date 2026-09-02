@@ -47,7 +47,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
           The overlay/banner/pageHeader siblings above are conditional (HS2-H4MWDB: opening the
           ticket context menu toggles the overlay); without a key the shift rebuilds this subtree
           and the workspace loses its scrollTop. */}
-      <div class="app-shell__work-area" data-key="app-shell-work-area">
+      <div class="app-shell__work-area" data-key="app-shell-work-area" tabIndex={0} aria-label="Ticket work area">
         {composer && <div class="app-shell__composer">{composer}</div>}
         <section class="app-shell__workspace" data-key="app-shell-workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
       </div>

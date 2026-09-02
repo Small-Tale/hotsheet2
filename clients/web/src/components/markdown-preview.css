@@ -12,10 +12,10 @@
 .markdown-preview code { padding: .1rem .28rem; border-radius: .3rem; background: var(--wa-color-neutral-fill-normal); font: .82rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .markdown-preview pre { padding: .8rem; overflow: auto; border-radius: .55rem; background: #20232a; color: #f7f7f8; }
 .markdown-preview pre code { padding: 0; background: transparent; color: inherit; }
-.markdown-preview blockquote { padding-left: .8rem; border-left: 3px solid #c7cbd3; color: #636773; }
+.markdown-preview blockquote { padding-left: .8rem; border-left: 3px solid var(--wa-color-neutral-border-normal); color: #636773; }
 .markdown-preview table { width: 100%; border-collapse: collapse; }
-.markdown-preview th, .markdown-preview td { padding: .4rem .5rem; border: 1px solid #d9dce3; text-align: left; }
-.markdown-preview th { background: #f1f3f6; }
+.markdown-preview th, .markdown-preview td { padding: .4rem .5rem; border: 1px solid var(--wa-color-neutral-border-normal); text-align: left; }
+.markdown-preview th { background: var(--wa-color-neutral-fill-quiet); }
 .markdown-preview img { max-width: 100%; height: auto; border-radius: .45rem; }
 .markdown-preview input[type="checkbox"] { margin-right: .35rem; }
-.markdown-preview--empty { color: #858893; font-style: italic; }
+.markdown-preview--empty { color: var(--wa-color-neutral-on-quiet); font-style: italic; }

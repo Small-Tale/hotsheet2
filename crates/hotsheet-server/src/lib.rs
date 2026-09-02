@@ -736,8 +736,9 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/tickets/{id}/close", post(close_ticket))
         .route("/tickets/{id}/assign", post(assign_ticket))
-        // Coordination: claim the next available ticket, release, renew a lease (HS2-86).
+        // Coordination: claim next or one exact ticket, release, renew a lease.
         .route("/claim-next", post(claim_next_ticket))
+        .route("/tickets/{id}/claim", post(claim_ticket))
         .route("/tickets/{id}/release", post(release_ticket))
         .route("/tickets/{id}/renew", post(renew_ticket))
         // Cross-store copy / move (HS2-60 / HS2-S4H2AM): source is the default store,
@@ -2911,6 +2912,22 @@ async fn claim_next_ticket(
     ))
 }
 
+/// `POST /tickets/{id}/claim` — claim one exact open, unblocked ticket by slug or ULID.
+async fn claim_ticket(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<ClaimReq>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let entry = state.default_entry();
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let now = now();
+    let lease = now.plus_minutes(req.lease_minutes.unwrap_or(DEFAULT_LEASE_MINUTES));
+    let worker = req.worker.unwrap_or_else(|| "worker".into());
+    let claimed = ops::claim(&entry.store, &ticket.id, &now, lease, &worker, req.label)?;
+    state.changed_in(&entry, "claimed", &claimed);
+    Ok(Json(api_ticket(&entry, &claimed)?))
+}
+
 /// `POST /tickets/{id}/release` — release a claim (holder-only unless `force`).
 async fn release_ticket(
     State(state): State<AppState>,
@@ -4427,6 +4444,7 @@ impl From<OpError> for ApiError {
             OpError::Store(s) => ApiError::from(s),
             other @ (OpError::WrongWorker { .. }
             | OpError::NotClaimed(_)
+            | OpError::ClaimUnavailable { .. }
             | OpError::NotWorkingRequiresCompleted(_)) => {
                 ApiError::new(StatusCode::CONFLICT, other.to_string())
             }

@@ -1,4 +1,4 @@
-.toolbar-control-group { display: inline-flex; align-items: center; flex: 0 0 auto; gap: .15rem; box-sizing: border-box; height: 2.525rem; padding: .2rem; border: 1px solid #d7d9df; border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-normal); }
+.toolbar-control-group { display: inline-flex; align-items: center; flex: 0 0 auto; gap: .15rem; box-sizing: border-box; height: 2.525rem; padding: .2rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-normal); }
 .toolbar-control-group[data-appearance="borderless"] { border-color: transparent; background: transparent; }
 .toolbar-control-group > button { border: 0; }
 .toolbar-control-group > wa-button { min-width: 2rem; height: 2rem; }
@@ -14,7 +14,7 @@
 .toolbar-control-group[data-single="false"] wa-button:hover { background: var(--wa-color-surface-default); }
 .toolbar-control-group[data-single="true"] wa-button:hover::part(base) { background: transparent; }
 .toolbar-control-group[data-single="false"] wa-button:hover::part(base) { background: transparent; }
-.toolbar-control-group > button { display: grid; min-width: 2rem; height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); color: #646771; background: transparent; cursor: pointer; place-items: center; }
+.toolbar-control-group > button { display: grid; min-width: 2rem; height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
 .toolbar-control-group > button:hover { background: var(--wa-color-surface-default); }
 .toolbar-control-group > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .toolbar-control-group > button svg { width: 1rem; height: 1rem; }

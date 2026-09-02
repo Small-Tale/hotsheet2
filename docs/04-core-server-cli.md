@@ -265,7 +265,10 @@ hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at
 hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
-hotsheet claim-next --worker worker-1     # coordination primitive
+hotsheet claim-next --worker worker-1                       # self-select + claim
+hotsheet claim HS-7f3k9q --worker orchestrator-1 --label Codex # exact assigned ticket
+hotsheet renew HS-7f3k9q --worker orchestrator-1             # extend active lease
+hotsheet release HS-7f3k9q --worker orchestrator-1           # stop advertising work
 hotsheet key set openai                    # hidden terminal prompt
 printf '%s' "$PROVIDER_KEY" | hotsheet key set openai  # automation via stdin; never argv/settings
 hotsheet key list                         # provider names only, never values

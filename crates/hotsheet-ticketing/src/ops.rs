@@ -30,6 +30,8 @@ pub enum OpError {
     },
     #[error("{0} is not claimed")]
     NotClaimed(String),
+    #[error("{slug} cannot be claimed: {reason}")]
+    ClaimUnavailable { slug: String, reason: &'static str },
     #[error("a duplicate target is required when the close reason is `duplicate`")]
     DuplicateNeedsTarget,
     #[error("no ticket matching '{0}'")]
@@ -822,6 +824,74 @@ pub fn claim_next(
     t.updated_at = now.clone();
     store.write_ticket_committing(&t)?;
     Ok(Some(t))
+}
+
+/// Claim one exact open, unblocked ticket. A retry by the live holder is idempotent:
+/// it may extend the lease and update an explicit label, but does not increment the
+/// historical claim count. Expired/stale claims are new acquisitions and do increment it.
+pub fn claim(
+    store: &FsStore,
+    id: &Ulid,
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+) -> Result<Ticket, OpError> {
+    let tickets = store.list_tickets()?;
+    let mut t = tickets
+        .iter()
+        .find(|ticket| ticket.id == *id)
+        .cloned()
+        .ok_or_else(|| OpError::UnknownTicket(id.to_string()))?;
+    if !is_open(&t) {
+        return Err(OpError::ClaimUnavailable {
+            slug: t.slug,
+            reason: "ticket is not open",
+        });
+    }
+    let done: HashSet<Ulid> = tickets
+        .iter()
+        .filter(|ticket| is_done(ticket))
+        .map(|ticket| ticket.id)
+        .collect();
+    if is_blocked(&t, &done) {
+        return Err(OpError::ClaimUnavailable {
+            slug: t.slug,
+            reason: "ticket has unresolved blockers",
+        });
+    }
+
+    if !claim_available(&t, now) {
+        let holder = t
+            .claimed_by
+            .as_deref()
+            .expect("an unavailable claim has a holder");
+        if holder != worker {
+            return Err(OpError::WrongWorker {
+                slug: t.slug,
+                holder: holder.to_string(),
+                worker: worker.to_string(),
+            });
+        }
+        if t.claim_lease_expires_at
+            .as_ref()
+            .and_then(|current| current.chronological_cmp(&lease_expires))
+            == Some(Ordering::Less)
+        {
+            t.claim_lease_expires_at = Some(lease_expires);
+        }
+        if label.is_some() {
+            t.worker_label = label;
+        }
+    } else {
+        t.claimed_by = Some(worker.to_string());
+        t.claim_lease_expires_at = Some(lease_expires);
+        t.worker_label = label;
+        t.claim_count += 1;
+    }
+    t.updated_at = now.clone();
+    store.write_ticket_committing(&t)?;
+    Ok(t)
 }
 
 /// Release a claim. Only the holding `worker` may release unless `force`.
@@ -1827,5 +1897,143 @@ mod tests {
         renew(&store, &claimed.id, now.clone(), lease.clone(), "w1").unwrap();
         let released = release(&store, &claimed.id, now, "w1", false).unwrap();
         assert!(released.claimed_by.is_none());
+    }
+
+    #[test]
+    fn exact_claim_is_eligible_holder_idempotent_and_expiry_takeover_safe() {
+        let (_d, store) = store();
+        let blocker = create(
+            &store,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FC0").unwrap(),
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "blocker".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let exact = create(
+            &store,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FC1").unwrap(),
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "exact".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let blocked = create(
+            &store,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FC2").unwrap(),
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "blocked".into(),
+                category: "task".into(),
+                blocked_by: vec![blocker.id],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let now = ts("2026-08-19T00:10:00Z");
+        let first = claim(
+            &store,
+            &exact.id,
+            &now,
+            ts("2026-08-19T00:40:00Z"),
+            "w1",
+            Some("Agent one".into()),
+        )
+        .unwrap();
+        assert_eq!(
+            first.status,
+            Status::NotStarted,
+            "claiming never changes durable status"
+        );
+        assert_eq!(first.claim_count, 1);
+
+        let retry = claim(
+            &store,
+            &exact.id,
+            &now,
+            ts("2026-08-19T00:50:00Z"),
+            "w1",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            retry.claim_count, 1,
+            "same-holder retry is not a new attempt"
+        );
+        assert_eq!(retry.worker_label.as_deref(), Some("Agent one"));
+        assert_eq!(
+            retry.claim_lease_expires_at.as_ref().unwrap().as_str(),
+            "2026-08-19T00:50:00Z"
+        );
+        assert!(matches!(
+            claim(
+                &store,
+                &exact.id,
+                &now,
+                ts("2026-08-19T01:00:00Z"),
+                "w2",
+                None
+            ),
+            Err(OpError::WrongWorker { .. })
+        ));
+
+        let takeover = claim(
+            &store,
+            &exact.id,
+            &ts("2026-08-19T00:51:00Z"),
+            ts("2026-08-19T01:21:00Z"),
+            "w2",
+            Some("Agent two".into()),
+        )
+        .unwrap();
+        assert_eq!(takeover.claimed_by.as_deref(), Some("w2"));
+        assert_eq!(takeover.claim_count, 2);
+        assert!(matches!(
+            claim(
+                &store,
+                &blocked.id,
+                &now,
+                ts("2026-08-19T00:40:00Z"),
+                "w1",
+                None
+            ),
+            Err(OpError::ClaimUnavailable {
+                reason: "ticket has unresolved blockers",
+                ..
+            })
+        ));
+        let completed = update(
+            &store,
+            &blocker.id,
+            ts("2026-08-19T00:11:00Z"),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(matches!(
+            claim(
+                &store,
+                &completed.id,
+                &now,
+                ts("2026-08-19T00:40:00Z"),
+                "w1",
+                None
+            ),
+            Err(OpError::ClaimUnavailable {
+                reason: "ticket is not open",
+                ..
+            })
+        ));
     }
 }

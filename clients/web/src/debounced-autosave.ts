@@ -15,15 +15,20 @@ export function createDebouncedAutosave<T>(save: (value: T) => Promise<boolean>,
   let active: Promise<boolean> | undefined;
 
   const persist = async (): Promise<boolean> => {
-    if (!hasQueuedValue) return active ?? true;
+    if (active) {
+      const saved = await active;
+      return hasQueuedValue ? persist() : saved;
+    }
+    if (!hasQueuedValue) return true;
     const value = queued as T;
     queued = undefined;
     hasQueuedValue = false;
     if (timer) clearTimeout(timer);
     timer = undefined;
-    active = save(value);
-    try { return await active; }
-    finally { active = undefined; }
+    const current = save(value);
+    active = current;
+    try { return await current; }
+    finally { if (active === current) active = undefined; }
   };
 
   return {

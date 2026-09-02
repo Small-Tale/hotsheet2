@@ -26,8 +26,12 @@ are deleted only after destination creation, note creation, and provider-qualifi
 attachment copying all succeed. A paste is one history transaction: undo archives every
 created copy and restores cut originals, while redo reapplies the complete transfer.
 Failed transfers archive partial destination tickets and leave cut originals intact.
-These global shortcuts yield to
-editable controls and dialogs. Dragging an unselected ticket moves only it, while
+Ticket copy/cut/paste shortcuts run only while the ticket work area owns focus and a
+ticket list or board is present. The work area shows one continuous focus outline around
+its composer and ticket surface. Pointer interaction outside it releases that ownership,
+including non-focusable inspector text; an ordinary non-collapsed text selection, native
+or Web Awesome editable control, or open dialog always retains native Cmd/Ctrl+C/X/V.
+Dragging an unselected ticket moves only it, while
   dragging a selected ticket moves the selection; Queue, Backlog, and Archive sidebar
   destinations apply the corresponding status and visibly highlight during dragover.
   Right-clicking either a list or board TicketRow preserves an existing multi-selection
@@ -109,7 +113,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Only divergent changes to that same active field open a reconciliation surface with
   the remote and local versions plus an editable merged value. Whole-ticket concurrency
   token failures use the same comparison: unrelated field drift retries once against
-  the fresh token instead of presenting a false conflict.
+  the fresh token instead of presenting a false conflict. Background refresh also leaves
+  an in-flight or queued autosave draft alone; the write response and token retry path
+  distinguish this client's earlier partial save from a genuinely competing edit.
 
 - **Active ticket work.** Ticket rows show a slow yellow two-dot activity animation
   directly after status only while a worker holds a non-expired claim lease. Started
@@ -212,8 +218,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   the credential-hiding bridge. Ticket create/update/claim/move/delete events and replay
   overflow coalesce into an authoritative project refresh, including reconciliation of
   the selected inspector ticket. Background reconciliation is silent: it does not toggle
-  the foreground loading surface, and an open metadata select remains open across the
-  inspector update. Project switches abort the previous poll. Network failure retries
+  the foreground loading surface. While a metadata select popup is open, ticket refreshes
+  are coalesced and deferred until the popup closes, so the application never hides and
+  reopens the user's active chooser. Project switches abort the previous poll. Network failure retries
   with a fresh cursor and bounded exponential backoff without refreshing on every
   failure; the first successful reconnect reconciles once. The server-side project
   bridge retains legacy query authentication for `/ws/poll`, so a newer browser client

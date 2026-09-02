@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 32 -->
+<!-- hotsheet-skill-version: 34 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -21,17 +21,29 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    bounded investigations in parallel. Do not parallelize tickets that edit the same
    surfaces or depend on unresolved decisions. The primary agent owns integration,
    ticket status, verification, and publishing.
-3. **Work each ticket end to end.** Mark it started, implement and verify its scope, run
-   the completion checklist below, then mark it completed with a result and verification note.
+3. **Work each ticket end to end under an exact claim lease.** Choose one stable,
+   session-specific worker id. Immediately before active work, claim the assigned ticket
+   with `hotsheet_claim` (`id`, `worker`, optional `label`/`lease_minutes`) or
+   `hotsheet-cli claim <id> --worker <worker> [--label <label>] [--lease-minutes N]`.
+   A claim is presence, not workflow state: separately mark the ticket started. Renew
+   before the lease expires and before lengthy work with `hotsheet_renew` or
+   `hotsheet-cli renew`; release with `hotsheet_release` or `hotsheet-cli release` when
+   work stops for completion, handoff, error, or feedback. If another worker holds the
+   live lease, do not work concurrently; replan around other tickets. Then implement and
+   verify scope, run the completion checklist, and mark completed with a result and
+   verification note. Delegated workers claim their own exact assigned ticket and use a
+   distinct worker id; the primary agent remains responsible for integration.
 4. **Create every follow-up immediately, without asking.** As soon as you identify an
    unfinished step, open question, known gap, out-of-scope task, or designed-but-unbuilt
    behavior, create its ticket. Do not ask permission, wait, promise to file it later, or
    leave it only in a comment/TODO/note. Reference every follow-up slug in the current
    ticket's completing note, then continue.
 5. **Publish at ticket boundaries.** Run required gates, review the diff, make one commit
-   for that ticket, and push before beginning the next sequential ticket. Combine tickets
-   only when their implementations overlap so strongly that separation would be unsafe
-   or misleading, or when they are duplicates. Integrate parallel tickets separately.
+   for that ticket, include its ticket slug in the commit message, and push before
+   beginning the next sequential ticket. Combine tickets only when their implementations
+   overlap so strongly that separation would be unsafe or misleading, or when they are
+   duplicates; a combined commit message must reference every ticket slug it addresses.
+   Integrate parallel tickets separately.
 6. **Re-read the queue after every completion.** Concurrent work and new findings can
    change the plan. Continue until no actionable Up Next ticket remains.
 

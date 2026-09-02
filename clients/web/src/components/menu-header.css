@@ -3,7 +3,7 @@
 .menu-header button, .menu-header--toggle { cursor: pointer; }
 .menu-header button { display: grid; width: 1.65rem; height: 1.65rem; padding: 0; border: 0; border-radius: .35rem; color: #6c6f78; background: transparent; place-items: center; }
 .menu-header:not(.menu-header--toggle) button { margin-right: -.55rem; }
-.menu-header button:hover, .menu-header--toggle:hover { background: #e8ebf0; }
+.menu-header button:hover, .menu-header--toggle:hover { background: var(--wa-color-neutral-border-quiet); }
 .menu-header svg { width: .85rem; height: .85rem; flex: none; }
 .menu-header--toggle svg { transition: transform .18s ease; }
 .menu-header--toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }

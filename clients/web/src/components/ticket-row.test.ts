@@ -126,7 +126,7 @@ describe('TicketRow', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     for (const status of ['completed', 'verified'] as const) expect(String(TicketRow({ slug: 'HS2-DONE', title: 'Finished row', status, priority: 'default', category: 'task', tags: [] }))).toContain(`data-status="${status}"`);
     expect(css).toContain('[data-status="completed"], [data-status="verified"]');
-    expect(css).toContain('.ticket-list-row__identity strong { color: #6b7280; text-decoration: line-through; }');
+    expect(css).toContain('.ticket-list-row__identity strong { color: var(--wa-color-neutral-on-quiet); text-decoration: line-through; }');
   });
 
   it('offers Up Next only for not-started and started lifecycle states', () => {

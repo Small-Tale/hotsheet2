@@ -272,8 +272,12 @@ actively holding. The ticket list projects that lease as an animated yellow indi
 immediately after status. This is deliberately independent of the durable `started`
 status, and `claim_count` remains retry history rather than presence. The client schedules
 the nearest lease expiry locally so the indicator clears on time without network polling.
-Self-claim workers already communicate through claim/renew/release; exact-ticket claims
-for orchestrated assignments are tracked by HS2-J5WVMQ.
+Self-claim workers acquire through `claim-next`; general orchestration and delegated
+workers acquire their assigned slug/ULID through exact `claim`, renew before expiry or
+lengthy work, and release on completion, handoff, error, or feedback. A same-worker exact
+claim retry is idempotent and does not inflate `claim_count`; another live holder is a
+conflict, while an expired lease can be acquired as a new attempt. Claiming never changes
+the durable ticket status.
 
 ## 5.7 Permissions & user prompts (permission checks and other prompts)
 
@@ -318,8 +322,9 @@ Codex permissions remain supported through Hot Sheet's app-server drive (`trigge
 underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-storage.md)
 §2.7). Two regimes:
 
-- **Single shared server (this section's default):** a worker atomically claims the
-  top Up Next ticket (`SKIP LOCKED`-style over the index), holds a renewable lease,
+- **Single shared server (this section's default):** a self-directed worker atomically
+  claims the top Up Next ticket (`claim-next`), while an orchestrated worker claims its
+  exact assigned slug/ULID (`POST /tickets/{id}/claim`); either holds a renewable lease,
   and the server's write chokepoint rejects a write to a ticket another actor holds.
   Lazy reclaim + poison quarantine carried over. `claim-next` selection runs over
   the **index** (fast), and the claim is persisted to the **ticket file**
@@ -335,7 +340,8 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 
 > **Status: MCP shim built (v1, HS2-7/43); serverless mode added (HS2-96).**
 > `crates/hotsheet-mcp` → the `hotsheet-mcp` binary: a stdio JSON-RPC 2.0 server
-> exposing `hotsheet_query` / `get` / `create` / `update` / `close`. It runs in
+> exposing ticket CRUD plus `hotsheet_claim`, `hotsheet_claim_next`,
+> `hotsheet_renew`, and `hotsheet_release`. It runs in
 > **two modes over one `Backend` trait**, so the tool surface is identical either
 > way — this is what lets a headless agent work **with or without a server**:
 > - **`--path <store>` → serverless**, straight to disk over `hotsheet_ticketing::ops`

@@ -16,6 +16,11 @@ describe('application shell components', () => {
     expect(css).toMatch(/\.app-shell \{[^}]*min-width: 40rem/);
     expect(css).toMatch(/\.app-shell \{[^}]*min-height: 30rem/);
   });
+  it('draws one continuous focus outline around the ticket work area', () => {
+    const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    expect(css).toContain('.app-shell__work-area:focus, .app-shell__work-area:focus-within');
+    expect(css).toMatch(/app-shell__work-area:focus-within \{[^}]*outline: 2px solid var\(--wa-color-focus\)/);
+  });
   it('projects every ProjectTab state without nesting actions', () => {
     const markup = String(ProjectTab({ id: 'one', name: 'One', location: 'remote', selected: true, busy: true, disconnected: true, attention: true }));
     expect(markup).toContain('role="tab"');
@@ -77,7 +82,7 @@ describe('application shell components', () => {
     // HS2-H4MWDB: stable data-keys let the morph match the scroll-container chain by identity so
     // toggling the conditional overlay/banner siblings above it never rebuilds it (which would
     // reset the workspace scrollTop, e.g. when the ticket context menu opens).
-    expect(markup).toContain('class="app-shell__work-area" data-key="app-shell-work-area"');
+    expect(markup).toContain('class="app-shell__work-area" data-key="app-shell-work-area" tabindex="0" aria-label="Ticket work area"');
     expect(markup).toContain('data-key="app-shell-workspace"');
     expect(markup).toContain('class="app-shell__composer">compose');
     expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));

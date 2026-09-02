@@ -1,4 +1,4 @@
-<!-- hotsheet:begin section=ticket-driven-work v=2 -->
+<!-- hotsheet:begin section=ticket-driven-work v=3 -->
 ## Ticket-Driven Work
 
 When the user gives you work directly (not via the Hot Sheet channel or events), create Hot Sheet tickets before starting implementation — especially for substantial or multi-step work.
@@ -8,6 +8,7 @@ When the user gives you work directly (not via the Hot Sheet channel or events),
 - **Create every follow-up immediately — without asking.** As soon as you identify unfinished steps, open design questions, known gaps, out-of-scope work, or designed-but-unbuilt behavior, create a follow-up ticket. Do not ask permission, wait for confirmation, promise to file it later, or leave it only in a comment/TODO/note. Reference every follow-up slug in the current ticket's completing note, then continue.
 - **FEEDBACK NEEDED is for a blocker on the current ticket, not deferred work.** Use it only when the current ticket cannot proceed without a user decision or unavailable external state. Leave that ticket `started`, add a `FEEDBACK NEEDED:` note with the specific decision or state required, and wait after continuing any independent work. This does not replace a follow-up: create tickets first for every independently describable gap or later step.
 - **Completion checklist** — before marking a ticket `completed`: (1) finish and verify its scope; (2) update required tests, coverage, and docs; (3) scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-unimplemented behavior, open questions, and known gaps; (4) immediately create a follow-up for every incomplete item; (5) include the result, verification, and all follow-up slugs in the completing note.
+- **Commit traceability** — every commit for ticket-driven work must include every ticket slug addressed by that commit in its commit message. This applies to both single-ticket and intentionally combined commits.
 <!-- hotsheet:end section=ticket-driven-work -->
 
 ## Identity terminology
@@ -43,9 +44,9 @@ Treat a live, renewable ticket claim lease as the authoritative signal that an A
 actively working on that ticket. `started` is durable workflow state and may remain set
 while nobody is working; `claim_count` is historical retry/poison metadata. Workers
 claim before active work, renew during long work, and release when they stop. Never
-derive live activity from status or claim count. The self-claim worker workflow already
-implements this lifecycle; exact-ticket claiming for orchestrated assignments is tracked
-by HS2-J5WVMQ.
+derive live activity from status or claim count. Self-claim workers use `claim-next`;
+general orchestration and delegated agents use exact `claim <slug-or-id>`, then renew and
+release that same ticket with one stable, session-specific worker id.
 
 ## Client UI stack
 
