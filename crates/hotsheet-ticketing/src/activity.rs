@@ -19,6 +19,10 @@ use serde_json::Value;
 
 use crate::store::FsStore;
 
+/// Raw activity is diagnostic input, not durable history. Keep the event day and the
+/// preceding 13 calendar days on each machine; durable notes and git history outlive it.
+pub const MAX_RECENT_ACTIVITY_AGE_DAYS: i64 = 14;
+
 /// The **closed** activity-kind vocabulary (`docs/15` §15.2) — not free-form, so consumers
 /// style/emphasize consistently. Serialized as its snake-ish lowercase string.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,8 +169,52 @@ pub fn record(store: &FsStore, event: &ActivityEvent) -> io::Result<()> {
         .append(true)
         .open(path)?;
     writeln!(f, "{line}")?;
+    drop(f);
     ensure_gitignored(store.root(), "activity/recent/")?;
+    prune_by_age(&dir, event.day(), MAX_RECENT_ACTIVITY_AGE_DAYS)?;
     Ok(())
+}
+
+fn prune_by_age(dir: &Path, reference_day: &str, retain_days: i64) -> io::Result<()> {
+    let Some(mut reference) = hotsheet_model::Timestamp::new(format!("{reference_day}T00:00:00Z"))
+        .instant()
+        .map(|instant| instant.date())
+    else {
+        return Ok(());
+    };
+    let dated_paths: Vec<_> = fs::read_dir(dir)?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter_map(|path| {
+            let day = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .and_then(|day| {
+                    hotsheet_model::Timestamp::new(format!("{day}T00:00:00Z"))
+                        .instant()
+                        .map(|instant| instant.date())
+                })?;
+            (path.extension().and_then(|ext| ext.to_str()) == Some("jsonl")).then_some((path, day))
+        })
+        .collect();
+    if let Some(latest) = dated_paths.iter().map(|(_, day)| *day).max() {
+        reference = reference.max(latest);
+    }
+    let cutoff = reference - time::Duration::days(retain_days.saturating_sub(1));
+    for (path, day) in dated_paths {
+        if day < cutoff {
+            let _ = remove_if_present(&path)?;
+        }
+    }
+    Ok(())
+}
+
+fn remove_if_present(path: &Path) -> io::Result<bool> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
 }
 
 /// Read every stored activity event in **recording order** — day-files ascending, each file's
@@ -260,8 +308,10 @@ pub fn prune_before(store: &FsStore, keep_from: &str) -> io::Result<usize> {
             .file_stem()
             .and_then(|s| s.to_str())
             .is_some_and(|day| day < keep_from);
-        if is_old && path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
-            fs::remove_file(&path)?;
+        if is_old
+            && path.extension().and_then(|e| e.to_str()) == Some("jsonl")
+            && remove_if_present(&path)?
+        {
             removed += 1;
         }
     }
@@ -651,6 +701,63 @@ mod tests {
                 .exists()
         );
         // The surviving event is still readable.
+        assert_eq!(read_recent(&store).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn recording_automatically_prunes_sparse_files_by_calendar_age() {
+        let (_d, store) = store();
+        for day in ["2026-01-01", "2026-07-31", "2026-08-01", "2026-08-14"] {
+            record(&store, &ev(day, day, ActivityKind::Edit, Value::Null)).unwrap();
+        }
+        assert!(
+            !store
+                .root()
+                .join("activity/recent/2026-01-01.jsonl")
+                .exists()
+        );
+        assert!(
+            store
+                .root()
+                .join("activity/recent/2026-08-01.jsonl")
+                .exists()
+        );
+        assert!(
+            store
+                .root()
+                .join("activity/recent/2026-08-14.jsonl")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn concurrent_prune_removal_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.jsonl");
+        fs::write(&path, "event\n").unwrap();
+        assert!(remove_if_present(&path).unwrap());
+        assert!(!remove_if_present(&path).unwrap());
+    }
+
+    #[test]
+    fn late_old_event_is_removed_against_the_newest_recorded_day_without_error() {
+        let (_d, store) = store();
+        record(
+            &store,
+            &ev("new", "2026-08-14", ActivityKind::Edit, Value::Null),
+        )
+        .unwrap();
+        record(
+            &store,
+            &ev("late", "2026-01-01", ActivityKind::Edit, Value::Null),
+        )
+        .unwrap();
+        assert!(
+            !store
+                .root()
+                .join("activity/recent/2026-01-01.jsonl")
+                .exists()
+        );
         assert_eq!(read_recent(&store).unwrap().len(), 1);
     }
 }

@@ -118,8 +118,11 @@ describe('TicketRow', () => {
     expect(active.indexOf('data-component="status-badge"')).toBeLessThan(active.indexOf('ticket-list-row__active-work'));
     expect(active.indexOf('ticket-list-row__active-work')).toBeLessThan(active.indexOf('ticket-list-row__owner'));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
-    expect(css).toContain('background: var(--hs-ticket-state-up-next)');
-    expect(css).toContain('animation: ticket-active-work 2.4s ease-in-out infinite');
+    expect(active).toContain('<filter id="ticket-active-work-HS2-ACTIVE"');
+    expect(active).toContain('ticket-list-row__active-work-goo');
+    expect(css).toContain('color: var(--hs-ticket-state-up-next)');
+    expect(css).toContain('animation: ticket-active-work-left 6s infinite');
+    expect(css).toContain('animation: ticket-active-work-rotate 2.25s linear infinite');
     expect(css).toContain('@media (prefers-reduced-motion: reduce)');
   });
 

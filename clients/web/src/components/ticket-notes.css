@@ -2,7 +2,7 @@
 .ticket-notes__list { display: grid; min-width: 0; gap: .55rem; }
 .ticket-notes .note-card { padding: .7rem .75rem; border-radius: .6rem; }
 .ticket-notes__empty { color: var(--wa-color-neutral-on-quiet) !important; font-style: italic; }
-.ticket-notes__add { display: inline-flex; min-height: 2rem; width: 100%; border: 1px dashed #cdd1d9; border-radius: .5rem; color: #686c77; background: transparent; cursor: pointer; align-items: center; justify-content: center; gap: .35rem; font: inherit; font-size: .76rem; }
-.ticket-notes__add:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
-.ticket-notes__add svg { width: .85rem; height: .85rem; }
+.ticket-notes__add, .ticket-inspector__empty-action { display: inline-flex; min-height: 2rem; width: 100%; border: 1px dashed #cdd1d9; border-radius: .5rem; color: #686c77; background: transparent; cursor: pointer; align-items: center; justify-content: center; gap: .35rem; font: inherit; font-size: .76rem; }
+.ticket-notes__add:hover, .ticket-inspector__empty-action:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
+.ticket-notes__add svg, .ticket-inspector__empty-action svg { width: .85rem; height: .85rem; }
 .ticket-notes h2 span { display: inline-grid; min-width: 1.25rem; height: 1.25rem; margin-left: .25rem; padding: 0 .25rem; border-radius: var(--wa-border-radius-pill); background: #e8eaf0; font-size: .62rem; place-items: center; }

@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs';
 import { cp, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -58,11 +59,13 @@ async function main() {
 
   let stopping = false;
   for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.on(signal, async () => {
+    process.on(signal, () => {
       if (stopping) return;
       stopping = true;
       child.kill(signal);
-      await removeStableSnapshot(snapshotRoot);
+      // Signal handlers are not promise-aware. Remove synchronously so the parent cannot
+      // observe process exit before this process's private snapshot has disappeared.
+      rmSync(snapshotRoot, { recursive: true, force: true });
       process.exit(signal === 'SIGINT' ? 130 : 143);
     });
   }

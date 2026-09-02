@@ -54,6 +54,17 @@ export function ticketRowIndicator(props: Pick<TicketRowProps, 'feedbackNeeded' 
   return undefined;
 }
 
+/** One-third-speed adaptation of svg-spinners' MIT-licensed gooey-balls-2. */
+function ActiveWorkIndicator({ slug, agentName = 'AI' }: { slug: string; agentName?: string }) {
+  const filterId = `ticket-active-work-${slug.replaceAll(/[^a-zA-Z0-9_-]/g, '-')}`;
+  return <span class="ticket-list-row__active-work" role="img" aria-label={`${agentName} actively working`} title={`${agentName} is actively working on this ticket`}>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <defs><filter id={filterId}><feGaussianBlur in="SourceGraphic" stdDeviation={1} result="blurred"/><feColorMatrix in="blurred" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo"/><feBlend in="SourceGraphic" in2="goo"/></filter></defs>
+      <g class="ticket-list-row__active-work-goo" filter={`url(#${filterId})`}><circle class="ticket-list-row__active-work-left" cx="5" cy="12" r="4"/><circle class="ticket-list-row__active-work-right" cx="19" cy="12" r="4"/></g>
+    </svg>
+  </span>;
+}
+
 export function normalizeTicketRowProps(props: TicketRowProps): TicketRowProps {
   const category = props.category.trim() || 'issue';
   const categoryPresentation = defaultCategoryPresentation(category);
@@ -122,7 +133,7 @@ export function TicketRow(raw: TicketRowProps) {
             <div class="ticket-list-row__metadata">
               {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>}
               <StatusBadge status={props.status} compact />
-              {props.busy && <span class="ticket-list-row__active-work" role="img" aria-label={`${props.agentName} actively working`} title={`${props.agentName} is actively working on this ticket`}></span>}
+              {props.busy && <ActiveWorkIndicator slug={props.slug} agentName={props.agentName} />}
               {needsReview && <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-list-row__feedback-icon" />Needs review</span>}
               {props.blocked && <BlockedBadge compact />}
               <span class="ticket-list-row__owner" aria-label={props.agentName}>{props.agentName}</span>

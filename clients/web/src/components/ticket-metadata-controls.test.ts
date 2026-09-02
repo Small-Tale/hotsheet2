@@ -34,9 +34,15 @@ describe('ticket metadata controls and inspector panels', () => {
   it('renders inspector sections independently of the inspector shell', () => {
     const info = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }));
     expect(info).toContain('data-component="ticket-info-panel"');
-    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(4);
+    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(3);
     expect(info).toContain('data-action="edit-blocked-reason"');
     expect(info).toContain('Block ticket');
+    expect(info).not.toContain('<h2>Blocked reason</h2>');
+    expect(info).toContain('ticket-inspector__block-action');
+    const blocked = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: [], details: '', blockedReason: 'Waiting' }));
+    expect(blocked).toContain('<h2>Blocked reason</h2>');
+    expect(blocked).toContain('Waiting');
+    expect(blocked.match(/ticket-inspector__section-header/g)).toHaveLength(4);
     expect(info).toContain('data-component="ticket-notes"');
     const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }));
     expect(timeline.match(/<li/g)).toHaveLength(1);

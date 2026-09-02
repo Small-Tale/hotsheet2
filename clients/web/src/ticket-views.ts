@@ -5,6 +5,14 @@ export type TicketView = 'all' | 'backlog' | 'archive';
 export const canCreateTicketInView = (view: TicketView): boolean => view !== 'archive';
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' => view === 'backlog' ? 'backlog' : 'not_started';
 
+export function isOpenTicket(ticket: TicketRow): boolean {
+  return !['completed', 'verified', 'archive', 'deleted', 'moved'].includes(ticket.status ?? 'not_started');
+}
+
+export function isUpNextTicket(ticket: TicketRow): boolean {
+  return ticket.up_next && isOpenTicket(ticket);
+}
+
 export function isArchivedTicket(ticket: TicketRow): boolean {
   return ['archive', 'deleted', 'moved'].includes(ticket.status ?? '');
 }

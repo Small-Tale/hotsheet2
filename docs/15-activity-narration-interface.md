@@ -67,8 +67,9 @@ The `activity` capability turns native signals → events; the host owns the str
   last looked") is **computed from the stored events**, not a second pipeline. So live
   and digest are the same data, different read.
 - **Storage:** activity events are **derived/ephemeral-ish** — persist a bounded
-  recent window (a rolling file, like metrics raw JSONL [14](14-metrics-interface.md)
-  §14.3) so a digest can look back; old events age out. The *durable* record of "what
+  recent window (the event day plus the preceding 13 calendar days, like metrics raw JSONL
+  [14](14-metrics-interface.md) §14.3) so a digest can look back; recording a new day
+  automatically ages out older files. The *durable* record of "what
   happened" is the ticket's **notes + git history**, not this stream.
 
 ## 15.5 How it composes with the other seams
@@ -88,13 +89,45 @@ The `activity` capability turns native signals → events; the host owns the str
 - **Timeline** — a per-ticket / per-session "what happened" view, reads the stored
   window. (A natural, cheaper first consumer than full TTS.)
 
-## 15.7 Open questions
-- **Who writes `summary`** — the tool (richer, per-tool) or a host summarizer over
-  raw signals (uniform, less per-tool code)? Lean: host composes a default from the
-  structured event; a tool may override for quality.
+## 15.7 Durable milestone distillation
+
+> **Built (HS2-3GRNZW):** `ticketing::activity_distillation` selects meaningful,
+> bounded windows from the normalized stream and may turn them into shared `activity`
+> notes. It is disabled by default and consent comes exclusively from the machine-local
+> `activity_distillation` settings object; global/shared settings cannot enable it.
+
+Candidate selection is deterministic: meaningful decisions, explicitly changed plans,
+blocked/unblocked transitions, three edit/command events by default, a substantive turn
+ending, or a ticket-status change after substantive work. Start/end chatter, duplicate
+events, lone status events already represented by the status timeline, and ordinary
+low-signal plans do not create candidates. Windows are capped (64 events by default),
+and a bounded 2,048-id cache prevents completed-window replay from seeding another note.
+
+The `LocalActivitySummarizer` boundary receives only `DistillationRequest`: event ids,
+closed kinds, sanitized tool ids, and allow-listed ticket statuses. Raw event summaries,
+prompts, command strings/output, paths, and file contents are absent from the type. A
+local adapter can return a concise note, suppress a candidate, or fail; failure may use
+the deterministic count-based fallback only when `deterministic_fallback: true` is
+explicitly set (it defaults false). Returned notes are
+single-line-normalized and bounded to 500 characters.
+
+Each candidate hashes version + ticket + session + every ordered event id + count. That
+provenance produces both an embedded marker and the caller-generated note ULID passed
+through the provider-neutral `TicketProvider` boundary. Retries find the marker/id;
+concurrent git clients converge through the existing note-by-ULID semantic merge.
+Provider adapters whose remote service chooses note ids must persist/recognize the
+caller-generated id as their idempotency key.
+
+The built-in `deterministic` adapter runs locally beside the activity sink. An Apple
+client selects `apple_foundation_models`, consumes the same live/digest stream, maps the
+serializable `DistillationRequest` to its on-device Foundation Models session, and sends
+the returned text through `distill`/`write_distilled_note`. Apple frameworks are thus a
+client adapter, never a server dependency; other clients can inject another
+`LocalActivitySummarizer` or leave the feature disabled.
+
+### 15.7.1 Remaining stream considerations
+
 - **Importance heuristic** — default mapping from `kind` → `importance`, overridable.
-- **Privacy for shared timelines** — if activity is ever team-shared, decide what
-  leaves the device (summaries, not file contents/prompts).
 - **Volume/rate** — cap events/sec per turn so a chatty tool can't flood the stream.
 
 ## 15.8 Build plan (follow-ups)
@@ -104,7 +137,8 @@ The `activity` capability turns native signals → events; the host owns the str
     with the closed kind vocabulary, a `kind → default_importance` heuristic, and a host
     `default_summary` composer (a tool may override, §15.7).
   - The **bounded rolling store** — `record` / `read_recent` / `prune_before` over
-    `activity/recent/<YYYY-MM-DD>.jsonl` (per-device, gitignored — like metrics raw, §15.4).
+    `activity/recent/<YYYY-MM-DD>.jsonl` (per-device, gitignored — like metrics raw,
+    §15.4); recording automatically removes files outside the 14-day calendar window.
   - The **timeline** consumer — `activity::timeline(store, TimelineFilter)` (by
     ticket/session/min-importance, most-recent-capped), exposed as `GET /activity`; plus
     `POST /activity` to ingest an event (server stamps id/ts, defaults summary/importance).
@@ -129,6 +163,11 @@ The `activity` capability turns native signals → events; the host owns the str
   sink. Sanitized version-pinned cassettes replay in ordinary CI; credentialed drift
   checks remain explicitly ignored and environment-gated. Native payload capture does
   not create durable ticket notes or summarize content (HS2-3GRNZW owns that policy).
+- **Shipped (HS2-3GRNZW) — opt-in durable distillation:** bounded deterministic
+  milestone windows, privacy-safe serializable summarizer requests, a pluggable local
+  summarizer boundary, deterministic fallback, and provenance-derived idempotent
+  activity-note writes. The server supplies only the optional deterministic adapter;
+  Apple Foundation Models remains an on-device client adapter.
 - **Deferred:** the full Announcer UI/TTS remains the post-floor HS2-17 consumer.
 
 ## 15.9 Cross-references

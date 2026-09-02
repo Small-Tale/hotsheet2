@@ -181,6 +181,16 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   while retaining the full local ticket collection for project counts, mutations, and an
   immediate return to the unfiltered view when search is cleared.
 
+  Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
+  and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
+  `noopener noreferrer`; raw HTML remains escaped and unsafe URL protocols remain inert.
+
+  The shared left project sidebar presents a centered `M open, N up next` summary
+  immediately above Drive. Both counts derive from the existing checkout ticket collection:
+  open excludes completed, verified, archived, deleted, and moved tickets, and Up Next
+  additionally requires the Up Next flag. Mutations and long-poll-driven collection refreshes
+  update the summary reactively; the summary itself performs no polling or network request.
+
   The real inspector's attachment surface materializes ordinary-sized browsed and
   dropped files before upload, so a macOS promised screenshot cannot disappear while
   `fetch` lazily reads it. Empty, unreadable, and short-read files are rejected with

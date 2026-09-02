@@ -24,7 +24,7 @@ export function NoteComposerDemo() { return <section class="note-card-demo" aria
 
 export const READER_NOTES = [
   { id: 'reader-status', kind: 'status' as const, author: 'Hot Sheet', time: '1 hour ago', body: 'Status changed from Not started to Started.' },
-  { id: 'reader-note', kind: 'regular' as const, author: 'Claude', time: '24 minutes ago', body: 'The reader should preserve a comfortable line length while the note history remains easy to scan.' },
+  { id: 'reader-note', kind: 'regular' as const, author: 'Claude', time: '24 minutes ago', body: 'The reader should preserve a comfortable line length while the [note history](/ux-demo?component=note-card) remains easy to scan.' },
   { id: 'reader-feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '12 minutes ago', body: 'Should the reader keep this response visible while editing details?' },
   { id: 'reader-draft', kind: 'feedback_draft' as const, author: 'You', time: '8 minutes ago', body: 'Yes, keep the response beside the larger editor.' },
   { id: 'reader-activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Completed the first browser review of the reading surface.' },
@@ -44,6 +44,8 @@ export function TicketReaderDemo() {
 }
 
 export const MARKDOWN_INITIAL = `## Implementation notes
+
+[Open the component guide](/ux-demo?component=tag-chip).
 The editor keeps **source and preview** in one predictable surface. See [CommonMark](https://commonmark.org/) for the base syntax.
 
 - [x] Preserve drafts while switching modes.

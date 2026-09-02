@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, isArchivedTicket, isQueuedTicket, newTicketStatusForView, ticketsForView } from './ticket-views';
+import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketStatusForView, ticketsForView } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -24,5 +24,11 @@ describe('ticket views', () => {
     expect(canCreateTicketInView('all')).toBe(true);
     expect(canCreateTicketInView('backlog')).toBe(true);
     expect(canCreateTicketInView('archive')).toBe(false);
+  });
+
+  it('derives open and Up Next summary counts from workflow semantics', () => {
+    const tickets = ['not_started', 'started', 'backlog', 'completed', 'verified', 'archive', 'deleted', 'moved'].map((status, index) => ({ ...ticket(status), up_next: index !== 1 }));
+    expect(tickets.filter(isOpenTicket).map(item => item.status)).toEqual(['not_started', 'started', 'backlog']);
+    expect(tickets.filter(isUpNextTicket).map(item => item.status)).toEqual(['not_started', 'backlog']);
   });
 });

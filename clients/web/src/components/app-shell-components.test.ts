@@ -15,6 +15,7 @@ describe('application shell components', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     expect(css).toMatch(/\.app-shell \{[^}]*min-width: 40rem/);
     expect(css).toMatch(/\.app-shell \{[^}]*min-height: 30rem/);
+    expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.resizable-region[^{}]*display: none/);
   });
   it('draws one continuous focus outline around the ticket work area', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');

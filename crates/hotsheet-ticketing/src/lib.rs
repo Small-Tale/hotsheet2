@@ -9,6 +9,7 @@
 use hotsheet_model::Ulid;
 
 pub mod activity;
+pub mod activity_distillation;
 pub mod analytics;
 pub mod distclaim;
 pub mod distwork;
@@ -29,6 +30,11 @@ pub mod sync;
 pub mod wire;
 pub mod worklist;
 pub use activity::{ActivityEvent, ActivityKind, Importance, TimelineFilter};
+pub use activity_distillation::{
+    ActivityWindowProvenance, CandidateTrigger, DeterministicActivitySummarizer,
+    DistillationPipeline, DistillationPolicy, DistillationRequest, DistilledActivityNote,
+    LocalActivitySummarizer, SafeActivityEvent, write_distilled_note,
+};
 pub use auto_context::{AutoContextEntry, AutoContextSource, TicketAutoContext};
 pub use distclaim::{ClaimMarker, ClaimResult, DistError};
 pub use identity::{ME, current_user_email, resolve_me};

@@ -248,6 +248,9 @@ pub struct ProviderPatch {
 }
 
 /// Caller-owned time/id inputs keep provider implementations deterministic in tests.
+/// `generated_id` is also the provider-neutral idempotency key: adapters must return the
+/// existing object when a create/note request with the same id is retried. Providers whose
+/// remote API chooses ids should persist or recognize the caller id in remote provenance.
 #[derive(Debug, Clone)]
 pub struct MutationContext {
     pub now: Timestamp,

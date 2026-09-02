@@ -35,6 +35,7 @@
   --wa-shadow-l: 0 .75rem 2rem rgba(35, 32, 48, .09);
 
   /* Hot Sheet domain states have no generic Web Awesome equivalent. */
+  --hs-shell-divider: #cfd3dc;
   --hs-ticket-state-needs-review: #8b5cf6;
   --hs-ticket-state-up-next: #eab308;
 }

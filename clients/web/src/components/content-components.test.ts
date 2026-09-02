@@ -48,13 +48,15 @@ describe('content components', () => {
     expect(empty).toContain('Click to add Markdown.');
   });
 
-  it('projects GFM Markdown while escaping raw HTML and unsafe links', () => {
-    const markup = String(MarkdownPreview({ source: '# Title\n\n**bold** and `code`\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[unsafe](javascript:alert(1))\n\n<script>alert(1)</script>' }));
+  it('projects GFM Markdown with safe new-tab links while escaping raw HTML and unsafe protocols', () => {
+    const markup = String(MarkdownPreview({ source: '# Title\n\n**bold** and `code`\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n[safe](/guide "Guide") and <https://example.com/docs>\n\n[unsafe](javascript:alert(1))\n\n<script>alert(1)</script>' }));
     expect(markup).toContain('<h1');
     expect(markup).toContain('<strong>bold</strong>');
     expect(markup).toContain('<code>code</code>');
     expect(markup).toContain('<table>');
-    expect(markup).toContain('href="#"');
+    expect(markup).toContain('href="/guide" target="_blank" rel="noopener noreferrer" title="Guide"');
+    expect(markup).toContain('href="https://example.com/docs" target="_blank" rel="noopener noreferrer"');
+    expect(markup).toContain('href="#" target="_blank" rel="noopener noreferrer"');
     expect(markup).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 

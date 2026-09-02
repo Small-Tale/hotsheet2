@@ -26,6 +26,7 @@
 .permission-request-card__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
 .permission-request-card__countdown { display: flex; min-width: 0; align-items: center; gap: .2rem; color: var(--wa-color-neutral-on-quiet); font-size: .7rem; }
 .permission-request-card__timer { display: inline-flex; min-height: 2rem; align-items: center; white-space: nowrap; }
+.permission-request-card__timer strong { margin-left: .3em; }
 .permission-request-card .permission-request-card__stop-automation { display: inline-grid; width: 2rem; min-width: 2rem; min-height: 2rem; padding: 0; border-color: transparent; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; place-items: center; }
 .permission-request-card .permission-request-card__stop-automation:hover { color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); }
 .permission-request-card__stop-automation svg { width: .9rem; height: .9rem; }

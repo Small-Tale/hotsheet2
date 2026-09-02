@@ -120,9 +120,19 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
   await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate(node => ({
+    border: getComputedStyle(node).borderColor,
+    divider: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),
+    surface: getComputedStyle(node).backgroundColor,
+  }))).toEqual({ border: 'rgb(207, 211, 220)', divider: '#cfd3dc', surface: 'rgb(255, 255, 255)' });
   await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
   await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
+  await page.screenshot({ path: '/private/tmp/hs2-66m88k-dev-review-theme-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(dialog).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-66m88k-dev-review-theme-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
   const capturedPixels = await dialog.getByRole('img', { name: 'Captured region 1 preview' }).evaluate(async image => {
     if (!(image as HTMLImageElement).complete) await new Promise(resolve => { image.addEventListener('load', resolve, { once: true }); });
     const canvas = document.createElement('canvas'); canvas.width = (image as HTMLImageElement).naturalWidth; canvas.height = (image as HTMLImageElement).naturalHeight; const context = canvas.getContext('2d')!; context.drawImage(image as HTMLImageElement, 0, 0); const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data; let green = 0; for (let index = 0; index < pixels.length; index += 4) if (pixels[index] === 12 && pixels[index + 1] === 200 && pixels[index + 2] === 34) green += 1; return { center: [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data], green, width: canvas.width, height: canvas.height };
@@ -406,8 +416,24 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await page.goto('/ux-demo?component=ticket-reader');
   const reader = page.locator('[data-component="ticket-reader"]');
   await expect(reader.getByRole('heading', { name: 'Build TicketReader component and UX demo' })).toBeVisible();
-  await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Implementation notes');
+  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText('Implementation notes');
+  const readerGuide = reader.getByRole('link', { name: 'Open the component guide' });
+  await expect(readerGuide).toHaveAttribute('target', '_blank');
+  await expect(readerGuide).toHaveAttribute('rel', 'noopener noreferrer');
+  const popupPromise = page.waitForEvent('popup');
+  await readerGuide.click();
+  const popup = await popupPromise;
+  await expect(popup).toHaveURL(/component=tag-chip/);
+  await popup.close();
   await expect(reader.locator('[data-component="note-card"]')).toHaveCount(5);
+  const noteHistory = reader.getByRole('link', { name: 'note history' });
+  await expect(noteHistory).toHaveAttribute('target', '_blank');
+  await expect(noteHistory).toHaveAttribute('rel', 'noopener noreferrer');
+  await reader.screenshot({ path: '/private/tmp/hs2-hnh0m6-markdown-links-wide.png' });
+  await page.setViewportSize({ width: 940, height: 844 });
+  await noteHistory.scrollIntoViewIfNeeded();
+  await reader.screenshot({ path: '/private/tmp/hs2-hnh0m6-markdown-links-narrow.png' });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await expect(reader.getByRole('heading', { name: /Notes/ }).locator('span')).toHaveText('5');
   await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
   const readerWidth = await reader.boundingBox();
@@ -446,12 +472,13 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const readerSource = reader.getByRole('textbox', { name: 'Ticket details' });
   await readerSource.fill('## Reader draft\nPreserved across the shared inspector surface.');
   await readerSource.blur();
-  await expect(reader.locator('[data-component="markdown-preview"]')).toContainText('Reader draft');
+  await expect(reader.locator('.ticket-inspector__details-surface [data-component="markdown-preview"]')).toContainText('Reader draft');
 
   await page.goto('/ux-demo?component=markdown-editor');
 
   const editor = page.locator('[data-component="markdown-editor"]');
   await expect(editor.locator('[data-component="markdown-preview"]')).toContainText('Implementation notes');
+  await expect(editor.getByRole('link', { name: 'Open the component guide' })).toHaveAttribute('target', '_blank');
   await editor.getByRole('button', { name: 'Edit Markdown content' }).dblclick();
   const source = editor.getByRole('textbox', { name: 'Markdown content' });
   await expect(source).toHaveValue(/Implementation notes/);
@@ -823,7 +850,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
     [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
   );
   expect(sectionRhythm).toHaveLength(3);
-  expect(sectionRhythm.every(section => section.gap === '8.8px' && section.headerHeight === 32)).toBe(true);
+  expect(sectionRhythm.map(section => section.gap)).toEqual(['8.8px', '8.8px', '8.8px']);
+  expect(sectionRhythm.map(section => section.headerHeight)).toEqual([undefined, 32, 32]);
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   const blockedReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
@@ -1070,13 +1098,14 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
 });
 
 test('holds the AppShell at its 640 by 480 supported floor',async({page})=>{
-  await page.setViewportSize({width:640,height:480});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]');const bounds=await shell.boundingBox();expect(bounds?.width).toBeGreaterThanOrEqual(640);expect(bounds?.height).toBeGreaterThanOrEqual(480);await page.screenshot({path:'/private/tmp/hs2-501eph-shell-floor.png',fullPage:true});
+  await page.setViewportSize({width:640,height:480});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]');const bounds=await shell.boundingBox();expect(bounds?.width).toBeGreaterThanOrEqual(640);expect(bounds?.height).toBeGreaterThanOrEqual(480);await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-501eph-shell-floor.png',fullPage:true});
 });
 
 test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {
   await page.goto('/ux-demo?component=project-sidebar');
   const sidebar = page.locator('[data-component="project-sidebar"]');
   await expect(sidebar).toBeVisible();
+  await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next');
   for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const menuHeaderLefts = await sidebar.locator('[data-component="menu-header"]').evaluateAll(headers => headers.map(header => header.querySelector('h2, span')!.getBoundingClientRect().left));
   expect(menuHeaderLefts).toHaveLength(2);
@@ -1484,9 +1513,11 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toBeVisible();
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeHidden();
-  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toBeHidden();
-  await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
+  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();
+  await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();
+  // Keep all three user-controlled regions mounted at the supported floor. The
+  // center can be clipped until the user explicitly collapses a side region.
+  await expect(shell.locator('[data-component="ticket-list"]')).toHaveCount(1);
 });
 
 test('projects the feedback-needed indicator through list and board compositions', async ({ page }) => {
@@ -1556,6 +1587,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
     const railNode = node.querySelector('.ticket-list-row__indicator--needs-review');
     return {
       aliases: [
+        root.getPropertyValue('--hs-shell-divider').trim(),
         root.getPropertyValue('--hs-ticket-state-needs-review').trim(),
         root.getPropertyValue('--hs-ticket-state-up-next').trim(),
       ],
@@ -1564,7 +1596,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
       warningMatches: feedbackNode !== null && getComputedStyle(feedbackNode).backgroundColor === warning,
     };
   })).toEqual({
-    aliases: ['#8b5cf6', '#eab308'],
+    aliases: ['#cfd3dc', '#8b5cf6', '#eab308'],
     reviewMatches: true,
     surfaceMatches: true,
     warningMatches: true,
@@ -1581,6 +1613,16 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
     probe.remove();
     return matches;
   })).toBe(true);
+  const sidebarRegion = page.locator('.app-shell > .resizable-region[data-region-id="app-sidebar"]');
+  expect(await sidebarRegion.evaluate(node => ({
+    divider: getComputedStyle(node, '::after').backgroundColor,
+    token: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),
+  }))).toEqual({ divider: 'rgb(207, 211, 220)', token: '#cfd3dc' });
+  await page.screenshot({ path: '/private/tmp/hs2-66m88k-semantic-theme-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 940, height: 844 });
+  await expect(sidebarRegion).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-66m88k-semantic-theme-narrow.png', fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
 
   await page.goto('/ux-demo?component=permission-request');
   const details = page.locator('.permission-request-card__details');
@@ -1616,6 +1658,10 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await expect(card).toHaveAttribute('data-state', 'pending');
   await expect(card).toContainText('Wants permission to edit');
   await expect(card).toContainText('Auto-allow in');
+  await presentation.evaluate(async node => {
+    await customElements.whenDefined('wa-select');
+    await (node as HTMLElement & { updateComplete?: Promise<unknown> }).updateComplete;
+  });
   await presentation.evaluate(node => { (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation = node; });
   await presentation.click();
   await expect(presentation).toHaveJSProperty('open', true);

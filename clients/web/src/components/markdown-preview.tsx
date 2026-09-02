@@ -15,7 +15,7 @@ function safeUrl(value: string): string {
 marked.setOptions({ breaks: true, gfm: true });
 marked.use({ renderer: {
   html({ text }) { return escapeMarkdownHtml(text); },
-  link({ href, title, tokens }) { return `<a href="${safeUrl(href)}"${title ? ` title="${escapeMarkdownHtml(title)}"` : ''}>${this.parser.parseInline(tokens)}</a>`; },
+  link({ href, title, tokens }) { return `<a href="${safeUrl(href)}" target="_blank" rel="noopener noreferrer"${title ? ` title="${escapeMarkdownHtml(title)}"` : ''}>${this.parser.parseInline(tokens)}</a>`; },
   image({ href, title, text }) { return `<img src="${safeUrl(href)}" alt="${escapeMarkdownHtml(text)}"${title ? ` title="${escapeMarkdownHtml(title)}"` : ''}>`; },
 } });
 

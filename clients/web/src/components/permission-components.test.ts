@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
@@ -23,6 +26,7 @@ describe('permission presentation components', () => {
     expect(markup).toContain('aria-label="Stop auto-allow countdown"');
     expect(markup).toContain('title="Stop auto-allow countdown for this request"');
     expect(markup).toContain('data-lucide="pause"');
+    expect(readFileSync(resolve(import.meta.dirname, 'permission-request-card.css'), 'utf8')).toContain('.permission-request-card__timer strong { margin-left: .3em; }');
   });
 
   it('uses only the first action line as an edit target', () => {

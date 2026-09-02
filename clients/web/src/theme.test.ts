@@ -11,6 +11,11 @@ const productionCss = [
     .filter(file => file.endsWith('.css'))
     .map(file => resolve(sourceRoot, 'components', file)),
 ];
+const auxiliaryClientCss = [
+  resolve(sourceRoot, 'dev-review/dev-review.css'),
+  resolve(sourceRoot, 'ux-demo/style.css'),
+];
+const clientCss = [...productionCss, ...auxiliaryClientCss];
 
 function css(path: string): string {
   return readFileSync(path, 'utf8');
@@ -28,10 +33,10 @@ describe('shared client theme', () => {
   });
 
   it('defines every required and referenced Hot Sheet semantic alias exactly once', () => {
-    const allCss = [themePath, ...productionCss].map(css).join('\n');
+    const allCss = [themePath, ...clientCss].map(css).join('\n');
     const definitions = [...allCss.matchAll(/(--hs-[\w-]+)\s*:/g)].map(match => match[1]);
     const references = [...allCss.matchAll(/var\((--hs-[\w-]+)\)/g)].map(match => match[1]);
-    const required = ['--hs-ticket-state-needs-review', '--hs-ticket-state-up-next'];
+    const required = ['--hs-shell-divider', '--hs-ticket-state-needs-review', '--hs-ticket-state-up-next'];
 
     expect(new Set(definitions)).toEqual(new Set(required));
     expect(definitions).toHaveLength(required.length);
@@ -47,7 +52,8 @@ describe('shared client theme', () => {
       '#d9d9de', '#c7cbd3', '#d4d8e0', '#b9c0cc', '#aeb4c0', '#aeb3bd', '#252833',
       '#4b5563', '#555762', '#59606d', '#596170', '#62646d', '#646771', '#656873',
       '#667085', '#666a75', '#686a73', '#6b7280', '#717581', '#747985', '#777a84',
-      '#777b86', '#858893', '#8a8d96',
+      '#777b86', '#858893', '#8a8d96', '#202126', '#f7f7f9', '#6c6e78', '#5d606b',
+      '#9f2d27', '#dfe1e7',
     ];
 
     for (const path of productionCss) {
@@ -59,6 +65,7 @@ describe('shared client theme', () => {
     }
     expect(css(themePath)).toContain('--hs-ticket-state-needs-review: #8b5cf6');
     expect(css(themePath)).toContain('--hs-ticket-state-up-next: #eab308');
+    expect(css(themePath)).toContain('--hs-shell-divider: #cfd3dc');
     expect(css(themePath)).toContain('--wa-color-surface-default: #fff');
     expect(css(themePath)).toContain('--wa-color-surface-lowered: #f8f9fb');
     expect(css(themePath)).toContain('--wa-color-neutral-fill-quiet: #f1f3f6');
@@ -78,6 +85,30 @@ describe('shared client theme', () => {
     ]) expect(allProductionCss).toContain(`var(${token})`);
     expect(allProductionCss).not.toMatch(/gap:\s*\.(?:5|75)rem;/);
     expect(css(resolve(sourceRoot, 'dev-review/dev-review.css'))).not.toContain('#f8f9fb');
+  });
+
+  it('keeps UX demo and development chrome on the shared semantic palette', () => {
+    const demo = css(resolve(sourceRoot, 'ux-demo/style.css'));
+    const devReview = css(resolve(sourceRoot, 'dev-review/dev-review.css'));
+    const migratedDemoLiterals = [
+      '#2563eb', '#1d4ed8', '#3b82f6', '#d7dae1', '#d9d9de', '#d9dbe1', '#f4f5f7',
+      '#f7f8fa', '#fafafd', '#666a75', '#777a84', '#8a8d96',
+    ];
+    const migratedDevReviewLiterals = [
+      '#fff', '#2563eb', '#1d4ed8', '#3b82f6', '#202124', '#e2e4e9', '#eef0f4',
+      '#eef4ff', '#f4f5f7', '#d9dde5', '#b9bec8', '#aeb5c2', '#5e626c',
+    ];
+
+    for (const literal of migratedDemoLiterals) expect(demo).not.toContain(literal);
+    for (const literal of migratedDevReviewLiterals) expect(devReview).not.toContain(literal);
+    expect([...clientCss.map(css).join('\n').matchAll(/#cfd3dc\b/gi)]).toHaveLength(0);
+    expect(demo.match(/#fff\b/g)).toHaveLength(1);
+    expect(demo).toContain('repeating-conic-gradient(#f7f7f9 0 25%, #fff 0 50%)');
+    for (const source of [demo, devReview]) {
+      expect(source).toContain('var(--wa-color-surface-default)');
+      expect(source).toContain('var(--wa-color-neutral-on-quiet)');
+    }
+    expect(devReview).toContain('var(--hs-shell-divider)');
   });
 
   it('leaves repeated literals only for intentional domain states and geometry', () => {

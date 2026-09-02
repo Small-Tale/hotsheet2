@@ -61,10 +61,9 @@ The **built demo** composes the current production sidebar, tabs, connection ban
 header, ticket workspace, and inspector into a desktop shell. The supported AppShell
 floor is **640 × 480 CSS pixels**; native hosts must enforce the
 same minimum window content size rather than asking the shell to compress below it.
-Sidebar and inspector
-splitters are keyboard/pointer adjustable on wide displays; both secondary regions
-yield to the ticket workspace on compact displays. Sidebar regions never resize below
-250px. Production pointer drags update splitter geometry once per animation frame and
+Sidebar and inspector splitters are keyboard/pointer adjustable, remain present until
+the user explicitly collapses them, and never auto-hide at viewport breakpoints. Sidebar
+regions never resize below 250px. Production pointer drags update splitter geometry once per animation frame and
 commit a single render when released; pointer and keyboard sizes persist locally across
 reloads. Both sidebars animate between visible and collapsed states; their restore
 controls live at the matching leading/trailing edges of the center-column toolbar,
@@ -121,6 +120,11 @@ sidebar content offscreen while the main region resizes, avoiding compressed con
 and moves the restore control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
 scrolling content region can be reviewed without moving the Drive control.
+Immediately above Drive, a centered `M open, N up next` summary is derived from the
+already-loaded project tickets. Open follows the workflow-open axis (excluding completed,
+verified, and archive/transfer terminal states), while Up Next counts only workflow-open
+tickets carrying the Up Next flag. It updates with the same reactive ticket collection and
+does not introduce polling or another network request.
 
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
@@ -152,7 +156,7 @@ scrolling content region can be reviewed without moving the Drive control.
   - `CommandGroup` with collapsible heading
   - running, stopping, last-run, success, and failure states
 - `DriveControl` — **demo built**: primary start/stop action with explicit tool and
-  running semantics
+  running semantics, preceded by the centered open/Up Next project summary
   - primary launch/resume action
   - active tool/connection state and stop confirmation
 
@@ -412,8 +416,9 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   provenance. Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
-  An unblocked ticket exposes a small secondary `Block ticket` action;
-  its controlled editor creates the reason and the adjacent status `Blocked` pill.
+  An unblocked ticket exposes a full-width dashed `Block ticket` action without an
+  otherwise-empty `Blocked reason` heading. Its controlled editor flushes on blur,
+  preserves the saved reason, and creates the adjacent status `Blocked` pill.
   - `TicketTimeline` — **demo built**: chronological activity shown as time-ago,
     required title, and optional subtitle along a continuous dot/line track; its
     displayed event total is derived from the rendered entry collection
@@ -516,12 +521,16 @@ Both the real app and `/ux-demo` load `clients/web/src/theme.css` after Web Awes
 theme. Generic surface, text, brand, success/warning/danger, spacing, radius, focus,
 and shadow concepts use Web Awesome's `--wa-*` vocabulary directly. The shared theme
 defines `--hs-*` only for Hot Sheet domain concepts that Web Awesome cannot name—today,
-the Up Next and Needs Review ticket-state rails. One-off layout geometry and
+the Up Next and Needs Review ticket-state rails plus the stronger shared shell divider.
+The production shell, UX-demo chrome, and local Dev Review overlay all consume this
+same contract; `#cfd3dc` is defined once as `--hs-shell-divider` rather than repeated
+at the app-sidebar and review-dialog boundaries. One-off layout geometry and
 user/provider category colors remain local data rather than design tokens. In
 particular, the former repeated `#f8f9fb` work-area/details/drop-surface literal is now
 the shared `--wa-color-surface-lowered`; repeated neutral fills, borders, and muted text
 likewise use Web Awesome's `neutral-fill-*`, `neutral-border-*`, and `neutral-on-*`
-semantics. Unit policy scans reject those retired literals in production CSS and allow
+semantics. Unit policy scans reject those retired literals in production, UX-demo,
+and Dev Review CSS where shared semantics apply, and allow
 repetition only for reviewed Hot Sheet state palettes (such as status/category/corrupt
 ticket colors) and genuine component geometry.
 Actionable context-menu entries consistently pair their text with meaningful Lucide

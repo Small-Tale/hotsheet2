@@ -268,8 +268,9 @@ declarative.
 
 **Ticket-level active work.** Connection busy state answers whether a tool connection is
 doing something, while a non-expired ticket claim lease answers which ticket a worker is
-actively holding. The ticket list projects that lease as an animated yellow indicator
-immediately after status. This is deliberately independent of the durable `started`
+actively holding. The ticket list projects that lease immediately after status with a
+yellow, one-third-speed adaptation of the MIT-licensed svg-spinners `gooey-balls-2`
+indicator. This is deliberately independent of the durable `started`
 status, and `claim_count` remains retry history rather than presence. The client schedules
 the nearest lease expiry locally so the indicator clears on time without network polling.
 Self-claim workers acquire through `claim-next`; general orchestration and delegated

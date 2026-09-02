@@ -122,6 +122,11 @@ pub struct AppState {
     notifications: notifications::NotificationHub,
     tts: tts::TtsProviders,
     source_revision: source_revision::SourceRevisionMonitor,
+    /// Candidate windows for the built-in deterministic local adapter. The policy is
+    /// re-read from each store's machine-local settings on every event, so opt-out takes
+    /// effect immediately and no shared setting can enable distillation.
+    activity_distillation:
+        Arc<Mutex<std::collections::HashMap<String, hotsheet_ticketing::DistillationPipeline>>>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -222,6 +227,7 @@ impl AppState {
             notifications: Default::default(),
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
+            activity_distillation: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -575,10 +581,63 @@ impl AppState {
             id: event.id.clone(),
             slug: String::new(),
             message: None,
-            activity: Some(event),
+            activity: Some(event.clone()),
             assignment: None,
         });
+        self.maybe_distill_activity(store, &event);
         Ok(())
+    }
+
+    fn maybe_distill_activity(&self, store: &FsStore, event: &hotsheet_ticketing::ActivityEvent) {
+        let policy = match hotsheet_ticketing::DistillationPolicy::from_local_settings(
+            &Settings::new(store.root()),
+        ) {
+            Ok(policy) => policy,
+            Err(error) => {
+                eprintln!("activity distillation policy ignored: {error}");
+                return;
+            }
+        };
+        let store_id = multistore::store_url_id(store);
+        // Named client adapters (including Apple Foundation Models) consume the same
+        // normalized stream on-device. They are never loaded as server requirements.
+        if !policy.enabled || policy.adapter != "deterministic" {
+            if let Ok(mut pipelines) = self.activity_distillation.lock() {
+                pipelines.remove(&store_id);
+            }
+            return;
+        }
+        let request = self
+            .activity_distillation
+            .lock()
+            .ok()
+            .and_then(|mut pipelines| {
+                pipelines
+                    .entry(store_id.clone())
+                    .or_default()
+                    .observe(event, &policy)
+            });
+        let Some(request) = request else {
+            return;
+        };
+        let Some(note) = hotsheet_ticketing::activity_distillation::distill(
+            &request,
+            &policy,
+            &hotsheet_ticketing::DeterministicActivitySummarizer,
+        ) else {
+            return;
+        };
+        let provider = GitProvider::new(store_id, store.clone());
+        if let Err(error) = hotsheet_ticketing::write_distilled_note(
+            &provider,
+            &request.provenance.ticket,
+            Timestamp::new(event.ts.clone()),
+            &note,
+        ) {
+            // Activity capture is authoritative and must not fail because an optional
+            // distillation adapter or ticket mutation is temporarily unavailable.
+            eprintln!("activity distillation note failed: {error}");
+        }
     }
 }
 
@@ -4713,5 +4772,83 @@ mod watcher_tests {
         );
         // Non-.md paths are ignored.
         assert!(expand_ticket_files(vec![shard.join("README.txt")]).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod activity_distillation_tests {
+    use super::AppState;
+    use hotsheet_model::{NoteKind, Timestamp, Ulid};
+    use hotsheet_ticketing::{
+        ActivityEvent, ActivityKind, FsStore, NewTicket, Scope, Settings, StoreMetadata, ops,
+    };
+    use serde_json::json;
+
+    #[test]
+    fn enabled_deterministic_adapter_distills_live_activity_once() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        ops::create(
+            &store,
+            ticket_id,
+            "HS",
+            Timestamp::new("2026-09-02T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        Settings::new(store.root())
+            .set(
+                "activity_distillation",
+                json!({"enabled":true,"adapter":"deterministic"}),
+                Scope::Local,
+            )
+            .unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let mut event = ActivityEvent::new(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "2026-09-02T01:00:00Z",
+            "codex",
+            ActivityKind::Decision,
+            json!({"text":"private decision text"}),
+        );
+        event.ticket = Some(ticket_id.to_string());
+        event.session = Some("session-1".into());
+
+        state.record_activity(&store, event.clone()).unwrap();
+        state.record_activity(&store, event).unwrap();
+
+        let ticket = store.read_ticket(&ticket_id).unwrap();
+        assert_eq!(ticket.notes.len(), 1);
+        assert_eq!(ticket.notes[0].kind, NoteKind::Activity);
+        assert!(ticket.notes[0].text.starts_with("Recorded a decision"));
+        assert!(!ticket.notes[0].text.contains("private decision text"));
+    }
+
+    #[test]
+    fn distillation_is_disabled_by_default() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        ops::create(
+            &store,
+            ticket_id,
+            "HS",
+            Timestamp::new("2026-09-02T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let mut event = ActivityEvent::new(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "2026-09-02T01:00:00Z",
+            "codex",
+            ActivityKind::Decision,
+            json!({}),
+        );
+        event.ticket = Some(ticket_id.to_string());
+        event.session = Some("session-1".into());
+        state.record_activity(&store, event).unwrap();
+        assert!(store.read_ticket(&ticket_id).unwrap().notes.is_empty());
     }
 }

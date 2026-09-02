@@ -37,6 +37,11 @@ describe('NoteCard', () => {
     expect(markup).not.toContain('open-ticket-reader');
   });
 
+  it('renders note Markdown through the shared safe new-tab boundary', () => {
+    const markup = String(NoteCard({ id: 'link', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read the [runbook](/docs/runbook).' }));
+    expect(markup).toContain('href="/docs/runbook" target="_blank" rel="noopener noreferrer"');
+  });
+
   it('uses kind-driven reader behavior instead of launch-point editing', () => {
     const regular = String(NoteCard({ id: 'regular', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read only', readerMode: true }));
     expect(regular).not.toContain('data-edit-on-double-click');

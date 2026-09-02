@@ -466,6 +466,25 @@ a running GUI on one device, it's client-only and the core never sees it. This i
 why `hotsheet settings` (§4.4) can manage the first two scopes with no client at all,
 while a window position stays out of the core entirely.
 
+Rich-activity distillation is a stricter case: consent is read from the **local scope
+only**, even though normal effective settings permit shared/global fallback. A committed
+project must not opt another collaborator into summarization. Enable the built-in,
+no-network deterministic adapter with:
+
+```sh
+hotsheet settings set activity_distillation \
+  '{"enabled":true,"adapter":"deterministic","deterministic_fallback":true}' \
+  --scope local
+```
+
+The failure fallback defaults to `false`; the example opts into it explicitly. This is
+separate from selecting the deterministic adapter itself.
+
+Set `enabled` to `false` (or unset the local key) to stop it immediately; pending
+in-memory windows are discarded. Native clients can select a client-owned adapter such
+as `apple_foundation_models`. The server records and broadcasts the normalized local
+stream but never loads Apple Foundation Models or any other client model.
+
 Shared settings are versioned by the same git as tickets (diffable, mergeable via
 the same driver where sensible); local settings are disposable machine state. The
 `plugins` module reads the enabled-plugin set from settings to decide what `hotsheet
