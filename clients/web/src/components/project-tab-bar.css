@@ -5,12 +5,12 @@
 .project-tab-bar__modes { gap: .1rem; }
 .project-tab-bar__modes button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; flex: none; place-items: center; }
 .project-tab-bar__modes button:hover { background: var(--wa-color-surface-default); }
-.project-tab-bar__modes button[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s), inset 0 0 0 1px rgba(215, 218, 225, .8); }
+.project-tab-bar__modes button[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s), inset 0 0 0 1px color-mix(in srgb, var(--wa-color-neutral-border-normal) 80%, transparent); }
 .project-tab-bar__modes button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .project-tab-bar__modes svg { width: 1rem; height: 1rem; }
 .project-tab-bar__actions [hidden] { display: none; }
 .project-tab-bar__actions wa-button { display: inline-flex; width: 2rem; height: 2rem; line-height: 0; align-items: center; justify-content: center; }
 .project-tab-bar__actions wa-dropdown { display: inline-flex; height: 2rem; align-items: center; }
 .project-tab-bar__actions wa-button::part(base) { display: grid; width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); cursor: pointer; line-height: 0; place-items: center; }
-.project-tab-bar__actions wa-button:hover::part(base) { background: #e9ebef; }
+.project-tab-bar__actions wa-button:hover::part(base) { background: var(--wa-color-neutral-fill-normal); }
 .project-tab-bar__actions svg { display: block; width: 1rem; height: 1rem; }

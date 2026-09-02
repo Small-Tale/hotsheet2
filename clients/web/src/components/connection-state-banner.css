@@ -1,11 +1,11 @@
-.connection-state-banner { display: grid; min-height: 2.6rem; padding: .45rem .75rem; border-bottom: 1px solid #bfdbfe; color: #1e3a5f; background: var(--wa-color-brand-fill-quiet); grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
-.connection-state-banner[data-state="offline"], .connection-state-banner[data-state="reconnecting"] { border-color: #fde68a; color: #713f12; background: #fffbeb; }
-.connection-state-banner[data-state="incompatible"], .connection-state-banner[data-state="authentication"] { border-color: #fecaca; color: #7f1d1d; background: #fef2f2; }
+.connection-state-banner { display: grid; min-height: 2.6rem; padding: .45rem .75rem; border-bottom: 1px solid var(--wa-color-brand-border-quiet); color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
+.connection-state-banner[data-state="offline"], .connection-state-banner[data-state="reconnecting"] { border-color: var(--wa-color-warning-border-normal); color: var(--wa-color-warning-on-quiet); background: var(--wa-color-warning-fill-quiet); }
+.connection-state-banner[data-state="incompatible"], .connection-state-banner[data-state="authentication"] { border-color: var(--wa-color-danger-border-quiet); color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); }
 .connection-state-banner > svg { width: 1rem; height: 1rem; }
 .connection-state-banner > div { display: flex; min-width: 0; align-items: baseline; gap: var(--wa-space-xs); }
-.connection-state-banner strong { font-size: .76rem; }
-.connection-state-banner span { overflow: hidden; font-size: .7rem; opacity: .78; text-overflow: ellipsis; white-space: nowrap; }
-.connection-state-banner button { min-height: 1.8rem; padding: 0 .7rem; border: 1px solid currentColor; border-radius: var(--wa-border-radius-pill); color: inherit; background: rgba(255,255,255,.52); cursor: pointer; font: inherit; font-size: .7rem; font-weight: 650; }
+.connection-state-banner strong { font-size: var(--wa-font-size-xs); }
+.connection-state-banner span { overflow: hidden; font-size: var(--wa-font-size-2xs); opacity: .78; text-overflow: ellipsis; white-space: nowrap; }
+.connection-state-banner button { min-height: 1.8rem; padding: 0 .7rem; border: 1px solid currentColor; border-radius: var(--wa-border-radius-pill); color: inherit; background: color-mix(in srgb, var(--wa-color-surface-default) 52%, transparent); cursor: pointer; font: inherit; font-size: var(--wa-font-size-2xs); font-weight: 650; }
 .connection-state-banner button:hover { background: var(--wa-color-surface-default); }
 .connection-state-banner button:focus-visible { outline: 2px solid var(--wa-color-text-link); outline-offset: 2px; }
 .connection-state-banner__spinner { animation: connection-state-spin .9s linear infinite; }

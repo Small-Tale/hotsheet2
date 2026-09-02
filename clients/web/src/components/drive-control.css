@@ -1,6 +1,6 @@
-.drive-control { display: flex; width: 100%; min-height: 2.75rem; padding: .55rem .8rem; border: 0; border-radius: .65rem; color: var(--wa-color-neutral-on-loud); background: #22c55e; cursor: pointer; align-items: center; justify-content: center; gap: .55rem; font-weight: 700; }
-.drive-control:hover { background: #16a34a; }
-.drive-control[data-running="true"] { background: #374151; }
-.drive-control[data-running="true"]:hover { background: #1f2937; }
-.drive-control:focus-visible { outline: 3px solid rgba(37,99,235,.35); outline-offset: 2px; }
+.drive-control { display: flex; width: 100%; min-height: 2.75rem; padding: .55rem .8rem; border: 0; border-radius: .65rem; color: var(--wa-color-neutral-on-loud); background: var(--wa-color-success-fill-normal); cursor: pointer; align-items: center; justify-content: center; gap: .55rem; font-weight: 700; }
+.drive-control:hover { background: var(--wa-color-success-fill-loud); }
+.drive-control[data-running="true"] { background: var(--wa-color-neutral-fill-loud); }
+.drive-control[data-running="true"]:hover { background: var(--wa-color-neutral-on-normal); }
+.drive-control:focus-visible { outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 35%, transparent); outline-offset: 2px; }
 .drive-control svg { width: 1rem; height: 1rem; fill: currentColor; }

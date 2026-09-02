@@ -1,4 +1,4 @@
-.app-shell { display: flex; width: 100%; min-width: 64rem; height: min(46rem, calc(100vh - 8rem)); min-height: 37.5rem; overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: .85rem; background: var(--wa-color-surface-default); box-shadow: 0 1.25rem 3rem rgba(35, 32, 48, .1); }
+.app-shell { display: flex; width: 100%; min-width: 64rem; height: min(46rem, calc(100vh - 8rem)); min-height: 37.5rem; overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: .85rem; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
 /* Collapsing/expanding a region changes its flex width, which reflows .app-shell__main and
    every ticket row. Animating that width relayouts the whole list per frame (HS2-4KZBTT:
    "very choppy when there are too many tickets"), so the width change is instant — one reflow,

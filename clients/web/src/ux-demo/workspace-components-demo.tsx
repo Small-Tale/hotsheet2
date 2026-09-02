@@ -88,7 +88,7 @@ function WorkspaceContent() {
 
 export function WorkspaceHeaderDemo() {
   return <section class="workspace-component-demo" aria-label="WorkspaceHeader demo">
-    <WorkspaceHeader projectName="Hot Sheet 2" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} sortDirection={workspaceSortDirection.value} />
+    <WorkspaceHeader projectName="Hot Sheet 2" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} sortDirection={workspaceSortDirection.value} notificationCount={7} />
     <PageHeader title={workspaceMode.value === 'settings' ? 'Project Settings' : 'Queue'} />
     <div class="workspace-component-demo__content"><WorkspaceContent /></div>
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>

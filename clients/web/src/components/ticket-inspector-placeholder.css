@@ -1,2 +1,2 @@
 .ticket-inspector-placeholder { display: flex; height: 100%; min-height: 0; flex-direction: column; }
-.ticket-inspector-placeholder > p { max-width: 17rem; margin: auto; padding: 1.5rem; color: #747782; font-size: .82rem; line-height: 1.5; text-align: center; }
+.ticket-inspector-placeholder > p { max-width: 17rem; margin: auto; padding: 1.5rem; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); line-height: 1.5; text-align: center; }

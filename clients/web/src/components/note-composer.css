@@ -1,4 +1,4 @@
-.note-composer { display: grid; padding: .7rem; border: 1px solid #cfd6e3; border-radius: .6rem; background: var(--wa-color-surface-default); gap: .55rem; }
+.note-composer { display: grid; padding: .7rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .6rem; background: var(--wa-color-surface-default); gap: .55rem; }
 .note-composer textarea { box-sizing: border-box; width: 100%; min-height: 6rem; padding: .55rem .65rem; resize: vertical; border: 1px solid var(--wa-color-neutral-border-loud); border-radius: .45rem; color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.5; }
 .note-composer textarea:focus { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .note-composer footer { display: flex; justify-content: flex-end; gap: .35rem; }

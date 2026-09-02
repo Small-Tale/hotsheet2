@@ -7,29 +7,48 @@
 :root {
   /* Hot Sheet's existing light palette, expressed through Web Awesome semantics. */
   --wa-color-surface-default: #fff;
+  --wa-color-surface-raised: var(--wa-color-surface-default);
   --wa-color-surface-lowered: #f8f9fb;
   --wa-color-surface-border: var(--wa-color-neutral-border-normal);
   --wa-color-text-normal: #25262b;
-  --wa-color-text-link: #2563eb;
+  --wa-color-text-quiet: #656873;
+  --wa-color-text-link: var(--wa-color-brand-fill-loud);
+  --wa-color-overlay-modal: rgba(32, 35, 42, .34);
   --wa-color-focus: #3b82f6;
   --wa-color-brand-fill-quiet: #eff6ff;
   --wa-color-brand-fill-normal: #dbeafe;
   --wa-color-brand-fill-loud: #2563eb;
-  --wa-color-brand-border-loud: #2563eb;
+  --wa-color-brand-border-quiet: #93b4f5;
+  --wa-color-brand-border-normal: #60a5fa;
+  --wa-color-brand-border-loud: var(--wa-color-brand-fill-loud);
   --wa-color-brand-on-quiet: #1d4ed8;
   --wa-color-neutral-fill-quiet: #f1f3f6;
   --wa-color-neutral-fill-normal: #eceef2;
+  --wa-color-neutral-fill-loud: #374151;
   --wa-color-neutral-border-quiet: #e8ebf0;
   --wa-color-neutral-border-normal: #d7dae1;
   --wa-color-neutral-border-loud: #b9c0cc;
-  --wa-color-neutral-on-quiet: #656873;
-  --wa-color-neutral-on-normal: #252833;
-  --wa-color-neutral-on-loud: #fff;
+  --wa-color-neutral-on-quiet: var(--wa-color-text-quiet);
+  --wa-color-neutral-on-normal: var(--wa-color-text-normal);
+  --wa-color-neutral-on-loud: var(--wa-color-surface-default);
   --wa-color-warning-fill-quiet: #fff9e8;
+  --wa-color-warning-fill-normal: #fff0c9;
+  --wa-color-warning-fill-loud: #eab308;
   --wa-color-warning-border-normal: #f0c86a;
   --wa-color-warning-on-quiet: #8a5a08;
+  --wa-color-warning-on-normal: #392900;
+  --wa-color-danger-fill-quiet: #fff7f6;
+  --wa-color-danger-fill-normal: #fff0ee;
   --wa-color-danger-fill-loud: #b42318;
-  --wa-color-danger-on-quiet: #b42318;
+  --wa-color-danger-border-quiet: #efb6b2;
+  --wa-color-danger-border-normal: #d99994;
+  --wa-color-danger-border-loud: #b94b44;
+  --wa-color-danger-on-quiet: var(--wa-color-danger-fill-loud);
+  --wa-color-danger-on-normal: #76231e;
+  --wa-color-success-fill-quiet: #dff4e8;
+  --wa-color-success-fill-normal: #22c55e;
+  --wa-color-success-fill-loud: #16a05d;
+  --wa-color-success-on-quiet: #17623c;
   --wa-border-radius-pill: 999px;
   --wa-shadow-s: 0 1px 3px rgba(35, 32, 48, .14);
   --wa-shadow-l: 0 .75rem 2rem rgba(35, 32, 48, .09);
@@ -37,5 +56,5 @@
   /* Hot Sheet domain states have no generic Web Awesome equivalent. */
   --hs-shell-divider: #cfd3dc;
   --hs-ticket-state-needs-review: #8b5cf6;
-  --hs-ticket-state-up-next: #eab308;
+  --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
 }

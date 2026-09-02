@@ -1,6 +1,6 @@
 .project-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: .75rem; align-items: end; gap: var(--wa-space-s); }
 .project-summary__chart { display: flex; height: 3.2rem; align-items: end; gap: .3rem; }
 .project-summary__chart span { width: .9rem; height: var(--bar-height); min-height: .3rem; border-radius: .18rem .18rem 0 0; background: var(--wa-color-brand-fill-loud); }
-.project-summary__chart span[data-zero="true"] { height: 1px; min-height: 1px; border-radius: 0; background: #aeb1ba; }
-.project-summary__counts { display: grid; color: #71737d; font-size: .76rem; line-height: 1.35; }
-.project-summary__counts strong { color: #292a30; font-weight: 650; }
+.project-summary__chart span[data-zero="true"] { height: 1px; min-height: 1px; border-radius: 0; background: var(--wa-color-neutral-border-loud); }
+.project-summary__counts { display: grid; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.35; }
+.project-summary__counts strong { color: var(--wa-color-neutral-on-normal); font-weight: 650; }

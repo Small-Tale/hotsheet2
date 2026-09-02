@@ -1,36 +1,36 @@
-.corrupt-ticket-row { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: .65rem; padding: .8rem .9rem; border: 1px solid #efb6b2; border-left: .25rem solid #c7352d; background: #fff7f6; color: #76231e; }
-.corrupt-ticket-row__icon { width: 1.2rem; height: 1.2rem; margin-top: .1rem; color: #b52c25; }
+.corrupt-ticket-row { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: .65rem; padding: .8rem .9rem; border: 1px solid var(--wa-color-danger-border-quiet); border-left: .25rem solid var(--wa-color-danger-fill-loud); background: var(--wa-color-danger-fill-quiet); color: var(--wa-color-danger-on-normal); }
+.corrupt-ticket-row__icon { width: 1.2rem; height: 1.2rem; margin-top: .1rem; color: var(--wa-color-danger-on-quiet); }
 .corrupt-ticket-row__content { display: grid; min-width: 0; gap: .18rem; }
 .corrupt-ticket-row__select { display: grid; min-width: 0; padding: 0; border: 0; color: inherit; background: transparent; cursor: pointer; gap: .18rem; text-align: left; }
 .corrupt-ticket-row__select:focus-visible { border-radius: .25rem; outline: var(--wa-focus-ring); outline-offset: 2px; }
 .corrupt-ticket-row[data-selected="true"] { box-shadow: inset 0 0 0 2px var(--wa-color-brand-border-normal); }
-.corrupt-ticket-row__content strong { color: #681d18; font-size: .92rem; }
-.corrupt-ticket-row__content span { color: #8e302a; font-size: .78rem; font-weight: 650; }
-.corrupt-ticket-row__content p { margin: .12rem 0 0; color: #8c2822; font-size: .8rem; line-height: 1.35; overflow-wrap: anywhere; }
+.corrupt-ticket-row__content strong { color: var(--wa-color-danger-on-normal); font-size: var(--wa-font-size-s); }
+.corrupt-ticket-row__content span { color: var(--wa-color-danger-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 650; }
+.corrupt-ticket-row__content p { margin: .12rem 0 0; color: var(--wa-color-danger-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.35; overflow-wrap: anywhere; }
 .corrupt-ticket-row__actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; }
-.corrupt-ticket-row__actions button { display: inline-flex; min-height: 2rem; align-items: center; gap: .35rem; padding: .32rem .55rem; border: 1px solid #d99994; border-radius: .4rem; background: var(--wa-color-surface-default); color: #79251f; cursor: pointer; font-size: .76rem; font-weight: 700; }
-.corrupt-ticket-row__actions button:hover { border-color: #b94b44; background: #fff0ee; }
+.corrupt-ticket-row__actions button { display: inline-flex; min-height: 2rem; align-items: center; gap: .35rem; padding: .32rem .55rem; border: 1px solid var(--wa-color-danger-border-normal); border-radius: .4rem; background: var(--wa-color-surface-default); color: var(--wa-color-danger-on-normal); cursor: pointer; font-size: var(--wa-font-size-xs); font-weight: 700; }
+.corrupt-ticket-row__actions button:hover { border-color: var(--wa-color-danger-border-loud); background: var(--wa-color-danger-fill-normal); }
 .corrupt-ticket-row__actions button:disabled { opacity: .58; cursor: wait; }
 .corrupt-ticket-row__actions svg { width: .9rem; height: .9rem; }
-.corrupt-ticket-row__content .corrupt-ticket-row__recovery { color: #396342; }
-.corrupt-ticket-row__content .corrupt-ticket-row__recovery--failed { color: #8c2822; }
+.corrupt-ticket-row__content .corrupt-ticket-row__recovery { color: var(--wa-color-success-on-quiet); }
+.corrupt-ticket-row__content .corrupt-ticket-row__recovery--failed { color: var(--wa-color-danger-on-quiet); }
 @media (max-width: 32rem) { .corrupt-ticket-row__actions button { flex: 1 1 10rem; justify-content: center; } }
-.corrupt-ticket-inspector { display: flex; min-width: 0; height: 100%; flex-direction: column; color: #5c211d; background: var(--wa-color-surface-default); }
-.corrupt-ticket-inspector__header { display: grid; grid-template-columns: 1.35rem minmax(0,1fr) 2rem; align-items: start; gap: .65rem; padding: 1rem; border-bottom: 1px solid #efcac7; background: #fff7f6; }
-.corrupt-ticket-inspector__header > svg { width: 1.2rem; color: #b52c25; }
-.corrupt-ticket-inspector__header span, .corrupt-ticket-inspector__body h2 { color: #8e302a; font-size: .68rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.corrupt-ticket-inspector__header h1 { margin: .15rem 0 0; color: #681d18; font-size: 1.05rem; overflow-wrap: anywhere; }
-.corrupt-ticket-inspector__header button { display: inline-grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .35rem; background: transparent; color: #76231e; cursor: pointer; place-items: center; }
-.corrupt-ticket-inspector__header button:hover { background: #f9dfdc; }
+.corrupt-ticket-inspector { display: flex; min-width: 0; height: 100%; flex-direction: column; color: var(--wa-color-danger-on-normal); background: var(--wa-color-surface-default); }
+.corrupt-ticket-inspector__header { display: grid; grid-template-columns: 1.35rem minmax(0,1fr) 2rem; align-items: start; gap: .65rem; padding: 1rem; border-bottom: 1px solid var(--wa-color-danger-border-quiet); background: var(--wa-color-danger-fill-quiet); }
+.corrupt-ticket-inspector__header > svg { width: 1.2rem; color: var(--wa-color-danger-on-quiet); }
+.corrupt-ticket-inspector__header span, .corrupt-ticket-inspector__body h2 { color: var(--wa-color-danger-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.corrupt-ticket-inspector__header h1 { margin: .15rem 0 0; color: var(--wa-color-danger-on-normal); font-size: var(--wa-font-size-m); overflow-wrap: anywhere; }
+.corrupt-ticket-inspector__header button { display: inline-grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .35rem; background: transparent; color: var(--wa-color-danger-on-normal); cursor: pointer; place-items: center; }
+.corrupt-ticket-inspector__header button:hover { background: var(--wa-color-danger-fill-normal); }
 .corrupt-ticket-inspector__header button svg { width: 1rem; }
 .corrupt-ticket-inspector__body { display: grid; min-width: 0; padding: 1rem; overflow: auto; gap: 1.25rem; }
 .corrupt-ticket-inspector__body h2 { margin: 0 0 .4rem; }
 .corrupt-ticket-inspector__body p { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
-.corrupt-ticket-inspector__body code { display: block; padding: .7rem; border: 1px solid #ead4d1; border-radius: .45rem; background: #fff9f8; font-size: .74rem; overflow-wrap: anywhere; }
+.corrupt-ticket-inspector__body code { display: block; padding: .7rem; border: 1px solid var(--wa-color-danger-border-quiet); border-radius: .45rem; background: var(--wa-color-danger-fill-quiet); font-size: var(--wa-font-size-xs); overflow-wrap: anywhere; }
 .corrupt-ticket-inspector__actions { display: grid; gap: var(--wa-space-xs); }
-.corrupt-ticket-inspector__actions button { display: inline-flex; min-height: 2.35rem; align-items: center; justify-content: center; gap: .4rem; border: 1px solid #d99994; border-radius: .45rem; background: var(--wa-color-surface-default); color: #79251f; cursor: pointer; font: inherit; font-size: .8rem; font-weight: 700; }
-.corrupt-ticket-inspector__actions button:hover { border-color: #b94b44; background: #fff0ee; }
+.corrupt-ticket-inspector__actions button { display: inline-flex; min-height: 2.35rem; align-items: center; justify-content: center; gap: .4rem; border: 1px solid var(--wa-color-danger-border-normal); border-radius: .45rem; background: var(--wa-color-surface-default); color: var(--wa-color-danger-on-normal); cursor: pointer; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 700; }
+.corrupt-ticket-inspector__actions button:hover { border-color: var(--wa-color-danger-border-loud); background: var(--wa-color-danger-fill-normal); }
 .corrupt-ticket-inspector__actions button:disabled { opacity: .58; cursor: wait; }
 .corrupt-ticket-inspector__actions svg { width: 1rem; }
-.corrupt-ticket-inspector__recovery { color: #396342; }
-.corrupt-ticket-inspector__recovery--failed { color: #8c2822; }
+.corrupt-ticket-inspector__recovery { color: var(--wa-color-success-on-quiet); }
+.corrupt-ticket-inspector__recovery--failed { color: var(--wa-color-danger-on-quiet); }

@@ -2,5 +2,5 @@
 .view-navigation ul { display: grid; margin: 0; padding: 0; gap: .15rem; list-style: none; }
 .view-navigation li { margin: 0; }
 .view-navigation .menu-item { width: 100%; }
-.view-navigation small { color: #83858e; font-size: .75rem; font-variant-numeric: tabular-nums; }
-.view-navigation small[data-attention="true"] { color: #7c3aed; font-weight: 700; }
+.view-navigation small { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-variant-numeric: tabular-nums; }
+.view-navigation small[data-attention="true"] { color: var(--hs-ticket-state-needs-review); font-weight: 700; }

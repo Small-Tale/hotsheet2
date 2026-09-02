@@ -1,7 +1,7 @@
-.menu-header { display: flex; width: 100%; min-height: 1.8rem; padding: .2rem .55rem; border: 0; color: #7a7c85; background: transparent; align-items: center; justify-content: space-between; font: inherit; }
-.menu-header h2, .menu-header > span { margin: 0; font-size: .72rem; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+.menu-header { display: flex; width: 100%; min-height: 1.8rem; padding: .2rem .55rem; border: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; align-items: center; justify-content: space-between; font: inherit; }
+.menu-header h2, .menu-header > span { margin: 0; font-size: var(--wa-font-size-xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
 .menu-header button, .menu-header--toggle { cursor: pointer; }
-.menu-header button { display: grid; width: 1.65rem; height: 1.65rem; padding: 0; border: 0; border-radius: .35rem; color: #6c6f78; background: transparent; place-items: center; }
+.menu-header button { display: grid; width: 1.65rem; height: 1.65rem; padding: 0; border: 0; border-radius: .35rem; color: var(--wa-color-neutral-on-quiet); background: transparent; place-items: center; }
 .menu-header:not(.menu-header--toggle) button { margin-right: -.55rem; }
 .menu-header button:hover, .menu-header--toggle:hover { background: var(--wa-color-neutral-border-quiet); }
 .menu-header svg { width: .85rem; height: .85rem; flex: none; }

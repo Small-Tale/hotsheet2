@@ -3,9 +3,9 @@
 .ticket-board-column > header h2 { margin: 0; font: inherit; }
 .ticket-board-column__header:hover { background: var(--wa-color-neutral-fill-quiet); }
 .ticket-board-column__header:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
-.ticket-board-column__title { font-size: .82rem; font-weight: 700; letter-spacing: .01em; }
-.ticket-board-column__header span { display: grid; min-width: 1.45rem; height: 1.45rem; padding: 0 .35rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-border-quiet); font-size: .68rem; font-weight: 700; place-items: center; }
-.ticket-board-column__header .ticket-board-column__title { display: block; width: auto; min-width: 0; height: auto; padding: 0; border-radius: 0; color: inherit; background: transparent; font-size: .82rem; }
+.ticket-board-column__title { font-size: var(--wa-font-size-s); font-weight: 700; letter-spacing: .01em; }
+.ticket-board-column__header span { display: grid; min-width: 1.45rem; height: 1.45rem; padding: 0 .35rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-border-quiet); font-size: var(--wa-font-size-2xs); font-weight: 700; place-items: center; }
+.ticket-board-column__header .ticket-board-column__title { display: block; width: auto; min-width: 0; height: auto; padding: 0; border-radius: 0; color: inherit; background: transparent; font-size: var(--wa-font-size-s); }
 .ticket-board-column__tickets { position: relative; z-index: 1; display: grid; min-width: 0; min-height: 0; padding: .1rem .5rem 1rem; overflow-y: auto; align-content: start; gap: .55rem; scrollbar-color: var(--wa-color-neutral-border-loud) transparent; scrollbar-gutter: stable; scrollbar-width: thin; }
 .ticket-board-column__tickets::-webkit-scrollbar { width: .5rem; }
 .ticket-board-column__tickets::-webkit-scrollbar-track { background: transparent; }

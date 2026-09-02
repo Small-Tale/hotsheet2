@@ -12,9 +12,9 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await page.getByRole('button', { name: 'Dev Review On' }).click();
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   const catalog = page.getByRole('navigation');
-  await expect(catalog.locator('[data-item-id="global-search"]')).toHaveCSS('color', 'rgb(154, 156, 165)');
-  await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
-  await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(154, 156, 165)');
+  await expect(catalog.locator('[data-item-id="global-search"]')).toHaveCSS('color', 'rgb(185, 192, 204)');
+  await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(185, 192, 204)');
+  await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(185, 192, 204)');
   await expect(catalog.locator('[data-component="menu-header"]')).not.toHaveCount(0);
   await expect(catalog.locator('[data-component="menu-item"]')).not.toHaveCount(0);
   const firstCatalogList = catalog.locator('.catalog-group ul').first();
@@ -285,7 +285,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
   // Rows use the colored (filled) status variant like the inspector (HS2-Y3H2Z5).
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'filled');
-  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'rgb(223, 235, 255)');
+  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'rgb(219, 234, 254)');
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
   await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -630,6 +630,11 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.goto('/ux-demo?component=workspace-header');
   const header = page.locator('[data-component="workspace-header"]');
   await expect(header).toContainText('Hot Sheet 2');
+  const notificationBadge = header.locator('.view-mode-switcher__badge');
+  await expect(notificationBadge).toHaveText('7');
+  await expect(notificationBadge).toHaveCSS('font-size', '10px');
+  await expect(notificationBadge).toHaveCSS('background-color', 'rgb(234, 179, 8)');
+  await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-wide.png', fullPage: true });
   await expect(header.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
   await header.getByRole('button', { name: 'Columns view' }).click();
@@ -692,6 +697,9 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(page.getByRole('region', { name: 'Workspace board' })).toHaveCount(0);
   await header.getByRole('button', { name: 'List view' }).click();
   await expect(page.getByRole('listbox', { name: 'Workspace tickets' })).toBeVisible();
+  await page.setViewportSize({ width: 760, height: 900 });
+  await expect(notificationBadge).toHaveCSS('font-size', '10px');
+  await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-narrow.png', fullPage: true });
 });
 
 test('shows the ToolbarControlGroup variants with shared geometry', async ({ page }) => {
@@ -1052,7 +1060,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summary.locator('[data-bar]')).toHaveCount(7);
   await expect(summary.locator('[data-zero="true"]')).toHaveCount(1);
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('height', '1px');
-  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(174, 177, 186)');
+  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(185, 192, 204)');
 
   await page.goto('/ux-demo?component=repository-summary');
   const repository = page.getByRole('button', { name: 'Repository status for feature/client-sidebar' });

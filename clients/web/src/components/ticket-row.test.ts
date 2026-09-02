@@ -51,7 +51,7 @@ describe('TicketRow', () => {
     const tokenCss = readFileSync(resolve(import.meta.dirname, '../theme.css'), 'utf8');
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
-    expect(tokenCss).toContain('--hs-ticket-state-up-next: #eab308');
+    expect(tokenCss).toContain('--hs-ticket-state-up-next: var(--wa-color-warning-fill-loud)');
     expect(tokenCss).toContain('--hs-ticket-state-needs-review: #8b5cf6');
     expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(4);
     expect(inspectorCss).toContain('color: var(--hs-ticket-state-up-next)');

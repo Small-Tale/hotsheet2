@@ -1,4 +1,4 @@
-import { existsSync, readdirSync,readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -43,87 +43,47 @@ describe('shared client theme', () => {
     expect(new Set(references)).toEqual(new Set(required));
   });
 
-  it('keeps generic semantics on Web Awesome tokens and retired literals out of production CSS', () => {
-    const migratedLiterals = [
-      '#fff', '#3b82f6', '#1d4ed8', '#2563eb', '#dbeafe', '#eceef2', '#d7dae1',
-      '#e3e4e8', '#eff6ff', '#eef4ff', '#eaf2ff', '#f0c86a', '#fff9e8', '#8a5a08',
-      '#b42318', '#30323a', '#25262b', '#f8f9fb', '#f7f8fa', '#f1f3f6', '#f1f2f5',
-      '#eef0f4', '#e8ebf0', '#e1e3e8', '#dfe1e6', '#e5e7eb', '#d9dce3', '#d7d9df',
-      '#d9d9de', '#c7cbd3', '#d4d8e0', '#b9c0cc', '#aeb4c0', '#aeb3bd', '#252833',
-      '#4b5563', '#555762', '#59606d', '#596170', '#62646d', '#646771', '#656873',
-      '#667085', '#666a75', '#686a73', '#6b7280', '#717581', '#747985', '#777a84',
-      '#777b86', '#858893', '#8a8d96', '#202126', '#f7f7f9', '#6c6e78', '#5d606b',
-      '#9f2d27', '#dfe1e7',
-    ];
-
+  it('keeps every client-owned stylesheet on the shared semantic color palette', () => {
     for (const path of productionCss) {
       const source = css(path);
-      for (const literal of migratedLiterals) {
-        expect(source, `${path} still contains migrated literal ${literal}`)
-          .not.toMatch(new RegExp(`${literal}(?![0-9a-f])`, 'i'));
-      }
+      expect(source, `${path} contains a color literal outside theme.css`)
+        .not.toMatch(/#[\da-f]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)/i);
     }
-    expect(css(themePath)).toContain('--hs-ticket-state-needs-review: #8b5cf6');
-    expect(css(themePath)).toContain('--hs-ticket-state-up-next: #eab308');
-    expect(css(themePath)).toContain('--hs-shell-divider: #cfd3dc');
-    expect(css(themePath)).toContain('--wa-color-surface-default: #fff');
-    expect(css(themePath)).toContain('--wa-color-surface-lowered: #f8f9fb');
-    expect(css(themePath)).toContain('--wa-color-neutral-fill-quiet: #f1f3f6');
-    expect(css(themePath)).toContain('--wa-color-neutral-border-quiet: #e8ebf0');
-    expect(css(themePath)).toContain('--wa-color-neutral-border-normal: #d7dae1');
-    expect(css(themePath)).toContain('--wa-color-neutral-border-loud: #b9c0cc');
-    expect(css(themePath)).toContain('--wa-color-neutral-on-quiet: #656873');
-    expect(css(themePath)).toContain('--wa-color-neutral-on-normal: #252833');
-    expect(css(themePath)).toContain('--wa-color-focus: #3b82f6');
-    expect(existsSync(resolve(sourceRoot, 'components/ticket-state-colors.css'))).toBe(false);
-
-    const allProductionCss = productionCss.map(css).join('\n');
+    for (const path of auxiliaryClientCss) {
+      expect(css(path), `${path} contains a color literal outside theme.css`)
+        .not.toMatch(/#[\da-f]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)/i);
+    }
     for (const token of [
-      '--wa-color-surface-default', '--wa-color-text-normal', '--wa-color-brand-on-quiet',
-      '--wa-color-warning-fill-quiet', '--wa-color-danger-on-quiet', '--wa-space-xs',
-      '--wa-space-s', '--wa-border-radius-pill', '--wa-focus-ring', '--wa-shadow-l',
-    ]) expect(allProductionCss).toContain(`var(${token})`);
-    expect(allProductionCss).not.toMatch(/gap:\s*\.(?:5|75)rem;/);
-    expect(css(resolve(sourceRoot, 'dev-review/dev-review.css'))).not.toContain('#f8f9fb');
-  });
-
-  it('keeps UX demo and development chrome on the shared semantic palette', () => {
-    const demo = css(resolve(sourceRoot, 'ux-demo/style.css'));
-    const devReview = css(resolve(sourceRoot, 'dev-review/dev-review.css'));
-    const migratedDemoLiterals = [
-      '#2563eb', '#1d4ed8', '#3b82f6', '#d7dae1', '#d9d9de', '#d9dbe1', '#f4f5f7',
-      '#f7f8fa', '#fafafd', '#666a75', '#777a84', '#8a8d96',
-    ];
-    const migratedDevReviewLiterals = [
-      '#fff', '#2563eb', '#1d4ed8', '#3b82f6', '#202124', '#e2e4e9', '#eef0f4',
-      '#eef4ff', '#f4f5f7', '#d9dde5', '#b9bec8', '#aeb5c2', '#5e626c',
-    ];
-
-    for (const literal of migratedDemoLiterals) expect(demo).not.toContain(literal);
-    for (const literal of migratedDevReviewLiterals) expect(devReview).not.toContain(literal);
-    expect([...clientCss.map(css).join('\n').matchAll(/#cfd3dc\b/gi)]).toHaveLength(0);
-    expect(demo.match(/#fff\b/g)).toHaveLength(1);
-    expect(demo).toContain('repeating-conic-gradient(#f7f7f9 0 25%, #fff 0 50%)');
-    for (const source of [demo, devReview]) {
-      expect(source).toContain('var(--wa-color-surface-default)');
-      expect(source).toContain('var(--wa-color-neutral-on-quiet)');
+      '--wa-color-surface-default', '--wa-color-surface-lowered', '--wa-color-overlay-modal',
+      '--wa-color-text-normal', '--wa-color-text-quiet', '--wa-color-brand-fill-quiet',
+      '--wa-color-brand-border-quiet', '--wa-color-success-fill-quiet',
+      '--wa-color-warning-fill-quiet', '--wa-color-danger-fill-quiet',
+      '--wa-color-neutral-fill-quiet', '--wa-color-neutral-border-normal',
+      '--wa-color-neutral-on-quiet', '--wa-color-focus', '--wa-shadow-l',
+    ]) {
+      expect(css(themePath), `theme.css does not define ${token}`).toContain(`${token}:`);
+      expect(clientCss.map(css).join('\n'), `client CSS does not consume ${token}`).toContain(`var(${token})`);
     }
-    expect(devReview).toContain('var(--hs-shell-divider)');
+    const themeLiterals = [...css(themePath).matchAll(/#[\da-f]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)/gi)]
+      .map(match => match[0].toLocaleLowerCase());
+    expect(new Set(themeLiterals).size, 'theme.css repeats a palette literal instead of aliasing its semantic source')
+      .toBe(themeLiterals.length);
   });
 
-  it('leaves repeated literals only for intentional domain states and geometry', () => {
-    const occurrences = new Map<string, number>();
-    for (const source of productionCss.map(css)) {
-      for (const match of source.matchAll(/#[\da-f]{6}\b/gi)) {
-        const literal = match[0].toLocaleLowerCase();
-        occurrences.set(literal, (occurrences.get(literal) ?? 0) + 1);
+  it('uses the Web Awesome typography scale instead of one-off font sizes', () => {
+    const typeToken = 'var\\(--wa-font-size-(?:3xs|2xs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|smaller|larger)\\)';
+    const allowedSize = new RegExp(`^(?:${typeToken}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`);
+    for (const path of clientCss) {
+      const source = css(path);
+      for (const match of source.matchAll(/font-size:\s*([^;}]+)/g)) {
+        const value = match[1].trim().replace(/\s*!important$/, '');
+        expect(value, `${path} contains arbitrary font-size ${match[1].trim()}`)
+          .toMatch(allowedSize);
       }
+      expect(source, `${path} contains an arbitrary size in a font shorthand`)
+        .not.toMatch(/font:\s*(?:\d+\s+)?\d*\.?\d+(?:px|rem|em)\b/);
     }
-    const repeated = [...occurrences].filter(([, count]) => count > 1).map(([literal]) => literal).sort();
-    expect(repeated).toEqual([
-      '#396342', '#60a5fa', '#681d18', '#76231e', '#79251f', '#8b909b', '#8c2822',
-      '#8e302a', '#b52c25', '#b94b44', '#c33149', '#d99994', '#dc2626', '#feecec',
-      '#fff0ee', '#fff7f6',
-    ]);
+    expect(css(resolve(sourceRoot, 'components/workspace-header.css')))
+      .toMatch(/view-mode-switcher__badge[^}]*font-size: var\(--wa-font-size-3xs\)/);
   });
 });

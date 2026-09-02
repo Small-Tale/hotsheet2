@@ -79,9 +79,9 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
     </div>;
 }
 
-export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0 }: WorkspaceHeaderProps) {
   return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
     <WorkspaceIdentity projectName={projectName} />
-    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} sortDirection={sortDirection} />}
+    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} />}
   </header>;
 }

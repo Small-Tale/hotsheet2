@@ -196,9 +196,11 @@ does not introduce polling or another network request.
   keeps identical 40px geometry and hover highlights while omitting the idle border
   and background; sidebar visibility and inspector ticket-action groups use it.
 - `ProjectHeading`
-- `ViewModeSwitcher` — **built for list, columns, and project settings** with
-  accessible pressed state. Settings replaces ticket content while active rather
-  than opening a transient popover; later dashboard/analytics modes join the control.
+- `ViewModeSwitcher` — **built for list, columns, notifications, and project settings**
+  with accessible pressed state. The notifications mode projects its pending count in
+  the shared warning color and `3xs` typography tokens; the full `WorkspaceHeader`
+  forwards and demonstrates that state. Settings replaces ticket content while active
+  rather than opening a transient popover; later dashboard/analytics modes join the control.
 - `SortControl` — shared compact `Select` with aligned option labels and an ascending or
   descending Lucide arrow on the current field; activating the current option again
   reverses its direction.
@@ -541,15 +543,18 @@ defines `--hs-*` only for Hot Sheet domain concepts that Web Awesome cannot name
 the Up Next and Needs Review ticket-state rails plus the stronger shared shell divider.
 The production shell, UX-demo chrome, and local Dev Review overlay all consume this
 same contract; `#cfd3dc` is defined once as `--hs-shell-divider` rather than repeated
-at the app-sidebar and review-dialog boundaries. One-off layout geometry and
-user/provider category colors remain local data rather than design tokens. In
-particular, the former repeated `#f8f9fb` work-area/details/drop-surface literal is now
-the shared `--wa-color-surface-lowered`; repeated neutral fills, borders, and muted text
-likewise use Web Awesome's `neutral-fill-*`, `neutral-border-*`, and `neutral-on-*`
-semantics. Unit policy scans reject those retired literals in production, UX-demo,
-and Dev Review CSS where shared semantics apply, and allow
-repetition only for reviewed Hot Sheet state palettes (such as status/category/corrupt
-ticket colors) and genuine component geometry.
+at the app-sidebar and review-dialog boundaries. Raw CSS palette values are defined
+only in `theme.css`; component, demo, and development-tool styles select semantic
+surface, text, border, status, focus, overlay, and shadow tokens. Translucent effects
+derive from those tokens with `color-mix()` instead of embedding a second palette.
+User/provider category colors remain local application data because they are persisted
+choices, not component styling. Component font sizes likewise use Web Awesome's named
+`--wa-font-size-*` scale; components do not invent intermediate sizes. For example,
+the view-mode notification badge uses `--wa-font-size-3xs` rather than a one-off
+`.57rem`. Unit policy scans every client-owned stylesheet and rejects raw color values
+outside the theme or numeric component font sizes, so new variants cannot silently
+reintroduce either kind of drift. One-off layout geometry may remain local when it
+describes an actual component measurement rather than a reusable visual meaning.
 Actionable context-menu entries consistently pair their text with meaningful Lucide
 icons; structural separators do not require icons.
 - `TicketTagEditor` — **built**: shared tag list, compact add control, autocomplete,

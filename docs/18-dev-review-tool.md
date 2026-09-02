@@ -73,8 +73,10 @@ fine) while running the Vite development server. Both development entry points p
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.
 The overlay and its ticket dialog consume the shared client theme for generic surface,
-border, text, brand, and focus semantics—including `--hs-shell-divider` for the stronger
-dialog boundary—while translucent capture/scrim effects remain local to the tool.
+border, text, brand, focus, overlay, shadow, and typography semantics—including
+`--hs-shell-divider` for the stronger dialog boundary. Translucent capture effects are
+local compositions made with semantic tokens and `color-mix()`, not a separate literal
+palette.
 The catalog sidebar also exposes a development-only `Dev Review On/Off` toggle that
 updates the same query-backed state, so reviewers do not need to edit the URL.
 

@@ -10,7 +10,7 @@ describe('TagChip', () => {
     const tagChipCss = readFileSync(resolve(import.meta.dirname, 'tag-chip.css'), 'utf8');
     expect(tagChipCss).toContain('::part(remove-button__base)');
     expect(tagChipCss).toContain('width: 1rem');
-    expect(tagChipCss).toContain('font-size: .65rem');
+    expect(tagChipCss).toContain('font-size: var(--wa-font-size-2xs)');
   });
   it('provides stable compact defaults', () => {
     expect(normalizeTagChipProps({ id: 'tag-1', label: ' needs-design ' })).toEqual({

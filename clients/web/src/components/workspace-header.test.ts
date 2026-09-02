@@ -36,9 +36,11 @@ describe('WorkspaceHeader', () => {
   });
 
   it('renders the collapsed find state as a single magnifier button', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }));
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', notificationCount: 7 }));
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="false"/);
     expect(markup).toContain('data-action="open-workspace-search" aria-label="Search tickets"');
+    expect(markup).toContain('aria-label="Notifications view, 7 pending"');
+    expect(markup).toContain('class="view-mode-switcher__badge" aria-hidden="true">7</span>');
     expect(markup).not.toContain('name="workspace-search"');
   });
 
