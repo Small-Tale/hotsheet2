@@ -119,6 +119,26 @@ crate boundary preserves. Decision + rationale: [09](09-technology-decisions.md)
 - Wire types in `hotsheet-types` derive serde + `ts-rs` (→ TypeScript for the Kerf client;
   Swift generation added for the native client).
 
+### 12.6.1 Optional local Rust compiler cache
+
+Rust contributors can use [`sccache`](https://github.com/mozilla/sccache) to reuse
+compiler outputs across repeated lint, nextest, and coverage builds. Install it with
+`brew install sccache` on macOS or `cargo install sccache --locked`, then enable it in
+the shell that runs Cargo:
+
+```sh
+export RUSTC_WRAPPER=sccache
+sccache --start-server
+```
+
+Add the export to your shell profile if you want it enabled for every checkout. The
+repository deliberately does not set `build.rustc-wrapper` in `.cargo/config.toml`:
+that would make Cargo fail for contributors and automation without `sccache`
+installed. `RUSTC_WRAPPER` applies unchanged to the `cargo lint` alias,
+`cargo nextest run`, and `cargo llvm-cov`; inspect effectiveness with
+`sccache --show-stats`. CI continues to use its existing Cargo cache and does not
+enable sccache.
+
 ---
 
 ## 12.7 Testing strategy
