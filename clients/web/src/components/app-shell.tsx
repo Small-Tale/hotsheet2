@@ -42,9 +42,13 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
       {overlay}
       {banner}
       {pageHeader}
-      <div class="app-shell__work-area">
+      {/* Stable data-keys so the morph matches the scroll container by identity, not position.
+          The overlay/banner/pageHeader siblings above are conditional (HS2-H4MWDB: opening the
+          ticket context menu toggles the overlay); without a key the shift rebuilds this subtree
+          and the workspace loses its scrollTop. */}
+      <div class="app-shell__work-area" data-key="app-shell-work-area">
         {composer && <div class="app-shell__composer">{composer}</div>}
-        <section class="app-shell__workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
+        <section class="app-shell__workspace" data-key="app-shell-workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
       </div>
     </main>
     {mode === 'project' && inspector && <ResizableRegion id="app-inspector" label="Ticket inspector" size={inspectorSize} min={280} max={520} edge="start" collapsed={!inspectorVisible}>{inspector}</ResizableRegion>}

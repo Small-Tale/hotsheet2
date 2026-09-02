@@ -66,6 +66,11 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-valuemin="250"');
     expect(markup).toContain('data-region-id="app-inspector"');
     expect(markup).toContain('Ticket workspace');
+    // HS2-H4MWDB: stable data-keys let the morph match the scroll-container chain by identity so
+    // toggling the conditional overlay/banner siblings above it never rebuilds it (which would
+    // reset the workspace scrollTop, e.g. when the ticket context menu opens).
+    expect(markup).toContain('class="app-shell__work-area" data-key="app-shell-work-area"');
+    expect(markup).toContain('data-key="app-shell-workspace"');
     expect(markup).toContain('class="app-shell__composer">compose');
     expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));
     expect(markup).toContain('data-component="page-header"');

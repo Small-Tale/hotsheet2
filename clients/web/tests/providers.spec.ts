@@ -328,3 +328,34 @@ test('live project visual review',async({page})=>{
   await expect(page.locator('[data-component="ticket-list-row"]').first()).toBeVisible();
   await page.screenshot({path:'/private/tmp/hotsheet-real-app-narrow.png',fullPage:true});
 });
+
+test('preserves workspace scroll position when the ticket context menu opens (HS2-H4MWDB)',async({page})=>{
+  const base={connection_id:'git-local',native_id:'01',qualified_id:'git-local:01',id:'01',slug:'HS2-DEMO01',title:'Ticket',category:'feature',priority:'high',status:'started',up_next:false,tags:['client'],blocked_by:[],claim_count:0,created_at:'2026-08-30T00:00:00Z',updated_at:'2026-08-30T01:00:00Z'};
+  const many=Array.from({length:40},(_,i)=>({...base,id:String(100+i),native_id:String(100+i),qualified_id:`git-local:${100+i}`,slug:`HS2-ROW${String(i).padStart(2,'0')}`,title:`Scrollable ticket number ${i}`}));
+  const proj={id:'demo-checkout',root:'/work/demo',name:'demo',stores:['/work/demo.hs2'],apiPath:'/__hotsheet/project-api/demo-checkout'};
+  await page.route('**/*',async route=>{const req=route.request(),path=new URL(req.url()).pathname;
+    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:proj});
+    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:true,close:true,notes:true,note_edit:true,note_delete:true,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
+    if(path.endsWith('/permissions')&&req.method()==='GET')return route.fulfill({json:[]});
+    if(path.endsWith('/connections')&&req.method()==='GET')return route.fulfill({json:[]});
+    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
+    if(path.endsWith('/tickets')&&req.method()==='GET')return route.fulfill({json:many});
+    if(path.includes('/tickets/')&&req.method()==='GET'){const id=path.split('/').pop();const t=many.find(r=>r.id===id)||many[0];return route.fulfill({json:{store:'git-local',...t,details:'body',blocked_reason:null,notes:[],attachments:[]}})}
+    return route.continue();});
+  await page.setViewportSize({width:1400,height:820});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const menu=page.locator('.ticket-context-menu[role="menu"]');
+  await expect(page.locator('[data-action="select-ticket-row"]').first()).toBeVisible();
+  // List view: scroll the workspace, then open the context menu on a currently-visible row.
+  const list=await page.evaluate(()=>{const ws=document.querySelector('.app-shell__workspace') as HTMLElement;ws.scrollTop=400;const before=ws.scrollTop;const rows=[...document.querySelectorAll('[data-action="select-ticket-row"]')];const r=ws.getBoundingClientRect();const v=rows.find(el=>{const b=el.getBoundingClientRect();return b.top>=r.top+10&&b.bottom<=r.bottom-10}) as HTMLElement;const b=v.getBoundingClientRect();v.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:b.left+30,clientY:b.top+10}));return {before}});
+  await expect(menu).toBeVisible();
+  expect(await page.evaluate(()=>(document.querySelector('.app-shell__workspace') as HTMLElement).scrollTop)).toBe(list.before);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  // Board view: scroll a column's ticket list, then open the context menu on a visible row in it.
+  await page.getByRole('button',{name:'Columns view'}).click();
+  await expect(page.locator('.ticket-board-column__tickets').first()).toBeVisible();
+  const board=await page.evaluate(()=>{const col=[...document.querySelectorAll('.ticket-board-column__tickets')].find(c=>c.scrollHeight>c.clientHeight+50) as HTMLElement;col.scrollTop=300;const before=col.scrollTop;const rows=[...col.querySelectorAll('[data-action="select-ticket-row"]')];const r=col.getBoundingClientRect();const v=rows.find(el=>{const b=el.getBoundingClientRect();return b.top>=r.top+10&&b.bottom<=r.bottom-10}) as HTMLElement;const b=v.getBoundingClientRect();v.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:b.left+30,clientY:b.top+10}));return {before,colId:col.closest('[data-column-id]')!.getAttribute('data-column-id')}});
+  await expect(menu).toBeVisible();
+  expect(await page.evaluate(id=>{const col=document.querySelector(`[data-column-id="${id}"] .ticket-board-column__tickets`) as HTMLElement;return col.scrollTop},board.colId)).toBe(board.before);
+});
