@@ -70,7 +70,7 @@ and don't imply reading order — read by group.
 | Doc | Topic | Status |
 |---|---|---|
 | [00-vision-and-principles.md](00-vision-and-principles.md) | Product north star, scope, non-goals, principles | Decided |
-| `11-hs1-feature-inventory.md` | HS1 feature survey → per-area build/skip decisions (reference) | Done (HS2-22) |
+| `11-hs1-feature-inventory.md` | HS1 feature survey → per-area build/skip decisions, including the final search/history/command/title-shorthand carryover pass | Done (HS2-22, HS2-RFMZ1A) |
 
 **B · Architecture & decisions**
 | Doc | Topic | Status |
@@ -140,8 +140,8 @@ and don't imply reading order — read by group.
 > focus-follows · assignment = git email + committed `people.json` + one control +
 > soft review · orchestration **live-mount only** (no auto-clone) · multi-machine =
 > **git-native self-claim** (ref/tag CAS, no coordinator) · UI = **Kerf (`kerfjs`) + Web Awesome Core** (validated custom-element stack; see 06 §6.3 / 09 §9.5) · deferred
-> past v1: cross-server views, iOS push, remote terminals, iOS local stores. Remaining
-> open: the HS1 feature inventory (doc 11) + small implementation-time details.
+> past v1: cross-server views, iOS push, remote terminals, iOS local stores. The HS1
+> feature inventory is complete (doc 11); only implementation-time details remain open.
 >
 > **Round-3 confirmation (2026-08-20):** AI-tool **setup/instructions/skills/MCP and
 > project settings are core-owned**, driven by **either the CLI (headless — no

@@ -503,8 +503,11 @@ titles and slugs get expansion tooltips (`title` on web).
 **Hot Sheet application.** Workspace header search (trailing) delegates to the
 checkout index and already searches slug, title, tags, details, and notes. Add scope
 (This project / All projects / Up Next / Closed) and filter tokens (`status:`,
-`priority:`, `tag:`, `assignee:`) with suggestions; ⌘F focuses it. Native: Core
-Spotlight indexing of slugs and titles.
+`priority:`, `tag:`, `assignee:`) with suggestions; ⌘F focuses it. Search does not
+silently narrow to the active sidebar view. Exact slugs can reveal normally excluded
+lifecycle states, while those states otherwise require a visible scope/filter token;
+reference-mention results carry a match-reason label. Native: Core Spotlight indexing
+of slugs and titles.
 
 ### 3.9 Settings
 

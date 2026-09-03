@@ -26,6 +26,15 @@ providers will refresh the same normalized cache through their query/watch contr
 The UI never walks a store directory or calls a provider directly to draw a list; it
 queries the host.
 
+Search scope is independent of the currently selected sidebar view. An ordinary query
+searches the normal working lifecycle set even when the user opened it from a narrower
+view. Exact-slug lookup can surface a matching Backlog, Archive, or Deleted ticket so a
+known identity is never hidden by view scope. Advanced search exposes explicit scope and
+filter chips for including normally excluded lifecycle states rather than HS1's special
+inline “Include N …” result rows. Ticket-reference mentions may participate in results
+only when the client labels why the ticket matched. Client completion is tracked by
+HS2-383D6K.
+
 **The invariant (repeated because it's load-bearing): the index is a disposable
 cache.** It can be deleted and rebuilt from configured providers. For the git
 provider, files win; for an external provider, its native tracker wins. Nothing

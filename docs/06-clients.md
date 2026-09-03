@@ -153,7 +153,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   outcome, and press-and-hold output history. Definitions are edited in Project
   Settings and persisted to `hotsheet-settings.local.json`; commands always execute
   as an exact program plus argument array. Run transitions use the shared WebSocket/
-  long-poll event channel and never introduce client interval polling.
+  long-poll event channel and never introduce client interval polling. Press-and-hold
+  remains reserved for output/history. A context or overflow menu will provide “Run in
+  new terminal” for shell commands and capability-aware “Create task from command” for
+  AI commands (HS2-NT3F3Q).
 
 - **Project settings navigation.** Entering Settings replaces the ticket-oriented
   project sidebar with a persistent category navigator, following the HS1 settings-tab
@@ -211,7 +214,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Workspace search delegates to the checkout index rather than filtering compact rows
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text
   while retaining the full local ticket collection for project counts, mutations, and an
-  immediate return to the unfiltered view when search is cleared.
+  immediate return to the unfiltered view when search is cleared. Search semantics do not
+  inherit the selected sidebar view: ordinary queries cover the normal working statuses,
+  exact-slug lookup can reveal Backlog/Archive/Deleted matches, and explicit scope/filter
+  chips opt into normally excluded lifecycle states. Reference-mention matches must say
+  why they matched. HS2-383D6K owns the remaining advanced-search client work.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
@@ -551,6 +558,16 @@ a bigger local viewport or won by a last-write race and shrank the desktop
 unexpectedly, and a dropped remote left a stale size. Moving to **server-arbitrated,
 leased, focus-follows** claims fixes all three: intent (focus) drives size,
 disconnects self-heal, and one arbiter means local and remote behave identically.
+
+### 6.7.7 Per-terminal shell history
+
+Interactive bash, zsh, and fish sessions default to machine-local history isolated by
+checkout/project and terminal id. Two terminals therefore do not silently share recall,
+and one project's commands do not enter another project's history. A local-only terminal
+preference may explicitly inherit the user's normal global shell history when that is
+more useful. The terminal host owns shell-specific environment wiring and persistence;
+no history path or command content is committed to a ticket store. Implementation is
+tracked by HS2-A5V801.
 
 ## 6.8 Notes, reader mode & editing
 

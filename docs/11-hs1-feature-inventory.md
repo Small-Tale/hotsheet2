@@ -1,6 +1,6 @@
 # 11. HS1 Feature Inventory → Rewrite Decisions
 
-> **Status: In progress (HS2-22).** A thorough survey of every high- and low-level
+> **Status: Complete (HS2-22, final carryover pass HS2-RFMZ1A).** A thorough survey of every high- and low-level
 > feature in Hot Sheet 1 (`~/Documents/hotsheet`, README + 188 requirement docs),
 > so each can get an explicit **"build it in Hot Sheet 2? and if so, with what
 > changes?"** decision — the maintainer's ask (2026-08-19).
@@ -20,6 +20,28 @@
 
 The single best HS1 companion when scoping any area: `docs/ai/requirements-summary.md`
 in HS1 (a maintained, status-marked synthesis of every requirement doc).
+
+### Final carryover decisions (2026-09-03)
+
+The final comparison of HS1's maintained requirements and implementation against HS2's
+requirements and full ticket backlog found five remaining clusters. The maintainer made
+these decisions:
+
+- **Search semantics:** keep view-independent ordinary search and exact-slug discovery
+  across hidden lifecycle states; use explicit scope/filter chips instead of HS1's
+  special include rows, and label reference-mention matches. Requirements are in docs/03,
+  docs/06, and `design-guidelines.md`; implementation remains HS2-383D6K.
+- **Reader traversal:** do not carry over HS1's Details/note Previous/Next or “Read latest
+  note” traversal. HS2's reader already presents the complete ticket. Character-level
+  multi-part feedback is covered by HS2-C5SAB3.
+- **Shell history:** keep per-project/per-terminal bash, zsh, and fish history by default,
+  with a local “inherit global history” escape hatch (HS2-A5V801).
+- **Custom-command alternate actions:** keep HS2's press-and-hold history gesture; put
+  “Run in new terminal” and “Create task from command” in a context/overflow menu
+  (HS2-NT3F3Q).
+- **Ticket conveniences:** carry over leading bracket-tag extraction (HS2-CHZKR5). Do not
+  add age-based Verified→Archive cleanup or automatic hard purge; git history remains the
+  recovery/audit mechanism.
 
 ---
 

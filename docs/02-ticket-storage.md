@@ -319,6 +319,13 @@ trivially diffable, and separates machine fields (frontmatter) from human prose
 (body). It is the format the ticket asks for in spirit — "search the text of
 tickets," "draw tickets" — while staying git-merge-friendly.
 
+All ticket-creation entry points share title shorthand normalization. One or more
+leading bracket groups (for example `[client] [regression] Fix selection`) become
+normalized tags and are removed from the stored title; bracket-like text elsewhere in
+the title remains literal. Escaping, invalid/empty groups, duplicate tags, and a title
+that becomes empty must resolve identically in core, CLI, server, and clients. This HS1
+convenience is accepted for HS2 and tracked by HS2-CHZKR5.
+
 ## 2.6 Notes storage — the one real design fork
 
 **Notes** (timestamped entries, appended heavily by AI tools) can be stored two

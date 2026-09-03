@@ -667,6 +667,9 @@ capability-aware sections when their underlying features and data contracts land
   running command opens an explicit stop confirmation.
 - Press-and-hold opens the latest bounded output/history view. The button hover title
   exposes the latest run outcome without adding permanent sidebar chrome.
+- A context or overflow menu owns alternate actions: “Run in new terminal” for shell
+  commands and capability-aware “Create task from command” for AI commands. These do not
+  replace the history gesture (HS2-NT3F3Q).
 - `CommandRunDialog` owns output and cancellation presentation. Completion and stop
   changes arrive through the existing long poll; the client never interval-polls.
 - Project Settings contains a local-only JSON editor for the typed `{program,args}`
