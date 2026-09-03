@@ -20,7 +20,7 @@ const full = { ...row, details:'The real ticket body. [Project guide](/docs/proj
 async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded = false, ticketLoadDelay = 0, batchResponseDelay = 0, patchResponseDelay = 0) {
   let rows = [{...row,feedback_needed:primaryFeedbackNeeded},backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
   let selectedFull = primaryFeedbackNeeded
-    ? {...full,notes:[...full.notes,{id:'N4',kind:'feedback_needed',created_at:'2026-08-30T00:37:00Z',edited_at:'2026-08-30T00:37:00Z',text:'One more decision is needed.'}]}
+    ? {...full,notes:[...full.notes,{id:'N4',kind:'feedback_needed',created_at:'2026-08-30T00:37:00Z',edited_at:'2026-08-30T00:37:00Z',text:'FEEDBACK NEEDED\n\nHello there\n\n1. Something\n2. Another thing'}]}
     : full;
   const evidenceByTicket = new Map<string,Array<{id:string;filename:string;created_at:string}>>();
   const patches: Record<string,unknown>[] = [];
@@ -95,6 +95,15 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await expect(ticket.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color','rgb(139, 92, 246)');
   await expect(inspector).toHaveAttribute('data-needs-review','true');
   await page.screenshot({path:'/private/tmp/hs2-vwphrd-feedback-needed-narrow.png',fullPage:true});
+});
+
+test('clicks feedback prompt sections to compose an interleaved Markdown reply',async({page})=>{
+  const patches=await mockProject(page,true,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Open ticket reader'}).click();
+  const note=page.getByRole('dialog').locator('article[data-note-id="N4"]');await expect(note.getByRole('button',{name:/Add response after section/})).toHaveCount(4);
+  await note.getByRole('button',{name:'Add response after section 3'}).click();const first=note.getByRole('textbox',{name:'Response after section 3'});await expect(first).toBeFocused();await first.fill('My first response');
+  await note.getByRole('button',{name:'Add response after section 4'}).click();const second=note.getByRole('textbox',{name:'Response after section 4'});await expect(second).toBeFocused();await second.fill('My second response');
+  await note.screenshot({path:'/private/tmp/hs2-c5sab3-inline-feedback-replies.png'});await page.setViewportSize({width:760,height:900});const noteBox=(await note.boundingBox())!,replyBox=(await second.boundingBox())!;expect(replyBox.x).toBeGreaterThanOrEqual(noteBox.x);expect(replyBox.x+replyBox.width).toBeLessThanOrEqual(noteBox.x+noteBox.width);await note.screenshot({path:'/private/tmp/hs2-c5sab3-inline-feedback-replies-narrow.png'});await note.getByRole('button',{name:'Respond'}).click();
+  await expect.poll(()=>patches.find(patch=>patch.note_kind==='regular')?.note).toBe('> FEEDBACK NEEDED\n\n> Hello there\n\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response');
 });
 
 test('clears needs review when a regular response follows the feedback-needed note',async({page})=>{

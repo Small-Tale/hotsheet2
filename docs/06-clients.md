@@ -575,6 +575,14 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
 - **Explicitly editing an existing note is a different action from responding.** Direct
   editing is prefilled with that note's complete Markdown—including for
   `feedback_needed`—and autosaves the replacement by note id.
+- **Feedback prompts support user-chosen inline reply points.** In reader mode, the
+  client lexes the prompt into top-level Markdown blocks and splits each top-level list
+  into one block per item while keeping nested list detail with its parent. Clicking a
+  rendered block (or focusing it and pressing Enter/Space) inserts and focuses a reply
+  field immediately after that block. On submission, the complete prompt is emitted as
+  Markdown blockquotes with non-empty replies interleaved at the selected points; an
+  optional general response follows at the end. If the user only enters general
+  feedback, the response remains plain Markdown without redundantly quoting the prompt.
 - **`regular` and `status` notes, and the ticket `details`, use the same direct editing
   affordances in the reader as they do in the inspector.** Rendered Markdown owns its
   own whitespace; note containers must not preserve the renderer's HTML formatting

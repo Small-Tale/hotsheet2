@@ -16,6 +16,14 @@
 .note-card__editor { display: grid; min-width: 0; gap: var(--wa-space-xs); }
 .note-card__editor textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 5rem; padding: .55rem .65rem; resize: vertical; border: 1px solid var(--wa-color-neutral-border-loud); border-radius: .45rem; color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.5; }
 .note-card__editor > div { display: flex; justify-content: flex-end; gap: .35rem; }
+.note-card__feedback-prompt { display: grid; gap: var(--wa-space-2xs); }
+.note-card__feedback-section { display: grid; gap: var(--wa-space-2xs); }
+.note-card__feedback-block { position: relative; padding: var(--wa-space-2xs); border-radius: var(--wa-border-radius-s); cursor: text; }
+.note-card__feedback-block::after { position: absolute; right: var(--wa-space-2xs); bottom: calc(var(--wa-space-xs) * -1); display: grid; width: var(--wa-space-l); height: var(--wa-space-l); border-radius: var(--wa-border-radius-pill); background: var(--wa-color-brand-fill-normal); color: var(--wa-color-brand-on-normal); content: '+'; font-size: var(--wa-font-size-2xs); line-height: 1; opacity: 0; place-items: center; transition: opacity 120ms ease; }
+.note-card__feedback-block:hover, .note-card__feedback-block:focus-visible { background: color-mix(in srgb, var(--wa-color-brand-fill-quiet) 55%, transparent); outline: none; }
+.note-card__feedback-block:hover::after, .note-card__feedback-block:focus-visible::after { opacity: 1; }
+.note-card__feedback-section:has(.note-card__inline-reply) .note-card__feedback-block::after { opacity: 0; }
+.note-card__inline-reply { width: calc(100% - var(--wa-space-l)); min-height: 4rem; margin-left: var(--wa-space-l); padding: var(--wa-space-xs); resize: vertical; border: 1px solid var(--wa-color-brand-border-normal); border-radius: var(--wa-border-radius-s); color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.5; }
 .note-card[data-kind="status"], .note-card[data-kind="activity"] { border-color: transparent; background: var(--wa-color-neutral-fill-normal); }
 .note-card[data-kind="status"] .note-card__kind { color: var(--wa-color-text-link); }
 .note-card[data-kind="activity"] .note-card__kind { color: var(--wa-color-neutral-on-quiet); }

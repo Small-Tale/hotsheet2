@@ -39,6 +39,23 @@ describe('NoteCard', () => {
     expect(responding).toContain('<textarea name="note-body" data-note-id="feedback-response" data-note-response="true" aria-label="Feedback response"></textarea>');
   });
 
+  it('turns feedback prompt blocks into inline response insertion targets', () => {
+    const markup = String(NoteCard({
+      id: 'inline-feedback',
+      kind: 'feedback_needed',
+      author: 'Codex',
+      time: 'Now',
+      body: 'Choose:\n\n1. First\n2. Second',
+      readerMode: true,
+      inlineReplies: [{ blockIndex: 2, text: 'Reply to second' }],
+    }));
+    expect(markup.match(/data-action="add-inline-feedback-reply"/g)).toHaveLength(3);
+    expect(markup).toContain('aria-label="Response after section 3"');
+    expect(markup).toContain('Reply to second');
+    expect(markup).toContain('aria-label="Feedback response"');
+    expect(markup).toContain('placeholder="General response (optional)"');
+  });
+
   it('exposes content editing without a redundant edit button', () => {
     const markup = String(NoteCard({ id: 'actions', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }));
     expect(markup).toContain('data-edit-on-double-click="true"');

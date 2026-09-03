@@ -4,6 +4,7 @@ import './ticket-inspector.css';
 import { BookOpen, CircleAlert, Info, ListTree, MessageSquareCode, PanelRightClose, Paperclip, Star, X } from 'lucide';
 
 import type { CodeReview } from '../api';
+import type { InlineFeedbackReply } from '../feedback-replies';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
 import { LucideIcon } from './lucide-icon';
 import type { MarkdownEditorMode } from './markdown-editor';
@@ -55,6 +56,7 @@ export interface TicketInspectorProps {
   notes?: readonly NoteCardProps[];
   editingNoteId?: string;
   noteDraft?: string;
+  inlineFeedbackReplies?: Readonly<Record<string, readonly InlineFeedbackReply[]>>;
   blockedReason?: string;
   blockedReasonEditing?: boolean;
   blockedReasonDraft?: string;
@@ -72,7 +74,7 @@ const tabs = [
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
 
-export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, upNextEligible = status === 'not_started' || status === 'started', feedbackNeeded = false, timelineEntries, attachments, codeReview, codeReviewLoading = false, codeReviewMessage = '', attachmentsEnabled = true, attachmentMessage = '', notes, editingNoteId, noteDraft, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', fieldConflict, fieldConflictResolution = fieldConflict?.mine ?? '' }: TicketInspectorProps) {
+export function TicketInspector({ slug, title, titleEditing = false, titleDraft = title, canUpdate = true, canAddNotes = true, canEditNotes = true, canDeleteNotes = true, composingNote = false, composerDraft = '', status, priority, category, tags, tagSuggestions, details, detailsMode, detailsDirty, activeTab = 'info', upNext = false, upNextEligible = status === 'not_started' || status === 'started', feedbackNeeded = false, timelineEntries, attachments, codeReview, codeReviewLoading = false, codeReviewMessage = '', attachmentsEnabled = true, attachmentMessage = '', notes, editingNoteId, noteDraft, inlineFeedbackReplies, blockedReason, blockedReasonEditing, blockedReasonDraft, providerName, updatedLabel, presentation = 'sidebar', fieldConflict, fieldConflictResolution = fieldConflict?.mine ?? '' }: TicketInspectorProps) {
   const star = <>{upNextEligible && <button type="button" class={`ticket-inspector__star${upNext ? ' ticket-inspector__star--active' : ''}`} data-action="toggle-inspector-up-next" aria-label={upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button>}</>;
   const close = <button type="button" data-action={presentation === 'reader' ? 'close-ticket-reader' : 'close-ticket-inspector'} aria-label={presentation === 'reader' ? 'Close ticket reader' : 'Hide inspector'}><LucideIcon icon={presentation === 'reader' ? X : PanelRightClose} name={presentation === 'reader' ? 'x' : 'panel-right-close'} /></button>;
   const actions = presentation === 'reader'
@@ -86,7 +88,7 @@ export function TicketInspector({ slug, title, titleEditing = false, titleDraft 
     {feedbackNeeded && <div class="ticket-inspector__feedback" role="status"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-inspector__feedback-icon" /><span>Needs review</span></div>}
     {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
     <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections">{tabs.map(tab => <button type="button" data-action="set-inspector-tab" data-inspector-tab={tab.id} aria-label={tab.id === 'attachments' && attachments?.length ? `${tab.label}, ${attachments.length}` : tab.label} aria-current={activeTab === tab.id ? 'page' : undefined}><LucideIcon icon={tab.icon} name={tab.iconName} /><span class="ticket-inspector__tab-label">{tab.label}</span>{tab.id === 'attachments' && Boolean(attachments?.length) && <span class="ticket-inspector__tab-count" aria-hidden="true">{attachments!.length}</span>}</button>)}</nav>
-    {activeTab === 'info' && <TicketInfoPanel status={status} priority={priority} category={category} tags={tags} tagSuggestions={tagSuggestions} canUpdate={canUpdate} canAddNotes={canAddNotes} canEditNotes={canEditNotes} canDeleteNotes={canDeleteNotes} composingNote={composingNote} composerDraft={composerDraft} details={details} detailsMode={detailsMode} detailsDirty={detailsDirty} readerPresentation={presentation === 'reader'} notes={notes} editingNoteId={editingNoteId} noteDraft={noteDraft} blockedReason={blockedReason} blockedReasonEditing={blockedReasonEditing} blockedReasonDraft={blockedReasonDraft} providerName={providerName} updatedLabel={updatedLabel} />}
+    {activeTab === 'info' && <TicketInfoPanel status={status} priority={priority} category={category} tags={tags} tagSuggestions={tagSuggestions} canUpdate={canUpdate} canAddNotes={canAddNotes} canEditNotes={canEditNotes} canDeleteNotes={canDeleteNotes} composingNote={composingNote} composerDraft={composerDraft} details={details} detailsMode={detailsMode} detailsDirty={detailsDirty} readerPresentation={presentation === 'reader'} notes={notes} editingNoteId={editingNoteId} noteDraft={noteDraft} inlineFeedbackReplies={inlineFeedbackReplies} blockedReason={blockedReason} blockedReasonEditing={blockedReasonEditing} blockedReasonDraft={blockedReasonDraft} providerName={providerName} updatedLabel={updatedLabel} />}
     {activeTab === 'timeline' && <TicketTimeline entries={timelineEntries} />}
     {activeTab === 'code-review' && <TicketCodeReview review={codeReview} loading={codeReviewLoading} message={codeReviewMessage} />}
     {activeTab === 'attachments' && <TicketAttachments attachments={attachments} enabled={attachmentsEnabled} message={attachmentMessage} />}
