@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type { CodeReview } from '../api';
@@ -16,6 +19,11 @@ const review: CodeReview = {
 };
 
 describe('TicketCodeReview', () => {
+  it('resets the native list-item indent so commit rows align with their list', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
+    expect(css).toMatch(/\.ticket-code-review__commits li \{[^}]*margin-inline-start: 0;/);
+  });
+
   it('lists commit messages and exposes only server-provided commit and range targets', () => {
     const markup = String(TicketCodeReview({ review }));
     expect(markup).toContain('Opens in glassbox');

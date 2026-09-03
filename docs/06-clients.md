@@ -253,7 +253,8 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   boundaries. Multiple disjoint runs therefore remain separately reviewable; interleaved
   unrelated commits are never silently included. The inspector tab uses the Lucide
   `message-square-code` icon while individual commit and range actions retain their
-  established icons. Loading and launch errors stay in
+  established icons. Commit rows are flush with the review list instead of inheriting
+  the component library's native list-item indentation. Loading and launch errors stay in
   the segment and do not replace ticket content or use the foreground project-loading
   indicator. All discovery, target validation, and process launch remain server-owned.
 
