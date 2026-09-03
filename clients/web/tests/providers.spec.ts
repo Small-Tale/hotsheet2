@@ -127,12 +127,14 @@ test('shows active work only for the lifetime of a live ticket claim lease',asyn
   await expect(indicator).toHaveCount(0,{timeout:6_000});
 });
 
-test('keeps the visible inspector region mounted while a selected ticket loads',async({page})=>{
+test('keeps the visible inspector region mounted while a selected ticket loads',async({page,context})=>{
+  await context.grantPermissions(['clipboard-read','clipboard-write']);
   await mockProject(page,true,false,300);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const region=page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');await expect(region).toBeVisible();const before=await region.evaluate(node=>node.getBoundingClientRect().width);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.waitForTimeout(75);
   await expect(region).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder > .toolbar')).toHaveAttribute('data-divider','false');expect(await region.evaluate(node=>node.getBoundingClientRect().width)).toBe(before);
   await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
+  await region.getByRole('button',{name:'Copy ticket number HS2-DEMO01'}).click();await expect(page.getByText('HS2-DEMO01 copied to clipboard.',{exact:true})).toBeVisible();await expect.poll(()=>page.evaluate(()=>navigator.clipboard.readText())).toBe('HS2-DEMO01');
 });
 
 test('keeps an active editor stable when its already-selected ticket is clicked again',async({page})=>{

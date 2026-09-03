@@ -80,7 +80,7 @@ export function TicketInspector({ slug, title, titleEditing = false, titleDraft 
     : <ToolbarControlGroup appearance="borderless" label="Ticket actions">{star}<button type="button" data-action="open-ticket-reader" aria-label="Open ticket reader" title="Open ticket reader"><LucideIcon icon={BookOpen} name="book-open" /></button>{close}</ToolbarControlGroup>;
   return <aside class={presentation === 'reader' ? 'ticket-inspector ticket-inspector--reader' : 'ticket-inspector'} data-component="ticket-inspector" data-presentation={presentation} data-ticket-slug={slug} data-needs-review={String(feedbackNeeded)} data-attachment-drop-target="true" aria-label={`${slug} inspector`}>
     <header class="ticket-inspector__header">
-      <Toolbar divider={false} center={<ToolbarText text={slug} size="small" />} trailing={actions} />
+      <Toolbar divider={false} center={<button type="button" class="ticket-inspector__slug" data-action="copy-ticket-slug" aria-label={`Copy ticket number ${slug}`} title="Copy ticket number"><ToolbarText text={slug} size="small" /></button>} trailing={actions} />
       {titleEditing ? <input class="ticket-inspector__title-input" name="ticket-title" aria-label="Ticket title" value={titleDraft} /> : <h1 data-action={canUpdate ? 'edit-ticket-title' : undefined} data-editable={String(canUpdate)} tabIndex={canUpdate ? 0 : undefined} title={canUpdate ? 'Double-click to edit title' : undefined}>{title}</h1>}
     </header>
     {feedbackNeeded && <div class="ticket-inspector__feedback" role="status"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-inspector__feedback-icon" /><span>Needs review</span></div>}
