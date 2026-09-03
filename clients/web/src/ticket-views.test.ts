@@ -30,7 +30,7 @@ describe('ticket views', () => {
 
   it('derives open and Up Next summary counts from workflow semantics', () => {
     const tickets = ['not_started', 'started', 'backlog', 'completed', 'verified', 'archive', 'deleted', 'moved'].map((status, index) => ({ ...ticket(status), up_next: index !== 1 }));
-    expect(tickets.filter(isOpenTicket).map(item => item.status)).toEqual(['not_started', 'started', 'backlog']);
-    expect(tickets.filter(isUpNextTicket).map(item => item.status)).toEqual(['not_started', 'backlog']);
+    expect(tickets.filter(isOpenTicket).map(item => item.status)).toEqual(['not_started', 'started']);
+    expect(tickets.filter(isUpNextTicket).map(item => item.status)).toEqual(['not_started']);
   });
 });

@@ -6,7 +6,7 @@ export const canCreateTicketInView = (view: TicketView): boolean => !['archive',
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' => view === 'backlog' ? 'backlog' : 'not_started';
 
 export function isOpenTicket(ticket: TicketRow): boolean {
-  return !['completed', 'verified', 'archive', 'deleted', 'moved'].includes(ticket.status ?? 'not_started');
+  return ['not_started', 'started'].includes(ticket.status ?? 'not_started');
 }
 
 export function isUpNextTicket(ticket: TicketRow): boolean {

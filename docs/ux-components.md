@@ -131,8 +131,8 @@ and moves the restore control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
 scrolling content region can be reviewed without moving the Drive control.
 Immediately above Drive, a centered `M open, N up next` summary is derived from the
-already-loaded project tickets. Open follows the workflow-open axis (excluding completed,
-verified, and archive/transfer terminal states), while Up Next counts only workflow-open
+already-loaded project tickets. Open is the active-work axis (exactly Not Started +
+Started; Backlog is excluded), while Up Next counts only workflow-open
 tickets carrying the Up Next flag. It updates with the same reactive ticket collection and
 does not introduce polling or another network request.
 

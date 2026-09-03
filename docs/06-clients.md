@@ -219,7 +219,7 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
 
   The shared left project sidebar presents a centered `M open, N up next` summary
   immediately above Drive. Both counts derive from the existing checkout ticket collection:
-  open excludes completed, verified, archived, deleted, and moved tickets, and Up Next
+  open means exactly Not Started + Started (Backlog is not active work), and Up Next
   additionally requires the Up Next flag. Mutations and long-poll-driven collection refreshes
   update the summary reactively; the summary itself performs no polling or network request.
 
