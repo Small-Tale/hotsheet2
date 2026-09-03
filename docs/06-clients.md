@@ -641,7 +641,9 @@ disposable index must therefore recompute the compact flag for unchanged ticket 
 
 **Reader mode is a directly editable focus surface.** Opening reader mode shows the
 ticket's details + notes on one large scrollable surface with no separate top-level edit
-mode. Details and ordinary notes expose their normal edit interactions immediately.
+mode. The reader uses the available browser height with exactly 24px of backdrop above
+and below; it has no desktop-height cap that leaves unnecessary vertical space. Details
+and ordinary notes expose their normal edit interactions immediately.
 Leaving the details editor flushes its pending autosave and returns that surface to
 preview. Closing the reader performs the same save-and-exit transition, so its shared
 editing state never leaks into the sidebar inspector; stale save completions cannot close

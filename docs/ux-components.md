@@ -519,9 +519,9 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   with long-name ellipsis and per-file removal before submission.
 - `InlineEditableField`
 - `ReaderButton`
-- `TicketReader` — **built in the demo and real web shell**: a large dialog
-  presentation of the actual
-  `TicketInspector`, preserving its metadata editing, tabs, attachments, timeline,
+- `TicketReader` — **built in the demo and real web shell**: a nearly
+  full-browser-height dialog with exactly 24px of backdrop above and below, presenting
+  the actual `TicketInspector`, preserving its metadata editing, tabs, attachments, timeline,
   Markdown details, notes, and controlled state rather than maintaining a reduced
   parallel reader implementation. The inspector exposes a Reader action, reader content
   uses its full available width, and details/notes retain their normal direct editing

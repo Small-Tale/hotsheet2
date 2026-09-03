@@ -80,5 +80,9 @@ describe('content components', () => {
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-inspector-tab="attachments"');
+    const readerCss = readFileSync(resolve(import.meta.dirname, 'ticket-reader.css'), 'utf8');
+    expect(readerCss).toMatch(/\.ticket-reader \{[^}]*height: calc\(100vh - 3rem\);/);
+    const shellCss = readFileSync(resolve(import.meta.dirname, '..', 'style.css'), 'utf8');
+    expect(shellCss).toMatch(/\.ticket-reader-backdrop \{[^}]*padding: 1\.5rem;/);
   });
 });

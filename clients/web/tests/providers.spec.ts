@@ -108,6 +108,12 @@ test('clicks exact feedback character positions, removes a split, and composes a
   await expect.poll(()=>patches.find(patch=>patch.note_kind==='regular')?.note).toBe('> FEEDBACK NEEDED\n>\n> Hello there\n>\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response');
 });
 
+test('keeps exactly 24px above and below the nearly full-height ticket reader',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Open ticket reader'}).click();
+  const reader=page.getByRole('dialog',{name:'Read and edit HS2-DEMO01'}),wide=await reader.boundingBox();expect(wide!.y).toBe(24);expect(wide!.height).toBe(852);await page.screenshot({path:'/private/tmp/hs2-h5vjet-reader-height-wide.png',fullPage:true});
+  await page.setViewportSize({width:760,height:900});const narrow=await reader.boundingBox();expect(narrow!.y).toBe(24);expect(narrow!.height).toBe(852);await page.screenshot({path:'/private/tmp/hs2-h5vjet-reader-height-narrow.png',fullPage:true});
+});
+
 test('clears needs review when a regular response follows the feedback-needed note',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');
