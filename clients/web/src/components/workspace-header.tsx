@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
-import { ArrowDown, ArrowUp, Bell, Columns3, List, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
+import { ArrowDown, ArrowDownAZ, ArrowDownWideNarrow, ArrowUp, ArrowUpAZ, ArrowUpNarrowWide, Bell, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { Select, type SelectChoice } from './select';
@@ -53,10 +53,22 @@ export function applyWorkspaceSortDirection(comparison: number, direction: Works
   return direction === 'ascending' ? comparison : -comparison;
 }
 
+const sortTriggerIcons: Record<WorkspaceSort, Record<WorkspaceSortDirection, { icon: IconNode; iconName: string }>> = {
+  updated: { ascending: { icon: ClockArrowUp, iconName: 'clock-arrow-up' }, descending: { icon: ClockArrowDown, iconName: 'clock-arrow-down' } },
+  priority: { ascending: { icon: ArrowUpNarrowWide, iconName: 'arrow-up-narrow-wide' }, descending: { icon: ArrowDownWideNarrow, iconName: 'arrow-down-wide-narrow' } },
+  title: { ascending: { icon: ArrowDownAZ, iconName: 'arrow-down-a-z' }, descending: { icon: ArrowUpAZ, iconName: 'arrow-up-a-z' } },
+  status: { ascending: { icon: ListSortAscending, iconName: 'list-sort-ascending' }, descending: { icon: ListSortDescending, iconName: 'list-sort-descending' } },
+};
+
+export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSortDirection) {
+  return sortTriggerIcons[sort][direction];
+}
+
 export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   const directionIcon=sortDirection==='ascending'?ArrowUp:ArrowDown,directionName=sortDirection==='ascending'?'arrow-up':'arrow-down';
   const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=sortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
+  const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
   return <div class="workspace-header__actions" data-component="workspace-controls">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
@@ -65,7 +77,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
         <ModeButton mode="settings" current={mode} label="Settings" icon={Settings} iconName="settings" />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__sort-group" single>
-        <Select className="workspace-header__sort" name="workspace-sort" ariaLabel="Sort tickets" value={sort} choices={sortChoices} disabled={projectActionsDisabled} />
+        <Select className="workspace-header__sort" name="workspace-sort" ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`} value={sort} choices={sortChoices} disabled={projectActionsDisabled} renderSelected={()=> <LucideIcon icon={trigger.icon} name={trigger.iconName} />} />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
         <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="toggle-favorite" aria-label="Favorite view" title="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>

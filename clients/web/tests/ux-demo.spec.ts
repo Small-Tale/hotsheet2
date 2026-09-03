@@ -675,20 +675,28 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
   await header.getByRole('button', { name: 'List view' }).click();
   const sortSelect = header.locator('wa-select[name="workspace-sort"]');
+  await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently updated, descending');
+  await expect(sortSelect.locator('.select__custom-selected [data-lucide="clock-arrow-down"]')).toBeVisible();
   await sortSelect.click();
+  await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="arrow-down"]')).toBeVisible();
+  await expect(sortSelect.locator('wa-option[value="priority"] .select__icon')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-0dcczk-sort-select-wide.png', fullPage: true });
   const prioritySort = sortSelect.locator('wa-option[value="priority"]');
   await prioritySort.click();
   await expect(page.getByText('Sorted by priority, ascending')).toBeVisible();
   await expect(sortSelect).toHaveJSProperty('value', 'priority');
-  await expect(sortSelect.locator('.select__icon--selected [data-lucide="arrow-up"]')).toBeVisible();
+  await expect(sortSelect.locator('.select__custom-selected [data-lucide="arrow-up-narrow-wide"]')).toBeVisible();
   const ascendingTitles = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__identity strong').allTextContents();
   await sortSelect.click();
   await prioritySort.click();
   await expect(page.getByText('Sorted by priority, descending')).toBeVisible();
-  await expect(sortSelect.locator('.select__icon--selected [data-lucide="arrow-down"]')).toBeVisible();
+  await expect(sortSelect.locator('.select__custom-selected [data-lucide="arrow-down-wide-narrow"]')).toBeVisible();
   const descendingTitles = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__identity strong').allTextContents();
   expect(descendingTitles).toEqual([...ascendingTitles].reverse());
+  for (const [value,firstIcon,secondIcon] of [['title','arrow-down-a-z','arrow-up-a-z'],['status','list-sort-ascending','list-sort-descending'],['updated','clock-arrow-down','clock-arrow-up']] as const) {
+    const option=sortSelect.locator(`wa-option[value="${value}"]`);await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.select__custom-selected [data-lucide="${firstIcon}"]`)).toBeVisible();await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.select__custom-selected [data-lucide="${secondIcon}"]`)).toBeVisible();
+  }
+  await page.setViewportSize({width:1024,height:600});await sortSelect.click();await page.screenshot({path:'/private/tmp/hs2-0dcczk-sort-select-floor.png',fullPage:true});await page.keyboard.press('Escape');
   await header.getByRole('button', { name: 'Settings view' }).click();
   await expect(header.getByRole('button', { name: 'Settings view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(sortSelect).toHaveAttribute('disabled', '');
