@@ -19,9 +19,10 @@ export function parsePermissionAutomation(raw:unknown):PermissionAutomation {
   return {action:value.action==='allow'||value.action==='deny'?value.action:'off',delayMs:PERMISSION_DELAYS.includes(value.delayMs as typeof PERMISSION_DELAYS[number])?value.delayMs!:60_000};
 }
 
-export function parsePermissionHistory(raw:unknown):PermissionHistoryItem[] {
+export function parsePermissionHistory(raw:unknown,now=Date.now()):PermissionHistoryItem[] {
   if(!Array.isArray(raw))return [];
-  return raw.filter((item):item is PermissionHistoryItem=>Boolean(item)&&typeof item==='object'&&typeof (item as PermissionHistoryItem).key==='string'&&typeof (item as PermissionHistoryItem).resolvedAt==='number').slice(-200);
+  const cutoff=now-7*24*60*60*1000;
+  return raw.filter((item):item is PermissionHistoryItem=>Boolean(item)&&typeof item==='object'&&typeof (item as PermissionHistoryItem).key==='string'&&typeof (item as PermissionHistoryItem).resolvedAt==='number'&&(item as PermissionHistoryItem).resolvedAt>=cutoff).slice(-200);
 }
 
 export function formatPermissionCountdown(milliseconds:number):string {const total=Math.ceil(Math.max(0,milliseconds)/1000);return `${Math.floor(total/60)}:${String(total%60).padStart(2,'0')}`}
@@ -37,7 +38,7 @@ export class PermissionInbox {
   private historyItems:PermissionHistoryItem[];
   constructor(history:unknown=[]){this.historyItems=parsePermissionHistory(history)}
   pending(){return [...this.pendingItems.values()].sort((a,b)=>a.receivedAt-b.receivedAt)}
-  history(){return [...this.historyItems].sort((a,b)=>b.resolvedAt-a.resolvedAt)}
+  history(now=Date.now()){const cutoff=now-7*24*60*60*1000;return this.historyItems.filter(item=>item.resolvedAt>=cutoff).sort((a,b)=>b.resolvedAt-a.resolvedAt)}
   visible(){return this.pending().find(item=>!item.ignored)}
   reconcile(project:PermissionProject,requests:WirePermissionRequest[],connections:ToolConnection[],now=Date.now()){
     let changed=false;

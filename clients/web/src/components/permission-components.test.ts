@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
 import { NotificationCenter } from './notification-center';
+import { NotificationNavigation } from './notification-navigation';
 import { PermissionRequestCard, PermissionRequestPopup, updatePermissionCountdownText } from './permission-request-card';
 
 const pending: PermissionItem = { id: 7, connection: 'claude-main', tool: 'Bash', action: 'npm run test\nnpm run lint', always_allow_supported: true, key: 'project:7', projectId: 'project', projectName: 'Hot Sheet 2', agent: 'Claude', role: 'main worker', receivedAt: 10, ignored: false };
@@ -65,12 +66,9 @@ describe('permission presentation components', () => {
     expect(markup).not.toContain('Always Allow');
   });
 
-  it('groups pending and newest-first history without hiding external decisions', () => {
+  it('renders the selected notification slice without hiding external decisions', () => {
     const allowed: PermissionHistoryItem = { ...pending, key: 'project:8', id: 8, decision: 'allow', scope: 'once', resolvedAt: 30 };
     const markup = String(NotificationCenter({ pending: [pending], history: [allowed, history], countdowns: { 'project:7': '1:00' } }));
-    expect(markup).toContain('1 pending notification');
-    expect(markup).toContain('Pending');
-    expect(markup).toContain('Previous');
     expect(markup).toContain('allowed permission');
     expect(markup).toContain('Decision made outside Hot Sheet');
     expect(markup).toContain('1:00');
@@ -87,8 +85,15 @@ describe('permission presentation components', () => {
   });
 
   it('renders explicit empty states', () => {
-    const markup = String(NotificationCenter({ pending: [], history: [] }));
+    const markup = String(NotificationCenter({ pending: [], history: [], title: 'Pending' }));
     expect(markup).toContain('No requests need your attention.');
-    expect(markup).toContain('Previous decisions will appear here.');
+    expect(String(NotificationCenter({ pending: [], history: [], title: 'Last 7 Days' }))).toContain('No notification history in last 7 days.');
+  });
+
+  it('offers the three notification views with counts and current state', () => {
+    const markup = String(NotificationNavigation({ selected: 'day', counts: { pending: 2, day: 3, week: 5 }, collapseControl: true }));
+    for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
+    expect(markup).toContain('data-item-id="day"');
+    expect(markup).toContain('aria-current="page"');
   });
 });
