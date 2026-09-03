@@ -157,7 +157,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   pattern. Ticket sources, Commands, Permissions, and Column view each render as a
   separate workspace so unrelated controls do not become one long settings page. The
   selected category names the shared page header; the workspace does not repeat that
-  heading, and the right region uses the same empty inspector placeholder as Notifications.
+  heading, and the right region uses the same divider-free empty inspector placeholder
+  as Notifications. Entering Settings preserves the ticket selection for returning to
+  list/board, but that retained selection never changes the Settings placeholder semantics.
 
 - **Persistent shell splitters.** The project sidebar and ticket inspector are
   independently resizable by pointer or keyboard. Dragging updates only splitter
