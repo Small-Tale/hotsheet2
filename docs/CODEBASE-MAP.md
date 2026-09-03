@@ -28,8 +28,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
-    src/api.ts               #   Typed server client for providers plus checkout-scoped real ticket/repository operations
-    src/main.tsx             #   Real AppShell: project tabs, tickets/views, and cross-project permission polling/resolution
+    src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, and terminal snapshots
+    src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission updates, and global terminal dashboard state
+    src/terminal-grid-layout.ts # Pure terminal tile axis/fit geometry: >600px fits 1–10 across; <=600px fits 1–3 high
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     src/project-change-poll.ts # Replay-safe selected-project long poll; coalesced ticket refresh, overflow/reconnect recovery, and abortable lifecycle
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
@@ -43,7 +44,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     src/dev-server.ts        #   Hono local project bridge plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)
-    src/components/          #   Production domain UI components, including shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
+    src/components/          #   Production domain UI components, including TerminalDashboard, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
     src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS

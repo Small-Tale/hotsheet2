@@ -31,6 +31,20 @@ describe('change polling transport',()=>{
   });
 });
 
+describe('terminal dashboard transport',()=>{
+  it('lists terminals and reads a safely encoded terminal snapshot',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify([{id:'agent/1',alive:true,busy:false}]),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'agent/1',alive:true,busy:false,scrollback:'ready'}),{status:200}));
+    const api=new Api('/api');
+    await expect(api.terminals()).resolves.toHaveLength(1);
+    await expect(api.terminal('agent/1')).resolves.toMatchObject({scrollback:'ready'});
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/terminals',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/terminals/agent%2F1',expect.any(Object));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('ticket search transport',()=>{
   it('sends trimmed text through the comprehensive checkout query',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('[]',{status:200}));

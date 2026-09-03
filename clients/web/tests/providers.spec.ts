@@ -37,6 +37,9 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/commands')&&request.method()==='GET')return route.fulfill({json:commandDefinitions});
     if(path.endsWith('/commands')&&request.method()==='PUT'){commandDefinitions=request.postDataJSON();return route.fulfill({json:commandDefinitions})}
     if(path.endsWith('/command-runs')&&request.method()==='GET')return route.fulfill({json:commandRuns});
+    if(path.endsWith('/terminals')&&request.method()==='GET')return route.fulfill({json:[{id:'codex-main',alive:true,busy:true,cwd:'/work/demo',progress:68},{id:'tests',alive:true,busy:false,cwd:'/work/demo'}]});
+    if(path.endsWith('/terminals/codex-main')&&request.method()==='GET')return route.fulfill({json:{id:'codex-main',alive:true,busy:true,cwd:'/work/demo',progress:68,scrollback:'Implementing terminal dashboard\nRunning browser checks…'}});
+    if(path.endsWith('/terminals/tests')&&request.method()==='GET')return route.fulfill({json:{id:'tests',alive:true,busy:false,cwd:'/work/demo',scrollback:'Test Files 42 passed\nWaiting for changes.'}});
     const commandStart=path.match(/\/commands\/([^/]+)\/run$/);
     if(commandStart&&request.method()==='POST'){const run={id:'run-1',command_id:commandStart[1],state:'running' as const,output:[]};commandRuns=[run,...commandRuns];return route.fulfill({status:202,json:run})}
     const commandCancel=path.match(/\/command-runs\/([^/]+)\/cancel$/);
@@ -74,6 +77,16 @@ test('activates Dev Review from the main app query only in explicit development 
   await page.goto('/?dev-review=1');await expect(page.locator('.hs-dev-review')).toBeVisible();await expect(page.getByRole('button',{name:'Feedback'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-wide.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});await expect(page.locator('.hs-dev-review')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-narrow.png',fullPage:true});
   await page.goto('/?dev-review=0');await expect(page.locator('.hs-dev-review')).toHaveCount(0);
+});
+
+test('uses independent width and height terminal dashboard zoom scales',async({page})=>{
+  await page.setViewportSize({width:1440,height:1100});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Terminal dashboard'}).click();const dashboard=page.getByRole('region',{name:'Terminal dashboard'});await expect(dashboard).toBeVisible();await expect(dashboard).toHaveAttribute('data-basis','across');await expect(dashboard).toHaveAttribute('data-fit','4');await expect(dashboard.getByText('Running browser checks…')).toBeVisible();await expect(dashboard.locator('.terminal-tile__preview').first()).toHaveCSS('background-color','rgb(55, 65, 81)');
+  await dashboard.getByRole('button',{name:/Zoom in, fit fewer terminals across/}).click();await expect(dashboard).toHaveAttribute('data-fit','3');await expect(page.evaluate(()=>localStorage.getItem('hotsheet.terminals.fit-across'))).resolves.toBe('3');
+  await dashboard.getByRole('button',{name:'Magnify codex-main'}).click();await expect(dashboard.getByRole('dialog',{name:'Magnified codex-main'})).toBeVisible();await page.keyboard.press('Escape');await expect(dashboard.getByRole('dialog')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-2zcn7k-terminal-dashboard-wide.png',fullPage:true});
+  await page.setViewportSize({width:1100,height:720});await expect(dashboard).toHaveAttribute('data-basis','high');await expect(dashboard).toHaveAttribute('data-fit','2');await dashboard.getByRole('button',{name:/Zoom out, fit more terminals high/}).click();await expect(dashboard).toHaveAttribute('data-fit','3');await expect(page.evaluate(()=>localStorage.getItem('hotsheet.terminals.fit-high'))).resolves.toBe('3');await expect(page.evaluate(()=>localStorage.getItem('hotsheet.terminals.fit-across'))).resolves.toBe('3');
+  await dashboard.getByRole('button',{name:'Hide codex-main'}).click();await expect(dashboard.getByText('Show hidden (1)')).toBeVisible();await dashboard.getByRole('button',{name:'Show hidden (1)'}).click();await expect(dashboard.getByText('Running browser checks…')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-2zcn7k-terminal-dashboard-short.png',fullPage:true});
+  await page.getByRole('tab',{name:/demo/}).click();await expect(page.getByRole('button',{name:'Terminal dashboard'})).toHaveAttribute('aria-pressed','false');
 });
 
 test('keeps feedback rectangle input within its frame budget in the populated main app',async({page},testInfo)=>{

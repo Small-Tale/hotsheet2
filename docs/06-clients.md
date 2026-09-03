@@ -445,8 +445,11 @@ authenticated route as clicks and are distinguished in client history.
 
 The long tail of HS1 UI (custom views/query builder, stats, Announcer, telemetry
 dashboards, print) remains **deferred**, each its own ticket after the floor lands. The
-terminal dashboard is now active work: HS2-946EQG settled its interaction contract from
-the updated project/drawer wireframes, and HS2-2ZCN7K implements it.
+terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
+updated project/drawer wireframes. HS2-2ZCN7K has shipped the global dashboard shell,
+snapshot previews, project/flow grouping, magnification/hiding, and independent persisted
+width/high zoom controls; WebSocket-backed interactive viewports and the project drawer
+remain in that implementation ticket.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 

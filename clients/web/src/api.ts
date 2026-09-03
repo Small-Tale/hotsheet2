@@ -19,6 +19,8 @@ export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[]
 export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:string;to:string};
 export interface PermissionRequest {id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean}
 export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}
+export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;link?:string;progress?:number}
+export interface TerminalRead extends TerminalInfo {scrollback:string}
 export interface CommandDefinition {id:string;title:string;program:string;args:string[];group?:string;confirmation?:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}
 export interface CommandRun {id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:CommandOutputLine[]}
@@ -54,6 +56,8 @@ export class Api {
   openCodeReview=(checkout:string,id:string,target:CodeReviewTarget)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,{method:'POST',body:JSON.stringify(target)});
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
   activeToolConnections=()=>this.request<ToolConnection[]>('/connections');
+  terminals=()=>this.request<TerminalInfo[]>('/terminals');
+  terminal=(id:string)=>this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
   commands=()=>this.request<CommandDefinition[]>('/commands');
   saveCommands=(definitions:CommandDefinition[])=>this.request<CommandDefinition[]>('/commands',{method:'PUT',body:JSON.stringify(definitions)});
   commandRuns=()=>this.request<CommandRun[]>('/command-runs');
