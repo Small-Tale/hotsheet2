@@ -1677,6 +1677,12 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
 });
 
 test('previews and resets important PermissionRequestCard variants', async ({ page }) => {
+  let releaseDemoModified!: () => void;
+  const demoModifiedReady = new Promise<void>(resolve => { releaseDemoModified = resolve; });
+  await page.route('**/__hotsheet/demo-modified', async route => {
+    await demoModifiedReady;
+    await route.fulfill({ json: { 'permission-request': new Date().toISOString() } });
+  });
   await page.setViewportSize({ width: 1728, height: 971 });
   await page.goto('/ux-demo?component=permission-request');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -1704,12 +1710,14 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   await presentation.evaluate(node => { (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation = node; });
   await presentation.click();
   await expect(presentation).toHaveJSProperty('open', true);
+  releaseDemoModified();
   const initialCountdown = await card.locator('.permission-request-card__timer').textContent();
   await expect.poll(() => card.locator('.permission-request-card__timer').textContent()).not.toBe(initialCountdown);
   await expect(presentation).toHaveJSProperty('open', true);
   expect(await presentation.evaluate(node => (window as typeof window & { __permissionPresentation?: Element }).__permissionPresentation === node)).toBe(true);
   await page.keyboard.press('Escape');
   await expect(presentation).toHaveJSProperty('open', false);
+  await expect(page.locator('[data-action="select-demo"][data-item-id="permission-request"] small')).toHaveText('Now');
   await choose(presentation, 'list');
   await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
   await choose(presentation, 'popup');

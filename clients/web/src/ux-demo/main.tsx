@@ -214,6 +214,7 @@ import {
 } from './workspace-components-demo';
 
 type FormControl = HTMLElement & { checked: boolean; value: string };
+type OpenSelect = HTMLElement & { open: boolean };
 const defaultDemo = 'tag-chip';
 const fromUrl = () =>
   new URL(location.href).searchParams.get('component') ?? defaultDemo;
@@ -224,6 +225,16 @@ const devReviewOn = signal(
     new URL(location.href).searchParams.get('dev-review') === '1',
 );
 const demoModified = signal<Record<string, string>>({});
+function updateDemoModifiedWhenSelectsClose(value: Record<string, string>): void {
+  const openSelect = [...document.querySelectorAll<OpenSelect>('wa-select')].find(control => control.open);
+  if (!openSelect) {
+    demoModified.value = value;
+    return;
+  }
+  openSelect.addEventListener('wa-after-hide', () => {
+    updateDemoModifiedWhenSelectsClose(value);
+  }, { once: true });
+}
 const contextMenu = signal<
   { x: number; y: number; ticketSlug?: string } | undefined
 >(undefined);
@@ -611,7 +622,7 @@ if (import.meta.env.DEV)
   void fetch('/__hotsheet/demo-modified')
     .then((response) => response.json())
     .then((value) => {
-      demoModified.value = value as Record<string, string>;
+      updateDemoModifiedWhenSelectsClose(value as Record<string, string>);
     });
 const setDevReview = async (active: boolean) => {
   devReviewController?.destroy();
