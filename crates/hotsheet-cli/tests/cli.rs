@@ -318,6 +318,151 @@ command = "hotsheet-cli permission-hook"
         .success()
         .stdout("http://127.0.0.1:4567|route-back|hello\n");
     assert!(project.join(".fake/settings.json").is_file());
+
+    // One exact adjacent source is accepted and persisted without -C or a legacy link.
+    let adjacent_project = root.path().join("adjacent");
+    let adjacent_store = root.path().join("adjacent.hs2");
+    std::fs::create_dir(&adjacent_project).unwrap();
+    hotsheet_ticketing::FsStore::init(
+        &adjacent_store,
+        &hotsheet_ticketing::StoreMetadata::new("AD"),
+    )
+    .unwrap();
+    let adjacent_instance = hotsheet_cli::external_launch::instance_path(&home, &adjacent_store);
+    std::fs::write(
+        adjacent_instance,
+        serde_json::json!({
+            "pid": std::process::id(), "url": "http://127.0.0.1:4567",
+            "secret": "route-back", "store_path": adjacent_store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut adjacent = Command::cargo_bin("hotsheet-cli").unwrap();
+    adjacent
+        .current_dir(&adjacent_project)
+        .env("HOTSHEET_HOME", &home)
+        .args(["launch", "fake", "--", "adjacent"])
+        .assert()
+        .success()
+        .stdout("http://127.0.0.1:4567|route-back|adjacent\n");
+    let registry =
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(home.join("checkouts.json"));
+    assert_eq!(
+        registry
+            .resolve(adjacent_project.to_str().unwrap())
+            .unwrap()
+            .default_source,
+        Some(hotsheet_ticketing::git_connection_id(
+            &hotsheet_ticketing::FsStore::open(&adjacent_store).unwrap()
+        ))
+    );
+
+    // A registered non-adjacent default resolves directly.
+    let registered_project = root.path().join("registered");
+    let registered_store = root.path().join("registered-tickets");
+    std::fs::create_dir(&registered_project).unwrap();
+    hotsheet_ticketing::FsStore::init(
+        &registered_store,
+        &hotsheet_ticketing::StoreMetadata::new("RG"),
+    )
+    .unwrap();
+    registry
+        .register(
+            &registered_project,
+            None,
+            None,
+            vec![registered_store.clone()],
+        )
+        .unwrap();
+    let registered_instance =
+        hotsheet_cli::external_launch::instance_path(&home, &registered_store);
+    std::fs::write(
+        registered_instance,
+        serde_json::json!({
+            "pid": std::process::id(), "url": "http://127.0.0.1:4567",
+            "secret": "route-back", "store_path": registered_store.canonicalize().unwrap(),
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut registered = Command::cargo_bin("hotsheet-cli").unwrap();
+    registered
+        .current_dir(&registered_project)
+        .env("HOTSHEET_HOME", &home)
+        .args(["launch", "fake", "--", "registered"])
+        .assert()
+        .success()
+        .stdout("http://127.0.0.1:4567|route-back|registered\n");
+
+    let created_project = root.path().join("created");
+    let created_store = root
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("chosen-ticket-store");
+    std::fs::create_dir(&created_project).unwrap();
+    let created_instance = hotsheet_cli::external_launch::instance_path(&home, &created_store);
+    std::fs::write(
+        created_instance,
+        serde_json::json!({
+            "pid": std::process::id(), "url": "http://127.0.0.1:4567",
+            "secret": "route-back", "store_path": created_store,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut created = Command::cargo_bin("hotsheet-cli").unwrap();
+    created
+        .current_dir(&created_project)
+        .env("HOTSHEET_HOME", &home)
+        .args([
+            "launch",
+            "fake",
+            "--create-ticket-store",
+            created_store.to_str().unwrap(),
+            "--",
+            "created",
+        ])
+        .assert()
+        .success()
+        .stdout("http://127.0.0.1:4567|route-back|created\n");
+    assert!(created_store.join("hotsheet-store.json").is_file());
+}
+
+#[test]
+fn launch_noninteractive_source_errors_are_actionable_and_never_guess() {
+    let root = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    let empty = root.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
+    let mut zero = Command::cargo_bin("hotsheet-cli").unwrap();
+    zero.current_dir(&empty)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["launch", "fake"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--ticket-store <path>"))
+        .stderr(predicate::str::contains("--create-ticket-store <path>"));
+
+    let ambiguous = root.path().join("ambiguous");
+    std::fs::create_dir(&ambiguous).unwrap();
+    for name in ["ambiguous.hs2", "shared.hs2"] {
+        hotsheet_ticketing::FsStore::init(
+            root.path().join(name),
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+    }
+    let mut multiple = Command::cargo_bin("hotsheet-cli").unwrap();
+    multiple
+        .current_dir(&ambiguous)
+        .env("HOTSHEET_HOME", home.path())
+        .args(["launch", "fake"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("multiple ticket sources match"))
+        .stderr(predicate::str::contains("--ticket-store <path>"));
 }
 
 #[test]

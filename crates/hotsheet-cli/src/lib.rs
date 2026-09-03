@@ -35,6 +35,84 @@ use crate::import::{ExportFile, ImportSummary, SUPPORTED_EXPORT_VERSION, import}
 /// (`docs/02` §2.8, HS2-5CXKZ0). Gitignored — the store path is absolute + machine-local.
 pub const STORE_LINK: &str = ".hotsheet/store";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchSourceDiscovery {
+    pub selected: Option<PathBuf>,
+    pub candidates: Vec<PathBuf>,
+}
+
+pub fn select_launch_candidate(candidates: &[PathBuf], one_based: usize) -> Option<PathBuf> {
+    one_based
+        .checked_sub(1)
+        .and_then(|index| candidates.get(index))
+        .cloned()
+}
+
+/// Resolve registered/legacy launch sources and conservatively discover valid sibling
+/// `.hs2` stores. A selected source is authoritative; candidates require caller choice.
+pub fn discover_launch_sources(
+    project: &Path,
+    registry: &hotsheet_ticketing::checkouts::CheckoutRegistry,
+) -> Result<LaunchSourceDiscovery> {
+    let project = project
+        .canonicalize()
+        .with_context(|| format!("project path does not exist: {}", project.display()))?;
+    if let Ok(checkout) = registry.resolve(project.to_string_lossy().as_ref()) {
+        if let Some(default) = checkout.default_source.as_deref()
+            && let Some(source) = checkout.source(default)
+        {
+            if source.provider != "git" {
+                bail!(
+                    "checkout default source '{default}' is {}; interactive launch currently requires a git source",
+                    source.provider
+                );
+            }
+            let path = PathBuf::from(&source.locator);
+            if FsStore::open(&path).is_ok() {
+                return Ok(LaunchSourceDiscovery {
+                    selected: Some(path),
+                    candidates: Vec::new(),
+                });
+            }
+        }
+    }
+    let linked = resolve_store_path(PathBuf::from("."), &project);
+    if linked != Path::new(".") && FsStore::open(&linked).is_ok() {
+        return Ok(LaunchSourceDiscovery {
+            selected: Some(linked.canonicalize().unwrap_or(linked)),
+            candidates: Vec::new(),
+        });
+    }
+    let mut candidates = registry
+        .resolve(project.to_string_lossy().as_ref())
+        .ok()
+        .into_iter()
+        .flat_map(|checkout| checkout.sources)
+        .filter(|source| source.provider == "git")
+        .map(|source| PathBuf::from(source.locator))
+        .filter(|path| FsStore::open(path).is_ok())
+        .collect::<Vec<_>>();
+    if let Some(parent) = project.parent() {
+        for entry in std::fs::read_dir(parent)?.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|value| value.to_str()) == Some("hs2")
+                && FsStore::open(&path).is_ok()
+            {
+                candidates.push(path.canonicalize().unwrap_or(path));
+            }
+        }
+    }
+    candidates.sort_by_key(|path| {
+        let exact = PathBuf::from(format!("{}.hs2", project.display()));
+        (path != &exact, path.clone())
+    });
+    candidates.dedup();
+    Ok(LaunchSourceDiscovery {
+        selected: None,
+        candidates,
+    })
+}
+
 /// Resolve which store directory a command operates on (HS2-5CXKZ0), so `hotsheet-cli` run
 /// inside a **code** repo finds its separate ticket store without `-C` every time:
 /// 1. an explicit `-C <path>` (anything but the default `.`) wins;
@@ -343,5 +421,49 @@ mod store_link_tests {
         let not_store = tempfile::tempdir().unwrap();
         let code = tempfile::tempdir().unwrap();
         assert!(link_store(not_store.path(), code.path()).is_err());
+    }
+
+    #[test]
+    fn launch_discovery_covers_zero_one_multiple_registered_and_cancelled_choices() {
+        if std::env::var_os("HOTSHEET_STORE").is_some() {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("app");
+        std::fs::create_dir(&project).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("checkouts.json"),
+        );
+        assert!(
+            discover_launch_sources(&project, &registry)
+                .unwrap()
+                .candidates
+                .is_empty()
+        );
+
+        let exact = root.path().join("app.hs2");
+        FsStore::init(&exact, &StoreMetadata::new("HS")).unwrap();
+        let one = discover_launch_sources(&project, &registry).unwrap();
+        assert_eq!(one.candidates, vec![exact.canonicalize().unwrap()]);
+
+        let other = root.path().join("shared.hs2");
+        FsStore::init(&other, &StoreMetadata::new("SH")).unwrap();
+        let multiple = discover_launch_sources(&project, &registry).unwrap();
+        assert_eq!(multiple.candidates.len(), 2);
+        assert_eq!(select_launch_candidate(&multiple.candidates, 0), None);
+        assert_eq!(
+            select_launch_candidate(&multiple.candidates, 1),
+            Some(exact.canonicalize().unwrap())
+        );
+
+        registry
+            .register(&project, None, None, vec![other.clone()])
+            .unwrap();
+        assert_eq!(
+            discover_launch_sources(&project, &registry)
+                .unwrap()
+                .selected,
+            Some(other.canonicalize().unwrap())
+        );
     }
 }

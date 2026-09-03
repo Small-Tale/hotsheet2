@@ -340,14 +340,20 @@ enum Cmd {
     /// (defer to Claude's normal flow). Register it as a Claude `PreToolUse` hook.
     PermissionHook,
     /// Launch an interactive AI tool in this terminal with permission requests routed to
-    /// the running Hot Sheet server. The ticket store is discovered from the current
-    /// checkout's `.hotsheet/store` link, so `-C` is normally unnecessary.
+    /// the running Hot Sheet server. The ticket store is resolved from checkout sources,
+    /// a legacy `.hotsheet/store` link, or conservative sibling discovery.
     Launch {
         /// The tool to launch (currently `claude`; other tools require a native adapter).
         tool: String,
         /// Project directory in which to run the tool (defaults to the current directory).
         #[arg(long)]
         project: Option<PathBuf>,
+        /// Explicit existing git ticket store for deterministic non-interactive onboarding.
+        #[arg(long, value_name = "PATH")]
+        ticket_store: Option<PathBuf>,
+        /// Create and associate this standalone git ticket store when none is linked.
+        #[arg(long, value_name = "PATH", conflicts_with = "ticket_store")]
+        create_ticket_store: Option<PathBuf>,
         /// Additional arguments passed to the tool after `--`.
         #[arg(last = true)]
         args: Vec<String>,
@@ -706,13 +712,13 @@ fn main() -> Result<()> {
     // (HS2-5CXKZ0). `init`/`link` operate on the literal path, not a resolved one.
     if !matches!(
         cli.command,
-        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. }
+        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. } | Cmd::Launch { .. }
     ) {
         cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
     }
     let refresh = !matches!(
         cli.command,
-        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. }
+        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. } | Cmd::Launch { .. }
     );
     let result = match cli.command {
         Cmd::Init {
@@ -908,8 +914,18 @@ fn main() -> Result<()> {
         Cmd::Launch {
             tool,
             project,
+            ticket_store,
+            create_ticket_store,
             args,
-        } => cmd_launch(&cli.path, &cwd, &tool, project, args),
+        } => cmd_launch(
+            &cli.path,
+            &cwd,
+            &tool,
+            project,
+            ticket_store,
+            create_ticket_store,
+            args,
+        ),
         Cmd::Serve { bind, secret, stop } => cmd_serve(&cli.path, &bind, secret, stop),
         Cmd::Cert { cmd } => cmd_cert(&cli.path, &cmd),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
@@ -2056,20 +2072,79 @@ fn cmd_launch(
     cwd: &Path,
     tool: &str,
     project: Option<PathBuf>,
+    ticket_store: Option<PathBuf>,
+    create_ticket_store: Option<PathBuf>,
     args: Vec<String>,
 ) -> Result<()> {
     let project = project.unwrap_or_else(|| cwd.to_path_buf());
-    hotsheet_cli::setup::run_setup(store, &project, Some(tool), false)?;
+    let project = project
+        .canonicalize()
+        .with_context(|| format!("project path does not exist: {}", project.display()))?;
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let explicit = ticket_store.or_else(|| (store != Path::new(".")).then(|| store.to_path_buf()));
+    let selected = if let Some(path) = explicit {
+        FsStore::open(&path)
+            .with_context(|| format!("{} is not a Hot Sheet ticket store", path.display()))?;
+        path.canonicalize().unwrap_or(path)
+    } else if let Some(path) = create_ticket_store {
+        FsStore::init(&path, &StoreMetadata::new("HS"))?;
+        git_init(&path);
+        path.canonicalize().unwrap_or(path)
+    } else {
+        let discovery = hotsheet_cli::discover_launch_sources(&project, &registry)?;
+        if let Some(path) = discovery.selected {
+            path
+        } else if discovery.candidates.len() == 1 {
+            discovery.candidates[0].clone()
+        } else if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+            choose_launch_source(&project, &discovery.candidates)?
+        } else if discovery.candidates.is_empty() {
+            bail!(
+                "no ticket source is associated with {}; pass --ticket-store <path> or --create-ticket-store <path>",
+                project.display()
+            )
+        } else {
+            bail!(
+                "multiple ticket sources match {}: {}; pass --ticket-store <path>",
+                project.display(),
+                discovery
+                    .candidates
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        }
+    };
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(&selected);
+    match registry.resolve(project.to_string_lossy().as_ref()) {
+        Ok(_) => {
+            registry.add_source(project.to_string_lossy().as_ref(), source.clone(), true)?;
+        }
+        Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => {
+            registry.register_sources(
+                &project,
+                None,
+                None,
+                vec![source],
+                Some(hotsheet_ticketing::checkouts::TicketSource::git(&selected).connection_id),
+            )?;
+        }
+        Err(error) => return Err(error.into()),
+    }
+    hotsheet_cli::setup::run_setup(&selected, &project, Some(tool), false)?;
     let launch = hotsheet_cli::external_launch::prepare(
-        store,
+        &selected,
         tool,
         args,
         &hotsheet_plugins::hotsheet_home(),
     )?;
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)?;
-    let permission_project = FsStore::open(store)
+    let permission_project = FsStore::open(&selected)
         .map(|store| store.root().display().to_string())
-        .unwrap_or_else(|_| store.display().to_string());
+        .unwrap_or_else(|_| selected.display().to_string());
     let mut command = std::process::Command::new(&program);
     command
         .args(&launch.args)
@@ -2092,6 +2167,47 @@ fn cmd_launch(
             bail!("{} exited with {status}", program.display())
         }
     }
+}
+
+fn choose_launch_source(project: &Path, candidates: &[PathBuf]) -> Result<PathBuf> {
+    use std::io::Write;
+    if candidates.is_empty() {
+        let proposed = PathBuf::from(format!("{}.hs2", project.display()));
+        eprint!(
+            "No ticket source found. [c]reate {}, [s]elect existing, or [q]uit: ",
+            proposed.display()
+        );
+        std::io::stderr().flush()?;
+        let mut answer = String::new();
+        std::io::stdin().read_line(&mut answer)?;
+        if answer.trim().eq_ignore_ascii_case("c") {
+            FsStore::init(&proposed, &StoreMetadata::new("HS"))?;
+            git_init(&proposed);
+            return Ok(proposed.canonicalize().unwrap_or(proposed));
+        }
+        if answer.trim().eq_ignore_ascii_case("s") {
+            eprint!("Existing ticket store path: ");
+            std::io::stderr().flush()?;
+            answer.clear();
+            std::io::stdin().read_line(&mut answer)?;
+            let path = PathBuf::from(answer.trim());
+            FsStore::open(&path)
+                .with_context(|| format!("{} is not a Hot Sheet ticket store", path.display()))?;
+            return Ok(path.canonicalize().unwrap_or(path));
+        }
+        bail!("ticket-source onboarding cancelled")
+    }
+    eprintln!("Choose a ticket source for {}:", project.display());
+    for (index, path) in candidates.iter().enumerate() {
+        eprintln!("  {}) {}", index + 1, path.display());
+    }
+    eprint!("Selection (or 0 to cancel): ");
+    std::io::stderr().flush()?;
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer)?;
+    let selection = answer.trim().parse::<usize>().unwrap_or(0);
+    hotsheet_cli::select_launch_candidate(candidates, selection)
+        .context("ticket-source onboarding cancelled")
 }
 
 /// POST the ask to the server's `/permissions/ask`, returning its JSON reply.
