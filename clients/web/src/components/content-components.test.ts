@@ -85,4 +85,6 @@ describe('content components', () => {
     const shellCss = readFileSync(resolve(import.meta.dirname, '..', 'style.css'), 'utf8');
     expect(shellCss).toMatch(/\.ticket-reader-backdrop \{[^}]*padding: 1\.5rem;/);
   });
+
+  it('keeps the feedback catchall at half the ordinary note-editor minimum height',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).toMatch(/textarea\[data-note-response="true"\] \{ min-height: 2\.5rem; \}/)});
 });

@@ -612,6 +612,8 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   Markdown blockquotes with non-empty replies interleaved at the selected points; an
   optional general response follows at the end. If the user only enters general
   feedback, the response remains plain Markdown without redundantly quoting the prompt.
+  The optional catchall response starts at half the ordinary note-editor minimum height
+  so it does not dominate the feedback prompt, while remaining vertically resizable.
 - **`regular` and `status` notes, and the ticket `details`, use the same direct editing
   affordances in the reader as they do in the inspector.** Rendered Markdown owns its
   own whitespace; note containers must not preserve the renderer's HTML formatting
