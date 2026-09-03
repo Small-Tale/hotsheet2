@@ -1,9 +1,9 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './note-card.css';
 
-import { Activity, CircleAlert, FilePenLine, MessageSquareText, RefreshCw, Trash2 } from 'lucide';
+import { Activity, CircleAlert, FilePenLine, MessageSquareText, RefreshCw, Trash2, X } from 'lucide';
 
-import { type InlineFeedbackReply,parseFeedbackBlocks } from '../feedback-replies';
+import { type InlineFeedbackReply,splitFeedbackPrompt } from '../feedback-replies';
 import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
 
@@ -30,7 +30,7 @@ export function NoteCard({ id, kind, author, time, body, title, editable = true,
       <span class="note-card__kind"><LucideIcon icon={presentation.icon} name={presentation.iconName} />{title ?? presentation.label}</span>
       <span class="note-card__header-end">{!editorOpen && deletable && <span class="note-card__actions"><button type="button" data-action="delete-note" data-note-id={id} aria-label="Delete note"><LucideIcon icon={Trash2} name="trash-2" /></button></span>}<time>{time}</time></span>
     </header>
-    {feedbackResponse && <div class="note-card__feedback-prompt">{parseFeedbackBlocks(body).map((block, blockIndex) => <div class="note-card__feedback-section"><div class="note-card__feedback-block" data-action="add-inline-feedback-reply" data-note-id={id} data-block-index={blockIndex} role="button" tabIndex={0} aria-label={`Add response after section ${blockIndex + 1}`}><MarkdownPreview source={block.markdown} /></div>{inlineReplies.find(reply => reply.blockIndex === blockIndex) && <textarea class="note-card__inline-reply" name="inline-feedback-response" data-note-id={id} data-block-index={blockIndex} aria-label={`Response after section ${blockIndex + 1}`}>{inlineReplies.find(reply => reply.blockIndex === blockIndex)!.text}</textarea>}</div>)}</div>}
+    {feedbackResponse && <div class="note-card__feedback-prompt">{splitFeedbackPrompt(body, inlineReplies).map(segment => <div class="note-card__feedback-section">{segment.markdown && <div class="note-card__feedback-block" data-action="add-inline-feedback-reply" data-note-id={id} data-segment-start={segment.start} data-segment-end={segment.end} role="button" tabIndex={0} aria-label="Add response at a character position"><MarkdownPreview source={segment.markdown} /></div>}{segment.reply && <div class="note-card__inline-reply-row"><textarea class="note-card__inline-reply" name="inline-feedback-response" data-note-id={id} data-offset={segment.reply.offset} aria-label={`Response at character ${segment.reply.offset}`}>{segment.reply.text}</textarea><button type="button" data-action="remove-inline-feedback-reply" data-note-id={id} data-offset={segment.reply.offset} aria-label={`Remove response at character ${segment.reply.offset}`}><LucideIcon icon={X} name="x" /></button></div>}</div>)}</div>}
     {editorOpen ? <div class="note-card__editor"><textarea name="note-body" data-note-id={id} data-note-response={feedbackResponse ? 'true' : undefined} aria-label={feedbackResponse ? 'Feedback response' : 'Note body'} placeholder={feedbackResponse && inlineReplies.length ? 'General response (optional)' : undefined}>{source}</textarea>{feedbackEditor && <div><wa-button appearance="accent" data-action="save-note-edit" data-note-id={id} data-note-response={feedbackResponse ? 'true' : undefined}>{feedbackResponse ? 'Respond' : 'Submit'}</wa-button></div>}</div> : <div class="note-card__body" {...editAttributes}><MarkdownPreview source={body} /></div>}
     <footer>{author}</footer>
   </article>;

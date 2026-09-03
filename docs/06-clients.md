@@ -576,10 +576,11 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   editing is prefilled with that note's complete Markdown—including for
   `feedback_needed`—and autosaves the replacement by note id.
 - **Feedback prompts support user-chosen inline reply points.** In reader mode, the
-  client lexes the prompt into top-level Markdown blocks and splits each top-level list
-  into one block per item while keeping nested list detail with its parent. Clicking a
-  rendered block (or focusing it and pressing Enter/Space) inserts and focuses a reply
-  field immediately after that block. On submission, the complete prompt is emitted as
+  client maps a click in the rendered Markdown to the corresponding source-character
+  boundary and inserts a focused reply field at that exact point. Enter/Space on the
+  keyboard-accessible prompt adds a reply at the end of the focused segment. Each reply
+  field has a remove action that deletes the field and rejoins its surrounding prompt
+  segments. On submission, the complete prompt is emitted as
   Markdown blockquotes with non-empty replies interleaved at the selected points; an
   optional general response follows at the end. If the user only enters general
   feedback, the response remains plain Markdown without redundantly quoting the prompt.

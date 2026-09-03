@@ -39,7 +39,7 @@ describe('NoteCard', () => {
     expect(responding).toContain('<textarea name="note-body" data-note-id="feedback-response" data-note-response="true" aria-label="Feedback response"></textarea>');
   });
 
-  it('turns feedback prompt blocks into inline response insertion targets', () => {
+  it('turns feedback text into character-position insertion targets with removable responses', () => {
     const markup = String(NoteCard({
       id: 'inline-feedback',
       kind: 'feedback_needed',
@@ -47,11 +47,13 @@ describe('NoteCard', () => {
       time: 'Now',
       body: 'Choose:\n\n1. First\n2. Second',
       readerMode: true,
-      inlineReplies: [{ blockIndex: 2, text: 'Reply to second' }],
+      inlineReplies: [{ offset: 7, text: 'Reply after a character' }],
     }));
-    expect(markup.match(/data-action="add-inline-feedback-reply"/g)).toHaveLength(3);
-    expect(markup).toContain('aria-label="Response after section 3"');
-    expect(markup).toContain('Reply to second');
+    expect(markup.match(/data-action="add-inline-feedback-reply"/g)).toHaveLength(2);
+    expect(markup).toContain('aria-label="Response at character 7"');
+    expect(markup).toContain('Reply after a character');
+    expect(markup).toContain('data-action="remove-inline-feedback-reply"');
+    expect(markup).toContain('aria-label="Remove response at character 7"');
     expect(markup).toContain('aria-label="Feedback response"');
     expect(markup).toContain('placeholder="General response (optional)"');
   });

@@ -97,13 +97,15 @@ test('projects an indexed feedback-needed note into the real row and inspector r
   await page.screenshot({path:'/private/tmp/hs2-vwphrd-feedback-needed-narrow.png',fullPage:true});
 });
 
-test('clicks feedback prompt sections to compose an interleaved Markdown reply',async({page})=>{
+test('clicks exact feedback character positions, removes a split, and composes an interleaved Markdown reply',async({page})=>{
   const patches=await mockProject(page,true,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Open ticket reader'}).click();
-  const note=page.getByRole('dialog').locator('article[data-note-id="N4"]');await expect(note.getByRole('button',{name:/Add response after section/})).toHaveCount(4);
-  await note.getByRole('button',{name:'Add response after section 3'}).click();const first=note.getByRole('textbox',{name:'Response after section 3'});await expect(first).toBeFocused();await first.fill('My first response');
-  await note.getByRole('button',{name:'Add response after section 4'}).click();const second=note.getByRole('textbox',{name:'Response after section 4'});await expect(second).toBeFocused();await second.fill('My second response');
+  const note=page.getByRole('dialog').locator('article[data-note-id="N4"]'),clickAfter=async(text:string)=>{const block=note.locator('.note-card__feedback-block').filter({hasText:text});await block.scrollIntoViewIfNeeded();const point=await block.evaluate((element,needle)=>{const walker=document.createTreeWalker(element,NodeFilter.SHOW_TEXT);let node:Node|null;while((node=walker.nextNode())){const index=node.textContent?.indexOf(needle)??-1;if(index<0)continue;const range=document.createRange();range.setStart(node,index+needle.length-1);range.setEnd(node,index+needle.length);const rect=range.getBoundingClientRect();return{x:rect.right-.5,y:rect.y+rect.height/2}}throw new Error(`Text not found: ${needle}`)},text);await page.mouse.click(point.x,point.y)};
+  await expect(note.getByRole('button',{name:'Add response at a character position'})).toHaveCount(1);
+  await clickAfter('Something');const first=note.getByRole('textbox',{name:/Response at character/});await expect(first).toBeFocused();await first.fill('Discard me');await note.getByRole('button',{name:/Remove response at character/}).click();await expect(note.locator('.note-card__inline-reply')).toHaveCount(0);
+  await clickAfter('Something');await note.getByRole('textbox',{name:/Response at character/}).fill('My first response');
+  await clickAfter('Another thing');const second=note.getByRole('textbox',{name:/Response at character/}).last();await expect(second).toBeFocused();await second.fill('My second response');
   await note.screenshot({path:'/private/tmp/hs2-c5sab3-inline-feedback-replies.png'});await page.setViewportSize({width:760,height:900});const noteBox=(await note.boundingBox())!,replyBox=(await second.boundingBox())!;expect(replyBox.x).toBeGreaterThanOrEqual(noteBox.x);expect(replyBox.x+replyBox.width).toBeLessThanOrEqual(noteBox.x+noteBox.width);await note.screenshot({path:'/private/tmp/hs2-c5sab3-inline-feedback-replies-narrow.png'});await note.getByRole('button',{name:'Respond'}).click();
-  await expect.poll(()=>patches.find(patch=>patch.note_kind==='regular')?.note).toBe('> FEEDBACK NEEDED\n\n> Hello there\n\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response');
+  await expect.poll(()=>patches.find(patch=>patch.note_kind==='regular')?.note).toBe('> FEEDBACK NEEDED\n>\n> Hello there\n>\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response');
 });
 
 test('clears needs review when a regular response follows the feedback-needed note',async({page})=>{
