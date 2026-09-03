@@ -1,7 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './note-card.css';
 
-import { Activity, CircleAlert, FilePenLine, MessageSquareText, Pencil, RefreshCw, Trash2 } from 'lucide';
+import { Activity, CircleAlert, FilePenLine, MessageSquareText, RefreshCw, Trash2 } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
@@ -22,13 +22,14 @@ export function NoteCard({ id, kind, author, time, body, title, editable = true,
   const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
   const editorOpen = editing || feedbackEditor;
   const source = draft ?? (kind === 'feedback_needed' ? '' : body);
-  return <article class={`note-card${editorOpen ? ' note-card--editing' : ''}`} data-component="note-card" data-note-id={id} data-kind={kind} data-edit-on-double-click={editable && !editorOpen ? 'true' : undefined} title={editable && !editorOpen ? 'Double-click to edit' : undefined}>
+  const editAttributes=editable&&!editorOpen?{'data-edit-on-double-click':'true',role:'button',tabIndex:0,'aria-label':'Edit note',title:'Double-click to edit'}:{};
+  return <article class={`note-card${editorOpen ? ' note-card--editing' : ''}`} data-component="note-card" data-note-id={id} data-kind={kind} data-edit-on-double-click={editable&&!editorOpen?'true':undefined} title={editable&&!editorOpen?'Double-click to edit':undefined}>
     <header class="note-card__header">
       <span class="note-card__kind"><LucideIcon icon={presentation.icon} name={presentation.iconName} />{title ?? presentation.label}</span>
-      <span class="note-card__header-end">{!editorOpen && (editable || deletable) && <span class="note-card__actions">{editable && <button type="button" data-action="edit-note" data-note-id={id} aria-label="Edit note"><LucideIcon icon={Pencil} name="pencil" /></button>}{deletable && <button type="button" data-action="delete-note" data-note-id={id} aria-label="Delete note"><LucideIcon icon={Trash2} name="trash-2" /></button>}</span>}<time>{time}</time></span>
+      <span class="note-card__header-end">{!editorOpen && deletable && <span class="note-card__actions"><button type="button" data-action="delete-note" data-note-id={id} aria-label="Delete note"><LucideIcon icon={Trash2} name="trash-2" /></button></span>}<time>{time}</time></span>
     </header>
     {kind === 'feedback_needed' && feedbackEditor && <div class="note-card__body"><MarkdownPreview source={body} /></div>}
-    {editorOpen ? <div class="note-card__editor"><textarea name="note-body" data-note-id={id} data-note-response={kind === 'feedback_needed' ? 'true' : undefined} aria-label={kind === 'feedback_needed' ? 'Feedback response' : 'Note body'}>{source}</textarea>{feedbackEditor && <div><wa-button appearance="accent" data-action="save-note-edit" data-note-id={id} data-note-response={kind === 'feedback_needed' ? 'true' : undefined}>{kind === 'feedback_needed' ? 'Respond' : 'Submit'}</wa-button></div>}</div> : <div class="note-card__body"><MarkdownPreview source={body} /></div>}
+    {editorOpen ? <div class="note-card__editor"><textarea name="note-body" data-note-id={id} data-note-response={kind === 'feedback_needed' ? 'true' : undefined} aria-label={kind === 'feedback_needed' ? 'Feedback response' : 'Note body'}>{source}</textarea>{feedbackEditor && <div><wa-button appearance="accent" data-action="save-note-edit" data-note-id={id} data-note-response={kind === 'feedback_needed' ? 'true' : undefined}>{kind === 'feedback_needed' ? 'Respond' : 'Submit'}</wa-button></div>}</div> : <div class="note-card__body" {...editAttributes}><MarkdownPreview source={body} /></div>}
     <footer>{author}</footer>
   </article>;
 }

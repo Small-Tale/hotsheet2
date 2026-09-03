@@ -440,12 +440,12 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
   expect(readerContentWidth!.width).toBeGreaterThan(readerWidth!.width * .9);
   const editableNote = reader.locator('[data-component="note-card"][data-note-id="reader-note"]');
-  await expect(editableNote.getByRole('button', { name: 'Edit note' })).toBeVisible();
+  await expect(editableNote.locator('.note-card__body')).toHaveAttribute('aria-label', 'Edit note');
   await reader.getByRole('button', { name: 'Edit Ticket details' }).dblclick();
   const readerDetails = reader.getByRole('textbox', { name: 'Ticket details' });
   await expect(readerDetails).toBeFocused();
   await expect(readerDetails).toHaveCSS('resize', 'vertical');
-  await editableNote.dblclick();
+  await editableNote.locator('.note-card__body').dblclick();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
   await expect(editableNote.getByRole('textbox', { name: 'Note body' })).toHaveCSS('resize', 'vertical');
   await editableNote.getByRole('textbox', { name: 'Note body' }).fill('Edited note body');
@@ -892,9 +892,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   expect((await blockedSection.boundingBox())!.y).toBeLessThan((await detailsSection.boundingBox())!.y);
   await expect(inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]')).toHaveCount(5);
   const firstNote = inspector.locator('[data-component="ticket-notes"] [data-component="note-card"]').first();
-  await expect(firstNote.getByRole('button', { name: 'Edit note' })).toBeAttached();
+  const firstNoteBody=firstNote.locator('.note-card__body');await expect(firstNoteBody).toHaveAttribute('aria-label', 'Edit note');
   await expect(firstNote.locator('[data-action="open-ticket-reader"]')).toHaveCount(0);
-  await firstNote.getByRole('button', { name: 'Edit note' }).click();
+  await firstNoteBody.press('Enter');
   await expect(firstNote.getByRole('textbox', { name: 'Note body' })).toBeFocused();
   await firstNote.getByRole('textbox', { name: 'Note body' }).fill('Autosaved inspector note');
   await firstNote.getByRole('textbox', { name: 'Note body' }).blur();

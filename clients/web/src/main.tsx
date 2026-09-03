@@ -432,8 +432,8 @@ delegate(document.body,'click','[data-action="add-ticket-note"]',()=>{if(!canAdd
 delegate(document.body,'input','[name="new-note-body"]',(_event,target)=>{newNoteDraft.value=(target as HTMLTextAreaElement).value});
 delegate(document.body,'click','[data-action="cancel-new-note"]',()=>{composingNote.value=false;newNoteDraft.value=''});
 delegate(document.body,'submit','[data-action="create-note-form"]',(event)=>{event.preventDefault();const text=newNoteDraft.value.trim();if(!text||!canAddNotes())return;void updateSelected({note:text,note_kind:'regular'}).then(saved=>{if(saved){composingNote.value=false;newNoteDraft.value=''}})});
-delegate(document.body,'dblclick','[data-edit-on-double-click="true"]',(_event,target)=>{beginNoteEdit(data(target).noteId!)});
-delegate(document.body,'click','[data-action="edit-note"]',(_event,target)=>{beginNoteEdit(data(target).noteId!)});
+delegate(document.body,'dblclick','[data-edit-on-double-click="true"]',(_event,target)=>{beginNoteEdit(data(target.closest('[data-note-id]')!).noteId!)});
+delegate(document.body,'keydown','[data-edit-on-double-click="true"]',(event,target)=>{if(!['Enter',' '].includes((event as KeyboardEvent).key))return;event.preventDefault();beginNoteEdit(data(target.closest('[data-note-id]')!).noteId!)});
 delegate(document.body,'input','[name="note-body"]',(_event,target)=>{editingNoteId.value=data(target).noteId;noteDraft.value=(target as HTMLTextAreaElement).value;if(data(target).noteResponse!=='true'&&editingNoteId.value)noteAutosave.schedule({id:editingNoteId.value,value:noteDraft.value})});
 delegate(document.body,'focusout','[name="note-body"]',(_event,target)=>{if(data(target).noteResponse==='true')return;void noteAutosave.flush().then(saved=>{if(saved){editingNoteId.value=undefined;noteDraft.value=''}})});
 delegate(document.body,'click','[data-action="save-note-edit"]',(_event,target)=>{const id=editingNoteId.value??data(target).noteId,note=selectedTicket.value?.notes.find(item=>item.id===id),response=data(target).noteResponse==='true'||note?.kind==='feedback_draft';if(!id||!noteDraft.value.trim())return;const patch=response?{note:noteDraft.value,note_kind:'regular'}:{note_id:id,note:noteDraft.value};void updateSelected(patch).then(saved=>{if(saved){editingNoteId.value=undefined;noteDraft.value=''}})});
@@ -441,6 +441,7 @@ delegate(document.body,'click','[data-action="delete-note"]',(_event,target)=>{c
 function beginBlockedReasonEdit(){blockedReasonDraft.value=selectedTicket.value?.blocked_reason??'';blockedReasonDraftBase=blockedReasonDraft.value;blockedReasonEditing.value=true;queueMicrotask(()=>activeTicketSurface().querySelector<HTMLElement>('[name="blocked-reason"]')?.focus())}
 delegate(document.body,'click','[data-action="edit-blocked-reason"]',()=>{beginBlockedReasonEdit()});
 delegate(document.body,'dblclick','[data-edit-blocked-reason="true"]',()=>{beginBlockedReasonEdit()});
+delegate(document.body,'keydown','[data-edit-blocked-reason="true"]',(event)=>{if(!['Enter',' '].includes((event as KeyboardEvent).key))return;event.preventDefault();beginBlockedReasonEdit()});
 delegate(document.body,'input','[name="blocked-reason"]',(_event,target)=>{blockedReasonDraft.value=(target as HTMLTextAreaElement).value;blockedReasonAutosave.schedule(blockedReasonDraft.value)});
 delegate(document.body,'focusout','[name="blocked-reason"]',()=>{void blockedReasonAutosave.flush().then(saved=>{if(saved)blockedReasonEditing.value=false})});
 delegate(document.body,'click','[data-action="open-ticket-reader"]',()=>{inspectorTab.value='info';readerOpen.value=true});

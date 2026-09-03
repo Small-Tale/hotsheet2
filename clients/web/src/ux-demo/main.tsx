@@ -1200,12 +1200,19 @@ delegate(root, 'wa-remove', '[data-component="tag-chip"]', (_event, target) => {
   inspectorTags.value = removeTicketTag(inspectorTags.value, tag);
   tagsAutosave.schedule(inspectorTags.value);
 });
-delegate(root, 'click', '[data-action="edit-blocked-reason"]', () => {
+const beginBlockedReasonEdit = () => {
   inspectorBlockedReasonDraft.value = inspectorBlockedReason.value;
   inspectorBlockedReasonEditing.value = true;
   queueMicrotask(() =>
     root.querySelector<HTMLElement>('[name="blocked-reason"]')?.focus(),
   );
+};
+delegate(root, 'click', '[data-action="edit-blocked-reason"]', beginBlockedReasonEdit);
+delegate(root, 'dblclick', '[data-edit-blocked-reason="true"]', beginBlockedReasonEdit);
+delegate(root, 'keydown', '[data-edit-blocked-reason="true"]', (event) => {
+  if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+  event.preventDefault();
+  beginBlockedReasonEdit();
 });
 delegate(root, 'input', '[name="blocked-reason"]', (_event, target) => {
   inspectorBlockedReasonDraft.value = (target as FormControl).value;
@@ -1255,11 +1262,13 @@ delegate(
   'dblclick',
   '[data-edit-on-double-click="true"]',
   (_event, target) => {
-    beginNoteEdit((target as HTMLElement).dataset.noteId!);
+    beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
   },
 );
-delegate(root, 'click', '[data-action="edit-note"]', (_event, target) => {
-  beginNoteEdit((target as HTMLElement).dataset.noteId!);
+delegate(root, 'keydown', '[data-edit-on-double-click="true"]', (event, target) => {
+  if (!['Enter', ' '].includes((event as KeyboardEvent).key)) return;
+  event.preventDefault();
+  beginNoteEdit((target as HTMLElement).closest<HTMLElement>('[data-note-id]')!.dataset.noteId!);
 });
 delegate(root, 'input', '[name="note-body"]', (_event, target) => {
   editingNoteId.value = (target as HTMLElement).dataset.noteId;

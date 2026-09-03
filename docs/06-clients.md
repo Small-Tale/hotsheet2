@@ -137,7 +137,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   The freeform blocked reason uses the same silent blur-flush path: a non-empty reason
   persists, an empty edit sends `null` to clear it, and the authoritative response exits
   editing without making the text disappear. An existing blocked-reason surface enters
-  that editor on double-click, matching details and ordinary notes.
+  that editor on double-click, matching details and ordinary notes. Existing blocked
+  reasons and ordinary notes do not add redundant per-item Edit buttons; their content
+  surfaces support double-click plus Enter/Space keyboard entry instead.
 
 - **Active ticket work.** Ticket rows show a slow yellow two-dot activity animation
   directly after status only while a worker holds a non-expired claim lease. Started
