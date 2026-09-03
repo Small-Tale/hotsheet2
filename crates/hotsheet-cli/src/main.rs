@@ -591,6 +591,28 @@ enum CheckoutCmd {
     List,
     /// Resolve an id, id prefix, alias, or path and print its JSON record.
     Resolve { reference: String },
+    /// Associate a provider-neutral ticket source with a checkout.
+    AddSource {
+        reference: String,
+        connection_id: String,
+        provider: String,
+        locator: String,
+        #[arg(long)]
+        default: bool,
+    },
+    /// Remove a ticket-source association; removing the default clears it.
+    RemoveSource {
+        reference: String,
+        connection_id: String,
+    },
+    /// Select the source used by unqualified creates, or clear it with --clear.
+    SetDefault {
+        reference: String,
+        #[arg(required_unless_present = "clear")]
+        connection_id: Option<String>,
+        #[arg(long, conflicts_with = "connection_id")]
+        clear: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2863,6 +2885,53 @@ fn cmd_checkout(cmd: CheckoutCmd) -> Result<()> {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&registry.resolve(&reference)?)?
+            );
+        }
+        CheckoutCmd::AddSource {
+            reference,
+            connection_id,
+            provider,
+            locator,
+            default,
+        } => {
+            let source = if provider == "git" {
+                let source = hotsheet_ticketing::checkouts::TicketSource::git(&locator);
+                if source.connection_id != connection_id {
+                    bail!("git source id must be {}", source.connection_id);
+                }
+                source
+            } else {
+                hotsheet_ticketing::checkouts::TicketSource {
+                    connection_id,
+                    provider,
+                    locator,
+                }
+            };
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&registry.add_source(&reference, source, default)?)?
+            );
+        }
+        CheckoutCmd::RemoveSource {
+            reference,
+            connection_id,
+        } => println!(
+            "{}",
+            serde_json::to_string_pretty(&registry.remove_source(&reference, &connection_id)?)?
+        ),
+        CheckoutCmd::SetDefault {
+            reference,
+            connection_id,
+            clear,
+        } => {
+            let selected = if clear {
+                None
+            } else {
+                connection_id.as_deref()
+            };
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&registry.set_default_source(&reference, selected)?)?
             );
         }
     }

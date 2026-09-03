@@ -216,6 +216,31 @@ fn checkout_register_list_and_resolve_are_store_independent() {
         .assert()
         .success()
         .stdout(predicate::str::contains(checkout.path().to_str().unwrap()));
+
+    let mut add_source = Command::cargo_bin("hotsheet-cli").unwrap();
+    add_source
+        .env("HOTSHEET_HOME", home.path())
+        .args([
+            "checkout",
+            "add-source",
+            "web",
+            "github-main",
+            "github",
+            "acme/web",
+            "--default",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            r#""default_source": "github-main""#,
+        ));
+    let mut remove_source = Command::cargo_bin("hotsheet-cli").unwrap();
+    remove_source
+        .env("HOTSHEET_HOME", home.path())
+        .args(["checkout", "remove-source", "web", "github-main"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("default_source").not());
 }
 
 #[cfg(unix)]

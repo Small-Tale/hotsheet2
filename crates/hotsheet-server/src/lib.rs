@@ -28,7 +28,7 @@ use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
 use hotsheet_model::{
@@ -848,6 +848,14 @@ pub fn app(state: AppState) -> Router {
         .route("/projects/open", post(open_project))
         .route("/checkouts/{reference}", get(resolve_checkout))
         .route(
+            "/checkouts/{reference}/sources/{connection_id}",
+            put(add_checkout_source).delete(remove_checkout_source),
+        )
+        .route(
+            "/checkouts/{reference}/default-source",
+            put(set_checkout_default_source),
+        )
+        .route(
             "/checkouts/{reference}/repository/status",
             get(checkout_repository_status),
         )
@@ -1558,10 +1566,21 @@ async fn create_provider_ticket(
     Path(connection_id): Path<String>,
     Json(req): Json<CreateReq>,
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    Ok((
+        StatusCode::CREATED,
+        Json(do_provider_create(&state, &connection_id, req)?),
+    ))
+}
+
+fn do_provider_create(
+    state: &AppState,
+    connection_id: &str,
+    req: CreateReq,
+) -> Result<ApiTicket, ApiError> {
     let priority = opt_parse(req.priority.as_deref())?.unwrap_or_default();
     let status = initial_status(req.status.as_deref())?;
-    let provider = provider_for(&state, &connection_id)?;
-    let ticket = provider
+    let provider = provider_for(state, connection_id)?;
+    provider
         .create(
             MutationContext {
                 now: now(),
@@ -1579,8 +1598,7 @@ async fn create_provider_ticket(
                 transfer: None,
             },
         )
-        .map_err(provider_transfer_error)?;
-    Ok((StatusCode::CREATED, Json(ticket)))
+        .map_err(provider_transfer_error)
 }
 
 async fn update_provider_ticket(
@@ -1588,7 +1606,16 @@ async fn update_provider_ticket(
     Path((connection_id, id)): Path<(String, String)>,
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
-    let provider = provider_for(&state, &connection_id)?;
+    Ok(Json(do_provider_update(&state, &connection_id, &id, req)?))
+}
+
+fn do_provider_update(
+    state: &AppState,
+    connection_id: &str,
+    id: &str,
+    req: UpdateReq,
+) -> Result<ApiTicket, ApiError> {
+    let provider = provider_for(state, connection_id)?;
     if req.note_id.is_some() && !provider.supports_note_edit() {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -1632,7 +1659,7 @@ async fn update_provider_ticket(
         }
         .map_err(provider_transfer_error)?;
     }
-    Ok(Json(ticket))
+    Ok(ticket)
 }
 
 async fn report_provider_ticket_not_working(
@@ -1807,6 +1834,9 @@ struct RegisterCheckoutBody {
     repository: Option<String>,
     #[serde(default)]
     stores: Vec<String>,
+    #[serde(default)]
+    sources: Vec<hotsheet_ticketing::checkouts::TicketSource>,
+    default_source: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1816,6 +1846,9 @@ struct OpenProjectBody {
     repository: Option<String>,
     /// Explicit git stores. When omitted, conservative filesystem discovery is used.
     stores: Option<Vec<String>>,
+    /// Explicit provider-neutral sources. When supplied, these are authoritative.
+    sources: Option<Vec<hotsheet_ticketing::checkouts::TicketSource>>,
+    default_source: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1833,20 +1866,39 @@ async fn open_project(
     Json(body): Json<OpenProjectBody>,
 ) -> Result<(StatusCode, Json<OpenProjectResponse>), ApiError> {
     let root = FsPath::new(&body.root);
-    let discovered = body.stores.is_none();
+    let discovered = body.stores.is_none() && body.sources.is_none();
     let stores = match body.stores {
         Some(paths) => paths.into_iter().map(std::path::PathBuf::from).collect(),
-        None => hotsheet_ticketing::checkouts::discover_ticket_stores(root)
-            .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?,
+        None if body.sources.is_none() => {
+            hotsheet_ticketing::checkouts::discover_ticket_stores(root)
+                .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?
+        }
+        None => Vec::new(),
     };
-    for path in &stores {
-        let store = FsStore::open(path)
+    let mut sources = body.sources.unwrap_or_default();
+    sources.extend(
+        stores
+            .iter()
+            .cloned()
+            .map(hotsheet_ticketing::checkouts::TicketSource::git),
+    );
+    for source in sources.iter().filter(|source| source.provider == "git") {
+        let store = FsStore::open(&source.locator)
             .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
         state.host_store(store)?;
     }
+    let default_source = body
+        .default_source
+        .or_else(|| (sources.len() == 1).then(|| sources[0].connection_id.clone()));
     let checkout = state
         .checkout_registry
-        .register(root, body.alias.as_deref(), body.repository, stores)
+        .register_sources(
+            root,
+            body.alias.as_deref(),
+            body.repository,
+            sources,
+            default_source,
+        )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     hotsheet_ticketing::worklist::regenerate_checkout(&checkout)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -1873,16 +1925,23 @@ async fn register_checkout(
     State(state): State<AppState>,
     Json(body): Json<RegisterCheckoutBody>,
 ) -> Result<(StatusCode, Json<hotsheet_ticketing::checkouts::Checkout>), ApiError> {
+    let mut sources = body.sources;
+    sources.extend(
+        body.stores
+            .into_iter()
+            .map(hotsheet_ticketing::checkouts::TicketSource::git),
+    );
+    let default_source = body
+        .default_source
+        .or_else(|| (sources.len() == 1).then(|| sources[0].connection_id.clone()));
     let entry = state
         .checkout_registry
-        .register(
+        .register_sources(
             FsPath::new(&body.root),
             body.alias.as_deref(),
             body.repository,
-            body.stores
-                .into_iter()
-                .map(std::path::PathBuf::from)
-                .collect(),
+            sources,
+            default_source,
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     hotsheet_ticketing::worklist::regenerate_checkout(&entry)
@@ -1906,6 +1965,73 @@ async fn resolve_checkout(
             };
             ApiError::new(status, e.to_string())
         })
+}
+
+#[derive(Deserialize)]
+struct CheckoutSourceBody {
+    provider: String,
+    locator: String,
+    #[serde(default)]
+    make_default: bool,
+}
+
+async fn add_checkout_source(
+    State(state): State<AppState>,
+    Path((reference, connection_id)): Path<(String, String)>,
+    Json(body): Json<CheckoutSourceBody>,
+) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
+    let source = if body.provider == "git" {
+        let store = FsStore::open(&body.locator)
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+        state.host_store(store.clone())?;
+        let source = hotsheet_ticketing::checkouts::TicketSource::git(store.root());
+        if source.connection_id != connection_id {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                format!("git source id must be {}", source.connection_id),
+            ));
+        }
+        source
+    } else {
+        hotsheet_ticketing::checkouts::TicketSource {
+            connection_id,
+            provider: body.provider,
+            locator: body.locator,
+        }
+    };
+    state
+        .checkout_registry
+        .add_source(&reference, source, body.make_default)
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+async fn remove_checkout_source(
+    State(state): State<AppState>,
+    Path((reference, connection_id)): Path<(String, String)>,
+) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
+    state
+        .checkout_registry
+        .remove_source(&reference, &connection_id)
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+#[derive(Deserialize)]
+struct CheckoutDefaultSourceBody {
+    connection_id: Option<String>,
+}
+
+async fn set_checkout_default_source(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(body): Json<CheckoutDefaultSourceBody>,
+) -> Result<Json<hotsheet_ticketing::checkouts::Checkout>, ApiError> {
+    state
+        .checkout_registry
+        .set_default_source(&reference, body.connection_id.as_deref())
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
 }
 
 async fn checkout_repository_status(
@@ -1994,7 +2120,12 @@ fn checkout_entries(
         .resolve(reference)
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     let mut entries = Vec::new();
-    for store_path in checkout.stores {
+    for source in checkout
+        .sources
+        .into_iter()
+        .filter(|source| source.provider == "git")
+    {
+        let store_path = source.locator;
         let canonical = FsPath::new(&store_path)
             .canonicalize()
             .unwrap_or_else(|_| store_path.clone().into());
@@ -2012,12 +2143,6 @@ fn checkout_entries(
         if let Some(entry) = state.host.get(&info.id) {
             entries.push((info.id, entry));
         }
-    }
-    if entries.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!("checkout {reference} has no linked ticket stores"),
-        ));
     }
     Ok(entries)
 }
@@ -2060,6 +2185,33 @@ async fn list_checkout_tickets(
             }
             result.push(value);
         }
+    }
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    for source in checkout
+        .sources
+        .iter()
+        .filter(|source| source.provider != "git")
+    {
+        let provider = provider_for(&state, &source.connection_id)?;
+        let query = params.clone().into_query(state.store.root())?;
+        for ticket in provider.query(&query).map_err(provider_transfer_error)? {
+            let mut value = serde_json::to_value(ticket).map_err(|error| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            })?;
+            if let Some(object) = value.as_object_mut() {
+                object.insert("store".into(), source.connection_id.clone().into());
+            }
+            result.push(value);
+        }
+    }
+    if checkout.sources.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("checkout {reference} has no linked ticket sources"),
+        ));
     }
     Ok(Json(result))
 }
@@ -2180,32 +2332,34 @@ async fn create_corrupt_ticket_repair(
 #[derive(Deserialize)]
 struct CheckoutStoreQuery {
     store: Option<String>,
+    source: Option<String>,
 }
-fn checkout_entry_for_create(
+fn checkout_source_for_create(
     state: &AppState,
     reference: &str,
     requested: Option<&str>,
-) -> Result<StoreEntry, ApiError> {
-    let entries = checkout_entries(state, reference)?;
+) -> Result<hotsheet_ticketing::checkouts::TicketSource, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let requested = requested.or(checkout.default_source.as_deref());
     if let Some(id) = requested {
-        return entries
+        return checkout
+            .sources
             .into_iter()
-            .find(|(store_id, entry)| store_id == id || entry.store.root().to_string_lossy() == id)
-            .map(|(_, e)| e)
+            .find(|source| source.connection_id == id || source.locator == id)
             .ok_or_else(|| {
                 ApiError::new(
                     StatusCode::BAD_REQUEST,
-                    "requested store is not linked to checkout",
+                    "requested source is not linked to checkout",
                 )
             });
     }
-    match entries.as_slice() {
-        [(_, entry)] => Ok(entry.clone()),
-        _ => Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "checkout has multiple stores; specify ?store=<store-id>",
-        )),
-    }
+    Err(ApiError::new(
+        StatusCode::CONFLICT,
+        "checkout has no default ticket source; specify ?source=<connection-id>",
+    ))
 }
 fn checkout_entry_for_ticket(
     state: &AppState,
@@ -2227,21 +2381,97 @@ fn checkout_entry_for_ticket(
         )),
     }
 }
+
+fn checkout_ticket_owner(
+    state: &AppState,
+    reference: &str,
+    id: &str,
+) -> Result<(hotsheet_ticketing::checkouts::TicketSource, String), ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    if let Some((source, native_id)) = checkout.sources.iter().find_map(|source| {
+        id.strip_prefix(&format!("{}:", source.connection_id))
+            .map(|native| (source.clone(), native.to_string()))
+    }) {
+        return Ok((source, native_id));
+    }
+    let mut found = Vec::new();
+    for source in checkout.sources {
+        let exists = if source.provider == "git" {
+            state
+                .host
+                .get(&source.connection_id)
+                .map(|entry| ops::resolve(&entry.store, id))
+                .transpose()?
+                .flatten()
+                .is_some()
+        } else {
+            match provider_for(state, &source.connection_id)?.get(id) {
+                Ok(_) => true,
+                Err(hotsheet_ticketing::ProviderError::NotFound { .. }) => false,
+                Err(error) => return Err(provider_transfer_error(error)),
+            }
+        };
+        if exists {
+            found.push(source);
+        }
+    }
+    match found.as_slice() {
+        [source] => Ok((source.clone(), id.to_string())),
+        [] => Err(ApiError::not_found(id)),
+        _ => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!("ticket {id} is ambiguous across checkout sources; use its qualified id"),
+        )),
+    }
+}
 async fn create_checkout_ticket(
     State(state): State<AppState>,
     Path(reference): Path<String>,
     Query(q): Query<CheckoutStoreQuery>,
     Json(req): Json<CreateReq>,
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
-    let entry = checkout_entry_for_create(&state, &reference, q.store.as_deref())?;
-    Ok((StatusCode::CREATED, Json(do_create(&state, &entry, req)?)))
+    let source = checkout_source_for_create(
+        &state,
+        &reference,
+        q.source.as_deref().or(q.store.as_deref()),
+    )?;
+    let ticket = if source.provider == "git" {
+        let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                format!("checkout links an unhosted git source: {}", source.locator),
+            )
+        })?;
+        do_create(&state, &entry, req)?
+    } else {
+        do_provider_create(&state, &source.connection_id, req)?
+    };
+    Ok((StatusCode::CREATED, Json(ticket)))
 }
 async fn get_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
-    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        let ticket = provider_for(&state, &source.connection_id)?
+            .get(&native_id)
+            .map_err(provider_transfer_error)?;
+        return Ok(Json(ResolvedTicket {
+            store: source.connection_id,
+            ticket,
+        }));
+    }
+    let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            "checkout links an unhosted git source",
+        )
+    })?;
+    let ticket = ops::resolve(&entry.store, &native_id)?.ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
         ticket: api_ticket(&entry, &ticket)?,
@@ -2252,10 +2482,22 @@ async fn update_checkout_ticket(
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        return Ok(Json(ResolvedTicket {
+            store: source.connection_id.clone(),
+            ticket: do_provider_update(&state, &source.connection_id, &native_id, req)?,
+        }));
+    }
+    let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            "checkout links an unhosted git source",
+        )
+    })?;
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: do_update(&state, &entry, &id, req)?,
+        ticket: do_update(&state, &entry, &native_id, req)?,
     }))
 }
 

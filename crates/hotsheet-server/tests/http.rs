@@ -4396,6 +4396,114 @@ async fn direct_github_provider_runs_through_provider_routes_without_mirroring()
 }
 
 #[tokio::test]
+async fn checkout_sources_aggregate_and_route_external_provider_mutations() {
+    let (dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(200, serde_json::json!([github_issue(11, "remote issue")])),
+                github_response(201, github_issue(12, "created remotely")),
+                github_response(200, github_issue(11, "remote issue")),
+                github_response(200, github_issue(11, "updated remotely")),
+            ]
+            .into(),
+        ),
+    });
+    let provider = GitHubProvider::new(
+        GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
+        transport,
+    );
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(provider)));
+    let registration = serde_json::json!({
+        "root": checkout.path(),
+        "alias": "external",
+        "sources": [{
+            "connection_id": "github-main",
+            "provider": "github",
+            "locator": "acme/repo"
+        }],
+        "default_source": "github-main"
+    })
+    .to_string();
+    let registered = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/checkouts", Some(&registration)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(registered["default_source"], "github-main");
+    assert!(registered["stores"].as_array().unwrap().is_empty());
+
+    let listed = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/checkouts/external/tickets", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["qualified_id"], "github-main:11");
+    let created = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts/external/tickets",
+                Some(r#"{"title":"created remotely"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(created["qualified_id"], "github-main:12");
+    let updated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                "/checkouts/external/tickets/github-main:11",
+                Some(r#"{"title":"updated remotely"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(updated["store"], "github-main");
+    assert_eq!(updated["qualified_id"], "github-main:11");
+    let cleared = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                "/checkouts/external/default-source",
+                Some(r#"{"connection_id":null}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(cleared.get("default_source").is_none());
+    let ambiguous_create = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/external/tickets",
+            Some(r#"{"title":"needs a source"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ambiguous_create.status(), StatusCode::CONFLICT);
+    assert!(
+        FsStore::open(dir.path())
+            .unwrap()
+            .list_tickets()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract() {
     let (dir, st) = state();
     let gitlab = GitLabProvider::new(

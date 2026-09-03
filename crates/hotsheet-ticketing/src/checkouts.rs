@@ -17,6 +17,39 @@ pub struct Checkout {
     pub repository: Option<String>,
     #[serde(default)]
     pub stores: Vec<String>,
+    #[serde(default)]
+    pub sources: Vec<TicketSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_source: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TicketSource {
+    pub connection_id: String,
+    pub provider: String,
+    pub locator: String,
+}
+
+impl TicketSource {
+    pub fn git(path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        let canonical = path.canonicalize().unwrap_or(path);
+        let locator = canonical.to_string_lossy().into_owned();
+        let hash = format!("{:x}", Sha256::digest(locator.as_bytes()));
+        Self {
+            connection_id: hash[..16].to_string(),
+            provider: "git".into(),
+            locator,
+        }
+    }
+}
+
+impl Checkout {
+    pub fn source(&self, connection_id: &str) -> Option<&TicketSource> {
+        self.sources
+            .iter()
+            .find(|source| source.connection_id == connection_id)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,7 +60,7 @@ struct RegistryFile {
     checkouts: Vec<Checkout>,
 }
 
-const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 1;
+const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 2;
 const fn registry_schema_version() -> u64 {
     CHECKOUT_REGISTRY_SCHEMA_VERSION
 }
@@ -129,6 +162,38 @@ impl CheckoutRegistry {
         let root = root
             .canonicalize()
             .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
+        let alias = alias.map(str::to_owned).unwrap_or_else(|| {
+            root.file_name()
+                .and_then(|v| v.to_str())
+                .unwrap_or("checkout")
+                .to_owned()
+        });
+        let sources = stores
+            .into_iter()
+            .map(TicketSource::git)
+            .collect::<Vec<_>>();
+        let default_source = legacy_default_source(&root, &sources)
+            .or_else(|| (sources.len() == 1).then(|| sources[0].connection_id.clone()));
+        self.register_sources(
+            root.as_path(),
+            Some(&alias),
+            repository,
+            sources,
+            default_source,
+        )
+    }
+
+    pub fn register_sources(
+        &self,
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        mut sources: Vec<TicketSource>,
+        mut default_source: Option<String>,
+    ) -> Result<Checkout, CheckoutError> {
+        let root = root
+            .canonicalize()
+            .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
         let id = checkout_id(&root)?;
         let alias = alias.map(str::to_owned).unwrap_or_else(|| {
             root.file_name()
@@ -136,14 +201,31 @@ impl CheckoutRegistry {
                 .unwrap_or("checkout")
                 .to_owned()
         });
-        let mut store_strings = Vec::new();
-        for store in stores {
-            let canonical = store.canonicalize().unwrap_or(store);
-            let value = canonical.to_string_lossy().into_owned();
-            if !store_strings.contains(&value) {
-                store_strings.push(value);
+        for source in &mut sources {
+            if source.provider == "git" {
+                let normalized = TicketSource::git(&source.locator);
+                if default_source.as_deref() == Some(&source.connection_id) {
+                    default_source = Some(normalized.connection_id.clone());
+                }
+                *source = normalized;
             }
         }
+        sources.sort_by(|a, b| a.connection_id.cmp(&b.connection_id));
+        sources.dedup_by(|a, b| a.connection_id == b.connection_id);
+        if let Some(default) = &default_source
+            && !sources
+                .iter()
+                .any(|source| &source.connection_id == default)
+        {
+            return Err(CheckoutError::Invalid(format!(
+                "default source '{default}' is not associated with checkout {id}"
+            )));
+        }
+        let mut store_strings = sources
+            .iter()
+            .filter(|source| source.provider == "git")
+            .map(|source| source.locator.clone())
+            .collect::<Vec<_>>();
         store_strings.sort();
         let entry = Checkout {
             id: id.clone(),
@@ -151,6 +233,8 @@ impl CheckoutRegistry {
             alias,
             repository,
             stores: store_strings,
+            sources,
+            default_source,
         };
         let mut file = self.read()?;
         if let Some(existing) = file.checkouts.iter_mut().find(|c| c.id == id) {
@@ -183,6 +267,70 @@ impl CheckoutRegistry {
         }
     }
 
+    pub fn add_source(
+        &self,
+        reference: &str,
+        source: TicketSource,
+        make_default: bool,
+    ) -> Result<Checkout, CheckoutError> {
+        let mut checkout = self.resolve(reference)?;
+        checkout
+            .sources
+            .retain(|item| item.connection_id != source.connection_id);
+        let source_id = source.connection_id.clone();
+        checkout.sources.push(source);
+        if make_default {
+            checkout.default_source = Some(source_id);
+        }
+        self.register_sources(
+            Path::new(&checkout.root),
+            Some(&checkout.alias),
+            checkout.repository,
+            checkout.sources,
+            checkout.default_source,
+        )
+    }
+
+    pub fn remove_source(
+        &self,
+        reference: &str,
+        connection_id: &str,
+    ) -> Result<Checkout, CheckoutError> {
+        let mut checkout = self.resolve(reference)?;
+        let before = checkout.sources.len();
+        checkout
+            .sources
+            .retain(|source| source.connection_id != connection_id);
+        if checkout.sources.len() == before {
+            return Err(CheckoutError::NotFound(connection_id.into()));
+        }
+        if checkout.default_source.as_deref() == Some(connection_id) {
+            checkout.default_source = None;
+        }
+        self.register_sources(
+            Path::new(&checkout.root),
+            Some(&checkout.alias),
+            checkout.repository,
+            checkout.sources,
+            checkout.default_source,
+        )
+    }
+
+    pub fn set_default_source(
+        &self,
+        reference: &str,
+        connection_id: Option<&str>,
+    ) -> Result<Checkout, CheckoutError> {
+        let checkout = self.resolve(reference)?;
+        self.register_sources(
+            Path::new(&checkout.root),
+            Some(&checkout.alias),
+            checkout.repository,
+            checkout.sources,
+            connection_id.map(str::to_owned),
+        )
+    }
+
     fn read(&self) -> Result<RegistryFile, CheckoutError> {
         let text = match std::fs::read_to_string(&self.path) {
             Ok(v) => v,
@@ -199,6 +347,11 @@ impl CheckoutRegistry {
                 supported: CHECKOUT_REGISTRY_SCHEMA_VERSION,
             });
         }
+        let mut file = file;
+        file.schema_version = CHECKOUT_REGISTRY_SCHEMA_VERSION;
+        for checkout in &mut file.checkouts {
+            migrate_checkout(checkout);
+        }
         Ok(file)
     }
 
@@ -213,6 +366,57 @@ impl CheckoutRegistry {
         )?;
         std::fs::rename(tmp, &self.path)?;
         Ok(())
+    }
+}
+
+fn legacy_default_source(root: &Path, sources: &[TicketSource]) -> Option<String> {
+    let linked = legacy_link_source(root)?;
+    sources
+        .iter()
+        .find(|source| source.connection_id == linked.connection_id)
+        .map(|source| source.connection_id.clone())
+}
+
+fn legacy_link_source(root: &Path) -> Option<TicketSource> {
+    let link = std::fs::read_to_string(root.join(".hotsheet/store")).ok()?;
+    let path = PathBuf::from(link.trim());
+    let path = if path.is_absolute() {
+        path
+    } else {
+        root.join(path)
+    };
+    Some(TicketSource::git(path))
+}
+
+fn migrate_checkout(checkout: &mut Checkout) {
+    if checkout.sources.is_empty() {
+        checkout.sources = checkout.stores.iter().map(TicketSource::git).collect();
+        if checkout.sources.is_empty()
+            && let Some(source) = legacy_link_source(Path::new(&checkout.root))
+        {
+            checkout.sources.push(source);
+        }
+    }
+    if checkout.stores.is_empty() {
+        checkout.stores = checkout
+            .sources
+            .iter()
+            .filter(|source| source.provider == "git")
+            .map(|source| source.locator.clone())
+            .collect();
+    }
+    if checkout
+        .default_source
+        .as_ref()
+        .is_some_and(|default| checkout.source(default).is_none())
+    {
+        checkout.default_source = None;
+    }
+    if checkout.default_source.is_none() {
+        checkout.default_source =
+            legacy_default_source(Path::new(&checkout.root), &checkout.sources).or_else(|| {
+                (checkout.sources.len() == 1).then(|| checkout.sources[0].connection_id.clone())
+            });
     }
 }
 
@@ -251,6 +455,8 @@ mod tests {
             )
             .unwrap();
         assert_eq!(saved.stores.len(), 2);
+        assert_eq!(saved.sources.len(), 2);
+        assert!(saved.default_source.is_none());
         assert_eq!(registry.resolve("frontend").unwrap(), saved);
         assert_eq!(registry.resolve(&saved.id[..8]).unwrap(), saved);
         assert_eq!(registry.resolve(checkout.to_str().unwrap()).unwrap(), saved);
@@ -267,6 +473,100 @@ mod tests {
         let error = registry.list().unwrap_err().to_string();
         assert!(error.contains("newer version of Hot Sheet 2"));
         assert!(error.contains("Update Hot Sheet 2"));
+    }
+
+    #[test]
+    fn migrates_legacy_stores_and_link_into_explicit_sources_and_default() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        let store_a = temp.path().join("a.hs2");
+        let store_b = temp.path().join("b.hs2");
+        std::fs::create_dir(&checkout).unwrap();
+        std::fs::create_dir(&store_a).unwrap();
+        std::fs::create_dir(&store_b).unwrap();
+        std::fs::create_dir(checkout.join(".hotsheet")).unwrap();
+        std::fs::write(
+            checkout.join(".hotsheet/store"),
+            store_b.to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+        let path = temp.path().join("checkouts.json");
+        std::fs::write(
+            &path,
+            serde_json::json!({"schemaVersion":1,"checkouts":[{
+                "id":checkout_id(&checkout).unwrap(),"root":checkout,"alias":"app",
+                "stores":[store_a,store_b]
+            }]})
+            .to_string(),
+        )
+        .unwrap();
+        let migrated = CheckoutRegistry::new(&path).list().unwrap().remove(0);
+        assert_eq!(migrated.sources.len(), 2);
+        assert_eq!(
+            migrated
+                .source(migrated.default_source.as_deref().unwrap())
+                .unwrap()
+                .locator,
+            store_b.canonicalize().unwrap().to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn external_sources_defaults_and_removal_are_explicit_and_many_to_many() {
+        let temp = tempfile::tempdir().unwrap();
+        let first = temp.path().join("first");
+        let second = temp.path().join("second");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&second).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let external = TicketSource {
+            connection_id: "github-acme".into(),
+            provider: "github".into(),
+            locator: "acme/issues".into(),
+        };
+        for root in [&first, &second] {
+            registry
+                .register_sources(
+                    root,
+                    None,
+                    None,
+                    vec![external.clone()],
+                    Some("github-acme".into()),
+                )
+                .unwrap();
+        }
+        assert_eq!(registry.list().unwrap().len(), 2);
+        let alternate = TicketSource {
+            connection_id: "jira-eng".into(),
+            provider: "jira".into(),
+            locator: "ENG".into(),
+        };
+        registry
+            .add_source(first.to_str().unwrap(), alternate, false)
+            .unwrap();
+        let changed = registry
+            .set_default_source(first.to_str().unwrap(), Some("jira-eng"))
+            .unwrap();
+        assert_eq!(changed.default_source.as_deref(), Some("jira-eng"));
+        let removed_default = registry
+            .remove_source(first.to_str().unwrap(), "jira-eng")
+            .unwrap();
+        assert!(removed_default.default_source.is_none());
+        let changed = registry
+            .set_default_source(first.to_str().unwrap(), None)
+            .unwrap();
+        assert!(changed.default_source.is_none());
+        let removed = registry
+            .remove_source(first.to_str().unwrap(), "github-acme")
+            .unwrap();
+        assert!(removed.sources.is_empty());
+        assert!(
+            registry
+                .set_default_source(second.to_str().unwrap(), Some("missing"))
+                .unwrap_err()
+                .to_string()
+                .contains("not associated")
+        );
     }
 
     #[test]

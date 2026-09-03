@@ -7,7 +7,8 @@ export interface ProviderConnection {id:string;provider:string;locator:string;na
 export interface Note {id:string;kind:'regular'|'activity'|'feedback_needed'|'feedback_draft'|'status';created_at:string;edited_at:string;text:string}
 export interface Attachment {id:string;filename:string;created_at:string}
 export interface Ticket {qualified_id:string;native_id:string;native_url?:string;title:string;status:string;connection_id:string;notes?:Note[];attachments?:Attachment[]}
-export interface Checkout {id:string;root:string;alias:string;repository?:string;stores:string[]}
+export interface CheckoutSource {connection_id:string;provider:string;locator:string}
+export interface Checkout {id:string;root:string;alias:string;repository?:string;stores:string[];sources?:CheckoutSource[];default_source?:string}
 export interface TicketRow {connection_id:string;native_id:string;qualified_id:string;id:string;slug:string;title:string;category?:string;priority?:string;status?:string;up_next:boolean;feedback_needed:boolean;tags:string[];blocked_by:string[];claimed_by?:string;claim_lease_expires_at?:string;worker_label?:string;claim_count:number;created_at?:string;updated_at?:string;completed_at?:string}
 export interface CorruptTicket {store:string;store_path:string;path:string;id?:string;slug?:string;error:string;error_code?:'invalid_ticket'|'upgrade_required'}
 export interface FullTicket extends TicketRow {details:string;blocked_reason?:string;notes:Note[];attachments:Attachment[];concurrency_token?:string}

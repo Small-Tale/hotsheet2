@@ -421,6 +421,8 @@ mod tests {
                 first.root().to_string_lossy().into_owned(),
                 second.root().to_string_lossy().into_owned(),
             ],
+            sources: Vec::new(),
+            default_source: None,
         };
 
         assert_eq!(regenerate_checkout(&checkout).unwrap(), 2);
