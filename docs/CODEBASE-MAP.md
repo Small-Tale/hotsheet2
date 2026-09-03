@@ -36,6 +36,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request
     src/ticket-views.ts      #   Disjoint active Queue, Backlog, and Archive view semantics
+    src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning
