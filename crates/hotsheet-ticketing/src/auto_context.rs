@@ -267,8 +267,7 @@ mod tests {
     #[test]
     fn scopes_merge_per_entry_in_precedence_order() {
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("HOTSHEET_HOME", dir.path().join("home")) };
-        let settings = Settings::new(dir.path());
+        let settings = Settings::with_global_home(dir.path(), dir.path().join("home"));
         settings
             .set(
                 SETTING_KEY,
@@ -301,6 +300,5 @@ mod tests {
             got.iter().map(|e| e.text.as_str()).collect::<Vec<_>>(),
             ["local task", "g", "s"]
         );
-        unsafe { std::env::remove_var("HOTSHEET_HOME") };
     }
 }

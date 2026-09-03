@@ -85,18 +85,35 @@ fn hotsheet_home() -> PathBuf {
 /// Read/write the project settings beside a store root.
 pub struct Settings {
     root: PathBuf,
+    global_home: Option<PathBuf>,
 }
 
 impl Settings {
     /// Settings stored beside `root` (the store directory).
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            global_home: None,
+        }
+    }
+
+    /// Settings with an explicitly injected machine-wide home. Intended for
+    /// isolated hosts and tests that must not mutate process-global environment.
+    pub fn with_global_home(root: impl Into<PathBuf>, global_home: impl Into<PathBuf>) -> Self {
+        Self {
+            root: root.into(),
+            global_home: Some(global_home.into()),
+        }
     }
 
     fn path(&self, scope: Scope) -> PathBuf {
         match scope {
             // Global lives under the machine home, independent of any store.
-            Scope::Global => hotsheet_home().join(Scope::Global.file_name()),
+            Scope::Global => self
+                .global_home
+                .clone()
+                .unwrap_or_else(hotsheet_home)
+                .join(Scope::Global.file_name()),
             _ => self.root.join(scope.file_name()),
         }
     }
@@ -341,15 +358,9 @@ mod tests {
 
     #[test]
     fn global_layer_is_machine_wide_and_lowest_precedence() {
-        // nextest runs each test in its own process, so pointing HOTSHEET_HOME at a temp
-        // dir here is isolated. SAFETY: single-threaded test process.
         let home = root();
-        unsafe {
-            std::env::set_var("HOTSHEET_HOME", home.path());
-        }
-
         let d = root();
-        let s = Settings::new(d.path());
+        let s = Settings::with_global_home(d.path(), home.path());
 
         // A global default + a project override of the same key.
         s.set("default_tool", json!("claude"), Scope::Global)
@@ -378,9 +389,5 @@ mod tests {
             s.get_effective("default_tool").unwrap(),
             Some(json!("gemini"))
         );
-
-        unsafe {
-            std::env::remove_var("HOTSHEET_HOME");
-        }
     }
 }
