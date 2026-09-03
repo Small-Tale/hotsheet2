@@ -3,11 +3,22 @@ import type { TicketTimelineEntry } from './components/ticket-timeline';
 
 export interface TimestampedTimelineEntry extends TicketTimelineEntry { timestamp: string }
 
-const statusTransition = /^Status changed from .+ to (.+)$/;
+const statusTransition = /^Status changed from (.+) to (.+)$/;
+
+function statusTransitionTitle(source: string, destination: string): string {
+  if (destination === 'Not Started') return source === 'Backlog' ? 'Moved out of backlog' : 'Re-enqueued';
+  if (destination === 'Backlog') return 'Moved to backlog';
+  if (destination === 'Archive') return 'Archived';
+  if (destination === 'Deleted') return 'Deleted';
+  if (destination === 'Moved') return 'Moved';
+  if (['Started', 'Completed', 'Verified'].includes(destination)) return destination;
+  return `Moved to ${destination.toLowerCase()}`;
+}
 
 function noteEntry(note: Note): TimestampedTimelineEntry {
   const [title, ...rest] = note.text.split('\n');
-  const conciseStatus = title.match(statusTransition)?.[1];
+  const transition = title.match(statusTransition);
+  const conciseStatus = transition ? statusTransitionTitle(transition[1], transition[2]) : undefined;
   return {
     id: note.id,
     timestamp: note.created_at,

@@ -606,8 +606,9 @@ icons; structural separators do not require icons.
 Activity notes are durable ticket history. The separate rich AI activity stream can
 feed a live timeline and, under HS2-3GRNZW, later propose distilled activity notes;
 the two sources must remain visually and semantically distinguishable. Status-change
-activity uses only its destination label in the timeline (for example `Completed`),
-while the durable note keeps the complete from/to transition for history and auditing.
+activity uses a concise past-tense action in the timeline (for example `Completed`,
+`Moved to backlog`, or `Moved out of backlog`), while the durable note keeps the complete
+from/to transition for history and auditing.
 Native rich-event wiring remains tracked by HS2-SW655F.
 
 The inspector's segmented tabs own the one-rem gap below the control. The scrolling tab

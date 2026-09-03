@@ -573,7 +573,9 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   show the lifecycle timestamps the ticket still carries (`created_at`, `completed_at`,
   and `verified_at`) so the timeline is never blank. Show `edited_at` when it differs
   from creation. Render status-transition entries as the concise destination label
-  (`Started`, `Completed`, `Not Started`) while retaining the full durable note text.
+  as past-tense actions (`Started`, `Completed`, `Moved to backlog`, `Moved out of
+  backlog`, `Re-enqueued`) while retaining the full durable note text and using the
+  source state where it changes the action's meaning.
   Rich native tool events and distilled background/subtask milestones remain tracked by
   HS2-SW655F and HS2-3GRNZW respectively.
 

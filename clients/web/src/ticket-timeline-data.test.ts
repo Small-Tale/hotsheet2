@@ -50,7 +50,25 @@ describe('ticketTimelineEntries', () => {
       note('three', 'activity', '2026-09-02T04:00:00Z', 'Status changed from Completed to Not Started'),
       note('four', 'activity', '2026-09-02T05:00:00Z', 'Status changed from Not Started to Started'),
     ] }));
-    expect(entries.map(entry => entry.title)).toEqual(['Ticket created', 'Started', 'Completed', 'Not Started', 'Started']);
+    expect(entries.map(entry => entry.title)).toEqual(['Ticket created', 'Started', 'Completed', 'Re-enqueued', 'Started']);
+  });
+
+  it('renders every status destination as a past-tense action and uses the source when reopening', () => {
+    const entries = ticketTimelineEntries(ticket({ completed_at: undefined, notes: [
+      note('backlog', 'activity', '2026-09-02T02:00:00Z', 'Status changed from Started to Backlog'),
+      note('unbacklog', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Backlog to Not Started'),
+      note('archive', 'activity', '2026-09-02T04:00:00Z', 'Status changed from Verified to Archive'),
+      note('delete', 'activity', '2026-09-02T05:00:00Z', 'Status changed from Archive to Deleted'),
+      note('move', 'activity', '2026-09-02T06:00:00Z', 'Status changed from Deleted to Moved'),
+    ] }));
+    expect(entries.map(entry => entry.title)).toEqual([
+      'Ticket created',
+      'Moved to backlog',
+      'Moved out of backlog',
+      'Archived',
+      'Deleted',
+      'Moved',
+    ]);
   });
 
   it('renders a Not Working report as attributed activity with a concise summary', () => {

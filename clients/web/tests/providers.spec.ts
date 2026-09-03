@@ -493,6 +493,7 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await expect(page.getByText('Ticket created')).toBeVisible();
   await expect(page.getByText('Connected the client')).toBeVisible();
   const timeline=page.locator('[data-component="ticket-timeline"]');await expect(timeline.getByText('Completed',{exact:true})).toBeVisible();await expect(timeline).not.toContainText('Status changed from Started to Completed');
+  await page.getByRole('button',{name:'Info'}).click();await page.locator('wa-select[name="inspector-status"]').click();await page.locator('wa-select[name="inspector-status"] wa-option[value="backlog"]').click();await page.getByRole('button',{name:'Timeline'}).click();await expect(timeline.getByText('Moved to backlog',{exact:true})).toBeVisible();await expect(timeline).not.toContainText('Status changed from Completed to Backlog');
   await page.screenshot({path:'/private/tmp/hs2-22gcky-timeline-wide.png'});
   await page.setViewportSize({width:940,height:900});
   await expect(page.locator('[data-component="ticket-timeline"]')).toBeVisible();
