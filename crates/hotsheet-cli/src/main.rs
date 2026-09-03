@@ -168,6 +168,12 @@ enum Cmd {
         /// Clear all blockers.
         #[arg(long)]
         clear_blocked_by: bool,
+        /// Set the user-facing explanation for why this ticket is blocked.
+        #[arg(long, conflicts_with = "clear_blocked_reason")]
+        blocked_reason: Option<String>,
+        /// Clear the blocked reason without changing dependency blockers.
+        #[arg(long)]
+        clear_blocked_reason: bool,
         /// Mark Up Next.
         #[arg(long, conflicts_with = "no_up_next")]
         up_next: bool,
@@ -800,6 +806,8 @@ fn main() -> Result<()> {
             tags,
             blocked_by,
             clear_blocked_by,
+            blocked_reason,
+            clear_blocked_reason,
             up_next,
             no_up_next,
             note,
@@ -816,6 +824,8 @@ fn main() -> Result<()> {
             tags,
             blocked_by,
             clear_blocked_by,
+            blocked_reason,
+            clear_blocked_reason,
             up_next,
             no_up_next,
             note,
@@ -2466,6 +2476,8 @@ fn cmd_edit(
     tags: Vec<String>,
     blocked_by: Vec<String>,
     clear_blocked_by: bool,
+    blocked_reason: Option<String>,
+    clear_blocked_reason: bool,
     up_next: bool,
     no_up_next: bool,
     note: Option<String>,
@@ -2514,7 +2526,11 @@ fn cmd_edit(
         tags: (!tags.is_empty()).then_some(tags),
         up_next,
         blocked_by,
-        blocked_reason: None,
+        blocked_reason: if clear_blocked_reason {
+            Some(None)
+        } else {
+            blocked_reason.map(Some)
+        },
     };
     let updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
     if let Some(text) = note.filter(|t| !t.is_empty()) {

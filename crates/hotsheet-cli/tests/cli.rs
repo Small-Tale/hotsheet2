@@ -803,6 +803,49 @@ fn blocked_by_set_clear_and_reject() {
 }
 
 #[test]
+fn blocked_reason_set_clear_and_omission() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "blocked explanation");
+
+    hs(p)
+        .args(["edit", &slug, "--blocked-reason", "Waiting for access"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &slug, "--title", "Still blocked"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "blocked_reason: Waiting for access",
+        ));
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--blocked-reason",
+            "replacement",
+            "--clear-blocked-reason",
+        ])
+        .assert()
+        .failure();
+    hs(p)
+        .args(["edit", &slug, "--clear-blocked-reason"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("blocked_reason").not());
+}
+
+#[test]
 fn ls_limit_caps_rows_after_sort() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
