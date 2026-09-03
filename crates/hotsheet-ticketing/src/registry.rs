@@ -102,7 +102,7 @@ impl StoreRegistry {
 fn read_opt(store: &FsStore, id: &Ulid) -> Result<Option<Ticket>, StoreError> {
     match store.read_ticket(id) {
         Ok(t) => Ok(Some(t)),
-        Err(StoreError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) if e.is_io_kind(std::io::ErrorKind::NotFound) => Ok(None),
         Err(e) => Err(e),
     }
 }

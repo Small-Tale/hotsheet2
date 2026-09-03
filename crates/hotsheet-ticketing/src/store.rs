@@ -116,6 +116,17 @@ pub enum StoreError {
     Git(String),
 }
 
+impl StoreError {
+    /// Match an underlying filesystem kind regardless of whether the error has
+    /// path/operation context attached.
+    pub fn is_io_kind(&self, kind: std::io::ErrorKind) -> bool {
+        match self {
+            Self::Io(source) | Self::IoAt { source, .. } => source.kind() == kind,
+            _ => false,
+        }
+    }
+}
+
 /// A ticket file that could not be parsed during a resilient enumeration
 /// ([`FsStore::list_tickets_resilient`]). Surfaced instead of aborting the whole
 /// scan so a single bad file can never hide every healthy ticket (HS2-PRVPCQ).

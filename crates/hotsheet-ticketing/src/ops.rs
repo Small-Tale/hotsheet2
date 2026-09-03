@@ -195,7 +195,7 @@ pub fn resolve(store: &FsStore, needle: &str) -> Result<Option<Ticket>, StoreErr
     if let Ok(id) = Ulid::from_string(needle) {
         return match store.read_ticket(&id) {
             Ok(t) => Ok(Some(t)),
-            Err(StoreError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) if e.is_io_kind(std::io::ErrorKind::NotFound) => Ok(None),
             Err(e) => Err(e),
         };
     }

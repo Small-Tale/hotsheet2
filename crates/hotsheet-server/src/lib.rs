@@ -2352,11 +2352,12 @@ async fn get_checkout_ticket_attachment(
     let (attachment, bytes) = entry
         .store
         .read_attachment(&ticket.id, &attachment_id)
-        .map_err(|error| match &error {
-            StoreError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+        .map_err(|error| {
+            if error.is_io_kind(std::io::ErrorKind::NotFound) {
                 ApiError::not_found(&attachment_id.to_string())
+            } else {
+                error.into()
             }
-            _ => error.into(),
         })?;
     let mut headers = HeaderMap::new();
     let content_type = match FsPath::new(&attachment.filename)
@@ -2396,11 +2397,12 @@ async fn delete_checkout_ticket_attachment(
     let updated = entry
         .store
         .remove_attachment(&ticket.id, &attachment_id, now())
-        .map_err(|error| match &error {
-            StoreError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+        .map_err(|error| {
+            if error.is_io_kind(std::io::ErrorKind::NotFound) {
                 ApiError::not_found(&attachment_id.to_string())
+            } else {
+                error.into()
             }
-            _ => error.into(),
         })?;
     state.changed_in(&entry, "attachment_removed", &updated);
     Ok(Json(ResolvedTicket {
@@ -4514,9 +4516,7 @@ impl IntoResponse for ApiError {
 impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
         let status = match &e {
-            StoreError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
-                StatusCode::NOT_FOUND
-            }
+            error if error.is_io_kind(std::io::ErrorKind::NotFound) => StatusCode::NOT_FOUND,
             StoreError::NotAStore(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };

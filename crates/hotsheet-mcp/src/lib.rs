@@ -1374,7 +1374,7 @@ mod core_backend {
 
     fn store_err(e: StoreError) -> BackendError {
         let status = match &e {
-            StoreError::Io(io) if io.kind() == std::io::ErrorKind::NotFound => 404,
+            error if error.is_io_kind(std::io::ErrorKind::NotFound) => 404,
             _ => 500,
         };
         BackendError {
