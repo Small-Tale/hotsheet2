@@ -127,8 +127,10 @@ client adapter, never a server dependency; other clients can inject another
 
 ### 15.7.1 Remaining stream considerations
 
-- **Importance heuristic** — default mapping from `kind` → `importance`, overridable.
-- **Volume/rate** — cap events/sec per turn so a chatty tool can't flood the stream.
+- **Importance heuristic — shipped:** default mapping from `kind` → `importance`,
+  overridable by the producer.
+- **Volume/rate — HS2-26M48F:** cap/coalesce events per turn or session so a chatty
+  tool cannot flood persistence or clients.
 
 ## 15.8 Build plan (follow-ups)
 - HS2-70 (this) = the spec.

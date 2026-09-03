@@ -15,9 +15,9 @@ evidence in [TEST-COVERAGE.md](TEST-COVERAGE.md).
 > lock, `serve --stop`; HS2-59), the `hotsheet-cli reindex` CLI, the plugin host +
 > AI-tool **drive/permission/metrics** stack (`hotsheet-aitools`, `hotsheet-plugins`),
 > and **`hotsheet-terminals`** (PTY + manager + busy) with server `/terminals*` routes.
-> Still design-only or incomplete: **client** auto-start/supervise, live-tool protocol
-> verification, and the clients. No-server index maintenance, git-aware fast-path reindex,
-> and Tier-1 mTLS are built.
+> Still design-only or incomplete: **client** auto-start/supervise, serverless incremental
+> index maintenance, and the Tauri/native clients. Git-aware fast-path reindex, Tier-1
+> mTLS, and version-pinned/live AI-tool protocol verification are built.
 
 ## Directory tree
 

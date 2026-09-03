@@ -241,10 +241,10 @@ A single literal merged report across Rust + TS + (later) Swift is impractical, 
   floor (`report --fail-under-lines`). A scheduled, creds-gated **`Live tier`**
   workflow (`live.yml`, nightly + manual dispatch) runs the `#[ignore]` live
   codex/claude turns (`HOTSHEET_CODEX_LIVE`/`HOTSHEET_CLAUDE_LIVE`) only on a runner
-  flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. **Pending
-  (HS2-8WR8XF):** raising the coverage floors as measured runs settle, **web
-  coverage + the web E2E (Playwright)** — blocked on the Kerf client existing — and a
-  macOS matrix leg for the terminal/SwiftUI surfaces.
+  flagged `HOTSHEET_LIVE_RUNNER`, keeping the default tier fast. Playwright web E2E is
+  now part of the normal suite. **Pending (HS2-FPXSD0):** raise measured coverage
+  floors, close remaining web coverage gaps, and add the macOS matrix leg for
+  terminal/native-client surfaces.
 - The `check` job also validates the feature double-coverage matrix. Repository guidance
   requires the matrix to change with feature/requirement status or test-layer changes,
   making missing unit/E2E evidence visible even when line coverage remains green.

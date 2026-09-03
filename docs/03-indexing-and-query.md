@@ -11,8 +11,8 @@
 > rebuild if corrupt). Built: the `hotsheet-cli reindex` command, the git-diff
 > reconcile fast path (§3.4), the `blocked_by`/`assignees`/`reviews` facet tables, and
 > **keyset paging** (`page_after` cursor) + `me` identity resolution (§3.5, HS2-TCDTCH).
-> **Not yet:** no-server incremental index maintenance and the watcher's git-diff
-> fast path. SQLite + FTS5 is the recommendation; §3.7.
+> **Not yet:** no-server incremental index maintenance (HS2-8XXZBV). The watcher's
+> git-diff fast path is built. SQLite + FTS5 is the recommendation; §3.7.
 
 ## 3.1 Why an index at all
 

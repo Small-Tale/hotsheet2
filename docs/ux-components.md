@@ -112,7 +112,8 @@ Supporting components:
 - `ConnectionStateBanner` — **demo built**: connecting, reconnecting, offline,
   incompatible-server, and authentication variants with state-specific Lucide icons,
   live-region semantics, details, and relevant recovery actions.
-- `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops.
+- `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
+  (HS2-R6P8MZ).
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.
 - `WindowChrome` — native traffic lights/titlebar accommodation in Tauri/macOS; absent
   or adapted in an ordinary browser.
@@ -365,8 +366,8 @@ always retain native clipboard behavior.
   control has an explicit compact 2rem height, so native heading metrics cannot expand
   the board's header track.
   It also has a standalone demo that preserves the 250px production minimum and shared
-  responsive `TicketRow` composition. Loading and empty states
-  remain future variants.
+  responsive `TicketRow` composition. Loading, empty, and mutation-error variants are
+  tracked by HS2-0W67Y6.
 - The real Queue board uses `Not Started`, `Started`, `Completed`, and `Verified`
   columns. A per-project setting can hide `Verified`, merging those tickets into
   `Completed`. Backlog and Archive views each use one eponymous column because the
@@ -383,6 +384,9 @@ coverage.
 
 ### 3.4 Search and filtering — feature floor
 
+The advanced search and active-filter surface is tracked by HS2-383D6K; the later
+custom query-builder/editor is tracked separately by HS2-G7FWSS.
+
 - `GlobalSearchOverlay`
 - `SearchQueryInput`
 - `SearchScopePicker`
@@ -396,7 +400,7 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 
 ### 3.5 Selection and batch actions — partial
 
-- `SelectionBar`
+- `SelectionBar` — persistent affordance tracked with undo history by HS2-4CAN74.
 - `BatchActionMenu` — the selected-row context menu currently supplies the shipped batch
   surface; a persistent selection bar remains later work.
 - `TicketContextMenu` — **built**: shared list/board menu with Lucide icons, checked
@@ -405,8 +409,8 @@ Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
   fresh provider concurrency tokens and participate in field-aware Undo. Capture-phase
   composed-path containment keeps shadow-DOM menu interactions open and dismisses on every
   true outside pointer-down or Escape.
-- `CopyMoveTicketDialog`
-- `UndoToast` / `UndoHistory`
+- `CopyMoveTicketDialog` — tracked by HS2-77M88K.
+- `UndoToast` / `UndoHistory` — tracked by HS2-4CAN74.
 
 ## 4. Ticket inspector, reading, and editing
 
@@ -793,7 +797,8 @@ overlays the content to preserve usable demo space. One viewport-anchored toggle
 in the same location and changes between “Settings” and “Close settings”; opening the
 inspector must not introduce a second control or a moving pointer target. It should
 also keep stateful Web Awesome control properties synchronized when a demo reset
-restores its canonical mock state. It should grow to provide:
+restores its canonical mock state. The remaining catalog review-tooling package is
+tracked by HS2-89692E. It should grow to provide:
 
 Catalog groups reset native list margins so their shared `MenuHeader` and `MenuItem`
 rows begin on the same outer edge; hierarchy is already clear from the headers and

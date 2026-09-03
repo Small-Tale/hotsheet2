@@ -243,14 +243,14 @@ declarative.
 
 ## 5.6 Connection registry & busy tracking (list connections; track busy-ness)
 
-> **Status: registry + busy built (HS2-107).** `hotsheet_aitools::ConnectionRegistry`
+> **Status: registry + busy wired (HS2-107/34X6BW/4M67VN).** `hotsheet_aitools::ConnectionRegistry`
 > — register/unregister/get/list/count over `Connection { id, project, tool, role
 > (Main|Worker|DriveSpawned), transport, pid, started_at }`, plus **busy as a derived
 > sliding-window view**: `note_activity(id, now)` is one heartbeat both hooks and
 > byte-stream/spinner inference feed, `is_busy`/`busy_count` read the window, and
-> `set_idle` drops it on a `Done`. The clock is injected (deterministic). Still to
-> wire: live `TurnHandle` signals feeding it (with the server), and the actual spinner
-> inference (with terminals, HS2-10).
+> `set_idle` drops it on a `Done`. The clock is injected (deterministic). Live
+> `TurnHandle` signals feed it in the server, and hosted terminals supply OSC-133/spinner
+> inference.
 
 - **Connection registry.** Each live tool connection registers an entry
   (`project`, `tool`, `pid`/session, `startedAt`, role: main vs worker vs

@@ -120,11 +120,13 @@ Two refinements for the distributed/team case:
   `blocked_by` for hard ordering. A review never hard-blocks a ticket.
 
 **Still open (smaller):**
+- **Client presentation.** The shared People control, identity-derived views, and
+  on-sync/native attention UX are tracked by HS2-CRW5CP.
 - **Notification transport off-server.** In-app + on-sync desktop notifications are
-  clear; the iOS-push path is deferred ([08](08-distributed-and-remote.md) O5).
-- **Team roster source of truth.** For a GitHub-backed store, optionally derive
-  people from repo collaborators to seed `people.json`. Enhancement; git identity
-  works without it.
+  clear; the iOS-push path is deferred to HS2-ZSRHYA ([08](08-distributed-and-remote.md) O5).
+
+GitHub collaborator seeding for `people.json` shipped in HS2-NZT80R; git identity
+continues to work without it.
 
 ## 10.6 Cross-references
 - The `assignees` / `review_requests` fields + shared/local tiering: [02](02-ticket-storage.md) §2.5, §2.11

@@ -99,16 +99,13 @@ Metrics can be shared across a team **through git** — no server sync needed:
 - Cross-project + cross-person rollups feed a team cost view (from the shared rollups,
   §14.4).
 
-## 14.6 Open questions
-- **Price table maintenance** — where the per-model prices live and how they update
-  (ship a default, allow override; the `claude-api` skill is the source of truth for
-  Anthropic pricing).
-- **Rollup cadence + tail size** — how often to roll up vs. how much raw JSONL a live
-  read scans; tune for dashboard latency.
-- **Per-contributor identity** for shared rollups = the git email (same as assignment,
-  [10](10-assignment-and-collaboration.md)).
-- **Non-Claude attribution fidelity** — Codex/ACP tools may report usage more coarsely;
-  attribute what they give, don't fabricate.
+## 14.6 Resolved implementation decisions
+- **Price table maintenance** ships a default with a local override (HS2-8BCRHS).
+- **Rollup cadence + tail size** is caller-controlled; settled reads combine the latest
+  rollup with its raw tail so dashboards can tune cadence without losing events.
+- **Per-contributor identity** is git email, shared with assignment.
+- **Non-Claude attribution fidelity** preserves only fields each protocol reports;
+  Codex/Claude/ACP mappings are version-pinned and drift-tested.
 
 ## 14.7 Build plan (follow-ups)
 - HS2-69 (this) = the spec.

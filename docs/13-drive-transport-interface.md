@@ -243,13 +243,14 @@ Every plugin with a `drive` passes:
   (if present) reports health + prestart.
 - Absent caps return `None` and are never called.
 
-## 13.8 Open questions
-- **`Target` when zero connections exist** — does `run` *start* one (spawn) or error
-  (channel needs a running session)? Lean: spawn-drives auto-start; channel-drives
-  surface "not connected" (HS1's behavior).
-- **Streaming granularity** of `Output` events (raw bytes vs. parsed) — keep raw at
-  this layer; parsing is a consumer concern.
-- **Cancellation semantics** for async `run` (drop the handle vs. explicit `interrupt`).
+## 13.8 Resolved transport semantics
+- **`Target` when zero connections exist:** spawn drives start a process; channel,
+  ACP, and app-server drives surface `NotConnected` when their backing service/session
+  is unavailable.
+- **Streaming granularity:** `Output` preserves transport output at this layer;
+  protocol-specific activity parsing is a consumer/adapter concern.
+- **Cancellation:** capable drives expose explicit `TurnHandle::interrupt`; dropping a
+  handle is not the cancellation contract.
 
 ## 13.9 Build plan (follow-ups)
 - HS2-67 (this) = the spec. Implementation lands in **HS2-9** (plugin host + Claude
