@@ -24,7 +24,7 @@ export function NotificationNavigation({ selected, counts, collapseControl = fal
     {collapseControl && <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide notification sidebar" title="Hide notification sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></ToolbarControlGroup>} />}
     <div class="settings-navigation__content">
       <p class="settings-navigation__heading">Notifications</p>
-      <nav aria-label="Notification views">{views.map(item => <MenuItem action="select-notification-view" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} trailing={counts[item.id] ? <span>{counts[item.id]}</span> : undefined} />)}</nav>
+      <nav aria-label="Notification views">{views.map(item => <MenuItem action="select-notification-view" itemId={item.id} selected={selected === item.id} icon={<LucideIcon icon={item.icon} name={item.iconName} />} label={item.label} trailing={<small class="menu-item__count" data-attention={String(item.id === 'pending' && counts.pending > 0)}>{counts[item.id]}</small>} />)}</nav>
     </div>
   </aside>;
 }

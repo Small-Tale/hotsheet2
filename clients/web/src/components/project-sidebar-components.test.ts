@@ -56,6 +56,7 @@ describe('ProjectSidebar component slice', () => {
 
   it('projects current view, counts, and attention', () => {
     const markup = String(ViewNavigation({ selectedId: 'all', items: [{ id: 'all', label: 'All Tickets', count: 4, icon: 'all' }, { id: 'review', label: 'Review', count: 2, attention: true, icon: 'needs-review' }] }));
+    expect(markup.match(/class="menu-item__count"/g)).toHaveLength(2);
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-attention="true"');
     expect(markup).toContain('aria-label="Add view"');

@@ -14,6 +14,6 @@ const icons: Record<ViewNavigationItem['icon'], [IconNode, string]> = {
 export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
   return <nav class="view-navigation" data-component="view-navigation" aria-label="Ticket views">
     <MenuHeader label="Views" action="add-view" actionLabel="Add view" actionIcon={Plus} actionIconName="plus" />
-    <ul>{items.map(item => { const [icon, name] = icons[item.icon]; return <li><MenuItem action="select-view" itemId={item.id} dropStatus={item.id === 'backlog' ? 'backlog' : item.id === 'archive' ? 'archive' : item.id === 'all' ? 'not_started' : undefined} selected={item.id === selectedId} icon={<LucideIcon icon={icon} name={name} />} label={item.label} trailing={item.count !== undefined ? <small data-attention={String(Boolean(item.attention))}>{item.count}</small> : undefined} /></li>; })}</ul>
+    <ul>{items.map(item => { const [icon, name] = icons[item.icon]; return <li><MenuItem action="select-view" itemId={item.id} dropStatus={item.id === 'backlog' ? 'backlog' : item.id === 'archive' ? 'archive' : item.id === 'all' ? 'not_started' : undefined} selected={item.id === selectedId} icon={<LucideIcon icon={icon} name={name} />} label={item.label} trailing={item.count !== undefined ? <small class="menu-item__count" data-attention={String(Boolean(item.attention))}>{item.count}</small> : undefined} /></li>; })}</ul>
   </nav>;
 }

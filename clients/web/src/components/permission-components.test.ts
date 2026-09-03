@@ -93,7 +93,10 @@ describe('permission presentation components', () => {
   it('offers the three notification views with counts and current state', () => {
     const markup = String(NotificationNavigation({ selected: 'day', counts: { pending: 2, day: 3, week: 5 }, collapseControl: true }));
     for (const label of ['Pending', 'Last 24 Hours', 'Last 7 Days']) expect(markup).toContain(label);
+    expect(markup.match(/class="menu-item__count"/g)).toHaveLength(3);
+    expect(markup).toContain('class="menu-item__count" data-attention="true">2</small>');
     expect(markup).toContain('data-item-id="day"');
     expect(markup).toContain('aria-current="page"');
+    expect(String(NotificationNavigation({ selected: 'pending', counts: { pending: 0, day: 0, week: 0 } }))).toContain('class="menu-item__count" data-attention="false">0</small>');
   });
 });
