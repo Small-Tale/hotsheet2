@@ -593,6 +593,10 @@ disposable index must therefore recompute the compact flag for unchanged ticket 
 **Reader mode is a directly editable focus surface.** Opening reader mode shows the
 ticket's details + notes on one large scrollable surface with no separate top-level edit
 mode. Details and ordinary notes expose their normal edit interactions immediately.
+Leaving the details editor flushes its pending autosave and returns that surface to
+preview. Closing the reader performs the same save-and-exit transition, so its shared
+editing state never leaks into the sidebar inspector; stale save completions cannot close
+a newer editor generation or a different selected ticket.
 While editing details/notes **in the detail panel**, the **reader button stays
   available**; clicking it **launches directly into the larger reader/editing mode**,
   carrying the in-progress edit — so you can escalate from the tight inline editor to
