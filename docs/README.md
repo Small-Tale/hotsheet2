@@ -91,6 +91,7 @@ and don't imply reading order — read by group.
 | [04-core-server-cli.md](04-core-server-cli.md) | Shared core, server (+lifecycle), CLI, MCP, merge driver | Decided |
 | [06-clients.md](06-clients.md) | Browser web UX → Tauri → SwiftUI macOS → iOS → Android; root real-project AppShell and local onboarding now usable; broader client floor remains | Partial |
 | [ux-components.md](ux-components.md) | Cross-client component architecture and real-component `/ux-demo` catalog | Initial inventory |
+| [design-guidelines.md](design-guidelines.md) | Apple macOS HIG (Tahoe / Liquid Glass) distilled for the native macOS app and the web/Tauri client: applicability matrix, rules per foundation/pattern/component/input/technology, shortcut register, menu-bar spec, AI-content rules, checklists | Decided (HS2-ZC24BS) |
 | [18-dev-review-tool.md](18-dev-review-tool.md) | Embeddable Option/Alt-drag screenshot annotation and Hot Sheet ticket submission tool | Shipped initial web implementation |
 
 **E · AI-tool integration**
@@ -209,6 +210,7 @@ Keep this current as the design firms up. Statuses: **Design** (specified here) 
 | Trigger / permissions bridge | 05 §5.5, §5.7; 06 §6.6 | Shipped (`hotsheet-cli trigger`/`work`; capability-aware external-terminal `launch` with Claude hook route-back and no-`-C` linked-store discovery; FIFO `SharedPermissionBridge`; machine-local durable Always Allow rules; shared 24-hour eventual safe-deny guard; server `/permissions`,`/permissions/{id}`,`/permissions/ask`; Codex app-server approvals + Claude PreToolUse hook; web popup, cross-project badges, Notifications history, Ignore, and visible-only auto-Allow/auto-Deny — HS2-11/HS2-9R9YZW/HS2-YMR9HE/HS2-XCTAHM/HS2-TFBV7Z/HS2-C46G58) |
 | Browser web UX client (1st) → Tauri host (2nd) | 06, UX catalog | Partial; the production shell and `/ux-demo` cover the main ticket workflow. Remaining feature-floor work is explicitly tracked: shell/navigation (HS2-W6JHT1), advanced search (HS2-383D6K), persistent selection/undo (HS2-4CAN74), board states (HS2-0W67Y6), global drops (HS2-R6P8MZ), catalog tooling (HS2-89692E), people/review UX (HS2-CRW5CP), settings (HS2-BDW1BN/S4TZ31), and native host/lifecycle work |
 | Native SwiftUI macOS (3rd) → iOS (4th) | 06, UX catalog | Confirmed; macOS follows the same conceptual component responsibilities using native SwiftUI primitives |
+| **Apple HIG adoption (macOS fully; web/Tauri "HIG-shaped, not HIG-skinned")** | design-guidelines | Decided (HS2-ZC24BS): guidelines doc shipped; web gaps tracked — system appearance/dark mode (HS2-DKZG9S), typography (HS2-PS29TA), native icon decision (HS2-0P83KD), menu bar/command registry (HS2-80VPPW), conformance audit (HS2-A2A9GT), AI-content labeling (HS2-WBW3Z9), iOS considerations (HS2-46RA38) |
 | Android client (5th, Kotlin/Compose) | 06 | Deferred (sequence-confirmed) |
 | Code organization (Cargo workspace/crates) + test strategy | 12 | Decided |
 | PGLite → git migration (UI-prompted) | 07 | Partial (Node exporter + Rust importer + conformance test; deterministic/idempotent HS2 identity and normalized close state shipped; UI flow deferred) |
