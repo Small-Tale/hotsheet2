@@ -1320,6 +1320,60 @@ fn edit_can_append_and_edit_an_activity_note() {
 }
 
 #[test]
+fn edit_reads_multiline_markdown_note_from_stdin_without_shell_escaping() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Request feedback");
+    let markdown = "FEEDBACK NEEDED: Choose a direction.\n\n1. **Keep** the current behavior\n2. Use the `new` behavior\n";
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note-file",
+            "-",
+            "--note-kind",
+            "feedback_needed",
+        ])
+        .write_stdin(markdown)
+        .assert()
+        .success();
+
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    // Ticket formatting trims a terminal newline, but preserves every meaningful Markdown
+    // line break instead of persisting shell/JSON escape text.
+    assert_eq!(ticket.notes[0].text, markdown.trim_end());
+    assert!(!ticket.notes[0].text.contains("\\n"));
+    assert_eq!(
+        ticket.notes[0].kind,
+        hotsheet_model::NoteKind::FeedbackNeeded
+    );
+
+    let note_id = ticket.notes[0].id.to_string();
+    let replacement = "FEEDBACK NEEDED: Revised question.\n\n- First choice\n- Second choice\n";
+    let note_file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(note_file.path(), replacement).unwrap();
+    hs(p)
+        .arg("edit")
+        .arg(&slug)
+        .arg("--edit-note")
+        .arg(note_id)
+        .arg("--note-file")
+        .arg(note_file.path())
+        .assert()
+        .success();
+
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ticket.notes[0].text, replacement.trim_end());
+}
+
+#[test]
 fn attach_adds_stable_metadata_and_nested_payload() {
     let dir = tempfile::tempdir().unwrap();
     let source = tempfile::NamedTempFile::new().unwrap();

@@ -81,6 +81,7 @@ mod tests {
         assert!(skill.contains("Priority is an important guidance signal"));
         assert!(skill.contains("Completion checklist"));
         assert!(skill.contains("FEEDBACK NEEDED is not deferred-work tracking"));
+        assert!(skill.contains("--note-file -"));
 
         let mcp: serde_json::Value = serde_json::from_str(&read(d.path(), ".mcp.json")).unwrap();
         let hs = &mcp["mcpServers"]["hotsheet"];

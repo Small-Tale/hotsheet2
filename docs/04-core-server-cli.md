@@ -263,6 +263,7 @@ hotsheet search "flicker"                 # FTS via the local index
 hotsheet show HS-7f3k9q
 hotsheet attach HS-7f3k9q ./proof.png       # stable id + RFC3339 created_at
 hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
+printf '%s' "$MARKDOWN" | hotsheet edit HS-7f3k9q --note-file - --note-kind feedback_needed
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
 hotsheet claim-next --worker worker-1                       # self-select + claim
@@ -279,6 +280,11 @@ hotsheet provider-new github-main "Bug title"
 hotsheet provider-edit github-main 42 --expected-token <opaque> --status started
 hotsheet provider-close github-main 42 --reason completed
 ```
+`--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,
+use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved
+without shell-escape interpretation. `--note-file` works for both appended notes and
+`--edit-note` replacements.
+
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
 an `x-hotsheet-filename` header. Browser clients percent-encode Unicode filenames and
 declare `x-hotsheet-filename-encoding: percent`; the server decodes them before normal

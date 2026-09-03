@@ -3,6 +3,7 @@
 //! (`docs/04-core-server-cli.md` §4.4) and imports HS1 exports (`docs/07`).
 
 use std::collections::HashSet;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -127,11 +128,14 @@ enum Cmd {
         expected_token: Option<String>,
         #[arg(long)]
         note: Option<String>,
+        /// Read the note body from a UTF-8 file, or from stdin with `-`.
+        #[arg(long, value_name = "PATH", conflicts_with = "note")]
+        note_file: Option<PathBuf>,
         /// Edit this provider-native note id instead of appending a note.
-        #[arg(long, requires = "note", conflicts_with = "note_kind")]
+        #[arg(long, conflicts_with = "note_kind")]
         edit_note: Option<String>,
         /// Kind for --note: regular | activity | feedback_needed | status.
-        #[arg(long, requires = "note")]
+        #[arg(long)]
         note_kind: Option<String>,
     },
     /// Close a provider-native ticket.
@@ -183,11 +187,14 @@ enum Cmd {
         /// Append a note to the ticket.
         #[arg(long)]
         note: Option<String>,
+        /// Read the note body from a UTF-8 file, or from stdin with `-`.
+        #[arg(long, value_name = "PATH", conflicts_with = "note")]
+        note_file: Option<PathBuf>,
         /// Edit this existing note ULID instead of appending a note.
-        #[arg(long, requires = "note", conflicts_with = "note_kind")]
+        #[arg(long, conflicts_with = "note_kind")]
         edit_note: Option<String>,
         /// Kind for --note: regular | activity | feedback_needed | status.
-        #[arg(long, requires = "note")]
+        #[arg(long)]
         note_kind: Option<String>,
     },
     /// Record why a ticket was closed (close outcome; orthogonal to status).
@@ -801,22 +808,27 @@ fn main() -> Result<()> {
             status,
             expected_token,
             note,
+            note_file,
             note_kind,
             edit_note,
-        } => cmd_provider_edit(
-            &cli.path,
-            &connection,
-            &id,
-            ProviderEditInput {
-                title,
-                details,
-                status,
-                expected_token,
-                note,
-                note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
-                edit_note,
-            },
-        ),
+        } => {
+            let note = read_note_input(note, note_file)?;
+            validate_note_modifiers(&note, note_kind.as_ref(), edit_note.as_ref())?;
+            cmd_provider_edit(
+                &cli.path,
+                &connection,
+                &id,
+                ProviderEditInput {
+                    title,
+                    details,
+                    status,
+                    expected_token,
+                    note,
+                    note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
+                    edit_note,
+                },
+            )
+        }
         Cmd::ProviderClose {
             connection,
             id,
@@ -839,27 +851,32 @@ fn main() -> Result<()> {
             up_next,
             no_up_next,
             note,
+            note_file,
             note_kind,
             edit_note,
-        } => cmd_edit(
-            &cli.path,
-            &id,
-            title,
-            details,
-            category,
-            priority,
-            status,
-            tags,
-            blocked_by,
-            clear_blocked_by,
-            blocked_reason,
-            clear_blocked_reason,
-            up_next,
-            no_up_next,
-            note,
-            parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
-            edit_note,
-        ),
+        } => {
+            let note = read_note_input(note, note_file)?;
+            validate_note_modifiers(&note, note_kind.as_ref(), edit_note.as_ref())?;
+            cmd_edit(
+                &cli.path,
+                &id,
+                title,
+                details,
+                category,
+                priority,
+                status,
+                tags,
+                blocked_by,
+                clear_blocked_by,
+                blocked_reason,
+                clear_blocked_reason,
+                up_next,
+                no_up_next,
+                note,
+                parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
+                edit_note,
+            )
+        }
         Cmd::Close {
             id,
             reason,
@@ -2685,6 +2702,34 @@ fn cmd_edit(
         }
     }
     println!("Updated {}", updated.slug);
+    Ok(())
+}
+
+fn read_note_input(note: Option<String>, note_file: Option<PathBuf>) -> Result<Option<String>> {
+    let Some(path) = note_file else {
+        return Ok(note);
+    };
+    let text = if path == Path::new("-") {
+        let mut text = String::new();
+        std::io::stdin()
+            .read_to_string(&mut text)
+            .context("failed to read note body from stdin")?;
+        text
+    } else {
+        std::fs::read_to_string(&path)
+            .with_context(|| format!("failed to read note body from {}", path.display()))?
+    };
+    Ok(Some(text))
+}
+
+fn validate_note_modifiers(
+    note: &Option<String>,
+    note_kind: Option<&String>,
+    edit_note: Option<&String>,
+) -> Result<()> {
+    if note.is_none() && (note_kind.is_some() || edit_note.is_some()) {
+        bail!("--note-kind and --edit-note require --note or --note-file");
+    }
     Ok(())
 }
 

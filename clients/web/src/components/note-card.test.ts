@@ -43,6 +43,13 @@ describe('NoteCard', () => {
     expect(markup).toContain('href="/docs/runbook" target="_blank" rel="noopener noreferrer"');
   });
 
+  it('renders feedback-needed notes with the same Markdown support as regular notes', () => {
+    const markup = String(NoteCard({ id: 'feedback-markdown', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Choose one:\n\n1. **Keep** this\n2. Use `that`' }));
+    expect(markup).toContain('<ol>');
+    expect(markup).toContain('<strong>Keep</strong>');
+    expect(markup).toContain('<code>that</code>');
+  });
+
   it('keeps regular reader notes directly editable while preserving feedback response behavior', () => {
     const regular = String(NoteCard({ id: 'regular', kind: 'regular', author: 'Codex', time: 'Now', body: 'Read only', readerMode: true }));
     expect(regular).toContain('data-edit-on-double-click="true"');
