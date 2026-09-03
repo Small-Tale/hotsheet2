@@ -55,6 +55,7 @@ import { ticketBoardGroups } from './ticket-board-layout';
 import { bulkTagChoices, bulkTicketPatch, canBulkUpdate, type BulkTicketAction } from './ticket-bulk-operations';
 import { ticketClipboardAction } from './ticket-clipboard-shortcuts';
 import { type ClipboardTicket, deduplicateTitle, TicketHistory, type TicketPatch, type TicketSnapshot } from './ticket-operations';
+import { loadTicketEditorSizes, saveTicketEditorSize, ticketEditorKind } from './ticket-editor-size';
 import { projectTicketPatch, reportMutationTiming, ticketRowFromFull } from './ticket-mutation';
 import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketStatusForView, ticketsForView, type TicketView } from './ticket-views';
 import { ticketTimelineEntries } from './ticket-timeline-data';
@@ -68,6 +69,7 @@ if(import.meta.env.DEV){
 }
 
 type Control = HTMLElement & { value:string; open?:boolean; show?():void; hide?():void };
+loadTicketEditorSizes(localStorage,document.documentElement.style);
 interface Project { id:string; root:string; name:string; stores:string[]; apiPath:string; compatibility:CompatibilityAssessment }
 const data = (target: Element) => (target as HTMLElement).dataset;
 
@@ -480,6 +482,7 @@ delegate(document.body,'dblclick','[data-edit-blocked-reason="true"]',(_event,ta
 delegate(document.body,'keydown','[data-edit-blocked-reason="true"]',(event,target)=>{if(!['Enter',' '].includes((event as KeyboardEvent).key))return;event.preventDefault();beginBlockedReasonEdit(isReaderSurface(target))});
 delegate(document.body,'input','[name="blocked-reason"]',(_event,target)=>{const reader=isReaderSurface(target),draft=reader?readerBlockedReasonDraft:blockedReasonDraft,autosave=reader?readerBlockedReasonAutosave:blockedReasonAutosave;draft.value=(target as HTMLTextAreaElement).value;autosave.schedule(draft.value)});
 delegate(document.body,'focusout','[name="blocked-reason"]',(_event,target)=>{const reader=isReaderSurface(target),editing=reader?readerBlockedReasonEditing:blockedReasonEditing,autosave=reader?readerBlockedReasonAutosave:blockedReasonAutosave;void autosave.flush().then(saved=>{if(saved)editing.value=false})});
+delegate(document.body,'pointerup','textarea[name="markdown-source"], textarea[name="blocked-reason"], textarea[name="note-body"]',(_event,target)=>{const kind=ticketEditorKind((target as HTMLTextAreaElement).name);if(kind)saveTicketEditorSize(localStorage,document.documentElement.style,kind,isReaderSurface(target)?'reader':'sidebar',target.getBoundingClientRect().height)});
 delegate(document.body,'click','[data-action="open-ticket-reader"]',()=>{inspectorTab.value='info';readerOpen.value=true});
 delegate(document.body,'click','[data-action="close-ticket-reader"]',()=>{void finishDetailsEdit(true);void readerNoteAutosave.flush().then(saved=>{if(saved)readerEditingNoteId.value=undefined});void readerBlockedReasonAutosave.flush().then(saved=>{if(saved)readerBlockedReasonEditing.value=false});readerOpen.value=false});
 delegate(document.body,'click','[data-action="set-inspector-tab"]',(_event,target)=>{inspectorTab.value=data(target).inspectorTab as InspectorTab;if(inspectorTab.value==='code-review'&&!codeReviewLoading.value)void refreshCodeReview()});
