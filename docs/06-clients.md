@@ -443,9 +443,10 @@ node—not the application root—so an unrelated open Web Awesome select or pop
 its live element, open state, focus, and selection. Automatic decisions use the same
 authenticated route as clicks and are distinguished in client history.
 
-The long tail of HS1 UI (custom views/query builder, terminal dashboard, stats,
-Announcer, telemetry dashboards, print) is **deferred**, each its own ticket after
-the floor lands.
+The long tail of HS1 UI (custom views/query builder, stats, Announcer, telemetry
+dashboards, print) remains **deferred**, each its own ticket after the floor lands. The
+terminal dashboard is now active work: HS2-946EQG settled its interaction contract from
+the updated project/drawer wireframes, and HS2-2ZCN7K implements it.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 

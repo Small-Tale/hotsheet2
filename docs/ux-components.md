@@ -717,6 +717,39 @@ notification model.
 The browser mock should simulate output, focus ownership, resize arbitration, session
 completion, and disconnection without spawning a PTY.
 
+### 6.3 `TerminalGrid` and `TerminalDashboard` — desktop feature
+
+The project bottom drawer and global Terminals screen share one tile-grid contract. The
+drawer keeps its compact tab rail above the grid; the global screen removes the project
+sidebar and ticket inspector, keeps the project-tab strip for navigation, and groups live
+terminal tiles by project. Each tile has a 4:3 preview, terminal and project identity,
+busy/idle/exited state, and pending-attention treatment. An empty project is omitted from
+the global grid unless it is the only available project, in which case the screen explains
+how to create or open a terminal.
+
+Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
+tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);
+minus zooms out (more terminals). The active count is announced as “N across” or “N high”:
+
+- when the grid container is taller than 600 px, scale means how many terminal tiles fit
+  across the available content width, preserving HS1's integer 1–10 column model;
+- when its height is 600 px or less, scale means how many terminal tiles fit in the
+  available content height, clamped to 1–3. Tiles then continue in additional horizontally
+  scrollable columns rather than shrinking below the chosen height;
+- the width and height modes retain independent values (defaults: 4 across and 2 high), so
+  crossing the 600 px boundary does not destroy the user's prior scale on either side;
+- the exact 600 px boundary uses height mode. Resize observation recomputes geometry but
+  does not change either stored count. Minus/plus disable at the active range limit.
+
+A plain tile activation magnifies that terminal in place over the same grid; activating it
+again or pressing Escape restores the grid. Magnification moves the active viewport claim
+to the enlarged surface and returns it to the tile when dismissed. The explicit dedicated
+action opens the terminal as the sole drawer viewport for its project, while the project
+action jumps to that project and selects the same terminal. These actions must never spawn
+a second PTY. Visibility controls can switch between project-grouped and flowing layouts
+and hide/show terminals without destroying sessions. Focus, resize claims, attention, and
+selection survive layout and scale changes.
+
 ## 7. Overlays and shared interaction components
 
 - `PopoverMenu`
@@ -779,7 +812,8 @@ semantic actions; Kerf owns state and composition.
 
 These remain in the component architecture but are not initial-client blockers:
 
-- `TerminalDashboard` — drawer grids, saved layouts, viewport controls
+- `TerminalDashboard` — interaction contract settled in §6.3; implementation tracked by
+  HS2-2ZCN7K
 - `AnalyticsDashboard` — throughput, cycle time, category, usage, and cost charts
 - `CustomViewBuilder` — query construction and saved-view editing
 - `AnnouncerOverlay` — digest picture-in-picture, live narration, playback controls,
