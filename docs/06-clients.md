@@ -134,6 +134,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   the fresh token instead of presenting a false conflict. Background refresh also leaves
   an in-flight or queued autosave draft alone; the write response and token retry path
   distinguish this client's earlier partial save from a genuinely competing edit.
+  The freeform blocked reason uses the same silent blur-flush path: a non-empty reason
+  persists, an empty edit sends `null` to clear it, and the authoritative response exits
+  editing without making the text disappear.
 
 - **Active ticket work.** Ticket rows show a slow yellow two-dot activity animation
   directly after status only while a worker holds a non-expired claim lease. Started

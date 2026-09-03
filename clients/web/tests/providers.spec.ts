@@ -416,6 +416,7 @@ test('autosaves ticket text fields without explicit save or cancel controls',asy
 
   await inspector.locator('.ticket-inspector__content').evaluate(node=>{node.scrollTop=0});await inspector.screenshot({path:'/private/tmp/hs2-qbscn2-block-ticket-empty.png'});await inspector.getByRole('button',{name:'Block ticket'}).click();const blocked=inspector.getByRole('textbox',{name:'Blocked reason'});await blocked.fill('Waiting for review');
   await expect.poll(()=>patches.some(patch=>patch.blocked_reason==='Waiting for review')).toBe(true);await blocked.blur();await expect(inspector.getByText('Waiting for review',{exact:true})).toBeVisible();await expect(inspector.getByRole('heading',{name:'Blocked reason'})).toBeVisible();await inspector.screenshot({path:'/private/tmp/hs2-72kryh-blocked-reason.png'});
+  await inspector.getByRole('button',{name:'Edit',exact:true}).click();const clearReason=inspector.getByRole('textbox',{name:'Blocked reason'});await clearReason.fill('   ');await clearReason.blur();await expect.poll(()=>patches.some(patch=>patch.blocked_reason===null)).toBe(true);await expect(inspector.getByRole('button',{name:'Block ticket'})).toBeVisible();
 });
 
 test('creates, cancels, edits, and deletes notes through the shared inspector and reader',async({page})=>{

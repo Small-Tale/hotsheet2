@@ -1581,6 +1581,7 @@ async fn update_provider_ticket(
                 tags: req.tags,
                 up_next: req.up_next,
                 blocked_by: req.blocked_by,
+                blocked_reason: req.blocked_reason,
             },
         )
         .map_err(provider_transfer_error)?;
@@ -2702,6 +2703,7 @@ fn do_update(
         tags: req.tags,
         up_next: req.up_next,
         blocked_by,
+        blocked_reason: req.blocked_reason,
     };
     let updated = ops::update(&entry.store, &ticket.id, now(), patch)?;
     // An optional note append/edit rides the same update call (parity with CLI + MCP).
@@ -4370,12 +4372,23 @@ struct UpdateReq {
     up_next: Option<bool>,
     /// Replace the blocker set (slug or ULID); `[]` clears it, absent leaves it.
     blocked_by: Option<Vec<String>>,
+    /// Set, clear with JSON null, or leave unchanged when absent.
+    #[serde(default, deserialize_with = "deserialize_nullable_patch")]
+    blocked_reason: Option<Option<String>>,
     /// Optional note to append alongside the field update.
     note: Option<String>,
     /// Existing note ULID to edit; absent appends a new note.
     note_id: Option<String>,
     /// Kind of the appended note; defaults to regular for older clients.
     note_kind: Option<NoteKind>,
+}
+
+fn deserialize_nullable_patch<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 /// `POST /batch` body: apply the same field update to every listed ticket (HS2-86).

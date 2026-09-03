@@ -356,6 +356,8 @@ pub struct TicketPatch {
     pub up_next: Option<bool>,
     /// Replace the blocker set (already resolved to ULIDs); `Some(vec![])` clears it.
     pub blocked_by: Option<Vec<Ulid>>,
+    /// Absent leaves the reason unchanged; present `None` clears it.
+    pub blocked_reason: Option<Option<String>>,
 }
 
 /// Apply a patch to an existing ticket and write it. A move to a terminal status
@@ -388,6 +390,12 @@ pub fn update(
     }
     if let Some(v) = patch.blocked_by {
         t.blocked_by = v;
+    }
+    if let Some(v) = patch.blocked_reason {
+        t.blocked_reason = v.and_then(|reason| {
+            let normalized = reason.trim();
+            (!normalized.is_empty()).then(|| normalized.to_string())
+        });
     }
     if let Some(s) = patch.status {
         t.status = s;
@@ -1147,11 +1155,13 @@ mod tests {
             ts("2026-08-21T00:01:00Z"),
             TicketPatch {
                 blocked_by: Some(ids),
+                blocked_reason: Some(Some("  Waiting for review  ".into())),
                 ..Default::default()
             },
         )
         .unwrap();
         assert_eq!(set.blocked_by, vec![a.id]);
+        assert_eq!(set.blocked_reason.as_deref(), Some("Waiting for review"));
         assert_eq!(store.read_ticket(&b.id).unwrap().blocked_by, vec![a.id]);
 
         // Some(vec![]) clears; None leaves unchanged
@@ -1166,6 +1176,23 @@ mod tests {
         )
         .unwrap();
         assert!(cleared.blocked_by.is_empty());
+        assert_eq!(
+            cleared.blocked_reason.as_deref(),
+            Some("Waiting for review")
+        );
+
+        let reason_cleared = update(
+            &store,
+            &b.id,
+            ts("2026-08-21T00:03:00Z"),
+            TicketPatch {
+                blocked_reason: Some(None),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(reason_cleared.blocked_reason, None);
+        assert_eq!(store.read_ticket(&b.id).unwrap().blocked_reason, None);
 
         // unknown ticket + self-reference are rejected
         assert!(matches!(

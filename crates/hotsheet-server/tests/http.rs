@@ -1713,7 +1713,7 @@ async fn create_get_update_close_and_query() {
 
 #[tokio::test]
 async fn blocked_by_set_clear_and_reject() {
-    let (_d, st) = state();
+    let (dir, st) = state();
     let app = app(st);
 
     let mk = |title: &str| format!(r#"{{"title":"{title}"}}"#);
@@ -1742,7 +1742,30 @@ async fn blocked_by_set_clear_and_reject() {
     )
     .await;
     let b_slug = b["slug"].as_str().unwrap().to_string();
+    let b_id = b["id"].as_str().unwrap().parse().unwrap();
     assert_eq!(b["blocked_by"], serde_json::json!([a_id]));
+
+    let reason_set = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{b_slug}"),
+                Some(r#"{"blocked_reason":"  Waiting for review  "}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reason_set["blocked_reason"], "Waiting for review");
+    assert_eq!(
+        FsStore::open(dir.path())
+            .unwrap()
+            .read_ticket(&b_id)
+            .unwrap()
+            .blocked_reason
+            .as_deref(),
+        Some("Waiting for review")
+    );
 
     // PATCH with [] clears
     let cleared = body_json(
@@ -1757,6 +1780,28 @@ async fn blocked_by_set_clear_and_reject() {
     )
     .await;
     assert_eq!(cleared["blocked_by"], serde_json::json!([]));
+    assert_eq!(cleared["blocked_reason"], "Waiting for review");
+
+    let reason_cleared = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{b_slug}"),
+                Some(r#"{"blocked_reason":null}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reason_cleared["blocked_reason"], serde_json::Value::Null);
+    assert_eq!(
+        FsStore::open(dir.path())
+            .unwrap()
+            .read_ticket(&b_id)
+            .unwrap()
+            .blocked_reason,
+        None
+    );
 
     // self-reference → 400
     let resp = app

@@ -246,6 +246,7 @@ pub struct ProviderPatch {
     pub tags: Option<Vec<String>>,
     pub up_next: Option<bool>,
     pub blocked_by: Option<Vec<String>>,
+    pub blocked_reason: Option<Option<String>>,
 }
 
 /// Caller-owned time/id inputs keep provider implementations deterministic in tests.
@@ -626,6 +627,7 @@ impl TicketProvider for GitProvider {
                 tags: patch.tags,
                 up_next: patch.up_next,
                 blocked_by,
+                blocked_reason: patch.blocked_reason,
             },
         )?;
         Ok(ApiTicket::from_provider(

@@ -143,6 +143,7 @@ fn tools_list() -> Value {
                 "expected_token": str_prop("opaque optimistic-concurrency token returned by get"),
                 "tags": { "type": "array", "items": { "type": "string" } }, "up_next": { "type": "boolean" },
                 "blocked_by": { "type": "array", "items": { "type": "string" }, "description": "replace the blocker set (slug or ULID); [] clears it" },
+                "blocked_reason": { "type": ["string", "null"], "description": "set the freeform block reason, or null to clear it" },
                 "note": str_prop("note text to append, or replacement text when note_id is present"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
                 "note_id": str_prop("existing note ULID to edit instead of appending")
@@ -896,6 +897,14 @@ mod core_backend {
                             .map(|_| str_vec(body, "tags")),
                         up_next: body.get("up_next").and_then(Value::as_bool),
                         blocked_by,
+                        blocked_reason: match body.get("blocked_reason") {
+                            None => None,
+                            Some(Value::Null) => Some(None),
+                            Some(Value::String(reason)) => Some(Some(reason.clone())),
+                            Some(_) => {
+                                return Err(bad_request("blocked_reason must be a string or null"));
+                            }
+                        },
                     };
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
@@ -2305,6 +2314,13 @@ mod tests {
         let b_id = b["id"].as_str().unwrap().to_string();
         assert_eq!(b["blocked_by"], json!([a_id]));
 
+        let reason_set = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": b_id, "blocked_reason": "  Waiting for review  " }),
+        );
+        assert_eq!(reason_set["blocked_reason"], "Waiting for review");
+
         // update: clearing with [] empties the set
         let cleared = call(
             &backend,
@@ -2325,6 +2341,14 @@ mod tests {
             json!({ "id": b_id, "title": "blocked v2" }),
         );
         assert_eq!(touched["blocked_by"], json!([a_id]), "absent leaves it");
+        assert_eq!(touched["blocked_reason"], "Waiting for review");
+
+        let reason_cleared = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": b_id, "blocked_reason": null }),
+        );
+        assert_eq!(reason_cleared["blocked_reason"], serde_json::Value::Null);
 
         // unknown blocker and self-reference are tool errors
         let unknown = call(

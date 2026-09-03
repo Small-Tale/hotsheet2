@@ -2505,6 +2505,7 @@ fn cmd_edit(
         tags: (!tags.is_empty()).then_some(tags),
         up_next,
         blocked_by,
+        blocked_reason: None,
     };
     let updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
     if let Some(text) = note.filter(|t| !t.is_empty()) {
