@@ -94,6 +94,7 @@ describe('TicketInspector', () => {
     expect(panelCss).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
     expect(panelCss).toContain('.ticket-inspector__metadata > .select { width: 100%; min-width: 0; }');
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
+    expect(inspectorCss).toContain('@container (max-width: 52rem) { .ticket-inspector__tab-label { display: none; } }');
   });
 
   it('puts the tab-to-content gap on the segmented control without duplicate content padding', () => {

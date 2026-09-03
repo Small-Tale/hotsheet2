@@ -170,6 +170,19 @@ test('resizes and persists both production shell sidebars',async({page})=>{
   await expect.poll(()=>inspector.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialInspector+16);
 });
 
+test('uses labels only when the inspector segmented control has enough room',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  const sidebarTabs=page.locator('[data-region-id="app-inspector"] .ticket-inspector__tabs');
+  expect(await sidebarTabs.locator('.ticket-inspector__tab-label').evaluateAll(labels=>labels.every(label=>getComputedStyle(label).display==='none'))).toBe(true);
+  await page.getByRole('button',{name:'Open ticket reader'}).click();const reader=page.getByRole('dialog',{name:'Read and edit HS2-DEMO01'}),readerTabs=reader.locator('.ticket-inspector__tabs');
+  await expect(readerTabs.locator('.ticket-inspector__tab-label').first()).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-2p9k4y-segments-wide.png',fullPage:true});
+  await page.setViewportSize({width:868,height:700});
+  expect(await readerTabs.locator('.ticket-inspector__tab-label').evaluateAll(labels=>labels.every(label=>getComputedStyle(label).display==='none'))).toBe(true);
+  await expect(readerTabs.getByRole('button',{name:'Code Review'}).locator('svg')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-2p9k4y-segments-narrow.png',fullPage:true});
+});
+
 interface RenderMetricsSnapshot { passes:number;mutations:number }
 type InstrumentedWindow=typeof window&{__hotsheetRenderMetrics?:{reset():void;snapshot():RenderMetricsSnapshot}};
 const resetRenderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>{(window as InstrumentedWindow).__hotsheetRenderMetrics?.reset()});
