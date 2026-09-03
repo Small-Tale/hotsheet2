@@ -16,6 +16,7 @@ describe('ticket views', () => {
     expect(ticketsForView(tickets, 'all').map(item => item.status)).toEqual(['not_started', 'started', 'completed', 'verified']);
     expect(ticketsForView(tickets, 'backlog').map(item => item.status)).toEqual(['backlog']);
     expect(ticketsForView(tickets, 'archive').map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
+    expect(ticketsForView(tickets, 'errors')).toEqual([]);
   });
 
   it('creates into the visible active destination and disables creation for Archive', () => {
@@ -24,6 +25,7 @@ describe('ticket views', () => {
     expect(canCreateTicketInView('all')).toBe(true);
     expect(canCreateTicketInView('backlog')).toBe(true);
     expect(canCreateTicketInView('archive')).toBe(false);
+    expect(canCreateTicketInView('errors')).toBe(false);
   });
 
   it('derives open and Up Next summary counts from workflow semantics', () => {

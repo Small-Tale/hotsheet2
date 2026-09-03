@@ -2,3 +2,6 @@
 .view-navigation ul { display: grid; margin: 0; padding: 0; gap: .15rem; list-style: none; }
 .view-navigation li { margin: 0; }
 .view-navigation .menu-item { width: 100%; }
+.view-navigation .menu-item--errors { color: var(--wa-color-danger-on-quiet); }
+.view-navigation .menu-item--errors:hover { background: var(--wa-color-danger-fill-quiet); }
+.view-navigation .menu-item--errors[aria-current="page"] { color: var(--wa-color-danger-on-normal); background: var(--wa-color-danger-fill-normal); }

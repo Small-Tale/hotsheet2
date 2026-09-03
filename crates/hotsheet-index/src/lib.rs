@@ -187,6 +187,18 @@ impl Index {
             .optional()?)
     }
 
+    /// Record the bytes currently present for an already-indexed ticket without
+    /// replacing its last healthy searchable projection. This lets callers retain a
+    /// usable stale row for an unparseable file while still detecting a later repair,
+    /// even when the repair restores the exact previous healthy bytes.
+    pub fn record_source_hash(&self, id: &Ulid, content_hash: &str) -> Result<(), IndexError> {
+        self.conn.execute(
+            "UPDATE tickets SET content_hash=?1 WHERE store_id=?2 AND id=?3",
+            params![content_hash, self.store_id, id.to_string()],
+        )?;
+        Ok(())
+    }
+
     /// Insert or update a ticket's index rows + FTS entry.
     pub fn upsert(
         &self,
@@ -411,6 +423,7 @@ impl Index {
                     let ticket = match parse_ticket(&path, &bytes) {
                         Ok(ticket) => ticket,
                         Err(error) => {
+                            self.record_source_hash(&id, &hash)?;
                             eprintln!(
                                 "warning: skipping unparseable ticket {}: {error}",
                                 path.display()
@@ -454,6 +467,7 @@ impl Index {
                 let ticket = match parse_ticket(&path, &bytes) {
                     Ok(ticket) => ticket,
                     Err(error) => {
+                        self.record_source_hash(&id, &hash)?;
                         eprintln!(
                             "warning: skipping unparseable ticket {}: {error}",
                             path.display()

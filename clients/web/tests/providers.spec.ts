@@ -259,6 +259,9 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   corruptTickets=[diagnostic];
   await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'changed',id:diagnostic.id,slug:diagnostic.slug}],overflow:false}});
   const corrupt=page.locator('[data-component="corrupt-ticket-row"]');
+  await expect(page.getByRole('button',{name:/Ticket errors/})).toContainText('1');
+  await expect(corrupt).toHaveCount(0);
+  await page.getByRole('button',{name:/Ticket errors/}).click();
   await expect(corrupt).toContainText('HS2-QQRY00');
   await expect(stale).toHaveCount(0);
   await expect(corrupt).toContainText('Ticket file could not be read');
@@ -278,6 +281,12 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-wide.png',fullPage:true});
   await page.setViewportSize({width:1024,height:844});await expect(inspector).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
 
+  corruptTickets=[];
+  await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'changed',id:diagnostic.id,slug:diagnostic.slug}],overflow:false}});
+  await expect(page.getByRole('button',{name:/Ticket errors/})).toHaveCount(0);
+  await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
+  await expect(corrupt).toHaveCount(0);
+
   await page.getByText('Use real project tickets').click();
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Use real project tickets');
 });
@@ -292,6 +301,7 @@ test('identifies a ticket from newer HS2 as upgrade-required instead of corrupt'
   await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:/Ticket errors/}).click();
   const newer=page.locator('[data-component="corrupt-ticket-row"]');
   await expect(newer).toContainText('Hot Sheet 2 update required');
   await expect(newer.locator('[data-lucide="refresh-cw"]')).toBeVisible();

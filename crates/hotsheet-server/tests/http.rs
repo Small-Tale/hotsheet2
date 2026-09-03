@@ -2351,6 +2351,7 @@ async fn watcher_reindexes_an_external_write() {
         ),
     )
     .unwrap();
+    let mut saw_corrupt = false;
     for _ in 0..80 {
         let polled = body_json(
             app.clone()
@@ -2391,11 +2392,56 @@ async fn watcher_reindexes_an_external_write() {
             .await;
             assert_eq!(health["corrupt"][0]["id"], created.id.to_string());
             assert_eq!(health["corrupt"][0]["slug"], created.slug);
+            cursor = polled["cursor"].as_u64().unwrap();
+            saw_corrupt = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        saw_corrupt,
+        "watcher did not replay corrupt-ticket invalidation within 8s"
+    );
+
+    // Restoring the exact pre-corruption bytes is still a meaningful transition. The
+    // corrupt hash must not leave that repair invisible to the watcher.
+    store.write_ticket(&edited).unwrap();
+    for _ in 0..80 {
+        let polled = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={cursor}&timeout_ms=0"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let repaired = polled["events"].as_array().unwrap().iter().any(|event| {
+            event["kind"] == "changed"
+                && event["id"] == created.id.to_string()
+                && event["slug"] == created.slug
+        });
+        if repaired {
+            let health = body_json(
+                app.clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri("/health")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap(),
+            )
+            .await;
+            assert!(health["corrupt"].as_array().unwrap().is_empty());
             return;
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    panic!("watcher did not replay corrupt-ticket invalidation within 8s");
+    panic!("watcher did not replay manual corrupt-ticket repair within 8s");
 }
 
 /// The watcher also regenerates each consuming checkout's local worklist on change.

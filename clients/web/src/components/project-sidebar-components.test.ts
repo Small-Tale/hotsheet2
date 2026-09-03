@@ -62,6 +62,13 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('aria-label="Add view"');
   });
 
+  it('gives parsing errors a distinct shared navigation item', () => {
+    const markup = String(ViewNavigation({ selectedId: 'errors', items: [{ id: 'errors', label: 'Ticket errors', count: 2, attention: true, icon: 'errors' }] }));
+    expect(markup).toContain('menu-item--errors');
+    expect(markup).toContain('data-lucide="file-warning"');
+    expect(markup).toContain('aria-current="page"');
+  });
+
   it('renders expanded command state and running presentation', () => {
     const markup = String(CommandNavigation({ label: 'Commands', expanded: true, commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test', group: 'Checks', running: true, lastRun: 'completed (exit 0)' }] }));
     expect(markup).toContain('aria-expanded="true"');

@@ -1,8 +1,8 @@
 import type { TicketRow } from './api';
 
-export type TicketView = 'all' | 'backlog' | 'archive';
+export type TicketView = 'all' | 'backlog' | 'archive' | 'errors';
 
-export const canCreateTicketInView = (view: TicketView): boolean => view !== 'archive';
+export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'errors'].includes(view);
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' => view === 'backlog' ? 'backlog' : 'not_started';
 
 export function isOpenTicket(ticket: TicketRow): boolean {
@@ -22,6 +22,7 @@ export function isQueuedTicket(ticket: TicketRow): boolean {
 }
 
 export function ticketsForView(tickets: readonly TicketRow[], view: TicketView): TicketRow[] {
+  if (view === 'errors') return [];
   if (view === 'archive') return tickets.filter(isArchivedTicket);
   if (view === 'backlog') return tickets.filter(ticket => ticket.status === 'backlog');
   return tickets.filter(isQueuedTicket);

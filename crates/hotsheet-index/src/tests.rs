@@ -377,6 +377,35 @@ fn upsert_updates_the_hash_and_delete_removes() {
 }
 
 #[test]
+fn recording_a_source_hash_preserves_the_last_healthy_projection() {
+    let (_d, _store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let title = ix
+        .query(&TicketQuery::default())
+        .unwrap()
+        .into_iter()
+        .find(|row| row.id == id.to_string())
+        .unwrap()
+        .title;
+
+    ix.record_source_hash(&id, "corrupt-bytes").unwrap();
+
+    assert_eq!(
+        ix.content_hash(&id).unwrap().as_deref(),
+        Some("corrupt-bytes")
+    );
+    assert_eq!(
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .unwrap()
+            .title,
+        title
+    );
+}
+
+#[test]
 fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
     use hotsheet_model::NoteKind;
     let (_d, store, ix) = seeded();
