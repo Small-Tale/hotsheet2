@@ -161,6 +161,8 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   heading, and the right region uses the same divider-free empty inspector placeholder
   as Notifications. Entering Settings preserves the ticket selection for returning to
   list/board, but that retained selection never changes the Settings placeholder semantics.
+  Right-sidebar toolbars are divider-free in every state—ticket, loading, multi-selection,
+  Settings, and Notifications—so content sections, not the shell toolbar, own separators.
 
 - **Persistent shell splitters.** The project sidebar and ticket inspector are
   independently resizable by pointer or keyboard. Dragging updates only splitter

@@ -9,10 +9,10 @@ describe('TicketInspectorPlaceholder', () => {
     expect(empty).toContain('Select a ticket to see and edit its details');
 
     const loading = String(TicketInspectorPlaceholder({ selectionCount: 1 }));
-    expect(loading).toContain('data-component="toolbar" data-divider="true"');
+    expect(loading).toContain('data-component="toolbar" data-divider="false"');
 
     const multi = String(TicketInspectorPlaceholder({ selectionCount: 2 }));
-    expect(multi).toContain('data-component="toolbar" data-divider="true"');
+    expect(multi).toContain('data-component="toolbar" data-divider="false"');
     expect(multi).toContain('2 items selected — use batch actions to edit them together');
   });
 });

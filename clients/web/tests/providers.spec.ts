@@ -131,7 +131,7 @@ test('keeps the visible inspector region mounted while a selected ticket loads',
   await mockProject(page,true,false,300);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const region=page.locator('[data-component="resizable-region"][data-region-id="app-inspector"]');await expect(region).toBeVisible();const before=await region.evaluate(node=>node.getBoundingClientRect().width);
   await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.waitForTimeout(75);
-  await expect(region).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder > .toolbar')).toHaveAttribute('data-divider','true');expect(await region.evaluate(node=>node.getBoundingClientRect().width)).toBe(before);
+  await expect(region).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder')).toBeVisible();await expect(region.locator('.ticket-inspector-placeholder > .toolbar')).toHaveAttribute('data-divider','false');expect(await region.evaluate(node=>node.getBoundingClientRect().width)).toBe(before);
   await expect(region.locator('[data-component="ticket-inspector"]')).toBeVisible();
 });
 
@@ -144,10 +144,10 @@ test('keeps an active editor stable when its already-selected ticket is clicked 
   await page.screenshot({path:'/private/tmp/hs2-e0mjm8-reselect-editor-wide.png',fullPage:true});await page.setViewportSize({width:940,height:844});await expect(editor).toBeFocused();await page.screenshot({path:'/private/tmp/hs2-e0mjm8-reselect-editor-narrow.png',fullPage:true});
 });
 
-test('omits the separator below the empty ticket inspector toolbar',async({page})=>{
+test('omits separators below every right-sidebar toolbar state',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();await page.waitForTimeout(500);
   const placeholder=page.locator('.ticket-inspector-placeholder'),toolbar=placeholder.locator(':scope > .toolbar');await expect(placeholder).toContainText('Select a ticket to see and edit its details');await expect(toolbar).toHaveAttribute('data-divider','false');await expect(toolbar).toHaveCSS('border-bottom-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-gvk7zy-empty-inspector-wide.png',fullPage:true});
-  await page.setViewportSize({width:940,height:844});await expect(placeholder).toBeVisible();await expect(toolbar).toHaveCSS('border-bottom-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-gvk7zy-empty-inspector-narrow.png',fullPage:true});
+  await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').click();await expect(page.locator('[data-component="ticket-inspector"] .ticket-inspector__header > .toolbar')).toHaveAttribute('data-divider','false');await page.getByRole('button',{name:/Notifications view/}).click();const notificationToolbar=page.getByRole('complementary',{name:'Notification inspector'}).locator(':scope > .toolbar');await expect(notificationToolbar).toHaveAttribute('data-divider','false');await page.setViewportSize({width:1024,height:600});await expect(notificationToolbar).toHaveCSS('border-bottom-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-f3nk91-right-sidebar-floor.png',fullPage:true});
 });
 
 test('resizes and persists both production shell sidebars',async({page})=>{
