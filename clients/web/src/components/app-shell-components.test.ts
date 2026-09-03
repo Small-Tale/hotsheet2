@@ -39,6 +39,7 @@ describe('application shell components', () => {
     expect(markup).toContain('role="tab"');
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain('data-location="remote"');
+    expect(markup).toContain('data-ticket-drop-project="one"');
     expect(markup).toContain('data-lucide="cloud"');
     expect(markup).toContain('aria-label="Project busy"');
     expect(markup).not.toContain('data-lucide="loader-circle"');

@@ -1,11 +1,11 @@
 .quick-ticket-composer__launcher { display: flex; width: 100%; min-height: 2.85rem; padding: .65rem .85rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .55rem; color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); cursor: pointer; font: inherit; align-items: center; gap: .55rem; text-align: left; }
 .quick-ticket-composer__launcher:hover { border-color: var(--wa-color-neutral-border-loud); background: var(--wa-color-surface-default); }
-.quick-ticket-composer__launcher[data-dragging="true"] { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
+.quick-ticket-composer__launcher:is([data-dragging="true"], [data-dragging-ticket="true"]) { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
 .quick-ticket-composer__launcher:focus-visible { outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 24%, transparent); }
 .quick-ticket-composer__launcher svg { width: 1rem; height: 1rem; }
 .quick-ticket-composer { display: grid; width: 100%; padding: 1rem; border: 1px solid var(--wa-color-brand-border-quiet); border-radius: .7rem; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem); gap: var(--wa-space-s); }
 .quick-ticket-composer wa-input::part(base) { height: 2.5rem; min-height: 2.5rem; }
-.quick-ticket-composer[data-dragging="true"] { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
+.quick-ticket-composer:is([data-dragging="true"], [data-dragging-ticket="true"]) { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
 .quick-ticket-composer__attachments { display: grid; grid-column: 1 / -1; gap: .45rem; }
 .quick-ticket-composer__attachments header { display: flex; align-items: center; justify-content: space-between; }
 .quick-ticket-composer__attachments header > span, .quick-ticket-composer__attachments header label { display: inline-flex; align-items: center; gap: .35rem; font-size: var(--wa-font-size-xs); font-weight: 650; }

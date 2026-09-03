@@ -20,7 +20,7 @@ export interface ProjectTabProps {
 }
 
 export function ProjectTab({ id, name, location, selected = false, busy = false, disconnected = false, attention = false, closable = true,notificationCount=0 }: ProjectTabProps) {
-  return <div class="project-tab" data-component="project-tab" data-project-id={id} data-selected={String(selected)} data-location={location} data-busy={String(busy)} data-disconnected={String(disconnected)} data-attention={String(attention)}>
+  return <div class="project-tab" data-component="project-tab" data-project-id={id} data-ticket-drop-project={id} data-selected={String(selected)} data-location={location} data-busy={String(busy)} data-disconnected={String(disconnected)} data-attention={String(attention)}>
     {closable && <button type="button" class="project-tab__close" data-action="close-project-tab" data-project-id={id} aria-label={`Close ${name}`} title={`Close ${name}`}><LucideIcon icon={X} name="x" /></button>}
     <button type="button" class="project-tab__select" role="tab" aria-selected={String(selected)} data-action="select-project-tab" data-project-id={id} tabindex={selected ? '0' : '-1'}>
       {location === 'remote' && <LucideIcon icon={Cloud} name="cloud" />}

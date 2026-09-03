@@ -31,8 +31,8 @@ export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
 }
 
 export function QuickTicketComposer({ expanded = false, title = '', category = 'task', providerName = 'Hot Sheet', canCreate = true, attachments = [], attachmentsEnabled = true, attachmentMessage = '', attachmentError = false, busy = false, submitting = false }: QuickTicketComposerProps) {
-  if (!expanded) return <button type="button" class="quick-ticket-composer__launcher" data-component="quick-ticket-composer" data-action="expand-ticket-composer" data-new-ticket-drop-target="true" title={attachmentsEnabled ? 'Create a new ticket or drop attachment files here' : 'Create a new ticket'}><LucideIcon icon={Plus} name="plus" />New ticket…</button>;
-  return <form class="quick-ticket-composer" data-component="quick-ticket-composer" data-action="create-ticket-form" data-new-ticket-drop-target="true" data-submitting={String(submitting)}>
+  if (!expanded) return <button type="button" class="quick-ticket-composer__launcher" data-component="quick-ticket-composer" data-action="expand-ticket-composer" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" title={attachmentsEnabled ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here' : 'Create a new ticket or drop tickets to duplicate'}><LucideIcon icon={Plus} name="plus" />New ticket…</button>;
+  return <form class="quick-ticket-composer" data-component="quick-ticket-composer" data-action="create-ticket-form" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" data-submitting={String(submitting)}>
     <wa-input name="new-ticket-title" label="Ticket title" value={title} autofocus required></wa-input>
     <TicketCategorySelect name="new-ticket-category" label="Category" value={category} />
     <section class="quick-ticket-composer__attachments" aria-label="New ticket attachments">

@@ -12,10 +12,12 @@ describe('QuickTicketComposer', () => {
   });
   it('has distinct collapsed, editable, and provider-disabled presentations', () => {
     const collapsed = String(QuickTicketComposer({}));
+    expect(collapsed).toContain('data-ticket-drop-action="duplicate"');
     expect(collapsed).toContain('data-action="expand-ticket-composer"');
     expect(collapsed).toContain('data-new-ticket-drop-target="true"');
     expect(collapsed).toContain('drop attachment files here');
     const expanded = String(QuickTicketComposer({ expanded: true, title: 'New work', category: 'bug', attachments: [{ id: 'proof', name: 'proof.png' }] }));
+    expect(expanded).toContain('data-ticket-drop-action="duplicate"');
     expect(expanded).toContain('data-action="create-ticket-form"');
     expect(expanded).toContain('value="New work"');
     expect(expanded).toContain('data-lucide="bug"');
