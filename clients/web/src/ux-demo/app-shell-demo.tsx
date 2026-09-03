@@ -147,7 +147,7 @@ export function ConnectionStateBannerDemo() {
 }
 
 function ShellSidebar() {
-  return <ProjectSidebar completedToday={6} inProgress={3} completionTrend={[3, 0, 2, 5, 4, 7, 6]} branch="feature/client-shell" unpushed={2} uncommitted={1} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="Codex" openCount={17} upNextCount={4} collapseControl />;
+  return <ProjectSidebar completedToday={6} inProgress={3} completionTrend={[3, 0, 2, 5, 4, 7, 6]} branch="feature/client-shell" unpushed={2} uncommitted={1} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="Codex" openCount={17} upNextCount={4} activeCount={2} collapseControl />;
 }
 
 export function AppShellDemo() {

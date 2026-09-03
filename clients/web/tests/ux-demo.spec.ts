@@ -1141,7 +1141,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await page.goto('/ux-demo?component=project-sidebar');
   const sidebar = page.locator('[data-component="project-sidebar"]');
   await expect(sidebar).toBeVisible();
-  await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next');
+  await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next, 2 active');
   for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const menuHeaderLefts = await sidebar.locator('[data-component="menu-header"]').evaluateAll(headers => headers.map(header => header.querySelector('h2, span')!.getBoundingClientRect().left));
   expect(menuHeaderLefts).toHaveLength(2);

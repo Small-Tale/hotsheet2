@@ -93,14 +93,14 @@ describe('ProjectSidebar component slice', () => {
   });
 
   it('composes the five sidebar boundaries without duplicating their markup', () => {
-    const markup = String(ProjectSidebar({ completedToday: 1, inProgress: 2, completionTrend: [0, 1], branch: 'main', unpushed: 0, uncommitted: 1, views: [{ id: 'all', label: 'All Tickets', icon: 'all' }], selectedViewId: 'all', commandGroupLabel: 'Commands', commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test' }], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex', openCount: 7, upNextCount: 3 }));
+    const markup = String(ProjectSidebar({ completedToday: 1, inProgress: 2, completionTrend: [0, 1], branch: 'main', unpushed: 0, uncommitted: 1, views: [{ id: 'all', label: 'All Tickets', icon: 'all' }], selectedViewId: 'all', commandGroupLabel: 'Commands', commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test' }], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex', openCount: 7, upNextCount: 3, activeCount: 2 }));
     for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) expect(markup).toContain(`data-component="${component}"`);
-    expect(markup).toContain('data-component="project-work-summary">7 open, 3 up next');
+    expect(markup).toContain('data-component="project-work-summary">7 open, 3 up next, 2 active');
     expect(markup.indexOf('project-work-summary')).toBeLessThan(markup.indexOf('data-component="drive-control"'));
   });
 
   it('omits the command section when the project has no commands', () => {
-    const markup = String(ProjectSidebar({ completedToday: 0, inProgress: 0, completionTrend: [], branch: 'main', unpushed: 0, uncommitted: 0, views: [], selectedViewId: 'all', commandGroupLabel: 'Project commands', commands: [], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex', openCount: 0, upNextCount: 0 }));
+    const markup = String(ProjectSidebar({ completedToday: 0, inProgress: 0, completionTrend: [], branch: 'main', unpushed: 0, uncommitted: 0, views: [], selectedViewId: 'all', commandGroupLabel: 'Project commands', commands: [], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex', openCount: 0, upNextCount: 0, activeCount: 0 }));
     expect(markup).not.toContain('data-component="command-navigation"');
     expect(markup).not.toContain('Project commands');
   });

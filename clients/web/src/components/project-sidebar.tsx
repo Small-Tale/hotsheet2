@@ -27,6 +27,7 @@ export interface ProjectSidebarProps {
   driveTool: string;
   openCount: number;
   upNextCount: number;
+  activeCount: number;
   collapseControl?: boolean;
 }
 
@@ -40,7 +41,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       {props.commands.length > 0 && <CommandNavigation label={props.commandGroupLabel} commands={props.commands} expanded={props.commandGroupExpanded} />}
     </div>
     <footer class="project-sidebar__footer">
-      <p class="project-sidebar__work-summary" data-component="project-work-summary">{props.openCount} open, {props.upNextCount} up next</p>
+      <p class="project-sidebar__work-summary" data-component="project-work-summary">{props.openCount} open, {props.upNextCount} up next, {props.activeCount} active</p>
       <DriveControl running={props.driveRunning} tool={props.driveTool} />
     </footer>
   </aside>;
