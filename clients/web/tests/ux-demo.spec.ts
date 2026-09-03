@@ -677,6 +677,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const sortSelect = header.locator('wa-select[name="workspace-sort"]');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently updated, descending');
   await expect(sortSelect.locator('.select__custom-selected [data-lucide="clock-arrow-down"]')).toBeVisible();
+  const triggerGeometry=await sortSelect.evaluate(node=>{const root=node.shadowRoot!,combobox=root.querySelector<HTMLElement>('[part~="combobox"]')!,expand=root.querySelector<HTMLElement>('[part~="expand-icon"]')!,selected=node.querySelector<HTMLElement>('.select__custom-selected')!,outer=combobox.getBoundingClientRect(),icon=selected.getBoundingClientRect(),arrow=expand.getBoundingClientRect();return{width:outer.width,gap:arrow.left-icon.right,arrowOverflow:arrow.right-outer.right}});expect(triggerGeometry.width).toBeLessThanOrEqual(46);expect(triggerGeometry.gap).toBeLessThanOrEqual(8);expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
   await sortSelect.click();
   await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="arrow-down"]')).toBeVisible();
   await expect(sortSelect.locator('wa-option[value="priority"] .select__icon')).toBeVisible();

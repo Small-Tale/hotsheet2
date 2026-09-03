@@ -67,6 +67,7 @@ describe('WorkspaceHeader', () => {
     const toolbarCss = readFileSync(resolve(import.meta.dirname, 'toolbar.css'), 'utf8');
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
     expect(toolbarCss).toContain('container: toolbar / inline-size');
+    expect(headerCss).toContain('.workspace-header__sort { width: 2.75rem; }');
     expect(headerCss).toContain('@container toolbar (max-width: 30rem) { .workspace-header__actions > .workspace-header__utility-group { display: none; } }');
     expect(headerCss).toContain('@container toolbar (max-width: 26rem) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }');
     expect(headerCss).toContain('@container toolbar (max-width: 14rem) { .workspace-header__actions > .workspace-header__search-group { display: none; } }');

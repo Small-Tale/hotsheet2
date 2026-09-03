@@ -174,7 +174,8 @@ does not introduce polling or another network request.
 - `WorkspaceHeader` — **demo built**: responsive project identity, compact
   all-Lucide Tahoe-style toolbar groups, animated inline expanding live search, a functional
   compact shared `Select` sort control whose popup carries simple direction arrows while
-  its trigger uses a semantic field-and-direction icon and accessible label, and toggles
+  its tightly spaced trigger uses a semantic field-and-direction icon and accessible
+  label without clipping the chevron, and toggles
   ascending/descending
   direction when reselected, and a connected list/column/settings workspace. When its owning
   toolbar narrows, lower-priority utility and sort controls yield first; search and then the view

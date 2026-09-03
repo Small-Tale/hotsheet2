@@ -9,9 +9,10 @@
 .view-mode-switcher__button[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); }
 .view-mode-switcher__button:focus-visible { outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 25%, transparent); }
 .workspace-header__actions wa-button::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); }
-.workspace-header__sort { width: 3.25rem; }
-.workspace-header__sort::part(combobox) { min-height: 2rem; border: 0; border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-normal); box-shadow: none; }
+.workspace-header__sort { width: 2.75rem; }
+.workspace-header__sort::part(combobox) { position: relative; min-height: 2rem; border: 0; border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-normal); box-shadow: none; }
 .workspace-header__sort::part(display-input) { position: absolute; width: 1px; overflow: hidden; clip-path: inset(50%); }
+.workspace-header__sort::part(expand-icon) { position: absolute; inset-inline-end: .2rem; }
 .workspace-header__sort .select__custom-selected { width: 1rem; height: 1rem; color: var(--wa-color-text-link); flex: none; }
 .workspace-header__sort .select__custom-selected svg { width: 1rem; height: 1rem; }
 .workspace-header__search-group { width: 2.525rem; overflow: hidden; transition: width .25s ease, background-color .2s ease, border-color .2s ease; }
