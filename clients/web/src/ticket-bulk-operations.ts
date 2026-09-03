@@ -3,6 +3,7 @@ import type { TicketPatch } from './ticket-operations';
 
 export type BulkTicketAction =
   | { kind: 'field'; field: 'category' | 'priority' | 'status'; value: string }
+  | { kind: 'up-next'; value: boolean }
   | { kind: 'add-tag'; tag: string }
   | { kind: 'remove-tag'; tag: string }
   | { kind: 'delete' };
@@ -24,6 +25,7 @@ export function bulkTagChoices(tickets: readonly TicketRow[]): string[] {
 
 export function bulkTicketPatch(ticket: Pick<TicketRow, 'tags'>, action: BulkTicketAction): TicketPatch | undefined {
   if (action.kind === 'field') return { [action.field]: action.value };
+  if (action.kind === 'up-next') return { up_next: action.value };
   if (action.kind === 'delete') return { status: 'deleted' };
   const tag = action.tag.trim();
   if (!tag) return undefined;

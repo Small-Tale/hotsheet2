@@ -24,6 +24,15 @@ describe('TicketRowContextMenu', () => {
     expect(markup.indexOf('data-context-action="Move to Backlog"')).toBeLessThan(markup.indexOf('data-context-action="Archive ticket"'));
   });
 
+  it('disables destination actions when every selected ticket is already there', () => {
+    const backlog = String(TicketRowContextMenu({ x: 0, y: 0, status: 'backlog', allInBacklog: true }));
+    expect(backlog).toContain('data-context-action="Move to Backlog" disabled');
+    expect(backlog).not.toContain('data-context-action="Archive ticket" disabled');
+    const archive = String(TicketRowContextMenu({ x: 0, y: 0, status: 'archive', allInArchive: true }));
+    expect(archive).toContain('data-context-action="Archive ticket" disabled');
+    expect(archive).not.toContain('data-context-action="Move to Backlog" disabled');
+  });
+
   it('renders checked metadata submenus with stable bulk mutation contracts', () => {
     const markup = String(TicketRowContextMenu({ x: 12, y: 24, category: 'bug', priority: 'high', status: 'started' }));
     for (const field of ['category', 'priority', 'status']) expect(markup).toContain(`data-context-field="${field}"`);
