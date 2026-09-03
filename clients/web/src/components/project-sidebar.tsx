@@ -37,7 +37,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       <ProjectSummary completedToday={props.completedToday} inProgress={props.inProgress} trend={props.completionTrend} />
       <RepositorySummary branch={props.branch} unpushed={props.unpushed} uncommitted={props.uncommitted} />
       <ViewNavigation items={props.views} selectedId={props.selectedViewId} />
-      <CommandNavigation label={props.commandGroupLabel} commands={props.commands} expanded={props.commandGroupExpanded} />
+      {props.commands.length > 0 && <CommandNavigation label={props.commandGroupLabel} commands={props.commands} expanded={props.commandGroupExpanded} />}
     </div>
     <footer class="project-sidebar__footer">
       <p class="project-sidebar__work-summary" data-component="project-work-summary">{props.openCount} open, {props.upNextCount} up next</p>
