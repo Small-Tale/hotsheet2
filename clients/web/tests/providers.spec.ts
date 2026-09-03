@@ -165,10 +165,16 @@ test('resizes and persists both production shell sidebars',async({page})=>{
   await expect.poll(()=>sidebar.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialSidebar+32);
   await inspectorHandle.press('ArrowLeft');
   await expect.poll(()=>inspector.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialInspector+16);
+  await page.getByLabel('Columns view').click();
+  const sortSelect=page.locator('wa-select[name="workspace-sort"]');await sortSelect.click();await sortSelect.locator('wa-option[value="priority"]').click();
+  const commandGroup=page.getByRole('button',{name:'Project commands'});await commandGroup.click();await expect(commandGroup).toHaveAttribute('aria-expanded','false');
   await page.screenshot({path:'/private/tmp/hs2-qgg6pf-resizable-sidebars.png',fullPage:true});
+  await page.getByRole('button',{name:'Hide project sidebar'}).click();await page.getByRole('button',{name:'Hide ticket inspector'}).click();
   await page.reload();
-  await expect.poll(()=>sidebar.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialSidebar+32);
-  await expect.poll(()=>inspector.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialInspector+16);
+  await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed','true');await expect(sortSelect).toHaveJSProperty('value','priority');await expect(sortSelect).toHaveAttribute('aria-label','Sort tickets: Priority, ascending');
+  await expect(page.getByRole('button',{name:'Show project sidebar'})).toBeVisible();await expect(page.getByRole('button',{name:'Show ticket inspector'})).toBeVisible();
+  await page.getByRole('button',{name:'Show project sidebar'}).click();await expect.poll(()=>sidebar.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialSidebar+32);await expect(page.getByRole('button',{name:'Project commands'})).toHaveAttribute('aria-expanded','false');
+  await page.getByRole('button',{name:'Show ticket inspector'}).click();await expect.poll(()=>inspector.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialInspector+16);
 });
 
 test('uses labels only when the inspector segmented control has enough room',async({page})=>{
