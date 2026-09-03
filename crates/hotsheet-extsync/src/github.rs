@@ -539,6 +539,9 @@ impl TicketProvider for GitHubProvider {
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError> {
         validate_number(native_id)?;
+        if patch.blocked_reason.is_some() {
+            return self.unsupported("blocked_reason");
+        }
         if patch.blocked_by.as_ref().is_some_and(|v| !v.is_empty()) {
             return Err(ProviderError::Unsupported {
                 connection_id: self.config.connection_id.clone(),
@@ -1113,6 +1116,29 @@ mod tests {
             .unwrap_err();
         assert!(matches!(error, ProviderError::Conflict { .. }));
         assert_eq!(transport.requests.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn blocked_reason_updates_are_explicitly_unsupported() {
+        let transport = FakeTransport::with(vec![]);
+        let provider = provider(transport.clone());
+        for blocked_reason in [Some(Some("waiting".into())), Some(None)] {
+            assert!(matches!(
+                provider.update(
+                    "42",
+                    Timestamp::new("2026-08-26T01:00:00Z"),
+                    ProviderPatch {
+                        blocked_reason,
+                        ..Default::default()
+                    },
+                ),
+                Err(ProviderError::Unsupported {
+                    capability: "blocked_reason",
+                    ..
+                })
+            ));
+        }
+        assert!(transport.requests.lock().unwrap().is_empty());
     }
 
     #[test]

@@ -411,6 +411,9 @@ impl TicketProvider for GitLabProvider {
         _: Timestamp,
         patch: ProviderPatch,
     ) -> Result<ApiTicket, ProviderError> {
+        if patch.blocked_reason.is_some() {
+            return self.unsupported("blocked_reason");
+        }
         let current = self.issue(native_id)?;
         if patch
             .expected_token
@@ -833,6 +836,29 @@ mod tests {
             provider(fake).get("1"),
             Err(ProviderError::Authentication { .. })
         ));
+    }
+
+    #[test]
+    fn blocked_reason_updates_are_explicitly_unsupported() {
+        let fake = Arc::new(Fake::default());
+        let provider = provider(fake.clone());
+        for blocked_reason in [Some(Some("waiting".into())), Some(None)] {
+            assert!(matches!(
+                provider.update(
+                    "9",
+                    Timestamp::new("x"),
+                    ProviderPatch {
+                        blocked_reason,
+                        ..Default::default()
+                    },
+                ),
+                Err(ProviderError::Unsupported {
+                    capability: "blocked_reason",
+                    ..
+                })
+            ));
+        }
+        assert!(fake.requests.lock().unwrap().is_empty());
     }
 
     #[test]
