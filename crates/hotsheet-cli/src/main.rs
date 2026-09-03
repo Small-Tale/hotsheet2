@@ -2013,7 +2013,8 @@ fn cmd_permission_hook() -> Result<()> {
         (Some(url), Some(secret)) => {
             let (tool, action) = hook_tool_action(&input);
             let connection = hook_connection(&input);
-            match ask_server(&url, &secret, &connection, &tool, &action) {
+            let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
+            match ask_server(&url, &secret, &project, &connection, &tool, &action) {
                 Ok(reply) => decision_from_server(&reply),
                 // Server unreachable / error → defer to Claude rather than block it.
                 Err(_) => HookDecision::Ask,
@@ -2044,12 +2045,16 @@ fn cmd_launch(
         &hotsheet_plugins::hotsheet_home(),
     )?;
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)?;
+    let permission_project = FsStore::open(store)
+        .map(|store| store.root().display().to_string())
+        .unwrap_or_else(|_| store.display().to_string());
     let mut command = std::process::Command::new(&program);
     command
         .args(&launch.args)
         .current_dir(&project)
         .env("HOTSHEET_SERVER", &launch.server.url)
-        .env("HOTSHEET_SECRET", &launch.server.secret);
+        .env("HOTSHEET_SECRET", &launch.server.secret)
+        .env("HOTSHEET_PROJECT", permission_project);
 
     #[cfg(unix)]
     {
@@ -2071,13 +2076,14 @@ fn cmd_launch(
 fn ask_server(
     url: &str,
     secret: &str,
+    project: &str,
     connection: &str,
     tool: &str,
     action: &str,
 ) -> Result<serde_json::Value> {
     let endpoint = format!("{}/permissions/ask", url.trim_end_matches('/'));
     let body = serde_json::json!({
-        "connection": connection, "tool": tool, "action": action,
+        "project": project, "connection": connection, "tool": tool, "action": action,
     })
     .to_string();
     let text = ureq::post(&endpoint)

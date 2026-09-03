@@ -3974,6 +3974,87 @@ async fn an_always_answer_persists_a_rule_that_auto_resolves_next_time() {
 }
 
 #[tokio::test]
+async fn permission_rules_are_isolated_and_persisted_per_hosted_project() {
+    let primary_dir = tempfile::tempdir().unwrap();
+    let secondary_dir = tempfile::tempdir().unwrap();
+    let primary = FsStore::init(primary_dir.path(), &StoreMetadata::new("AA")).unwrap();
+    let secondary = FsStore::init(secondary_dir.path(), &StoreMetadata::new("BB")).unwrap();
+    let rules_dir = primary_dir.path().join("permission-rules");
+    let primary_rules = rules_dir.join("primary.json");
+    let state = AppState::new(primary, SECRET.into())
+        .unwrap()
+        .with_permission_rules(&primary_rules);
+    let bridge = state.permission_bridge();
+    let app = app(state);
+    let body = format!(r#"{{"path":"{}"}}"#, secondary_dir.path().display());
+    let registered = body_json(
+        app.clone()
+            .oneshot(authed("POST", "/stores", Some(&body)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let secondary_id = registered["id"].as_str().unwrap();
+    let secondary_project = secondary.root().display().to_string();
+
+    let waiter_bridge = bridge.clone();
+    let waiter_project = secondary_project.clone();
+    let waiter = std::thread::spawn(move || {
+        waiter_bridge.request_blocking_for_project(
+            waiter_project,
+            "secondary-worker",
+            "Bash",
+            "npm test",
+        )
+    });
+    let id = loop {
+        let pending = body_json(
+            app.clone()
+                .oneshot(authed("GET", "/permissions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if let Some(request) = pending.as_array().unwrap().first() {
+            assert_eq!(request["project"], secondary_project);
+            assert_eq!(request["always_allow_supported"], true);
+            break request["id"].as_u64().unwrap();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    };
+    let response = app
+        .oneshot(authed(
+            "POST",
+            &format!("/permissions/{id}"),
+            Some(r#"{"decision":"allow","scope":"always"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(body_json(response).await["persisted"], true);
+    assert_eq!(
+        waiter.join().unwrap(),
+        hotsheet_aitools::PermissionDecision::Allow
+    );
+    assert!(rules_dir.join(format!("{secondary_id}.json")).exists());
+    assert!(
+        !primary_rules.exists(),
+        "the secondary rule never touches the primary file"
+    );
+
+    assert!(matches!(
+        bridge.request_blocking_timeout_for_project(
+            primary_dir.path().display().to_string(),
+            "primary-worker",
+            "Bash",
+            "npm test",
+            std::time::Duration::from_millis(1),
+            hotsheet_aitools::PermissionDecision::Deny,
+        ),
+        hotsheet_aitools::PermissionDecision::Deny
+    ));
+}
+
+#[tokio::test]
 async fn long_poll_hands_back_a_cursor_then_replays_events_since_it() {
     let (_d, st) = state();
     let app = app(st);

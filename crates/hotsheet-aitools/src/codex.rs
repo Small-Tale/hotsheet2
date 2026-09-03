@@ -38,6 +38,8 @@ use crate::procio::StreamChild;
 /// `Deny`) so an unattended run can't hang.
 pub struct PermissionPolicy {
     pub bridge: Arc<SharedPermissionBridge>,
+    /// Stable project identity used to isolate remembered rules.
+    pub project: String,
     /// The live connection id attributed on requests (so a client shows which running tool
     /// is asking).
     pub connection: String,
@@ -199,8 +201,14 @@ fn approval_tokens(method: &str) -> Option<(&'static str, &'static str)> {
 /// route-back resolve arrives on a different (server HTTP) thread and wakes it.
 fn resolve_decision(p: &PermissionPolicy, method: &str, params: &Value) -> Decision {
     let action = approval_action(params);
-    p.bridge
-        .request_blocking_timeout(p.connection.clone(), method, action, p.timeout, p.default)
+    p.bridge.request_blocking_timeout_for_project(
+        p.project.clone(),
+        p.connection.clone(),
+        method,
+        action,
+        p.timeout,
+        p.default,
+    )
 }
 
 /// A coarse action string for rule-matching: the command (joined), else a call id / path.
@@ -1116,6 +1124,7 @@ mod approval_tests {
             bridge: Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
                 rules,
             ))),
+            project: String::new(),
             connection: "codex".into(),
             default,
             // Short so the "unmatched → blocks then falls back to default" test is quick.
@@ -1142,12 +1151,14 @@ mod approval_tests {
         let p = policy(
             vec![
                 Rule {
+                    project: String::new(),
                     tool: "execCommandApproval".into(),
                     action: "git status".into(),
                     decision: Decision::Allow,
                     persist: true,
                 },
                 Rule {
+                    project: String::new(),
                     tool: "execCommandApproval".into(),
                     action: "rm -rf /".into(),
                     decision: Decision::Deny,
@@ -1218,6 +1229,7 @@ mod approval_tests {
     fn policy_with_timeout(timeout: std::time::Duration) -> PermissionPolicy {
         PermissionPolicy {
             bridge: Arc::new(SharedPermissionBridge::default()),
+            project: String::new(),
             connection: "codex".into(),
             default: Decision::Deny,
             timeout,

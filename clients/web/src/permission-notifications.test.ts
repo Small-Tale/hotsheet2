@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest';
 
-import { formatPermissionCountdown,parsePermissionAutomation,parsePermissionHistory,parsePermissionResolution,PermissionInbox,VisiblePermissionTimer } from './permission-notifications';
+import { formatPermissionCountdown,parsePermissionAutomation,parsePermissionHistory,parsePermissionResolution,permissionBelongsToProject,PermissionInbox,VisiblePermissionTimer } from './permission-notifications';
 
 const project={id:'p',name:'Project',root:'/p',apiPath:'/p'};
 const request={id:1,connection:'c',tool:'Bash',action:'npm test',always_allow_supported:true};
@@ -13,4 +13,5 @@ describe('permission notifications',()=>{
   it('cancels one request without affecting valid fail-closed settings',()=>{const timer=new VisiblePermissionTimer();timer.tick('p:1',15_000,0);timer.cancel('p:1',1_000);expect(timer.tick('p:1',15_000,20_000)).toBeUndefined();expect(parsePermissionAutomation({action:'allow',delayMs:15_000})).toEqual({action:'allow',delayMs:15_000});expect(parsePermissionAutomation({action:'allow',delayMs:12})).toEqual({action:'allow',delayMs:60_000});expect(formatPermissionCountdown(61_001)).toBe('1:02')});
   it('rejects malformed and older-than-seven-days persisted history',()=>{const week=7*24*60*60*1000,now=week+10;expect(parsePermissionHistory({key:'not-an-array'},now)).toEqual([]);expect(parsePermissionHistory([null,{key:'valid',resolvedAt:10},{key:'expired',resolvedAt:9},{key:3,resolvedAt:10}],now)).toEqual([{key:'valid',resolvedAt:10}])});
   it('parses replayed resolution outcomes and safely degrades session scope',()=>{expect(parsePermissionResolution('allow:always')).toEqual({decision:'allow',scope:'always'});expect(parsePermissionResolution('deny:once')).toEqual({decision:'deny',scope:'once'});expect(parsePermissionResolution('allow:session')).toEqual({decision:'allow',scope:'once'});expect(parsePermissionResolution()).toBeUndefined()});
+  it('uses explicit project identity before connection fallback',()=>{const projects=[{...project,stores:['/p.hs2']},{id:'q',name:'Other',root:'/q',stores:['/q.hs2'],apiPath:'/q'}],connections=[{id:'c',tool:'Claude',project:'/p',role:'main' as const,busy:true}];expect(permissionBelongsToProject({...request,project:'/q.hs2'},connections,projects,'p')).toBe(false);expect(permissionBelongsToProject({...request,project:'/p.hs2'},connections,projects,'p')).toBe(true);expect(permissionBelongsToProject(request,connections,projects,'p')).toBe(true)});
 });

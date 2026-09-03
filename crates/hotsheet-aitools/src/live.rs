@@ -142,6 +142,7 @@ pub fn run_trigger(
             if let Some(bridge) = &t.permission_bridge {
                 app.set_permission_policy(crate::codex::PermissionPolicy {
                     bridge: bridge.clone(),
+                    project: t.cwd.display().to_string(),
                     connection: t.conn_id.clone(),
                     default: crate::permission::Decision::Deny,
                     timeout: crate::permission::DEFAULT_PERMISSION_TIMEOUT,

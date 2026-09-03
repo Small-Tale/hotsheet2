@@ -97,7 +97,9 @@ fn ask_permission(tool: &str, action: &str) -> Result<String, Box<dyn std::error
     let secret = std::env::var("HOTSHEET_SECRET")?;
     let connection =
         std::env::var("HOTSHEET_CONNECTION").unwrap_or_else(|_| "hs-fake-agent".to_string());
+    let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
     let body = serde_json::json!({
+        "project": project,
         "connection": connection,
         "tool": tool,
         "action": action,

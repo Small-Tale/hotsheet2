@@ -57,6 +57,8 @@ pub enum Scope {
 pub struct Request {
     /// Stable per-bridge id, used to resolve out of order.
     pub id: u64,
+    /// Stable project identity. Empty only for legacy single-project callers.
+    pub project: String,
     /// The connection that raised it — the route-back target for the answer.
     pub connection: String,
     /// The tool/action asking (e.g. `"Bash"`, `"Edit"`).
@@ -65,9 +67,10 @@ pub struct Request {
     pub action: String,
 }
 
-/// A persisted allow-rule: auto-answer any request matching `(tool, action)`.
+/// A persisted allow-rule: auto-answer any request matching `(project, tool, action)`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule {
+    pub project: String,
     pub tool: String,
     pub action: String,
     pub decision: Decision,
@@ -77,8 +80,8 @@ pub struct Rule {
 }
 
 impl Rule {
-    fn matches(&self, tool: &str, action: &str) -> bool {
-        self.tool == tool && self.action == action
+    fn matches(&self, project: &str, tool: &str, action: &str) -> bool {
+        self.project == project && self.tool == tool && self.action == action
     }
 }
 
@@ -94,6 +97,7 @@ pub enum Outcome {
 /// A resolved request: who to route the answer back to, and the decision.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resolved {
+    pub project: String,
     pub connection: String,
     pub decision: Decision,
     /// A rule to persist, when the answer's scope was `Always`. `None` otherwise.
@@ -132,15 +136,33 @@ impl PermissionBridge {
         tool: impl Into<String>,
         action: impl Into<String>,
     ) -> Outcome {
+        self.request_for_project("", connection, tool, action)
+    }
+
+    /// Raise a permission request scoped to one project.
+    pub fn request_for_project(
+        &mut self,
+        project: impl Into<String>,
+        connection: impl Into<String>,
+        tool: impl Into<String>,
+        action: impl Into<String>,
+    ) -> Outcome {
+        let project = project.into();
         let tool = tool.into();
         let action = action.into();
-        if let Some(rule) = self.rules.iter().find(|r| r.matches(&tool, &action)) {
+        if let Some(rule) = self
+            .rules
+            .iter()
+            .rev()
+            .find(|r| r.matches(&project, &tool, &action))
+        {
             return Outcome::Auto(rule.decision);
         }
         self.next_id += 1;
         let id = self.next_id;
         self.queue.push_back(Request {
             id,
+            project,
             connection: connection.into(),
             tool,
             action,
@@ -179,13 +201,15 @@ impl PermissionBridge {
         let mut persisted_rule = None;
         if scope != Scope::Once {
             let rule = Rule {
+                project: req.project.clone(),
                 tool: req.tool.clone(),
                 action: req.action.clone(),
                 decision,
                 persist: scope == Scope::Always,
             };
-            // A later rule for the same key supersedes an earlier one.
-            self.rules.retain(|r| !r.matches(&req.tool, &req.action));
+            // A later rule for the same project-scoped key supersedes an earlier one.
+            self.rules
+                .retain(|r| !r.matches(&req.project, &req.tool, &req.action));
             if scope == Scope::Always {
                 persisted_rule = Some(rule.clone());
             }
@@ -193,6 +217,7 @@ impl PermissionBridge {
         }
 
         Some(Resolved {
+            project: req.project,
             connection: req.connection,
             decision,
             persisted_rule,
@@ -242,6 +267,11 @@ impl SharedPermissionBridge {
         self.inner.lock().unwrap().set_rules(rules);
     }
 
+    /// Add another project's durable rules without disturbing already seeded projects.
+    pub fn add_rules(&self, rules: impl IntoIterator<Item = Rule>) {
+        self.inner.lock().unwrap().rules.extend(rules);
+    }
+
     /// Raise a request and **block** until it's decided: an allow-rule answers immediately;
     /// otherwise it's enqueued (firing the pending observer) and this waits until a
     /// [`resolve`](Self::resolve) with its id arrives (a human answering over the route-back).
@@ -251,9 +281,25 @@ impl SharedPermissionBridge {
         tool: impl Into<String>,
         action: impl Into<String>,
     ) -> Decision {
+        self.request_blocking_for_project("", connection, tool, action)
+    }
+
+    pub fn request_blocking_for_project(
+        &self,
+        project: impl Into<String>,
+        connection: impl Into<String>,
+        tool: impl Into<String>,
+        action: impl Into<String>,
+    ) -> Decision {
         // Materialize the fields up front so the pending observer gets the full Request.
-        let (connection, tool, action) = (connection.into(), tool.into(), action.into());
-        let id = match self.inner.lock().unwrap().request(
+        let (project, connection, tool, action) = (
+            project.into(),
+            connection.into(),
+            tool.into(),
+            action.into(),
+        );
+        let id = match self.inner.lock().unwrap().request_for_project(
+            project.clone(),
             connection.clone(),
             tool.clone(),
             action.clone(),
@@ -265,6 +311,7 @@ impl SharedPermissionBridge {
         if let Some(f) = self.on_pending.lock().unwrap().as_ref() {
             f(&Request {
                 id,
+                project,
                 connection,
                 tool,
                 action,
@@ -293,8 +340,26 @@ impl SharedPermissionBridge {
         timeout: Duration,
         on_timeout: Decision,
     ) -> Decision {
-        let (connection, tool, action) = (connection.into(), tool.into(), action.into());
-        let id = match self.inner.lock().unwrap().request(
+        self.request_blocking_timeout_for_project("", connection, tool, action, timeout, on_timeout)
+    }
+
+    pub fn request_blocking_timeout_for_project(
+        &self,
+        project: impl Into<String>,
+        connection: impl Into<String>,
+        tool: impl Into<String>,
+        action: impl Into<String>,
+        timeout: Duration,
+        on_timeout: Decision,
+    ) -> Decision {
+        let (project, connection, tool, action) = (
+            project.into(),
+            connection.into(),
+            tool.into(),
+            action.into(),
+        );
+        let id = match self.inner.lock().unwrap().request_for_project(
+            project.clone(),
             connection.clone(),
             tool.clone(),
             action.clone(),
@@ -305,6 +370,7 @@ impl SharedPermissionBridge {
         if let Some(f) = self.on_pending.lock().unwrap().as_ref() {
             f(&Request {
                 id,
+                project,
                 connection,
                 tool,
                 action,
@@ -358,9 +424,11 @@ impl SharedPermissionBridge {
 // ---- durable allow-rule storage (HS2-9R9YZW) -------------------------------------
 
 /// The on-disk form of an `Always` allow-rule — enough to auto-answer the same
-/// `(tool, action)` on a later run. The transient `persist` flag isn't stored.
+/// `(project, tool, action)` on a later run. The transient `persist` flag isn't stored.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredRule {
+    #[serde(default)]
+    pub project: String,
     pub tool: String,
     pub action: String,
     pub decision: Decision,
@@ -369,6 +437,7 @@ pub struct StoredRule {
 impl From<&Rule> for StoredRule {
     fn from(r: &Rule) -> Self {
         StoredRule {
+            project: r.project.clone(),
             tool: r.tool.clone(),
             action: r.action.clone(),
             decision: r.decision,
@@ -380,6 +449,7 @@ impl StoredRule {
     /// Rehydrate a durable (persisted) [`Rule`] for seeding a bridge.
     pub fn into_rule(self) -> Rule {
         Rule {
+            project: self.project,
             tool: self.tool,
             action: self.action,
             decision: self.decision,
@@ -402,10 +472,11 @@ pub fn load_rules(path: &Path) -> Vec<Rule> {
 }
 
 /// Persist an `Always` allow-rule to `path`, replacing any existing rule for the same
-/// `(tool, action)` (a later answer wins) — so remembered answers survive a restart.
+/// `(project, tool, action)` (a later answer wins) — so remembered answers survive a restart.
 pub fn append_rule(path: &Path, rule: &Rule) -> std::io::Result<()> {
     let mut rules: Vec<StoredRule> = load_rules(path).iter().map(StoredRule::from).collect();
-    rules.retain(|r| !(r.tool == rule.tool && r.action == rule.action));
+    rules
+        .retain(|r| !(r.project == rule.project && r.tool == rule.tool && r.action == rule.action));
     rules.push(StoredRule::from(rule));
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -433,6 +504,7 @@ mod tests {
         // A seeded rule auto-resolves with no blocking.
         let b = Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
             vec![Rule {
+                project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
                 decision: Decision::Allow,
@@ -505,6 +577,7 @@ mod tests {
         use std::sync::Arc;
         let b = Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
             vec![Rule {
+                project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
                 decision: Decision::Allow,
@@ -522,6 +595,7 @@ mod tests {
         use std::sync::Arc;
         let b = Arc::new(SharedPermissionBridge::new(PermissionBridge::with_rules(
             vec![Rule {
+                project: String::new(),
                 tool: "Bash".into(),
                 action: "ls".into(),
                 decision: Decision::Allow,
@@ -562,6 +636,7 @@ mod tests {
         assert!(load_rules(&path).is_empty(), "missing file → no rules");
 
         let allow = Rule {
+            project: String::new(),
             tool: "Bash".into(),
             action: "ls".into(),
             decision: Decision::Allow,
@@ -658,8 +733,30 @@ mod tests {
     }
 
     #[test]
+    fn rules_never_cross_project_boundaries() {
+        let mut bridge = PermissionBridge::new();
+        let first = match bridge.request_for_project("project-a", "c1", "Bash", "npm test") {
+            Outcome::Pending(id) => id,
+            _ => panic!("first project must ask"),
+        };
+        bridge
+            .resolve(first, Decision::Allow, Scope::Session)
+            .unwrap();
+        assert_eq!(
+            bridge.request_for_project("project-a", "c2", "Bash", "npm test"),
+            Outcome::Auto(Decision::Allow)
+        );
+        assert!(matches!(
+            bridge.request_for_project("project-b", "c3", "Bash", "npm test"),
+            Outcome::Pending(_)
+        ));
+        assert_eq!(bridge.rules()[0].project, "project-a");
+    }
+
+    #[test]
     fn seeded_rules_auto_resolve_from_the_first_request() {
         let mut b = PermissionBridge::with_rules(vec![Rule {
+            project: String::new(),
             tool: "Bash".into(),
             action: "git status".into(),
             decision: Decision::Allow,

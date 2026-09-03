@@ -16,7 +16,7 @@ export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;co
 export interface CodeReviewRange {from:string;to:string;count:number}
 export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean}
 export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:string;to:string};
-export interface PermissionRequest {id:number;connection:string;tool:string;action:string;always_allow_supported?:boolean}
+export interface PermissionRequest {id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean}
 export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}
 export interface CommandDefinition {id:string;title:string;program:string;args:string[];group?:string;confirmation?:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}

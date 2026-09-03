@@ -246,6 +246,7 @@ fn drive_one_ticket(
         Some((url, secret)) => vec![
             format!("HOTSHEET_SERVER={url}"),
             format!("HOTSHEET_SECRET={secret}"),
+            format!("HOTSHEET_PROJECT={}", store.root().display()),
         ],
         None => Vec::new(),
     };

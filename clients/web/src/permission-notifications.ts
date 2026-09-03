@@ -3,15 +3,22 @@ export type PermissionScope = 'once'|'always';
 export type PermissionHistoryDecision = PermissionDecision|'external';
 export type PermissionAutomationAction = 'off'|'allow'|'deny';
 
-export interface WirePermissionRequest { id:number;connection:string;tool:string;action:string;always_allow_supported?:boolean }
+export interface WirePermissionRequest { id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean }
 export interface ToolConnection { id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean }
-export interface PermissionProject { id:string;name:string;root:string;apiPath:string }
+export interface PermissionProject { id:string;name:string;root:string;stores?:string[];apiPath:string }
 export interface PermissionItem extends WirePermissionRequest { key:string;projectId:string;projectName:string;agent:string;role:string;receivedAt:number;ignored:boolean }
 export interface PermissionHistoryItem extends PermissionItem { decision:PermissionHistoryDecision;scope?:PermissionScope;resolvedAt:number;automatic?:boolean }
 export interface PermissionAutomation { action:PermissionAutomationAction;delayMs:number }
 
 export const PERMISSION_DELAYS = [15_000,60_000,120_000,300_000,900_000,3_600_000] as const;
 export const DEFAULT_PERMISSION_AUTOMATION:PermissionAutomation={action:'off',delayMs:60_000};
+
+export function permissionBelongsToProject(request:WirePermissionRequest,connections:ToolConnection[],projects:PermissionProject[],currentId:string):boolean {
+  const identity=request.project||connections.find(item=>item.id===request.connection)?.project;
+  if(!identity)return true;
+  const owner=projects.find(item=>item.id===identity||item.root===identity||item.stores?.includes(identity));
+  return !owner||owner.id===currentId;
+}
 
 export function parsePermissionAutomation(raw:unknown):PermissionAutomation {
   if(!raw||typeof raw!=='object')return DEFAULT_PERMISSION_AUTOMATION;

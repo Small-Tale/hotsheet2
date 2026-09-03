@@ -99,7 +99,7 @@ pub struct AppState {
     permissions: Arc<hotsheet_aitools::SharedPermissionBridge>,
     /// Where `Always` allow-rules persist (a store-local JSON file), so remembered answers
     /// survive a restart. `None` in tests (they don't touch disk for rules).
-    permission_rules_path: Option<std::path::PathBuf>,
+    permission_rule_paths: Arc<Mutex<std::collections::HashMap<String, std::path::PathBuf>>>,
     /// The **shared** connection registry for the driving loop (HS2-TCV3BF): each ticket the
     /// server is driving registers here for its turn, so `GET /connections` shows what's
     /// live and (once driving is concurrent) the in-flight bound can consult busy state.
@@ -160,7 +160,7 @@ impl AppState {
             let log = event_log.clone();
             permissions.set_on_pending(move |req| {
                 let ev = ChangeEvent {
-                    store: String::new(),
+                    store: req.project.clone(),
                     kind: "permission_asked".to_string(),
                     id: req.id.to_string(),
                     slug: req.tool.clone(),
@@ -210,7 +210,7 @@ impl AppState {
             writer_locks: Arc::new(Mutex::new(Vec::new())),
             sync_kick: Arc::new(Mutex::new(None)),
             permissions,
-            permission_rules_path: None,
+            permission_rule_paths: Arc::new(Mutex::new(std::collections::HashMap::new())),
             // A generous busy window: a driven turn heartbeats via the local registry, but
             // the shared one tracks "currently driving" by registration, not the window.
             drive_registry: Arc::new(Mutex::new(hotsheet_aitools::ConnectionRegistry::new(
@@ -285,12 +285,28 @@ impl AppState {
     /// Seed the permission bridge with the durable `Always` allow-rules stored at `path`,
     /// and persist future `Always` answers there (call this in a real run; leave off in
     /// tests so they never touch disk). Builder-style.
-    pub fn with_permission_rules(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+    pub fn with_permission_rules(self, path: impl Into<std::path::PathBuf>) -> Self {
         let path = path.into();
-        let rules = hotsheet_aitools::load_permission_rules(&path);
+        let project = self.store.root().display().to_string();
+        let stored_rules = hotsheet_aitools::load_permission_rules(&path);
+        let mut rules = stored_rules
+            .clone()
+            .into_iter()
+            .map(|mut rule| {
+                rule.project.clear();
+                rule
+            })
+            .collect::<Vec<_>>();
+        rules.extend(stored_rules.into_iter().map(|mut rule| {
+            rule.project = project.clone();
+            rule
+        }));
         // Re-seed the bridge with the loaded rules (keeping the on_pending observer).
         self.permissions.reseed_rules(rules);
-        self.permission_rules_path = Some(path);
+        let mut paths = self.permission_rule_paths.lock().unwrap();
+        paths.insert(String::new(), path.clone());
+        paths.insert(project, path);
+        drop(paths);
         self
     }
 
@@ -385,6 +401,22 @@ impl AppState {
             index: Arc::new(Mutex::new(index)),
         };
         self.host.register(entry.clone());
+        let project = store.root().display().to_string();
+        if let Ok(mut paths) = self.permission_rule_paths.lock()
+            && !paths.is_empty()
+            && !paths.contains_key(&project)
+            && let Some(directory) = paths.values().next().and_then(|path| path.parent())
+        {
+            let path = directory.join(format!("{id}.json"));
+            let rules = hotsheet_aitools::load_permission_rules(&path)
+                .into_iter()
+                .map(|mut rule| {
+                    rule.project = project.clone();
+                    rule
+                });
+            self.permissions.add_rules(rules);
+            paths.insert(project, path);
+        }
         let store_root = store.root().to_path_buf();
         match spawn_watcher_for(
             WatchTarget {
@@ -3037,7 +3069,7 @@ async fn renew_ticket(
 /// `GET /permissions` — the requests a driven tool is currently blocked on, for a client
 /// to render + answer. Each carries the raising connection + the `(tool, action)` asked.
 async fn list_permissions(State(state): State<AppState>) -> Json<Vec<PermissionInfo>> {
-    let always_allow_supported = state.permission_rules_path.is_some();
+    let rule_projects = state.permission_rule_paths.lock().unwrap().clone();
     Json(
         state
             .permissions
@@ -3045,10 +3077,11 @@ async fn list_permissions(State(state): State<AppState>) -> Json<Vec<PermissionI
             .into_iter()
             .map(|request| PermissionInfo {
                 id: request.id,
+                project: request.project.clone(),
                 connection: request.connection,
                 tool: request.tool,
                 action: request.action,
-                always_allow_supported,
+                always_allow_supported: rule_projects.contains_key(&request.project),
             })
             .collect(),
     )
@@ -3059,6 +3092,7 @@ async fn list_permissions(State(state): State<AppState>) -> Json<Vec<PermissionI
 #[derive(Serialize)]
 struct PermissionInfo {
     id: u64,
+    project: String,
     connection: String,
     tool: String,
     action: String,
@@ -3068,6 +3102,8 @@ struct PermissionInfo {
 /// Body for `POST /permissions/ask`: who's asking + what.
 #[derive(Deserialize)]
 struct AskBody {
+    #[serde(default)]
+    project: String,
     /// The live connection id (so a client attributes the prompt to the right tool).
     connection: String,
     /// The tool/action asking (e.g. `"Bash"`, `"Edit"`) — the rule-match key.
@@ -3084,9 +3120,15 @@ async fn ask_permission(
     Json(body): Json<AskBody>,
 ) -> Json<serde_json::Value> {
     let bridge = state.permissions.clone();
+    let project = if body.project.is_empty() {
+        state.store.root().display().to_string()
+    } else {
+        body.project
+    };
     // request_blocking_timeout blocks (Condvar); run it off the async runtime.
     let decision = tokio::task::spawn_blocking(move || {
-        bridge.request_blocking_timeout(
+        bridge.request_blocking_timeout_for_project(
+            project,
             body.connection,
             body.tool,
             body.action,
@@ -3331,7 +3373,13 @@ fn terminal_launch(
     })?;
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    let mut env = vec![("HOTSHEET_SECRET".to_string(), state.secret.clone())];
+    let mut env = vec![
+        ("HOTSHEET_SECRET".to_string(), state.secret.clone()),
+        (
+            "HOTSHEET_PROJECT".to_string(),
+            state.store.root().display().to_string(),
+        ),
+    ];
     if let Ok(url) = state.terminal_server_url.lock()
         && let Some(url) = url.as_ref()
     {
@@ -3872,7 +3920,13 @@ async fn resolve_permission(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("no pending request {id}")))?;
     // Persist an `Always` rule so the remembered answer survives a restart.
     let mut persisted = false;
-    if let (Some(rule), Some(path)) = (&resolved.persisted_rule, &state.permission_rules_path) {
+    let rules_path = state
+        .permission_rule_paths
+        .lock()
+        .unwrap()
+        .get(&resolved.project)
+        .cloned();
+    if let (Some(rule), Some(path)) = (&resolved.persisted_rule, rules_path.as_ref()) {
         match hotsheet_aitools::append_permission_rule(path, rule) {
             Ok(()) => persisted = true,
             Err(e) => eprintln!("failed to persist permission rule: {e}"),
@@ -3881,7 +3935,7 @@ async fn resolve_permission(
     // Resolution can happen through another client or transport. Publish a replayable
     // nudge so every notification inbox reconciles the now-absent request into history.
     state.emit(ChangeEvent {
-        store: String::new(),
+        store: resolved.project.clone(),
         kind: "permission_resolved".to_string(),
         id: id.to_string(),
         slug: String::new(),
