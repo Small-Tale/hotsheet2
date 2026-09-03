@@ -1580,6 +1580,16 @@ fn do_provider_create(
     let priority = opt_parse(req.priority.as_deref())?.unwrap_or_default();
     let status = initial_status(req.status.as_deref())?;
     let provider = provider_for(state, connection_id)?;
+    let new = ops::normalize_new_ticket_input(NewTicket {
+        title: req.title,
+        category: req.category.unwrap_or_else(|| "issue".into()),
+        priority,
+        status,
+        details: req.details.unwrap_or_default(),
+        tags: req.tags.unwrap_or_default(),
+        up_next: req.up_next.unwrap_or(false),
+        blocked_by: Vec::new(),
+    });
     provider
         .create(
             MutationContext {
@@ -1587,13 +1597,13 @@ fn do_provider_create(
                 generated_id: Ulid::new(),
             },
             ProviderDraft {
-                title: req.title,
-                category: req.category.unwrap_or_else(|| "issue".into()),
-                priority,
-                status,
-                details: req.details.unwrap_or_default(),
-                tags: req.tags.unwrap_or_default(),
-                up_next: req.up_next.unwrap_or(false),
+                title: new.title,
+                category: new.category,
+                priority: new.priority,
+                status: new.status,
+                details: new.details,
+                tags: new.tags,
+                up_next: new.up_next,
                 blocked_by: req.blocked_by.unwrap_or_default(),
                 transfer: None,
             },

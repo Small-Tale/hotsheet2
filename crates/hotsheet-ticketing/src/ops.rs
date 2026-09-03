@@ -294,6 +294,58 @@ pub struct NewTicket {
     pub blocked_by: Vec<Ulid>,
 }
 
+/// Expand leading `[tag]` title shorthand for every core-backed creation path.
+///
+/// Existing tags keep their order. Extracted tags are whitespace-normalized with
+/// hyphens and appended once. `\[` escapes a literal leading bracket, malformed or
+/// empty groups stop extraction, and an all-tag title remains literal so creation
+/// never silently produces an empty title.
+pub fn normalize_new_ticket_input(mut new: NewTicket) -> NewTicket {
+    let original = new.title.trim().to_string();
+    if let Some(literal) = original.strip_prefix("\\[") {
+        new.title = format!("[{literal}");
+        dedupe_tags(&mut new.tags);
+        return new;
+    }
+
+    let mut rest = original.as_str();
+    let mut extracted = Vec::new();
+    while let Some(after_open) = rest.strip_prefix('[') {
+        let Some(close) = after_open.find(']') else {
+            break;
+        };
+        let content = &after_open[..close];
+        if content.is_empty() || content.contains('[') {
+            break;
+        }
+        let tag = content.split_whitespace().collect::<Vec<_>>().join("-");
+        if tag.is_empty() {
+            break;
+        }
+        extracted.push(tag);
+        rest = after_open[close + 1..].trim_start();
+    }
+
+    if !extracted.is_empty() && !rest.is_empty() {
+        new.title = rest.trim().to_string();
+        new.tags.extend(extracted);
+    } else {
+        new.title = original;
+    }
+    dedupe_tags(&mut new.tags);
+    new
+}
+
+fn dedupe_tags(tags: &mut Vec<String>) {
+    let mut unique = Vec::with_capacity(tags.len());
+    for tag in tags.drain(..) {
+        if !unique.contains(&tag) {
+            unique.push(tag);
+        }
+    }
+    *tags = unique;
+}
+
 /// Resolve slug-or-ULID `needles` to blocker ULIDs, rejecting unknown tickets and
 /// (when `target` is given) a self-reference. Deduplicates while preserving order.
 /// Surfaces call this to turn user-facing strings into the `Vec<Ulid>` the model
@@ -324,6 +376,7 @@ pub fn create(
     now: Timestamp,
     new: NewTicket,
 ) -> Result<Ticket, StoreError> {
+    let new = normalize_new_ticket_input(new);
     let mut t = Ticket::new(
         id,
         derive_slug(&id, prefix),
@@ -1044,6 +1097,68 @@ mod tests {
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(s)
+    }
+
+    #[test]
+    fn new_ticket_title_shorthand_extracts_only_valid_leading_tags() {
+        let normalized = normalize_new_ticket_input(NewTicket {
+            title: "  [client] [Needs Review] Fix selection [literal]  ".into(),
+            tags: vec!["client".into(), "existing".into()],
+            ..Default::default()
+        });
+        assert_eq!(normalized.title, "Fix selection [literal]");
+        assert_eq!(normalized.tags, ["client", "existing", "Needs-Review"]);
+
+        let escaped = normalize_new_ticket_input(NewTicket {
+            title: r"\[client] Literal title".into(),
+            ..Default::default()
+        });
+        assert_eq!(escaped.title, "[client] Literal title");
+        assert!(escaped.tags.is_empty());
+
+        let malformed = normalize_new_ticket_input(NewTicket {
+            title: "[client] [] stays literal".into(),
+            ..Default::default()
+        });
+        assert_eq!(malformed.title, "[] stays literal");
+        assert_eq!(malformed.tags, ["client"]);
+
+        let all_tag = normalize_new_ticket_input(NewTicket {
+            title: "[client] [server]".into(),
+            ..Default::default()
+        });
+        assert_eq!(all_tag.title, "[client] [server]");
+        assert!(all_tag.tags.is_empty());
+
+        let embedded = normalize_new_ticket_input(NewTicket {
+            title: "Fix [client] selection".into(),
+            ..Default::default()
+        });
+        assert_eq!(embedded.title, "Fix [client] selection");
+        assert!(embedded.tags.is_empty());
+    }
+
+    #[test]
+    fn create_persists_normalized_title_shorthand() {
+        let (_d, store) = store();
+        let created = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "[client] [Needs Review] Fix selection".into(),
+                category: "bug".into(),
+                tags: vec!["client".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(created.title, "Fix selection");
+        assert_eq!(created.tags, ["client", "Needs-Review"]);
+        let persisted = store.read_ticket(&created.id).unwrap();
+        assert_eq!(persisted.title, created.title);
+        assert_eq!(persisted.tags, created.tags);
     }
 
     #[test]

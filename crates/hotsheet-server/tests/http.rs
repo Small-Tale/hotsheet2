@@ -42,8 +42,29 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+#[tokio::test]
+async fn create_extracts_leading_title_tags_over_http() {
+    let (_dir, state) = state();
+    let response = app(state)
+        .oneshot(authed(
+            "POST",
+            "/tickets",
+            Some(r#"{"title":"[client] [Needs Review] Fix selection","tags":["client"]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let created = body_json(response).await;
+    assert_eq!(created["title"], "Fix selection");
+    assert_eq!(
+        created["tags"],
+        serde_json::json!(["client", "Needs-Review"])
+    );
+}
+
 struct FakeGitHub {
     responses: Mutex<VecDeque<HttpResponse>>,
+    requests: Mutex<Vec<serde_json::Value>>,
 }
 
 impl GitHubTransport for FakeGitHub {
@@ -52,8 +73,11 @@ impl GitHubTransport for FakeGitHub {
         _: &str,
         _: &str,
         _: &[(&str, String)],
-        _: Option<&serde_json::Value>,
+        body: Option<&serde_json::Value>,
     ) -> Result<HttpResponse, String> {
+        if let Some(body) = body {
+            self.requests.lock().unwrap().push(body.clone());
+        }
         self.responses
             .lock()
             .unwrap()
@@ -4395,10 +4419,11 @@ async fn direct_github_provider_runs_through_provider_routes_without_mirroring()
             ]
             .into(),
         ),
+        requests: Mutex::new(Vec::new()),
     });
     let provider = GitHubProvider::new(
         GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
-        transport,
+        transport.clone(),
     );
     let app = app(st.with_ticket_provider(Arc::new(provider)));
 
@@ -4425,12 +4450,26 @@ async fn direct_github_provider_runs_through_provider_routes_without_mirroring()
         .oneshot(authed(
             "POST",
             "/providers/github-main/tickets",
-            Some(r#"{"title":"created remotely"}"#),
+            Some(r#"{"title":"[client] [Needs Review] created remotely","tags":["client"]}"#),
         ))
         .await
         .unwrap();
     assert_eq!(created.status(), StatusCode::CREATED);
     assert_eq!(body_json(created).await["native_id"], "12");
+    let requests = transport.requests.lock().unwrap();
+    assert_eq!(requests[0]["title"], "created remotely");
+    assert!(
+        requests[0]["labels"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("client"))
+    );
+    assert!(
+        requests[0]["labels"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("Needs-Review"))
+    );
     assert!(
         FsStore::open(dir.path())
             .unwrap()
@@ -4456,6 +4495,7 @@ async fn checkout_sources_aggregate_and_route_external_provider_mutations() {
             ]
             .into(),
         ),
+        requests: Mutex::new(Vec::new()),
     });
     let provider = GitHubProvider::new(
         GitHubConfig::new("github-main", "acme/repo", "fixture-token"),
@@ -4573,6 +4613,7 @@ async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract()
                 )]
                 .into(),
             ),
+            requests: Mutex::new(Vec::new()),
         }),
     );
     let jira = JiraProvider::new(
@@ -4600,6 +4641,7 @@ async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract()
                 )]
                 .into(),
             ),
+            requests: Mutex::new(Vec::new()),
         }),
     );
     let app = app(st

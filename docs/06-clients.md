@@ -252,6 +252,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   failures keep the created ticket, continue valid siblings, and direct the user to retry
   failed files from that ticket's Attachments tab. Providers must advertise both create
   and attachment capabilities before the composer accepts evidence.
+  The title also accepts leading tag shorthand: `[client] [Needs Review] Fix selection`
+  creates `Fix selection` with `client` and `Needs-Review` tags. The client sends the
+  original title and renders the authoritative normalized ticket returned by the server,
+  keeping Git and external-provider creation behavior identical (HS2-CHZKR5).
   When the selected provider advertises attachment support, each attachment exposes
   icon actions to open, download, copy its checkout-qualified reference, or remove it;
   every icon action has an action-and-filename accessible name, matching hover title,

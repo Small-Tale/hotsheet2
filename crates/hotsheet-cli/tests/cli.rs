@@ -1253,6 +1253,33 @@ fn new_accepts_positional_title_up_next_and_tags() {
 }
 
 #[test]
+fn new_extracts_leading_title_tags_through_the_cli() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+
+    let out = hs(p)
+        .args([
+            "new",
+            "[client] [Needs Review] Fix selection",
+            "--tag",
+            "client",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let slug = stdout.split_whitespace().nth(1).unwrap();
+
+    hs(p)
+        .args(["show", slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("title: Fix selection"))
+        .stdout(predicate::str::contains("client"))
+        .stdout(predicate::str::contains("Needs-Review"));
+}
+
+#[test]
 fn new_without_a_title_errors() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
