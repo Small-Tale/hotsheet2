@@ -639,8 +639,9 @@ hidden. The server's compact row continues to expose the source `feedback_needed
 boolean (mirrored in the index), while the client normalizes it at presentation time.
 For note-driven feedback, only an unanswered ask is active: among regular and
 `feedback_needed` notes, the most recent one controls the state. A later regular note is
-the response and clears Needs review; activity/status notes are neutral, and a later
-`feedback_needed` note opens it again.
+the response and clears Needs review; the answered ask then uses the ordinary note
+presentation rather than retaining feedback styling or an editor. Activity/status notes
+are neutral, and a later `feedback_needed` note opens it again.
 For compatibility with early HS2 automation, a regular note whose trimmed text begins
 with the historical exact marker `FEEDBACK NEEDED:` is normalized to the
 `feedback_needed` kind at the wire boundary and participates in the same exchange.

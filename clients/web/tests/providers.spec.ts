@@ -138,6 +138,8 @@ test('clears needs review when a regular response follows the feedback-needed no
   const inspector=page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toHaveAttribute('data-needs-review','false');
   await expect(inspector.locator('.ticket-inspector__feedback')).toHaveCount(0);
+  await expect(inspector.locator('[data-component="note-card"][data-note-id="N2"]')).toHaveAttribute('data-kind','regular');
+  await inspector.locator('[data-component="note-card"][data-note-id="N2"]').screenshot({path:'/private/tmp/hs2-98q45q-answered-feedback.png'});
 });
 
 test('shows Blocked only while a dependency remains unresolved',async({page})=>{
