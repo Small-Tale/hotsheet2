@@ -562,8 +562,12 @@ it's shown, **not how the view was opened** (HS1's inconsistency: the same note
 rendered as an editable feedback form when opened via "Provide feedback" but
 read-only when opened via the reader icon). In HS2 there is **one reader mode**, and:
 
-- **`feedback_needed` and `feedback_draft` notes always render in the feedback-editor
-  style** (you can answer the ask / continue your draft) — wherever they appear.
+- **`feedback_needed` and `feedback_draft` notes render in the feedback-editor style in
+  reader mode** (you can answer the ask / continue your draft). A new response starts
+  empty; a saved draft is prefilled.
+- **Explicitly editing an existing note is a different action from responding.** Direct
+  editing is prefilled with that note's complete Markdown—including for
+  `feedback_needed`—and autosaves the replacement by note id.
 - **`regular` and `status` notes, and the ticket `details`, use the same direct editing
   affordances in the reader as they do in the inspector.**
 - **`activity` notes render as a chronological timeline** ordered by `created_at`

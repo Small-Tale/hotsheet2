@@ -30,6 +30,15 @@ describe('NoteCard', () => {
     expect(markup).not.toContain('data-action="cancel-note-edit"');
   });
 
+  it('prefills direct feedback-note edits while keeping reader responses empty', () => {
+    const editing = String(NoteCard({ id: 'feedback-edit', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Existing feedback question', editing: true }));
+    expect(editing).toContain('aria-label="Note body"');
+    expect(editing).toContain('Existing feedback question');
+    const responding = String(NoteCard({ id: 'feedback-response', kind: 'feedback_needed', author: 'Codex', time: 'Now', body: 'Existing feedback question', readerMode: true }));
+    expect(responding).toContain('aria-label="Feedback response"');
+    expect(responding).toContain('<textarea name="note-body" data-note-id="feedback-response" data-note-response="true" aria-label="Feedback response"></textarea>');
+  });
+
   it('exposes content editing without a redundant edit button', () => {
     const markup = String(NoteCard({ id: 'actions', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }));
     expect(markup).toContain('data-edit-on-double-click="true"');
