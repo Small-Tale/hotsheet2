@@ -403,6 +403,9 @@ enum Cmd {
         /// Lease length in minutes.
         #[arg(long, default_value_t = 30)]
         lease_minutes: i64,
+        /// Also transition a Not Started ticket to Started in the same write.
+        #[arg(long)]
+        start: bool,
     },
     /// Release a claim (only the holding worker, unless --force).
     Release {
@@ -888,7 +891,8 @@ fn main() -> Result<()> {
             worker,
             label,
             lease_minutes,
-        } => cmd_claim(&cli.path, &id, &worker, label, lease_minutes),
+            start,
+        } => cmd_claim(&cli.path, &id, &worker, label, lease_minutes, start),
         Cmd::Release { id, worker, force } => cmd_release(&cli.path, &id, &worker, force),
         Cmd::Renew {
             id,
@@ -2392,13 +2396,18 @@ fn cmd_claim(
     worker: &str,
     label: Option<String>,
     lease_minutes: i64,
+    start: bool,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, id)?;
     let now_dt = OffsetDateTime::now_utc();
     let now = Timestamp::from_datetime(now_dt);
     let lease = lease_until(now_dt, lease_minutes);
-    let claimed = ops::claim(&store, &ticket.id, &now, lease, worker, label)?;
+    let claimed = if start {
+        ops::claim_and_start(&store, &ticket.id, &now, lease, worker, label)?
+    } else {
+        ops::claim(&store, &ticket.id, &now, lease, worker, label)?
+    };
     println!(
         "Claimed {} for {worker} (lease {lease_minutes}m)",
         claimed.slug

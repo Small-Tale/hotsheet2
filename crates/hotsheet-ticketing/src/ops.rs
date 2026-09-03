@@ -887,6 +887,40 @@ pub fn claim(
     worker: &str,
     label: Option<String>,
 ) -> Result<Ticket, OpError> {
+    let t = prepare_claim(store, id, now, lease_expires, worker, label)?;
+    store.write_ticket_committing(&t)?;
+    Ok(t)
+}
+
+/// Claim one exact ticket and transition a Not Started ticket to Started in the
+/// same durable write. This prevents callers from exposing a live worker claim
+/// while the workflow status still says that nobody has begun the work.
+pub fn claim_and_start(
+    store: &FsStore,
+    id: &Ulid,
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+) -> Result<Ticket, OpError> {
+    let mut t = prepare_claim(store, id, now, lease_expires, worker, label)?;
+    if t.status == Status::NotStarted {
+        let previous = t.status;
+        t.status = Status::Started;
+        append_status_transition(&mut t, previous, Status::Started, now);
+    }
+    store.write_ticket_committing(&t)?;
+    Ok(t)
+}
+
+fn prepare_claim(
+    store: &FsStore,
+    id: &Ulid,
+    now: &Timestamp,
+    lease_expires: Timestamp,
+    worker: &str,
+    label: Option<String>,
+) -> Result<Ticket, OpError> {
     let tickets = store.list_tickets()?;
     let mut t = tickets
         .iter()
@@ -940,7 +974,6 @@ pub fn claim(
         t.claim_count += 1;
     }
     t.updated_at = now.clone();
-    store.write_ticket_committing(&t)?;
     Ok(t)
 }
 

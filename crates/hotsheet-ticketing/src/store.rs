@@ -83,6 +83,13 @@ impl StoreMetadata {
 pub enum StoreError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error("{operation} {path}: {source}")]
+    IoAt {
+        operation: &'static str,
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("not a Hot Sheet store (no hotsheet-store.json at {0}); run `hotsheet init` first")]
     NotAStore(PathBuf),
     #[error("invalid hotsheet-store.json: {0}")]
@@ -205,7 +212,12 @@ impl FsStore {
 
     /// Read the store metadata.
     pub fn metadata(&self) -> Result<StoreMetadata, StoreError> {
-        let text = fs::read_to_string(self.root.join(STORE_METADATA_FILE))?;
+        let path = self.root.join(STORE_METADATA_FILE);
+        let text = fs::read_to_string(&path).map_err(|source| StoreError::IoAt {
+            operation: "reading store metadata",
+            path,
+            source,
+        })?;
         let value: serde_json::Value = serde_json::from_str(&text)?;
         if let Some(version) = value.get("schemaVersion") {
             let supported = GUARDED_STORE_SCHEMA_V2.to_string();
@@ -252,9 +264,17 @@ impl FsStore {
         }
         let path = self.ticket_path(&ticket.id);
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent).map_err(|source| StoreError::IoAt {
+                operation: "creating ticket directory",
+                path: parent.to_path_buf(),
+                source,
+            })?;
         }
-        fs::write(&path, to_file_string(&normalized))?;
+        fs::write(&path, to_file_string(&normalized)).map_err(|source| StoreError::IoAt {
+            operation: "writing ticket",
+            path: path.clone(),
+            source,
+        })?;
         Ok(path)
     }
 
@@ -386,7 +406,11 @@ impl FsStore {
 
     /// Read and parse a ticket file at an explicit path.
     pub fn read_ticket_at(&self, path: &Path) -> Result<Ticket, StoreError> {
-        let text = fs::read_to_string(path)?;
+        let text = fs::read_to_string(path).map_err(|source| StoreError::IoAt {
+            operation: "reading ticket",
+            path: path.to_path_buf(),
+            source,
+        })?;
         let mut ticket = parse_file(&text).map_err(|source| StoreError::Parse {
             path: path.to_path_buf(),
             source,
@@ -682,13 +706,42 @@ impl FsStore {
         if !tickets_dir.is_dir() {
             return Ok(paths);
         }
-        for shard in fs::read_dir(&tickets_dir)? {
-            let shard = shard?;
-            if !shard.file_type()?.is_dir() {
+        let shards = fs::read_dir(&tickets_dir).map_err(|source| StoreError::IoAt {
+            operation: "listing ticket directory",
+            path: tickets_dir.clone(),
+            source,
+        })?;
+        for shard in shards {
+            let shard = shard.map_err(|source| StoreError::IoAt {
+                operation: "reading ticket directory entry",
+                path: tickets_dir.clone(),
+                source,
+            })?;
+            let shard_path = shard.path();
+            if !shard
+                .file_type()
+                .map_err(|source| StoreError::IoAt {
+                    operation: "reading ticket shard metadata",
+                    path: shard_path.clone(),
+                    source,
+                })?
+                .is_dir()
+            {
                 continue;
             }
-            for entry in fs::read_dir(shard.path())? {
-                let path = entry?.path();
+            let entries = fs::read_dir(&shard_path).map_err(|source| StoreError::IoAt {
+                operation: "listing ticket shard",
+                path: shard_path.clone(),
+                source,
+            })?;
+            for entry in entries {
+                let path = entry
+                    .map_err(|source| StoreError::IoAt {
+                        operation: "reading ticket shard entry",
+                        path: shard_path.clone(),
+                        source,
+                    })?
+                    .path();
                 if path.extension().and_then(|e| e.to_str()) == Some("md") {
                     paths.push(path);
                 }

@@ -22,9 +22,10 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    ticket status, verification, and publishing.
 3. **Work each ticket end to end under an exact claim lease.** Choose one stable,
    session-specific worker id. Immediately before active work, claim the assigned ticket
-   with `hotsheet_claim` (`id`, `worker`, optional `label`/`lease_minutes`) or
-   `hotsheet-cli claim <id> --worker <worker> [--label <label>] [--lease-minutes N]`.
-   A claim is presence, not workflow state: separately mark the ticket started. Renew
+   with the atomic CLI form
+   `hotsheet-cli claim <id> --worker <worker> [--label <label>] [--lease-minutes N] --start`,
+   which acquires the claim and changes Not Started to Started in one durable write.
+   Do not issue separate claim and status commands. Renew
    before the lease expires and before lengthy work with `hotsheet_renew` or
    `hotsheet-cli renew`; release with `hotsheet_release` or `hotsheet-cli release` when
    work stops for completion, handoff, error, or feedback. If another worker holds the

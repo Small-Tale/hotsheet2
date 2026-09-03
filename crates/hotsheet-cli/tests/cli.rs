@@ -970,6 +970,32 @@ fn exact_claim_accepts_slug_and_ulid_without_changing_status_or_retry_count() {
 }
 
 #[test]
+fn exact_claim_can_atomically_start_a_ticket() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).arg("init").assert().success();
+    let slug = new_ticket(p, "claim and start");
+
+    hs(p)
+        .args(["claim", &slug, "--worker", "agent-1", "--start"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "Claimed {slug} for agent-1"
+        )));
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: started"))
+        .stdout(predicate::str::contains("claimed_by: agent-1"))
+        .stdout(predicate::str::contains("claim_count: 1"))
+        .stdout(predicate::str::contains(
+            "Status changed from Not Started to Started",
+        ));
+}
+
+#[test]
 fn new_accepts_positional_title_up_next_and_tags() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
