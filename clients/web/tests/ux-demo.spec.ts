@@ -510,6 +510,15 @@ test('keeps feedback Markdown list spacing compact', async ({ page }) => {
   await feedbackNote.screenshot({ path: '/private/tmp/hs2-8dd2dg-feedback-list-spacing.png' });
 });
 
+test('de-emphasizes email-style quoted Markdown at wide and narrow sizes', async ({ page }) => {
+  await page.goto('/ux-demo?component=markdown-editor');
+  const preview=page.locator('[data-component="markdown-preview"]'),quote=preview.locator('blockquote'),body=preview.locator(':scope > p').first();
+  await expect(quote).toBeVisible();
+  const typography=await Promise.all([quote,body].map(locator=>locator.evaluate(node=>({fontSize:parseFloat(getComputedStyle(node).fontSize),lineHeight:parseFloat(getComputedStyle(node).lineHeight),marginLeft:getComputedStyle(node).marginLeft}))));
+  expect(typography[0].fontSize).toBeLessThan(typography[1].fontSize);expect(typography[0].lineHeight).toBeLessThan(typography[1].lineHeight);expect(typography[0].marginLeft).toBe('0px');
+  await preview.screenshot({path:'/private/tmp/hs2-9acety-quoted-content-wide.png'});await page.setViewportSize({width:390,height:844});await quote.scrollIntoViewIfNeeded();await preview.screenshot({path:'/private/tmp/hs2-9acety-quoted-content-narrow.png'});
+});
+
 test('uses the identical responsive TicketRow in list and board compositions', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=ticket-list');

@@ -223,6 +223,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
   `noopener noreferrer`; raw HTML remains escaped and unsafe URL protocols remain inert.
+  Blockquotes follow email-reply semantics: a compact neutral rail, smaller quiet text,
+  and inherited heading size de-emphasize quoted context instead of presenting it as a
+  literary pull quote.
 
   The shared left project sidebar presents a centered `M open, N up next` summary
   immediately above Drive. Both counts derive from the existing checkout ticket collection:
