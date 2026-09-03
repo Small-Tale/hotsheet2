@@ -1,9 +1,13 @@
+import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
+import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './terminal-dashboard.css';
 
 import { ExternalLink, Eye, EyeOff, LayoutGrid, Maximize2, Minus, Plus, Rows3, X } from 'lucide';
 
 import { terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
 import { LucideIcon } from './lucide-icon';
+import { ToolbarControlGroup } from './toolbar-control-group';
 
 export interface TerminalDashboardSession {
   id: string;
@@ -38,6 +42,17 @@ export interface TerminalDashboardProps {
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
 
+export function TerminalDashboardControls({ grouping = 'project', hiddenCount = 0 }: {grouping?:'project'|'flow';hiddenCount?:number}) {
+  return <div class="terminal-dashboard-controls" data-component="terminal-dashboard-controls">
+    <ToolbarControlGroup appearance="borderless" single>
+      <wa-button appearance="plain" data-action="show-hidden-terminals" disabled={hiddenCount===0} title={hiddenCount?'Show hidden terminals':'No hidden terminals'}><LucideIcon icon={Eye} name="eye" /><span class="terminal-dashboard-controls__label">Show hidden terminals</span>{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</wa-button>
+    </ToolbarControlGroup>
+    <ToolbarControlGroup appearance="borderless" single>
+      <wa-dropdown placement="bottom-end"><wa-button slot="trigger" appearance="plain" with-caret aria-label={`Group terminals: ${grouping==='project'?'Project':'None'}`}>Group</wa-button><wa-dropdown-item type="checkbox" checked={grouping==='project'} data-action="set-terminal-grouping" data-terminal-grouping="project"><span slot="icon"><LucideIcon icon={Rows3} name="rows-3" /></span>Project</wa-dropdown-item><wa-dropdown-item type="checkbox" checked={grouping==='flow'} data-action="set-terminal-grouping" data-terminal-grouping="flow"><span slot="icon"><LucideIcon icon={LayoutGrid} name="layout-grid" /></span>None</wa-dropdown-item></wa-dropdown>
+    </ToolbarControlGroup>
+  </div>;
+}
+
 function TerminalTile({ session, magnified = false }: {session:TerminalDashboardSession;magnified?:boolean}) {
   const key = keyFor(session);
   const preview = terminalPreviewText(session.scrollback) || 'Terminal is ready.';
@@ -45,7 +60,7 @@ function TerminalTile({ session, magnified = false }: {session:TerminalDashboard
     <button type="button" class="terminal-tile__preview" data-action="magnify-terminal" data-terminal-key={key} aria-label={`${magnified ? 'Restore' : 'Magnify'} ${session.title ?? session.id}`} title={`${magnified ? 'Restore' : 'Magnify'} terminal`}><pre>{preview}</pre></button>
     <footer class="terminal-tile__footer">
       <span class="terminal-tile__state" aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}></span>
-      <span class="terminal-tile__identity"><strong>{session.title ?? session.id}</strong><small>{session.projectName}{session.cwd ? ` · ${session.cwd}` : ''}</small></span>
+      <span class="terminal-tile__identity"><strong>{session.projectName}<span aria-hidden="true"> › </span>{session.title ?? session.id}</strong>{session.cwd&&<small>{session.cwd}</small>}</span>
       {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
       <button type="button" data-action="open-terminal-project" data-terminal-key={key} aria-label={`Open ${session.title ?? session.id} in ${session.projectName}`} title="Open project"><LucideIcon icon={ExternalLink} name="external-link" /></button>
       <button type="button" data-action="dedicate-terminal" data-terminal-key={key} aria-label={`Open ${session.title ?? session.id} as dedicated terminal`} title="Open dedicated terminal"><LucideIcon icon={Maximize2} name="maximize-2" /></button>
@@ -66,14 +81,6 @@ export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, g
   const layout = terminalGridLayout(width, height, fitAcross, fitHigh);
   const magnified = groups.flatMap(group => group.sessions).find(session => keyFor(session) === magnifiedKey);
   return <section class="terminal-dashboard" data-component="terminal-dashboard" data-basis={layout.basis} data-fit={String(layout.fit)} aria-label="Terminal dashboard">
-    <header class="terminal-dashboard__toolbar">
-      <div class="terminal-dashboard__grouping" role="group" aria-label="Terminal grouping">
-        <button type="button" data-action="set-terminal-grouping" data-terminal-grouping="project" aria-pressed={String(grouping === 'project')} title="Group by project"><LucideIcon icon={Rows3} name="rows-3" /><span>Projects</span></button>
-        <button type="button" data-action="set-terminal-grouping" data-terminal-grouping="flow" aria-pressed={String(grouping === 'flow')} title="Flow all terminals"><LucideIcon icon={LayoutGrid} name="layout-grid" /><span>Flow</span></button>
-      </div>
-      {hidden.size > 0 && <button type="button" class="terminal-dashboard__show-hidden" data-action="show-hidden-terminals"><LucideIcon icon={Eye} name="eye" /><span>Show hidden ({hidden.size})</span></button>}
-      <span class="terminal-dashboard__fit" aria-live="polite">{layout.fit} {layout.basis}</span>
-    </header>
     <div class="terminal-dashboard__content" data-terminal-grid-measure="true">
       {loading ? <div class="terminal-dashboard__empty" role="status">Loading terminals…</div> : message ? <div class="terminal-dashboard__empty" role="status">{message}</div> : sessions.length === 0 ? <div class="terminal-dashboard__empty"><strong>No active terminals</strong><span>Open a project terminal to add it to this dashboard.</span></div> : grouping === 'flow' ? <Grid sessions={sessions} layout={layout} /> : visibleGroups.map(group => <section class="terminal-dashboard__project" data-key={group.projectId} data-project-id={group.projectId}><h2>{group.projectName}<span>{group.sessions.length}</span></h2><Grid sessions={group.sessions} layout={layout} /></section>)}
     </div>

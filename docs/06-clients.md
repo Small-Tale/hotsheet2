@@ -448,8 +448,8 @@ dashboards, print) remains **deferred**, each its own ticket after the floor lan
 terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K has shipped the global dashboard shell,
 snapshot previews, project/flow grouping, magnification/hiding, and independent persisted
-width/high zoom controls; WebSocket-backed interactive viewports and the project drawer
-remain in that implementation ticket.
+width/high zoom controls. WebSocket-backed interactive viewports continue in HS2-PD4MZ9;
+the project drawer continues in HS2-586BVQ.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 

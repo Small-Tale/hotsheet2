@@ -722,7 +722,9 @@ completion, and disconnection without spawning a PTY.
 The project bottom drawer and global Terminals screen share one tile-grid contract. The
 drawer keeps its compact tab rail above the grid; the global screen removes the project
 sidebar and ticket inspector, keeps the project-tab strip for navigation, and groups live
-terminal tiles by project. Each tile has a 4:3 preview, terminal and project identity,
+terminal tiles by project. Following the exported global-dashboard wireframe, visibility
+and grouping live in the main toolbar, while zoom remains anchored to the grid's bottom
+right corner. Each tile has a 4:3 preview, terminal and project identity,
 busy/idle/exited state, and pending-attention treatment. An empty project is omitted from
 the global grid unless it is the only available project, in which case the screen explains
 how to create or open a terminal.
@@ -813,8 +815,8 @@ semantic actions; Kerf owns state and composition.
 These remain in the component architecture but are not initial-client blockers:
 
 - `TerminalDashboard` — interaction contract settled in §6.3; the global snapshot-backed
-  screen and its responsive controls are built, while interactive WebSocket viewports and
-  the project drawer remain in HS2-2ZCN7K
+  screen and its responsive controls are built. Interactive WebSocket viewports continue
+  in HS2-PD4MZ9 and the project drawer in HS2-586BVQ.
 - `AnalyticsDashboard` — throughput, cycle time, category, usage, and cost charts
 - `CustomViewBuilder` — query construction and saved-view editing
 - `AnnouncerOverlay` — digest picture-in-picture, live narration, playback controls,
