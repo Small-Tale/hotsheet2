@@ -88,9 +88,13 @@ describe('NoteCard', () => {
     expect(needed).toContain('aria-label="Feedback response"');
     expect(needed).toContain('data-note-response="true"');
     expect(needed).toContain('Respond');
+    expect(needed).toContain('data-action="dismiss-feedback"');
+    expect(needed).toContain('No response needed');
     const draft = String(NoteCard({ id: 'draft', kind: 'feedback_draft', author: 'You', time: 'Now', body: 'Continue me', readerMode: true }));
     expect(draft).toContain('aria-label="Note body"');
     expect(draft).toContain('Continue me');
     expect(draft).toContain('Submit');
   });
+
+  it('marks the exact regular acknowledgement for subtle presentation',()=>{const acknowledgement=String(NoteCard({id:'ack',kind:'regular',author:'You',time:'Now',body:'No response needed'}));expect(acknowledgement).toContain('data-acknowledgement="true"');expect(String(NoteCard({id:'other',kind:'regular',author:'You',time:'Now',body:'No response needed here'}))).not.toContain('data-acknowledgement="true"')});
 });

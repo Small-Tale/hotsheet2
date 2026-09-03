@@ -34,3 +34,5 @@
 .note-card[data-kind="activity"] .note-card__kind { color: var(--wa-color-neutral-on-quiet); }
 .note-card[data-kind="feedback_needed"], .note-card[data-kind="feedback_draft"] { border-color: var(--wa-color-warning-border-normal); background: var(--wa-color-warning-fill-quiet); }
 .note-card[data-kind="feedback_needed"] .note-card__kind, .note-card[data-kind="feedback_draft"] .note-card__kind { color: var(--wa-color-warning-on-quiet); }
+.note-card[data-acknowledgement="true"] { border-color: transparent; background: var(--wa-color-neutral-fill-quiet); }
+.note-card[data-acknowledgement="true"] :is(.note-card__kind, .note-card__body) { color: var(--wa-color-neutral-on-quiet); }
