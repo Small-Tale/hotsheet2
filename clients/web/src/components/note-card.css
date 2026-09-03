@@ -10,7 +10,7 @@
 .note-card__actions button { display: inline-grid; width: 1.75rem; height: 1.75rem; padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
 .note-card__actions button:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .note-card__actions svg { width: .8rem; height: .8rem; }
-.note-card__body { min-width: 0; margin: 0; font-size: var(--wa-font-size-s); line-height: 1.5; overflow-wrap: anywhere; white-space: pre-wrap; }
+.note-card__body { min-width: 0; margin: 0; font-size: var(--wa-font-size-s); line-height: 1.5; overflow-wrap: anywhere; }
 .note-card__body .markdown-preview { font: inherit; }
 .note-card:not(.note-card--editing) { cursor: text; }
 .note-card__editor { display: grid; min-width: 0; gap: var(--wa-space-xs); }

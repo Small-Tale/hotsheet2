@@ -10,7 +10,7 @@ export const NOTE_DEMO_KINDS: readonly NoteKind[] = ['regular', 'status', 'feedb
 export const noteDemoNotes = signal([
   { id: 'regular', kind: 'regular' as const, author: 'Claude', time: '12 minutes ago', body: 'The shared row now keeps metadata readable at narrow widths.' },
   { id: 'status', kind: 'status' as const, author: 'Hot Sheet', time: '9 minutes ago', body: 'Status changed from Started to Needs Review.' },
-  { id: 'feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '4 minutes ago', title: 'Feedback needed', body: 'Should this interaction preserve the current filter when switching projects?' },
+  { id: 'feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '4 minutes ago', title: 'Feedback needed', body: 'Which behavior should we preserve?\n\n1. Keep the current filter\n2. Reset to the queue\n3. Remember per project' },
   { id: 'draft', kind: 'feedback_draft' as const, author: 'You', time: '2 minutes ago', body: 'Preserve the current filter when switching between related worktrees.' },
   { id: 'activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Finished the responsive layout pass and browser verification.' },
 ]);

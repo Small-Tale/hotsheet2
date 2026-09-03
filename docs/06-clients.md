@@ -569,7 +569,9 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   editing is prefilled with that note's complete Markdown—including for
   `feedback_needed`—and autosaves the replacement by note id.
 - **`regular` and `status` notes, and the ticket `details`, use the same direct editing
-  affordances in the reader as they do in the inspector.**
+  affordances in the reader as they do in the inspector.** Rendered Markdown owns its
+  own whitespace; note containers must not preserve the renderer's HTML formatting
+  whitespace, which would create artificial blank lines between list items.
 - **`activity` notes render as a chronological timeline** ordered by `created_at`
   (ULID tie-breaker). Never collapse duplicate, repeated, or reversed transitions;
   each entry is historical context. Every actual status change appends one of these

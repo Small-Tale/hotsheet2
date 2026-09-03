@@ -500,6 +500,16 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(editor).toHaveAttribute('data-expanded', 'false');
 });
 
+test('keeps feedback Markdown list spacing compact', async ({ page }) => {
+  await page.goto('/ux-demo?component=note-card');
+  const feedbackNote = page.locator('[data-component="note-card"][data-kind="feedback_needed"]');
+  const feedbackItems = feedbackNote.locator('li');
+  await expect(feedbackItems).toHaveCount(3);
+  const itemGaps = await feedbackItems.evaluateAll(items => items.slice(1).map((item, index) => item.getBoundingClientRect().top - items[index].getBoundingClientRect().bottom));
+  expect(Math.max(...itemGaps)).toBeLessThanOrEqual(8);
+  await feedbackNote.screenshot({ path: '/private/tmp/hs2-8dd2dg-feedback-list-spacing.png' });
+});
+
 test('uses the identical responsive TicketRow in list and board compositions', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=ticket-list');
