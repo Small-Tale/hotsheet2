@@ -1,12 +1,13 @@
 import './repository-status-popover.css';
 
-import { ArrowDown, ArrowUp, CircleCheck, Clipboard, Copy, ExternalLink, FolderOpen, GitBranch, GitCommitHorizontal, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
+import { ArrowDown, ArrowUp, CircleCheck, Clipboard, Copy, ExternalLink, FolderOpen, GitBranch, GitCommitHorizontal, GitCompare, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
 
 import type { CodeReview, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
 import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 import { type CodeReviewComparison, TicketCodeReview } from './ticket-code-review';
+import { ToolbarControlGroup } from './toolbar-control-group';
 
 export type RepositoryStatusState='clean'|'dirty'|'ahead'|'behind'|'diverged'|'conflicted'|'error';
 export type RepositoryStatusView='staged'|'unstaged'|'untracked'|'conflicted'|'commits';
@@ -39,7 +40,7 @@ export function RepositoryStatusPopover({status,error='',refreshing=false,view='
   const files=repositoryFilesForView(detailFiles??status?.files??[],view);
   const review:CodeReview|undefined=status?{commits:detailCommits??status.commits??[],ranges:status.ranges??[],difftool:status.difftool,truncated:Boolean(status.truncated)}:undefined;
   return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'repository-status-popover'} class="repository-status-popover" data-component="repository-status-popover" data-state={state} data-view={view} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="repository-status-title">
-    <header><span class="repository-status-popover__icon"><LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/></span><div><h2 id="repository-status-title">Repository Status</h2><p>{stateCopy[state]}</p></div><button type="button" class="repository-status-popover__refresh" data-action="refresh-repository-status" disabled={refreshing} aria-label={refreshing?'Refreshing repository status':'Refresh repository status'}><LucideIcon icon={RefreshCw} name="refresh-cw"/></button></header>
+    <header><span class="repository-status-popover__icon"><LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/></span><div><h2 id="repository-status-title">Repository Status</h2><p>{stateCopy[state]}</p></div><div class="repository-status-popover__actions"><button type="button" class="repository-status-popover__refresh" data-action="refresh-repository-status" disabled={refreshing} aria-label={refreshing?'Refreshing repository status':'Refresh repository status'}><LucideIcon icon={RefreshCw} name="refresh-cw"/></button>{comparison&&<ToolbarControlGroup single><button type="button" data-action="toggle-repository-comparison" aria-label="Compare two commits" title="Compare two commits" aria-pressed={String(comparison.active)}><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup>}</div></header>
     {status&&<div class="repository-status-popover__layout"><aside>
       <dl class="repository-status-popover__values"><div><dt>Branch</dt><dd>{branch}</dd></div><div><dt>Upstream</dt><dd>{upstream}</dd></div></dl>
       <dl class="repository-status-popover__values"><div><dt>Ahead</dt><dd><LucideIcon icon={ArrowUp} name="arrow-up"/>{status.ahead}</dd></div><div><dt>Behind</dt><dd><LucideIcon icon={ArrowDown} name="arrow-down"/>{status.behind}</dd></div></dl>

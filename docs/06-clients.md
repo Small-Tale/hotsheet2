@@ -791,8 +791,10 @@ The Commits view embeds the same commit graph, configured difftool actions, and
 multi-commit range presentation as ticket Code Review. Both individual commits and the
 unpushed range are rediscovered and validated by the server immediately before launch;
 arbitrary browser-supplied paths or revisions are rejected. Its Git Compare toolbar
-action switches to Commits and opens a light-purple selection banner. A/B segmented
-controls choose which side the next commit click sets; selecting A advances to B, both
+action sits in its own contained group beside Refresh; it switches to Commits and toggles
+a light-purple selection banner without a redundant Cancel action. Compact A/B segmented
+controls choose which side the next commit click sets and remain separated from Open;
+selecting A advances to B, both
 commits receive visible side labels, and Open remains disabled until two distinct sides
 are selected. Open uses the same external-difftool affordance as a single commit. The
 shared component's complete comparison state is represented in `/ux-demo`. Repository

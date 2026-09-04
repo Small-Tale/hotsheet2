@@ -67,6 +67,18 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('data-action="open-repository-review"');
     expect(markup).toContain('data-review-mode="range"');
     expect(markup).toContain('aria-label="Compare two commits"');
+    expect(markup).toContain('data-action="toggle-repository-comparison"');
+    expect(markup).toMatch(/repository-status-popover__actions[\s\S]*refresh-repository-status[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison/);
+  });
+
+  it('keeps the comparison selector compact and separated from its open action',()=>{
+    const markup=String(RepositoryStatusPopover({status:status(),view:'commits',comparison:{active:true,side:'a'}}));
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).not.toContain('cancel-repository-comparison');
+    const css=readFileSync(resolve(import.meta.dirname,'ticket-code-review.css'),'utf8');
+    expect(css).toMatch(/__compare-banner \{[^}]*grid-template-columns: auto minmax\(0,1fr\) auto/);
+    expect(css).toMatch(/__compare-banner \.toolbar-control-group \{[^}]*width: max-content/);
+    expect(css).toMatch(/__compare-open \{[^}]*grid-column: 3/);
   });
 
   it('renders bounded detail pages with an infinite-scroll sentinel',()=>{

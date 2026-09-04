@@ -1,12 +1,13 @@
 .repository-status-popover { box-sizing: border-box; width: min(64rem, calc(100vw - 2 * var(--wa-space-l))); height: min(37.5rem, calc(100vh - 2 * var(--wa-space-l))); padding: 0; overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-xl); color: var(--wa-color-text-normal); }
 .repository-status-popover::backdrop { background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 18%, transparent); }
-.repository-status-popover > header { display: grid; min-height: 4.9rem; padding: var(--wa-space-m) var(--wa-space-l); box-sizing: border-box; border-bottom: 1px solid var(--wa-color-surface-border); grid-template-columns: 2rem minmax(0,1fr) 2.5rem; align-items: start; gap: var(--wa-space-m); }
+.repository-status-popover > header { display: grid; min-height: 4.9rem; padding: var(--wa-space-m) var(--wa-space-l); box-sizing: border-box; border-bottom: 1px solid var(--wa-color-surface-border); grid-template-columns: 2rem minmax(0,1fr) auto; align-items: start; gap: var(--wa-space-m); }
 .repository-status-popover__icon { display: grid; width: 2rem; height: 2rem; border-radius: var(--wa-border-radius-circle); place-items: center; color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .repository-status-popover[data-state="clean"] .repository-status-popover__icon { color: var(--wa-color-success-on-quiet); background: var(--wa-color-success-fill-quiet); }
 .repository-status-popover:is([data-state="error"],[data-state="conflicted"]) .repository-status-popover__icon { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); }
 .repository-status-popover h2, .repository-status-popover header p { margin: 0; }
 .repository-status-popover h2 { font-size: var(--wa-font-size-l); line-height: 1.2; }
 .repository-status-popover header p { margin-top: var(--wa-space-2xs); color: var(--wa-color-text-quiet); }
+.repository-status-popover__actions { display: flex; align-items: center; gap: var(--wa-space-xs); }
 .repository-status-popover__refresh { display: grid; width: 2.5rem; height: 2.5rem; padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-circle); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); cursor: pointer; place-items: center; }
 .repository-status-popover__refresh:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .repository-status-popover__refresh:disabled { opacity: .5; cursor: wait; }

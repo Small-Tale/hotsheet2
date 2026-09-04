@@ -1,6 +1,6 @@
 import './ticket-code-review.css';
 
-import { ExternalLink, GitCommitHorizontal, GitCompare, GitCompareArrows, X } from 'lucide';
+import { ExternalLink, GitCommitHorizontal, GitCompare, GitCompareArrows } from 'lucide';
 
 import type { CodeReview, CodeReviewTarget } from '../api';
 import { LucideIcon } from './lucide-icon';
@@ -32,10 +32,9 @@ export function TicketCodeReview({ review, loading = false, message = '', title 
   const enabled = Boolean(review?.difftool);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
   const heading = <div class="ticket-code-review__heading"><h2>{title}</h2>{review?.difftool && <span>Opens in {review.difftool}</span>}</div>;
-  const compareButton = comparison && <ToolbarControlGroup appearance="borderless" single><button type="button" data-action="start-repository-comparison" aria-label="Compare two commits" title="Compare two commits" aria-pressed={comparison.active}><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup>;
   return <div class={`${embedded ? '' : 'ticket-inspector__content '}ticket-code-review`} data-component="ticket-code-review">
     <section>
-      <Toolbar className="ticket-code-review__header" divider={false} leading={heading} trailing={compareButton}/>
+      <Toolbar className="ticket-code-review__header" divider={false} leading={heading}/>
       {loading && <p role="status">{loadingMessage}</p>}
       {!loading && review && review.commits.length === 0 && <div class="ticket-code-review__empty"><LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" /><p>{emptyMessage}</p></div>}
       {!loading && review && review.commits.length > 0 && <>
@@ -43,7 +42,6 @@ export function TicketCodeReview({ review, loading = false, message = '', title 
         {comparison?.active && <div class="ticket-code-review__compare-banner" role="status">
           <div><LucideIcon icon={GitCompare} name="git-compare"/><span>Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.</span></div>
           <ToolbarControlGroup label="Comparison side"><button type="button" data-action="set-repository-comparison-side" data-comparison-side="a" data-selected={String(comparison.side==='a')} aria-pressed={comparison.side==='a'}>A</button><button type="button" data-action="set-repository-comparison-side" data-comparison-side="b" data-selected={String(comparison.side==='b')} aria-pressed={comparison.side==='b'}>B</button></ToolbarControlGroup>
-          <button type="button" class="ticket-code-review__compare-cancel" data-action="cancel-repository-comparison"><LucideIcon icon={X} name="x"/>Cancel</button>
           <button type="button" class="ticket-code-review__compare-open" data-action={action} data-review-mode="compare" data-review-from={comparison.a} data-review-to={comparison.b} disabled={!enabled||!compareReady} aria-label={`Open comparison in ${review.difftool??'configured diff tool'}`}><LucideIcon icon={ExternalLink} name="external-link"/>Open</button>
         </div>}
         {review.ranges.filter(range => range.count > 1).map(range => <button type="button" class="ticket-code-review__range" data-action={action} data-review-mode="range" data-review-from={range.from} data-review-to={range.to} disabled={!enabled} aria-label={`Open ${range.count} commit bundle ${shortSha(range.from)} through ${shortSha(range.to)} in ${review.difftool ?? 'configured diff tool'}`}><LucideIcon icon={GitCompareArrows} name="git-compare-arrows" /><span>Open {range.count}-commit bundle<small>{shortSha(range.from)} → {shortSha(range.to)}</small></span><LucideIcon icon={ExternalLink} name="external-link" /></button>)}

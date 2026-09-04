@@ -693,12 +693,13 @@ delegate(root, 'click', '[data-action="select-repository-view"]', (_event, targe
   repositoryDemoView.value = (target as HTMLElement).dataset.itemId as typeof repositoryDemoView.value;
   repositoryDemoEvent.value = `${(target as HTMLElement).textContent?.trim() ?? 'Repository view'} selected.`;
 });
-delegate(root, 'click', '[data-action="start-repository-comparison"]', () => {
+delegate(root, 'click', '[data-action="toggle-repository-comparison"]', () => {
+  if (repositoryDemoComparison.value.active) {
+    repositoryDemoComparison.value = { active: false, side: 'a' };
+    return;
+  }
   repositoryDemoView.value = 'commits';
   repositoryDemoComparison.value = { active: true, side: 'a' };
-});
-delegate(root, 'click', '[data-action="cancel-repository-comparison"]', () => {
-  repositoryDemoComparison.value = { active: false, side: 'a' };
 });
 delegate(root, 'click', '[data-action="set-repository-comparison-side"]', (_event, target) => {
   repositoryDemoComparison.value = { ...repositoryDemoComparison.value, side: (target as HTMLElement).dataset.comparisonSide as 'a' | 'b' };

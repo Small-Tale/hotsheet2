@@ -60,6 +60,8 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('class="ticket-code-review__compare-label">A</b>');
     expect(markup).toContain('class="ticket-code-review__compare-label">B</b>');
     expect(markup).toContain('Third hidden line');
+    expect(markup).not.toContain('cancel-repository-comparison');
+    expect(markup).not.toContain('start-repository-comparison');
   });
 
   it('limits collapsed commit detail to two Markdown lines',()=>{
