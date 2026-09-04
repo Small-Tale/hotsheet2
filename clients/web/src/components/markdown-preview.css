@@ -4,7 +4,8 @@
 .markdown-preview h1 { margin: 1.35rem 0 .55rem; font-size: var(--wa-font-size-l); }
 .markdown-preview h2 { margin: 1.15rem 0 .4rem; font-size: var(--wa-font-size-m); }
 .markdown-preview h3, .markdown-preview h4, .markdown-preview h5, .markdown-preview h6 { margin: .95rem 0 .3rem; font-size: var(--wa-font-size-m); }
-.markdown-preview p, .markdown-preview ul, .markdown-preview ol, .markdown-preview blockquote, .markdown-preview pre, .markdown-preview table { margin: .65rem 0; }
+.markdown-preview p { margin: var(--wa-space-m) 0; }
+.markdown-preview ul, .markdown-preview ol, .markdown-preview blockquote, .markdown-preview pre, .markdown-preview table { margin: var(--wa-space-s) 0; }
 .markdown-preview ul, .markdown-preview ol { padding-left: 1.4rem; }
 .markdown-preview li { margin-inline-start: 0; }
 .markdown-preview li + li { margin-top: .2rem; }

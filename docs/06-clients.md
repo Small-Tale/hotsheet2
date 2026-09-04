@@ -223,6 +223,8 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
   `noopener noreferrer`; raw HTML remains escaped and unsafe URL protocols remain inert.
+  Paragraphs use a full shared spacing step so separate thoughts remain visually distinct
+  in both compact inspector notes and the larger reader.
   Blockquotes follow email-reply semantics: a compact neutral rail, smaller quiet text,
   and inherited heading size de-emphasize quoted context instead of presenting it as a
   literary pull quote.
