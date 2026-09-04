@@ -474,7 +474,11 @@ zoom continues to select its across/high model from the drawer's actual measured
 Double-clicking non-interactive space in the drawer rail toggles that measured maximum
 and the last manually resized height (or 320px before the first resize); tab and action
 buttons do not trigger the toggle. Maximizing is temporary and does not overwrite the
-persisted restore height. Magnification remains a temporary viewer over the same PTY.
+persisted restore height. Explicit hide/show changes animate the drawer's height and
+content for 200ms (and honor reduced motion); manual pointer/keyboard resizing and rail
+maximize/restore remain immediate. The terminal content stays mounted only through the
+closing transition, then releases its viewport resources. Magnification remains a
+temporary viewer over the same PTY.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 

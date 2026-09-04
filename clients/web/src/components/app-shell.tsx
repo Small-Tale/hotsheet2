@@ -32,9 +32,10 @@ export interface AppShellProps {
   terminalDrawerVisible?: boolean;
   terminalDrawerSize?: number;
   terminalDrawerMax?: number;
+  terminalDrawerTransitioning?: boolean;
 }
 
-export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset',overlay,terminalDrawer,terminalDrawerVisible=false,terminalDrawerSize=320,terminalDrawerMax=520 }: AppShellProps) {
+export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset',overlay,terminalDrawer,terminalDrawerVisible=false,terminalDrawerSize=320,terminalDrawerMax=520,terminalDrawerTransitioning=false }: AppShellProps) {
   return <section class="app-shell" data-component="app-shell" data-mode={mode} data-sidebar-visible={String(sidebarVisible)}>
     {mode === 'project' && <ResizableRegion id="app-sidebar" label="Project sidebar" size={sidebarSize} min={250} max={360} collapsed={!sidebarVisible}>{sidebar}</ResizableRegion>}
     <main class="app-shell__main">
@@ -55,8 +56,8 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
         {composer && <div class="app-shell__composer">{composer}</div>}
         <section class="app-shell__workspace" data-key="app-shell-workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
       </div>
-      {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={180} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible}>{terminalDrawer}</ResizableRegion>}
-      {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&<button type="button" class="app-shell__terminal-drawer-restore" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button>}
+      {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={180} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible} transitioning={terminalDrawerTransitioning}>{terminalDrawer}</ResizableRegion>}
+      {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&!terminalDrawerTransitioning&&<button type="button" class="app-shell__terminal-drawer-restore" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button>}
     </main>
     {mode === 'project' && inspector && <ResizableRegion id="app-inspector" label="Ticket inspector" size={inspectorSize} min={280} max={520} edge="start" collapsed={!inspectorVisible}>{inspector}</ResizableRegion>}
   </section>;
