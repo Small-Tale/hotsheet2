@@ -731,7 +731,25 @@ local browser gate: after warm application startup, its click-to-next-frame proj
 must remain below 100 ms; 33 ms is the aspirational two-frame target. Network/disk/git
 completion is reported separately and does not delay acknowledged visual feedback.
 
-## 6.10 Cross-references
+## 6.10 Repository status browser
+
+The project sidebar repository summary opens a viewport-bounded master/detail dialog.
+The master column uses value cells for branch, upstream, ahead, and behind, followed by
+counted Staged, Unstaged, Untracked, Conflicted, and Commits views. The detail column
+scrolls independently. File views preserve porcelain-v2 change kinds (including rename
+origins) and use icons plus text rather than color alone. Double-click/Enter asks the
+host to open a currently reported file; the context menu can copy relative or absolute
+paths, open the file, or reveal it with host-specific Finder/File Explorer/file-manager
+wording. The server re-reads status and validates repository containment before any host
+launch.
+
+The Commits view embeds the same commit graph, configured difftool actions, and
+multi-commit range presentation as ticket Code Review. Both individual commits and the
+unpushed range are rediscovered and validated by the server immediately before launch;
+arbitrary browser-supplied paths or revisions are rejected. Repository status remains
+explicit-refresh/event driven and introduces no polling.
+
+## 6.11 Cross-references
 - UX component inventory and `/ux-demo` contract: [ux-components.md](ux-components.md)
 - Server-side PTY manager that hosts the arbiter: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.4
 - The server clients talk to + its auto-start lifecycle: [04-core-server-cli.md](04-core-server-cli.md) §4.3.1

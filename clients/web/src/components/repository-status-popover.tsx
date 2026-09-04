@@ -1,11 +1,14 @@
 import './repository-status-popover.css';
 
-import { ArrowDown, ArrowUp, CircleCheck, FilePenLine, GitBranch, RefreshCw, TriangleAlert } from 'lucide';
+import { ArrowDown, ArrowUp, CircleCheck, Clipboard, Copy, ExternalLink, FilePenLine, FilePlus2, FileQuestion, FileSymlink, FileX2, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, RefreshCw, SquareMinus, SquarePlus, SquareX, TriangleAlert } from 'lucide';
 
-import type { RepositoryStatus } from '../api';
+import type { CodeReview, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
 import { LucideIcon } from './lucide-icon';
+import { TicketCodeReview } from './ticket-code-review';
 
 export type RepositoryStatusState='clean'|'dirty'|'ahead'|'behind'|'diverged'|'conflicted'|'error';
+export type RepositoryStatusView='staged'|'unstaged'|'untracked'|'conflicted'|'commits';
+export interface RepositoryFileMenu {path:string;absolutePath?:string;x:number;y:number}
 
 export function repositoryStatusState(status:RepositoryStatus|null,error=''):RepositoryStatusState {
   if(error||!status)return 'error';
@@ -21,12 +24,93 @@ const stateCopy:Record<RepositoryStatusState,string>={
   clean:'Working tree is clean',dirty:'Local changes have not been committed',ahead:'Local commits have not been pushed',behind:'Remote commits have not been integrated',diverged:'Local and remote histories have diverged',conflicted:'Repository has unresolved conflicts',error:'Repository status is unavailable',
 };
 
-export function RepositoryStatusPopover({status,error='',refreshing=false}:{status:RepositoryStatus|null;error?:string;refreshing?:boolean}){
+const viewDefinitions=[
+  {id:'staged',label:'Staged',icon:SquarePlus},
+  {id:'unstaged',label:'Unstaged',icon:SquareMinus},
+  {id:'untracked',label:'Untracked',icon:FileQuestion},
+  {id:'conflicted',label:'Conflicted',icon:SquareX},
+  {id:'commits',label:'Commits',icon:GitCommitHorizontal},
+] as const;
+
+export function RepositoryStatusPopover({status,error='',refreshing=false,view='unstaged',fileMenu}:{status:RepositoryStatus|null;error?:string;refreshing?:boolean;view?:RepositoryStatusView;fileMenu?:RepositoryFileMenu}){
   const state=repositoryStatusState(status,error),branch=status?.branch||'No branch',upstream=status?.upstream||'No upstream';
-  return <section popover="auto" id="repository-status-popover" class="repository-status-popover" data-component="repository-status-popover" data-state={state} role="dialog" aria-labelledby="repository-status-title">
-    <header><span class="repository-status-popover__icon"><LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/></span><div><h2 id="repository-status-title">Repository status</h2><p>{stateCopy[state]}</p></div></header>
-    {status&&<><dl class="repository-status-popover__identity"><dt>Branch</dt><dd>{branch}</dd><dt>Upstream</dt><dd>{upstream}</dd></dl><div class="repository-status-popover__metrics" aria-label="Repository status counts"><span><LucideIcon icon={ArrowUp} name="arrow-up"/><strong>{status.ahead}</strong> ahead</span><span><LucideIcon icon={ArrowDown} name="arrow-down"/><strong>{status.behind}</strong> behind</span><span><LucideIcon icon={FilePenLine} name="file-pen-line"/><strong>{status.staged}</strong> staged</span><span><strong>{status.unstaged}</strong> unstaged</span><span><strong>{status.untracked}</strong> untracked</span><span data-conflicted={status.conflicted>0?'true':undefined}><strong>{status.conflicted}</strong> conflicted</span></div></>}
+  const files=repositoryFilesForView(status?.files??[],view);
+  const review:CodeReview|undefined=status?{commits:status.commits??[],ranges:status.ranges??[],difftool:status.difftool,truncated:Boolean(status.truncated)}:undefined;
+  return <section popover="auto" id="repository-status-popover" class="repository-status-popover" data-component="repository-status-popover" data-state={state} data-view={view} role="dialog" aria-labelledby="repository-status-title">
+    <header><span class="repository-status-popover__icon"><LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/></span><div><h2 id="repository-status-title">Repository Status</h2><p>{stateCopy[state]}</p></div><button type="button" class="repository-status-popover__refresh" data-action="refresh-repository-status" disabled={refreshing} aria-label={refreshing?'Refreshing repository status':'Refresh repository status'}><LucideIcon icon={RefreshCw} name="refresh-cw"/></button></header>
+    {status&&<div class="repository-status-popover__layout"><aside>
+      <dl class="repository-status-popover__values"><div><dt>Branch</dt><dd>{branch}</dd></div><div><dt>Upstream</dt><dd>{upstream}</dd></div></dl>
+      <dl class="repository-status-popover__values"><div><dt>Ahead</dt><dd><LucideIcon icon={ArrowUp} name="arrow-up"/>{status.ahead}</dd></div><div><dt>Behind</dt><dd><LucideIcon icon={ArrowDown} name="arrow-down"/>{status.behind}</dd></div></dl>
+      <nav aria-label="Repository views"><h3>Views</h3>{viewDefinitions.map(item=><button type="button" data-action="select-repository-view" data-repository-view={item.id} aria-current={view===item.id?'page':undefined}><LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'file-question':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/><span>{item.label}</span><small>{repositoryViewCount(status,item.id)}</small></button>)}</nav>
+    </aside><main class="repository-status-popover__detail" aria-live="polite">
+      {view==='commits'?<TicketCodeReview embedded title="Commits" emptyMessage="No commits were found in this repository." loadingMessage="Finding commits…" action="open-repository-review" review={review}/>:<RepositoryFileList files={files} view={view}/>}
+    </main></div>}
+    {!status&&!error&&<p class="repository-status-popover__loading" role="status">Loading repository status…</p>}
     {error&&<p class="repository-status-popover__error" role="alert">{error}</p>}
-    <footer><button type="button" data-action="refresh-repository-status" disabled={refreshing}><LucideIcon icon={RefreshCw} name="refresh-cw"/>{refreshing?'Refreshing…':'Refresh'}</button><button type="button" popoverTarget="repository-status-popover" popoverTargetAction="hide">Close</button></footer>
+    {fileMenu&&<RepositoryFileContextMenu menu={fileMenu} platform={status?.platform}/>}
   </section>;
+}
+
+function RepositoryFileList({files,view}:{files:RepositoryFile[];view:Exclude<RepositoryStatusView,'commits'>}){
+  if(files.length===0)return <div class="repository-status-popover__empty"><LucideIcon icon={CircleCheck} name="circle-check"/><p>No {view} files.</p></div>;
+  return <div class="repository-status-popover__files" role="list" aria-label={`${view} files`}>{files.map(file=>{
+    const change=repositoryFileChange(file,view);
+    const icon=fileChangeIcon(change);
+    return <div class="repository-status-popover__file" role="button" tabIndex={0} data-repository-file={file.path} data-change={change} title="Double-click to open; right-click for more actions"><span class="repository-status-popover__file-icon"><LucideIcon icon={icon} name={fileChangeIconName(change)}/></span><span><strong>{file.path}</strong>{file.original_path&&<small>from {file.original_path}</small>}</span><span class="repository-status-popover__file-state">{fileChangeLabel(change)}</span></div>;
+  })}</div>;
+}
+
+function RepositoryFileContextMenu({menu,platform}:{menu:RepositoryFileMenu;platform?:RepositoryStatus['platform']}){
+  const reveal=platform==='macos'?'Show in Finder':platform==='windows'?'Show in File Explorer':'Show in file manager';
+  return <div class="repository-status-popover__context-menu" data-component="repository-file-context-menu" role="menu" style={`left:${menu.x}px;top:${menu.y}px`}>
+    <button type="button" role="menuitem" data-repository-file-action="open" data-repository-file-path={menu.path}><LucideIcon icon={ExternalLink} name="external-link"/>Open</button>
+    <button type="button" role="menuitem" data-repository-file-action="copy-path" data-repository-file-path={menu.path}><LucideIcon icon={Clipboard} name="clipboard"/>Copy path</button>
+    {menu.absolutePath&&<button type="button" role="menuitem" data-repository-file-action="copy-absolute-path" data-repository-file-path={menu.absolutePath}><LucideIcon icon={Copy} name="copy"/>Copy absolute path</button>}
+    <hr/>
+    <button type="button" role="menuitem" data-repository-file-action="reveal" data-repository-file-path={menu.path}><LucideIcon icon={FolderOpen} name="folder-open"/>{reveal}</button>
+  </div>;
+}
+
+export function repositoryFilesForView(files:RepositoryFile[],view:RepositoryStatusView):RepositoryFile[]{
+  if(view==='commits')return [];
+  return files.filter(file=>view==='staged'?Boolean(file.staged)&&!file.conflicted:view==='unstaged'?Boolean(file.unstaged)&&!file.untracked&&!file.conflicted:view==='untracked'?file.untracked:file.conflicted);
+}
+
+export function repositoryAbsolutePath(root:string|undefined,path:string,platform:RepositoryStatus['platform']):string|undefined{
+  if(!root)return undefined;
+  const separator=platform==='windows'?'\\':'/';
+  return `${root.replace(/[\\/]+$/,'')}${separator}${platform==='windows'?path.replaceAll('/','\\'):path}`;
+}
+
+function repositoryViewCount(status:RepositoryStatus,view:RepositoryStatusView):number{
+  if(view==='commits')return status.commit_count??status.commits?.length??0;
+  return status[view];
+}
+
+function repositoryFileChange(file:RepositoryFile,view:Exclude<RepositoryStatusView,'commits'>):RepositoryFileChange{
+  if(view==='conflicted')return 'unmerged';
+  if(view==='untracked')return 'untracked';
+  return file[view]??'modified';
+}
+
+function fileChangeIcon(change:RepositoryFileChange){
+  if(change==='added')return FilePlus2;
+  if(change==='deleted')return FileX2;
+  if(change==='renamed'||change==='copied')return FileSymlink;
+  if(change==='untracked')return FileQuestion;
+  if(change==='unmerged')return GitMerge;
+  return FilePenLine;
+}
+
+function fileChangeIconName(change:RepositoryFileChange):string{
+  if(change==='added')return 'file-plus-2';
+  if(change==='deleted')return 'file-x-2';
+  if(change==='renamed'||change==='copied')return 'file-symlink';
+  if(change==='untracked')return 'file-question';
+  if(change==='unmerged')return 'git-merge';
+  return 'file-pen-line';
+}
+
+function fileChangeLabel(change:RepositoryFileChange):string{
+  return change==='type_changed'?'Type changed':change[0].toUpperCase()+change.slice(1);
 }

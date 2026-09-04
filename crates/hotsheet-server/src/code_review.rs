@@ -66,6 +66,47 @@ pub enum CodeReviewError {
 }
 
 pub fn discover(root: &Path, ticket_slug: &str) -> Result<CodeReview, CodeReviewError> {
+    let (all, difftool, truncated) = discover_commits(root)?;
+    let commits = all
+        .iter()
+        .filter(|commit| subject_mentions_ticket(&commit.subject, ticket_slug))
+        .cloned()
+        .collect::<Vec<_>>();
+    let ranges = contiguous_ranges(&all, &commits);
+    Ok(CodeReview {
+        commits,
+        ranges,
+        difftool,
+        truncated,
+    })
+}
+
+/// Discover recent repository history. When the current branch is ahead of its
+/// upstream, expose that consecutive local run as the same validated range contract
+/// used by ticket code review.
+pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, CodeReviewError> {
+    let (commits, difftool, truncated) = discover_commits(root)?;
+    let ranges = repository_range(&commits, ahead).into_iter().collect();
+    Ok(CodeReview {
+        commits,
+        ranges,
+        difftool,
+        truncated,
+    })
+}
+
+fn repository_range(commits: &[CodeReviewCommit], ahead: usize) -> Option<CodeReviewRange> {
+    let count = ahead.min(commits.len());
+    (count > 1).then(|| CodeReviewRange {
+        from: commits[count - 1].sha.clone(),
+        to: commits[0].sha.clone(),
+        count,
+    })
+}
+
+fn discover_commits(
+    root: &Path,
+) -> Result<(Vec<CodeReviewCommit>, Option<String>, bool), CodeReviewError> {
     if !git_success(root, &["rev-parse", "--git-dir"]) {
         return Err(CodeReviewError::NotRepository);
     }
@@ -90,18 +131,8 @@ pub fn discover(root: &Path, ticket_slug: &str) -> Result<CodeReview, CodeReview
         Err(error) => return Err(error),
     };
     let all = parse_log(&output);
-    let commits = all
-        .iter()
-        .filter(|commit| subject_mentions_ticket(&commit.subject, ticket_slug))
-        .cloned()
-        .collect::<Vec<_>>();
-    let ranges = contiguous_ranges(&all, &commits);
-    Ok(CodeReview {
-        commits,
-        ranges,
-        difftool,
-        truncated: all.len() == LOG_LIMIT,
-    })
+    let truncated = all.len() == LOG_LIMIT;
+    Ok((all, difftool, truncated))
 }
 
 pub fn launch(
@@ -357,5 +388,22 @@ mod tests {
             ),
             Err(CodeReviewError::InvalidTarget)
         ));
+    }
+
+    #[test]
+    fn repository_review_exposes_only_the_consecutive_unpushed_range() {
+        let commits = vec![
+            commit("cccccccc", "newest", "bbbbbbbb"),
+            commit("bbbbbbbb", "middle", "aaaaaaaa"),
+            commit("aaaaaaaa", "upstream", "rootroot"),
+        ];
+        assert_eq!(
+            repository_range(&commits, 2),
+            Some(CodeReviewRange {
+                from: "bbbbbbbb".into(),
+                to: "cccccccc".into(),
+                count: 2,
+            })
+        );
     }
 }

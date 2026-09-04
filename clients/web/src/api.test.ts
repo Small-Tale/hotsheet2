@@ -87,6 +87,18 @@ describe('ticket code review transport',()=>{
   });
 });
 
+describe('repository browser transport',()=>{
+  it('sends host file and review actions through checkout routes',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(null,{status:204}));
+    const api=new Api('/api');
+    await api.repositoryFileAction('folder with spaces','src/a b.ts','reveal');
+    await api.openRepositoryReview('folder with spaces',{mode:'range',from:'aaa',to:'bbb'});
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/checkouts/folder%20with%20spaces/repository/files/action',expect.objectContaining({method:'POST',body:'{"path":"src/a b.ts","action":"reveal"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder%20with%20spaces/repository/review',expect.objectContaining({method:'POST',body:'{"mode":"range","from":"aaa","to":"bbb"}'}));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('atomic Not Working transport',()=>{
   it('sends note, evidence, and concurrency token in one multipart request',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({status:'not_started',up_next:true}),{status:200}));

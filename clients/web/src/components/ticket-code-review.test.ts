@@ -49,6 +49,13 @@ describe('TicketCodeReview', () => {
     expect(String(TicketCodeReview({ review: { commits: [], ranges: [], difftool: 'meld', truncated: false } }))).toContain('No commits with this ticket');
   });
 
+  it('supports the repository dialog while preserving the shared commit presentation', () => {
+    const markup = String(TicketCodeReview({ review, embedded: true, title: 'Commits', action: 'open-repository-review' }));
+    expect(markup).not.toContain('ticket-inspector__content');
+    expect(markup).toContain('<h2>Commits</h2>');
+    expect(markup).toContain('data-action="open-repository-review"');
+  });
+
   it('decodes only complete action datasets', () => {
     expect(codeReviewTarget({ reviewMode: 'commit', reviewCommit: 'abc' })).toEqual({ mode: 'commit', commit: 'abc' });
     expect(codeReviewTarget({ reviewMode: 'range', reviewFrom: 'abc', reviewTo: 'def' })).toEqual({ mode: 'range', from: 'abc', to: 'def' });

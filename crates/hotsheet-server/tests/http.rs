@@ -1244,6 +1244,7 @@ async fn repository_status_endpoint_reports_real_git_state() {
         .await
         .unwrap();
     let resp = app
+        .clone()
         .oneshot(authed("GET", "/checkouts/repo/repository/status", None))
         .await
         .unwrap();
@@ -1252,6 +1253,38 @@ async fn repository_status_endpoint_reports_real_git_state() {
     assert_eq!(status["unstaged"], 1);
     assert_eq!(status["untracked"], 1);
     assert_eq!(status["clean"], false);
+    assert_eq!(
+        status["root"],
+        checkout
+            .path()
+            .canonicalize()
+            .unwrap()
+            .display()
+            .to_string()
+    );
+    assert_eq!(status["commit_count"], 1);
+    assert_eq!(status["commits"].as_array().unwrap().len(), 1);
+    let files = status["files"].as_array().unwrap();
+    assert!(
+        files
+            .iter()
+            .any(|file| file["path"] == "tracked.txt" && file["unstaged"] == "modified")
+    );
+    assert!(
+        files
+            .iter()
+            .any(|file| file["path"] == "new.txt" && file["untracked"] == true)
+    );
+
+    let unsafe_action = app
+        .oneshot(authed(
+            "POST",
+            "/checkouts/repo/repository/files/action",
+            Some(r#"{"path":"../outside","action":"open"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unsafe_action.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

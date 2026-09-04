@@ -1,24 +1,52 @@
-.repository-status-popover { box-sizing: border-box; width: min(28rem, calc(100vw - 2 * var(--wa-space-l))); max-height: calc(100vh - 2 * var(--wa-space-l)); padding: var(--wa-space-l); overflow: auto; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-xl); color: var(--wa-color-text-normal); }
-.repository-status-popover::backdrop { background: transparent; }
-.repository-status-popover > header { display: flex; align-items: flex-start; gap: var(--wa-space-m); }
-.repository-status-popover__icon { display: grid; width: 2rem; height: 2rem; border-radius: var(--wa-border-radius-circle); place-items: center; color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); flex: none; }
+.repository-status-popover { box-sizing: border-box; width: min(64rem, calc(100vw - 2 * var(--wa-space-l))); height: min(36rem, calc(100vh - 2 * var(--wa-space-l))); padding: 0; overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-xl); color: var(--wa-color-text-normal); }
+.repository-status-popover::backdrop { background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 18%, transparent); }
+.repository-status-popover > header { display: grid; min-height: 4.9rem; padding: var(--wa-space-m) var(--wa-space-l); box-sizing: border-box; border-bottom: 1px solid var(--wa-color-surface-border); grid-template-columns: 2rem minmax(0,1fr) 2.5rem; align-items: start; gap: var(--wa-space-m); }
+.repository-status-popover__icon { display: grid; width: 2rem; height: 2rem; border-radius: var(--wa-border-radius-circle); place-items: center; color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .repository-status-popover[data-state="clean"] .repository-status-popover__icon { color: var(--wa-color-success-on-quiet); background: var(--wa-color-success-fill-quiet); }
 .repository-status-popover:is([data-state="error"],[data-state="conflicted"]) .repository-status-popover__icon { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); }
-.repository-status-popover h2, .repository-status-popover header p { margin: 0; }
-.repository-status-popover h2 { font-size: var(--wa-font-size-l); }
+.repository-status-popover h2, .repository-status-popover header p, .repository-status-popover h3 { margin: 0; }
+.repository-status-popover h2 { font-size: var(--wa-font-size-l); line-height: 1.2; }
 .repository-status-popover header p { margin-top: var(--wa-space-2xs); color: var(--wa-color-text-quiet); }
-.repository-status-popover__identity { display: grid; grid-template-columns: auto minmax(0,1fr); margin: var(--wa-space-l) 0 0; gap: var(--wa-space-xs) var(--wa-space-m); }
-.repository-status-popover__identity dt { color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-s); }
-.repository-status-popover__identity dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-weight: var(--wa-font-weight-semibold); }
-.repository-status-popover__metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); margin-top: var(--wa-space-l); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
-.repository-status-popover__metrics span { display: flex; min-width: 0; padding: var(--wa-space-s) var(--wa-space-m); align-items: center; gap: var(--wa-space-xs); border-bottom: 1px solid var(--wa-color-surface-border); }
-.repository-status-popover__metrics span:nth-child(odd) { border-right: 1px solid var(--wa-color-surface-border); }
-.repository-status-popover__metrics span:nth-last-child(-n+2) { border-bottom: 0; }
-.repository-status-popover__metrics svg { width: 1rem; height: 1rem; color: var(--wa-color-text-quiet); }
-.repository-status-popover__metrics [data-conflicted="true"] { color: var(--wa-color-danger-on-quiet); }
-.repository-status-popover__error { padding: var(--wa-space-m); border-radius: var(--wa-border-radius-m); color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); overflow-wrap: anywhere; }
-.repository-status-popover > footer { display: flex; margin-top: var(--wa-space-l); justify-content: flex-end; gap: var(--wa-space-s); }
-.repository-status-popover > footer button { display: inline-flex; min-height: 2.25rem; padding: 0 var(--wa-space-m); align-items: center; gap: var(--wa-space-xs); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); cursor: pointer; font: inherit; font-weight: var(--wa-font-weight-action); }
-.repository-status-popover > footer button:last-child { border-color: var(--wa-color-brand-border-loud); color: var(--wa-color-brand-on-loud); background: var(--wa-color-brand-fill-loud); }
-.repository-status-popover > footer button:disabled { opacity: .5; cursor: wait; }
-.repository-status-popover > footer button:focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 2px; }
+.repository-status-popover__refresh { display: grid; width: 2.5rem; height: 2.5rem; padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-circle); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); cursor: pointer; place-items: center; }
+.repository-status-popover__refresh:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
+.repository-status-popover__refresh:disabled { opacity: .5; cursor: wait; }
+.repository-status-popover__refresh svg { width: 1.15rem; height: 1.15rem; }
+.repository-status-popover__layout { display: grid; min-width: 0; min-height: 0; height: calc(100% - 4.9rem); grid-template-columns: 27rem minmax(0,1fr); }
+.repository-status-popover__layout > aside { min-width: 0; padding: var(--wa-space-l); overflow: auto; border-right: 1px solid var(--wa-color-surface-border); }
+.repository-status-popover__values { display: grid; margin: 0 0 var(--wa-space-m); overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
+.repository-status-popover__values > div { display: grid; min-height: 2.55rem; padding: 0 var(--wa-space-m); box-sizing: border-box; grid-template-columns: minmax(6rem,auto) minmax(0,1fr); align-items: center; gap: var(--wa-space-m); }
+.repository-status-popover__values > div + div { border-top: 1px solid var(--wa-color-surface-border); }
+.repository-status-popover__values dt { color: var(--wa-color-text-quiet); }
+.repository-status-popover__values dd { display: flex; min-width: 0; margin: 0; overflow-wrap: anywhere; align-items: center; justify-content: flex-end; gap: var(--wa-space-2xs); font-weight: var(--wa-font-weight-semibold); text-align: right; }
+.repository-status-popover__values dd svg { width: .9rem; height: .9rem; color: var(--wa-color-text-quiet); }
+.repository-status-popover nav { display: grid; gap: var(--wa-space-2xs); }
+.repository-status-popover nav h3 { padding: var(--wa-space-s) var(--wa-space-xs) var(--wa-space-2xs); color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-s); font-weight: var(--wa-font-weight-normal); }
+.repository-status-popover nav button { display: grid; width: 100%; min-height: 2.35rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-text-normal); background: transparent; cursor: pointer; grid-template-columns: 1.15rem minmax(0,1fr) auto; align-items: center; gap: var(--wa-space-xs); font: inherit; text-align: left; }
+.repository-status-popover nav button:hover { background: var(--wa-color-neutral-fill-quiet); }
+.repository-status-popover nav button[aria-current="page"] { background: var(--wa-color-brand-fill-quiet); color: var(--wa-color-brand-on-quiet); }
+.repository-status-popover nav button svg { width: 1rem; height: 1rem; }
+.repository-status-popover nav button small { color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-xs); }
+.repository-status-popover__detail { min-width: 0; min-height: 0; padding: var(--wa-space-l); overflow: auto; }
+.repository-status-popover__files { display: grid; min-width: 0; align-content: start; }
+.repository-status-popover__file { display: grid; min-width: 0; min-height: 2.75rem; padding: var(--wa-space-xs) var(--wa-space-s); border-bottom: 1px solid var(--wa-color-neutral-border-quiet); border-radius: var(--wa-border-radius-s); cursor: pointer; grid-template-columns: 1.35rem minmax(0,1fr) auto; align-items: center; gap: var(--wa-space-xs); }
+.repository-status-popover__file:hover, .repository-status-popover__file:focus-visible { background: var(--wa-color-neutral-fill-quiet); outline: none; }
+.repository-status-popover__file-icon { display: grid; width: 1.2rem; height: 1.2rem; color: var(--wa-color-neutral-on-quiet); place-items: center; }
+.repository-status-popover__file-icon svg { width: 1rem; height: 1rem; }
+.repository-status-popover__file > span:nth-child(2) { min-width: 0; }
+.repository-status-popover__file strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--wa-font-size-s); font-weight: var(--wa-font-weight-normal); }
+.repository-status-popover__file small { display: block; margin-top: var(--wa-space-2xs); overflow: hidden; color: var(--wa-color-text-quiet); text-overflow: ellipsis; white-space: nowrap; font-size: var(--wa-font-size-2xs); }
+.repository-status-popover__file-state { padding: var(--wa-space-2xs) var(--wa-space-xs); border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); font-size: var(--wa-font-size-2xs); }
+.repository-status-popover__file[data-change="unmerged"] .repository-status-popover__file-icon, .repository-status-popover__file[data-change="unmerged"] .repository-status-popover__file-state { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); }
+.repository-status-popover__file[data-change="added"] .repository-status-popover__file-icon { color: var(--wa-color-success-on-quiet); }
+.repository-status-popover__file[data-change="deleted"] .repository-status-popover__file-icon { color: var(--wa-color-danger-on-quiet); }
+.repository-status-popover__empty { display: grid; min-height: 12rem; color: var(--wa-color-text-quiet); place-items: center; align-content: center; gap: var(--wa-space-s); text-align: center; }
+.repository-status-popover__empty svg { width: 1.5rem; height: 1.5rem; color: var(--wa-color-success-on-quiet); }
+.repository-status-popover__loading, .repository-status-popover__error { margin: var(--wa-space-l); padding: var(--wa-space-m); border-radius: var(--wa-border-radius-m); }
+.repository-status-popover__error { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); overflow-wrap: anywhere; }
+.repository-status-popover__context-menu { position: fixed; z-index: 2; display: grid; min-width: 13rem; padding: var(--wa-space-2xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
+.repository-status-popover__context-menu button { display: grid; min-height: 2.2rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-text-normal); background: transparent; cursor: pointer; grid-template-columns: 1rem minmax(0,1fr); align-items: center; gap: var(--wa-space-s); font: inherit; text-align: left; }
+.repository-status-popover__context-menu button:hover { background: var(--wa-color-neutral-fill-quiet); }
+.repository-status-popover__context-menu svg { width: 1rem; height: 1rem; }
+.repository-status-popover__context-menu hr { width: 100%; margin: var(--wa-space-2xs) 0; border: 0; border-top: 1px solid var(--wa-color-surface-border); }
+.repository-status-popover .ticket-code-review__header { margin-bottom: var(--wa-space-m); }
+@media (max-width: 48rem) { .repository-status-popover { width: calc(100vw - 2 * var(--wa-space-s)); height: calc(100vh - 2 * var(--wa-space-s)); } .repository-status-popover__layout { grid-template-columns: minmax(15rem,40%) minmax(0,1fr); } .repository-status-popover__layout > aside, .repository-status-popover__detail { padding: var(--wa-space-m); } }

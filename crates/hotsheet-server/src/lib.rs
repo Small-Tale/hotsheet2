@@ -11,6 +11,7 @@ pub mod dist_work_loop;
 pub mod lifecycle;
 pub mod multistore;
 pub mod notifications;
+pub mod repository_browser;
 pub mod source_revision;
 pub mod sync_loop;
 pub mod terminal_broker;
@@ -858,6 +859,14 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/repository/status",
             get(checkout_repository_status),
+        )
+        .route(
+            "/checkouts/{reference}/repository/review",
+            post(open_checkout_repository_review),
+        )
+        .route(
+            "/checkouts/{reference}/repository/files/action",
+            post(checkout_repository_file_action),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/code-review",
@@ -2061,14 +2070,91 @@ async fn set_checkout_default_source(
 async fn checkout_repository_status(
     State(state): State<AppState>,
     Path(reference): Path<String>,
-) -> Result<Json<hotsheet_ticketing::repository_status::RepositoryStatus>, ApiError> {
+) -> Result<Json<repository_browser::RepositoryOverview>, ApiError> {
     let checkout = state
         .checkout_registry
         .resolve(&reference)
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
-    hotsheet_ticketing::repository_status::snapshot(FsPath::new(&checkout.root))
+    let root: std::path::PathBuf = checkout.root.into();
+    tokio::task::spawn_blocking(move || repository_browser::discover(&root))
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("repository discovery task failed: {error}"),
+            )
+        })?
         .map(Json)
-        .map_err(|e| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, e.to_string()))
+        .map_err(repository_browser_api_error)
+}
+
+async fn open_checkout_repository_review(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(target): Json<code_review::ReviewTarget>,
+) -> Result<StatusCode, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let root: std::path::PathBuf = checkout.root.into();
+    tokio::task::spawn_blocking(move || {
+        let status = hotsheet_ticketing::repository_status::snapshot(&root)?;
+        let review = code_review::discover_repository(&root, status.ahead as usize)?;
+        code_review::launch(&root, &review, &target)
+            .map_err(repository_browser::RepositoryBrowserError::from)
+    })
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("repository review launch task failed: {error}"),
+        )
+    })?
+    .map_err(repository_browser_api_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn checkout_repository_file_action(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(request): Json<repository_browser::RepositoryFileActionRequest>,
+) -> Result<StatusCode, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let root: std::path::PathBuf = checkout.root.into();
+    tokio::task::spawn_blocking(move || repository_browser::act_on_file(&root, &request))
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("repository file action task failed: {error}"),
+            )
+        })?
+        .map_err(repository_browser_api_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn repository_browser_api_error(error: repository_browser::RepositoryBrowserError) -> ApiError {
+    use repository_browser::RepositoryBrowserError;
+    let status = match error {
+        RepositoryBrowserError::UnknownFile
+        | RepositoryBrowserError::UnsafePath
+        | RepositoryBrowserError::MissingFile => StatusCode::BAD_REQUEST,
+        RepositoryBrowserError::Review(code_review::CodeReviewError::DifftoolNotConfigured) => {
+            StatusCode::CONFLICT
+        }
+        RepositoryBrowserError::Status(_)
+        | RepositoryBrowserError::Review(code_review::CodeReviewError::NotRepository) => {
+            StatusCode::UNPROCESSABLE_ENTITY
+        }
+        RepositoryBrowserError::Review(_) | RepositoryBrowserError::Launch(_) => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+    ApiError::new(status, error.to_string())
 }
 
 async fn get_checkout_code_review(

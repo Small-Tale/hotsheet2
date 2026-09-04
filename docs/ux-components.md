@@ -147,8 +147,10 @@ does not introduce polling or another network request.
   crowding the already icon-rich row.
   - `BranchChip`
   - unpushed and uncommitted counts
-  - opens the production repository-status popover with full counts, explicit refresh,
-    and clean/dirty/ahead/behind/conflict/error presentation (HS2-RPVFA4)
+  - opens the production repository-status master/detail dialog with value-cell branch
+    metadata; scrollable iconic staged/unstaged/untracked/conflicted file views;
+    double-click, keyboard, copy-path, and host-native reveal actions; and a Commits view
+    that reuses Code Review difftool/range presentation (HS2-RPVFA4, HS2-323XHG)
 - `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.

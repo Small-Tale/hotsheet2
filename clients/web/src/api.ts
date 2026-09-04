@@ -12,7 +12,10 @@ export interface Checkout {id:string;root:string;alias:string;repository?:string
 export interface TicketRow {connection_id:string;native_id:string;qualified_id:string;id:string;slug:string;title:string;category?:string;priority?:string;status?:string;up_next:boolean;feedback_needed:boolean;tags:string[];blocked_by:string[];claimed_by?:string;claim_lease_expires_at?:string;worker_label?:string;claim_count:number;created_at?:string;updated_at?:string;completed_at?:string}
 export interface CorruptTicket {store:string;store_path:string;path:string;id?:string;slug?:string;error:string;error_code?:'invalid_ticket'|'upgrade_required'}
 export interface FullTicket extends TicketRow {details:string;blocked_reason?:string;notes:Note[];attachments:Attachment[];concurrency_token?:string}
-export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number}
+export type RepositoryFileChange='added'|'copied'|'deleted'|'modified'|'renamed'|'type_changed'|'unmerged'|'untracked';
+export interface RepositoryFile {path:string;original_path?:string;staged?:RepositoryFileChange;unstaged?:RepositoryFileChange;untracked:boolean;conflicted:boolean}
+export type RepositoryPlatform='macos'|'windows'|'linux';
+export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number;clean?:boolean;files?:RepositoryFile[];root?:string;platform?:RepositoryPlatform;commit_count?:number;commits?:CodeReviewCommit[];ranges?:CodeReviewRange[];difftool?:string;truncated?:boolean}
 export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;committed_at:string}
 export interface CodeReviewRange {from:string;to:string;count:number}
 export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean}
@@ -52,6 +55,8 @@ export class Api {
   checkoutAttachmentUrl=(checkout:string,id:string,attachmentId:string)=>`${this.origin}/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`;
   deleteCheckoutAttachment=(checkout:string,id:string,attachmentId:string)=>this.request<FullTicket&{store:string}>(this.checkoutAttachmentUrl(checkout,id,attachmentId).slice(this.origin.length),{method:'DELETE'}).then(ticket=>({store:ticket.store,ticket}));
   repositoryStatus=(checkout:string)=>this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
+  repositoryFileAction=(checkout:string,path:string,action:'open'|'reveal')=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/repository/files/action`,{method:'POST',body:JSON.stringify({path,action})});
+  openRepositoryReview=(checkout:string,target:CodeReviewTarget)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/repository/review`,{method:'POST',body:JSON.stringify(target)});
   codeReview=(checkout:string,id:string)=>this.request<CodeReview>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`);
   openCodeReview=(checkout:string,id:string,target:CodeReviewTarget)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,{method:'POST',body:JSON.stringify(target)});
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
