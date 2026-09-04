@@ -464,15 +464,21 @@ viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the proj
 bottom drawer over that same viewport boundary.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
-sidebar and ticket inspector at full height. Its compact rail switches between the grid
-and one dedicated existing session, creates the host user's default shell only from the
-explicit plus action, exposes hidden-session recovery, and collapses to one floating restore button.
+sidebar and ticket inspector at full height. Its compact rail switches between the decorated
+grid and one undecorated, interactive xterm session that fills the content area. The terminal
+tabs scroll horizontally, with the explicit plus action immediately after them; plus creates
+the host user's default shell. The rail also exposes hidden-session recovery and collapses to
+one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall
+back when WebGL is unavailable, and refit on animation frames while the drawer resizes.
+Their library-owned DOM is protected from application morphs, so committing a resize keeps
+the same xterm instance and WebSocket instead of reconnecting the shell.
 Global project/terminal jump actions open this drawer on the matching project and terminal.
 Drawer visibility, height, selected terminal per project, and independent short-container
 zoom are device-local. Its accessible vertical splitter persists heights from 180px
 through the live boundary immediately below `PageHeader`, so it can consume the full
 ticket work area on taller windows instead of stopping at the former 520px cap. Grid
-zoom continues to select its across/high model from the drawer's actual measured height.
+zoom continues to select its across/high model from the drawer's actual measured height
+and is not shown for a dedicated full-size terminal.
 Double-clicking non-interactive space in the drawer rail toggles that measured maximum
 and the last manually resized height (or 320px before the first resize); tab and action
 buttons do not trigger the toggle. Maximizing is temporary and does not overwrite the

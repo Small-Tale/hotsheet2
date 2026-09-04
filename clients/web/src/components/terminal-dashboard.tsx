@@ -59,7 +59,7 @@ function TerminalTile({ session, magnified = false }: {session:TerminalDashboard
   const key = keyFor(session);
   const preview = terminalPreviewText(session.scrollback) || 'Terminal is ready.';
   return <article class="terminal-tile" data-key={key} data-component="terminal-tile" data-terminal-key={key} data-busy={String(session.busy)} data-alive={String(session.alive)} data-magnified={String(magnified)}>
-    <div class="terminal-tile__preview"><pre>{preview}</pre><div class="terminal-viewport" data-component="terminal-viewport" data-project-id={session.projectId} data-terminal-id={session.id} aria-label={`${session.title??session.id} interactive terminal`}></div><button type="button" class="terminal-tile__magnify" data-action="magnify-terminal" data-terminal-key={key} aria-label={`${magnified ? 'Restore' : 'Magnify'} ${session.title ?? session.id}`} title={`${magnified ? 'Restore' : 'Magnify'} terminal`}><LucideIcon icon={magnified?X:Maximize2} name={magnified?'x':'maximize-2'}/></button></div>
+    <div class="terminal-tile__preview"><pre>{preview}</pre><div class="terminal-viewport" data-key={`viewport:${key}`} data-morph-skip data-component="terminal-viewport" data-project-id={session.projectId} data-terminal-id={session.id} aria-label={`${session.title??session.id} interactive terminal`}></div><button type="button" class="terminal-tile__magnify" data-action="magnify-terminal" data-terminal-key={key} aria-label={`${magnified ? 'Restore' : 'Magnify'} ${session.title ?? session.id}`} title={`${magnified ? 'Restore' : 'Magnify'} terminal`}><LucideIcon icon={magnified?X:Maximize2} name={magnified?'x':'maximize-2'}/></button></div>
     <footer class="terminal-tile__footer">
       <span class="terminal-tile__state" aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}></span>
       <span class="terminal-tile__identity"><strong>{session.projectName}<span aria-hidden="true"> › </span>{session.title ?? session.id}</strong>{session.cwd&&<small>{session.cwd}</small>}</span>
@@ -69,6 +69,12 @@ function TerminalTile({ session, magnified = false }: {session:TerminalDashboard
       <button type="button" data-action="hide-dashboard-terminal" data-terminal-key={key} aria-label={`Hide ${session.title ?? session.id}`} title="Hide terminal"><LucideIcon icon={EyeOff} name="eye-off" /></button>
     </footer>
   </article>;
+}
+
+export function TerminalSession({ session }: {session:TerminalDashboardSession}) {
+  return <section class="terminal-session" data-key={keyFor(session)} data-component="terminal-session" data-terminal-key={keyFor(session)} aria-label={`${session.title??session.id} terminal`}>
+    <div class="terminal-viewport terminal-viewport--dedicated" data-key={`dedicated-viewport:${keyFor(session)}`} data-morph-skip data-component="terminal-viewport" data-project-id={session.projectId} data-terminal-id={session.id} aria-label={`${session.title??session.id} interactive terminal`}></div>
+  </section>;
 }
 
 function Grid({ sessions, layout }: {sessions:TerminalDashboardSession[];layout:ReturnType<typeof terminalGridLayout>}) {
