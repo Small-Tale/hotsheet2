@@ -1,9 +1,11 @@
 import devServer, { defaultOptions } from '@hono/vite-dev-server';
 import { defineConfig } from 'vite';
 
+import { installTerminalWebSocketBridge } from './src/terminal-ws-bridge';
+
 export default defineConfig(({ command }) => ({
   plugins: command === 'serve'
-    ? [devServer({
+    ? [{name:'hotsheet-terminal-websocket-bridge',configureServer:installTerminalWebSocketBridge},devServer({
         entry: 'src/dev-server.ts',
         exclude: [/^(?!\/(?:ux-demo|__hotsheet\/(?:dev-review|demo-modified|projects|project-api))(?:[/?]|$)).*/, ...defaultOptions.exclude],
       })]

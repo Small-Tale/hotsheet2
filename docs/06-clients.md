@@ -453,21 +453,36 @@ authenticated route as clicks and are distinguished in client history.
 The long tail of HS1 UI (custom views/query builder, stats, Announcer, telemetry
 dashboards, print) remains **deferred**, each its own ticket after the floor lands. The
 terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
-updated project/drawer wireframes. HS2-2ZCN7K has shipped the global dashboard shell,
-snapshot previews, project/flow grouping, magnification/hiding, and independent persisted
-width/high zoom controls. WebSocket-backed interactive viewports continue in HS2-PD4MZ9;
-the project drawer continues in HS2-586BVQ.
+updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
+project/flow grouping, magnification/hiding, and independent persisted width/high zoom
+controls. HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
+viewports over the existing terminal attach WebSocket. The project drawer continues in
+HS2-586BVQ and composes the same viewport boundary.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 
-> **Status: the server-side arbiter is built (HS2-BD7Q74).** The cross-device
+> **Status: the server arbiter and browser viewport are built (HS2-BD7Q74,
+> HS2-PD4MZ9).** The cross-device
 > generalization of HS1's terminal "borrow-stack" (docs/54), which worked locally but was
 > never designed for remotes. `hotsheet-terminals::SizeArbiter` implements the model below —
 > leased viewport claims, focus-follows (default) + smallest/largest/pinned, the
 > `SIZE_FOCUS_HOLD`/`MIN_DELTA`/`RESIZE_MIN_INTERVAL` guards, and disconnect self-heal — wired
 > into the WS attach (Text `{resize}` claims in, `{pty_size, driven_by}` decisions out). The
-> **client-side** viewport rendering (§6.7.4 letterbox/scale-to-fit, "tap to resize") lands
-> with the client work.
+> client consumes those decisions through the credential-hiding local bridge described
+> below.
+
+Each rendered pane owns a stable random viewer id and one WebSocket attachment to the
+existing PTY; opening another pane or magnifying the terminal attaches another viewer and
+never calls terminal creation. The browser URL is same-origin and secret-free. The local
+Vite bridge performs the upgrade and adds the loopback server credential only to its
+server-side upstream. A future Tauri host must provide the same bridge boundary rather
+than exposing the server secret to web content.
+
+The viewport renders ANSI/VT output with xterm, forwards typed input as terminal text, and
+sends `{viewer_id, cols, rows, focus, visible}` claims on connection, geometry/focus/
+visibility changes, and a five-second lease heartbeat. The heartbeat renews server state;
+it is not request polling. Disconnects retry with bounded exponential backoff, while
+dispose closes the socket so the server removes that viewer and self-heals its chosen size.
 
 ### 6.7.1 The fundamental constraint
 
@@ -557,6 +572,12 @@ Every non-driving viewport reconciles its viewport against the broadcast `ptySiz
   takes focus and the PTY resizes to it.
 - Show a subtle affordance when a viewport isn't driving the size (e.g. "viewing at
   120×40 — tap to resize to this screen") so the mismatch is legible, not confusing.
+
+The web viewport implements this with a true-size top-left letterbox when the PTY fits,
+proportional scale-to-fit down to a 70% readable floor when it does not, and pane-local
+scrolling below that floor. A non-driving overlay reports the broadcast dimensions and
+invites focus; focusing sends a new claim and leaves the arbiter—not the browser—to decide
+whether and when the PTY actually resizes.
 
 ### 6.7.5 Escape hatch: a per-viewer *separate* terminal
 

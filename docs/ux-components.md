@@ -815,9 +815,9 @@ semantic actions; Kerf owns state and composition.
 
 These remain in the component architecture but are not initial-client blockers:
 
-- `TerminalDashboard` — interaction contract settled in §6.3; the global snapshot-backed
-  screen and its responsive controls are built. Interactive WebSocket viewports continue
-  in HS2-PD4MZ9 and the project drawer in HS2-586BVQ.
+- `TerminalDashboard` — interaction contract settled in §6.3; the global screen,
+  responsive controls, and shared interactive WebSocket/xterm viewport are built. The
+  project drawer composes that viewport in HS2-586BVQ.
 - `AnalyticsDashboard` — throughput, cycle time, category, usage, and cost charts
 - `CustomViewBuilder` — query construction and saved-view editing
 - `AnnouncerOverlay` — digest picture-in-picture, live narration, playback controls,

@@ -69,6 +69,7 @@ import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from
 import type { CompatibilityAssessment } from './compatibility';
 import { isTicketConcurrencyConflict, reconcileActiveDraft, reconcileTicketPatch, type TicketFieldConflict } from './ticket-field-reconciliation';
 import { adjustTerminalFit, TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH, terminalGridBasis } from './terminal-grid-layout';
+import { mountTerminalViewport,terminalBrowserWebSocketUrl } from './terminal-viewport';
 import type { ProjectTabBarMode } from './components/project-tab-bar';
 
 if(import.meta.env.DEV){
@@ -87,6 +88,7 @@ const terminalGroups=signal<TerminalDashboardGroup[]>([]),terminalDashboardLoadi
 const terminalDashboardSize=signal({width:1200,height:601}),terminalFitAcross=signal(Number(localStorage.getItem('hotsheet.terminals.fit-across'))||TERMINAL_GRID_DEFAULT_ACROSS),terminalFitHigh=signal(Number(localStorage.getItem('hotsheet.terminals.fit-high'))||TERMINAL_GRID_DEFAULT_HIGH);
 const terminalGrouping=signal<'project'|'flow'>('project'),magnifiedTerminalKey=signal<string|undefined>(undefined),hiddenTerminalKeys=signal<string[]>([]);
 let terminalDashboardGeneration=0,terminalDashboardObserver:ResizeObserver|undefined;
+const terminalViewportMounts=new Map<HTMLElement,()=>void>();
 const corruptRecovery = signal<Record<string,CorruptTicketRecoveryState>>({});
 const selectedCorruptKey = signal<string|undefined>(undefined);
 const selectedTicketSlugs = signal<string[]>([]);
@@ -178,6 +180,7 @@ async function refreshTerminalDashboard(){
   terminalDashboardLoading.value=false;
 }
 function observeTerminalDashboard(){queueMicrotask(()=>{terminalDashboardObserver?.disconnect();const target=document.querySelector<HTMLElement>('[data-terminal-grid-measure="true"]');if(!target)return;terminalDashboardObserver=new ResizeObserver(entries=>{const rect=entries[0]?.contentRect;if(!rect)return;const next={width:Math.max(1,Math.floor(rect.width)),height:Math.max(1,Math.floor(rect.height))},previous=terminalDashboardSize.value;if(next.width!==previous.width||next.height!==previous.height)terminalDashboardSize.value=next});terminalDashboardObserver.observe(target)})}
+function syncTerminalViewportMounts(){const elements=new Set(document.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]'));for(const[element,dispose]of terminalViewportMounts)if(!elements.has(element)){dispose();terminalViewportMounts.delete(element)}for(const element of elements){if(terminalViewportMounts.has(element))continue;const projectId=element.dataset.projectId,terminalId=element.dataset.terminalId,current=projects.value.find(item=>item.id===projectId);if(!current||!terminalId)continue;terminalViewportMounts.set(element,mountTerminalViewport(element,{url:terminalBrowserWebSocketUrl(current.apiPath,terminalId)}))}}
 function setShellMode(mode:ProjectTabBarMode){shellMode.value=mode;magnifiedTerminalKey.value=undefined;if(mode==='terminals'){void refreshTerminalDashboard();observeTerminalDashboard()}else terminalDashboardObserver?.disconnect()}
 const status = (value?:string):TicketStatus => ['not_started','started','completed','verified','backlog','archive'].includes(value ?? '') ? value as TicketStatus : 'not_started';
 const priority = (value?:string):TicketPriority => priorityFromWire(value);
@@ -395,7 +398,7 @@ function MainShell(){
 const appRoot=document.querySelector<HTMLElement>('#app')!;
 const renderMetrics=import.meta.env.DEV?createRenderMetrics(appRoot):undefined;
 if(renderMetrics)(window as typeof window&{__hotsheetRenderMetrics?:typeof renderMetrics}).__hotsheetRenderMetrics=renderMetrics;
-mount(appRoot,()=>{renderMetrics?.recordPass();const target=notWorkingTarget.value;return <><MainShell/><ProjectDialog/><CommandDialog/><ConnectionDetailsSurface/><RepositoryStatusSurface/><BulkTicketDialog state={bulkTicketDialog.value}/>{target&&<NotWorkingSurface target={target} note={notWorkingNote.value} files={notWorkingFiles.value} submitting={notWorkingSubmitting.value} submissionError={notWorkingError.value}/>} {readerOpen.value&&<div class="ticket-reader-backdrop"><Reader/></div>}{loading.value&&<div class="app-loading" role="status">Loading…</div>}{toastMessage.value&&<div class="app-toast" role="status">{toastMessage.value}</div>}{error.value&&project()&&<div class="app-error" role="alert">{error.value}</div>}</>});
+mount(appRoot,()=>{renderMetrics?.recordPass();queueMicrotask(syncTerminalViewportMounts);const target=notWorkingTarget.value;return <><MainShell/><ProjectDialog/><CommandDialog/><ConnectionDetailsSurface/><RepositoryStatusSurface/><BulkTicketDialog state={bulkTicketDialog.value}/>{target&&<NotWorkingSurface target={target} note={notWorkingNote.value} files={notWorkingFiles.value} submitting={notWorkingSubmitting.value} submissionError={notWorkingError.value}/>} {readerOpen.value&&<div class="ticket-reader-backdrop"><Reader/></div>}{loading.value&&<div class="app-loading" role="status">Loading…</div>}{toastMessage.value&&<div class="app-toast" role="status">{toastMessage.value}</div>}{error.value&&project()&&<div class="app-error" role="alert">{error.value}</div>}</>});
 
 delegate(document.body,'click','[data-action="add-project"]',()=>{error.value='';(document.querySelector('[data-project-dialog]') as Control).show?.()});
 delegate(document.body,'click','[data-action="cancel-open-project"]',()=>{(document.querySelector('[data-project-dialog]') as Control).hide?.()});

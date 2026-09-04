@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, developmentRepositoryRoot, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl, developmentRepositoryRoot, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
 describe('developmentRepositoryRoot', () => {
   it('uses the explicit original repository root inside a stable snapshot', () => {
@@ -24,6 +24,13 @@ describe('authenticatedServerUrl', () => {
   it('does not put secrets into ordinary upstream request URLs', () => {
     expect(authenticatedServerUrl('http://127.0.0.1:55560', '/tickets?text=one', 'secret'))
       .toBe('http://127.0.0.1:55560/tickets?text=one');
+  });
+});
+
+describe('authenticatedTerminalWebSocketUrl',()=>{
+  it('adds the secret only to the loopback upstream and escapes terminal identity',()=>{
+    expect(authenticatedTerminalWebSocketUrl('http://127.0.0.1:5511','codex/main','private value')).toBe('ws://127.0.0.1:5511/terminals/codex%2Fmain/attach?secret=private+value');
+    expect(authenticatedTerminalWebSocketUrl('https://hs.test','term','secret')).toMatch(/^wss:/);
   });
 });
 

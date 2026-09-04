@@ -28,9 +28,11 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
-    src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, and terminal snapshots
+    src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, and terminal discovery/snapshots
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission updates, and global terminal dashboard state
     src/terminal-grid-layout.ts # Pure terminal tile axis/fit geometry: >600px fits 1–10 across; <=600px fits 1–3 high
+    src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
+    src/terminal-viewport-runtime.ts # Lazy xterm renderer/input plus leased claims, server-size scaling, and reconnect lifecycle
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     src/project-change-poll.ts # Replay-safe selected-project long poll; coalesced ticket refresh, overflow/reconnect recovery, and abortable lifecycle
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
@@ -41,7 +43,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
-    src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding API proxy; authenticated corrupt-path validation and shell-free platform reveal
+    src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding HTTP/terminal-WS target resolution; authenticated corrupt-path validation and shell-free platform reveal
+    src/terminal-ws-bridge.ts #  Vite WebSocket upgrade bridge; keeps server credentials out of browser URLs and frames
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     src/dev-server.ts        #   Hono local project bridge plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)

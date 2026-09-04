@@ -147,3 +147,18 @@ export function authenticatedServerUrl(origin: string, path: string, secret: str
   if (url.pathname === '/ws/poll' && !url.searchParams.has('secret')) url.searchParams.set('secret', secret);
   return url.toString();
 }
+
+/** Resolve a browser-facing project session to its authenticated terminal attach URL.
+ * This runs only inside the local bridge; the returned URL and secret never reach browser JS. */
+export function projectTerminalWebSocketUrl(projectId:string,terminalId:string):string|undefined {
+  const target=sessions.get(projectId);
+  if(!target)return undefined;
+  return authenticatedTerminalWebSocketUrl(target.url,terminalId,target.secret);
+}
+
+export function authenticatedTerminalWebSocketUrl(origin:string,terminalId:string,secret:string):string {
+  const url=new URL(`/terminals/${encodeURIComponent(terminalId)}/attach`,origin);
+  url.protocol=url.protocol==='https:'?'wss:':'ws:';
+  url.searchParams.set('secret',secret);
+  return url.toString();
+}
