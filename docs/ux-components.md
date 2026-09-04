@@ -148,7 +148,8 @@ does not introduce polling or another network request.
   - `BranchChip`
   - unpushed and uncommitted counts
   - opens the production repository-status master/detail dialog with value-cell branch
-    metadata; scrollable iconic staged/unstaged/untracked/conflicted file views;
+    metadata; scrollable staged/unstaged/untracked/conflicted file views with Git-letter
+    badges and middle-truncated paths;
     double-click, keyboard, copy-path, and host-native reveal actions; and a Commits view
     that reuses Code Review difftool/range presentation (HS2-RPVFA4, HS2-323XHG)
 - `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row

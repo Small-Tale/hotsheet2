@@ -3,8 +3,8 @@ import { resolve } from 'node:path';
 
 import { describe,expect,it } from 'vitest';
 
-import type { RepositoryFile,RepositoryStatus } from '../api';
-import { repositoryAbsolutePath,repositoryFilesForView,RepositoryStatusPopover,repositoryStatusState } from './repository-status-popover';
+import type { RepositoryFile,RepositoryFileChange,RepositoryStatus } from '../api';
+import { repositoryAbsolutePath,repositoryFilesForView,repositoryFileStatusLetter,RepositoryStatusPopover,repositoryStatusState } from './repository-status-popover';
 
 const files:RepositoryFile[]=[
   {path:'src/staged.ts',staged:'added',untracked:false,conflicted:false},
@@ -32,12 +32,23 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-repository-file="src/staged.ts"');
     expect(markup).toContain('data-change="renamed"');
-    expect(markup).toContain('from src/old name.ts');
-    expect(markup).toContain('data-lucide="file-plus-2"');
+    expect(markup).toContain('aria-label="src/old name.ts"');
+    expect(markup).toContain('data-lucide="square-pen"');
+    expect(markup).toContain('class="repository-status-popover__file-status" aria-label="Added">A</span>');
+    expect(markup).toContain('class="repository-status-popover__file-status" aria-label="Renamed">R</span>');
+    expect(markup).not.toContain('repository-status-popover__file-state');
+    expect(markup).toContain('repository-status-popover__path');
     expect(markup).toContain('data-action="refresh-repository-status"');
     const css=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8');
     expect(css).toMatch(/__layout \{[^}]*grid-template-columns:/);
     expect(css).toMatch(/__detail \{[^}]*overflow: auto;/);
+    expect(css).toMatch(/__values \{[^}]*background:/);
+    expect(css).not.toMatch(/__values \{[^}]*border:/);
+    expect(css).toMatch(/__values > div \+ div::before \{[^}]*left: var\(--wa-space-m\);/);
+  });
+
+  it('uses the canonical Git status letter for every file change kind',()=>{
+    expect(['added','copied','deleted','modified','renamed','type_changed','unmerged','untracked'].map(change=>repositoryFileStatusLetter(change as RepositoryFileChange))).toEqual(['A','C','D','M','R','T','U','?']);
   });
 
   it('filters files into non-overlapping working-tree views',()=>{

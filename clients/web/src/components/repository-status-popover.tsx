@@ -1,6 +1,6 @@
 import './repository-status-popover.css';
 
-import { ArrowDown, ArrowUp, CircleCheck, Clipboard, Copy, ExternalLink, FilePenLine, FilePlus2, FileQuestion, FileSymlink, FileX2, FolderOpen, GitBranch, GitCommitHorizontal, GitMerge, RefreshCw, SquareMinus, SquarePlus, SquareX, TriangleAlert } from 'lucide';
+import { ArrowDown, ArrowUp, CircleCheck, Clipboard, Copy, ExternalLink, FolderOpen, GitBranch, GitCommitHorizontal, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
 
 import type { CodeReview, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
 import { LucideIcon } from './lucide-icon';
@@ -27,7 +27,7 @@ const stateCopy:Record<RepositoryStatusState,string>={
 const viewDefinitions=[
   {id:'staged',label:'Staged',icon:SquarePlus},
   {id:'unstaged',label:'Unstaged',icon:SquareMinus},
-  {id:'untracked',label:'Untracked',icon:FileQuestion},
+  {id:'untracked',label:'Untracked',icon:SquarePen},
   {id:'conflicted',label:'Conflicted',icon:SquareX},
   {id:'commits',label:'Commits',icon:GitCommitHorizontal},
 ] as const;
@@ -41,7 +41,7 @@ export function RepositoryStatusPopover({status,error='',refreshing=false,view='
     {status&&<div class="repository-status-popover__layout"><aside>
       <dl class="repository-status-popover__values"><div><dt>Branch</dt><dd>{branch}</dd></div><div><dt>Upstream</dt><dd>{upstream}</dd></div></dl>
       <dl class="repository-status-popover__values"><div><dt>Ahead</dt><dd><LucideIcon icon={ArrowUp} name="arrow-up"/>{status.ahead}</dd></div><div><dt>Behind</dt><dd><LucideIcon icon={ArrowDown} name="arrow-down"/>{status.behind}</dd></div></dl>
-      <nav aria-label="Repository views"><h3>Views</h3>{viewDefinitions.map(item=><button type="button" data-action="select-repository-view" data-repository-view={item.id} aria-current={view===item.id?'page':undefined}><LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'file-question':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/><span>{item.label}</span><small>{repositoryViewCount(status,item.id)}</small></button>)}</nav>
+      <nav aria-label="Repository views"><h3>Views</h3>{viewDefinitions.map(item=><button type="button" data-action="select-repository-view" data-repository-view={item.id} aria-current={view===item.id?'page':undefined}><LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'square-pen':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/><span>{item.label}</span><small>{repositoryViewCount(status,item.id)}</small></button>)}</nav>
     </aside><main class="repository-status-popover__detail" aria-live="polite">
       {view==='commits'?<TicketCodeReview embedded title="Commits" emptyMessage="No commits were found in this repository." loadingMessage="Finding commits…" action="open-repository-review" review={review}/>:<RepositoryFileList files={files} view={view}/>}
     </main></div>}
@@ -55,8 +55,7 @@ function RepositoryFileList({files,view}:{files:RepositoryFile[];view:Exclude<Re
   if(files.length===0)return <div class="repository-status-popover__empty"><LucideIcon icon={CircleCheck} name="circle-check"/><p>No {view} files.</p></div>;
   return <div class="repository-status-popover__files" role="list" aria-label={`${view} files`}>{files.map(file=>{
     const change=repositoryFileChange(file,view);
-    const icon=fileChangeIcon(change);
-    return <div class="repository-status-popover__file" role="button" tabIndex={0} data-repository-file={file.path} data-change={change} title="Double-click to open; right-click for more actions"><span class="repository-status-popover__file-icon"><LucideIcon icon={icon} name={fileChangeIconName(change)}/></span><span><strong>{file.path}</strong>{file.original_path&&<small>from {file.original_path}</small>}</span><span class="repository-status-popover__file-state">{fileChangeLabel(change)}</span></div>;
+    return <div class="repository-status-popover__file" role="button" tabIndex={0} data-repository-file={file.path} data-change={change} title={`${file.path} — ${fileChangeLabel(change)}. Double-click to open; right-click for more actions`}><span class="repository-status-popover__file-status" aria-label={fileChangeLabel(change)}>{repositoryFileStatusLetter(change)}</span><span>{middleEllipsisPath(file.path)}{file.original_path&&<small>from {middleEllipsisPath(file.original_path)}</small>}</span></div>;
   })}</div>;
 }
 
@@ -93,24 +92,15 @@ function repositoryFileChange(file:RepositoryFile,view:Exclude<RepositoryStatusV
   return file[view]??'modified';
 }
 
-function fileChangeIcon(change:RepositoryFileChange){
-  if(change==='added')return FilePlus2;
-  if(change==='deleted')return FileX2;
-  if(change==='renamed'||change==='copied')return FileSymlink;
-  if(change==='untracked')return FileQuestion;
-  if(change==='unmerged')return GitMerge;
-  return FilePenLine;
-}
-
-function fileChangeIconName(change:RepositoryFileChange):string{
-  if(change==='added')return 'file-plus-2';
-  if(change==='deleted')return 'file-x-2';
-  if(change==='renamed'||change==='copied')return 'file-symlink';
-  if(change==='untracked')return 'file-question';
-  if(change==='unmerged')return 'git-merge';
-  return 'file-pen-line';
+export function repositoryFileStatusLetter(change:RepositoryFileChange):string{
+  return change==='untracked'?'?':change==='type_changed'?'T':change==='unmerged'?'U':change[0].toUpperCase();
 }
 
 function fileChangeLabel(change:RepositoryFileChange):string{
   return change==='type_changed'?'Type changed':change[0].toUpperCase()+change.slice(1);
+}
+
+function middleEllipsisPath(path:string){
+  const suffixLength=Math.min(20,Math.floor(path.length/2)),splitAt=path.length-suffixLength;
+  return <span class="repository-status-popover__path" aria-label={path}><span>{path.slice(0,splitAt)}</span><span>{path.slice(splitAt)}</span></span>;
 }

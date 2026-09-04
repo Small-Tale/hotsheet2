@@ -737,11 +737,15 @@ The project sidebar repository summary opens a viewport-bounded master/detail di
 The master column uses value cells for branch, upstream, ahead, and behind, followed by
 counted Staged, Unstaged, Untracked, Conflicted, and Commits views. The detail column
 scrolls independently. File views preserve porcelain-v2 change kinds (including rename
-origins) and use icons plus text rather than color alone. Double-click/Enter asks the
+origins) as compact rounded Git-letter badges (`M`, `A`, `R`, `?`, and so on), and
+middle-truncate long paths while keeping their beginning and filename-visible ending.
+Double-click/Enter asks the
 host to open a currently reported file; the context menu can copy relative or absolute
 paths, open the file, or reveal it with host-specific Finder/File Explorer/file-manager
 wording. The server re-reads status and validates repository containment before any host
-launch.
+launch. At roomy viewport heights the dialog is exactly tall enough for the complete
+master column; at constrained heights it caps to the viewport and scrolls that column.
+Value groups have no outer border and use text-aligned inset row separators.
 
 The Commits view embeds the same commit graph, configured difftool actions, and
 multi-commit range presentation as ticket Code Review. Both individual commits and the
