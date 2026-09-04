@@ -463,8 +463,8 @@ bottom drawer over that same viewport boundary.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
 sidebar and ticket inspector at full height. Its compact rail switches between the grid
-and one dedicated existing session, creates a new shell only from the explicit plus
-action, exposes hidden-session recovery, and collapses to one floating restore button.
+and one dedicated existing session, creates the host user's default shell only from the
+explicit plus action, exposes hidden-session recovery, and collapses to one floating restore button.
 Global project/terminal jump actions open this drawer on the matching project and terminal.
 Drawer visibility, height, selected terminal per project, and independent short-container
 zoom are device-local. Its accessible vertical splitter persists heights from 180px

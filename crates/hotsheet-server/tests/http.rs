@@ -3702,23 +3702,24 @@ async fn a_connected_terminal_feeds_its_busy_into_the_connection_registry() {
 }
 
 #[tokio::test]
-async fn terminal_requires_a_command_or_a_connect_only_plugin_launch() {
+async fn terminal_without_a_command_launches_the_users_default_shell() {
     let (_d, st) = state();
-    let resp = app(st)
+    let application = app(st);
+    let resp = application
+        .clone()
         .oneshot(authed("POST", "/terminals", Some(r#"{"id":"empty"}"#)))
         .await
         .unwrap();
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-    let body = String::from_utf8(
-        resp.into_body()
-            .collect()
-            .await
-            .unwrap()
-            .to_bytes()
-            .to_vec(),
-    )
-    .unwrap();
-    assert!(body.contains("command is required"), "{body}");
+    assert_eq!(resp.status(), StatusCode::OK);
+    let terminal = body_json(resp).await;
+    assert_eq!(terminal["id"], "empty");
+    assert_eq!(terminal["alive"], true);
+
+    let resp = application
+        .oneshot(authed("DELETE", "/terminals/empty", None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]

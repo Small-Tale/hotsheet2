@@ -145,6 +145,9 @@ drive runtime, busy, the *live* permission bridge) requires the always-on server
 
 The **terminal/PTY manager** (in the core, hosted by the server) provides:
 - One or more PTYs per project, spawned lazily, keyed by `(project, terminalId)`.
+- A bare terminal-create request launches the host user's default shell (`SHELL` on
+  Unix or `COMSPEC` on Windows, with `/bin/sh` and `cmd.exe` fallbacks), matching
+  HS1's explicit new-terminal behavior.
 - A **scrollback ring buffer** and multi-client attach (many viewers see one
   stream, tmux-style).
 - Survival across server restarts via a **detached PTY broker process** (carried

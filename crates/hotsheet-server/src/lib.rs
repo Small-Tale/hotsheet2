@@ -3684,7 +3684,8 @@ fn broker_err(resp: hotsheet_terminals::BrokerResponse) -> ApiError {
     }
 }
 
-/// `POST /terminals` `{command, args?, cwd?, id?, connect?}` — open (or reattach to) a PTY.
+/// `POST /terminals` `{command?, args?, cwd?, id?, connect?}` — open (or reattach to) a PTY.
+/// With neither `command` nor `connect`, the user's default shell is launched.
 async fn open_terminal(
     State(state): State<AppState>,
     Json(req): Json<OpenTerminalReq>,
@@ -3751,9 +3752,10 @@ async fn open_terminal(
     Ok(Json(term_info(&term, &id)))
 }
 
-/// Compose either the caller's explicit command or a plugin-declared interactive launch.
-/// Connect-only launch performs setup first so MCP/instructions/hooks exist before the tool
-/// starts, resolves the program without a shell, and injects this server's permission route.
+/// Compose the caller's explicit command, a plugin-declared interactive launch, or the user's
+/// default shell. Connect-only launch performs setup first so MCP/instructions/hooks exist before
+/// the tool starts, resolves the program without a shell, and injects this server's permission
+/// route.
 struct PreparedTerminalLaunch {
     command: String,
     args: Vec<String>,
@@ -3771,12 +3773,13 @@ fn terminal_launch(
             env: Vec::new(),
         });
     }
-    let tool = req.connect.as_deref().ok_or_else(|| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            "command is required unless connect names a plugin with an interactive launch",
-        )
-    })?;
+    let Some(tool) = req.connect.as_deref() else {
+        return Ok(PreparedTerminalLaunch {
+            command: user_default_shell(),
+            args: req.args.clone(),
+            env: Vec::new(),
+        });
+    };
     let root = state.store.root();
     hotsheet_aitools::launch_safety::assert_no_hs1(root)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
@@ -3809,6 +3812,18 @@ fn terminal_launch(
         args: launch.args.clone(),
         env,
     })
+}
+
+fn user_default_shell() -> String {
+    #[cfg(windows)]
+    let (variable, fallback) = ("COMSPEC", "cmd.exe");
+    #[cfg(not(windows))]
+    let (variable, fallback) = ("SHELL", "/bin/sh");
+
+    std::env::var_os(variable)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 /// Register a launched-in-terminal tool as a `Pty` connection on the shared registry and
