@@ -30,12 +30,14 @@ describe('RepositoryStatusPopover',()=>{
     const markup=String(RepositoryStatusPopover({status:status(),view:'staged'}));
     for(const text of ['<dt>Branch</dt><dd>main','<dt>Upstream</dt><dd>origin/main','<dt>Ahead</dt>','<dt>Behind</dt>','Staged','Unstaged','Untracked','Conflicted','Commits'])expect(markup).toContain(text);
     expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain('data-repository-file="src/staged.ts"');
-    expect(markup).toContain('data-change="renamed"');
+    expect(markup).toContain('data-component="menu-header"');
+    expect(markup.match(/data-component="menu-item"/g)).toHaveLength(7);
+    expect(markup).toContain('data-action="open-repository-file" data-item-id="src/staged.ts"');
+    expect(markup).toContain('data-state="renamed"');
     expect(markup).toContain('aria-label="src/old name.ts"');
     expect(markup).toContain('data-lucide="square-pen"');
-    expect(markup).toContain('class="repository-status-popover__file-status" aria-label="Added">A</span>');
-    expect(markup).toContain('class="repository-status-popover__file-status" aria-label="Renamed">R</span>');
+    expect(markup).toContain('class="repository-status-popover__file-status" aria-hidden="true">A</span>');
+    expect(markup).toContain('class="repository-status-popover__file-status" aria-hidden="true">R</span>');
     expect(markup).not.toContain('repository-status-popover__file-state');
     expect(markup).toContain('repository-status-popover__path');
     expect(markup).toContain('data-action="refresh-repository-status"');

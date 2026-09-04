@@ -146,6 +146,7 @@ import {
   sidebarViews,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
+import { repositoryDemoEvent, repositoryDemoView, RepositoryStatusPopoverDemo } from './repository-status-demo';
 import { SelectDemo } from './select-demo';
 import {
   resetStatusBadgeDemo,
@@ -345,6 +346,7 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
       name: 'chart-no-axes-column-increasing',
     },
     'repository-summary': { icon: GitBranch, name: 'git-branch' },
+    'repository-status-popover': { icon: FolderGit2, name: 'folder-git-2' },
     'view-navigation': { icon: ListTree, name: 'list-tree' },
     'command-navigation': { icon: Command, name: 'command' },
     'drive-control': { icon: Play, name: 'play' },
@@ -428,6 +430,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
   if (item.id === 'repository-summary') return <RepositorySummaryDemo />;
+  if (item.id === 'repository-status-popover') return <RepositoryStatusPopoverDemo />;
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
   if (item.id === 'drive-control') return <DriveControlDemo />;
@@ -685,6 +688,19 @@ delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
 });
 delegate(root, 'click', '[data-action="open-repository-status"]', () => {
   sidebarEvent.value = 'Repository status requested.';
+});
+delegate(root, 'click', '[data-action="select-repository-view"]', (_event, target) => {
+  repositoryDemoView.value = (target as HTMLElement).dataset.itemId as typeof repositoryDemoView.value;
+  repositoryDemoEvent.value = `${(target as HTMLElement).textContent?.trim() ?? 'Repository view'} selected.`;
+});
+delegate(root, 'click', '[data-action="refresh-repository-status"]', () => {
+  repositoryDemoEvent.value = 'Repository status refreshed.';
+});
+delegate(root, 'dblclick', '[data-action="open-repository-file"]', (_event, target) => {
+  repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.itemId}.`;
+});
+delegate(root, 'click', '[data-action="open-repository-review"]', (_event, target) => {
+  repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.reviewMode} review in Glassbox.`;
 });
 delegate(root, 'click', '[data-action="add-view"]', () => {
   sidebarEvent.value = 'New view editor requested.';

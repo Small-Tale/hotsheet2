@@ -151,7 +151,10 @@ does not introduce polling or another network request.
     metadata; scrollable staged/unstaged/untracked/conflicted file views with Git-letter
     badges and middle-truncated paths;
     double-click, keyboard, copy-path, and host-native reveal actions; and a Commits view
-    that reuses Code Review difftool/range presentation (HS2-RPVFA4, HS2-323XHG)
+    that reuses Code Review difftool/range presentation. The master views and detail
+    files compose the shared `MenuHeader` and `MenuItem` primitives, and the complete
+    dialog is represented as an embedded production component in `/ux-demo`
+    (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4).
 - `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.

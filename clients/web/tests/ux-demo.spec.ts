@@ -45,6 +45,10 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
 });
 
+test('represents the shared repository-status composition in the UX catalog',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=repository-status-popover');const dialog=page.locator('[data-component="repository-status-popover"]');await expect(dialog).toBeVisible();await expect(dialog).toHaveAttribute('data-embedded','true');await expect(dialog.locator('[data-component="menu-header"]')).toContainText('Views');await expect(dialog.locator('[data-component="menu-item"]')).not.toHaveCount(0);await dialog.getByRole('button',{name:/Staged 2/}).click();await expect(dialog).toHaveAttribute('data-view','staged');const file=dialog.locator('[data-action="open-repository-file"]').first();await file.dblclick();await expect(page.locator('.component-stage__event')).toContainText('Would open');await dialog.screenshot({path:'/private/tmp/hs2-z0tsx4-repository-status-demo-wide.png'});await page.setViewportSize({width:760,height:640});await dialog.screenshot({path:'/private/tmp/hs2-z0tsx4-repository-status-demo-narrow.png'});
+});
+
 test('captures, reviews, cancels, and submits dev-review feedback', async ({ page }) => {
   let submitted: Record<string, unknown> | undefined;
   await page.route('**/__hotsheet/dev-review/tickets', async route => {
