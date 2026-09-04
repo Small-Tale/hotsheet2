@@ -32,15 +32,18 @@ describe('change polling transport',()=>{
 });
 
 describe('terminal dashboard transport',()=>{
-  it('lists terminals and reads a safely encoded terminal snapshot',async()=>{
+  it('lists terminals, reads a safely encoded snapshot, and creates a project terminal',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify([{id:'agent/1',alive:true,busy:false}]),{status:200}))
-      .mockResolvedValueOnce(new Response(JSON.stringify({id:'agent/1',alive:true,busy:false,scrollback:'ready'}),{status:200}));
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'agent/1',alive:true,busy:false,scrollback:'ready'}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'terminal-2',alive:true,busy:false}),{status:200}));
     const api=new Api('/api');
     await expect(api.terminals()).resolves.toHaveLength(1);
     await expect(api.terminal('agent/1')).resolves.toMatchObject({scrollback:'ready'});
+    await expect(api.createTerminal({cwd:'/project root'})).resolves.toMatchObject({id:'terminal-2'});
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/terminals',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/terminals/agent%2F1',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/terminals',expect.objectContaining({method:'POST',body:'{"cwd":"/project root"}'}));
     fetchMock.mockRestore();
   });
 });

@@ -1,16 +1,17 @@
 import { clampRegionSize } from './components/resizable-region';
 
-export type AppRegionId = 'app-sidebar' | 'app-inspector';
+export type AppRegionId = 'app-sidebar' | 'app-inspector' | 'app-terminal-drawer';
 
 export const APP_REGION_BOUNDS: Record<AppRegionId, { min: number; max: number; fallback: number }> = {
   'app-sidebar': { min: 250, max: 360, fallback: 272 },
   'app-inspector': { min: 280, max: 520, fallback: 352 },
+  'app-terminal-drawer': { min: 180, max: 520, fallback: 320 },
 };
 
 const storageKey = (id: AppRegionId) => `hotsheet.layout.${id}.size`;
 
 export function isAppRegionId(value: string | undefined): value is AppRegionId {
-  return value === 'app-sidebar' || value === 'app-inspector';
+  return value === 'app-sidebar' || value === 'app-inspector' || value === 'app-terminal-drawer';
 }
 
 export function normalizeAppRegionSize(id: AppRegionId, size: number): number {

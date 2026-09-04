@@ -456,8 +456,18 @@ terminal dashboard is active work: HS2-946EQG settled its interaction contract f
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
 project/flow grouping, magnification/hiding, and independent persisted width/high zoom
 controls. HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
-viewports over the existing terminal attach WebSocket. The project drawer continues in
-HS2-586BVQ and composes the same viewport boundary.
+viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
+bottom drawer over that same viewport boundary.
+
+The project terminal drawer occupies only the center AppShell column, leaving the project
+sidebar and ticket inspector at full height. Its compact rail switches between the grid
+and one dedicated existing session, creates a new shell only from the explicit plus
+action, exposes hidden-session recovery, and collapses to one floating restore button.
+Global project/terminal jump actions open this drawer on the matching project and terminal.
+Drawer visibility, height, selected terminal per project, and independent short-container
+zoom are device-local. Its accessible vertical splitter persists a 180–520 px height;
+because this container is at most 520 px tall, grid zoom uses the 1–3 high model and
+continues horizontally. Magnification remains a temporary viewer over the same PTY.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 

@@ -693,7 +693,7 @@ notification model.
 
 ## 6. Bottom drawer and terminals
 
-### 6.1 `BottomDrawer` — desktop feature
+### 6.1 `BottomDrawer` — production built
 
 - `DrawerTabBar`
 - `DrawerTab`
@@ -701,6 +701,12 @@ notification model.
 - `DrawerVisibilityButton`
 - `DrawerResizeHandle`
 - tab kinds: terminal first; activity, command output, or other tools may follow
+
+The shipped terminal drawer is a center-column-only vertical `ResizableRegion` with a
+compact grid/terminal tab rail, explicit new-terminal action, hidden-session recovery,
+persisted 180–520 px height, and a floating restore button when collapsed. Grid and
+dedicated tabs attach viewports to existing sessions; only the plus action creates a PTY.
+Activity and command-output tab kinds remain later extensions.
 
 ### 6.2 `TerminalPane` — desktop feature
 
@@ -713,7 +719,7 @@ notification model.
   “resize to this screen” action
 - `TerminalViewportClaim` behavior — focus, visibility, size, heartbeat, and lease
 - letterbox, scale-to-fit, readable-floor, and scroll presentation states
-- `TerminalGrid` and `MagnifiedTerminal` for the later dashboard
+- `TerminalGrid` and `MagnifiedTerminal` shared by the project drawer and global dashboard
 
 The browser mock should simulate output, focus ownership, resize arbitration, session
 completion, and disconnection without spawning a PTY.
@@ -816,8 +822,8 @@ semantic actions; Kerf owns state and composition.
 These remain in the component architecture but are not initial-client blockers:
 
 - `TerminalDashboard` — interaction contract settled in §6.3; the global screen,
-  responsive controls, and shared interactive WebSocket/xterm viewport are built. The
-  project drawer composes that viewport in HS2-586BVQ.
+  responsive controls, shared interactive WebSocket/xterm viewport, and project drawer
+  composition are built.
 - `AnalyticsDashboard` — throughput, cycle time, category, usage, and cost charts
 - `CustomViewBuilder` — query construction and saved-view editing
 - `AnnouncerOverlay` — digest picture-in-picture, live narration, playback controls,

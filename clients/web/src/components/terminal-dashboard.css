@@ -27,6 +27,7 @@
 .terminal-viewport .xterm-viewport { overflow-y: auto; }
 .terminal-viewport[data-driving="false"]::after { position: sticky; z-index: 2; left: var(--wa-space-xs); bottom: var(--wa-space-xs); display: inline-block; padding: var(--wa-space-2xs) var(--wa-space-xs); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-normal); background: color-mix(in srgb,var(--wa-color-surface-default) 88%,transparent); box-shadow: var(--wa-shadow-s); content: attr(data-viewing-label); font-size: var(--wa-font-size-2xs); }
 .terminal-dashboard .terminal-tile__magnify { position: absolute; z-index: 2; top: var(--wa-space-xs); right: var(--wa-space-xs); display: none; width: 1.75rem; height: 1.75rem; border-radius: var(--wa-border-radius-m); background: color-mix(in srgb,var(--wa-color-neutral-fill-loud) 80%,transparent); place-items: center; }
+.terminal-dashboard .terminal-tile__magnify svg { width: 1rem; height: 1rem; }
 .terminal-tile__footer { display: flex; min-height: 2.7rem; padding: .35rem .4rem .35rem .55rem; align-items: center; gap: .4rem; }
 .terminal-tile__state { width: .5rem; height: .5rem; border-radius: var(--wa-border-radius-circle); background: var(--wa-color-neutral-fill-loud); flex: none; }
 .terminal-tile[data-busy="true"] .terminal-tile__state { background: var(--wa-color-success-fill-loud); box-shadow: 0 0 0 3px var(--wa-color-success-fill-quiet); }
