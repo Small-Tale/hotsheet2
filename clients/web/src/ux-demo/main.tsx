@@ -1350,9 +1350,9 @@ delegate(root, 'focusout', '[name="markdown-source"]', (event, target) => {
     target.closest('[data-component="markdown-editor"]')?.contains(next)
   )
     return;
-  void markdownAutosave.flush().then(() => {
+  setTimeout(() => void markdownAutosave.flush().then(() => {
     markdownMode.value = 'preview';
-  });
+  }), 0);
 });
 delegate(root, 'dblclick', '[data-action="edit-markdown"]', () => {
   markdownMode.value = 'write';
