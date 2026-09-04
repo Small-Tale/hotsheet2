@@ -98,5 +98,11 @@ describe('NoteCard', () => {
     expect(draft).toContain('Submit');
   });
 
+  it('renders feedback reader navigation only on an opted-in inspector note', () => {
+    const props = { id: 'needed', kind: 'feedback_needed' as const, author: 'Codex', time: 'Now', body: 'Please answer', respondToFeedback: true };
+    expect(String(NoteCard(props))).toContain('data-action="respond-to-feedback"');
+    expect(String(NoteCard({ ...props, readerMode: true }))).not.toContain('respond-to-feedback');
+  });
+
   it('marks the exact regular acknowledgement for subtle presentation',()=>{const acknowledgement=String(NoteCard({id:'ack',kind:'regular',author:'You',time:'Now',body:'No response needed'}));expect(acknowledgement).toContain('data-acknowledgement="true"');expect(String(NoteCard({id:'other',kind:'regular',author:'You',time:'Now',body:'No response needed here'}))).not.toContain('data-acknowledgement="true"')});
 });

@@ -1368,7 +1368,7 @@ delegate(root, 'click', '[data-action="save-note-edit"]', (_event, target) => {
   noteDraft.value = '';
   recordCollectionEvent('Note edit saved');
 });
-delegate(root, 'click', '[data-action="open-ticket-reader"]', () => {
+delegate(root, 'click', '[data-action="open-ticket-reader"], [data-action="respond-to-feedback"]', () => {
   recordCollectionEvent('Ticket reader requested');
   selectDemo('ticket-reader');
 });

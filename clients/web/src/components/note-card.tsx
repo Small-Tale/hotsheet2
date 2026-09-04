@@ -8,7 +8,7 @@ import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
 
 export type NoteKind = 'regular' | 'status' | 'feedback_needed' | 'feedback_draft' | 'activity';
-export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editable?: boolean; deletable?: boolean; editing?: boolean; draft?: string; readerMode?: boolean; inlineReplies?: readonly InlineFeedbackReply[] }
+export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editable?: boolean; deletable?: boolean; editing?: boolean; draft?: string; readerMode?: boolean; respondToFeedback?: boolean; inlineReplies?: readonly InlineFeedbackReply[] }
 
 const presentations = {
   regular: { label: 'Note', icon: MessageSquareText, iconName: 'message-square-text' },
@@ -18,7 +18,7 @@ const presentations = {
   activity: { label: 'Activity', icon: Activity, iconName: 'activity' },
 } as const;
 
-export function NoteCard({ id, kind, author, time, body, title, editable = true, deletable = true, editing = false, draft, readerMode = false, inlineReplies = [] }: NoteCardProps) {
+export function NoteCard({ id, kind, author, time, body, title, editable = true, deletable = true, editing = false, draft, readerMode = false, respondToFeedback = false, inlineReplies = [] }: NoteCardProps) {
   const presentation = presentations[kind];
   const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
   const feedbackResponse = readerMode && kind === 'feedback_needed';
@@ -33,6 +33,7 @@ export function NoteCard({ id, kind, author, time, body, title, editable = true,
     </header>
     {feedbackResponse && <div class="note-card__feedback-prompt">{splitFeedbackPrompt(body, inlineReplies).map(segment => <div class="note-card__feedback-section">{segment.markdown && <div class="note-card__feedback-block" data-action="add-inline-feedback-reply" data-note-id={id} data-segment-start={segment.start} data-segment-end={segment.end} role="button" tabIndex={0} aria-label="Add response at a character position"><MarkdownPreview source={segment.markdown} /></div>}{segment.reply && <div class="note-card__inline-reply-row"><textarea class="note-card__inline-reply" name="inline-feedback-response" data-note-id={id} data-offset={segment.reply.offset} aria-label={`Response at character ${segment.reply.offset}`}>{segment.reply.text}</textarea><button type="button" data-action="remove-inline-feedback-reply" data-note-id={id} data-offset={segment.reply.offset} aria-label={`Remove response at character ${segment.reply.offset}`}><LucideIcon icon={X} name="x" /></button></div>}</div>)}</div>}
     {editorOpen ? <div class="note-card__editor"><textarea name="note-body" data-note-id={id} data-note-response={feedbackResponse ? 'true' : undefined} aria-label={feedbackResponse ? 'Feedback response' : 'Note body'} placeholder={feedbackResponse && inlineReplies.length ? 'General response (optional)' : undefined}>{source}</textarea>{feedbackEditor && <div>{feedbackResponse&&<wa-button size="small" appearance="outlined" data-action="dismiss-feedback" data-note-id={id} title="Clear this feedback request without replying">No response needed</wa-button>}<wa-button appearance="accent" data-action="save-note-edit" data-note-id={id} data-note-response={feedbackResponse ? 'true' : undefined}>{feedbackResponse ? 'Respond' : 'Submit'}</wa-button></div>}</div> : <div class="note-card__body" {...editAttributes}><MarkdownPreview source={body} /></div>}
+    {respondToFeedback && !readerMode && <wa-button class="note-card__respond" appearance="outlined" data-action="respond-to-feedback" data-note-id={id}>Respond to Feedback</wa-button>}
     <footer>{author}</footer>
   </article>;
 }

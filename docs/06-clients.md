@@ -691,6 +691,10 @@ still carries the specific question and feedback editor. The unified needs-revie
 takes precedence over blocked and Up Next rails so the outstanding decision is never
 hidden. The server's compact row continues to expose the source `feedback_needed`
 boolean (mirrored in the index), while the client normalizes it at presentation time.
+In the sidebar inspector, the active feedback note has a full-width **Respond to
+Feedback** action directly below its body. It is omitted from answered or superseded
+asks and from reader mode itself. Activating it opens reader mode on Info, scrolls the
+active note into view, and focuses its response editor.
 For note-driven feedback, only an unanswered ask is active: among regular and
 `feedback_needed` notes, the most recent one controls the state. A later regular note is
 the response and clears Needs review; the answered ask then uses the ordinary note

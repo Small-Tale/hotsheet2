@@ -28,6 +28,17 @@ describe('content components', () => {
     const markup=String(TicketNotes({ notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }], composing: true }));
     expect(markup.indexOf('data-component="note-card"')).toBeLessThan(markup.indexOf('data-component="note-composer"'));
   });
+  it('offers Respond to Feedback only below the active inspector feedback note', () => {
+    const notes = [
+      { id: 'old', kind: 'feedback_needed' as const, author: 'Codex', time: 'Earlier', body: 'Old ask' },
+      { id: 'active', kind: 'feedback_needed' as const, author: 'Codex', time: 'Now', body: 'Current ask' },
+    ];
+    const inspector = String(TicketNotes({ notes }));
+    expect(inspector.match(/data-action="respond-to-feedback"/g)).toHaveLength(1);
+    expect(inspector).toMatch(/data-note-id="active"[^]*data-action="respond-to-feedback" data-note-id="active"/);
+    expect(String(TicketNotes({ notes, readerMode: true }))).not.toContain('respond-to-feedback');
+    expect(String(TicketNotes({ notes: [...notes, { id: 'answer', kind: 'regular', author: 'You', time: 'Later', body: 'Answered' }] }))).not.toContain('respond-to-feedback');
+  });
   it('renders Markdown source, preview, and expansion as explicit states without a save footer', () => {
     const source = String(MarkdownEditor({ value: '## Goal', mode: 'write', dirty: true }));
     expect(source).toContain('textarea');

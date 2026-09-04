@@ -17,6 +17,7 @@
 .note-card__editor textarea { width: 100%; min-width: 0; max-width: 100%; min-height: 5rem; padding: .55rem .65rem; resize: vertical; border: 1px solid var(--wa-color-neutral-border-loud); border-radius: .45rem; color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.5; }
 .note-card__editor textarea[data-note-response="true"] { min-height: 2.5rem; }
 .note-card__editor > div { display: flex; justify-content: flex-end; gap: .35rem; }
+.note-card__respond { width: 100%; }
 .note-card__feedback-prompt { display: grid; gap: var(--wa-space-2xs); }
 .note-card__feedback-section { display: grid; gap: var(--wa-space-2xs); }
 .note-card__feedback-block { position: relative; padding: var(--wa-space-2xs); border-radius: var(--wa-border-radius-s); cursor: text; }
