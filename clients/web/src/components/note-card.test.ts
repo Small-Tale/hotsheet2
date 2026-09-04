@@ -91,6 +91,7 @@ describe('NoteCard', () => {
     expect(needed).toContain('data-action="dismiss-feedback"');
     expect(needed).toContain('No response needed');
     expect(needed).toContain('size="small" appearance="outlined"');
+    expect(needed).toContain('size="small" appearance="accent"');
     expect(needed).not.toContain('data-lucide="circle-check"');
     const draft = String(NoteCard({ id: 'draft', kind: 'feedback_draft', author: 'You', time: 'Now', body: 'Continue me', readerMode: true }));
     expect(draft).toContain('aria-label="Note body"');
