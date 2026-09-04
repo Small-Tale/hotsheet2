@@ -471,7 +471,10 @@ zoom are device-local. Its accessible vertical splitter persists heights from 18
 through the live boundary immediately below `PageHeader`, so it can consume the full
 ticket work area on taller windows instead of stopping at the former 520px cap. Grid
 zoom continues to select its across/high model from the drawer's actual measured height.
-Magnification remains a temporary viewer over the same PTY.
+Double-clicking non-interactive space in the drawer rail toggles that measured maximum
+and the last manually resized height (or 320px before the first resize); tab and action
+buttons do not trigger the toggle. Maximizing is temporary and does not overwrite the
+persisted restore height. Magnification remains a temporary viewer over the same PTY.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 
