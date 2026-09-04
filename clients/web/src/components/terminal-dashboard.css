@@ -1,9 +1,12 @@
 .terminal-dashboard { position: relative; display: flex; min-width: 0; min-height: 0; height: 100%; overflow: hidden; flex-direction: column; background: var(--wa-color-surface-lowered); }
 .terminal-dashboard-controls { display: flex; align-items: center; gap: var(--wa-space-xs); }
-.terminal-dashboard-controls__label { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .terminal-dashboard-controls__count { position: absolute; top: -.25rem; right: -.2rem; display: grid; min-width: 1rem; height: 1rem; padding: 0 .2rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-warning-on-normal); background: var(--wa-color-warning-fill-loud); font-size: var(--wa-font-size-3xs); font-weight: 700; line-height: 1; place-items: center; }
-.terminal-dashboard-controls wa-button { position: relative; }
-.terminal-dashboard-controls wa-dropdown-item svg { width: 1rem; height: 1rem; }
+.terminal-dashboard-controls__visibility { position: relative; }
+.terminal-dashboard-controls__visibility:disabled { opacity: var(--wa-opacity-disabled); cursor: not-allowed; }
+.terminal-dashboard-controls__grouping { padding-inline: .25rem; }
+.terminal-dashboard-controls__grouping-select { width: 5rem; }
+.terminal-dashboard-controls__grouping-select::part(combobox) { min-height: 2rem; padding-inline: .35rem .15rem; border: 0; border-radius: var(--wa-border-radius-pill); background: transparent; box-shadow: none; }
+.terminal-dashboard-controls__grouping-select .select__custom-selected { color: var(--wa-color-neutral-on-quiet); font-weight: var(--wa-font-weight-semibold); }
 .terminal-dashboard button { border: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; }
 .terminal-dashboard button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .terminal-dashboard button:disabled { cursor: not-allowed; opacity: .38; }

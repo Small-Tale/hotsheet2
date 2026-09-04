@@ -457,7 +457,9 @@ dashboards, print) remains **deferred**, each its own ticket after the floor lan
 terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
 project/flow grouping, magnification/hiding, and independent persisted width/high zoom
-controls. HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
+controls. Its visibility action uses the standard toolbar button boundary (reserved for a
+future visibility-groups dialog), while project/none grouping uses the shared Select control.
+HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.
 

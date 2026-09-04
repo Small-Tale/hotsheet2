@@ -1,12 +1,10 @@
-import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
-import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './terminal-dashboard.css';
 
 import { ExternalLink, Eye, EyeOff, LayoutGrid, Maximize2, Minus, Plus, Rows3, X } from 'lucide';
 
 import { terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
 import { LucideIcon } from './lucide-icon';
+import { Select, type SelectChoice } from './select';
 import { ToolbarControlGroup } from './toolbar-control-group';
 
 export interface TerminalDashboardSession {
@@ -41,14 +39,18 @@ export interface TerminalDashboardProps {
 }
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
+const GROUPING_CHOICES: readonly SelectChoice<'project'|'flow'>[] = [
+  { value: 'project', label: 'Project', icon: Rows3, iconName: 'rows-3' },
+  { value: 'flow', label: 'None', icon: LayoutGrid, iconName: 'layout-grid' },
+];
 
 export function TerminalDashboardControls({ grouping = 'project', hiddenCount = 0 }: {grouping?:'project'|'flow';hiddenCount?:number}) {
   return <div class="terminal-dashboard-controls" data-component="terminal-dashboard-controls">
     <ToolbarControlGroup appearance="borderless" single>
-      <wa-button appearance="plain" data-action="show-hidden-terminals" disabled={hiddenCount===0} title={hiddenCount?'Show hidden terminals':'No hidden terminals'}><LucideIcon icon={Eye} name="eye" /><span class="terminal-dashboard-controls__label">Show hidden terminals</span>{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</wa-button>
+      <button type="button" class="terminal-dashboard-controls__visibility" data-action="show-hidden-terminals" disabled={hiddenCount===0} aria-label="Show hidden terminals" title={hiddenCount?'Show hidden terminals':'No hidden terminals'}><LucideIcon icon={Eye} name="eye" />{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</button>
     </ToolbarControlGroup>
-    <ToolbarControlGroup appearance="borderless" single>
-      <wa-dropdown placement="bottom-end"><wa-button slot="trigger" appearance="plain" with-caret aria-label={`Group terminals: ${grouping==='project'?'Project':'None'}`}>Group</wa-button><wa-dropdown-item type="checkbox" checked={grouping==='project'} data-action="set-terminal-grouping" data-terminal-grouping="project"><span slot="icon"><LucideIcon icon={Rows3} name="rows-3" /></span>Project</wa-dropdown-item><wa-dropdown-item type="checkbox" checked={grouping==='flow'} data-action="set-terminal-grouping" data-terminal-grouping="flow"><span slot="icon"><LucideIcon icon={LayoutGrid} name="layout-grid" /></span>None</wa-dropdown-item></wa-dropdown>
+    <ToolbarControlGroup appearance="borderless" className="terminal-dashboard-controls__grouping">
+      <Select className="terminal-dashboard-controls__grouping-select" name="terminal-grouping" ariaLabel={`Group terminals: ${grouping==='project'?'Project':'None'}`} value={grouping} choices={GROUPING_CHOICES} renderSelected={()=><span>Group</span>} />
     </ToolbarControlGroup>
   </div>;
 }
