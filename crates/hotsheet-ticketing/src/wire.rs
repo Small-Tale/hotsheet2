@@ -421,7 +421,7 @@ mod tests {
             created_at: Timestamp::new("2026-08-20T00:00:00Z"),
             edited_at: Timestamp::new("2026-08-20T00:00:00Z"),
             summary: None,
-            text: "FEEDBACK NEEDED: choose one".into(),
+            text: "Context first. IMMEDIATE FEEDBACK NEEDED choose one".into(),
         });
 
         assert!(TicketRow::from(&waiting).feedback_needed);

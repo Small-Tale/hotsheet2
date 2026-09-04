@@ -29,6 +29,15 @@ pub struct Note {
 }
 
 impl Note {
+    /// Whether regular-note text uses HS1's historical feedback marker.
+    ///
+    /// HS1 deliberately accepted the all-caps phrase anywhere in the note and did
+    /// not require a colon. Keep the match case-sensitive so ordinary prose such as
+    /// "feedback needed from the user" does not accidentally open an exchange.
+    pub fn text_requests_feedback(text: &str) -> bool {
+        text.contains("FEEDBACK NEEDED")
+    }
+
     /// Whether this note opens a feedback exchange.
     ///
     /// Early HS2 automation wrote the historical `FEEDBACK NEEDED:` convention as a
@@ -36,8 +45,7 @@ impl Note {
     /// `feedback_needed` kind.
     pub fn is_feedback_needed_request(&self) -> bool {
         self.kind == NoteKind::FeedbackNeeded
-            || (self.kind == NoteKind::Regular
-                && self.text.trim_start().starts_with("FEEDBACK NEEDED:"))
+            || (self.kind == NoteKind::Regular && Self::text_requests_feedback(&self.text))
     }
 }
 
@@ -283,5 +291,21 @@ mod tests {
             "2026-08-20T00:02:00Z",
         ));
         assert!(!ticket.feedback_needed());
+    }
+
+    #[test]
+    fn legacy_feedback_marker_matches_hs1s_flexible_read_rules() {
+        for text in [
+            "FEEDBACK NEEDED: choose one",
+            "Context first. FEEDBACK NEEDED: choose one",
+            "FEEDBACK NEEDED choose one",
+            "IMMEDIATE FEEDBACK NEEDED: choose one",
+        ] {
+            assert!(Note::text_requests_feedback(text), "{text:?}");
+        }
+
+        assert!(!Note::text_requests_feedback(
+            "I think feedback needed from the user before continuing."
+        ));
     }
 }

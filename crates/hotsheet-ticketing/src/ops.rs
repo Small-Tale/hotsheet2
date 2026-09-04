@@ -620,7 +620,7 @@ pub fn add_note_with_summary(
     text: String,
 ) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
-    let kind = if kind == NoteKind::Regular && text.trim_start().starts_with("FEEDBACK NEEDED:") {
+    let kind = if kind == NoteKind::Regular && Note::text_requests_feedback(&text) {
         NoteKind::FeedbackNeeded
     } else {
         kind
@@ -1643,6 +1643,32 @@ mod tests {
 
         assert_eq!(ticket.notes[0].kind, NoteKind::FeedbackNeeded);
         assert!(store.read_ticket(&id).unwrap().feedback_needed());
+    }
+
+    #[test]
+    fn add_note_promotes_hs1_style_embedded_marker_without_a_colon() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+
+        let ticket = add_note(
+            &store,
+            &id,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap(),
+            ts("2026-08-19T01:00:00Z"),
+            NoteKind::Regular,
+            "Context first. FEEDBACK NEEDED choose a layout".into(),
+        )
+        .unwrap();
+
+        assert_eq!(ticket.notes[0].kind, NoteKind::FeedbackNeeded);
     }
 
     #[test]

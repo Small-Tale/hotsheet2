@@ -694,10 +694,11 @@ For note-driven feedback, only an unanswered ask is active: among regular and
 the response and clears Needs review; the answered ask then uses the ordinary note
 presentation rather than retaining feedback styling or an editor. Activity/status notes
 are neutral, and a later `feedback_needed` note opens it again.
-For compatibility with early HS2 automation, a regular note whose trimmed text begins
-with the historical exact marker `FEEDBACK NEEDED:` is normalized to the
-`feedback_needed` kind at the wire boundary and participates in the same exchange.
-New core writes promote that marker to the first-class kind. Rebuilding an older
+For compatibility with HS1 and early HS2 automation, a regular note containing the
+case-sensitive all-caps phrase `FEEDBACK NEEDED` is normalized to the `feedback_needed`
+kind at the wire boundary and participates in the same exchange. The phrase may appear
+after introductory context and its colon is optional; lowercase prose does not match.
+New core writes promote the same marker to the first-class kind. Rebuilding an older
 disposable index must therefore recompute the compact flag for unchanged ticket files.
 
 **Reader mode is a directly editable focus surface.** Opening reader mode shows the

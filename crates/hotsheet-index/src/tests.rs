@@ -457,13 +457,13 @@ fn feedback_needed_flag_round_trips_and_reconciles_both_ways() {
 }
 
 #[test]
-fn legacy_feedback_prefix_sets_the_indexed_flag() {
+fn hs1_style_feedback_marker_sets_the_indexed_flag() {
     use hotsheet_model::{Note, NoteKind};
     let (_d, store, ix) = seeded();
     let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
 
-    // Reproduce an early HS2 file exactly: it persisted the marker as a regular note,
-    // before core writes promoted the convention to the typed kind.
+    // Reproduce HS1's relaxed read shape in an early HS2 regular note: introductory
+    // context is allowed and the marker's colon is optional.
     let mut ticket = store.read_ticket(&id).unwrap();
     ticket.notes.push(Note {
         id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"),
@@ -471,7 +471,7 @@ fn legacy_feedback_prefix_sets_the_indexed_flag() {
         edited_at: Timestamp::new("2026-08-19T01:00:00Z"),
         kind: NoteKind::Regular,
         summary: None,
-        text: "FEEDBACK NEEDED: choose one".into(),
+        text: "Context first. FEEDBACK NEEDED choose one".into(),
     });
     store.write_ticket(&ticket).unwrap();
     ix.reconcile(&store).unwrap();
