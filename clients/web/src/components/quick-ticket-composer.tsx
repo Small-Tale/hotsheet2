@@ -4,7 +4,7 @@ import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
 import './quick-ticket-composer.css';
 
-import { Paperclip, Plus, Trash2, Upload } from 'lucide';
+import { Paperclip, Plus, Star, Trash2, Upload } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { TicketCategorySelect } from './ticket-category-select';
@@ -12,7 +12,9 @@ import { TicketCategorySelect } from './ticket-category-select';
 export interface QuickTicketComposerProps {
   expanded?: boolean;
   title?: string;
+  details?: string;
   category?: string;
+  upNext?: boolean;
   providerName?: string;
   canCreate?: boolean;
   attachments?: readonly { id: string; name: string }[];
@@ -30,11 +32,12 @@ export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
   return true;
 }
 
-export function QuickTicketComposer({ expanded = false, title = '', category = 'task', providerName = 'Hot Sheet', canCreate = true, attachments = [], attachmentsEnabled = true, attachmentMessage = '', attachmentError = false, busy = false, submitting = false }: QuickTicketComposerProps) {
+export function QuickTicketComposer({ expanded = false, title = '', details = '', category = 'task', upNext = false, providerName = 'Hot Sheet', canCreate = true, attachments = [], attachmentsEnabled = true, attachmentMessage = '', attachmentError = false, busy = false, submitting = false }: QuickTicketComposerProps) {
   if (!expanded) return <button type="button" class="quick-ticket-composer__launcher" data-component="quick-ticket-composer" data-action="expand-ticket-composer" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" title={attachmentsEnabled ? 'Create a new ticket, drop tickets to duplicate, or drop attachment files here' : 'Create a new ticket or drop tickets to duplicate'}><LucideIcon icon={Plus} name="plus" />New ticket…</button>;
   return <form class="quick-ticket-composer" data-component="quick-ticket-composer" data-action="create-ticket-form" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" data-submitting={String(submitting)}>
     <wa-input name="new-ticket-title" label="Ticket title" value={title} autofocus required></wa-input>
-    <TicketCategorySelect name="new-ticket-category" label="Category" value={category} />
+    <div class="quick-ticket-composer__metadata"><TicketCategorySelect name="new-ticket-category" label="Category" value={category} /><button type="button" class="quick-ticket-composer__up-next" data-action="toggle-new-ticket-up-next" aria-pressed={String(upNext)} aria-label={upNext?'Remove new ticket from Up Next':'Add new ticket to Up Next'} title={upNext?'Remove from Up Next':'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button></div>
+    <label class="quick-ticket-composer__details"><span>Details</span><textarea name="new-ticket-details" rows={1}>{details}</textarea></label>
     <section class="quick-ticket-composer__attachments" aria-label="New ticket attachments">
       <header><span><LucideIcon icon={Paperclip} name="paperclip" />Attachments</span>{attachmentsEnabled && <label><LucideIcon icon={Plus} name="plus" />Add<input type="file" multiple name="new-ticket-attachments" aria-label="Browse attachments for new ticket" /></label>}</header>
       {attachments.length > 0 && <div class="quick-ticket-composer__attachment-list">{attachments.map(item => <div class="quick-ticket-composer__attachment" data-pending-attachment-id={item.id}><LucideIcon icon={Paperclip} name="paperclip" /><span title={item.name}>{item.name}</span><button type="button" data-action="remove-new-ticket-attachment" data-pending-attachment-id={item.id} aria-label={`Remove ${item.name}`} title={`Remove ${item.name}`}><LucideIcon icon={Trash2} name="trash-2" /></button></div>)}</div>}

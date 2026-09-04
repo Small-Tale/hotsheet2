@@ -190,8 +190,10 @@ import { ToolbarDemo } from './toolbar-demo';
 import { ToolbarTextDemo } from './toolbar-text-demo';
 import {
   composerCategory,
+  composerDetails,
   composerExpanded,
   composerTitle,
+  composerUpNext,
   createDemoTicket,
   focusWorkspaceSearch,
   inspectorCategory,
@@ -1153,13 +1155,21 @@ delegate(root, 'click', '[data-action="expand-ticket-composer"]', () => {
 delegate(root, 'click', '[data-action="cancel-ticket-composer"]', () => {
   composerExpanded.value = false;
   composerTitle.value = '';
+  composerDetails.value = '';
+  composerUpNext.value = false;
   recordCollectionEvent('Ticket creation cancelled');
 });
 delegate(root, 'input', '[name="new-ticket-title"]', (_event, target) => {
   composerTitle.value = (target as FormControl).value;
 });
+delegate(root, 'input', '[name="new-ticket-details"]', (_event, target) => {
+  composerDetails.value = (target as HTMLTextAreaElement).value;
+});
 delegate(root, 'change', '[name="new-ticket-category"]', (_event, target) => {
   composerCategory.value = (target as FormControl).value;
+});
+delegate(root, 'click', '[data-action="toggle-new-ticket-up-next"]', () => {
+  composerUpNext.value = !composerUpNext.value;
 });
 delegate(root, 'submit', '[data-action="create-ticket-form"]', (event) => {
   event.preventDefault();

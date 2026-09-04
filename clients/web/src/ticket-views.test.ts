@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketStatusForView, ticketsForView } from './ticket-views';
+import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, ticketsForView } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -22,6 +22,8 @@ describe('ticket views', () => {
   it('creates into the visible active destination and disables creation for Archive', () => {
     expect(newTicketStatusForView('all')).toBe('not_started');
     expect(newTicketStatusForView('backlog')).toBe('backlog');
+    expect(newTicketCreationPlacement('backlog',false)).toEqual({status:'backlog',up_next:false});
+    expect(newTicketCreationPlacement('backlog',true)).toEqual({status:'not_started',up_next:true});
     expect(canCreateTicketInView('all')).toBe(true);
     expect(canCreateTicketInView('backlog')).toBe(true);
     expect(canCreateTicketInView('archive')).toBe(false);

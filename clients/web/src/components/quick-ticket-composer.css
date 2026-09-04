@@ -5,6 +5,15 @@
 .quick-ticket-composer__launcher svg { width: 1rem; height: 1rem; }
 .quick-ticket-composer { display: grid; width: 100%; padding: 1rem; border: 1px solid var(--wa-color-brand-border-quiet); border-radius: .7rem; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem); gap: var(--wa-space-s); }
 .quick-ticket-composer wa-input::part(base) { height: 2.5rem; min-height: 2.5rem; }
+.quick-ticket-composer__metadata { display: grid; min-width: 0; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: var(--wa-space-xs); }
+.quick-ticket-composer__up-next { display: grid; width: 2.5rem; height: 2.5rem; padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-surface-default); cursor: pointer; place-items: center; }
+.quick-ticket-composer__up-next:hover { color: var(--hs-ticket-state-up-next); background: var(--wa-color-neutral-fill-quiet); }
+.quick-ticket-composer__up-next[aria-pressed="true"] { color: var(--hs-ticket-state-up-next); border-color: var(--hs-ticket-state-up-next); }
+.quick-ticket-composer__up-next[aria-pressed="true"] svg { fill: currentColor; }
+.quick-ticket-composer__up-next:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
+.quick-ticket-composer__up-next svg { width: 1rem; height: 1rem; }
+.quick-ticket-composer__details { display: grid; min-width: 0; grid-column: 1 / -1; color: var(--wa-color-text-normal); gap: var(--wa-space-2xs); font-size: var(--wa-font-size-s); }
+.quick-ticket-composer__details textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 2.5rem; padding: var(--wa-space-xs) var(--wa-space-s); resize: vertical; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.4; }
 .quick-ticket-composer:is([data-dragging="true"], [data-dragging-ticket="true"]) { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
 .quick-ticket-composer__attachments { display: grid; grid-column: 1 / -1; gap: .45rem; }
 .quick-ticket-composer__attachments header { display: flex; align-items: center; justify-content: space-between; }

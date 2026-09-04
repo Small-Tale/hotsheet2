@@ -794,6 +794,7 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   expect(await title.evaluate((node: HTMLInputElement) => node.checkValidity())).toBe(false);
   await expect(form).toBeVisible();
   await title.fill('Created from the UX demo');
+  const details=form.getByRole('textbox',{name:'Details'});await details.fill('One-line details that can grow.');expect(await details.getAttribute('rows')).toBe('1');expect(await details.evaluate(node=>getComputedStyle(node).resize)).toBe('vertical');
   const category = form.locator('wa-select[name="new-ticket-category"]');
   await expect(category.locator('.select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
@@ -805,10 +806,14 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(form.locator('.select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await form.getByRole('button',{name:'Add new ticket to Up Next'}).click();
+  await expect(form.getByRole('button',{name:'Remove new ticket from Up Next'})).toHaveAttribute('aria-pressed','true');
+  await form.screenshot({path:'/private/tmp/hs2-new-ticket-details-up-next.png'});
   await form.getByRole('button', { name: 'Create ticket' }).click();
   const createdList = page.getByRole('listbox', { name: 'Recently updated tickets' });
   await expect(createdList).toContainText('Created from the UX demo');
   await expect(createdList.locator('[data-component="ticket-list-row"]').first().locator('[data-lucide="bug"]')).toBeVisible();
+  await expect(createdList.locator('[data-component="ticket-list-row"]').first().getByRole('button',{name:'Remove from Up Next'})).toBeVisible();
   await expect(page.getByText(/HS2-DEMO\d created/)).toBeVisible();
   await page.getByRole('button', { name: /New ticket/ }).click();
   await page.getByRole('textbox', { name: 'Ticket title' }).fill('Discard this');
@@ -821,6 +826,8 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(launcher).toHaveCSS('cursor', 'pointer');
   await launcher.click();
   await expect(page.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
+  await expect(page.getByRole('textbox',{name:'Details'})).toHaveValue('');
+  await expect(page.getByRole('button',{name:'Add new ticket to Up Next'})).toHaveAttribute('aria-pressed','false');
 });
 
 test('navigates, toggles, closes, and reopens TicketInspector', async ({ page }) => {

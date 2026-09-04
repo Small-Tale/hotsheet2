@@ -319,7 +319,11 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit
   views with counts derived from those same predicates. The new-ticket composer is
   available in Queue and Backlog but hidden in Archive; creation from Backlog defaults
-  the new ticket to backlog status. Column presentation always gives TicketRows a
+  the new ticket to backlog status. Its expanded first row keeps the title beside the
+  category and an immediately trailing star toggle; the star creates directly in Up Next
+  (and therefore overrides a Backlog-view default to active Not Started). A full-width
+  Details textarea follows on its own row, starts one text line tall, and resizes vertically.
+  Column presentation always gives TicketRows a
   rounded visible border, including the wide single-column Backlog and Archive boards.
   The composer owns its bottom spacing; while it is rendered, both list and edge-to-edge
   board workspaces remove their otherwise-normal top inset so only one vertical gap is

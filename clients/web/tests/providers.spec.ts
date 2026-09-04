@@ -56,7 +56,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
     if(path.endsWith('/batch')&&request.method()==='POST'){const updates=request.postDataJSON().updates as Array<Record<string,unknown>&{id:string}>;const changed=updates.map(({id,...body})=>{patches.push(body);rows=rows.map(item=>item.id===id?{...item,...body}:item);const ticket=rows.find(item=>item.id===id)!;return{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id)??[],concurrency_token:`next-${id}`}});if(batchResponseDelay)await new Promise(resolve=>setTimeout(resolve,batchResponseDelay));return route.fulfill({json:changed})}
     if(path.endsWith('/tickets')&&request.method()==='GET'){if(url.searchParams.get('text')==='QQRY00'){await new Promise(resolve=>setTimeout(resolve,150));return route.fulfill({json:[searchSlugRow,searchDetailsRow]})}return route.fulfill({json:rows})}
-    if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON(),normalized=normalizedCreatedTicket(body);const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:normalized.title,tags:normalized.tags,category:body.category,status:body.status??'not_started',up_next:false};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:'',notes:[],attachments:[]}})}
+    if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON(),normalized=normalizedCreatedTicket(body);const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:normalized.title,tags:normalized.tags,category:body.category,status:body.status??'not_started',up_next:Boolean(body.up_next)};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:body.details??'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
     if(path.endsWith('/tickets/01')&&request.method()==='GET'){if(ticketLoadDelay)await new Promise(resolve=>setTimeout(resolve,ticketLoadDelay));return route.fulfill({json:{store:'git-local',...selectedFull}})}
     const attachmentMatch=path.match(/\/tickets\/([^/]+)\/attachments$/);
@@ -604,7 +604,7 @@ test('hides title and tag mutation affordances when the provider cannot update',
 });
 
 test('opens a checkout, discovers its source, and drives real shell ticket flows',async({page})=>{
-  await mockProject(page);let submittedTitle='';page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/tickets'))submittedTitle=request.postDataJSON().title});await page.goto('/');
+  await mockProject(page);let submitted:Record<string,unknown>={};page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/tickets'))submitted=request.postDataJSON()});await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
   await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/Users/westphal/Documents/hotsheet2');
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
@@ -630,15 +630,20 @@ test('opens a checkout, discovers its source, and drives real shell ticket flows
   await page.getByRole('button',{name:'Info'}).click();await page.setViewportSize({width:940,height:900});await expect(activityNote).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-a32eak-activity-note-narrow.png',fullPage:true});
   await page.getByRole('button',{name:'New ticket…'}).click();
   await page.locator('wa-input[name="new-ticket-title"]').evaluate((node:HTMLElement&{value:string})=>{node.value='[client] [Needs Review] Created from the real shell';node.dispatchEvent(new Event('input',{bubbles:true}))});
+  await page.getByRole('textbox',{name:'Details'}).fill('Created with **Markdown** details.');
+  await page.getByRole('button',{name:'Add new ticket to Up Next'}).click();
+  await expect(page.getByRole('button',{name:'Remove new ticket from Up Next'})).toHaveAttribute('aria-pressed','true');
+  await page.locator('[data-action="create-ticket-form"]').screenshot({path:'/private/tmp/hs2-new-ticket-composer-production.png'});
   await page.getByRole('button',{name:'Create ticket'}).click();
   const createdRow=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');
   await expect(createdRow).toContainText('Created from the real shell');
   await expect(createdRow).not.toContainText('[client]');
-  expect(submittedTitle).toBe('[client] [Needs Review] Created from the real shell');
+  expect(submitted).toMatchObject({title:'[client] [Needs Review] Created from the real shell',details:'Created with **Markdown** details.',status:'not_started',up_next:true});
+  await expect(createdRow.getByRole('button',{name:'Remove from Up Next'})).toBeVisible();
   await expect(createdRow).toHaveAttribute('data-selected','true');
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('HS2-NEW001');
   await expect(page.locator('[data-component="ticket-inspector"] [data-component="markdown-editor"]')).toHaveAttribute('data-mode','write');
-  await expect(page.getByRole('textbox',{name:'Details'})).toBeFocused();
+  await expect(page.getByRole('textbox',{name:'Details'})).toHaveValue('Created with **Markdown** details.');await expect(page.getByRole('textbox',{name:'Details'})).toBeFocused();
   await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(1);
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('client');
   await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Needs-Review');

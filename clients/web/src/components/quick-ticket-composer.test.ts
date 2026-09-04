@@ -16,11 +16,15 @@ describe('QuickTicketComposer', () => {
     expect(collapsed).toContain('data-action="expand-ticket-composer"');
     expect(collapsed).toContain('data-new-ticket-drop-target="true"');
     expect(collapsed).toContain('drop attachment files here');
-    const expanded = String(QuickTicketComposer({ expanded: true, title: 'New work', category: 'bug', attachments: [{ id: 'proof', name: 'proof.png' }] }));
+    const expanded = String(QuickTicketComposer({ expanded: true, title: 'New work', details: 'Why this matters', category: 'bug', upNext: true, attachments: [{ id: 'proof', name: 'proof.png' }] }));
     expect(expanded).toContain('data-ticket-drop-action="duplicate"');
     expect(expanded).toContain('data-action="create-ticket-form"');
     expect(expanded).toContain('value="New work"');
     expect(expanded).toContain('data-lucide="bug"');
+    expect(expanded).toContain('name="new-ticket-details" rows="1">Why this matters</textarea>');
+    expect(expanded).toContain('data-action="toggle-new-ticket-up-next"');
+    expect(expanded).toContain('aria-pressed="true"');
+    expect(expanded).toContain('data-lucide="star"');
     expect(expanded).toContain('Browse attachments for new ticket');
     expect(expanded).toContain('Drop attachment files anywhere in this area or browse');
     expect(expanded).toContain('data-pending-attachment-id="proof"');
@@ -31,6 +35,12 @@ describe('QuickTicketComposer', () => {
     expect(disabled).toContain('does not support attachments');
     expect(disabled).not.toContain('name="new-ticket-attachments"');
     expect(disabled).toContain('disabled');
+  });
+
+  it('keeps one-line details vertically resizable and places Up Next after category',()=>{
+    const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8'),markup=String(QuickTicketComposer({expanded:true}));
+    expect(markup).toMatch(/new-ticket-category[\s\S]*toggle-new-ticket-up-next[\s\S]*new-ticket-details/);
+    expect(css).toMatch(/__details textarea \{[^}]*min-height: 2\.5rem;[^}]*resize: vertical/);
   });
 
   it('shows creation progress and attachment errors accessibly', () => {

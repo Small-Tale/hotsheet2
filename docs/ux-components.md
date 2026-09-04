@@ -285,12 +285,14 @@ always retain native clipboard behavior.
 
 - `ViewHeading`
 - `QuickTicketComposer` — **demo built**: compact launcher expands to title/category,
-  provider destination, required-title validation, create, and cancel states; creation
+  an adjacent Up Next star, a one-line vertically resizable Details field, provider
+  destination, required-title validation, create, and cancel states; creation
   inserts a selected mock ticket into the shared collection. The collapsed launcher and
   expanded form are attachment drop targets. Dropped or browsed files are safety-screened,
   shown as removable pending evidence, cleared on cancellation, and uploaded after the
   ticket is created when the selected provider supports both operations. Category choices use
   the shared colored/iconic picker in both its selected and menu presentations;
+  the star sends explicit Up Next placement and takes precedence over Backlog-view creation;
   created mock tickets derive their category icon/color from that same choice model.
   Textual Cancel intentionally has no redundant icon.
   - compact “New ticket…” entry

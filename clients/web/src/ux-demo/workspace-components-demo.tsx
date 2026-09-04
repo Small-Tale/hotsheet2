@@ -19,7 +19,9 @@ export const workspaceSort = signal<WorkspaceSort>('updated');
 export const workspaceSortDirection = signal<WorkspaceSortDirection>(defaultWorkspaceSortDirection(workspaceSort.value));
 export const composerExpanded = signal(false);
 export const composerTitle = signal('');
+export const composerDetails = signal('');
 export const composerCategory = signal('task');
+export const composerUpNext = signal(false);
 export const inspectorOpen = signal(true);
 export const inspectorTab = signal<InspectorTab>('info');
 export const inspectorCategory = signal('feature');
@@ -73,9 +75,11 @@ export function createDemoTicket(): boolean {
   if (!title) return false;
   const slug = `HS2-DEMO${demoSequence++}`;
   const category = DEFAULT_TICKET_CATEGORIES.find(choice => choice.value === composerCategory.value)!;
-  collectionTickets.value = [{ slug, title, status: 'not_started', priority: 'default', category: category.value, tags: ['new'], selected: true, categoryIcon: category.iconName, categoryColor: category.color, updatedLabel: 'Now' }, ...collectionTickets.value.map(ticket => ({ ...ticket, selected: false }))];
+  collectionTickets.value = [{ slug, title, status: 'not_started', priority: 'default', category: category.value, tags: ['new'], selected: true, upNext: composerUpNext.value, categoryIcon: category.iconName, categoryColor: category.color, updatedLabel: 'Now' }, ...collectionTickets.value.map(ticket => ({ ...ticket, selected: false }))];
   composerExpanded.value = false;
   composerTitle.value = '';
+  composerDetails.value = '';
+  composerUpNext.value = false;
   collectionEvent.value = `${slug} created`;
   return true;
 }
@@ -99,7 +103,7 @@ export function PageHeaderDemo() { return <section class="workspace-component-de
 
 export function QuickTicketComposerDemo() {
   return <section class="workspace-component-demo" aria-label="QuickTicketComposer demo">
-    <QuickTicketComposer expanded={composerExpanded.value} title={composerTitle.value} category={composerCategory.value} providerName="Hot Sheet git" />
+    <QuickTicketComposer expanded={composerExpanded.value} title={composerTitle.value} details={composerDetails.value} category={composerCategory.value} upNext={composerUpNext.value} providerName="Hot Sheet git" />
     <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
   </section>;
