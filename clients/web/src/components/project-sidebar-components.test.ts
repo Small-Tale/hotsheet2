@@ -46,12 +46,18 @@ describe('ProjectSidebar component slice', () => {
   });
 
   it('renders repository status as one discoverable action', () => {
-    const markup = String(RepositorySummary({ branch: 'main', unpushed: 3, uncommitted: 1 }));
-    expect(markup).toContain('Repository status for main');
+    const markup = String(RepositorySummary({ branch: 'main', unpushed: 3, behind: 2, uncommitted: 1 }));
+    expect(markup).toContain('Repository status for main: 3 ahead, 2 behind, 1 uncommitted, 0 conflicted');
     expect(markup).toContain('data-lucide="git-branch"');
     expect(markup).toContain('repository-summary__branch-name');
     expect(markup).toContain('3 unpushed commits');
+    expect(markup).toContain('2 commits behind');
     expect(markup).not.toContain('data-lucide="file-pen-line"');
+  });
+
+  it('makes repository failures and conflicts visible from the collapsed summary',()=>{
+    expect(String(RepositorySummary({branch:'main',unpushed:0,uncommitted:0,error:true}))).toContain('data-state="error"');
+    expect(String(RepositorySummary({branch:'main',unpushed:0,uncommitted:0,conflicted:2}))).toContain('data-state="conflicted"');
   });
 
   it('projects current view, counts, and attention', () => {

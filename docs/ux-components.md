@@ -142,12 +142,13 @@ does not introduce polling or another network request.
   a one-pixel neutral baseline mark so all seven day positions remain visible.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
-- `RepositorySummary` — **demo built**: one accessible branch/status action with
+- `RepositorySummary` — **production built**: one accessible branch/status action with
   unpushed and uncommitted counts. The uncommitted count remains text-only to avoid
   crowding the already icon-rich row.
   - `BranchChip`
   - unpushed and uncommitted counts
-  - opens the repository-status popover tracked by HS2-RPVFA4
+  - opens the production repository-status popover with full counts, explicit refresh,
+    and clean/dirty/ahead/behind/conflict/error presentation (HS2-RPVFA4)
 - `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.

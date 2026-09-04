@@ -233,6 +233,13 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   additionally requires the Up Next flag. Mutations and long-poll-driven collection refreshes
   update the summary reactively; the summary itself performs no polling or network request.
 
+  The repository row is also the checkout's compact status chip. It distinguishes clean,
+  dirty, ahead, behind, conflicted, and unavailable states from the checkout-scoped status
+  snapshot. Activating it opens a repository popover with branch/upstream identity and the
+  complete ahead, behind, staged, unstaged, untracked, and conflicted counts. Repository
+  failures remain local to this surface instead of hiding the project, and its explicit
+  Refresh action performs one request; the status surface never introduces simple polling.
+
   The real inspector's attachment surface materializes ordinary-sized browsed and
   dropped files before upload, so a macOS promised screenshot cannot disappear while
   `fetch` lazily reads it. Empty, unreadable, and short-read files are rejected with

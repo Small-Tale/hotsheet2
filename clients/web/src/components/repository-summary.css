@@ -5,4 +5,6 @@
 .repository-summary__branch-name { min-width: 0; overflow: hidden; direction: rtl; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .repository-summary__metric { color: var(--wa-color-text-link); font-size: var(--wa-font-size-xs); font-variant-numeric: tabular-nums; }
 .repository-summary__metric--changes { padding: .05rem .38rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-border-quiet); }
+.repository-summary[data-state="conflicted"] .menu-item__icon, .repository-summary[data-state="error"] .menu-item__icon, .repository-summary__metric--error { color: var(--wa-color-danger-on-quiet); }
+.repository-summary__metric--error { font-size: var(--wa-font-size-2xs); }
 .repository-summary svg { width: .9rem; height: .9rem; flex: none; }
