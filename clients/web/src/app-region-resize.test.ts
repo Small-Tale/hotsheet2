@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isAppRegionId, loadAppRegionSize, normalizeAppRegionSize, saveAppRegionSize } from './app-region-resize';
+import { isAppRegionId, loadAppRegionSize, normalizeAppRegionSize, saveAppRegionSize, terminalDrawerMaximum } from './app-region-resize';
 
 describe('production app region sizing', () => {
   it('recognizes only production shell regions and clamps their independent bounds', () => {
@@ -14,7 +14,9 @@ describe('production app region sizing', () => {
     expect(normalizeAppRegionSize('app-inspector', 900)).toBe(520);
   });
 
-  it('persists a bounded vertical terminal drawer height',()=>{const storage=new Map<string,string>(),adapter={getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>{storage.set(key,value)}};expect(saveAppRegionSize(adapter,'app-terminal-drawer',700)).toBe(520);expect(loadAppRegionSize(adapter,'app-terminal-drawer')).toBe(520)});
+  it('persists drawer heights above the old fixed cap for layout-time clamping',()=>{const storage=new Map<string,string>(),adapter={getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>{storage.set(key,value)}};expect(saveAppRegionSize(adapter,'app-terminal-drawer',700)).toBe(700);expect(loadAppRegionSize(adapter,'app-terminal-drawer')).toBe(700)});
+
+  it('measures the drawer maximum from the shell bottom to the work-area top',()=>{expect(terminalDrawerMaximum(900,164)).toBe(736);expect(terminalDrawerMaximum(220,100)).toBe(180)});
 
   it('loads defaults for missing or invalid values and persists normalized values', () => {
     const values = new Map<string, string>();

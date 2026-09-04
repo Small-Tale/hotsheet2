@@ -467,9 +467,11 @@ and one dedicated existing session, creates a new shell only from the explicit p
 action, exposes hidden-session recovery, and collapses to one floating restore button.
 Global project/terminal jump actions open this drawer on the matching project and terminal.
 Drawer visibility, height, selected terminal per project, and independent short-container
-zoom are device-local. Its accessible vertical splitter persists a 180–520 px height;
-because this container is at most 520 px tall, grid zoom uses the 1–3 high model and
-continues horizontally. Magnification remains a temporary viewer over the same PTY.
+zoom are device-local. Its accessible vertical splitter persists heights from 180px
+through the live boundary immediately below `PageHeader`, so it can consume the full
+ticket work area on taller windows instead of stopping at the former 520px cap. Grid
+zoom continues to select its across/high model from the drawer's actual measured height.
+Magnification remains a temporary viewer over the same PTY.
 
 ## 6.7 Terminal display & multi-viewer PTY sizing
 

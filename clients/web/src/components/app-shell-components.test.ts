@@ -78,6 +78,7 @@ describe('application shell components', () => {
   it('composes the terminal drawer as a center-only vertical region with collapsed recovery',()=>{
     const open=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never,terminalDrawerVisible:true,terminalDrawerSize:340}));
     expect(open).toContain('data-region-id="app-terminal-drawer"');expect(open).toContain('data-axis="vertical"');expect(open).toContain('data-edge="start"');expect(open).toContain('aria-valuenow="340"');expect(open.indexOf('data-region-id="app-terminal-drawer"')).toBeLessThan(open.indexOf('</main>'));
+    const tall=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never,terminalDrawerVisible:true,terminalDrawerSize:700,terminalDrawerMax:760}));expect(tall).toContain('aria-valuemax="760"');expect(tall).toContain('aria-valuenow="700"');
     const collapsed=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never}));expect(collapsed).toContain('data-collapsed="true"');expect(collapsed).toContain('aria-label="Show terminal drawer"');
   });
 
