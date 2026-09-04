@@ -683,7 +683,8 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   whitespace, which would create artificial blank lines between list items.
 - **`activity` notes render in both Notes and the chronological Timeline** ordered by
   `created_at` (ULID tie-breaker). Notes retains the complete Markdown record with a
-  quieter Activity presentation; Timeline is a compact index containing only the
+  quieter, unfilled, smaller Activity presentation so regular notes retain primary
+  reading emphasis; Timeline is a compact index containing only the
   optional durable `summary` headline. It never repeats the full body or a subtitle.
   New AI-authored activity notes supply a plain-text, one-line, outcome-oriented
   `note_summary` in the same write. Legacy notes and providers without structured

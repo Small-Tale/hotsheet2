@@ -30,9 +30,11 @@
 .note-card__inline-reply-row button { display: inline-grid; width: var(--wa-space-xl); height: var(--wa-space-xl); flex: none; padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
 .note-card__inline-reply-row button:hover { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); }
 .note-card__inline-reply-row button svg { width: var(--wa-space-m); height: var(--wa-space-m); }
-.note-card[data-kind="status"], .note-card[data-kind="activity"] { border-color: transparent; background: var(--wa-color-neutral-fill-normal); }
+.note-card[data-kind="status"] { border-color: transparent; background: var(--wa-color-neutral-fill-normal); }
 .note-card[data-kind="status"] .note-card__kind { color: var(--wa-color-text-link); }
-.note-card[data-kind="activity"] .note-card__kind { color: var(--wa-color-neutral-on-quiet); }
+.note-card[data-kind="activity"] { padding: var(--wa-space-s) var(--wa-space-m); border-color: transparent; background: transparent; gap: var(--wa-space-2xs); }
+.note-card[data-kind="activity"] .note-card__kind { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: var(--wa-font-weight-semibold); }
+.note-card[data-kind="activity"] .note-card__body { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.4; }
 .note-card[data-kind="feedback_needed"], .note-card[data-kind="feedback_draft"] { border-color: var(--wa-color-warning-border-normal); background: var(--wa-color-warning-fill-quiet); }
 .note-card[data-kind="feedback_needed"] .note-card__kind, .note-card[data-kind="feedback_draft"] .note-card__kind { color: var(--wa-color-warning-on-quiet); }
 .note-card[data-acknowledgement="true"] { border-color: transparent; background: var(--wa-color-neutral-fill-quiet); }
