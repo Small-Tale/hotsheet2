@@ -5115,14 +5115,20 @@ async fn claim_next_release_renew_over_http() {
         .oneshot(authed("POST", "/claim-next", Some(r#"{"worker":"w1"}"#)))
         .await
         .unwrap();
-    app.clone()
-        .oneshot(authed(
-            "PATCH",
-            &format!("/tickets/{slug}"),
-            Some(r#"{"status":"completed"}"#),
-        ))
-        .await
-        .unwrap();
+    let completed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/tickets/{slug}"),
+                Some(r#"{"status":"completed"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(completed["claimed_by"].is_null());
+    assert!(completed["claim_lease_expires_at"].is_null());
+    assert!(completed["worker_label"].is_null());
     let resp = app
         .clone()
         .oneshot(authed("POST", "/claim-next", Some(r#"{}"#)))

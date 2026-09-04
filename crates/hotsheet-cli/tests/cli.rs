@@ -1180,6 +1180,26 @@ fn exact_claim_accepts_slug_and_ulid_without_changing_status_or_retry_count() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("claimed by 'agent-1'"));
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--status",
+            "completed",
+            "--note",
+            "Finished work",
+        ])
+        .assert()
+        .success();
+    hs(p)
+        .args(["show", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("status: completed"))
+        .stdout(predicate::str::contains("claimed_by").not())
+        .stdout(predicate::str::contains("claim_lease_expires_at").not())
+        .stdout(predicate::str::contains("worker_label").not());
 }
 
 #[test]

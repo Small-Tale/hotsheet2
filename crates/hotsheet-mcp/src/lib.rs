@@ -2226,11 +2226,14 @@ mod tests {
         );
         // ... after releasing, the ticket is claimable again, so claim it, then complete it.
         assert_eq!(none["slug"], slug, "released ticket is claimable again");
-        call(
+        let completed = call(
             &backend,
             "hotsheet_update",
             json!({ "id": slug, "status": "completed" }),
         );
+        assert!(completed["claimed_by"].is_null());
+        assert!(completed["claim_lease_expires_at"].is_null());
+        assert!(completed["worker_label"].is_null());
         let empty = call(
             &backend,
             "hotsheet_claim_next",

@@ -464,6 +464,7 @@ pub fn update(
         // any up_next in this same patch, so a move out of active always wins (HS2-55610S).
         if !s.is_active() {
             t.up_next = false;
+            clear_claim_fields(&mut t);
         } else if t.close_reason.is_some() {
             // Reopening — moving back to an active status — clears the close annotation
             // (close_reason/closed_at/duplicate_of), per HS2-61.
@@ -471,15 +472,25 @@ pub fn update(
             t.closed_at = None;
             t.duplicate_of = None;
         }
+        if s.is_active() && !previous_status.is_active() {
+            clear_claim_fields(&mut t);
+        }
     }
     // Also covers `--up-next` on an already-inactive ticket when no status is present in
     // this patch. Up Next is only meaningful for not_started/started.
     if !t.status.is_active() {
         t.up_next = false;
+        clear_claim_fields(&mut t);
     }
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
+}
+
+fn clear_claim_fields(ticket: &mut Ticket) {
+    ticket.claimed_by = None;
+    ticket.claim_lease_expires_at = None;
+    ticket.worker_label = None;
 }
 
 fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: &Timestamp) {
@@ -563,6 +574,7 @@ pub fn prepare_not_working(
     let previous = ticket.status;
     ticket.status = Status::NotStarted;
     ticket.up_next = true;
+    clear_claim_fields(ticket);
     ticket.close_reason = None;
     ticket.closed_at = None;
     ticket.duplicate_of = None;
@@ -721,6 +733,7 @@ pub fn close(
     }
     // A closed ticket is no longer Up Next, whatever its status field (HS2-55610S).
     t.up_next = false;
+    clear_claim_fields(&mut t);
     t.updated_at = now;
     store.write_ticket_committing(&t)?;
     Ok(t)
@@ -2213,6 +2226,77 @@ mod tests {
         renew(&store, &claimed.id, now.clone(), lease.clone(), "w1").unwrap();
         let released = release(&store, &claimed.id, now, "w1", false).unwrap();
         assert!(released.claimed_by.is_none());
+    }
+
+    #[test]
+    fn terminal_status_changes_release_claims_and_heal_legacy_coordination() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FA0").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "claimed work".into(),
+                category: "task".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        claim(
+            &store,
+            &id,
+            &ts("2026-08-19T00:10:00Z"),
+            ts("2026-08-19T01:10:00Z"),
+            "worker-1",
+            Some("Codex".into()),
+        )
+        .unwrap();
+
+        let completed = update(
+            &store,
+            &id,
+            ts("2026-08-19T00:20:00Z"),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(completed.claimed_by.is_none());
+        assert!(completed.claim_lease_expires_at.is_none());
+        assert!(completed.worker_label.is_none());
+        assert_eq!(completed.claim_count, 1, "claim history is retained");
+
+        let mut legacy = completed;
+        legacy.claimed_by = Some("stale-worker".into());
+        legacy.claim_lease_expires_at = Some(ts("2026-08-19T02:00:00Z"));
+        legacy.worker_label = Some("Legacy".into());
+        store.write_ticket_committing(&legacy).unwrap();
+        let healed = update(
+            &store,
+            &id,
+            ts("2026-08-19T00:30:00Z"),
+            TicketPatch {
+                title: Some("edited completed work".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(healed.claimed_by.is_none());
+
+        let reopened = update(
+            &store,
+            &id,
+            ts("2026-08-19T00:40:00Z"),
+            TicketPatch {
+                status: Some(Status::NotStarted),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(reopened.claimed_by.is_none());
     }
 
     #[test]

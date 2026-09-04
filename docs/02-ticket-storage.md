@@ -430,6 +430,9 @@ primitive (carried from HS1 `src/db/claims.ts`) means at most one worker activel
 edits a given ticket at a time; the write chokepoint rejects a write to a ticket
 another actor holds a live lease on. So two *simultaneous* edits to one ticket are
 already the exception. See [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7.
+Moving a ticket to any terminal status automatically clears `claimed_by`,
+`claim_lease_expires_at`, and `worker_label`, so completion cannot continue advertising
+active work. Reopening a legacy terminal ticket clears stale claim metadata as well.
 
 **3 — A semantic git merge driver makes same-ticket merges automatic.** When two
 branches *do* touch the same ticket file (e.g. an offline edit merged against an

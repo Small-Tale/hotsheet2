@@ -235,12 +235,12 @@ test('lists associated commits and opens a validated commit or range in the conf
 });
 
 test('shows active work only for the lifetime of a live ticket claim lease',async({page})=>{
-  await mockProject(page);const expires=new Date(Date.now()+5_000).toISOString(),active={...row,claimed_by:'codex-worker',worker_label:'Codex',claim_lease_expires_at:expires,claim_count:1},previouslyClaimed={...startedRow2,claim_count:4};
-  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:[active,previouslyClaimed]}):route.fallback());
+  await mockProject(page);const expires=new Date(Date.now()+5_000).toISOString(),active={...row,claimed_by:'codex-worker',worker_label:'Codex',claim_lease_expires_at:expires,claim_count:1},previouslyClaimed={...startedRow2,claim_count:4},legacyCompleted={...completedRow,claimed_by:'stale-worker',worker_label:'Stale',claim_lease_expires_at:expires,claim_count:1};
+  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:[active,previouslyClaimed,legacyCompleted]}):route.fallback());
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();await page.waitForTimeout(500);
   const activeRow=page.locator('[data-ticket-slug="HS2-DEMO01"]'),idleRow=page.locator('[data-ticket-slug="HS2-START02"]'),indicator=activeRow.locator('.ticket-list-row__active-work'),workSummary=page.locator('[data-component="project-work-summary"]');
   await expect(workSummary).toContainText('1 active');
-  await expect(indicator).toHaveAttribute('aria-label','Codex actively working');await expect(idleRow.locator('.ticket-list-row__active-work')).toHaveCount(0);expect(await activeRow.locator('.ticket-list-row__metadata').evaluate(node=>[...node.children].map(child=>child.className))).toEqual(expect.arrayContaining(['ticket-list-row__active-work']));
+  await expect(indicator).toHaveAttribute('aria-label','Codex actively working');await expect(idleRow.locator('.ticket-list-row__active-work')).toHaveCount(0);await expect(page.locator('[data-ticket-slug="HS2-DONE01"] .ticket-list-row__active-work')).toHaveCount(0);expect(await activeRow.locator('.ticket-list-row__metadata').evaluate(node=>[...node.children].map(child=>child.className))).toEqual(expect.arrayContaining(['ticket-list-row__active-work']));
   await page.screenshot({path:'/private/tmp/hs2-w77014-active-work-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(indicator).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-w77014-active-work-narrow.png',fullPage:true});
   await expect(indicator).toHaveCount(0,{timeout:6_000});await expect(workSummary).toContainText('0 active');
 });
