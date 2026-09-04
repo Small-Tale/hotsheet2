@@ -34,10 +34,10 @@ const viewDefinitions=[
   {id:'commits',label:'Commits',icon:GitCommitHorizontal},
 ] as const;
 
-export function RepositoryStatusPopover({status,error='',refreshing=false,view='unstaged',fileMenu,embedded=false,comparison,expandedCommits}:{status:RepositoryStatus|null;error?:string;refreshing?:boolean;view?:RepositoryStatusView;fileMenu?:RepositoryFileMenu;embedded?:boolean;comparison?:CodeReviewComparison;expandedCommits?:readonly string[]}){
+export function RepositoryStatusPopover({status,error='',refreshing=false,view='unstaged',fileMenu,embedded=false,comparison,expandedCommits,detailFiles,detailCommits,detailLoading=false,detailError='',detailHasMore=false}:{status:RepositoryStatus|null;error?:string;refreshing?:boolean;view?:RepositoryStatusView;fileMenu?:RepositoryFileMenu;embedded?:boolean;comparison?:CodeReviewComparison;expandedCommits?:readonly string[];detailFiles?:RepositoryFile[];detailCommits?:CodeReview['commits'];detailLoading?:boolean;detailError?:string;detailHasMore?:boolean}){
   const state=repositoryStatusState(status,error),branch=status?.branch||'No branch',upstream=status?.upstream||'No upstream';
-  const files=repositoryFilesForView(status?.files??[],view);
-  const review:CodeReview|undefined=status?{commits:status.commits??[],ranges:status.ranges??[],difftool:status.difftool,truncated:Boolean(status.truncated)}:undefined;
+  const files=repositoryFilesForView(detailFiles??status?.files??[],view);
+  const review:CodeReview|undefined=status?{commits:detailCommits??status.commits??[],ranges:status.ranges??[],difftool:status.difftool,truncated:Boolean(status.truncated)}:undefined;
   return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'repository-status-popover'} class="repository-status-popover" data-component="repository-status-popover" data-state={state} data-view={view} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="repository-status-title">
     <header><span class="repository-status-popover__icon"><LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/></span><div><h2 id="repository-status-title">Repository Status</h2><p>{stateCopy[state]}</p></div><button type="button" class="repository-status-popover__refresh" data-action="refresh-repository-status" disabled={refreshing} aria-label={refreshing?'Refreshing repository status':'Refresh repository status'}><LucideIcon icon={RefreshCw} name="refresh-cw"/></button></header>
     {status&&<div class="repository-status-popover__layout"><aside>
@@ -45,7 +45,9 @@ export function RepositoryStatusPopover({status,error='',refreshing=false,view='
       <dl class="repository-status-popover__values"><div><dt>Ahead</dt><dd><LucideIcon icon={ArrowUp} name="arrow-up"/>{status.ahead}</dd></div><div><dt>Behind</dt><dd><LucideIcon icon={ArrowDown} name="arrow-down"/>{status.behind}</dd></div></dl>
       <nav aria-label="Repository views"><MenuHeader label="Views"/>{viewDefinitions.map(item=><MenuItem action="select-repository-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'square-pen':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/>} label={item.label} trailing={<small class="menu-item__count">{repositoryViewCount(status,item.id)}</small>}/>)}</nav>
     </aside><main class="repository-status-popover__detail" aria-live="polite">
-      {view==='commits'?<TicketCodeReview embedded title="Commits" emptyMessage="No commits were found in this repository." loadingMessage="Finding commits…" action="open-repository-review" review={review} comparison={comparison} expandedCommits={expandedCommits}/>:<RepositoryFileList files={files} view={view}/>}
+      {view==='commits'?<TicketCodeReview embedded title="Commits" emptyMessage="No commits were found in this repository." loadingMessage="Finding commits…" action="open-repository-review" review={review} comparison={comparison} expandedCommits={expandedCommits} loading={detailLoading&&review?.commits.length===0}/>:<RepositoryFileList files={files} view={view} loading={detailLoading}/>}
+      {detailError&&<p class="repository-status-popover__detail-error" role="alert">{detailError}</p>}
+      {(detailHasMore||detailLoading)&&<div class="repository-status-popover__pagination" data-repository-pagination-sentinel="true" role="status">{detailLoading?'Loading more…':'Load more'}</div>}
     </main></div>}
     {!status&&!error&&<p class="repository-status-popover__loading" role="status">Loading repository status…</p>}
     {error&&<p class="repository-status-popover__error" role="alert">{error}</p>}
@@ -53,7 +55,8 @@ export function RepositoryStatusPopover({status,error='',refreshing=false,view='
   </section>;
 }
 
-function RepositoryFileList({files,view}:{files:RepositoryFile[];view:Exclude<RepositoryStatusView,'commits'>}){
+function RepositoryFileList({files,view,loading=false}:{files:RepositoryFile[];view:Exclude<RepositoryStatusView,'commits'>;loading?:boolean}){
+  if(files.length===0&&loading)return <></>;
   if(files.length===0)return <div class="repository-status-popover__empty"><LucideIcon icon={CircleCheck} name="circle-check"/><p>No {view} files.</p></div>;
   return <div class="repository-status-popover__files" role="list" aria-label={`${view} files`}>{files.map(file=>{
     const change=repositoryFileChange(file,view);

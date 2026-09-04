@@ -3,11 +3,11 @@
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use hotsheet_ticketing::repository_status::{self, RepositoryStatus};
+use hotsheet_ticketing::repository_status::{self, RepositoryFile, RepositoryStatus};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::code_review::{self, CodeReview, CodeReviewCommit, CodeReviewRange};
+use crate::code_review::{self, CodeReviewCommit, CodeReviewRange};
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -40,6 +40,38 @@ pub struct RepositoryOverview {
     pub truncated: bool,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct RepositoryPage<T> {
+    pub items: Vec<T>,
+    pub next_cursor: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RepositoryFileView {
+    Staged,
+    Unstaged,
+    Untracked,
+    Conflicted,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
+pub struct RepositoryPageQuery {
+    #[serde(default)]
+    pub cursor: usize,
+    #[serde(default = "default_page_limit")]
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct RepositoryFilePageQuery {
+    pub view: RepositoryFileView,
+    #[serde(default)]
+    pub cursor: usize,
+    #[serde(default = "default_page_limit")]
+    pub limit: usize,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RepositoryFileAction {
@@ -70,23 +102,59 @@ pub enum RepositoryBrowserError {
 }
 
 pub fn discover(root: &Path) -> Result<RepositoryOverview, RepositoryBrowserError> {
-    let status = repository_status::snapshot(root)?;
-    let CodeReview {
-        commits,
-        ranges,
-        difftool,
-        truncated,
-    } = code_review::discover_repository(root, status.ahead as usize)?;
+    let mut status = repository_status::snapshot(root)?;
+    let (ranges, difftool) =
+        code_review::discover_repository_metadata(root, status.ahead as usize)?;
+    status.files.clear();
     Ok(RepositoryOverview {
         root: root.display().to_string(),
         platform: HostPlatform::current(),
         commit_count: commit_count(root),
         status,
-        commits,
+        commits: Vec::new(),
         ranges,
         difftool,
-        truncated,
+        truncated: false,
     })
+}
+
+pub fn files_page(
+    root: &Path,
+    query: RepositoryFilePageQuery,
+) -> Result<RepositoryPage<RepositoryFile>, RepositoryBrowserError> {
+    let status = repository_status::snapshot(root)?;
+    let limit = query.limit.clamp(1, 100);
+    let mut matching = status
+        .files
+        .into_iter()
+        .filter(|file| match query.view {
+            RepositoryFileView::Staged => file.staged.is_some() && !file.conflicted,
+            RepositoryFileView::Unstaged => {
+                file.unstaged.is_some() && !file.untracked && !file.conflicted
+            }
+            RepositoryFileView::Untracked => file.untracked,
+            RepositoryFileView::Conflicted => file.conflicted,
+        })
+        .skip(query.cursor)
+        .take(limit + 1)
+        .collect::<Vec<_>>();
+    let has_more = matching.len() > limit;
+    matching.truncate(limit);
+    Ok(RepositoryPage {
+        next_cursor: has_more.then_some(query.cursor + matching.len()),
+        items: matching,
+    })
+}
+
+pub fn commits_page(
+    root: &Path,
+    query: RepositoryPageQuery,
+) -> Result<code_review::CodeReviewPage, RepositoryBrowserError> {
+    code_review::discover_repository_page(root, query.cursor, query.limit).map_err(Into::into)
+}
+
+fn default_page_limit() -> usize {
+    50
 }
 
 pub fn act_on_file(

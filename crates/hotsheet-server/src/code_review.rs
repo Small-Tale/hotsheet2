@@ -44,6 +44,12 @@ pub struct CodeReview {
     pub truncated: bool,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CodeReviewPage {
+    pub items: Vec<CodeReviewCommit>,
+    pub next_cursor: Option<usize>,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum ReviewTarget {
@@ -98,6 +104,66 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     })
 }
 
+pub fn discover_repository_metadata(
+    root: &Path,
+    ahead: usize,
+) -> Result<(Vec<CodeReviewRange>, Option<String>), CodeReviewError> {
+    if !git_success(root, &["rev-parse", "--git-dir"]) {
+        return Err(CodeReviewError::NotRepository);
+    }
+    let difftool = git_output(root, &["config", "--get", "diff.tool"])
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let ranges = if ahead > 1 && git_success(root, &["rev-parse", "--verify", "HEAD"]) {
+        let to = git_output(root, &["rev-parse", "HEAD"])?.trim().to_owned();
+        let from = git_output(root, &["rev-parse", &format!("HEAD~{}", ahead - 1)])?
+            .trim()
+            .to_owned();
+        vec![CodeReviewRange {
+            from,
+            to,
+            count: ahead,
+        }]
+    } else {
+        Vec::new()
+    };
+    Ok((ranges, difftool))
+}
+
+pub fn discover_repository_page(
+    root: &Path,
+    cursor: usize,
+    limit: usize,
+) -> Result<CodeReviewPage, CodeReviewError> {
+    if !git_success(root, &["rev-parse", "--git-dir"]) {
+        return Err(CodeReviewError::NotRepository);
+    }
+    let requested = limit.clamp(1, 100);
+    let output = match git_output(
+        root,
+        &[
+            "log",
+            &format!("--skip={cursor}"),
+            "-n",
+            &(requested + 1).to_string(),
+            &log_format(),
+            "HEAD",
+        ],
+    ) {
+        Ok(output) => output,
+        Err(_) if !git_success(root, &["rev-parse", "--verify", "HEAD"]) => String::new(),
+        Err(error) => return Err(error),
+    };
+    let mut items = parse_log(&output);
+    let has_more = items.len() > requested;
+    items.truncate(requested);
+    Ok(CodeReviewPage {
+        next_cursor: has_more.then_some(cursor + items.len()),
+        items,
+    })
+}
+
 fn repository_range(commits: &[CodeReviewCommit], ahead: usize) -> Option<CodeReviewRange> {
     let count = ahead.min(commits.len());
     (count > 1).then(|| CodeReviewRange {
@@ -119,15 +185,7 @@ fn discover_commits(
         .filter(|value| !value.is_empty());
     let output = match git_output(
         root,
-        &[
-            "log",
-            "-n",
-            &LOG_LIMIT.to_string(),
-            &format!(
-                "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{RECORD_SEPARATOR}"
-            ),
-            "HEAD",
-        ],
+        &["log", "-n", &LOG_LIMIT.to_string(), &log_format(), "HEAD"],
     ) {
         Ok(output) => output,
         Err(_) if !git_success(root, &["rev-parse", "--verify", "HEAD"]) => String::new(),
@@ -136,6 +194,12 @@ fn discover_commits(
     let all = parse_log(&output);
     let truncated = all.len() == LOG_LIMIT;
     Ok((all, difftool, truncated))
+}
+
+fn log_format() -> String {
+    format!(
+        "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{RECORD_SEPARATOR}"
+    )
 }
 
 pub fn launch(
@@ -147,6 +211,74 @@ pub fn launch(
         return Err(CodeReviewError::DifftoolNotConfigured);
     }
     let (old, new) = launch_revisions(root, review, target)?;
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["difftool", "--no-prompt", &old, &new])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| CodeReviewError::Launch(error.to_string()))
+}
+
+pub fn launch_repository(
+    root: &Path,
+    ahead: usize,
+    target: &ReviewTarget,
+) -> Result<(), CodeReviewError> {
+    let (ranges, difftool) = discover_repository_metadata(root, ahead)?;
+    if difftool.is_none() {
+        return Err(CodeReviewError::DifftoolNotConfigured);
+    }
+    let revisions = match target {
+        ReviewTarget::Commit { commit } => {
+            validate_reachable_commit(root, commit)?;
+            (commit_parent_or_empty_tree(root, commit)?, commit.clone())
+        }
+        ReviewTarget::Range { from, to } => {
+            let range = ranges
+                .iter()
+                .find(|range| range.from == *from && range.to == *to)
+                .ok_or(CodeReviewError::InvalidTarget)?;
+            (
+                commit_parent_or_empty_tree(root, &range.from)?,
+                range.to.clone(),
+            )
+        }
+        ReviewTarget::Compare { from, to } => {
+            if from == to {
+                return Err(CodeReviewError::InvalidTarget);
+            }
+            validate_reachable_commit(root, from)?;
+            validate_reachable_commit(root, to)?;
+            (from.clone(), to.clone())
+        }
+    };
+    spawn_difftool(root, revisions)
+}
+
+fn validate_reachable_commit(root: &Path, commit: &str) -> Result<(), CodeReviewError> {
+    if commit.len() != 40 || !commit.bytes().all(|value| value.is_ascii_hexdigit()) {
+        return Err(CodeReviewError::InvalidTarget);
+    }
+    if !git_success(root, &["merge-base", "--is-ancestor", commit, "HEAD"]) {
+        return Err(CodeReviewError::InvalidTarget);
+    }
+    Ok(())
+}
+
+fn commit_parent_or_empty_tree(root: &Path, commit: &str) -> Result<String, CodeReviewError> {
+    git_output(root, &["rev-parse", &format!("{commit}^")])
+        .map(|value| value.trim().to_owned())
+        .or_else(|_| {
+            git_output(root, &["hash-object", "-t", "tree", "--stdin"])
+                .map(|value| value.trim().to_owned())
+        })
+}
+
+fn spawn_difftool(root: &Path, (old, new): (String, String)) -> Result<(), CodeReviewError> {
     Command::new("git")
         .arg("-C")
         .arg(root)

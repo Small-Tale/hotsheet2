@@ -1232,6 +1232,19 @@ async fn repository_status_endpoint_reports_real_git_state() {
         "-qm",
         "initial",
     ]);
+    std::fs::write(checkout.path().join("second.txt"), "second\n").unwrap();
+    run(&["add", "second.txt"]);
+    run(&[
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-qm",
+        "second",
+        "-m",
+        "Detailed **Markdown** message",
+    ]);
     std::fs::write(checkout.path().join("tracked.txt"), "two\n").unwrap();
     std::fs::write(checkout.path().join("new.txt"), "new\n").unwrap();
     let registry_home = tempfile::tempdir().unwrap();
@@ -1262,19 +1275,67 @@ async fn repository_status_endpoint_reports_real_git_state() {
             .display()
             .to_string()
     );
-    assert_eq!(status["commit_count"], 1);
-    assert_eq!(status["commits"].as_array().unwrap().len(), 1);
-    let files = status["files"].as_array().unwrap();
+    assert_eq!(status["commit_count"], 2);
+    assert!(status["commits"].as_array().unwrap().is_empty());
+    assert!(status["files"].as_array().unwrap().is_empty());
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/checkouts/repo/repository/files?view=unstaged&limit=1",
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let file_page = body_json(resp).await;
+    let files = file_page["items"].as_array().unwrap();
     assert!(
         files
             .iter()
             .any(|file| file["path"] == "tracked.txt" && file["unstaged"] == "modified")
     );
-    assert!(
-        files
-            .iter()
-            .any(|file| file["path"] == "new.txt" && file["untracked"] == true)
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/checkouts/repo/repository/files?view=untracked&limit=1",
+            None,
+        ))
+        .await
+        .unwrap();
+    let file_page = body_json(resp).await;
+    assert_eq!(file_page["items"][0]["path"], "new.txt");
+    assert_eq!(file_page["items"][0]["untracked"], true);
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/checkouts/repo/repository/commits?limit=1",
+            None,
+        ))
+        .await
+        .unwrap();
+    let commit_page = body_json(resp).await;
+    assert_eq!(commit_page["items"].as_array().unwrap().len(), 1);
+    assert_eq!(commit_page["items"][0]["subject"], "second");
+    assert_eq!(
+        commit_page["items"][0]["body"],
+        "Detailed **Markdown** message"
     );
+    assert_eq!(commit_page["next_cursor"], 1);
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            "/checkouts/repo/repository/commits?cursor=1&limit=1",
+            None,
+        ))
+        .await
+        .unwrap();
+    let commit_page = body_json(resp).await;
+    assert_eq!(commit_page["items"][0]["subject"], "initial");
+    assert!(commit_page["next_cursor"].is_null());
 
     let unsafe_action = app
         .oneshot(authed(

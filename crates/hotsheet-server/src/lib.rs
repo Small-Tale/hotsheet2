@@ -861,6 +861,14 @@ pub fn app(state: AppState) -> Router {
             get(checkout_repository_status),
         )
         .route(
+            "/checkouts/{reference}/repository/files",
+            get(checkout_repository_files),
+        )
+        .route(
+            "/checkouts/{reference}/repository/commits",
+            get(checkout_repository_commits),
+        )
+        .route(
             "/checkouts/{reference}/repository/review",
             post(open_checkout_repository_review),
         )
@@ -2088,6 +2096,53 @@ async fn checkout_repository_status(
         .map_err(repository_browser_api_error)
 }
 
+async fn checkout_repository_files(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(query): Query<repository_browser::RepositoryFilePageQuery>,
+) -> Result<
+    Json<repository_browser::RepositoryPage<hotsheet_ticketing::repository_status::RepositoryFile>>,
+    ApiError,
+> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let root: std::path::PathBuf = checkout.root.into();
+    tokio::task::spawn_blocking(move || repository_browser::files_page(&root, query))
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("repository file discovery task failed: {error}"),
+            )
+        })?
+        .map(Json)
+        .map_err(repository_browser_api_error)
+}
+
+async fn checkout_repository_commits(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Query(query): Query<repository_browser::RepositoryPageQuery>,
+) -> Result<Json<code_review::CodeReviewPage>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let root: std::path::PathBuf = checkout.root.into();
+    tokio::task::spawn_blocking(move || repository_browser::commits_page(&root, query))
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("repository commit discovery task failed: {error}"),
+            )
+        })?
+        .map(Json)
+        .map_err(repository_browser_api_error)
+}
+
 async fn open_checkout_repository_review(
     State(state): State<AppState>,
     Path(reference): Path<String>,
@@ -2100,8 +2155,7 @@ async fn open_checkout_repository_review(
     let root: std::path::PathBuf = checkout.root.into();
     tokio::task::spawn_blocking(move || {
         let status = hotsheet_ticketing::repository_status::snapshot(&root)?;
-        let review = code_review::discover_repository(&root, status.ahead as usize)?;
-        code_review::launch(&root, &review, &target)
+        code_review::launch_repository(&root, status.ahead as usize, &target)
             .map_err(repository_browser::RepositoryBrowserError::from)
     })
     .await

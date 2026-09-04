@@ -16,6 +16,7 @@ export type RepositoryFileChange='added'|'copied'|'deleted'|'modified'|'renamed'
 export interface RepositoryFile {path:string;original_path?:string;staged?:RepositoryFileChange;unstaged?:RepositoryFileChange;untracked:boolean;conflicted:boolean}
 export type RepositoryPlatform='macos'|'windows'|'linux';
 export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number;clean?:boolean;files?:RepositoryFile[];root?:string;platform?:RepositoryPlatform;commit_count?:number;commits?:CodeReviewCommit[];ranges?:CodeReviewRange[];difftool?:string;truncated?:boolean}
+export interface RepositoryPage<T> {items:T[];next_cursor?:number|null}
 export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;body?:string;committed_at:string}
 export interface CodeReviewRange {from:string;to:string;count:number}
 export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean}
@@ -55,6 +56,8 @@ export class Api {
   checkoutAttachmentUrl=(checkout:string,id:string,attachmentId:string)=>`${this.origin}/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}`;
   deleteCheckoutAttachment=(checkout:string,id:string,attachmentId:string)=>this.request<FullTicket&{store:string}>(this.checkoutAttachmentUrl(checkout,id,attachmentId).slice(this.origin.length),{method:'DELETE'}).then(ticket=>({store:ticket.store,ticket}));
   repositoryStatus=(checkout:string)=>this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
+  repositoryFiles=(checkout:string,view:'staged'|'unstaged'|'untracked'|'conflicted',cursor=0,limit=50)=>this.request<RepositoryPage<RepositoryFile>>(`/checkouts/${encodeURIComponent(checkout)}/repository/files?view=${view}&cursor=${cursor}&limit=${limit}`);
+  repositoryCommits=(checkout:string,cursor=0,limit=50)=>this.request<RepositoryPage<CodeReviewCommit>>(`/checkouts/${encodeURIComponent(checkout)}/repository/commits?cursor=${cursor}&limit=${limit}`);
   repositoryFileAction=(checkout:string,path:string,action:'open'|'reveal')=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/repository/files/action`,{method:'POST',body:JSON.stringify({path,action})});
   openRepositoryReview=(checkout:string,target:CodeReviewTarget)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/repository/review`,{method:'POST',body:JSON.stringify(target)});
   codeReview=(checkout:string,id:string)=>this.request<CodeReview>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`);

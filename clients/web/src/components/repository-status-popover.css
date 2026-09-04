@@ -36,6 +36,8 @@
 .repository-status-popover__empty { display: grid; min-height: 12rem; color: var(--wa-color-text-quiet); place-items: center; align-content: center; gap: var(--wa-space-s); text-align: center; }
 .repository-status-popover__empty svg { width: 1.5rem; height: 1.5rem; color: var(--wa-color-success-on-quiet); }
 .repository-status-popover__loading, .repository-status-popover__error { margin: var(--wa-space-l); padding: var(--wa-space-m); border-radius: var(--wa-border-radius-m); }
+.repository-status-popover__pagination { min-height: 2.5rem; padding: var(--wa-space-s); box-sizing: border-box; color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-xs); text-align: center; }
+.repository-status-popover__detail-error { padding: var(--wa-space-s); border-radius: var(--wa-border-radius-m); color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); font-size: var(--wa-font-size-xs); }
 .repository-status-popover__error { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); overflow-wrap: anywhere; }
 .repository-status-popover__context-menu { position: fixed; z-index: 2; display: grid; min-width: 13rem; padding: var(--wa-space-2xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
 .repository-status-popover__context-menu button { display: grid; min-height: 2.2rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-text-normal); background: transparent; cursor: pointer; grid-template-columns: 1rem minmax(0,1fr); align-items: center; gap: var(--wa-space-s); font: inherit; text-align: left; }

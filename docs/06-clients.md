@@ -748,6 +748,12 @@ wording. The server re-reads status and validates repository containment before 
 launch. At roomy viewport heights the dialog is exactly tall enough for the complete
 master column; at constrained heights it caps to the viewport and scrolls that column.
 Value groups have no outer border and use text-aligned inset row separators.
+The status snapshot contains counts and repository metadata rather than every detail
+row. Each file view and the commit view request an initial 50-row cursor page, then an
+intersection sentinel fetches further pages as the independently scrolling detail pane
+approaches its end. Server page sizes are capped at 100, and switching views or
+explicitly refreshing resets the active cursor, so very large histories and working
+trees do not create an unbounded response or DOM.
 
 The Commits view embeds the same commit graph, configured difftool actions, and
 multi-commit range presentation as ticket Code Review. Both individual commits and the

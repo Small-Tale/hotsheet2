@@ -105,7 +105,9 @@ client can present provider setup.
 ### Headless platform APIs
 
 The authenticated server exposes checkout-scoped repository snapshots at
-`/checkouts/{id}/repository/status`, current ticket-flow aggregates at
+`/checkouts/{id}/repository/status`, with bounded cursor pages for working-tree files
+and commits at the sibling `/repository/files` and `/repository/commits` endpoints,
+current ticket-flow aggregates at
 `/analytics/tickets`, and settled-plus-live usage totals at `/analytics/usage`.
 Historical cumulative-flow data is explicitly reported unavailable because current ticket
 files do not preserve status transitions.
@@ -120,8 +122,10 @@ response also reports the checkout's Git `diff.tool`. The matching `POST` accept
 single commit or adjacent range returned by a fresh discovery, rejects arbitrary refs,
 and starts `git difftool --no-prompt` with an argument array in the registered checkout.
 The repository-review endpoint additionally accepts two distinct, exact commits from a
-fresh repository discovery for an A/B comparison. The client never receives a program
-path or executes a review command itself.
+fresh repository discovery for an A/B comparison. Repository commits selected from any
+page are revalidated as full reachable commit IDs before launch; the ahead-range target
+must still exactly match current repository metadata. The client never receives a
+program path or executes a review command itself.
 
 Project command settings use exact `program` + `args` arrays. `/commands` only starts a
 configured id; requests cannot supply arbitrary shell text. Bounded run history includes

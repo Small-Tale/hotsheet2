@@ -69,6 +69,14 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('aria-label="Compare two commits"');
   });
 
+  it('renders bounded detail pages with an infinite-scroll sentinel',()=>{
+    const markup=String(RepositoryStatusPopover({status:status(),view:'staged',detailFiles:[files[0]],detailHasMore:true}));
+    expect(markup).toContain('data-item-id="src/staged.ts"');
+    expect(markup).not.toContain('data-item-id="src/new name.ts"');
+    expect(markup).toContain('data-repository-pagination-sentinel="true"');
+    expect(String(RepositoryStatusPopover({status:status(),view:'commits',detailCommits:[],detailLoading:true}))).toContain('Finding commits');
+  });
+
   it('normalizes absolute paths and host-specific reveal copy',()=>{
     expect(repositoryAbsolutePath('/work/demo/','src/file.ts','macos')).toBe('/work/demo/src/file.ts');
     expect(repositoryAbsolutePath('C:\\work\\demo','src/file.ts','windows')).toBe('C:\\work\\demo\\src\\file.ts');
