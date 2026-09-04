@@ -13,6 +13,17 @@ describe('new ticket attachments', () => {
     expect(result).toEqual({ ticket: { id: 'ticket', attachments: ['one.txt', 'two.txt'] }, failed: [] });
   });
 
+  it('projects the created ticket before attachment uploads settle', async () => {
+    const order: string[] = [];
+    await createTicketWithAttachments(
+      [new File(['proof'], 'proof.txt')],
+      async () => { order.push('created'); return { id: 'ticket' }; },
+      async (ticket) => { order.push('uploaded'); return ticket; },
+      (ticket) => { order.push(`projected:${ticket.id}`); },
+    );
+    expect(order).toEqual(['created', 'projected:ticket', 'uploaded']);
+  });
+
   it('keeps the created ticket and continues after a partial upload failure', async () => {
     const files = [new File(['bad'], 'bad.txt'), new File(['good'], 'good.txt')];
     const upload = vi.fn(async (ticket: { id: string; attachments: string[] }, file: File) => {

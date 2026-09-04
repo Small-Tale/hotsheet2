@@ -13,8 +13,10 @@ export async function createTicketWithAttachments<T>(
   files: readonly File[],
   create: () => Promise<T>,
   upload: (ticket: T, file: File) => Promise<T>,
+  onCreated?: (ticket: T) => void,
 ): Promise<NewTicketAttachmentResult<T>> {
   let ticket = await create();
+  onCreated?.(ticket);
   const failed: FailedNewTicketAttachment[] = [];
   for (const file of files) {
     try {

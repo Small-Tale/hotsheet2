@@ -533,6 +533,12 @@ test('projects Up Next immediately and reconciles without a full project refresh
   const afterPatch=requests.slice(requests.findIndex(value=>value.startsWith('PATCH '))+1);expect(afterPatch.filter(value=>value.includes('/tickets')||value.includes('/repository/status'))).toEqual([]);
 });
 
+test('projects a newly created ticket within one frame without a collection refresh',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const requests:string[]=[];page.on('request',request=>requests.push(`${request.method()} ${new URL(request.url()).pathname}`));await page.getByRole('button',{name:'New ticket…'}).click();await page.getByRole('textbox',{name:'Ticket title'}).fill('Immediate ticket');
+  await page.evaluate(()=>{document.querySelector('[data-action="create-ticket-form"]')!.addEventListener('submit',()=>{const started=performance.now(),observer=new MutationObserver(()=>{if(document.querySelector('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]')){(window as typeof window&{newTicketProjectionMs?:number}).newTicketProjectionMs=performance.now()-started;observer.disconnect()}});observer.observe(document.body,{attributes:true,childList:true,subtree:true})},{once:true,capture:true})});
+  await page.getByRole('button',{name:'Create ticket'}).click();const row=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');await expect(row).toBeVisible();await expect.poll(()=>page.evaluate(()=>(window as typeof window&{newTicketProjectionMs?:number}).newTicketProjectionMs)).toBeLessThan(100);await page.waitForTimeout(250);const createIndex=requests.findIndex(value=>value.startsWith('POST ')&&value.endsWith('/tickets'));expect(createIndex).toBeGreaterThanOrEqual(0);expect(requests.slice(createIndex+1).filter(value=>value.startsWith('GET ')&&(value.endsWith('/tickets')||value.endsWith('/repository/status')))).toEqual([]);
+});
+
 test('autosaves ticket text fields without explicit save or cancel controls',async({page})=>{
   const patches=await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByText('Use real project tickets').click();
   const inspector=page.locator('[data-component="ticket-inspector"]');

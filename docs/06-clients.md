@@ -727,11 +727,17 @@ are ignored, while the current failed request restores its captured projection a
 shows the error. The client emits `hotsheet:mutation-timing` with optimistic and request
 phase durations for local profiling.
 
+Ticket creation follows the same immediate-authority rule: as soon as the create
+response returns, the new ticket is inserted, selected, and opened for Details editing.
+Attachment uploads continue afterward and update the selected ticket in place. Creation
+does not block presentation on a collection, selected-ticket, or repository refresh.
+
 CI protects the deterministic contract (one PATCH and no follow-up collection/status
 GET) and the projection/reconciliation logic. `npm run test:performance` is the stricter
 local browser gate: after warm application startup, its click-to-next-frame projection
 must remain below 100 ms; 33 ms is the aspirational two-frame target. Network/disk/git
-completion is reported separately and does not delay acknowledged visual feedback.
+completion is reported separately and does not delay acknowledged visual feedback. The
+same warm click-to-DOM ceiling applies to an authoritative new-ticket response.
 
 ## 6.10 Repository status browser
 
