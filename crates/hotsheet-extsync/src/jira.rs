@@ -233,6 +233,7 @@ impl JiraProvider {
                     kind: NoteKind::Regular,
                     created_at: comment.created.clone(),
                     edited_at: comment.updated.unwrap_or(comment.created),
+                    summary: None,
                     text: strip_note(&adf_to_text(Some(&comment.body))),
                 })
                 .collect(),

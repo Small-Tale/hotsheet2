@@ -97,6 +97,7 @@ fn arb_review_kind() -> impl Strategy<Value = ReviewKind> {
 fn arb_shared_note_kind() -> impl Strategy<Value = NoteKind> {
     prop_oneof![
         Just(NoteKind::Regular),
+        Just(NoteKind::Activity),
         Just(NoteKind::FeedbackNeeded),
         Just(NoteKind::Status),
     ]
@@ -112,15 +113,21 @@ fn arb_note() -> impl Strategy<Value = Note> {
         arb_shared_note_kind(),
         arb_ts(),
         prop_oneof![
+            Just(None),
+            "[A-Za-z0-9 ]{1,40}".prop_map(Some),
+            Just(Some("Résumé ✓".to_string())),
+        ],
+        prop_oneof![
             "[!-~][ -~\n]{0,80}".prop_map(|s| s.trim().to_string()),
             Just("# heading\n<!-- hotsheet:note:end -->\n## later".to_string()),
         ],
     )
-        .prop_map(|(id, kind, at, text)| Note {
+        .prop_map(|(id, kind, at, summary, text)| Note {
             id,
             kind,
             created_at: at.clone(),
             edited_at: at,
+            summary,
             text: text.trim().to_string(),
         })
 }

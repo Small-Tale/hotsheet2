@@ -303,6 +303,7 @@ struct NoteMetadata {
     kind: NoteKind,
     created_at: Option<Timestamp>,
     edited_at: Option<Timestamp>,
+    summary: Option<String>,
 }
 
 fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
@@ -318,6 +319,7 @@ fn parse_note_metadata(id: Ulid, tokens: Vec<&str>) -> NoteMetadata {
         kind: value_after("kind:").map_or(NoteKind::Regular, parse_note_kind),
         created_at: value_after("created_at:").map(Timestamp::new),
         edited_at: value_after("edited_at:").map(Timestamp::new),
+        summary: value_after("summary_hex:").and_then(decode_note_summary),
     }
 }
 
@@ -343,6 +345,7 @@ fn build_note(metadata: NoteMetadata, block: &str) -> Option<Note> {
         kind: metadata.kind,
         created_at,
         edited_at,
+        summary: metadata.summary,
         text,
     })
 }
@@ -368,6 +371,10 @@ fn notes_to_string(notes: &[&Note]) -> String {
         out.push_str(n.created_at.as_str());
         out.push_str(" edited_at: ");
         out.push_str(n.edited_at.as_str());
+        if let Some(summary) = n.summary.as_deref() {
+            out.push_str(" summary_hex: ");
+            out.push_str(&encode_note_summary(summary));
+        }
         out.push_str(" -->\n");
         out.push_str(&escape_content(&n.text));
         out.push('\n');
@@ -377,6 +384,25 @@ fn notes_to_string(notes: &[&Note]) -> String {
     out.push_str(NOTES_END);
     out.push('\n');
     out
+}
+
+fn encode_note_summary(summary: &str) -> String {
+    summary
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn decode_note_summary(encoded: &str) -> Option<String> {
+    if encoded.len() % 2 != 0 {
+        return None;
+    }
+    let bytes = (0..encoded.len())
+        .step_by(2)
+        .map(|offset| u8::from_str_radix(&encoded[offset..offset + 2], 16).ok())
+        .collect::<Option<Vec<_>>>()?;
+    String::from_utf8(bytes).ok()
 }
 
 fn parse_bounded_content(after: &str) -> Result<(String, Vec<Note>), ParseError> {
@@ -554,6 +580,7 @@ mod tests {
                 kind: NoteKind::Regular,
                 created_at: "2026-08-19T15:20:44Z".into(),
                 edited_at: "2026-08-19T15:20:44Z".into(),
+                summary: None,
                 text: "Reproduced on macOS; root cause is the pre-theme paint.".into(),
             },
             Note {
@@ -561,6 +588,7 @@ mod tests {
                 kind: NoteKind::FeedbackNeeded,
                 created_at: "2026-08-19T15:31:02Z".into(),
                 edited_at: "2026-08-19T15:31:02Z".into(),
+                summary: None,
                 text: "should the fix also cover the dashboard dedicated view?".into(),
             },
         ];
@@ -727,6 +755,7 @@ mod tests {
             kind: NoteKind::FeedbackDraft,
             created_at: "2026-08-19T16:00:00Z".into(),
             edited_at: "2026-08-19T16:00:00Z".into(),
+            summary: None,
             text: "half-written reply".into(),
         });
         let text = to_file_string(&t);
@@ -745,6 +774,7 @@ mod tests {
             kind: NoteKind::Regular,
             created_at: "2026-08-19T15:20:44Z".into(),
             edited_at: "2026-08-19T15:20:44Z".into(),
+            summary: None,
             text: "   ".into(),
         }];
         let text = to_file_string(&t);
@@ -816,10 +846,16 @@ mod tests {
             kind: NoteKind::Activity,
             created_at: "2026-08-19T15:20:44Z".into(),
             edited_at: "2026-08-19T16:00:00Z".into(),
+            summary: Some("Completed café investigation".into()),
             text: "completed investigation".into(),
         }];
         let encoded = to_file_string(&ticket);
         assert!(encoded.contains("kind: activity"));
+        assert!(
+            encoded.contains(
+                "summary_hex: 436f6d706c6574656420636166c3a920696e7665737469676174696f6e"
+            )
+        );
         assert_eq!(parse_file(&encoded).unwrap(), ticket);
     }
 
@@ -860,6 +896,7 @@ mod tests {
             kind: NoteKind::Regular,
             created_at: "2026-08-19T00:00:00Z".into(),
             edited_at: "2026-08-19T00:00:00Z".into(),
+            summary: None,
             text: text.into(),
         };
         // Content that looks exactly like the structural markers, which the writer must
@@ -920,6 +957,7 @@ mod tests {
             kind: NoteKind::FeedbackDraft,
             created_at: "t0".into(),
             edited_at: "t0".into(),
+            summary: None,
             text: "half-written".into(),
         }];
         let text = to_file_string(&t);

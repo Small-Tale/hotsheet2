@@ -338,6 +338,19 @@ pub trait TicketProvider: Send + Sync {
         kind: NoteKind,
         text: String,
     ) -> Result<ApiTicket, ProviderError>;
+    /// Append a note with a concise timeline headline when the provider can preserve
+    /// Hot Sheet note metadata. External trackers may fall back to their ordinary
+    /// comment representation without losing the full note body.
+    fn add_note_with_summary(
+        &self,
+        native_id: &str,
+        ctx: MutationContext,
+        kind: NoteKind,
+        _summary: Option<String>,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        self.add_note(native_id, ctx, kind, text)
+    }
     fn report_not_working(
         &self,
         _native_id: &str,
@@ -654,6 +667,34 @@ impl TicketProvider for GitProvider {
             ctx.generated_id,
             ctx.now,
             kind,
+            text,
+        )?;
+        Ok(ApiTicket::from_provider(
+            &updated,
+            &self.connection_id,
+            None,
+        ))
+    }
+
+    fn add_note_with_summary(
+        &self,
+        native_id: &str,
+        ctx: MutationContext,
+        kind: NoteKind,
+        summary: Option<String>,
+        text: String,
+    ) -> Result<ApiTicket, ProviderError> {
+        let ticket = self.ticket(native_id)?;
+        if ticket.notes.iter().any(|note| note.id == ctx.generated_id) {
+            return Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None));
+        }
+        let updated = ops::add_note_with_summary(
+            &self.store,
+            &ticket.id,
+            ctx.generated_id,
+            ctx.now,
+            kind,
+            summary,
             text,
         )?;
         Ok(ApiTicket::from_provider(
@@ -1091,13 +1132,14 @@ pub fn copy_between(
     )?;
     for note in ticket.notes {
         let generated_id = transfer_ulid(operation_id, &format!("note:{}", note.id));
-        destination.add_note(
+        destination.add_note_with_summary(
             &created.native_id,
             MutationContext {
                 now: Timestamp::new(note.created_at.clone()),
                 generated_id,
             },
             note.kind,
+            note.summary.clone(),
             note.text.clone(),
         )?;
         if note.edited_at != note.created_at {

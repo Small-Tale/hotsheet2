@@ -249,6 +249,7 @@ impl GitLabProvider {
                     kind: NoteKind::Regular,
                     created_at: note.created_at.clone(),
                     edited_at: note.updated_at.unwrap_or(note.created_at),
+                    summary: None,
                     text: strip_note(&note.body),
                 })
                 .collect(),

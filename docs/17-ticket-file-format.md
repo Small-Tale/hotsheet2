@@ -121,7 +121,14 @@ than swallowed or discarded; a future schema can define such a section explicitl
 | `kind` | `regular\|activity\|feedback_needed\|feedback_draft\|status` | default `regular`. **`feedback_draft` is LOCAL** (overlay), the others shared. §2.6 |
 | `created_at` | RFC3339 | immutable creation time; primary timeline order |
 | `edited_at` | RFC3339 | last text edit; equals `created_at` when never edited |
+| `summary` | optional plain text | concise Timeline headline, encoded as UTF-8 hex in the forward-compatible `summary_hex:` note-marker token; primarily supplied for `activity`/`status` notes |
 | text | Markdown | rendered; raw HTML escaped |
+
+The hex marker encoding keeps summaries single-token and comment-safe while remaining
+ignorable by older bounded-note parsers. Missing summaries are valid: clients derive a
+bounded first-line fallback for legacy files and external providers. The full note text
+is authoritative and always appears in Notes; no client performs AI summarization while
+reading or rendering a ticket.
 
 Legacy note blocks with a leading `timestamp — text` map that timestamp to both
 fields. Timestamp-less legacy blocks deterministically derive both values from their

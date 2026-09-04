@@ -276,6 +276,7 @@ fn build_ticket(
                 kind: NoteKind::Regular,
                 created_at: created_at.clone(),
                 edited_at: created_at,
+                summary: None,
                 text: n.text.clone(),
             }
         })

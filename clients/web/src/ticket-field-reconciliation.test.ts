@@ -32,6 +32,10 @@ describe('field-aware ticket reconciliation', () => {
     expect(reconcileTicketPatch(ticket(), ticket({ notes: [{ ...ticket().notes[0], text: 'Theirs' }] }), { note_id: 'N1', note: 'Mine' }).conflicts[0]).toMatchObject({ key: 'note:N1', mine: 'Mine', theirs: 'Theirs' });
   });
 
+  it('keeps activity summary metadata attached to a retried note write', () => {
+    expect(reconcileTicketPatch(ticket(),ticket({status:'completed'}),{note:'Full detail',note_kind:'activity',note_summary:'Finished work'})).toEqual({retry:{note:'Full detail',note_kind:'activity',note_summary:'Finished work'},conflicts:[]});
+  });
+
   it('covers active-draft interleavings without warning for remote-only or converged edits', () => {
     expect(reconcileActiveDraft('base', 'base', 'remote')).toEqual({ kind: 'adopt-remote', base: 'remote', draft: 'remote' });
     expect(reconcileActiveDraft('base', 'mine', 'base')).toEqual({ kind: 'unchanged', base: 'base', draft: 'mine' });

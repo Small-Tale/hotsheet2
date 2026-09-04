@@ -1308,6 +1308,8 @@ fn edit_can_append_and_edit_an_activity_note() {
             "began investigating",
             "--note-kind",
             "activity",
+            "--note-summary",
+            "Started flicker investigation",
         ])
         .assert()
         .success();
@@ -1318,6 +1320,7 @@ fn edit_can_append_and_edit_an_activity_note() {
         .success()
         .stdout(predicate::str::contains("## Notes"))
         .stdout(predicate::str::contains("kind: activity"))
+        .stdout(predicate::str::contains("summary_hex:"))
         .stdout(predicate::str::contains("created_at:"))
         .stdout(predicate::str::contains("edited_at:"))
         .stdout(predicate::str::contains("began investigating"));
@@ -1326,8 +1329,17 @@ fn edit_can_append_and_edit_an_activity_note() {
     let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
         .unwrap()
         .unwrap();
-    let note_id = ticket.notes[0].id.to_string();
-    let created_at = ticket.notes[0].created_at.clone();
+    let activity = ticket
+        .notes
+        .iter()
+        .find(|note| note.text == "began investigating")
+        .unwrap();
+    assert_eq!(
+        activity.summary.as_deref(),
+        Some("Started flicker investigation")
+    );
+    let note_id = activity.id.to_string();
+    let created_at = activity.created_at.clone();
     hs(p)
         .args([
             "edit",
@@ -1342,8 +1354,17 @@ fn edit_can_append_and_edit_an_activity_note() {
     let edited = hotsheet_ticketing::ops::resolve(&store, &slug)
         .unwrap()
         .unwrap();
-    assert_eq!(edited.notes[0].created_at, created_at);
-    assert_eq!(edited.notes[0].text, "investigation complete");
+    let edited_activity = edited
+        .notes
+        .iter()
+        .find(|note| note.id.to_string() == note_id)
+        .unwrap();
+    assert_eq!(edited_activity.created_at, created_at);
+    assert_eq!(edited_activity.text, "investigation complete");
+    assert_eq!(
+        edited_activity.summary.as_deref(),
+        Some("Started flicker investigation")
+    );
 }
 
 #[test]

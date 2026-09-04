@@ -305,6 +305,10 @@ should the fix also cover the dashboard dedicated view?
   - `activity` — a durable chronological account of meaningful work and lifecycle
     transitions. Every actual status change automatically appends an activity note;
     repeated and reversed transitions remain separate entries. **Shared**.
+  Activity/status notes may also carry an optional plain-text `summary`, encoded in
+  their marker as the forward-compatible `summary_hex:` token. It is the concise
+  Timeline headline; the Markdown body remains the full record in Notes. Missing
+  summaries are valid for old files and external providers.
   The `kind` drives how the UI renders a note (feedback kinds get an editor; the rest
   get the reader) — [06-clients.md](06-clients.md) §6.8.
 - **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store

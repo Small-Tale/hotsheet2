@@ -19,14 +19,15 @@ describe('ticketTimelineEntries', () => {
     ]);
   });
 
-  it('orders activity/status notes chronologically and ignores ordinary notes', () => {
+  it('orders activity/status notes chronologically and keeps detail out of the timeline', () => {
     const entries = ticketTimelineEntries(ticket({ notes: [
       note('regular', 'regular', '2026-09-02T01:30:00Z', 'Discussion'),
       note('done', 'activity', '2026-09-02T03:00:00Z', 'Status changed from Started to Completed'),
       note('start', 'activity', '2026-09-02T02:00:00Z', 'Claude started work\nImplement the fix.'),
     ] }));
     expect(entries.map(entry => entry.id)).toEqual(['01TEST-created', 'start', 'done']);
-    expect(entries[1]).toMatchObject({ title: 'Claude started work', subtitle: 'Implement the fix.' });
+    expect(entries[1]).toMatchObject({ title: 'Claude started work' });
+    expect(entries[1].subtitle).toBeUndefined();
     expect(entries[2].emphasized).toBe(true);
     expect(entries[2].title).toBe('Completed');
   });
@@ -71,10 +72,16 @@ describe('ticketTimelineEntries', () => {
     ]);
   });
 
-  it('renders a Not Working report as attributed activity with a concise summary', () => {
-    const entries=ticketTimelineEntries(ticket({notes:[
-      note('report','activity','2026-09-02T04:00:00Z','Brian reported as not working\nThe select popup closes during refresh.'),
-    ]}));
-    expect(entries.at(-1)).toMatchObject({title:'Brian reported as not working',subtitle:'The select popup closes during refresh.'});
+  it('prefers a durable summary and deterministically bounds legacy activity headlines', () => {
+    const entries = ticketTimelineEntries(ticket({ notes: [
+      {
+        ...note('report', 'activity', '2026-09-02T04:00:00Z', 'Full implementation and verification detail that belongs only in Notes.'),
+        summary: 'Resolved the refresh regression',
+      },
+      note('legacy','activity','2026-09-02T05:00:00Z','## A very long legacy activity headline with enough words that it must be shortened before being presented in the compact timeline index'),
+    ] }));
+    expect(entries.at(-2)).toMatchObject({ title: 'Resolved the refresh regression' });
+    expect(entries.at(-2)?.subtitle).toBeUndefined();
+    expect(entries.at(-1)?.title).toBe('A very long legacy activity headline with enough words that it must be…');
   });
 });

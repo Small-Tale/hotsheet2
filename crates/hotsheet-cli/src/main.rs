@@ -137,6 +137,9 @@ enum Cmd {
         /// Kind for --note: regular | activity | feedback_needed | status.
         #[arg(long)]
         note_kind: Option<String>,
+        /// Concise plain-text timeline headline for an activity/status note.
+        #[arg(long, conflicts_with = "edit_note")]
+        note_summary: Option<String>,
     },
     /// Close a provider-native ticket.
     ProviderClose {
@@ -196,6 +199,9 @@ enum Cmd {
         /// Kind for --note: regular | activity | feedback_needed | status.
         #[arg(long)]
         note_kind: Option<String>,
+        /// Concise plain-text timeline headline for an activity/status note.
+        #[arg(long, conflicts_with = "edit_note")]
+        note_summary: Option<String>,
     },
     /// Record why a ticket was closed (close outcome; orthogonal to status).
     Close {
@@ -810,10 +816,16 @@ fn main() -> Result<()> {
             note,
             note_file,
             note_kind,
+            note_summary,
             edit_note,
         } => {
             let note = read_note_input(note, note_file)?;
-            validate_note_modifiers(&note, note_kind.as_ref(), edit_note.as_ref())?;
+            validate_note_modifiers(
+                &note,
+                note_kind.as_ref(),
+                note_summary.as_ref(),
+                edit_note.as_ref(),
+            )?;
             cmd_provider_edit(
                 &cli.path,
                 &connection,
@@ -825,6 +837,7 @@ fn main() -> Result<()> {
                     expected_token,
                     note,
                     note_kind: parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
+                    note_summary,
                     edit_note,
                 },
             )
@@ -853,10 +866,16 @@ fn main() -> Result<()> {
             note,
             note_file,
             note_kind,
+            note_summary,
             edit_note,
         } => {
             let note = read_note_input(note, note_file)?;
-            validate_note_modifiers(&note, note_kind.as_ref(), edit_note.as_ref())?;
+            validate_note_modifiers(
+                &note,
+                note_kind.as_ref(),
+                note_summary.as_ref(),
+                edit_note.as_ref(),
+            )?;
             cmd_edit(
                 &cli.path,
                 &id,
@@ -874,6 +893,7 @@ fn main() -> Result<()> {
                 no_up_next,
                 note,
                 parse_note_kind(note_kind.as_deref().unwrap_or("regular"))?,
+                note_summary,
                 edit_note,
             )
         }
@@ -1470,6 +1490,7 @@ struct ProviderEditInput {
     expected_token: Option<String>,
     note: Option<String>,
     note_kind: NoteKind,
+    note_summary: Option<String>,
     edit_note: Option<String>,
 }
 
@@ -1498,13 +1519,14 @@ fn cmd_provider_edit(
     if let Some(note) = input.note {
         ticket = match input.edit_note {
             Some(note_id) => provider.edit_note(id, &note_id, now, note),
-            None => provider.add_note(
+            None => provider.add_note_with_summary(
                 id,
                 MutationContext {
                     now,
                     generated_id: Ulid::new(),
                 },
                 input.note_kind,
+                input.note_summary,
                 note,
             ),
         }?;
@@ -2643,6 +2665,7 @@ fn cmd_edit(
     no_up_next: bool,
     note: Option<String>,
     note_kind: NoteKind,
+    note_summary: Option<String>,
     edit_note: Option<String>,
 ) -> Result<()> {
     let store = FsStore::open(path)?;
@@ -2698,7 +2721,15 @@ fn cmd_edit(
         if let Some(note_id) = edit_note {
             ops::edit_note(&store, &ticket.id, &note_id, now_ts(), text)?;
         } else {
-            ops::add_note(&store, &ticket.id, Ulid::new(), now_ts(), note_kind, text)?;
+            ops::add_note_with_summary(
+                &store,
+                &ticket.id,
+                Ulid::new(),
+                now_ts(),
+                note_kind,
+                note_summary,
+                text,
+            )?;
         }
     }
     println!("Updated {}", updated.slug);
@@ -2725,10 +2756,11 @@ fn read_note_input(note: Option<String>, note_file: Option<PathBuf>) -> Result<O
 fn validate_note_modifiers(
     note: &Option<String>,
     note_kind: Option<&String>,
+    note_summary: Option<&String>,
     edit_note: Option<&String>,
 ) -> Result<()> {
-    if note.is_none() && (note_kind.is_some() || edit_note.is_some()) {
-        bail!("--note-kind and --edit-note require --note or --note-file");
+    if note.is_none() && (note_kind.is_some() || note_summary.is_some() || edit_note.is_some()) {
+        bail!("--note-kind, --note-summary, and --edit-note require --note or --note-file");
     }
     Ok(())
 }

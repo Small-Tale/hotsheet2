@@ -146,6 +146,7 @@ fn tools_list() -> Value {
                 "blocked_reason": { "type": ["string", "null"], "description": "set the freeform block reason, or null to clear it" },
                 "note": str_prop("note text to append, or replacement text when note_id is present"),
                 "note_kind": str_prop("regular|activity|feedback_needed|feedback_draft|status; defaults to regular"),
+                "note_summary": str_prop("optional concise plain-text timeline headline"),
                 "note_id": str_prop("existing note ULID to edit instead of appending")
                 ,"checkout": str_prop("optional checkout id/alias/path"), "connection": str_prop("optional ticket-provider connection id")
             }, "required": ["id"] }
@@ -872,6 +873,16 @@ mod core_backend {
                     {
                         return Err(not_found(&format!("note {note_id}")));
                     }
+                    if edit_note_id.is_some() && body.get("note_summary").is_some() {
+                        return Err(bad_request(
+                            "note_summary is only valid when appending a note",
+                        ));
+                    }
+                    if body.get("note_summary").is_some()
+                        && str_field(body, "note").is_none_or(|note| note.is_empty())
+                    {
+                        return Err(bad_request("note_summary requires a non-empty note"));
+                    }
                     let new_note_kind = opt_enum(body, "note_kind")?.unwrap_or(NoteKind::Regular);
                     // A present `blocked_by` (even []) replaces the set; absent leaves it.
                     let blocked_by = match body.get("blocked_by").filter(|v| !v.is_null()) {
@@ -914,12 +925,13 @@ mod core_backend {
                                 ops::edit_note(&self.store, &t.id, &note_id, (self.now)(), text)
                                     .map_err(store_err)?
                             }
-                            None => ops::add_note(
+                            None => ops::add_note_with_summary(
                                 &self.store,
                                 &t.id,
                                 (self.mint)(),
                                 (self.now)(),
                                 new_note_kind,
+                                str_field(body, "note_summary"),
                                 text,
                             )
                             .map_err(store_err)?,
@@ -1940,11 +1952,23 @@ mod tests {
         assert_eq!(arr[0]["slug"], slug);
         assert_eq!(arr[0]["priority"], "high");
 
+        let orphan_summary = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note_summary": "Missing body" }),
+        );
+        assert!(
+            orphan_summary["error"]
+                .as_str()
+                .unwrap()
+                .contains("requires a non-empty note")
+        );
+
         // update → started, with a progress note appended in the same call
         let updated = call(
             &backend,
             "hotsheet_update",
-            json!({ "id": id, "status": "started", "tags": ["ui", "urgent"], "note": "picked this up", "note_kind": "activity" }),
+            json!({ "id": id, "status": "started", "tags": ["ui", "urgent"], "note": "picked this up", "note_kind": "activity", "note_summary": "Started urgent UI work" }),
         );
         assert_eq!(updated["status"], "started");
         assert_eq!(updated["tags"], json!(["ui", "urgent"]));
@@ -1955,6 +1979,7 @@ mod tests {
             .find(|note| note["text"] == "picked this up")
             .unwrap();
         assert_eq!(progress_note["kind"], "activity");
+        assert_eq!(progress_note["summary"], "Started urgent UI work");
         let note_id = progress_note["id"].as_str().unwrap();
         let created_at = progress_note["created_at"].clone();
         let edited = call(

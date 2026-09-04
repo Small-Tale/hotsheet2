@@ -36,7 +36,7 @@ function matchingFields(current: TicketSnapshot, expected: TicketPatch, replacem
   return Object.fromEntries(Object.keys(expected).filter(key => JSON.stringify(current[key]) === JSON.stringify(expected[key])).map(key => [key, replacement[key]]));
 }
 
-export interface ClipboardTicket { id: string; slug: string; connection_id: string; native_id: string; title: string; details: string; category: string; priority?: string; status?: string; up_next: boolean; tags: string[]; notes: Array<{kind:string;text:string}>; attachments:Array<{id:string;filename:string}> }
+export interface ClipboardTicket { id: string; slug: string; connection_id: string; native_id: string; title: string; details: string; category: string; priority?: string; status?: string; up_next: boolean; tags: string[]; notes: Array<{kind:string;text:string;summary?:string}>; attachments:Array<{id:string;filename:string}> }
 export function deduplicateTitle(title: string, existing: readonly string[]): string {
   const occupied = new Set(existing.map(value => value.toLocaleLowerCase()));
   if (!occupied.has(title.toLocaleLowerCase())) return title;

@@ -75,6 +75,8 @@ pub struct ApiNote {
     pub kind: NoteKind,
     pub created_at: String,
     pub edited_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
     pub text: String,
 }
 
@@ -143,6 +145,7 @@ impl ApiTicket {
                     },
                     created_at: n.created_at.as_str().to_string(),
                     edited_at: n.edited_at.as_str().to_string(),
+                    summary: n.summary.clone(),
                     text: n.text.clone(),
                 })
                 .collect(),
@@ -367,6 +370,7 @@ mod tests {
             kind,
             created_at: Timestamp::new(created_at),
             edited_at: Timestamp::new(created_at),
+            summary: None,
             text: "please confirm".into(),
         };
 
@@ -416,6 +420,7 @@ mod tests {
             kind: NoteKind::Regular,
             created_at: Timestamp::new("2026-08-20T00:00:00Z"),
             edited_at: Timestamp::new("2026-08-20T00:00:00Z"),
+            summary: None,
             text: "FEEDBACK NEEDED: choose one".into(),
         });
 

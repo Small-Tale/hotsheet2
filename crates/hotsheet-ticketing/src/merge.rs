@@ -389,6 +389,7 @@ mod tests {
             kind: hotsheet_model::NoteKind::Regular,
             created_at: ts("2026-08-19T01:00:00Z"),
             edited_at: ts("2026-08-19T01:00:00Z"),
+            summary: None,
             text: "ours note".into(),
         }];
         let mut theirs = base.clone();
@@ -397,6 +398,7 @@ mod tests {
             kind: hotsheet_model::NoteKind::Regular,
             created_at: ts("2026-08-19T02:00:00Z"),
             edited_at: ts("2026-08-19T02:00:00Z"),
+            summary: None,
             text: "theirs note".into(),
         }];
         let m = merge_tickets(&base, &ours, &theirs).ticket;
@@ -413,6 +415,7 @@ mod tests {
             kind: hotsheet_model::NoteKind::Activity,
             created_at: ts("2026-08-19T01:00:00Z"),
             edited_at: ts("2026-08-19T01:00:00Z"),
+            summary: Some("Started implementation".into()),
             text: "started".into(),
         }];
         let mut ours = base.clone();

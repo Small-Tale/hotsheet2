@@ -58,7 +58,7 @@ export function reconcileTicketPatch(base: FullTicket, remote: FullTicket, patch
   const retry: TicketPatch = {};
   const conflicts: TicketFieldConflict[] = [];
   const noteId = typeof patch.note_id === 'string' ? patch.note_id : undefined;
-  const fields = Object.keys(patch).filter(field => field !== 'expected_token' && field !== 'note_id' && field !== 'note_kind');
+  const fields = Object.keys(patch).filter(field => field !== 'expected_token' && field !== 'note_id' && field !== 'note_kind' && field !== 'note_summary');
   for (const field of fields) {
     const logicalField = field === 'note' && noteId ? 'note' : field;
     const baseValue = ticketField(base, logicalField, noteId);
@@ -80,6 +80,7 @@ export function reconcileTicketPatch(base: FullTicket, remote: FullTicket, patch
   }
   if (noteId && Object.hasOwn(retry, 'note')) retry.note_id = noteId;
   if (Object.hasOwn(retry, 'note') && patch.note_kind !== undefined) retry.note_kind = patch.note_kind;
+  if (Object.hasOwn(retry, 'note') && patch.note_summary !== undefined) retry.note_summary = patch.note_summary;
   return { retry, conflicts };
 }
 

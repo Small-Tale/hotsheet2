@@ -2556,13 +2556,24 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
     .await;
     let id = created["id"].as_str().unwrap().to_string();
 
+    let orphan_summary = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{id}"),
+            Some(r#"{"note_summary":"Missing body"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(orphan_summary.status(), StatusCode::BAD_REQUEST);
+
     // PATCH with a status change AND a note in the same call.
     let updated = body_json(
         app.clone()
             .oneshot(authed(
                 "PATCH",
                 &format!("/tickets/{id}"),
-                Some(r#"{"status":"started","note":"completed","note_kind":"activity"}"#),
+                Some(r#"{"status":"started","note":"completed","note_kind":"activity","note_summary":"Completed initial investigation"}"#),
             ))
             .await
             .unwrap(),
@@ -2581,6 +2592,7 @@ async fn update_can_append_edit_and_preserve_repeated_activity() {
         .find(|note| note["text"] == "completed")
         .unwrap();
     assert_eq!(progress["kind"], "activity");
+    assert_eq!(progress["summary"], "Completed initial investigation");
     let note_id = progress["id"].as_str().unwrap();
     let created_at = progress["created_at"].as_str().unwrap();
     assert_eq!(progress["edited_at"], created_at);

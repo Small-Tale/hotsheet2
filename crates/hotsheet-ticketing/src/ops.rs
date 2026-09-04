@@ -498,6 +498,7 @@ fn append_status_transition(ticket: &mut Ticket, from: Status, to: Status, now: 
         kind: NoteKind::Activity,
         created_at: now.clone(),
         edited_at: now.clone(),
+        summary: Some(status_label(to).to_string()),
         text: format!(
             "Status changed from {} to {}",
             status_label(from),
@@ -535,6 +536,7 @@ pub fn prepare_not_working(
             kind: NoteKind::Regular,
             created_at: now.clone(),
             edited_at: now.clone(),
+            summary: None,
             text: format!("Not working: {text}"),
         });
     }
@@ -552,6 +554,7 @@ pub fn prepare_not_working(
         kind: NoteKind::Activity,
         created_at: now.clone(),
         edited_at: now.clone(),
+        summary: Some("Reported as not working".into()),
         text: reporter
             .filter(|value| !value.trim().is_empty())
             .map(|value| format!("{} reported as not working\n{summary}", value.trim()))
@@ -602,6 +605,20 @@ pub fn add_note(
     kind: NoteKind,
     text: String,
 ) -> Result<Ticket, StoreError> {
+    add_note_with_summary(store, id, note_id, now, kind, None, text)
+}
+
+/// Append a note with an optional concise timeline headline. Whitespace is collapsed
+/// so summaries remain a single plain-text line regardless of the calling surface.
+pub fn add_note_with_summary(
+    store: &FsStore,
+    id: &Ulid,
+    note_id: Ulid,
+    now: Timestamp,
+    kind: NoteKind,
+    summary: Option<String>,
+    text: String,
+) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
     let kind = if kind == NoteKind::Regular && text.trim_start().starts_with("FEEDBACK NEEDED:") {
         NoteKind::FeedbackNeeded
@@ -613,6 +630,10 @@ pub fn add_note(
         kind,
         created_at: now.clone(),
         edited_at: now.clone(),
+        summary: summary.and_then(|value| {
+            let value = value.split_whitespace().collect::<Vec<_>>().join(" ");
+            (!value.is_empty()).then_some(value)
+        }),
         text,
     });
     t.updated_at = now;

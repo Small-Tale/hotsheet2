@@ -118,6 +118,12 @@ concurrent git clients converge through the existing note-by-ULID semantic merge
 Provider adapters whose remote service chooses note ids must persist/recognize the
 caller-generated id as their idempotency key.
 
+Distilled notes persist the adapter result as both their complete note text and optional
+durable Timeline summary. AI-authored activity notes outside distillation likewise send
+`note_summary` with the full Markdown body in one update; the headline is plain-text,
+single-line, outcome-oriented, and preferably at most 80 characters. Presentation never
+calls a summarizer: missing metadata uses a deterministic bounded first-line fallback.
+
 The built-in `deterministic` adapter runs locally beside the activity sink. An Apple
 client selects `apple_foundation_models`, consumes the same live/digest stream, maps the
 serializable `DistillationRequest` to its on-device Foundation Models session, and sends

@@ -444,9 +444,10 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   An unblocked ticket exposes a full-width dashed `Block ticket` action without an
   otherwise-empty `Blocked reason` heading. Its controlled editor flushes on blur,
   preserves the saved reason, and creates the adjacent status `Blocked` pill.
-  - `TicketTimeline` — **demo built**: chronological activity shown as time-ago,
-    required title, and optional subtitle along a continuous dot/line track; its
-    displayed event total is derived from the rendered entry collection
+  - `TicketTimeline` — **demo built**: chronological activity shown as time-ago and a
+    concise headline along a continuous dot/line track; durable ticket activity omits
+    the full note body/subtitle, and its displayed event total is derived from the
+    rendered entry collection
   - `TicketCodeReview` — **demo built**: ticket-associated commit subjects, abbreviated
     SHAs, dates, configured-tool status, individual commit actions, and adjacent-range
     actions. The catalog exposes configured, unconfigured, empty, loading, and error
@@ -604,7 +605,11 @@ icons; structural separators do not require icons.
 - `NoteEditor`
 - `NoteReaderButton`
 
-Activity notes are durable ticket history. The separate rich AI activity stream can
+Activity notes are durable ticket history and appear in both the complete Notes list
+and the compact Timeline index. NoteCard's quieter Activity presentation differentiates
+them without hiding their full Markdown body. Timeline uses an optional durable summary
+headline and never repeats the body; older notes fall back to a deterministic bounded
+first line. The separate rich AI activity stream can
 feed a live timeline and, under HS2-3GRNZW, later propose distilled activity notes;
 the two sources must remain visually and semantically distinguishable. Status-change
 activity uses a concise past-tense action in the timeline (for example `Completed`,

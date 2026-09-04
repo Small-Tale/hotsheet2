@@ -38,6 +38,14 @@ or other important subtask starts and when it finishes. Keep repeated and revers
 transitions as separate entries; they are history, not current-state fields. Ordinary
 commentary remains a `regular` note.
 
+When an AI writes an `activity` note, provide a durable `note_summary` alongside the
+full Markdown body. The summary is the Timeline headline: plain text, one line,
+outcome-oriented, preferably no more than 80 characters, and free of verification
+inventories or implementation detail. The complete body remains visible in Notes.
+Generate both in the same turn; never invoke AI while rendering or opening a ticket.
+Legacy notes and providers without summary metadata use a deterministic bounded
+first-line fallback.
+
 ## Active AI work
 
 Treat a live, renewable ticket claim lease as the authoritative signal that an AI is

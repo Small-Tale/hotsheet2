@@ -90,7 +90,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/analytics.rs       #   current ticket-flow, throughput, and cycle-time aggregates (HS2-38RJMK)
       src/commands.rs        #   typed safe argv command settings schema (HS2-JN3X4W)
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
-      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote/ApiAttachment timestamp metadata/TicketRow incl. provider identity + compact body-optional lists (shared by server + MCP)
+      src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary, ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus exact `claim <slug|ULID>`/claim-next/renew/release, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows

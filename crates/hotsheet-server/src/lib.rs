@@ -1632,13 +1632,26 @@ fn do_provider_update(
             format!("provider connection '{connection_id}' does not support note editing"),
         ));
     }
+    if req.note_id.is_some() && req.note_summary.is_some() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "note_summary is only valid when appending a note",
+        ));
+    }
+    if req.note_summary.is_some() && req.note.as_deref().is_none_or(str::is_empty) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "note_summary requires a non-empty note",
+        ));
+    }
     let timestamp = now();
     let note = req.note.clone();
     let note_id = req.note_id.clone();
     let note_kind = req.note_kind.unwrap_or(NoteKind::Regular);
+    let note_summary = req.note_summary.clone();
     let mut ticket = provider
         .update(
-            &id,
+            id,
             timestamp.clone(),
             ProviderPatch {
                 expected_token: req.expected_token,
@@ -1656,14 +1669,15 @@ fn do_provider_update(
         .map_err(provider_transfer_error)?;
     if let Some(note) = note {
         ticket = match note_id {
-            Some(note_id) => provider.edit_note(&id, &note_id, timestamp, note),
-            None => provider.add_note(
-                &id,
+            Some(note_id) => provider.edit_note(id, &note_id, timestamp, note),
+            None => provider.add_note_with_summary(
+                id,
                 MutationContext {
                     now: timestamp,
                     generated_id: Ulid::new(),
                 },
                 note_kind,
+                note_summary,
                 note,
             ),
         }
@@ -2971,6 +2985,18 @@ fn do_update(
     {
         return Err(ApiError::not_found(&format!("note {note_id}")));
     }
+    if edit_note_id.is_some() && req.note_summary.is_some() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "note_summary is only valid when appending a note",
+        ));
+    }
+    if req.note_summary.is_some() && req.note.as_deref().is_none_or(str::is_empty) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "note_summary requires a non-empty note",
+        ));
+    }
     // A present `blocked_by` (even []) replaces the set; absent leaves it unchanged.
     let blocked_by = match req.blocked_by {
         Some(needles) => Some(ops::resolve_blockers(
@@ -2996,12 +3022,13 @@ fn do_update(
     let latest = match req.note.filter(|t| !t.is_empty()) {
         Some(text) => match edit_note_id {
             Some(note_id) => ops::edit_note(&entry.store, &ticket.id, &note_id, now(), text)?,
-            None => ops::add_note(
+            None => ops::add_note_with_summary(
                 &entry.store,
                 &ticket.id,
                 Ulid::new(),
                 now(),
                 req.note_kind.unwrap_or(NoteKind::Regular),
+                req.note_summary,
                 text,
             )?,
         },
@@ -4689,6 +4716,8 @@ struct UpdateReq {
     note_id: Option<String>,
     /// Kind of the appended note; defaults to regular for older clients.
     note_kind: Option<NoteKind>,
+    /// Optional concise plain-text headline used by timeline presentations.
+    note_summary: Option<String>,
 }
 
 fn deserialize_nullable_patch<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>

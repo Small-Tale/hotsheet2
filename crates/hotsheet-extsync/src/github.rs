@@ -343,6 +343,7 @@ impl GitHubProvider {
                     kind: NoteKind::Regular,
                     created_at: comment.created_at.clone(),
                     edited_at: comment.updated_at.unwrap_or(comment.created_at),
+                    summary: None,
                     text: strip_note_marker(comment.body),
                 })
                 .collect(),

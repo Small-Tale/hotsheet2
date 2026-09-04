@@ -659,8 +659,15 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   affordances in the reader as they do in the inspector.** Rendered Markdown owns its
   own whitespace; note containers must not preserve the renderer's HTML formatting
   whitespace, which would create artificial blank lines between list items.
-- **`activity` notes render as a chronological timeline** ordered by `created_at`
-  (ULID tie-breaker). Never collapse duplicate, repeated, or reversed transitions;
+- **`activity` notes render in both Notes and the chronological Timeline** ordered by
+  `created_at` (ULID tie-breaker). Notes retains the complete Markdown record with a
+  quieter Activity presentation; Timeline is a compact index containing only the
+  optional durable `summary` headline. It never repeats the full body or a subtitle.
+  New AI-authored activity notes supply a plain-text, one-line, outcome-oriented
+  `note_summary` in the same write. Legacy notes and providers without structured
+  summary metadata use a Markdown-stripped, word-boundary-truncated first-line fallback;
+  clients never invoke AI while rendering or opening a ticket. Never collapse duplicate,
+  repeated, or reversed transitions;
   each entry is historical context. Every actual status change appends one of these
   durable activity notes. For tickets created before transition recording, clients also
   show the lifecycle timestamps the ticket still carries (`created_at`, `completed_at`,

@@ -22,6 +22,9 @@ pub struct Note {
     pub kind: NoteKind,
     pub created_at: Timestamp,
     pub edited_at: Timestamp,
+    /// Concise, plain-text timeline headline. Optional for files written before
+    /// HS2-A32EAK and for note kinds that do not appear in the timeline.
+    pub summary: Option<String>,
     pub text: String,
 }
 
@@ -218,6 +221,7 @@ mod tests {
             kind,
             created_at: Timestamp::new(created_at),
             edited_at: Timestamp::new(created_at),
+            summary: None,
             text: String::new(),
         }
     }

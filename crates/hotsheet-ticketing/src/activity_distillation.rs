@@ -160,6 +160,7 @@ impl LocalActivitySummarizer for DeterministicActivitySummarizer {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DistilledActivityNote {
     pub note_id: Ulid,
+    pub summary: String,
     pub text: String,
     pub provenance: ActivityWindowProvenance,
 }
@@ -249,6 +250,7 @@ pub fn distill(
     );
     Some(DistilledActivityNote {
         note_id,
+        summary: summary.clone(),
         text: format!("{summary}\n\n{marker}"),
         provenance: request.provenance.clone(),
     })
@@ -277,13 +279,14 @@ pub fn write_distilled_note(
     {
         return Ok(current);
     }
-    provider.add_note(
+    provider.add_note_with_summary(
         native_id,
         MutationContext {
             now,
             generated_id: note.note_id,
         },
         NoteKind::Activity,
+        Some(note.summary.clone()),
         note.text.clone(),
     )
 }

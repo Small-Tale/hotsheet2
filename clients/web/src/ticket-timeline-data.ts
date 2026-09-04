@@ -16,17 +16,24 @@ function statusTransitionTitle(source: string, destination: string): string {
 }
 
 function noteEntry(note: Note): TimestampedTimelineEntry {
-  const [title, ...rest] = note.text.split('\n');
+  const [title] = note.text.split('\n');
   const transition = title.match(statusTransition);
   const conciseStatus = transition ? statusTransitionTitle(transition[1], transition[2]) : undefined;
   return {
     id: note.id,
     timestamp: note.created_at,
     time: note.created_at,
-    title: conciseStatus || title || 'Ticket updated',
-    subtitle: rest.join('\n').trim() || undefined,
+    title: conciseStatus || timelineHeadline(note.summary?.trim() || title),
     emphasized: note.kind === 'status' || Boolean(conciseStatus),
   };
+}
+
+function timelineHeadline(text: string): string {
+  const plain = text.trim().replace(/^#{1,6}\s+/, '').replace(/[*_`~]/g, '').replace(/\s+/g, ' ') || 'Ticket updated';
+  if (plain.length <= 80) return plain;
+  const clipped = plain.slice(0, 80);
+  const boundary = clipped.lastIndexOf(' ');
+  return `${clipped.slice(0, boundary >= 48 ? boundary : 80).trimEnd()}…`;
 }
 
 /** Build durable ticket history and backfill the lifecycle timestamps available on
