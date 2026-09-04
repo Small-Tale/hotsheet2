@@ -455,9 +455,11 @@ multi-selection placeholders keep the divider to preserve their intentional stat
     the full note body/subtitle, and its displayed event total is derived from the
     rendered entry collection
   - `TicketCodeReview` — **demo built**: ticket-associated commit subjects, abbreviated
-    SHAs, dates, configured-tool status, individual commit actions, and adjacent-range
-    actions. The catalog exposes configured, unconfigured, empty, loading, and error
-    states; actions are disabled without a configured Git diff tool.
+    SHAs, dates, two-line Markdown body previews with click-to-expand full messages,
+    configured-tool status, individual commit actions, adjacent-range actions, and the
+    repository A/B comparison banner/labels. The catalog exposes configured,
+    unconfigured, empty, loading, and error states; actions are disabled without a
+    configured Git diff tool.
   - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
     derived from the rendered collection, plus native browse and drop entry points.
     Open, download, copy-reference, and remove icon buttons have explicit accessible

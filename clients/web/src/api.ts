@@ -16,10 +16,10 @@ export type RepositoryFileChange='added'|'copied'|'deleted'|'modified'|'renamed'
 export interface RepositoryFile {path:string;original_path?:string;staged?:RepositoryFileChange;unstaged?:RepositoryFileChange;untracked:boolean;conflicted:boolean}
 export type RepositoryPlatform='macos'|'windows'|'linux';
 export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number;clean?:boolean;files?:RepositoryFile[];root?:string;platform?:RepositoryPlatform;commit_count?:number;commits?:CodeReviewCommit[];ranges?:CodeReviewRange[];difftool?:string;truncated?:boolean}
-export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;committed_at:string}
+export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;body?:string;committed_at:string}
 export interface CodeReviewRange {from:string;to:string;count:number}
 export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean}
-export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:string;to:string};
+export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:string;to:string}|{mode:'compare';from:string;to:string};
 export interface PermissionRequest {id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean}
 export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}
 export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;link?:string;progress?:number}

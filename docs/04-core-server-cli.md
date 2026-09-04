@@ -112,13 +112,16 @@ files do not preserve status transitions.
 
 Checkout-scoped code review is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/code-review`. Discovery walks at most the
-newest 2,000 reachable commits and associates a commit only when the ticket slug is a
-bounded token in its subject; body-only mentions are cross-references, not ownership.
+newest 2,000 reachable commits, returns each commit's subject and full message body, and
+associates a commit only when the ticket slug is a bounded token in its subject;
+body-only mentions are cross-references, not ownership.
 Adjacent matching commits form reviewable ranges without spanning unrelated work. The
 response also reports the checkout's Git `diff.tool`. The matching `POST` accepts only a
 single commit or adjacent range returned by a fresh discovery, rejects arbitrary refs,
 and starts `git difftool --no-prompt` with an argument array in the registered checkout.
-The client never receives a program path or executes a review command itself.
+The repository-review endpoint additionally accepts two distinct, exact commits from a
+fresh repository discovery for an A/B comparison. The client never receives a program
+path or executes a review command itself.
 
 Project command settings use exact `program` + `args` arrays. `/commands` only starts a
 configured id; requests cannot supply arbitrary shell text. Bounded run history includes

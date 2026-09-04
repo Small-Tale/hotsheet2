@@ -1,23 +1,43 @@
-.ticket-code-review__header > div { display: flex; min-width: 0; align-items: baseline; justify-content: space-between; gap: var(--wa-space-xs); }
-.ticket-code-review__header span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); white-space: nowrap; }
+.ticket-code-review__header { height: auto; min-height: 2.525rem; padding: 0; }
+.ticket-code-review__heading { display: flex; min-width: 0; align-items: baseline; gap: var(--wa-space-xs); }
+.ticket-code-review__heading h2 { margin: 0; }
+.ticket-code-review__heading span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); white-space: nowrap; }
+.ticket-code-review__compare-banner { display: grid; min-width: 0; margin-bottom: var(--wa-space-m); padding: var(--wa-space-s); border: 1px solid color-mix(in srgb, var(--hs-ticket-state-needs-review) 42%, transparent); border-radius: var(--wa-border-radius-m); color: var(--wa-color-text-normal); background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 10%, var(--wa-color-surface-default)); grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: var(--wa-space-s); font-size: var(--wa-font-size-xs); }
+.ticket-code-review__compare-banner > div:first-child { display: flex; min-width: 0; grid-column: 1 / -1; align-items: center; gap: var(--wa-space-xs); }
+.ticket-code-review__compare-banner > div:first-child svg { width: 1rem; height: 1rem; flex: none; color: var(--hs-ticket-state-needs-review); }
+.ticket-code-review__compare-banner > button { display: inline-flex; min-height: 2rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-pill); align-items: center; justify-content: center; gap: var(--wa-space-2xs); font: inherit; font-weight: var(--wa-font-weight-semibold); cursor: pointer; }
+.ticket-code-review__compare-banner > button svg { width: .9rem; height: .9rem; }
+.ticket-code-review__compare-cancel { color: var(--wa-color-neutral-on-quiet); background: transparent; }
+.ticket-code-review__compare-open { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); }
+.ticket-code-review__compare-open:disabled { opacity: .45; cursor: not-allowed; }
+.ticket-code-review__compare-banner .toolbar-control-group { height: 2.2rem; }
+.ticket-code-review__compare-banner .toolbar-control-group > button { height: 1.7rem; }
+.ticket-code-review__compare-banner .toolbar-control-group > button[data-selected="true"] { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); }
 .ticket-code-review__range { display: flex; width: 100%; min-height: 2.4rem; padding: .5rem .65rem; border: 1px solid var(--wa-color-brand-border-normal); border-radius: .5rem; color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); cursor: pointer; align-items: center; gap: .45rem; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 650; }
 .ticket-code-review__range span { min-width: 0; flex: 1; text-align: left; }
 .ticket-code-review__range small { display: block; margin-top: .1rem; opacity: .72; font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-2xs); font-weight: 500; }
-.ticket-code-review__range svg, .ticket-code-review__commits button svg { width: .9rem; height: .9rem; flex: none; }
+.ticket-code-review__range svg, .ticket-code-review__commits > li > button svg { width: .9rem; height: .9rem; flex: none; }
 .ticket-code-review__range:disabled, .ticket-code-review__commits button:disabled { opacity: .55; cursor: not-allowed; }
 .ticket-code-review__commits { display: grid; min-width: 0; margin: 0; padding: 0; list-style: none; }
 .ticket-code-review__commits li { display: grid; min-width: 0; min-height: 4.25rem; margin-inline-start: 0; padding: .7rem 0; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); grid-template-columns: 1.3rem minmax(0, 1fr) 2rem; align-items: start; gap: var(--wa-space-xs); }
 .ticket-code-review__commits li:first-child { border-top: 1px solid var(--wa-color-neutral-border-quiet); }
 .ticket-code-review__graph { display: grid; width: 1.25rem; height: 1.25rem; margin-top: .05rem; color: var(--wa-color-neutral-on-quiet); place-items: center; }
 .ticket-code-review__graph svg { width: 1rem; height: 1rem; }
-.ticket-code-review__commits li > div { display: grid; min-width: 0; gap: .35rem; }
+.ticket-code-review__commit-summary { display: grid; min-width: 0; gap: .35rem; cursor: pointer; }
+.ticket-code-review__commit-summary:focus-visible { border-radius: var(--wa-border-radius-s); outline: var(--wa-focus-ring); outline-offset: 3px; }
 .ticket-code-review__commits strong { color: var(--wa-color-text-normal); font-size: var(--wa-font-size-xs); line-height: 1.35; overflow-wrap: anywhere; }
-.ticket-code-review__commits li > div > span { display: flex; min-width: 0; color: var(--wa-color-neutral-on-quiet); align-items: center; flex-wrap: wrap; gap: var(--wa-space-xs); font-size: var(--wa-font-size-2xs); }
+.ticket-code-review__commit-summary > span { display: flex; min-width: 0; color: var(--wa-color-neutral-on-quiet); align-items: center; flex-wrap: wrap; gap: var(--wa-space-xs); font-size: var(--wa-font-size-2xs); }
+.ticket-code-review__commit-body { min-width: 0; color: var(--wa-color-text-quiet); }
+.ticket-code-review__commit-body .markdown-preview { color: inherit; font-size: var(--wa-font-size-xs); line-height: 1.4; }
+.ticket-code-review__commit-body .markdown-preview :is(p,ul,ol,blockquote,pre,table) { margin: var(--wa-space-2xs) 0; }
+.ticket-code-review__compare-label { display: inline-grid; min-width: 1.25rem; height: 1.25rem; padding: 0 var(--wa-space-2xs); border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-normal); background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 18%, var(--wa-color-surface-default)); font-size: var(--wa-font-size-2xs); place-items: center; }
+.ticket-code-review__commits li[data-compared] { background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 5%, transparent); }
 .ticket-code-review__commits code { padding: .08rem .25rem; border-radius: .25rem; background: var(--wa-color-neutral-fill-normal); font-size: var(--wa-font-size-2xs); }
-.ticket-code-review__commits button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .4rem; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
-.ticket-code-review__commits button:not(:disabled):hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
+.ticket-code-review__commits > li > button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .4rem; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
+.ticket-code-review__commits > li > button:not(:disabled):hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .ticket-code-review__notice { padding: .65rem; border-radius: .5rem; background: var(--wa-color-neutral-fill-normal); color: var(--wa-color-neutral-on-quiet) !important; font-size: var(--wa-font-size-xs) !important; }
 .ticket-code-review__empty { display: grid; min-height: 8rem; padding: 1rem; border: 1px dashed var(--wa-color-neutral-border-loud); border-radius: .6rem; color: var(--wa-color-neutral-on-quiet); place-items: center; align-content: center; gap: var(--wa-space-xs); text-align: center; }
 .ticket-code-review__empty svg { width: 1.2rem; height: 1.2rem; }
 .ticket-code-review__message { color: var(--wa-color-neutral-on-quiet) !important; font-size: var(--wa-font-size-xs) !important; }
-@container (max-width: 22rem) { .ticket-code-review__header > div { align-items: flex-start; flex-direction: column; } .ticket-code-review__header span { white-space: normal; } }
+@container (max-width: 22rem) { .ticket-code-review__compare-banner { grid-template-columns: minmax(0,1fr) auto; } .ticket-code-review__compare-open { grid-column: 1 / -1; } }
+@container (max-width: 22rem) { .ticket-code-review__heading { align-items: flex-start; flex-direction: column; } .ticket-code-review__heading span { white-space: normal; } }

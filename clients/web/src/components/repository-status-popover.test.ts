@@ -61,11 +61,12 @@ describe('RepositoryStatusPopover',()=>{
   });
 
   it('reuses code-review commit and range actions in the commits view',()=>{
-    const markup=String(RepositoryStatusPopover({status:status({ranges:[{from:'aaa1111',to:'bbb2222',count:2}]}),view:'commits'}));
+    const markup=String(RepositoryStatusPopover({status:status({ranges:[{from:'aaa1111',to:'bbb2222',count:2}]}),view:'commits',comparison:{active:false,side:'a'}}));
     expect(markup).toContain('data-component="ticket-code-review"');
     expect(markup).toContain('Ship repository browser');
     expect(markup).toContain('data-action="open-repository-review"');
     expect(markup).toContain('data-review-mode="range"');
+    expect(markup).toContain('aria-label="Compare two commits"');
   });
 
   it('normalizes absolute paths and host-specific reveal copy',()=>{

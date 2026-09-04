@@ -13,12 +13,14 @@ use thiserror::Error;
 
 const LOG_LIMIT: usize = 2_000;
 const FIELD_SEPARATOR: char = '\u{1f}';
+const RECORD_SEPARATOR: char = '\u{1e}';
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CodeReviewCommit {
     pub sha: String,
     pub short_sha: String,
     pub subject: String,
+    pub body: String,
     pub committed_at: String,
     #[serde(skip_serializing)]
     parents: Vec<String>,
@@ -47,6 +49,7 @@ pub struct CodeReview {
 pub enum ReviewTarget {
     Commit { commit: String },
     Range { from: String, to: String },
+    Compare { from: String, to: String },
 }
 
 #[derive(Debug, Error)]
@@ -121,7 +124,7 @@ fn discover_commits(
             "-n",
             &LOG_LIMIT.to_string(),
             &format!(
-                "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s"
+                "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{RECORD_SEPARATOR}"
             ),
             "HEAD",
         ],
@@ -197,6 +200,22 @@ fn launch_revisions(
             };
             Ok((old, range.to.clone()))
         }
+        ReviewTarget::Compare { from, to } => {
+            if from == to {
+                return Err(CodeReviewError::InvalidTarget);
+            }
+            let from = review
+                .commits
+                .iter()
+                .find(|candidate| candidate.sha == *from)
+                .ok_or(CodeReviewError::InvalidTarget)?;
+            let to = review
+                .commits
+                .iter()
+                .find(|candidate| candidate.sha == *to)
+                .ok_or(CodeReviewError::InvalidTarget)?;
+            Ok((from.sha.clone(), to.sha.clone()))
+        }
     }
 }
 
@@ -228,9 +247,13 @@ fn git_success(root: &Path, args: &[&str]) -> bool {
 
 fn parse_log(output: &str) -> Vec<CodeReviewCommit> {
     output
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.splitn(5, FIELD_SEPARATOR);
+        .split(RECORD_SEPARATOR)
+        .filter_map(|record| {
+            let record = record.trim_start_matches(['\r', '\n']);
+            if record.is_empty() {
+                return None;
+            }
+            let mut fields = record.splitn(6, FIELD_SEPARATOR);
             Some(CodeReviewCommit {
                 sha: fields.next()?.to_owned(),
                 short_sha: fields.next()?.to_owned(),
@@ -241,6 +264,7 @@ fn parse_log(output: &str) -> Vec<CodeReviewCommit> {
                     .collect(),
                 committed_at: fields.next()?.to_owned(),
                 subject: fields.next()?.to_owned(),
+                body: fields.next()?.trim_end_matches(['\r', '\n']).to_owned(),
             })
         })
         .collect()
@@ -303,6 +327,7 @@ mod tests {
             sha: sha.into(),
             short_sha: sha.chars().take(7).collect(),
             subject: subject.into(),
+            body: String::new(),
             committed_at: "2026-09-02T00:00:00Z".into(),
             parents: (!parent.is_empty())
                 .then(|| parent.into())
@@ -388,6 +413,64 @@ mod tests {
             ),
             Err(CodeReviewError::InvalidTarget)
         ));
+        assert!(matches!(
+            launch_revisions(
+                Path::new("."),
+                &review,
+                &ReviewTarget::Compare {
+                    from: "bbbbbbbb".into(),
+                    to: "bbbbbbbb".into()
+                }
+            ),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+        assert!(matches!(
+            launch_revisions(
+                Path::new("."),
+                &review,
+                &ReviewTarget::Compare {
+                    from: "bbbbbbbb".into(),
+                    to: "--no-index".into()
+                }
+            ),
+            Err(CodeReviewError::InvalidTarget)
+        ));
+    }
+
+    #[test]
+    fn parses_multiline_commit_bodies_without_splitting_commits() {
+        let output = format!(
+            "aaa{FIELD_SEPARATOR}aaa{FIELD_SEPARATOR}parent{FIELD_SEPARATOR}2026-09-02T00:00:00Z{FIELD_SEPARATOR}Subject{FIELD_SEPARATOR}First line\n\n**Markdown** line{RECORD_SEPARATOR}\nbbb{FIELD_SEPARATOR}bbb{FIELD_SEPARATOR}{FIELD_SEPARATOR}2026-09-01T00:00:00Z{FIELD_SEPARATOR}Root{FIELD_SEPARATOR}{RECORD_SEPARATOR}\n"
+        );
+        let commits = parse_log(&output);
+        assert_eq!(commits.len(), 2);
+        assert_eq!(commits[0].body, "First line\n\n**Markdown** line");
+        assert_eq!(commits[1].subject, "Root");
+    }
+
+    #[test]
+    fn compare_uses_the_two_exact_discovered_commits() {
+        let review = CodeReview {
+            commits: vec![
+                commit("bbbbbbbb", "new", "aaaaaaaa"),
+                commit("aaaaaaaa", "old", "rootroot"),
+            ],
+            ranges: vec![],
+            difftool: Some("configured".into()),
+            truncated: false,
+        };
+        assert_eq!(
+            launch_revisions(
+                Path::new("."),
+                &review,
+                &ReviewTarget::Compare {
+                    from: "aaaaaaaa".into(),
+                    to: "bbbbbbbb".into(),
+                },
+            )
+            .unwrap(),
+            ("aaaaaaaa".into(), "bbbbbbbb".into())
+        );
     }
 
     #[test]

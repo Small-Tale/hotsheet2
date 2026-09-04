@@ -6,7 +6,7 @@ import type { CodeReview, RepositoryFile, RepositoryFileChange, RepositoryStatus
 import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
-import { TicketCodeReview } from './ticket-code-review';
+import { type CodeReviewComparison, TicketCodeReview } from './ticket-code-review';
 
 export type RepositoryStatusState='clean'|'dirty'|'ahead'|'behind'|'diverged'|'conflicted'|'error';
 export type RepositoryStatusView='staged'|'unstaged'|'untracked'|'conflicted'|'commits';
@@ -34,7 +34,7 @@ const viewDefinitions=[
   {id:'commits',label:'Commits',icon:GitCommitHorizontal},
 ] as const;
 
-export function RepositoryStatusPopover({status,error='',refreshing=false,view='unstaged',fileMenu,embedded=false}:{status:RepositoryStatus|null;error?:string;refreshing?:boolean;view?:RepositoryStatusView;fileMenu?:RepositoryFileMenu;embedded?:boolean}){
+export function RepositoryStatusPopover({status,error='',refreshing=false,view='unstaged',fileMenu,embedded=false,comparison,expandedCommits}:{status:RepositoryStatus|null;error?:string;refreshing?:boolean;view?:RepositoryStatusView;fileMenu?:RepositoryFileMenu;embedded?:boolean;comparison?:CodeReviewComparison;expandedCommits?:readonly string[]}){
   const state=repositoryStatusState(status,error),branch=status?.branch||'No branch',upstream=status?.upstream||'No upstream';
   const files=repositoryFilesForView(status?.files??[],view);
   const review:CodeReview|undefined=status?{commits:status.commits??[],ranges:status.ranges??[],difftool:status.difftool,truncated:Boolean(status.truncated)}:undefined;
@@ -45,7 +45,7 @@ export function RepositoryStatusPopover({status,error='',refreshing=false,view='
       <dl class="repository-status-popover__values"><div><dt>Ahead</dt><dd><LucideIcon icon={ArrowUp} name="arrow-up"/>{status.ahead}</dd></div><div><dt>Behind</dt><dd><LucideIcon icon={ArrowDown} name="arrow-down"/>{status.behind}</dd></div></dl>
       <nav aria-label="Repository views"><MenuHeader label="Views"/>{viewDefinitions.map(item=><MenuItem action="select-repository-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'square-pen':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/>} label={item.label} trailing={<small class="menu-item__count">{repositoryViewCount(status,item.id)}</small>}/>)}</nav>
     </aside><main class="repository-status-popover__detail" aria-live="polite">
-      {view==='commits'?<TicketCodeReview embedded title="Commits" emptyMessage="No commits were found in this repository." loadingMessage="Finding commits…" action="open-repository-review" review={review}/>:<RepositoryFileList files={files} view={view}/>}
+      {view==='commits'?<TicketCodeReview embedded title="Commits" emptyMessage="No commits were found in this repository." loadingMessage="Finding commits…" action="open-repository-review" review={review} comparison={comparison} expandedCommits={expandedCommits}/>:<RepositoryFileList files={files} view={view}/>}
     </main></div>}
     {!status&&!error&&<p class="repository-status-popover__loading" role="status">Loading repository status…</p>}
     {error&&<p class="repository-status-popover__error" role="alert">{error}</p>}

@@ -146,7 +146,7 @@ import {
   sidebarViews,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
-import { repositoryDemoEvent, repositoryDemoView, RepositoryStatusPopoverDemo } from './repository-status-demo';
+import { repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoView, RepositoryStatusPopoverDemo } from './repository-status-demo';
 import { SelectDemo } from './select-demo';
 import {
   resetStatusBadgeDemo,
@@ -692,6 +692,24 @@ delegate(root, 'click', '[data-action="open-repository-status"]', () => {
 delegate(root, 'click', '[data-action="select-repository-view"]', (_event, target) => {
   repositoryDemoView.value = (target as HTMLElement).dataset.itemId as typeof repositoryDemoView.value;
   repositoryDemoEvent.value = `${(target as HTMLElement).textContent?.trim() ?? 'Repository view'} selected.`;
+});
+delegate(root, 'click', '[data-action="start-repository-comparison"]', () => {
+  repositoryDemoView.value = 'commits';
+  repositoryDemoComparison.value = { active: true, side: 'a' };
+});
+delegate(root, 'click', '[data-action="cancel-repository-comparison"]', () => {
+  repositoryDemoComparison.value = { active: false, side: 'a' };
+});
+delegate(root, 'click', '[data-action="set-repository-comparison-side"]', (_event, target) => {
+  repositoryDemoComparison.value = { ...repositoryDemoComparison.value, side: (target as HTMLElement).dataset.comparisonSide as 'a' | 'b' };
+});
+delegate(root, 'click', '[data-action="select-repository-comparison-commit"]', (_event, target) => {
+  const sha = (target as HTMLElement).dataset.commitSha!, current = repositoryDemoComparison.value;
+  repositoryDemoComparison.value = current.side === 'a' ? { ...current, a: sha, side: 'b' } : { ...current, b: sha };
+});
+delegate(root, 'click', '[data-action="toggle-code-review-commit"]', (_event, target) => {
+  const sha = (target as HTMLElement).dataset.commitSha!;
+  repositoryDemoExpandedCommits.value = repositoryDemoExpandedCommits.value.includes(sha) ? repositoryDemoExpandedCommits.value.filter(item => item !== sha) : [...repositoryDemoExpandedCommits.value, sha];
 });
 delegate(root, 'click', '[data-action="refresh-repository-status"]', () => {
   repositoryDemoEvent.value = 'Repository status refreshed.';

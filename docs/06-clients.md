@@ -273,8 +273,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   offer Reveal in Finder.
 
   The inspector includes a Code Review segment for ticket-associated code history. It
-  lists each matching commit subject, abbreviated SHA, and date even when no review tool
-  is configured. When the checkout has a Git `diff.tool`, each commit has an Open action
+  lists each matching commit subject, up to two lines of its Markdown-formatted message
+  body, abbreviated SHA, and date even when no review tool is configured. Clicking the
+  commit summary toggles its complete Markdown body. When the checkout has a Git
+  `diff.tool`, each commit has an Open action
   and each adjacent multi-commit run has its own bundle action with explicit oldest/newest
   boundaries. Multiple disjoint runs therefore remain separately reviewable; interleaved
   unrelated commits are never silently included. The inspector tab uses the Lucide
@@ -750,8 +752,13 @@ Value groups have no outer border and use text-aligned inset row separators.
 The Commits view embeds the same commit graph, configured difftool actions, and
 multi-commit range presentation as ticket Code Review. Both individual commits and the
 unpushed range are rediscovered and validated by the server immediately before launch;
-arbitrary browser-supplied paths or revisions are rejected. Repository status remains
-explicit-refresh/event driven and introduces no polling.
+arbitrary browser-supplied paths or revisions are rejected. Its Git Compare toolbar
+action switches to Commits and opens a light-purple selection banner. A/B segmented
+controls choose which side the next commit click sets; selecting A advances to B, both
+commits receive visible side labels, and Open remains disabled until two distinct sides
+are selected. Open uses the same external-difftool affordance as a single commit. The
+shared component's complete comparison state is represented in `/ux-demo`. Repository
+status remains explicit-refresh/event driven and introduces no polling.
 
 ## 6.11 Cross-references
 - UX component inventory and `/ux-demo` contract: [ux-components.md](ux-components.md)
