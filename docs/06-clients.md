@@ -736,7 +736,10 @@ mode. The reader uses the available browser height with exactly 24px of backdrop
 and below; it has no desktop-height cap that leaves unnecessary vertical space. Details
 and ordinary notes expose their normal edit interactions immediately.
 Leaving the details editor flushes its pending autosave and returns that surface to
-preview. Closing the reader performs the same save-and-exit transition, so its shared
+preview. When a pointer action outside the editor causes that blur, the save begins
+immediately but the editor remains mounted until the originating click has reached its
+target; Add note, tab changes, and other controls therefore act on the first click.
+Closing the reader performs the same save-and-exit transition, so its shared
 editing state never leaks into the sidebar inspector; stale save completions cannot close
 a newer editor generation or a different selected ticket.
 While editing details/notes **in the detail panel**, the **reader button stays
