@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 33 -->
+<!-- hotsheet-skill-version: 34 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -40,6 +40,12 @@ docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented
 unimplemented behavior, open questions, and known gaps; immediately create tickets for
 every incomplete item; include result, verification, and all follow-up slugs in the
 completing note.
+
+For user-visible UI work, liberally capture and attach a representative set of real-browser
+screenshots covering the changed components, screens, states, and meaningful wide/narrow
+layouts. Prefer a focused crop when it communicates the change more clearly. Reference
+each useful capture by name (`attachment:filename`) in progress notes and especially the
+completion note. Screenshots supplement behavioral assertions; they do not replace them.
 
 Stop early only for an explicit user ticket/time/budget limit, an empty queue, or a
 genuine blocker requiring user input or unavailable external state. For that current-

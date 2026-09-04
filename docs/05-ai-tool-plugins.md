@@ -99,7 +99,10 @@ HS1 discovered is unavoidable because the registry is reachable from client code
 - `instructions`: the managed instruction file (`CLAUDE.md` / `AGENTS.md` /
   `GEMINI.md` / a rules file) + frontmatter + adapter-family flag.
 - `skills`: generate/refresh the worklist skill/rule artifact; report which
-  artifact answers "is this tool prepared?"
+  artifact answers "is this tool prepared?" The shared Hot Sheet workflow asks agents
+  doing user-visible UI work to attach representative real-browser captures across the
+  changed states and relevant viewport sizes, then reference those attachments by name
+  in the ticket's development and completion notes.
 - `command`: the binary + how a launch line resolves (channel flags, model
   variants).
 - `drive`: the transport implementation — run one turn; optional

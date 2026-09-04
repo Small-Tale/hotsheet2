@@ -80,6 +80,7 @@ mod tests {
         assert!(skill.contains("not a stopping condition"));
         assert!(skill.contains("Priority is an important guidance signal"));
         assert!(skill.contains("Completion checklist"));
+        assert!(skill.contains("attachment:filename"));
         assert!(skill.contains("FEEDBACK NEEDED is not deferred-work tracking"));
         assert!(skill.contains("--note-file -"));
 
