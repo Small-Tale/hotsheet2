@@ -46,10 +46,10 @@ const GROUPING_CHOICES: readonly SelectChoice<'project'|'flow'>[] = [
 
 export function TerminalDashboardControls({ grouping = 'project', hiddenCount = 0 }: {grouping?:'project'|'flow';hiddenCount?:number}) {
   return <div class="terminal-dashboard-controls" data-component="terminal-dashboard-controls">
-    <ToolbarControlGroup appearance="borderless" single>
+    <ToolbarControlGroup single>
       <button type="button" class="terminal-dashboard-controls__visibility" data-action="show-hidden-terminals" disabled={hiddenCount===0} aria-label="Show hidden terminals" title={hiddenCount?'Show hidden terminals':'No hidden terminals'}><LucideIcon icon={Eye} name="eye" />{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</button>
     </ToolbarControlGroup>
-    <ToolbarControlGroup appearance="borderless" className="terminal-dashboard-controls__grouping">
+    <ToolbarControlGroup className="terminal-dashboard-controls__grouping">
       <Select className="terminal-dashboard-controls__grouping-select" name="terminal-grouping" ariaLabel={`Group terminals: ${grouping==='project'?'Project':'None'}`} value={grouping} choices={GROUPING_CHOICES} renderSelected={()=><span>Group</span>} />
     </ToolbarControlGroup>
   </div>;
