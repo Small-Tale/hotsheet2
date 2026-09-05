@@ -98,10 +98,10 @@ pub fn parse_porcelain_v2(text: &str) -> RepositoryStatus {
                     out.behind = n.parse().unwrap_or(0);
                 }
             }
-        } else if line.starts_with("? ") {
+        } else if let Some(path) = line.strip_prefix("? ") {
             out.untracked += 1;
             out.files.push(RepositoryFile {
-                path: line[2..].to_owned(),
+                path: path.to_owned(),
                 original_path: None,
                 staged: None,
                 unstaged: Some(RepositoryFileChange::Untracked),
@@ -191,7 +191,16 @@ mod tests {
     use super::*;
     #[test]
     fn parses_branch_divergence_and_worktree_counts() {
-        let input = "# branch.oid abc123\0# branch.head main\0# branch.upstream origin/main\0# branch.ab +2 -3\01 M. N... 100644 100644 100644 a b staged file.txt\01 .M N... 100644 100644 100644 a b dirty file.txt\0u UU N... 100644 100644 100644 100644 a b c conflict.txt\0? new file.txt\0";
+        let input = concat!(
+            "# branch.oid abc123\0",
+            "# branch.head main\0",
+            "# branch.upstream origin/main\0",
+            "# branch.ab +2 -3\0",
+            "1 M. N... 100644 100644 100644 a b staged file.txt\0",
+            "1 .M N... 100644 100644 100644 a b dirty file.txt\0",
+            "u UU N... 100644 100644 100644 100644 a b c conflict.txt\0",
+            "? new file.txt\0",
+        );
         let status = parse_porcelain_v2(input);
         assert_eq!((status.ahead, status.behind), (2, 3));
         assert_eq!(
@@ -218,9 +227,11 @@ mod tests {
 
     #[test]
     fn parses_rename_records_with_the_original_path() {
-        let status = parse_porcelain_v2(
-            "# branch.head main\02 R. N... 100644 100644 100644 a b R100 new name.txt\0old name.txt\0",
-        );
+        let status = parse_porcelain_v2(concat!(
+            "# branch.head main\0",
+            "2 R. N... 100644 100644 100644 a b R100 new name.txt\0",
+            "old name.txt\0",
+        ));
         assert_eq!(status.staged, 1);
         assert_eq!(status.files[0].path, "new name.txt");
         assert_eq!(
