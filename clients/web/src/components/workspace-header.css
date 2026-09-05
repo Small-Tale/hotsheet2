@@ -3,7 +3,7 @@
 .workspace-header__actions { display: flex; min-width: 0; align-items: center; gap: .4rem; }
 .workspace-header__actions { justify-content: flex-end; }
 .view-mode-switcher__button { position: relative; display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
-.view-mode-switcher__badge { position: absolute; top: -.24rem; right: -.3rem; display: grid; min-width: .9rem; height: .9rem; padding: 0 .18rem; border: 1.5px solid var(--wa-color-neutral-fill-normal); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-warning-on-normal); background: var(--hs-ticket-state-up-next); font-size: var(--wa-font-size-3xs); font-weight: 750; line-height: 1; place-items: center; }
+.view-mode-switcher__badge { position: absolute; top: -.24rem; right: -.3rem; display: grid; min-width: .9rem; padding: .0625rem .3125rem; border: 1.5px solid var(--wa-color-neutral-fill-normal); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-warning-on-normal); background: var(--hs-ticket-state-up-next); font-size: var(--wa-font-size-3xs); font-weight: 750; line-height: 1; place-items: center; }
 .view-mode-switcher__button svg, .workspace-header__actions wa-button svg { width: 1rem; height: 1rem; }
 .view-mode-switcher__button:hover { background: var(--wa-color-surface-default); }
 .view-mode-switcher__button[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); }

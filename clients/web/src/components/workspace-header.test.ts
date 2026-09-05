@@ -54,6 +54,9 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('aria-label="Notifications view, 7 pending"');
     expect(markup).toContain('class="view-mode-switcher__badge" aria-hidden="true">7</span>');
     expect(markup).not.toContain('name="workspace-search"');
+    const css = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
+    expect(css).toMatch(/\.view-mode-switcher__badge \{[^}]*min-width: \.9rem;[^}]*padding: \.0625rem \.3125rem;/);
+    expect(css).not.toMatch(/\.view-mode-switcher__badge \{[^}]*(?:^|[;{]\s*)height:/);
   });
 
   it('omits every project control for global shell modes', () => {

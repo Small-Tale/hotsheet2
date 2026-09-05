@@ -210,7 +210,8 @@ does not introduce polling or another network request.
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, notifications, and project settings**
   with accessible pressed state. The notifications mode projects its pending count in
-  the shared warning color and `3xs` typography tokens; the full `WorkspaceHeader`
+  the shared warning color and `3xs` typography tokens; its content-sized pill uses
+  balanced vertical and horizontal padding instead of a forced height. The full `WorkspaceHeader`
   forwards and demonstrates that state. Settings replaces ticket content while active
   rather than opening a transient popover; later dashboard/analytics modes join the control.
 - `SortControl` — shared compact `Select` with aligned option labels and an ascending or

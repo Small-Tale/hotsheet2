@@ -660,7 +660,9 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const notificationBadge = header.locator('.view-mode-switcher__badge');
   await expect(notificationBadge).toHaveText('7');
   await expect(notificationBadge).toHaveCSS('font-size', '10px');
+  await expect(notificationBadge).toHaveCSS('padding', '1px 5px');
   await expect(notificationBadge).toHaveCSS('background-color', 'rgb(234, 179, 8)');
+  await notificationBadge.screenshot({ path: '/private/tmp/hs2-x9embf-notification-badge.png' });
   await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-wide.png', fullPage: true });
   await expect(header.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('listbox', { name: 'Workspace tickets' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
