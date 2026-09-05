@@ -488,7 +488,12 @@ The project terminal drawer occupies only the center AppShell column, leaving th
 sidebar and ticket inspector at full height. Its compact rail switches between the decorated
 grid and one undecorated, interactive xterm session that fills the content area. The terminal
 tabs scroll horizontally, with the explicit plus action immediately after them; plus creates
-the host user's default shell. The rail also exposes hidden-session recovery and collapses to
+the host user's default shell. Project and terminal tabs share one pill-tab primitive, with
+the close button before the label and optional leading/trailing state icons. Right-clicking
+either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
+Tabs; holding Option/Alt when opening the menu changes the directional action to the left.
+Closing the selected terminal follows HS1's nearest-neighbor behavior (right first, then
+left, then the grid). The rail also exposes hidden-session recovery and collapses to
 one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall
 back when WebGL is unavailable, and refit on animation frames while the drawer resizes.
 Their library-owned DOM is protected from application morphs, so committing a resize keeps

@@ -8,6 +8,7 @@ import { ConnectionStateBanner } from './connection-state-banner';
 import { PageHeader } from './page-header';
 import { ProjectTab } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
+import { AppTabContextMenu } from './project-tab-context-menu';
 import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from './resizable-region';
 
 describe('application shell components', () => {
@@ -60,6 +61,14 @@ describe('application shell components', () => {
     expect(markup).not.toContain('aria-label="Hide project sidebar"');
     expect(markup).toContain('data-project-id="one"');
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));
+  });
+
+  it('shares context-menu actions across project and terminal tabs with Option reversing direction',()=>{
+    const project=String(AppTabContextMenu({kind:'project',id:'one',x:10,y:20}));
+    const terminal=String(AppTabContextMenu({kind:'terminal',id:'term',x:10,y:20,direction:'left'}));
+    for(const label of ['Close Tab','Close Other Tabs','Close Tabs to the Right','Close All Tabs'])expect(project).toContain(label);
+    expect(project).toContain('aria-label="Project tab actions"');expect(project).toContain('data-action="project-tab-context-action"');
+    expect(terminal).toContain('aria-label="Terminal tab actions"');expect(terminal).toContain('Close Tabs to the Left');expect(terminal).toContain('data-action="terminal-tab-context-action"');
   });
 
   it('clamps and projects accessible splitters in both axes', () => {

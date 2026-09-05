@@ -70,6 +70,7 @@ export class Api {
   terminals=()=>this.request<TerminalInfo[]>('/terminals');
   terminal=(id:string)=>this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
   createTerminal=(value:{id?:string;command?:string;args?:string[];cwd?:string;connect?:string}={})=>this.request<TerminalInfo>('/terminals',{method:'POST',body:JSON.stringify(value)});
+  deleteTerminal=(id:string)=>this.request<void>(`/terminals/${encodeURIComponent(id)}`,{method:'DELETE'});
   commands=()=>this.request<CommandDefinition[]>('/commands');
   saveCommands=(definitions:CommandDefinition[])=>this.request<CommandDefinition[]>('/commands',{method:'PUT',body:JSON.stringify(definitions)});
   commandRuns=()=>this.request<CommandRun[]>('/command-runs');

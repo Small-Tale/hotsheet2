@@ -17,7 +17,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('drive-control', 'DriveControl', 'Primary AI drive start and stop action.', 'feature-floor', true),
     demo('workspace-header', 'WorkspaceHeader', 'Project identity, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']),
     demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
-    demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true),
+    demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true, ['app-tab']),
     demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, ['project-tab']),
     demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.', 'feature-floor', true),
     demo('connection-state-banner', 'ConnectionStateBanner', 'Connection progress, interruption, compatibility, and authentication states.', 'feature-floor', true),
@@ -73,11 +73,13 @@ export const demoCatalog: DemoCategory[] = [
     demo('notification-center', 'NotificationCenter', 'Pending permission requests and newest-first decision history.', 'feature-floor', true, ['permission-request']),
   ]},
   { id: 'terminal', name: 'Drawer and terminals', demos: [
+    demo('terminal-drawer', 'TerminalDrawer', 'Project terminal rail and dedicated terminal surface.', 'feature-floor', true, ['app-tab']),
     demo('bottom-drawer', 'BottomDrawer', 'Resizable tabbed desktop utility region.', 'desktop'),
     demo('terminal-pane', 'TerminalPane', 'Live shared terminal and actions.', 'desktop'),
     demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),
   ]},
   { id: 'shared', name: 'Shared interactions', demos: [
+    demo('app-tab', 'AppTab', 'Shared project and terminal tab geometry, state, and close action.', 'feature-floor', true),
     demo('select', 'Select', 'Compact icon-bearing single-value selection control.', 'feature-floor', true),
     demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group']),
     demo('menu-item', 'MenuItem', 'Aligned icon, label, trailing value, and selection geometry for menu-like rows.', 'feature-floor', true),

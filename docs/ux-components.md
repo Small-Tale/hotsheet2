@@ -715,7 +715,8 @@ notification model.
 ### 6.1 `BottomDrawer` — production built
 
 - `DrawerTabBar`
-- `DrawerTab`
+- `AppTab` / `DrawerTab` — shared with project tabs; close action precedes the label,
+  supports leading/trailing icons, and exposes the same close/others/directional/all menu
 - `AddDrawerTabButton`
 - `DrawerVisibilityButton`
 - `DrawerResizeHandle`
@@ -723,7 +724,7 @@ notification model.
 
 The shipped terminal drawer is a center-column-only vertical `ResizableRegion` with a
 compact grid/terminal tab rail, explicit new-terminal action, hidden-session recovery,
-persisted 180–520 px height, and a floating restore button when collapsed. Grid and
+persisted 180 px-to-workspace-boundary height, and a floating restore button when collapsed. Grid and
 dedicated tabs attach viewports to existing sessions; only the plus action creates a PTY.
 Activity and command-output tab kinds remain later extensions.
 

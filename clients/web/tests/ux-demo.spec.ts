@@ -1255,8 +1255,6 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
   for (const [label, selector] of [['Busy project', '.project-tab__busy'], ['Needs attention', '.project-tab__state--attention'], ['Disconnected', '.project-tab__state']] as const) {
     const tab = tabStates.filter({ hasText: label });
-    const stateIndicator = tab.locator(selector);
-    await expect(stateIndicator).toHaveCSS('right', '9.6px');
     const geometry = await tab.evaluate((node, stateSelector) => {
       const tab = node.getBoundingClientRect();
       const name = node.querySelector<HTMLElement>('.project-tab__name')!.getBoundingClientRect();
@@ -1266,6 +1264,11 @@ test('exercises the application-shell component slice and responsive composition
     expect(geometry.rightInset).toBeGreaterThan(7);
     expect(geometry.labelGap).toBeGreaterThan(0);
   }
+
+  await page.goto('/ux-demo?component=app-tab');
+  const sharedTabs=page.locator('[data-component$="-tab"]');await expect(sharedTabs).toHaveCount(2);await expect(page.getByRole('tab',{name:/Project tab/})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'Close Terminal tab'})).toBeAttached();
+  await page.goto('/ux-demo?component=terminal-drawer');
+  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-component="terminal-tab"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();
 
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -1286,7 +1289,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(closeGeometry.closeLeft).toBeLessThan(closeGeometry.selectLeft);
   expect(closeGeometry.nameLeft).toBeGreaterThan(closeGeometry.selectLeft);
   expect(closeGeometry.closeBackground).toBe('rgba(0, 0, 0, 0)');
-  expect(closeGeometry.selectPaddingRight).toBe('27.2px');
+  expect(closeGeometry.selectPaddingRight).toBe('12px');
   const tabActionCenters = await tabBar.evaluate(node => {
     const tab = node.querySelector('[data-component="project-tab"]')!.getBoundingClientRect();
     const add = node.querySelector('[data-action="add-project"] svg')!.getBoundingClientRect();

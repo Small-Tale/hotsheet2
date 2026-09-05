@@ -44,14 +44,17 @@ describe('terminal dashboard transport',()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify([{id:'agent/1',alive:true,busy:false}]),{status:200}))
       .mockResolvedValueOnce(new Response(JSON.stringify({id:'agent/1',alive:true,busy:false,scrollback:'ready'}),{status:200}))
-      .mockResolvedValueOnce(new Response(JSON.stringify({id:'terminal-2',alive:true,busy:false}),{status:200}));
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'terminal-2',alive:true,busy:false}),{status:200}))
+      .mockResolvedValueOnce(new Response(null,{status:204}));
     const api=new Api('/api');
     await expect(api.terminals()).resolves.toHaveLength(1);
     await expect(api.terminal('agent/1')).resolves.toMatchObject({scrollback:'ready'});
     await expect(api.createTerminal({cwd:'/project root'})).resolves.toMatchObject({id:'terminal-2'});
+    await expect(api.deleteTerminal('agent/1')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/terminals',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/terminals/agent%2F1',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/terminals',expect.objectContaining({method:'POST',body:'{"cwd":"/project root"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/terminals/agent%2F1',expect.objectContaining({method:'DELETE'}));
     fetchMock.mockRestore();
   });
 });

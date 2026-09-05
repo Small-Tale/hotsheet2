@@ -45,6 +45,7 @@ import {
   Wrench,
 } from 'lucide';
 
+import { AppTab } from '../components/app-tab';
 import { LucideIcon } from '../components/lucide-icon';
 import { MenuHeader } from '../components/menu-header';
 import { MenuItem } from '../components/menu-item';
@@ -56,6 +57,7 @@ import {
   resizeRegionFromPointer,
 } from '../components/resizable-region';
 import { Select } from '../components/select';
+import { TerminalDrawer } from '../components/terminal-drawer';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
@@ -359,6 +361,8 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'page-header': { icon: Text, name: 'text' },
     'project-tab': { icon: FolderGit2, name: 'folder-git-2' },
     'project-tabs': { icon: Columns3, name: 'columns-3' },
+    'app-tab': { icon: AppWindow, name: 'app-window' },
+    'terminal-drawer': { icon: Terminal, name: 'terminal' },
     'quick-ticket-composer': { icon: ListPlus, name: 'list-plus' },
     'ticket-list': { icon: List, name: 'list' },
     'ticket-row': { icon: Menu, name: 'menu' },
@@ -442,6 +446,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'drive-control') return <DriveControlDemo />;
   if (item.id === 'project-tab') return <ProjectTabDemo />;
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
+  if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab kind="project" id="project" name="Project tab" selected leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab kind="terminal" id="terminal" name="Terminal tab" leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy">●</span>}/></section>;
+  if (item.id === 'terminal-drawer') return <section class="terminal-drawer-demo"><TerminalDrawer projectId="demo" projectName="Demo project" sessions={[{ id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, scrollback: 'npm run dev\nready on http://127.0.0.1' }]} width={900} height={320} fitAcross={2} fitHigh={2} selectedId="shell"/></section>;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner')
     return <ConnectionStateBannerDemo />;
