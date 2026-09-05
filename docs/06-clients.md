@@ -499,8 +499,9 @@ bottom drawer over that same viewport boundary.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
 sidebar and ticket inspector at full height. Its compact rail switches between the decorated
-grid and one undecorated, interactive xterm session that fills the content area. The terminal
-tabs scroll horizontally, with the explicit plus action immediately after them; plus creates
+grid and one undecorated, interactive xterm session that fills the content area. Its grid tab
+never shrinks when terminal tabs consume the available width. The terminal tabs scroll
+horizontally, with the explicit plus action immediately after them; plus creates
 the host user's default shell. Project and terminal tabs share one pill-tab primitive, with
 the close button before the label and optional leading/trailing state icons. Right-clicking
 either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
