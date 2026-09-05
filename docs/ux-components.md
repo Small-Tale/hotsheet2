@@ -604,7 +604,10 @@ icons; structural separators do not require icons.
   contained long-token wrapping, and note identity;
   double-click enters a controlled editor whose Save persists and Cancel restores.
   In reader mode, regular/status notes remain directly editable, while feedback-needed
-  and feedback-draft notes always render their Respond/Submit editor style. Hover/focus
+  and feedback-draft notes always render their Respond/Submit editor style. An uppercase
+  `CHOICE` block in a feedback-needed note becomes Markdown-capable rounded options;
+  selected options use a green border/fill and checkmark, support platform-additive and
+  Shift-range selection, and coexist with inline and freeform replies. Hover/focus
   reveals an explicit Edit action in both inspector and reader, while
   the inspector toolbar provides the single Reader entry point from every inspector tab.
 - `RegularNote`

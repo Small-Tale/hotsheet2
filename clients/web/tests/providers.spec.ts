@@ -19,10 +19,10 @@ const full = { ...row, details:'The real ticket body. [Project guide](/docs/proj
 
 function normalizedCreatedTicket(body:Record<string,unknown>){const original=(typeof body.title==='string'?body.title:'').trim();let title=original,tags=Array.isArray(body.tags)?body.tags.filter((tag):tag is string=>typeof tag==='string'):[];if(original.startsWith('\\['))title=original.slice(1);else{let rest=original;const found:string[]=[];while(rest.startsWith('[')){const close=rest.indexOf(']'),content=close<0?'':rest.slice(1,close);if(close<0||!content.trim()||content.includes('['))break;found.push(content.trim().replaceAll(/\s+/g,'-'));rest=rest.slice(close+1).trimStart()}if(found.length&&rest){title=rest.trim();tags=[...new Set([...tags,...found])]}}return{title,tags}}
 
-async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded = false, ticketLoadDelay = 0, batchResponseDelay = 0, patchResponseDelay = 0) {
+async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded: boolean | 'choices' = false, ticketLoadDelay = 0, batchResponseDelay = 0, patchResponseDelay = 0) {
   let rows = [{...row,feedback_needed:primaryFeedbackNeeded},backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
   let selectedFull = primaryFeedbackNeeded
-    ? {...full,feedback_needed:true,notes:[...full.notes,{id:'N4',kind:'feedback_needed',created_at:'2026-08-30T00:37:00Z',edited_at:'2026-08-30T00:37:00Z',text:'FEEDBACK NEEDED\n\nHello there\n\n1. Something\n2. Another thing'}]}
+    ? {...full,feedback_needed:true,notes:[...full.notes,{id:'N4',kind:'feedback_needed',created_at:'2026-08-30T00:37:00Z',edited_at:'2026-08-30T00:37:00Z',text:primaryFeedbackNeeded==='choices'?'Which direction should I implement?\n\nCHOICE:\n- Keep the **current behavior**\n- Use `attachment:proof.png`\n- Defer this change\n\nYou can also explain another direction.':'FEEDBACK NEEDED\n\nHello there\n\n1. Something\n2. Another thing'}]}
     : {...full,feedback_needed:false};
   const evidenceByTicket = new Map<string,Array<{id:string;filename:string;created_at:string}>>();
   const patches: Record<string,unknown>[] = [];
@@ -185,6 +185,12 @@ test('clicks exact feedback character positions, removes a split, and composes a
   await clickAfter('Another thing');const second=note.getByRole('textbox',{name:/Response at character/}).last();await expect(second).toBeFocused();await second.fill('My second response');
   await note.screenshot({path:'/private/tmp/hs2-c5sab3-inline-feedback-replies.png'});await page.setViewportSize({width:760,height:900});const noteBox=(await note.boundingBox())!,replyBox=(await second.boundingBox())!;expect(replyBox.x).toBeGreaterThanOrEqual(noteBox.x);expect(replyBox.x+replyBox.width).toBeLessThanOrEqual(noteBox.x+noteBox.width);await note.screenshot({path:'/private/tmp/hs2-c5sab3-inline-feedback-replies-narrow.png'});await note.getByRole('button',{name:'Respond'}).click();
   await expect.poll(()=>patches.find(patch=>patch.note_kind==='regular')?.note).toBe('> FEEDBACK NEEDED\n>\n> Hello there\n>\n> 1. Something\n\nMy first response\n\n> 2. Another thing\n\nMy second response');
+});
+
+test('selects feedback choices with platform modifiers and preserves a freeform response',async({page})=>{
+  const patches=await mockProject(page,true,'choices');await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Open ticket reader'}).click();
+  const note=page.getByRole('dialog').locator('article[data-note-id="N4"]'),choices=note.getByRole('group',{name:'Feedback choices'}).locator('.note-card__choice');await expect(choices).toHaveCount(3);await choices.nth(0).click();await expect(choices.nth(0)).toHaveAttribute('aria-pressed','true');await choices.nth(1).click({modifiers:[process.platform==='darwin'?'Meta':'Control']});await expect(choices.nth(1)).toHaveAttribute('aria-pressed','true');await expect(choices.nth(1).locator('img')).toHaveAttribute('src',/proof\.png$/);await note.getByRole('textbox',{name:'Feedback response'}).fill('The two options can be combined.');await note.screenshot({path:'/private/tmp/hs2-6eeeqb-feedback-choices.png'});await note.getByRole('button',{name:'Respond'}).click();
+  await expect.poll(()=>patches.find(patch=>patch.note_kind==='regular')?.note).toBe('Selected choices:\n- Keep the **current behavior**\n- Use `attachment:proof.png`\n\nThe two options can be combined.');
 });
 
 test('records No response needed as a subtle regular response and clears review state',async({page})=>{

@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 37 -->
+<!-- hotsheet-skill-version: 38 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -74,6 +74,12 @@ Notes:
   HS1. If uncertain, use `hotsheet-cli -C <HS2-store>`.
 - If a ticket is unclear, do not guess. Record the needed decision, continue independent
   tickets, and return if the answer becomes available.
+- When a genuine user decision can be narrowed to concise, distinct options, a
+  `FEEDBACK NEEDED` note may include an uppercase `CHOICE` or `CHOICE:` line immediately
+  followed by a Markdown list. Options may include attachment references. Use choices
+  to make a decision easier, not to offload ordinary implementation judgment or replace
+  an open-ended question. Users may select zero or multiple options and may always add a
+  freeform response, so do not describe the list as exhaustive or require a selection.
 - AI-authored `activity` notes include `--note-summary "Concise outcome"` (or MCP
   `note_summary`) in the same update. Keep it plain-text, one line, outcome-oriented,
   preferably at most 80 characters, and leave implementation/verification detail in

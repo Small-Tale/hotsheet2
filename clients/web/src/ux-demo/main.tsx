@@ -62,6 +62,7 @@ import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/tic
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
 import { createDebouncedAutosave } from '../debounced-autosave';
+import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import {
   addDemoProject,
   AppShellDemo,
@@ -107,6 +108,7 @@ import {
   noteDemoNotes,
   noteDraft,
   readerAttachments,
+  readerFeedbackChoiceSelections,
   readerNotes,
   readerTab,
   TicketReaderDemo,
@@ -1352,6 +1354,17 @@ delegate(root, 'focusout', '[name="note-body"]', (_event, target) => {
     noteDraft.value = '';
     recordCollectionEvent('Note autosaved');
   });
+});
+let demoFeedbackChoiceAnchor: string | undefined = 'choice-1';
+delegate(root, 'click', '[data-action="toggle-feedback-choice"]', (event, target) => {
+  if ((event.target as Element).closest('a,[data-action="open-attachment-gallery"]')) return;
+  const noteId = (target as HTMLElement).dataset.noteId!, choiceId = (target as HTMLElement).dataset.choiceId!;
+  const note = readerNotes.value.find(item => item.id === noteId), group = note && parseFeedbackChoices(note.body);
+  if (!group) return;
+  const pointer = event as MouseEvent, next = updateFeedbackChoiceSelection(group.choices.map(choice => choice.id), readerFeedbackChoiceSelections.value[noteId] ?? [], choiceId, demoFeedbackChoiceAnchor, { additive: pointer.metaKey || pointer.ctrlKey, range: pointer.shiftKey });
+  readerFeedbackChoiceSelections.value = { ...readerFeedbackChoiceSelections.value, [noteId]: next.selected };
+  demoFeedbackChoiceAnchor = next.anchor;
+  recordCollectionEvent(`${next.selected.length} feedback choice${next.selected.length === 1 ? '' : 's'} selected`);
 });
 delegate(root, 'click', '[data-action="save-note-edit"]', (_event, target) => {
   const id = editingNoteId.value ?? (target as HTMLElement).dataset.noteId;

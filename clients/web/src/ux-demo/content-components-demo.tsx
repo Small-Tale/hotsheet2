@@ -25,11 +25,12 @@ export function NoteComposerDemo() { return <section class="note-card-demo" aria
 export const READER_NOTES = [
   { id: 'reader-status', kind: 'status' as const, author: 'Hot Sheet', time: '1 hour ago', body: 'Status changed from Not started to Started.' },
   { id: 'reader-note', kind: 'regular' as const, author: 'Claude', time: '24 minutes ago', body: 'The reader should preserve a comfortable line length while the [note history](/ux-demo?component=note-card) remains easy to scan.' },
-  { id: 'reader-feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '12 minutes ago', body: 'Should the reader keep this response visible while editing details?' },
+  { id: 'reader-feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '12 minutes ago', body: 'How should the reader preserve this response?\n\nCHOICE:\n- Keep it beside the **larger editor**\n- Move it below the editor\n- `attachment:reader-wireframe.png`' },
   { id: 'reader-draft', kind: 'feedback_draft' as const, author: 'You', time: '8 minutes ago', body: 'Yes, keep the response beside the larger editor.' },
   { id: 'reader-activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Completed the first browser review of the reading surface.' },
 ];
 export const readerNotes = signal(READER_NOTES);
+export const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({'reader-feedback':['choice-1']});
 export const readerTab = signal<InspectorTab>('info');
 export const readerAttachments = signal([{ id: 'wireframe', name: 'reader-wireframe.png' }, { id: 'notes', name: 'reader-notes.md' }]);
 export const editingNoteId = signal<string | undefined>(undefined);
@@ -39,7 +40,7 @@ export const inspectorBlockedReasonDraft = signal(inspectorBlockedReason.value);
 export const inspectorBlockedReasonEditing = signal(false);
 
 export function TicketReaderDemo() {
-  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={readerAttachments.value} timelineEntries={[{ id: 'started', time: '1h ago', title: 'Development started', subtitle: 'The reader composition work is underway.', emphasized: true }, { id: 'reviewed', time: 'Now', title: 'Reader composition reviewed', subtitle: 'Shared inspector behavior is ready for review.', emphasized: true }]} /></section>;
+  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} feedbackChoiceSelections={readerFeedbackChoiceSelections.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={readerAttachments.value} attachmentContext={{checkout:'ux-demo',ticket:'HS2-H892P1'}} timelineEntries={[{ id: 'started', time: '1h ago', title: 'Development started', subtitle: 'The reader composition work is underway.', emphasized: true }, { id: 'reviewed', time: 'Now', title: 'Reader composition reviewed', subtitle: 'Shared inspector behavior is ready for review.', emphasized: true }]} /></section>;
 }
 
 export const MARKDOWN_INITIAL = `## Implementation notes

@@ -712,6 +712,15 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   ask. It uses an outlined button rather than an ambiguous acknowledgement icon. Clients
   render the exact acknowledgement as a subtle ordinary note rather than another
   warning surface.
+- **Feedback prompts may offer explicit choices.** An uppercase `CHOICE` or `CHOICE:`
+  line immediately followed by a Markdown list becomes a set of rounded selection
+  controls. A normal click selects one option or clears the sole selection; Command on
+  macOS and Ctrl elsewhere toggles additional options, while Shift selects a range.
+  Zero or multiple selections are always valid. Selected controls use a green border,
+  quiet green fill, and checkmark. Option content uses the same Markdown and attachment
+  reference rendering as notes, including image references. Submission records the
+  selected option text in the regular response note and may include the existing
+  freeform and inline responses; the choice list never makes an answer mandatory.
 - **`regular` and `status` notes, and the ticket `details`, use the same direct editing
   affordances in the reader as they do in the inspector.** Rendered Markdown owns its
   own whitespace; note containers must not preserve the renderer's HTML formatting

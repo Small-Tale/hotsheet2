@@ -20,6 +20,17 @@ describe('inline feedback replies', () => {
     expect(combineFeedbackReply('Question?', [], '  General answer.  ')).toBe('General answer.');
   });
 
+  it('combines selected choices with an optional freeform response', () => {
+    expect(combineFeedbackReply('CHOICE:\n- First\n- **Second**', [], 'Because it is clearer.', ['choice-2']))
+      .toBe('Selected choice:\n- **Second**\n\nBecause it is clearer.');
+  });
+
+  it('omits choice syntax while interleaving inline and selected responses', () => {
+    const prompt = 'Question before.\n\nCHOICE:\n- First\n- Second\n\nAnything after?';
+    expect(combineFeedbackReply(prompt, [{ offset: 'Question'.length, text: 'Inline answer.' }], '', ['choice-1']))
+      .toBe('> Question\n\nInline answer.\n\n>  before.\n\nSelected choice:\n- First\n\n> Anything after?');
+  });
+
   it('quotes the prompt and interleaves responses after clicked characters', () => {
     const prompt = 'FEEDBACK NEEDED\n\nHello there.\n\n1. Something\n2. Another thing';
     const result = combineFeedbackReply(

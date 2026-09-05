@@ -58,6 +58,27 @@ describe('NoteCard', () => {
     expect(markup).toContain('placeholder="General response (optional)"');
   });
 
+  it('renders selectable Markdown choices while preserving a freeform response', () => {
+    const markup = String(NoteCard({
+      id: 'choice-feedback',
+      kind: 'feedback_needed',
+      author: 'Codex',
+      time: 'Now',
+      body: 'Pick a direction.\n\nCHOICE:\n- **Keep** this\n- `attachment:proof.png`',
+      readerMode: true,
+      selectedChoices: ['choice-2'],
+      attachmentContext: { checkout: 'project', ticket: 'HS2-CHOICE' },
+    }));
+    expect(markup.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
+    expect(markup).not.toContain('CHOICE:');
+    expect(markup).toContain('<strong>Keep</strong>');
+    expect(markup).toContain('aria-pressed="false"');
+    expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain('data-lucide="check"');
+    expect(markup).toContain('src="/checkouts/project/tickets/HS2-CHOICE/attachments/by-name/proof.png"');
+    expect(markup).toContain('placeholder="Additional response (optional)"');
+  });
+
   it('exposes content editing without a redundant edit button', () => {
     const markup = String(NoteCard({ id: 'actions', kind: 'regular', author: 'Codex', time: 'Now', body: 'Body' }));
     expect(markup).toContain('data-edit-on-double-click="true"');

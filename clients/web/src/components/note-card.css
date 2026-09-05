@@ -30,6 +30,18 @@
 .note-card__inline-reply-row button { display: inline-grid; width: var(--wa-space-xl); height: var(--wa-space-xl); flex: none; padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
 .note-card__inline-reply-row button:hover { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); }
 .note-card__inline-reply-row button svg { width: var(--wa-space-m); height: var(--wa-space-m); }
+.note-card__choices { display: grid; gap: var(--wa-space-xs); }
+.note-card__choice { display: grid; width: 100%; min-width: 0; padding: var(--wa-space-s) var(--wa-space-m); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-l); color: inherit; background: var(--wa-color-surface-default); font: inherit; text-align: left; cursor: pointer; grid-template-columns: var(--wa-space-l) minmax(0, 1fr); align-items: start; gap: var(--wa-space-xs); }
+.note-card__choice:hover { border-color: var(--wa-color-success-fill-loud); }
+.note-card__choice[aria-pressed="true"] { border-color: var(--wa-color-success-fill-loud); background: var(--wa-color-success-fill-quiet); }
+.note-card__choice-check { display: grid; width: var(--wa-space-l); height: var(--wa-space-l); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-pill); color: transparent; place-items: center; }
+.note-card__choice[aria-pressed="true"] .note-card__choice-check { border-color: var(--wa-color-success-fill-loud); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-success-fill-normal); }
+.note-card__choice-check svg { width: var(--wa-space-s); height: var(--wa-space-s); }
+.note-card__choice .markdown-preview { min-width: 0; font: inherit; }
+.note-card__choice .markdown-preview > :first-child { margin-top: 0; }
+.note-card__choice .markdown-preview > :last-child { margin-bottom: 0; }
+.note-card__choice .markdown-preview__attachment-image { width: min(100%, 12rem); max-height: 7rem; overflow: hidden; }
+.note-card__choice .markdown-preview__attachment-image img { display: block; width: 100%; max-height: 7rem; object-fit: cover; }
 .note-card[data-kind="status"] { border-color: transparent; background: var(--wa-color-neutral-fill-normal); }
 .note-card[data-kind="status"] .note-card__kind { color: var(--wa-color-text-link); }
 .note-card[data-kind="activity"] { padding: var(--wa-space-s) var(--wa-space-m); border-color: transparent; background: transparent; gap: var(--wa-space-2xs); }

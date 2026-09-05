@@ -1,3 +1,5 @@
+import { parseFeedbackChoices, selectedFeedbackChoicesMarkdown } from './feedback-choices';
+
 export interface InlineFeedbackReply { offset: number; text: string }
 export interface FeedbackSegment { start: number; end: number; markdown: string; reply?: InlineFeedbackReply }
 
@@ -30,16 +32,27 @@ function quoteMarkdown(markdown: string): string {
   return markdown.split('\n').map(line => line ? `> ${line}` : '>').join('\n');
 }
 
-export function combineFeedbackReply(prompt: string, replies: readonly InlineFeedbackReply[], generalReply: string): string {
+export function combineFeedbackReply(prompt: string, replies: readonly InlineFeedbackReply[], generalReply: string, selectedChoiceIds: readonly string[] = []): string {
   const liveReplies = replies.filter(reply => reply.text.trim());
   const general = generalReply.trim();
-  if (!liveReplies.length) return general;
+  const selectedChoices = selectedFeedbackChoicesMarkdown(prompt, selectedChoiceIds);
+  if (!liveReplies.length) return [selectedChoices, general].filter(Boolean).join('\n\n');
   const pieces: string[] = [];
-  for (const segment of splitFeedbackPrompt(prompt, liveReplies)) {
-    const markdown = segment.markdown.replace(/^\n+|\n+$/g, '');
-    if (markdown) pieces.push(quoteMarkdown(markdown));
-    if (segment.reply?.text.trim()) pieces.push(segment.reply.text.trim());
-  }
+  const appendRegion = (source: string, sourceStart: number) => {
+    const localReplies = liveReplies.filter(reply => reply.offset >= sourceStart && reply.offset <= sourceStart + source.length).map(reply => ({ ...reply, offset: reply.offset - sourceStart }));
+    for (const segment of splitFeedbackPrompt(source, localReplies)) {
+      const markdown = segment.markdown.replace(/^\n+|\n+$/g, '');
+      if (markdown) pieces.push(quoteMarkdown(markdown));
+      if (segment.reply?.text.trim()) pieces.push(segment.reply.text.trim());
+    }
+  };
+  const choiceGroup = parseFeedbackChoices(prompt);
+  if (choiceGroup) {
+    appendRegion(choiceGroup.before, 0);
+    if (selectedChoices) pieces.push(selectedChoices);
+    appendRegion(choiceGroup.after, choiceGroup.afterStart);
+  } else appendRegion(prompt, 0);
+  if (!choiceGroup && selectedChoices) pieces.push(selectedChoices);
   if (general) pieces.push(general);
   return pieces.join('\n\n');
 }
