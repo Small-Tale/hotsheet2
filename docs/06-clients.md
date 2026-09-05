@@ -856,7 +856,7 @@ The Commits view embeds the same commit graph, configured difftool actions, and
 multi-commit range presentation as ticket Code Review. Both individual commits and the
 unpushed range are rediscovered and validated by the server immediately before launch;
 arbitrary browser-supplied paths or revisions are rejected. Its Git Compare toolbar
-action sits in its own contained group beside Refresh; it switches to Commits and toggles
+action sits first in its own contained group, with Refresh last; it switches to Commits and toggles
 a light-purple selection banner without a redundant Cancel action. Compact A/B segmented
 controls choose which side the next commit click sets and remain separated from Open;
 selecting A advances to B, both
