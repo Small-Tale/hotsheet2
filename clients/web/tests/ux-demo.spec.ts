@@ -59,6 +59,9 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await page.goto('/ux-demo?component=ticket-row&dev-review=1');
   const captureTarget = page.locator('.demo-master [data-item-id="ticket-row"]');
   await captureTarget.scrollIntoViewIfNeeded();
+  await captureTarget.evaluate(node => { (node as HTMLElement).style.color = 'oklab(55% 0.1 0.1)'; });
+  await page.locator('.demo-detail__header').evaluate(node => { (node as HTMLElement).style.boxShadow = '0 0 2px oklab(55% 0.1 0.1)'; });
+  expect(await captureTarget.evaluate(node => getComputedStyle(node).color)).toMatch(/^(?:oklab|rgb)/);
   const markerBox = (await captureTarget.boundingBox())!;
   const tool = page.locator('.hs-dev-review');
   await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();

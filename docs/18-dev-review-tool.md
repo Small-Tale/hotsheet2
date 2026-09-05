@@ -34,7 +34,12 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   eager full-document `html2canvas` work must never compete with another gesture.
   Each capture renders its bounded document region directly at CSS-pixel scale using
   the current window scroll offset; this avoids device-pixel-ratio crop drift and
-  keeps scrolled and unscrolled captures aligned with their rectangles. Pointer
+  keeps scrolled and unscrolled captures aligned with their rectangles. Before the
+  legacy `html2canvas` parser reads the cloned document, modern computed CSS colors
+  (`oklab`, `oklch`, `lab`, `lch`, `color()`, and `color-mix()`) are converted through
+  the browser canvas into sRGB values. This applies to colors, borders, shadows,
+  gradients, and SVG paint both inside and outside the crop, because regional capture
+  still clones the complete document. Pointer
   movement updates the existing rectangle node without rebuilding handles and stale
   async results are discarded.
   Review-tool UI is excluded from every capture.

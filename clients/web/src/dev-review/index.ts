@@ -2,6 +2,7 @@ import './dev-review.css';
 
 import html2canvas from 'html2canvas';
 
+import { normalizeCaptureColors } from './capture-colors';
 import { createFrameBatcher } from './frame-batcher';
 import { clampRectToViewport, intersectRectWithViewport, normalizeRect, type ResizeHandle, resizeRect, type ReviewRect,translateAnchoredRect } from './geometry';
 
@@ -147,6 +148,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
           // coordinate space on Retina/high-DPI displays.
           scale: 1, backgroundColor: null, logging: false,
           ignoreElements: element => element.hasAttribute('data-hotsheet-dev-review'),
+          onclone: normalizeCaptureColors,
         });
         selection.capture = { id: selection.id, filename: `ux-feedback-${selection.id}.png`, dataUrl: cropped.toDataURL('image/png'), width: cropped.width, height: cropped.height };
       }
