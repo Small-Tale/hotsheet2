@@ -268,7 +268,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   accepted. Browser-compatible image references render inline, while other references
   ask the host to open the file with its default application. Right-click actions can
   download, copy the durable reference or host path, and reveal the file using the host
-  platform's file manager.
+  platform's file manager. Inline image controls remain intrinsic-height block content,
+  so later Markdown cannot overlap an image while it loads or after it is scaled. Copying
+  a reference or resolved host path reports success through the shared transient toast,
+  never by inserting a persistent status label into the attachment panel.
 
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained thumbnails for browser-compatible image formats,
@@ -757,22 +760,27 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   HS2-SW655F and HS2-3GRNZW respectively.
 
 **Feedback needed is needs review.** These are one user-facing concept, not competing
-ticket states. A `feedback_needed` note and an explicit review request both project to
+ticket states. A `feedback_needed` note, a description containing the case-sensitive
+`FEEDBACK NEEDED` marker, and an explicit review request all project to
 the same "Needs review" badge and purple leading rail in list and column presentations.
 The inspector/reader uses that same rail and "Needs review" banner; the underlying note
 still carries the specific question and feedback editor. The unified needs-review rail
 takes precedence over blocked and Up Next rails so the outstanding decision is never
 hidden. The server's compact row continues to expose the source `feedback_needed`
 boolean (mirrored in the index), while the client normalizes it at presentation time.
-In the sidebar inspector, the active feedback note has a full-width **Respond to
-Feedback** action directly below its body. It is omitted from answered or superseded
-asks and from reader mode itself. Activating it opens reader mode on Info, scrolls the
-active note into view, and focuses its response editor.
+In the sidebar inspector, the active feedback note or marked description has a full-width
+**Respond to Feedback** action directly below its body. It is omitted from answered or
+superseded asks and from reader mode itself. Activating it opens reader mode on Info,
+scrolls the active source into view, and focuses its response editor. Reader descriptions
+reuse the same Markdown choice selection, inline reply, optional general response, and
+No response needed controls as feedback notes; submitting adds a regular response note.
 For note-driven feedback, only an unanswered ask is active: among regular and
 `feedback_needed` notes, the most recent one controls the state. A later regular note is
 the response and clears Needs review; the answered ask then uses the ordinary note
 presentation rather than retaining feedback styling or an editor. Activity/status notes
 are neutral, and a later `feedback_needed` note opens it again.
+When a description opens the exchange, activity/status notes remain neutral and the first
+regular note answers it. A later first-class feedback request supersedes the description.
 For compatibility with HS1 and early HS2 automation, a regular note containing the
 case-sensitive all-caps phrase `FEEDBACK NEEDED` is normalized to the `feedback_needed`
 kind at the wire boundary and participates in the same exchange. The phrase may appear

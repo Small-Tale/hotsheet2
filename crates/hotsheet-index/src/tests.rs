@@ -486,6 +486,36 @@ fn hs1_style_feedback_marker_sets_the_indexed_flag() {
 }
 
 #[test]
+fn marked_description_sets_the_indexed_flag_until_a_regular_response() {
+    use hotsheet_model::NoteKind;
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let mut ticket = store.read_ticket(&id).unwrap();
+    ticket.details = "FEEDBACK NEEDED: choose one\n\nCHOICE:\n- A\n- B".into();
+    store.write_ticket(&ticket).unwrap();
+    ix.reconcile(&store).unwrap();
+    let row = |ix: &Index| {
+        ix.query(&TicketQuery::default())
+            .unwrap()
+            .into_iter()
+            .find(|row| row.id == id.to_string())
+            .unwrap()
+    };
+    assert!(row(&ix).feedback_needed);
+    ops::add_note(
+        &store,
+        &id,
+        ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"),
+        Timestamp::new("2026-08-19T01:00:00Z"),
+        NoteKind::Regular,
+        "Use B".into(),
+    )
+    .unwrap();
+    ix.reconcile(&store).unwrap();
+    assert!(!row(&ix).feedback_needed);
+}
+
+#[test]
 fn a_stale_schema_version_triggers_a_rebuild() {
     let dir = tempfile::tempdir().unwrap();
     let db = dir.path().join("i.sqlite");

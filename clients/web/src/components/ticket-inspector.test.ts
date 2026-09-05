@@ -69,6 +69,18 @@ describe('TicketInspector', () => {
     expect(css).toMatch(/data-needs-review="true"[^}]*var\(--hs-ticket-state-needs-review\)/);
   });
 
+  it('renders marked description choices as the reader feedback surface',()=>{
+    const details='FEEDBACK NEEDED: Which direction?\n\nCHOICE:\n- Keep **A**\n- Use `B`';
+    const sidebar=String(TicketInspector({...base,details,feedbackNeeded:true}));
+    expect(sidebar).toContain('data-note-id="ticket-details"');
+    expect(sidebar).toContain('Respond to Feedback');
+    const reader=String(TicketInspector({...base,details,feedbackNeeded:true,presentation:'reader'}));
+    expect(reader).toContain('data-details-feedback="true"');
+    expect(reader.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
+    expect(reader).toContain('aria-label="Feedback response"');
+    expect(reader).not.toContain('CHOICE:');
+  });
+
   it('shows a derived attachment count on the attachments segment', () => {
     const markup = String(TicketInspector({ ...base, attachments: [{ id: 'one', name: 'one.png' }, { id: 'two', name: 'two.md' }] }));
     expect(markup).toContain('aria-label="Attachments, 2"');

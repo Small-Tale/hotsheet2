@@ -7,6 +7,7 @@
 .ticket-inspector__content p { margin: 0; color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); line-height: 1.5; }
 .ticket-inspector__details { min-height: 3rem; cursor: text; }
 .ticket-inspector__details-surface { min-width: 0; max-width: 100%; padding: 0; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: .65rem; background: var(--wa-color-surface-default); }
+.ticket-inspector__details-feedback { display: grid; min-width: 0; padding: .75rem; gap: var(--wa-space-s); }
 .ticket-inspector__details:focus-visible { border-radius: .35rem; outline: var(--wa-focus-ring); outline-offset: 3px; }
 .ticket-inspector__blocked-surface { min-width: 0; padding: .7rem; border-radius: .55rem; background: var(--wa-color-neutral-fill-normal); overflow-wrap: anywhere; }
 .ticket-inspector__blocked-editor { display: grid; padding: .65rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .55rem; background: var(--wa-color-surface-default); gap: var(--wa-space-xs); }

@@ -195,6 +195,7 @@ impl Ticket {
     }
 
     /// Whether the ticket's latest feedback exchange is still waiting for a response.
+    /// A marked description starts the exchange when no regular/feedback note exists.
     /// A regular note answers the preceding feedback request; activity/status notes do
     /// not change that state, and a later feedback request opens it again.
     pub fn feedback_needed(&self) -> bool {
@@ -207,7 +208,10 @@ impl Ticket {
                     .unwrap_or_else(|| a.created_at.as_str().cmp(b.created_at.as_str()))
                     .then(a.id.cmp(&b.id))
             })
-            .is_some_and(Note::is_feedback_needed_request)
+            .map_or_else(
+                || Note::text_requests_feedback(&self.details),
+                Note::is_feedback_needed_request,
+            )
     }
 }
 
@@ -307,5 +311,26 @@ mod tests {
         assert!(!Note::text_requests_feedback(
             "I think feedback needed from the user before continuing."
         ));
+    }
+
+    #[test]
+    fn marked_description_opens_feedback_until_a_regular_note_answers_it() {
+        let mut ticket = Ticket {
+            details: "Context. FEEDBACK NEEDED: choose a direction\n\nCHOICE:\n- A\n- B".into(),
+            ..Ticket::default()
+        };
+        assert!(ticket.feedback_needed());
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+            NoteKind::Activity,
+            "2026-08-20T00:00:00Z",
+        ));
+        assert!(ticket.feedback_needed());
+        ticket.notes.push(note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+            NoteKind::Regular,
+            "2026-08-20T00:01:00Z",
+        ));
+        assert!(!ticket.feedback_needed());
     }
 }

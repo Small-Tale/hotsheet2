@@ -2,6 +2,11 @@ import type { Note } from './api';
 
 type RelevantNote = Pick<Note, 'id' | 'kind' | 'created_at'>;
 
+export const DETAILS_FEEDBACK_ID='ticket-details';
+
+/** Match the intentionally case-sensitive HS1 feedback marker used by the core. */
+export function textRequestsFeedback(text:string){return text.includes('FEEDBACK NEEDED')}
+
 const after = (candidate: RelevantNote, note: RelevantNote) => candidate.created_at > note.created_at || (candidate.created_at === note.created_at && candidate.id > note.id);
 
 /** A regular note answers the preceding feedback request; other note kinds are neutral. */

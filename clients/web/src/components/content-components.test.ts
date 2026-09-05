@@ -82,6 +82,8 @@ describe('content components', () => {
     expect(css).toContain('.markdown-preview p { margin: var(--wa-space-m) 0; }');
     expect(css).toMatch(/blockquote \{[^}]*margin-inline: 0;[^}]*border-left: 2px[^}]*font-size: var\(--wa-font-size-xs\);[^}]*line-height: 1\.5;/);
     expect(css).toMatch(/blockquote :is\(h1, h2, h3, h4, h5, h6\) \{ font-size: var\(--wa-font-size-xs\); \}/);
+    expect(css).toMatch(/\.markdown-preview img \{[^}]*display: block;[^}]*height: auto;/);
+    expect(css).toMatch(/\.markdown-preview__attachment-image \{[^}]*width: fit-content;[^}]*height: auto;[^}]*overflow: hidden;/);
   });
 
   it('renders filename attachment references as host actions and inline gallery images',()=>{
