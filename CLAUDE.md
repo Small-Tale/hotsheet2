@@ -38,6 +38,12 @@ or other important subtask starts and when it finishes. Keep repeated and revers
 transitions as separate entries; they are history, not current-state fields. Ordinary
 commentary remains a `regular` note.
 
+Activity notes are timeline history, not the primary home for a result. Put an
+investigation's conclusion, decision, recommendation, or other important durable content
+in a `regular` Markdown note. A finishing activity may briefly point to that regular note.
+For multiline Markdown passed through the CLI, always use `--note-file`; `--note` rejects
+literal `\n` sequences so escaped line breaks cannot silently become visible text.
+
 When an AI writes an `activity` note, provide a durable `note_summary` alongside the
 full Markdown body. The summary is the Timeline headline: plain text, one line,
 outcome-oriented, preferably no more than 80 characters, and free of verification

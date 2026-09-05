@@ -1399,6 +1399,27 @@ fn edit_reads_multiline_markdown_note_from_stdin_without_shell_escaping() {
         .args([
             "edit",
             &slug,
+            "--note",
+            r"FEEDBACK NEEDED: Choose a direction.\n\n1. Keep the current behavior",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--note-file"));
+
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    assert!(
+        hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap()
+            .notes
+            .is_empty(),
+        "escaped line breaks must be rejected before the note is persisted"
+    );
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
             "--note-file",
             "-",
             "--note-kind",
@@ -1408,7 +1429,6 @@ fn edit_reads_multiline_markdown_note_from_stdin_without_shell_escaping() {
         .assert()
         .success();
 
-    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
     let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
         .unwrap()
         .unwrap();

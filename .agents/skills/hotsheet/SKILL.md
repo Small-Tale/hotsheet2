@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 38 -->
+<!-- hotsheet-skill-version: 39 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -83,7 +83,10 @@ Notes:
 - AI-authored `activity` notes include `--note-summary "Concise outcome"` (or MCP
   `note_summary`) in the same update. Keep it plain-text, one line, outcome-oriented,
   preferably at most 80 characters, and leave implementation/verification detail in
-  the full Markdown note body.
+  the full Markdown note body. Activity is timeline history, not the primary result:
+  write investigation conclusions, decisions, and important recommendations as `regular`
+  Markdown notes, with an optional short activity entry pointing to them.
 - Notes support Markdown. For multiline CLI notes, pass real line breaks with
   `hotsheet-cli edit <slug> --note-file <path>` or stdin via `--note-file -`; do not put
-  JSON-escaped `\\n` sequences in `--note`, because the CLI stores that argument literally.
+  JSON-escaped `\\n` sequences in `--note`. The CLI rejects likely escaped line breaks;
+  use `--note-file` even when literal `\\n` text is intentional.

@@ -304,7 +304,10 @@ should the fix also cover the dashboard dedicated view?
     "QUARANTINED"). **Shared** (committed), informational for the team.
   - `activity` — a durable chronological account of meaningful work and lifecycle
     transitions. Every actual status change automatically appends an activity note;
-    repeated and reversed transitions remain separate entries. **Shared**.
+    repeated and reversed transitions remain separate entries. Activity is timeline
+    history, not the primary home for important prose: investigation conclusions,
+    decisions, and recommendations belong in `regular` Markdown notes; an activity may
+    briefly point to the result. **Shared**.
   Activity/status notes may also carry an optional plain-text `summary`, encoded in
   their marker as the forward-compatible `summary_hex:` token. It is the concise
   Timeline headline; the Markdown body remains the full record in Notes. Missing

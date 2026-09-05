@@ -290,7 +290,10 @@ hotsheet provider-close github-main 42 --reason completed
 `--note` accepts one argument exactly as supplied by the caller. For multiline Markdown,
 use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved
 without shell-escape interpretation. `--note-file` works for both appended notes and
-`--edit-note` replacements.
+`--edit-note` replacements. To prevent escaped line breaks from silently becoming visible
+text, direct `--note` input containing a literal `\n` sequence is rejected with guidance
+to use `--note-file`. Use the file/stdin form when a note intentionally documents that
+literal sequence as well.
 
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
 an `x-hotsheet-filename` header. Browser clients percent-encode Unicode filenames and

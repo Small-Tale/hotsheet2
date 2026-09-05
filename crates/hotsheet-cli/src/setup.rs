@@ -83,6 +83,8 @@ mod tests {
         assert!(skill.contains("attachment:filename"));
         assert!(skill.contains("FEEDBACK NEEDED is not deferred-work tracking"));
         assert!(skill.contains("--note-file -"));
+        assert!(skill.contains("Activity notes are timeline history"));
+        assert!(skill.contains("CLI rejects likely escaped line breaks"));
 
         let mcp: serde_json::Value = serde_json::from_str(&read(d.path(), ".mcp.json")).unwrap();
         let hs = &mcp["mcpServers"]["hotsheet"];

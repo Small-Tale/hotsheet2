@@ -2738,6 +2738,12 @@ fn cmd_edit(
 
 fn read_note_input(note: Option<String>, note_file: Option<PathBuf>) -> Result<Option<String>> {
     let Some(path) = note_file else {
+        if note.as_deref().is_some_and(|text| text.contains("\\n")) {
+            bail!(
+                "--note contains a literal \\n sequence; use --note-file <path> or --note-file - \
+                 for multiline Markdown with real line breaks (and for intentional literal \\n text)"
+            );
+        }
         return Ok(note);
     };
     let text = if path == Path::new("-") {
