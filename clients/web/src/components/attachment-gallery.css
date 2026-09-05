@@ -1,0 +1,13 @@
+.attachment-gallery { position: fixed; z-index: 70; inset: 0; display: grid; padding: var(--wa-space-m); background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 94%, transparent); grid-template: auto minmax(0, 1fr) / auto minmax(0, 1fr) auto; align-items: center; gap: var(--wa-space-m); }
+.attachment-gallery header { display: flex; min-width: 0; color: var(--wa-color-neutral-on-loud); grid-column: 1 / -1; align-items: center; gap: var(--wa-space-m); }
+.attachment-gallery header > span:first-child { min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-gallery button { display: inline-grid; width: var(--wa-space-xl); height: var(--wa-space-xl); padding: 0; border: 0; border-radius: var(--wa-border-radius-pill); background: color-mix(in srgb, var(--wa-color-surface-default) 14%, transparent); color: var(--wa-color-neutral-on-loud); cursor: pointer; place-items: center; }
+.attachment-gallery button:hover, .attachment-gallery button:focus-visible { background: color-mix(in srgb, var(--wa-color-surface-default) 28%, transparent); outline: var(--wa-focus-ring); }
+.attachment-gallery button:disabled { opacity: .35; cursor: default; }
+.attachment-gallery svg { width: var(--wa-space-l); height: var(--wa-space-l); }
+.attachment-gallery img { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+.attachment-context-menu { position: fixed; z-index: 80; display: grid; min-width: 13rem; padding: var(--wa-space-2xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
+.attachment-context-menu button { display: grid; min-height: 2.2rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-text-normal); background: transparent; cursor: pointer; grid-template-columns: 1rem minmax(0,1fr); align-items: center; gap: var(--wa-space-s); font: inherit; text-align: left; }
+.attachment-context-menu button:hover, .attachment-context-menu button:focus-visible { background: var(--wa-color-neutral-fill-quiet); outline: var(--wa-focus-ring); }
+.attachment-context-menu svg { width: 1rem; height: 1rem; }
+.attachment-context-menu hr { width: 100%; margin: var(--wa-space-2xs) 0; border: 0; border-top: 1px solid var(--wa-color-surface-border); }

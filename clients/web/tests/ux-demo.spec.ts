@@ -971,12 +971,12 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
 });
 
 test('renders standalone ticket metadata and inspector-section demos', async ({ page }) => {
-  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-status-menu', 'ticket-status-menu'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-code-review', 'ticket-code-review'], ['ticket-attachments', 'ticket-attachments']] as const) {
+  for (const [id, component] of [['ticket-category-select', 'ticket-category-select'], ['ticket-priority-select', 'ticket-priority-select'], ['ticket-status-menu', 'ticket-status-menu'], ['ticket-info-panel', 'ticket-info-panel'], ['ticket-timeline', 'ticket-timeline'], ['ticket-code-review', 'ticket-code-review'], ['ticket-attachments', 'ticket-attachments'],['attachment-gallery','attachment-gallery']] as const) {
     await page.goto(`/ux-demo?component=${id}`);
     await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`)).first()).toBeVisible();
   }
   await page.goto('/ux-demo?component=ticket-attachments');
-  const actions = page.locator('.ticket-inspector__attachment-actions button');
+  const actions = page.locator('[data-attachment-id="demo-video"] .ticket-inspector__attachment-actions button');
   await expect(actions).toHaveCount(4);
   const labels = ['Open choppy.mov', 'Download choppy.mov', 'Copy reference to choppy.mov', 'Remove choppy.mov'];
   for (const [index, button] of (await actions.all()).entries()) {
@@ -997,6 +997,10 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   await actions.first().hover();
   for (const button of await actions.all()) await expect(button.locator('svg')).toBeVisible();
   await page.locator('[data-component="ticket-attachments"]').screenshot({ path: '/private/tmp/hs2-pngaw7-attachment-actions-ux-narrow.png' });
+});
+
+test('navigates the standalone attachment gallery demo',async({page})=>{
+  await page.goto('/ux-demo?component=attachment-gallery');let gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toHaveAttribute('aria-label',/Image 1 of 2/);await gallery.getByRole('button',{name:'Next image'}).click();await expect(gallery).toHaveAttribute('aria-label',/Image 2 of 2/);await gallery.screenshot({path:'/private/tmp/hs2-64651d-gallery-ux.png'});await gallery.getByRole('button',{name:'Close image gallery'}).click();await expect(gallery).toHaveCount(0);await page.getByRole('button',{name:'Open gallery'}).click();gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toBeVisible();
 });
 
 test('opens the shared TicketReader intent when a composed row is double-clicked', async ({ page }) => {

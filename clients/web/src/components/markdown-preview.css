@@ -21,5 +21,7 @@
 .markdown-preview th, .markdown-preview td { padding: .4rem .5rem; border: 1px solid var(--wa-color-neutral-border-normal); text-align: left; }
 .markdown-preview th { background: var(--wa-color-neutral-fill-quiet); }
 .markdown-preview img { max-width: 100%; height: auto; border-radius: .45rem; }
+.markdown-preview__attachment-image { display: block; max-width: 100%; padding: 0; border: 0; border-radius: var(--wa-border-radius-m); background: transparent; cursor: zoom-in; }
+.markdown-preview__attachment-image:focus-visible { outline: var(--wa-focus-ring); outline-offset: var(--wa-space-2xs); }
 .markdown-preview input[type="checkbox"] { margin-right: .35rem; }
 .markdown-preview--empty { color: var(--wa-color-neutral-on-quiet); font-style: italic; }

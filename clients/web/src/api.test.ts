@@ -8,6 +8,14 @@ describe('attachment filename transport',()=>{
     expect(encoded).toBe('Screenshot%202026-08-31%20at%208.49.09%E2%80%AFAM.png');
     expect(new TextEncoder().encode(encoded)).toHaveLength(encoded.length);
   });
+  it('encodes filename references and host actions on checkout routes',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({path:'/store/screen shot.svg'}),{status:200}));
+    const api=new Api('/api');
+    expect(api.checkoutAttachmentByNameUrl('folder one','HS2-ONE','screen shot.svg')).toBe('/api/checkouts/folder%20one/tickets/HS2-ONE/attachments/by-name/screen%20shot.svg');
+    await expect(api.checkoutAttachmentByNameAction('folder one','HS2-ONE','screen shot.svg','reveal')).resolves.toEqual({path:'/store/screen shot.svg'});
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20one/tickets/HS2-ONE/attachments/by-name/screen%20shot.svg/action',expect.objectContaining({method:'POST',body:'{"action":"reveal"}'}));
+    fetchMock.mockRestore();
+  });
 });
 
 describe('corrupt ticket transport',()=>{

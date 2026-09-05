@@ -52,7 +52,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(timeline).toContain('One event');
     expect(timeline).toContain('Optional detail');
     expect(timeline).toContain('1 event total');
-    const attachments = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }] }));
+    const attachments = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png',url:'/attachment/one' }] }));
     expect(attachments.match(/class="ticket-inspector__attachment"/g)).toHaveLength(1);
     expect(attachments).toContain('1 attachment total');
     expect(attachments).toContain('data-attachment-drop-target="true"');
@@ -63,6 +63,10 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('data-action="download-attachment"');
     expect(attachments).toContain('data-action="copy-attachment-reference"');
     expect(attachments).toContain('data-action="remove-attachment"');
+    expect(attachments).toContain('class="ticket-attachments__image-grid"');
+    expect(attachments).toContain('data-action="open-attachment-gallery"');
+    const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
+    expect(css).toMatch(/ticket-attachments__image-grid img \{[^}]*object-fit: contain/);
     for (const label of ['Open one.png', 'Download one.png', 'Copy reference to one.png', 'Remove one.png']) {
       expect(attachments).toContain(`aria-label="${label}" title="${label}"`);
     }

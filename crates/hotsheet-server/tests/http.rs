@@ -875,6 +875,32 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         downloaded.into_body().collect().await.unwrap().to_bytes(),
         "checkout evidence"
     );
+    let by_name = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/combo/tickets/{slug}/attachments/by-name/proof.txt"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(by_name.status(), StatusCode::OK);
+    assert_eq!(
+        by_name.into_body().collect().await.unwrap().to_bytes(),
+        "checkout evidence"
+    );
+    let path = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/by-name/proof.txt/action"),
+                Some(r#"{"action":"path"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(path["path"].as_str().unwrap().ends_with("proof.txt"));
     let removed = body_json(
         app.clone()
             .oneshot(authed(

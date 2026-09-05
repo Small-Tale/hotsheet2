@@ -197,6 +197,40 @@ pub fn act_on_file(
     }
 }
 
+/// Launch a path already validated by its owning subsystem (for example, an attachment
+/// resolved through durable ticket metadata).
+pub fn act_on_host_path(
+    path: &Path,
+    action: RepositoryFileAction,
+) -> Result<(), RepositoryBrowserError> {
+    let target = match action {
+        RepositoryFileAction::Open => path.to_path_buf(),
+        RepositoryFileAction::Reveal if cfg!(target_os = "macos") => {
+            return spawn("open", &["-R".into(), path.as_os_str().into()]);
+        }
+        RepositoryFileAction::Reveal if cfg!(target_os = "windows") => {
+            return spawn("explorer", &[format!("/select,{}", path.display()).into()]);
+        }
+        RepositoryFileAction::Reveal => path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| path.to_path_buf()),
+    };
+    if cfg!(target_os = "macos") {
+        spawn("open", &[target.into_os_string()])
+    } else if cfg!(target_os = "windows") {
+        spawn(
+            "rundll32",
+            &[
+                "url.dll,FileProtocolHandler".into(),
+                target.into_os_string(),
+            ],
+        )
+    } else {
+        spawn("xdg-open", &[target.into_os_string()])
+    }
+}
+
 fn validated_status_path(root: &Path, relative: &str) -> Result<PathBuf, RepositoryBrowserError> {
     let relative_path = Path::new(relative);
     if relative.is_empty()

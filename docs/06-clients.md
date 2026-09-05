@@ -253,6 +253,20 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   Attachment upload endpoints accept bodies up to 100 MiB so ordinary screen recordings
   are not rejected by the framework's smaller default body limit; the larger allowance is
   route-specific and does not loosen JSON request limits.
+
+  Notes resolve `attachment:filename` and cross-ticket
+  `attachment:[TICKET-SLUG]filename` references. Inline-code references preserve spaces;
+  ordinary no-space references and standard Markdown link/image destinations are also
+  accepted. Browser-compatible image references render inline, while other references
+  ask the host to open the file with its default application. Right-click actions can
+  download, copy the durable reference or host path, and reveal the file using the host
+  platform's file manager.
+
+  The Attachments tab keeps the complete file list and adds a responsive, wrapping
+  grid of 160px square contained thumbnails for browser-compatible image formats,
+  including SVG. A
+  thumbnail or inline image opens the same full-screen gallery; arrows, keyboard arrows,
+  and horizontal swipe move through distinct attached and note-referenced images.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher or anywhere on the expanded
   composer, inspect and remove the staged filenames, and cancel to discard the entire

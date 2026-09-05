@@ -46,3 +46,7 @@
 .ticket-attachments__drop { display: grid; min-height: 5rem; padding: .75rem; border: 1px dashed var(--wa-color-neutral-border-loud); border-radius: .55rem; color: var(--wa-color-neutral-on-quiet); cursor: pointer; place-items: center; align-content: center; gap: .35rem; font-size: var(--wa-font-size-xs); }
 .ticket-attachments__drop:hover, [data-dragging-attachment="true"] .ticket-attachments__drop, [data-dragging-attachment="true"].ticket-inspector, [data-dragging-attachment="true"].ticket-list-row { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); }
 .ticket-attachments__drop svg { width: 1rem; height: 1rem; color: var(--wa-color-focus); }
+.ticket-attachments__image-grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--wa-space-xs); }
+.ticket-attachments__image-grid button { display: grid; width: 10rem; height: 10rem; flex: none; padding: var(--wa-space-2xs); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); cursor: zoom-in; place-items: center; }
+.ticket-attachments__image-grid button:hover, .ticket-attachments__image-grid button:focus-visible { border-color: var(--wa-color-focus); outline: var(--wa-focus-ring); outline-offset: 1px; }
+.ticket-attachments__image-grid img { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }

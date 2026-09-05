@@ -914,8 +914,20 @@ pub fn app(state: AppState) -> Router {
                 .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
         )
         .route(
+            "/checkouts/{reference}/tickets/{id}/attachments/by-name/{filename}",
+            get(get_checkout_ticket_attachment_by_name),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/attachments/by-name/{filename}/action",
+            post(act_on_checkout_ticket_attachment_by_name),
+        )
+        .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}",
             get(get_checkout_ticket_attachment).delete(delete_checkout_ticket_attachment),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/action",
+            post(act_on_checkout_ticket_attachment),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/notes/{note_id}",
@@ -2797,8 +2809,22 @@ async fn get_checkout_ticket_attachment(
                 error.into()
             }
         })?;
+    Ok(attachment_payload_response(&attachment.filename, bytes))
+}
+
+async fn get_checkout_ticket_attachment_by_name(
+    State(state): State<AppState>,
+    Path((reference, id, filename)): Path<(String, String, String)>,
+) -> Result<Response, ApiError> {
+    let (entry, ticket, attachment_id) =
+        checkout_attachment_by_name(&state, &reference, &id, &filename)?;
+    let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
+    Ok(attachment_payload_response(&attachment.filename, bytes))
+}
+
+fn attachment_payload_response(filename: &str, bytes: Vec<u8>) -> Response {
     let mut headers = HeaderMap::new();
-    let content_type = match FsPath::new(&attachment.filename)
+    let content_type = match FsPath::new(filename)
         .extension()
         .and_then(|value| value.to_str())
         .map(str::to_ascii_lowercase)
@@ -2808,6 +2834,9 @@ async fn get_checkout_ticket_attachment(
         Some("jpg" | "jpeg") => "image/jpeg",
         Some("gif") => "image/gif",
         Some("webp") => "image/webp",
+        Some("avif") => "image/avif",
+        Some("bmp") => "image/bmp",
+        Some("ico") => "image/x-icon",
         Some("svg") => "image/svg+xml",
         Some("pdf") => "application/pdf",
         Some("txt" | "md") => "text/plain; charset=utf-8",
@@ -2818,10 +2847,116 @@ async fn get_checkout_ticket_attachment(
         "content-type",
         content_type.parse().expect("static content type"),
     );
-    if let Ok(filename) = attachment.filename.parse() {
+    if let Ok(filename) = filename.parse() {
         headers.insert("x-hotsheet-filename", filename);
     }
-    Ok((headers, Bytes::from(bytes)).into_response())
+    (headers, Bytes::from(bytes)).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct AttachmentHostActionRequest {
+    action: AttachmentHostAction,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum AttachmentHostAction {
+    Open,
+    Reveal,
+    Path,
+}
+
+#[derive(Debug, Serialize)]
+struct AttachmentHostActionResponse {
+    path: String,
+}
+
+fn checkout_attachment_by_name(
+    state: &AppState,
+    reference: &str,
+    id: &str,
+    filename: &str,
+) -> Result<(StoreEntry, Ticket, Ulid), ApiError> {
+    let entry = checkout_entry_for_ticket(state, reference, id)?;
+    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let attachment_id = ticket
+        .attachments
+        .iter()
+        .rev()
+        .find(|attachment| attachment.filename == filename)
+        .map(|attachment| attachment.id)
+        .ok_or_else(|| ApiError::not_found(filename))?;
+    Ok((entry, ticket, attachment_id))
+}
+
+fn attachment_disk_path(
+    entry: &StoreEntry,
+    ticket_id: &Ulid,
+    attachment_id: &Ulid,
+    filename: &str,
+) -> std::path::PathBuf {
+    let nested = entry
+        .store
+        .attachment_dir(ticket_id)
+        .join(attachment_id.to_string())
+        .join(filename);
+    if nested.is_file() {
+        nested
+    } else {
+        entry.store.attachment_dir(ticket_id).join(filename)
+    }
+}
+
+async fn act_on_checkout_ticket_attachment(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+    Json(request): Json<AttachmentHostActionRequest>,
+) -> Result<Json<AttachmentHostActionResponse>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let (attachment, _) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    if request.action != AttachmentHostAction::Path {
+        repository_browser::act_on_host_path(
+            &path,
+            match request.action {
+                AttachmentHostAction::Open => repository_browser::RepositoryFileAction::Open,
+                AttachmentHostAction::Reveal => repository_browser::RepositoryFileAction::Reveal,
+                AttachmentHostAction::Path => unreachable!(),
+            },
+        )
+        .map_err(repository_browser_api_error)?;
+    }
+    Ok(Json(AttachmentHostActionResponse {
+        path: path.display().to_string(),
+    }))
+}
+
+async fn act_on_checkout_ticket_attachment_by_name(
+    State(state): State<AppState>,
+    Path((reference, id, filename)): Path<(String, String, String)>,
+    Json(request): Json<AttachmentHostActionRequest>,
+) -> Result<Json<AttachmentHostActionResponse>, ApiError> {
+    let (entry, ticket, attachment_id) =
+        checkout_attachment_by_name(&state, &reference, &id, &filename)?;
+    let (attachment, _) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    if request.action != AttachmentHostAction::Path {
+        repository_browser::act_on_host_path(
+            &path,
+            match request.action {
+                AttachmentHostAction::Open => repository_browser::RepositoryFileAction::Open,
+                AttachmentHostAction::Reveal => repository_browser::RepositoryFileAction::Reveal,
+                AttachmentHostAction::Path => unreachable!(),
+            },
+        )
+        .map_err(repository_browser_api_error)?;
+    }
+    Ok(Json(AttachmentHostActionResponse {
+        path: path.display().to_string(),
+    }))
 }
 
 async fn delete_checkout_ticket_attachment(

@@ -501,7 +501,9 @@ multi-selection placeholders keep the divider to preserve their intentional stat
 - `TicketTagsSection` — **built**: controlled chips with capability-aware removal,
   duplicate-safe creation, and native autocomplete suggestions shared by inspector
   and reader
-- `TicketAttachmentsSection`
+- `TicketAttachmentsSection` — **built**: complete attachment action list plus a
+  responsive, wrapping 160px square contained image-preview grid feeding the shared full-screen
+  arrow/keyboard/swipe gallery
 - `TicketNotesSection`
 
 ### 4.2 Details and reader surfaces — feature floor
@@ -511,6 +513,8 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   headings. Raw HTML is escaped and unsafe link/image protocols are rejected. Long
   tokens wrap, while intrinsically wide tables and code blocks remain locally
   scrollable rather than widening an inspector or reader.
+  Ticket-aware note previews additionally resolve local and cross-ticket attachment
+  references, inline supported images, and expose host-native actions.
 - `MarkdownEditor` — **demo built**: rendered preview by default, double-click/keyboard
   to edit non-empty content, single-click to add empty content, persistent controlled
   draft, full-surface vertically resizable embedded details with padded text and an

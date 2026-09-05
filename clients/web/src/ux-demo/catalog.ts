@@ -43,7 +43,7 @@ export const demoCatalog: DemoCategory[] = [
       demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, tags, notes, and provenance.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'markdown-editor', 'tag-chip', 'note-card', 'note-composer']),
       demo('ticket-timeline', 'TicketTimeline', 'Chronological ticket activity inspector section.', 'feature-floor', true),
       demo('ticket-code-review', 'TicketCodeReview', 'Ticket-associated commits and configured diff-tool actions.', 'feature-floor', true),
-      demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true),
+      demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true, ['attachment-gallery']),
       demo('ticket-category-select', 'TicketCategorySelect', 'Category chooser with configured icons and colors.', 'feature-floor', true, ['select']),
       demo('ticket-priority-select', 'TicketPrioritySelect', 'Priority chooser with semantic icons.', 'feature-floor', true, ['select']),
       demo('ticket-status-menu', 'TicketStatusMenu', 'Badge-triggered status chooser with semantic icons.', 'feature-floor', true, ['status-badge']),
@@ -55,6 +55,7 @@ export const demoCatalog: DemoCategory[] = [
     { id: 'content', name: 'Content', demos: [
       demo('ticket-reader', 'TicketReader', 'Large dialog presentation of the complete ticket inspector.', 'feature-floor', true, ['ticket-inspector']),
       demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
+      demo('attachment-gallery', 'AttachmentGallery', 'Full-screen keyboard, arrow, and swipe image viewer.', 'feature-floor', true),
       demo('not-working-dialog', 'NotWorkingDialog', 'Completed-ticket verification failure report with notes and evidence.', 'feature-floor', true, ['pending-attachment-picker']),
     ]},
     { id: 'notes', name: 'Notes and activity', demos: [

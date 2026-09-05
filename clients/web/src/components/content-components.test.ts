@@ -84,6 +84,16 @@ describe('content components', () => {
     expect(css).toMatch(/blockquote :is\(h1, h2, h3, h4, h5, h6\) \{ font-size: var\(--wa-font-size-xs\); \}/);
   });
 
+  it('renders filename attachment references as host actions and inline gallery images',()=>{
+    const context={baseUrl:'/project-api/demo',checkout:'checkout',ticket:'HS2-LOCAL'};
+    const markup=String(MarkdownPreview({source:'`attachment:report.pdf`\n\n`attachment:[HS2-OTHER]screen shot.svg`',attachmentContext:context}));
+    expect(markup).toContain('data-action="open-referenced-attachment"');
+    expect(markup).toContain('data-attachment-name="report.pdf"');
+    expect(markup).toContain('data-action="open-attachment-gallery"');
+    expect(markup).toContain('data-attachment-ticket="HS2-OTHER"');
+    expect(markup).toContain('/tickets/HS2-OTHER/attachments/by-name/screen%20shot.svg');
+  });
+
   it('derives the TicketReader note count and reuses NoteCard', () => {
     const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'high', category: 'feature', tags: ['client'], details: 'Details', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
     expect(markup).toContain('HS2-TEST');

@@ -171,6 +171,9 @@ import {
   toggleCollectionTicketUpNext,
 } from './ticket-collections-demo';
 import {
+  AttachmentGalleryDemo,
+  setGalleryDemo,
+  shiftGalleryDemo,
   TicketAttachmentsDemo,
   TicketCategorySelectDemo,
   TicketCodeReviewDemo,
@@ -429,6 +432,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-timeline') return <TicketTimelineDemo />;
   if (item.id === 'ticket-code-review') return <TicketCodeReviewDemo />;
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
+  if (item.id === 'attachment-gallery') return <AttachmentGalleryDemo />;
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
   if (item.id === 'repository-summary') return <RepositorySummaryDemo />;
@@ -1868,6 +1872,18 @@ delegate(
     event.preventDefault();
   },
 );
+delegate(root, 'click', '[data-action="open-gallery-demo"]', () => {
+  setGalleryDemo(true);
+});
+delegate(root, 'click', '[data-action="close-attachment-gallery"]', () => {
+  setGalleryDemo(false);
+});
+delegate(root, 'click', '[data-action="previous-gallery-image"]', () => {
+  shiftGalleryDemo(-1);
+});
+delegate(root, 'click', '[data-action="next-gallery-image"]', () => {
+  shiftGalleryDemo(1);
+});
 addEventListener('pointerdown', (event) => {
   if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
   if (tabContextMenu.value && !eventTargetsContextMenu(event, '.project-tab-context-menu')) tabContextMenu.value = undefined;
