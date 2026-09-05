@@ -174,6 +174,12 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   geometry until release, then persists the bounded width locally so a reload restores
   the layout without creating broad render churn.
 
+- **Stable scrolling across mutations.** List, board, each board column, and each ticket
+  row expose stable Kerf `data-key` identities. Status changes and other ticket mutations
+  therefore morph the existing scroll owners instead of replacing them; list position and
+  every independent column position survive moves between statuses (apart from the browser's
+  normal one-pixel scroll anchoring correction).
+
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
   development catalog. The project-tab `+` action opens a code-checkout dialog. On first

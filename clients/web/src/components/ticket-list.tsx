@@ -13,7 +13,7 @@ export interface TicketListProps {
 }
 
 export function TicketList({ tickets, corruptTickets = [], corruptRecovery = {}, selectedCorruptKey, label = 'Tickets' }: TicketListProps) {
-  return <section class="ticket-list" data-component="ticket-list">
+  return <section class="ticket-list" data-key="ticket-list" data-component="ticket-list">
     {corruptTickets.length>0&&<div class="ticket-list__diagnostics" aria-label="Unreadable tickets">{corruptTickets.map(ticket => <CorruptTicketRow ticket={ticket} recovery={corruptRecovery[corruptTicketKey(ticket)]} selected={selectedCorruptKey===corruptTicketKey(ticket)} />)}</div>}
     <div class="ticket-list__tickets" data-ticket-selection-root="true" role="listbox" aria-label={label} aria-multiselectable="true">{tickets.map(ticket => <TicketRow {...ticket} presentation="list" />)}</div>
   </section>;

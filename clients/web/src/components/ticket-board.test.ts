@@ -16,6 +16,10 @@ describe('TicketBoard', () => {
       { id: 'done', title: 'Done', tickets: [] },
     ] }));
     expect(markup).toContain('data-column-id="active"');
+    expect(markup).toContain('data-key="ticket-board"');
+    expect(markup).toContain('data-key="ticket-column:active"');
+    expect(markup).toContain('data-key="ticket-column-scroll:active"');
+    expect(markup).toContain('data-key="ticket:HS2-BOARD"');
     expect(markup).toContain('data-ticket-selection-root="true"');
     expect(markup).toContain('role="listbox"');
     expect(markup).toContain('role="group"');

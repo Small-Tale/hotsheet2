@@ -99,7 +99,7 @@ export function TicketRow(raw: TicketRowProps) {
     ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
     : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`} title={props.category}>{categoryAbbreviation(props.category, props.categoryShortLabel)}</span>;
   return (
-    <div class="ticket-list-row-container" data-component="ticket-list-row-container">
+    <div class="ticket-list-row-container" data-key={`ticket:${props.slug}`} data-component="ticket-list-row-container">
       <article
         class={`ticket-list-row ticket-list-row--${props.presentation}${props.selected ? ' ticket-list-row--selected' : ''}`}
         data-component="ticket-list-row"
