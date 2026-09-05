@@ -502,7 +502,9 @@ sidebar and ticket inspector at full height. Its compact rail switches between t
 grid and one undecorated, interactive xterm session that fills the content area. Its grid tab
 never shrinks when terminal tabs consume the available width. The terminal tabs scroll
 horizontally, with the explicit plus action immediately after them; plus creates
-the host user's default shell. Project and terminal tabs share one pill-tab primitive, with
+the host user's default shell. Its dedicated xterm viewport receives focus as soon as it
+mounts, allowing immediate typing without an extra click; this is a one-shot request that
+does not make later refreshes steal focus. Project and terminal tabs share one pill-tab primitive, with
 the close button before the label and optional leading/trailing state icons. Right-clicking
 either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
 Tabs; holding Option/Alt when opening the menu changes the directional action to the left.

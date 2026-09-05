@@ -10,6 +10,10 @@ export function parseTerminalSizeMessage(value:string):TerminalSizeMessage|undef
 
 export const terminalReconnectDelay=(attempt:number)=>Math.min(8_000,250*(2**Math.max(0,attempt)));
 export const TERMINAL_VIEWPORT_MIN_SCALE=.7;
+export interface TerminalFocusRequest {projectId:string;terminalId:string}
+export function terminalViewportShouldAutoFocus(request:TerminalFocusRequest|undefined,projectId:string,terminalId:string):boolean {
+  return request?.projectId===projectId&&request.terminalId===terminalId;
+}
 export function terminalViewportScale(viewportCols:number,viewportRows:number,ptyCols:number,ptyRows:number):number {
   return Math.max(TERMINAL_VIEWPORT_MIN_SCALE,Math.min(1,viewportCols/ptyCols,viewportRows/ptyRows));
 }
@@ -19,9 +23,9 @@ export function terminalBrowserWebSocketUrl(apiPath:string,terminalId:string,loc
   return `${protocol}//${locationValue.host}${apiPath}/terminals/${encodeURIComponent(terminalId)}/attach`;
 }
 
-export function mountTerminalViewport(element:HTMLElement,{url,viewerId=crypto.randomUUID()}:{url:string;viewerId?:string}):()=>void {
+export function mountTerminalViewport(element:HTMLElement,{url,viewerId=crypto.randomUUID(),autoFocus=false}:{url:string;viewerId?:string;autoFocus?:boolean}):()=>void {
   let disposed=false,disposeRuntime:(()=>void)|undefined;
   element.dataset.connection='loading';
-  void import('./terminal-viewport-runtime').then(({mountTerminalViewportRuntime})=>{if(disposed)return;disposeRuntime=mountTerminalViewportRuntime(element,{url,viewerId})});
+  void import('./terminal-viewport-runtime').then(({mountTerminalViewportRuntime})=>{if(disposed)return;disposeRuntime=mountTerminalViewportRuntime(element,{url,viewerId,autoFocus})});
   return ()=>{disposed=true;disposeRuntime?.()};
 }

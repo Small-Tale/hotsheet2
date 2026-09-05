@@ -6,10 +6,10 @@ import { Terminal } from '@xterm/xterm';
 
 import { parseTerminalSizeMessage,terminalReconnectDelay,terminalResizeClaim,terminalViewportScale } from './terminal-viewport';
 
-export function mountTerminalViewportRuntime(element:HTMLElement,{url,viewerId}:{url:string;viewerId:string}):()=>void {
+export function mountTerminalViewportRuntime(element:HTMLElement,{url,viewerId,autoFocus=false}:{url:string;viewerId:string;autoFocus?:boolean}):()=>void {
   const background=getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim()||'#000';
   const terminal=new Terminal({cursorBlink:true,convertEol:false,scrollback:5_000,fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace',fontSize:12,theme:{background}}),fit=new FitAddon();
-  terminal.loadAddon(fit);terminal.open(element);
+  terminal.loadAddon(fit);terminal.open(element);if(autoFocus)terminal.focus();
   let webgl:WebglAddon|undefined;
   if(element.classList.contains('terminal-viewport--dedicated'))try{webgl=new WebglAddon();terminal.loadAddon(webgl);element.dataset.renderer='webgl';webgl.onContextLoss(()=>{webgl?.dispose();webgl=undefined;element.dataset.renderer='dom'})}catch{element.dataset.renderer='dom'}else element.dataset.renderer='dom';
   let socket:WebSocket|undefined,reconnect:number|undefined,heartbeat:number|undefined,fitFrame:number|undefined,attempt=0,visible=true,disposed=false,serverSize:{cols:number;rows:number}|undefined;
