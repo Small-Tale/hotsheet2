@@ -10,6 +10,7 @@ export function parseTerminalSizeMessage(value:string):TerminalSizeMessage|undef
 
 export const terminalReconnectDelay=(attempt:number)=>Math.min(8_000,250*(2**Math.max(0,attempt)));
 export const TERMINAL_VIEWPORT_MIN_SCALE=.7;
+export const TERMINAL_RESIZE_SETTLE_MS=120;
 export interface TerminalFocusRequest {projectId:string;terminalId:string}
 export function terminalViewportShouldAutoFocus(request:TerminalFocusRequest|undefined,projectId:string,terminalId:string):boolean {
   return request?.projectId===projectId&&request.terminalId===terminalId;

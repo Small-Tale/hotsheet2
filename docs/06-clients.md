@@ -626,8 +626,10 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
 - `SIZE_FOCUS_HOLD_MS` (~500 ms) — a newly-focused viewport must hold focus this
   long before its size is applied (kills ping-pong when focus flickers).
 - `SIZE_MIN_DELTA` (≥2 cols/rows) — ignore sub-threshold differences.
-- `SIZE_RESIZE_MIN_INTERVAL_MS` (~750 ms) — rate-limit actual PTY resizes; coalesce
-  bursts.
+- `SIZE_RESIZE_MIN_INTERVAL_MS` (~100 ms) — rate-limit actual PTY resizes to ten per
+  second. Browser viewports coalesce layout work to animation frames and send a final
+  claim 120 ms after resizing settles, so a suppressed in-window update cannot leave the
+  terminal at an obsolete size until its heartbeat.
 
 **Alternative policies (configurable per terminal), for when focus-follows isn't
 wanted:**

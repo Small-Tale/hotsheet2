@@ -20,8 +20,9 @@ use std::collections::HashMap;
 pub const SIZE_FOCUS_HOLD_MS: u64 = 500;
 /// Ignore a resize smaller than this many rows/cols of delta (avoid churn on ±1).
 pub const SIZE_MIN_DELTA: u16 = 2;
-/// Don't resize the PTY more often than this (`SIZE_RESIZE_MIN_INTERVAL_MS`).
-pub const SIZE_RESIZE_MIN_INTERVAL_MS: u64 = 750;
+/// Don't resize the PTY more often than this (`SIZE_RESIZE_MIN_INTERVAL_MS`). This keeps
+/// interactive drags responsive while bounding SIGWINCH churn to ten updates per second.
+pub const SIZE_RESIZE_MIN_INTERVAL_MS: u64 = 100;
 
 /// One viewport's leased size claim.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -286,12 +287,12 @@ mod tests {
         assert!(a.decide(0).is_some());
 
         // A change within the min-interval is suppressed.
-        a.upsert(claim("v1", 120, 50, true, 100), 100);
-        assert!(a.decide(100).is_none(), "too soon after the last resize");
+        a.upsert(claim("v1", 120, 50, true, 50), 50);
+        assert!(a.decide(50).is_none(), "too soon after the last resize");
 
         // After the interval, it applies.
-        a.upsert(claim("v1", 120, 50, true, 1000), 1000);
-        assert_eq!(a.decide(1000).map(|d| (d.cols, d.rows)), Some((120, 50)));
+        a.upsert(claim("v1", 120, 50, true, 100), 100);
+        assert_eq!(a.decide(100).map(|d| (d.cols, d.rows)), Some((120, 50)));
 
         // A sub-min-delta change (±1) is ignored even after the interval.
         a.upsert(claim("v1", 121, 50, true, 2000), 2000);
