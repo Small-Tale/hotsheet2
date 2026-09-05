@@ -61,7 +61,7 @@ describe('RepositoryStatusPopover',()=>{
   });
 
   it('reuses code-review commit and range actions in the commits view',()=>{
-    const markup=String(RepositoryStatusPopover({status:status({ranges:[{from:'aaa1111',to:'bbb2222',count:2}]}),view:'commits',comparison:{active:false,side:'a'}}));
+    const markup=String(RepositoryStatusPopover({status:status({ranges:[{from:'aaa1111',to:'abc123456',count:2}]}),view:'commits',comparison:{active:false,side:'a'}}));
     expect(markup).toContain('data-component="ticket-code-review"');
     expect(markup).toContain('Ship repository browser');
     expect(markup).toContain('data-action="open-repository-review"');

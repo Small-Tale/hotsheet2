@@ -21,7 +21,7 @@ const review: CodeReview = {
 describe('TicketCodeReview', () => {
   it('resets the native list-item indent so commit rows align with their list', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-code-review.css'), 'utf8');
-    expect(css).toMatch(/\.ticket-code-review__commits li \{[^}]*margin-inline-start: 0;/);
+    expect(css).toMatch(/\.ticket-code-review__commit \{[^}]*margin-inline-start: 0;/);
   });
 
   it('lists commit messages and exposes only server-provided commit and range targets', () => {
@@ -30,11 +30,18 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('HS2-TEST: finish review UI');
     expect(markup).toContain('data-review-mode="range" data-review-from="aaa1111" data-review-to="bbb2222"');
     expect(markup).toContain('data-review-mode="range" data-review-from="ccc3333" data-review-to="ddd4444"');
-    expect(markup.match(/ticket-code-review__range/g)).toHaveLength(2);
+    expect(markup.match(/class="ticket-code-review__range"/g)).toHaveLength(2);
     expect(markup).toContain('Open 2-commit bundle<small>aaa1111 → bbb2222</small>');
     expect(markup).toContain('Open 2-commit bundle<small>ccc3333 → ddd4444</small>');
     expect(markup).toContain('data-review-mode="commit" data-review-commit="bbb2222"');
     expect(markup).toContain('data-lucide="external-link"');
+    const laterRange = markup.indexOf('data-review-from="ccc3333"');
+    const latestCommit = markup.indexOf('class="ticket-code-review__commit" data-commit-sha="ddd4444"');
+    const earlierRange = markup.indexOf('data-review-from="aaa1111"');
+    const earlierCommit = markup.indexOf('class="ticket-code-review__commit" data-commit-sha="bbb2222"');
+    expect(laterRange).toBeLessThan(latestCommit);
+    expect(earlierRange).toBeGreaterThan(markup.indexOf('data-commit-sha="ccc3333"'));
+    expect(earlierRange).toBeLessThan(earlierCommit);
   });
 
   it('keeps history readable but disables launching without a configured tool', () => {

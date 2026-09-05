@@ -865,6 +865,10 @@ are selected. Open uses the same external-difftool affordance as a single commit
 shared component's complete comparison state is represented in `/ux-demo`. Repository
 status remains explicit-refresh/event driven and introduces no polling.
 
+Every server-provided multi-commit bundle is placed in history immediately above its
+newest (`to`) commit, so the bundle action stays attached to the change it concludes
+even when multiple disjoint ticket ranges are present.
+
 ## 6.11 Cross-references
 - UX component inventory and `/ux-demo` contract: [ux-components.md](ux-components.md)
 - Server-side PTY manager that hosts the arbiter: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.4
