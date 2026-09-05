@@ -1462,6 +1462,50 @@ fn edit_reads_multiline_markdown_note_from_stdin_without_shell_escaping() {
 }
 
 #[test]
+fn edit_allows_literal_backslash_n_in_markdown_code_or_with_explicit_override() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Document escaped line breaks");
+
+    let code_examples = "Inline `\\n` and fenced code:\n\n```text\nfirst\\nsecond\n```";
+    hs(p)
+        .args(["edit", &slug, "--note", code_examples])
+        .assert()
+        .success();
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            r"Inline `\n` is code, but this prose \n is still rejected.",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--allow-literal-backslash-n"));
+
+    let intentional_prose = r"The wire format intentionally contains \n between records.";
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            intentional_prose,
+            "--allow-literal-backslash-n",
+        ])
+        .assert()
+        .success();
+
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(ticket.notes[0].text, code_examples);
+    assert_eq!(ticket.notes[1].text, intentional_prose);
+}
+
+#[test]
 fn attach_adds_stable_metadata_and_nested_payload() {
     let dir = tempfile::tempdir().unwrap();
     let source = tempfile::NamedTempFile::new().unwrap();

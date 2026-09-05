@@ -131,6 +131,9 @@ enum Cmd {
         /// Read the note body from a UTF-8 file, or from stdin with `-`.
         #[arg(long, value_name = "PATH", conflicts_with = "note")]
         note_file: Option<PathBuf>,
+        /// Permit literal `\\n` text outside Markdown code spans/blocks.
+        #[arg(long, requires = "note")]
+        allow_literal_backslash_n: bool,
         /// Edit this provider-native note id instead of appending a note.
         #[arg(long, conflicts_with = "note_kind")]
         edit_note: Option<String>,
@@ -193,6 +196,9 @@ enum Cmd {
         /// Read the note body from a UTF-8 file, or from stdin with `-`.
         #[arg(long, value_name = "PATH", conflicts_with = "note")]
         note_file: Option<PathBuf>,
+        /// Permit literal `\\n` text outside Markdown code spans/blocks.
+        #[arg(long, requires = "note")]
+        allow_literal_backslash_n: bool,
         /// Edit this existing note ULID instead of appending a note.
         #[arg(long, conflicts_with = "note_kind")]
         edit_note: Option<String>,
@@ -815,11 +821,12 @@ fn main() -> Result<()> {
             expected_token,
             note,
             note_file,
+            allow_literal_backslash_n,
             note_kind,
             note_summary,
             edit_note,
         } => {
-            let note = read_note_input(note, note_file)?;
+            let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
             validate_note_modifiers(
                 &note,
                 note_kind.as_ref(),
@@ -865,11 +872,12 @@ fn main() -> Result<()> {
             no_up_next,
             note,
             note_file,
+            allow_literal_backslash_n,
             note_kind,
             note_summary,
             edit_note,
         } => {
-            let note = read_note_input(note, note_file)?;
+            let note = read_note_input(note, note_file, allow_literal_backslash_n)?;
             validate_note_modifiers(
                 &note,
                 note_kind.as_ref(),
@@ -2736,12 +2744,21 @@ fn cmd_edit(
     Ok(())
 }
 
-fn read_note_input(note: Option<String>, note_file: Option<PathBuf>) -> Result<Option<String>> {
+fn read_note_input(
+    note: Option<String>,
+    note_file: Option<PathBuf>,
+    allow_literal_backslash_n: bool,
+) -> Result<Option<String>> {
     let Some(path) = note_file else {
-        if note.as_deref().is_some_and(|text| text.contains("\\n")) {
+        if !allow_literal_backslash_n
+            && note
+                .as_deref()
+                .is_some_and(contains_literal_backslash_n_outside_code)
+        {
             bail!(
-                "--note contains a literal \\n sequence; use --note-file <path> or --note-file - \
-                 for multiline Markdown with real line breaks (and for intentional literal \\n text)"
+                "--note contains a literal \\n sequence outside Markdown code; use --note-file \
+                 <path> or --note-file - for multiline Markdown with real line breaks, or pass \
+                 --allow-literal-backslash-n when the text is intentional"
             );
         }
         return Ok(note);
@@ -2757,6 +2774,95 @@ fn read_note_input(note: Option<String>, note_file: Option<PathBuf>) -> Result<O
             .with_context(|| format!("failed to read note body from {}", path.display()))?
     };
     Ok(Some(text))
+}
+
+fn contains_literal_backslash_n_outside_code(markdown: &str) -> bool {
+    let bytes = markdown.as_bytes();
+    let mut index = 0;
+    let mut inline_ticks = None;
+    let mut fenced_ticks = None;
+
+    while index < bytes.len() {
+        if bytes[index] == b'`' {
+            let run = backtick_run(bytes, index);
+            let fence_position = is_fence_position(bytes, index);
+
+            if let Some(opening_run) = fenced_ticks {
+                if fence_position && run >= opening_run && fence_closes_line(bytes, index + run) {
+                    fenced_ticks = None;
+                }
+            } else if let Some(opening_run) = inline_ticks {
+                if run == opening_run {
+                    inline_ticks = None;
+                }
+            } else if !is_backslash_escaped(bytes, index) {
+                if run >= 3 && fence_position {
+                    fenced_ticks = Some(run);
+                } else if has_matching_backtick_run(bytes, index + run, run) {
+                    inline_ticks = Some(run);
+                }
+            }
+            index += run;
+            continue;
+        }
+
+        if inline_ticks.is_none()
+            && fenced_ticks.is_none()
+            && bytes[index] == b'\\'
+            && bytes.get(index + 1) == Some(&b'n')
+        {
+            return true;
+        }
+        index += 1;
+    }
+    false
+}
+
+fn backtick_run(bytes: &[u8], start: usize) -> usize {
+    bytes[start..]
+        .iter()
+        .take_while(|byte| **byte == b'`')
+        .count()
+}
+
+fn is_fence_position(bytes: &[u8], index: usize) -> bool {
+    let line_start = bytes[..index]
+        .iter()
+        .rposition(|byte| *byte == b'\n')
+        .map_or(0, |newline| newline + 1);
+    index - line_start <= 3 && bytes[line_start..index].iter().all(|byte| *byte == b' ')
+}
+
+fn fence_closes_line(bytes: &[u8], after_run: usize) -> bool {
+    bytes[after_run..]
+        .iter()
+        .take_while(|byte| **byte != b'\n')
+        .all(|byte| byte.is_ascii_whitespace())
+}
+
+fn is_backslash_escaped(bytes: &[u8], index: usize) -> bool {
+    bytes[..index]
+        .iter()
+        .rev()
+        .take_while(|byte| **byte == b'\\')
+        .count()
+        % 2
+        == 1
+}
+
+fn has_matching_backtick_run(bytes: &[u8], mut index: usize, expected: usize) -> bool {
+    while index < bytes.len() {
+        if bytes[index] != b'`' {
+            index += 1;
+            continue;
+        }
+        let run = backtick_run(bytes, index);
+        if run == expected {
+            return true;
+        }
+        index += run;
+    }
+    false
 }
 
 fn validate_note_modifiers(

@@ -291,9 +291,10 @@ hotsheet provider-close github-main 42 --reason completed
 use `--note-file <path>` or `--note-file -` (stdin) so real line breaks are preserved
 without shell-escape interpretation. `--note-file` works for both appended notes and
 `--edit-note` replacements. To prevent escaped line breaks from silently becoming visible
-text, direct `--note` input containing a literal `\n` sequence is rejected with guidance
-to use `--note-file`. Use the file/stdin form when a note intentionally documents that
-literal sequence as well.
+text, direct `--note` input containing a literal `\n` sequence outside Markdown inline
+code or fenced backtick code is rejected with guidance to use `--note-file`. Intentional
+literal text outside code may be passed with `--allow-literal-backslash-n`; the file/stdin
+form also accepts intentional literal sequences without needing the override.
 
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
 an `x-hotsheet-filename` header. Browser clients percent-encode Unicode filenames and

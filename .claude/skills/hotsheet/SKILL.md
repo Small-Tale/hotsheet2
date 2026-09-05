@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 39 -->
+<!-- hotsheet-skill-version: 40 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -89,5 +89,6 @@ Notes:
   Markdown notes, with an optional short activity entry pointing to them.
 - Notes support Markdown. For multiline CLI notes, pass real line breaks with
   `hotsheet-cli edit <slug> --note-file <path>` or stdin via `--note-file -`; do not put
-  JSON-escaped `\\n` sequences in `--note`. The CLI rejects likely escaped line breaks;
-  use `--note-file` even when literal `\\n` text is intentional.
+  JSON-escaped `\\n` sequences in `--note`. The CLI rejects likely escaped line breaks
+  outside inline/fenced backtick code; use `--allow-literal-backslash-n` only when prose
+  containing literal `\\n` text is intentional.
