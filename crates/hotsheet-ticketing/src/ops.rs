@@ -452,6 +452,13 @@ pub fn update(
     }
     if let Some(s) = patch.status {
         t.status = s;
+        if s.is_active() && !previous_status.is_active() {
+            // Reopening begins a new work cycle. Completion/verification timestamps
+            // describe the current cycle, so stale terminal-state dates must not leak
+            // into the reopened ticket or suppress a later completion stamp.
+            t.completed_at = None;
+            t.verified_at = None;
+        }
         match s {
             Status::Completed if t.completed_at.is_none() => t.completed_at = Some(now.clone()),
             Status::Verified if t.verified_at.is_none() => t.verified_at = Some(now.clone()),
@@ -1481,6 +1488,75 @@ mod tests {
         .unwrap();
         assert_eq!(c.close_reason, Some(CloseReason::Completed));
         assert!(c.closed_at.is_some());
+    }
+
+    #[test]
+    fn reopening_verified_ticket_resets_and_restamps_lifecycle_timestamps() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "Repeat work cycle".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let completed_at = ts("2026-08-19T01:00:00Z");
+        update(
+            &store,
+            &id,
+            completed_at.clone(),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let verified_at = ts("2026-08-19T02:00:00Z");
+        update(
+            &store,
+            &id,
+            verified_at.clone(),
+            TicketPatch {
+                status: Some(Status::Verified),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let reopened = update(
+            &store,
+            &id,
+            ts("2026-08-19T03:00:00Z"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(reopened.status, Status::Started);
+        assert_eq!(reopened.completed_at, None);
+        assert_eq!(reopened.verified_at, None);
+
+        let recompleted_at = ts("2026-08-19T04:00:00Z");
+        let recompleted = update(
+            &store,
+            &id,
+            recompleted_at.clone(),
+            TicketPatch {
+                status: Some(Status::Completed),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(recompleted.completed_at, Some(recompleted_at));
+        assert_eq!(recompleted.verified_at, None);
+        assert_ne!(recompleted.completed_at, Some(completed_at));
+        assert_ne!(recompleted.verified_at, Some(verified_at));
     }
 
     #[test]

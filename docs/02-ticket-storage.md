@@ -412,8 +412,9 @@ merge by the §2.7 rule — **newest `updated_at` wins**. If two people close th
 ticket concurrently with different reasons, the later close wins and nothing
 conflicts; `duplicate_of` is a plain ULID that survives a move (§2.13).
 
-**Reopening** clears `close_reason` / `closed_at` / `duplicate_of` (and returns the
-ticket to an open status), the same way HS1 clears completion metadata on reopen.
+**Reopening** clears `close_reason` / `closed_at` / `duplicate_of` and the prior work
+cycle's `completed_at` / `verified_at` timestamps when it returns the ticket to an open
+status. Completing or verifying the reopened ticket stamps fresh lifecycle timestamps.
 
 ## 2.7 Concurrency & automatic conflict resolution
 

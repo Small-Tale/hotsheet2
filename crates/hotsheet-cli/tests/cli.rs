@@ -23,6 +23,65 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn reopening_verified_ticket_starts_a_fresh_completion_cycle() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    let slug = new_ticket(p, "Repeat completion cycle");
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--status",
+            "completed",
+            "--note",
+            "Initial result",
+        ])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &slug, "--status", "verified"])
+        .assert()
+        .success();
+
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let first_cycle = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let first_completed_at = first_cycle.completed_at.unwrap();
+    assert!(first_cycle.verified_at.is_some());
+
+    hs(p)
+        .args(["edit", &slug, "--status", "started"])
+        .assert()
+        .success();
+    let reopened = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(reopened.completed_at, None);
+    assert_eq!(reopened.verified_at, None);
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--status",
+            "completed",
+            "--note",
+            "Revised result",
+        ])
+        .assert()
+        .success();
+    let second_cycle = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert!(second_cycle.completed_at.is_some());
+    assert_ne!(second_cycle.completed_at, Some(first_completed_at));
+    assert_eq!(second_cycle.verified_at, None);
+}
+
+#[test]
 fn providers_reports_default_git_connection_and_capabilities() {
     let dir = tempfile::tempdir().unwrap();
     hs(dir.path())
