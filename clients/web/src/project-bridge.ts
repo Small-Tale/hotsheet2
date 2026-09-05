@@ -22,7 +22,16 @@ interface CorruptDiagnostic { path:string }
 export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
 export type FolderChooserRunner=(command:string,args:string[])=>Promise<string|undefined>;
 
-const sessions = new Map<string, SessionTarget>();
+type ProjectBridgeProcess=typeof process&{__hotsheetProjectSessions?:Map<string,SessionTarget>};
+
+/** Vite evaluates config plugins and its SSR dev entry in separate module graphs. Keep the
+ * authenticated project-session registry on their shared process object so HTTP opens and
+ * terminal WebSocket upgrades resolve the same session without exposing credentials. */
+export function projectSessionRegistry(host:ProjectBridgeProcess=process):Map<string,SessionTarget>{
+  return host.__hotsheetProjectSessions??=(new Map<string,SessionTarget>());
+}
+
+const sessions = projectSessionRegistry();
 
 export function revealCommand(path: string, hostPlatform = process.platform): {command:string;args:string[]} {
   if (hostPlatform === 'darwin') return { command: 'open', args: ['-R', path] };

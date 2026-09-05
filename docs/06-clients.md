@@ -540,7 +540,11 @@ Each rendered pane owns a stable random viewer id and one WebSocket attachment t
 existing PTY; opening another pane or magnifying the terminal attaches another viewer and
 never calls terminal creation. The browser URL is same-origin and secret-free. The local
 Vite bridge performs the upgrade and adds the loopback server credential only to its
-server-side upstream. A future Tauri host must provide the same bridge boundary rather
+server-side upstream. Vite loads that bridge from its config graph and the project-open
+HTTP handler from its SSR graph, so both resolve authenticated project sessions through
+one process-scoped registry; a successful project open must make terminal upgrades
+immediately attachable rather than leaving the viewport indefinitely connecting. A future
+Tauri host must provide the same bridge boundary rather
 than exposing the server secret to web content.
 
 The viewport renders ANSI/VT output with xterm, forwards typed input as terminal text, and

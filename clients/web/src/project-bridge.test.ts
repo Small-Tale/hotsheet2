@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDevApp } from './dev-server';
 import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder, developmentRepositoryRoot,folderChooserCommand, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
+describe('projectSessionRegistry',()=>{
+  it('shares project sessions across separately evaluated Vite module graphs',async()=>{
+    const moduleUrl=new URL('./project-bridge.ts',import.meta.url).href;
+    const configGraph=await import(`${moduleUrl}?graph=config`),ssrGraph=await import(`${moduleUrl}?graph=ssr`);
+    configGraph.projectSessionRegistry().set('module-graph-checkout',{url:'http://127.0.0.1:1',secret:'private'});
+    expect(ssrGraph.projectTerminalWebSocketUrl('module-graph-checkout','terminal')).toBe('ws://127.0.0.1:1/terminals/terminal/attach?secret=private');
+  });
+});
+
 describe('developmentRepositoryRoot', () => {
   it('uses the explicit original repository root inside a stable snapshot', () => {
     expect(developmentRepositoryRoot('/tmp/hotsheet-web-stable-123', {
