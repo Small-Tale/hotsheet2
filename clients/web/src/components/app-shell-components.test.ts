@@ -114,6 +114,7 @@ describe('application shell components', () => {
     // reset the workspace scrollTop, e.g. when the ticket context menu opens).
     expect(markup).toContain('class="app-shell__work-area" data-key="app-shell-work-area" data-has-composer="true" tabindex="0" aria-label="Ticket work area"');
     expect(markup).toContain('data-key="app-shell-workspace"');
+    expect(markup).toContain('data-ticket-scroll-owner="workspace"');
     expect(markup).toContain('class="app-shell__composer">compose');
     expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));
     expect(markup).toContain('data-component="page-header"');

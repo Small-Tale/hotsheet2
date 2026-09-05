@@ -54,7 +54,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
           and the workspace loses its scrollTop. */}
       <div class="app-shell__work-area" data-key="app-shell-work-area" data-has-composer={String(Boolean(composer))} tabIndex={0} aria-label="Ticket work area">
         {composer && <div class="app-shell__composer">{composer}</div>}
-        <section class="app-shell__workspace" data-key="app-shell-workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
+        <section class="app-shell__workspace" data-key="app-shell-workspace" data-ticket-scroll-owner="workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
       </div>
       {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={180} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible} transitioning={terminalDrawerTransitioning}>{terminalDrawer}</ResizableRegion>}
       {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&!terminalDrawerTransitioning&&<button type="button" class="app-shell__terminal-drawer-restore" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button>}

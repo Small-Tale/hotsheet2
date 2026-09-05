@@ -448,7 +448,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'drive-control') return <DriveControlDemo />;
   if (item.id === 'project-tab') return <ProjectTabDemo />;
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
-  if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab kind="project" id="project" name="Project tab" selected leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab kind="terminal" id="terminal" name="Terminal tab" leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy">●</span>}/></section>;
+  if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab kind="project" id="project" name="Project tab" selected leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab kind="terminal" id="terminal" name="Terminal tab" leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy"><LucideIcon icon={Activity} name="activity"/></span>}/></section>;
   if (item.id === 'terminal-drawer') return <section class="terminal-drawer-demo"><TerminalDrawer projectId="demo" projectName="Demo project" sessions={[{ id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, scrollback: 'npm run dev\nready on http://127.0.0.1' }]} width={900} height={320} fitAcross={2} fitHigh={2} selectedId="shell"/></section>;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner')
