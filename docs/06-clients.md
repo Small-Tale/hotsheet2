@@ -863,7 +863,9 @@ selecting A advances to B, both
 commits receive visible side labels, and Open remains disabled until two distinct sides
 are selected. Open uses the same external-difftool affordance as a single commit. The
 shared component's complete comparison state is represented in `/ux-demo`. Repository
-status remains explicit-refresh/event driven and introduces no polling.
+status remains explicit-refresh/event driven and introduces no polling. The UX demo's
+settings select switches among clean, dirty, ahead, behind, diverged, conflicted, and
+error fixtures so every headline icon and subtitle can be reviewed deterministically.
 
 Every server-provided multi-commit bundle is placed in history immediately above its
 newest (`to`) commit, so the bundle action stays attached to the change it concludes

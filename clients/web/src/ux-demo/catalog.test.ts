@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createDevApp } from '../dev-server';
 import { demoCatalog, demosUsing, findDemo, flattenCatalog } from './catalog';
+import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
 import { resetTicketRowDemo, ticketRowSettings } from './ticket-row-demo';
@@ -77,6 +78,23 @@ describe('UX demo catalog', () => {
     statusBadgeSettings.compact.value = true;
     resetStatusBadgeDemo();
     expect({ status: statusBadgeSettings.status.value, showIcon: statusBadgeSettings.showIcon.value, appearance: statusBadgeSettings.appearance.value, compact: statusBadgeSettings.compact.value }).toEqual({ status: 'started', showIcon: true, appearance: 'filled', compact: false });
+  });
+
+  it('offers and resets every repository-status headline scenario', () => {
+    const settings=String(RepositoryStatusPopoverSettings());
+    for(const scenario of ['clean','dirty','ahead','behind','diverged','conflicted','error'])expect(settings).toContain(`value="${scenario}"`);
+    expect((['clean','dirty','ahead','behind','diverged','conflicted'] as const).map(scenario=>[scenario,repositoryStatusForScenario(scenario)])).toMatchObject([
+      ['clean',{ahead:0,behind:0,conflicted:0,clean:true}],
+      ['dirty',{ahead:0,behind:0,conflicted:0,clean:false}],
+      ['ahead',{ahead:2,behind:0,conflicted:0}],
+      ['behind',{ahead:0,behind:2,conflicted:0}],
+      ['diverged',{ahead:2,behind:1,conflicted:0}],
+      ['conflicted',{conflicted:1}],
+    ]);
+    expect(repositoryStatusForScenario('error')).toBeNull();
+    repositoryDemoScenario.value='clean';
+    resetRepositoryStatusDemo();
+    expect(repositoryDemoScenario.value).toBe('conflicted');
   });
 
   it('resets every canonical TicketRow demo setting', () => {

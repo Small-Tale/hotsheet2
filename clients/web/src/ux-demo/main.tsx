@@ -150,7 +150,7 @@ import {
   sidebarViews,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
-import { repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoView, RepositoryStatusPopoverDemo } from './repository-status-demo';
+import { repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { SelectDemo } from './select-demo';
 import {
   resetStatusBadgeDemo,
@@ -526,6 +526,7 @@ function DemoApp() {
     selected.id === 'tag-chip' ||
     selected.id === 'status-badge' ||
     selected.id === 'ticket-row' ||
+    selected.id === 'repository-status-popover' ||
     selected.id === 'permission-request';
   return (
     <main
@@ -590,6 +591,8 @@ function DemoApp() {
             <StatusBadgeSettings />
           ) : selected.id === 'ticket-row' ? (
             <TicketRowSettings />
+          ) : selected.id === 'repository-status-popover' ? (
+            <RepositoryStatusPopoverSettings />
           ) : selected.id === 'permission-request' ? (
             <PermissionRequestSettings />
           ) : (
@@ -1003,7 +1006,11 @@ delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'tag-chip') resetTagChipDemo(root);
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
   if (selectedId.value === 'ticket-row') resetTicketRowDemo(root);
+  if (selectedId.value === 'repository-status-popover') resetRepositoryStatusDemo(root);
   if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
+});
+delegate(root, 'change', '[data-settings="repository-status-popover"] [name="scenario"]', (_event, target) => {
+  repositoryDemoScenario.value = (target as FormControl).value as typeof repositoryDemoScenario.value;
 });
 delegate(
   root,
