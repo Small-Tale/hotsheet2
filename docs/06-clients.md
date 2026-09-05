@@ -488,6 +488,8 @@ project/flow grouping, magnification/hiding, and independent persisted width/hig
 controls. Its visibility action uses a contained standard toolbar button group (reserved for
 a future visibility-groups dialog), while project/none grouping uses the shared Select in a
 matching contained group with the same trailing-arrow spacing as the workspace sort control.
+That edge-mounted grouping Select uses a trigger-width menu and an 8rem anchor, allowing Web
+Awesome's popup positioning to keep the entire listbox inside the viewport.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.

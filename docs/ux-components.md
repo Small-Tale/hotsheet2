@@ -759,6 +759,8 @@ how to create or open a terminal.
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);
 minus zooms out (more terminals). The active count is announced as “N across” or “N high”:
+the right-edge Group control constrains its menu to the 8rem trigger width so its popup
+remains wholly inside the viewport.
 
 - when the grid container is taller than 600 px, scale means how many terminal tiles fit
   across the available content width, preserving HS1's integer 1–10 column model;

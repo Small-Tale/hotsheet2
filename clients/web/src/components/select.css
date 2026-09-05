@@ -3,6 +3,7 @@
 .select::part(start), .select::part(end), .select::part(expand-icon) { margin: 0; }
 .select::part(expand-icon) { transform: scale(.5); }
 .select::part(listbox) { width: max-content; min-width: 100%; max-width: min(20rem, calc(100vw - 1.25rem)); }
+.select--fit-menu::part(listbox) { width: 100%; }
 .select wa-option::part(base) { align-items: center; }
 .select wa-option { --wa-form-control-activated-color: var(--wa-color-brand-fill-normal); --current-text-color: var(--wa-color-brand-on-quiet); }
 .select wa-option::part(start) { align-self: center; margin-top: 0; }

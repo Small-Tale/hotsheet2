@@ -3,7 +3,7 @@
 .terminal-dashboard-controls__count { position: absolute; top: -.25rem; right: -.2rem; display: grid; min-width: 1rem; height: 1rem; padding: 0 .2rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-warning-on-normal); background: var(--wa-color-warning-fill-loud); font-size: var(--wa-font-size-3xs); font-weight: 700; line-height: 1; place-items: center; }
 .terminal-dashboard-controls__visibility { position: relative; }
 .terminal-dashboard-controls__visibility:disabled { opacity: var(--wa-opacity-disabled); cursor: not-allowed; }
-.terminal-dashboard-controls__grouping-select { width: 5rem; }
+.terminal-dashboard-controls__grouping-select { width: 8rem; }
 .terminal-dashboard-controls__grouping-select::part(combobox) { position: relative; min-height: 2rem; padding-inline: .35rem .45rem; border: 0; border-radius: var(--wa-border-radius-pill); background: transparent; box-shadow: none; }
 .terminal-dashboard-controls__grouping-select::part(expand-icon) { position: absolute; inset-inline-end: .2rem; }
 .terminal-dashboard-controls__grouping-select .select__custom-selected { color: var(--wa-color-neutral-on-quiet); font-weight: var(--wa-font-weight-semibold); }
