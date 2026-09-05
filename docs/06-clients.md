@@ -502,6 +502,12 @@ the host user's default shell. Project and terminal tabs share one pill-tab prim
 the close button before the label and optional leading/trailing state icons. Right-clicking
 either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
 Tabs; holding Option/Alt when opening the menu changes the directional action to the left.
+Closeable tabs reserve the same trailing state slot even when it is empty, balancing the
+leading close control and preventing labels from shifting when status appears. Terminal tabs
+use that shared tab surface directly rather than layering a second selected background inside
+it. A dedicated terminal removes dashboard padding and shares one domain background token
+between its session container, viewport, and xterm theme, so any residual edge area is both
+symmetric and visually continuous with the terminal canvas.
 Closing the selected terminal follows HS1's nearest-neighbor behavior (right first, then
 left, then the grid). The rail also exposes hidden-session recovery and collapses to
 one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall

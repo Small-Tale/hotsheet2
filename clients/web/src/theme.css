@@ -57,4 +57,5 @@
   --hs-shell-divider: #cfd3dc;
   --hs-ticket-state-needs-review: #8b5cf6;
   --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
+  --hs-terminal-background: #000;
 }

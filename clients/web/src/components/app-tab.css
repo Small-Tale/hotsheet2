@@ -6,6 +6,7 @@
 .app-tab__select:focus-visible, .app-tab__close:focus-visible { border-radius: var(--wa-border-radius-pill); outline: var(--wa-focus-ring); outline-offset: -2px; }
 .app-tab__select > svg { width: 1rem; height: 1rem; flex: none; }
 .app-tab__name { overflow: hidden; font-size: var(--wa-font-size-xs); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.app-tab__trailing { display: grid; min-width: 1.275rem; min-height: 1.275rem; flex: none; place-items: center; }
 .app-tab__close { display: grid; flex: none; width: 1.275rem; height: 1.275rem; margin-left: var(--wa-space-xs); padding: 0; border: 0; appearance: none; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
 .app-tab__close:hover { color: var(--wa-color-text-normal); }
 .app-tab__close svg { width: .6375rem; height: .6375rem; }
