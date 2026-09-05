@@ -37,6 +37,9 @@ pub struct ApiTicket {
     pub priority: Priority,
     pub status: Status,
     pub up_next: bool,
+    /// Computed review state carried on full responses as well as compact rows so
+    /// selecting a ticket cannot discard the list's needs-review presentation.
+    pub feedback_needed: bool,
     pub tags: Vec<String>,
     pub blocked_by: Vec<String>,
     pub blocked_reason: Option<String>,
@@ -111,6 +114,7 @@ impl ApiTicket {
             priority: t.priority,
             status: t.status,
             up_next: t.up_next,
+            feedback_needed: t.feedback_needed(),
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
             blocked_reason: t.blocked_reason.clone(),
@@ -400,8 +404,11 @@ mod tests {
         ));
         assert!(TicketRow::from(&waiting).feedback_needed);
         assert!(TicketRow::compact(&waiting).feedback_needed);
+        assert!(ApiTicket::from(&waiting).feedback_needed);
         let json = serde_json::to_value(TicketRow::compact(&waiting)).unwrap();
         assert_eq!(json["feedback_needed"], true);
+        let full_json = serde_json::to_value(ApiTicket::from(&waiting)).unwrap();
+        assert_eq!(full_json["feedback_needed"], true);
 
         waiting.notes.push(note(
             "01ARZ3NDEKTSV4RRFFQ69G5FB3",
@@ -409,6 +416,7 @@ mod tests {
             "2026-08-20T00:02:00Z",
         ));
         assert!(!TicketRow::from(&waiting).feedback_needed);
+        assert!(!ApiTicket::from(&waiting).feedback_needed);
     }
 
     #[test]

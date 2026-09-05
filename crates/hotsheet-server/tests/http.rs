@@ -713,6 +713,7 @@ async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
     )
     .await;
     assert_eq!(updated["notes"][0]["kind"], "feedback_needed");
+    assert_eq!(updated["feedback_needed"], true);
 
     let rows = body_json(
         router

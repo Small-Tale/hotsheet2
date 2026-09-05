@@ -307,6 +307,7 @@ impl GitHubProvider {
             priority,
             status,
             up_next: false,
+            feedback_needed: false,
             tags: labels
                 .into_iter()
                 .filter(|label| {

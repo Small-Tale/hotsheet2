@@ -207,6 +207,7 @@ impl GitLabProvider {
             priority,
             status,
             up_next: false,
+            feedback_needed: false,
             tags: issue
                 .labels
                 .into_iter()

@@ -199,6 +199,7 @@ impl JiraProvider {
             priority,
             status,
             up_next: false,
+            feedback_needed: false,
             tags: issue.fields.labels,
             blocked_by: vec![],
             blocked_reason: None,
