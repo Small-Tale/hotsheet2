@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl, developmentRepositoryRoot, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder, developmentRepositoryRoot,folderChooserCommand, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
 describe('developmentRepositoryRoot', () => {
   it('uses the explicit original repository root inside a stable snapshot', () => {
@@ -54,6 +54,21 @@ describe('revealCommand',()=>{
     expect(await response.json()).toEqual({revealed:true});
     expect(reveal).toHaveBeenCalledWith('demo','/work/broken.md');
     expect((await createDevApp(false,undefined,reveal).request('/__hotsheet/projects/demo/corrupt-tickets/reveal',{method:'POST'})).status).toBe(404);
+  });
+});
+
+describe('native folder chooser',()=>{
+  it('uses fixed argument arrays for each host platform and returns the selected path',async()=>{
+    expect(folderChooserCommand('darwin')).toMatchObject({command:'osascript',args:['-e',expect.stringContaining('choose folder')]});
+    expect(folderChooserCommand('win32')).toMatchObject({command:'powershell.exe'});
+    expect(folderChooserCommand('linux')).toEqual({command:'zenity',args:['--file-selection','--directory','--title=Choose a folder for Hot Sheet']});
+    const runner=vi.fn().mockResolvedValue('/work/selected');await expect(chooseLocalFolder(runner,'darwin')).resolves.toBe('/work/selected');expect(runner).toHaveBeenCalledWith('osascript',expect.any(Array));
+  });
+  it('exposes selection and cancellation only from the local development bridge',async()=>{
+    const choose=vi.fn().mockResolvedValueOnce('/work/selected').mockResolvedValueOnce(undefined),app=createDevApp(true,undefined,undefined,choose);
+    expect(await (await app.request('/__hotsheet/folders/choose',{method:'POST'})).json()).toEqual({path:'/work/selected'});
+    expect(await (await app.request('/__hotsheet/folders/choose',{method:'POST'})).json()).toEqual({});
+    expect((await createDevApp(false).request('/__hotsheet/folders/choose',{method:'POST'})).status).toBe(404);
   });
 });
 

@@ -178,8 +178,10 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
   development catalog. The project-tab `+` action opens a code-checkout dialog. On first
   open, the server conservatively discovers a valid sibling `<checkout>.hs2` git ticket
-  store, hosts it, and records the many-to-many checkout/store link. The dialog accepts
-  an explicit git-store path when the convention does not apply. The Vite-only bridge
+  store, hosts it, and records the many-to-many checkout/store link. The roomy 48rem
+  dialog accepts an explicit git-store path when the convention does not apply; both
+  paths have host-native folder chooser buttons, and Cancel/Escape are controlled by
+  durable dialog state so unrelated renders cannot reopen or strand the surface. The Vite-only bridge
   discovers or detached-starts the local server and keeps its bearer credential out of
   browser state; Tauri will replace that bridge with its native lifecycle layer.
   Creating a ticket selects it and immediately opens and focuses its Details editor so

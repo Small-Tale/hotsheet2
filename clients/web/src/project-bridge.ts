@@ -20,6 +20,7 @@ interface SessionTarget { url:string; secret:string }
 interface CorruptDiagnostic { path:string }
 
 export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
+export type FolderChooserRunner=(command:string,args:string[])=>Promise<string|undefined>;
 
 const sessions = new Map<string, SessionTarget>();
 
@@ -38,6 +39,16 @@ const launchReveal: RevealLauncher = (command, args) => new Promise((resolveLaun
   child.once('error', reject);
   child.once('spawn', () => { child.unref(); resolveLaunch(); });
 });
+
+export function folderChooserCommand(hostPlatform=process.platform):{command:string;args:string[]}{
+  if(hostPlatform==='darwin')return{command:'osascript',args:['-e','POSIX path of (choose folder with prompt "Choose a folder for Hot Sheet")']};
+  if(hostPlatform==='win32')return{command:'powershell.exe',args:['-NoProfile','-Command',"Add-Type -AssemblyName System.Windows.Forms; $dialog = New-Object System.Windows.Forms.FolderBrowserDialog; if ($dialog.ShowDialog() -eq 'OK') { $dialog.SelectedPath }"]};
+  return{command:'zenity',args:['--file-selection','--directory','--title=Choose a folder for Hot Sheet']};
+}
+
+const runFolderChooser:FolderChooserRunner=(command,args)=>new Promise((resolveChoice,reject)=>{const child=spawn(command,args,{stdio:['ignore','pipe','ignore']}),chunks:Buffer[]=[];child.stdout.on('data',(chunk:Buffer)=>{chunks.push(chunk)});child.once('error',reject);child.once('close',code=>{resolveChoice(code===0?Buffer.concat(chunks).toString('utf8').trim()||undefined:undefined)})});
+
+export async function chooseLocalFolder(runner:FolderChooserRunner=runFolderChooser,hostPlatform=process.platform):Promise<string|undefined>{const command=folderChooserCommand(hostPlatform);return runner(command.command,command.args)}
 
 /** Refuse API use across a negotiated hard boundary. Unknown metadata stays usable
  * for pre-handshake development servers, but an explicit skew result is authoritative. */

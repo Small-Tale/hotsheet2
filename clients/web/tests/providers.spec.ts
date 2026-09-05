@@ -30,9 +30,11 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   let commandRuns:Array<{id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:Array<{seq:number;stream:string;text:string}>}>=[];
   let createdTerminal=false;
   const closedTerminals=new Set<string>();
+  let folderChoice=0;
   await page.route('**/*', async route => {
     const request=route.request(), url=new URL(request.url()), path=url.pathname;
     if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:project});
+    if(path==='/__hotsheet/folders/choose'&&request.method()==='POST')return route.fulfill({json:{path:['/picked/project','/picked/tickets.hs2'][folderChoice++]}});
     if(path.endsWith('/providers')) return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities:{create:true,update:canUpdate,close:true,notes:true,note_edit:canUpdate,note_delete:canUpdate,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,not_working_report:canUpdate,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]}}]});
     if(path.endsWith('/permissions')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/connections')&&request.method()==='GET')return route.fulfill({json:[]});
@@ -98,6 +100,10 @@ test('activates Dev Review from the main app query only in explicit development 
   await page.goto('/?dev-review=1');await expect(page.locator('.hs-dev-review')).toBeVisible();await expect(page.getByRole('button',{name:'Feedback'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-wide.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});await expect(page.locator('.hs-dev-review')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-narrow.png',fullPage:true});
   await page.goto('/?dev-review=0');await expect(page.locator('.hs-dev-review')).toHaveCount(0);
+});
+
+test('opens a roomy project dialog with native browse controls and working cancel',async({page})=>{
+  await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
 });
 
 test('uses independent width and height terminal dashboard zoom scales',async({page})=>{

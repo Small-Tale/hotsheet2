@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import { openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
+import {chooseLocalFolder, openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket): Hono {
+export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder()): Hono {
   const app = new Hono();
   app.post('/__hotsheet/projects/open', async context => {
     if (!dev) return context.notFound();
@@ -16,6 +16,10 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
     } catch (error) {
       return context.json({ error: error instanceof Error ? error.message : 'Could not open project.' }, 400);
     }
+  });
+  app.post('/__hotsheet/folders/choose',async context=>{
+    if(!dev)return context.notFound();
+    try{return context.json({path:await chooseFolder()})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not open the folder chooser.'},400)}
   });
   app.all('/__hotsheet/project-api/:project/*', async context => {
     if (!dev) return context.notFound();
