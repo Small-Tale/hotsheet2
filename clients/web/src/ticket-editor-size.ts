@@ -1,4 +1,4 @@
-export type TicketEditorKind = 'details' | 'blocked-reason' | 'note';
+export type TicketEditorKind = 'details' | 'blocked-reason' | 'note' | 'new-ticket-details';
 export type TicketEditorPresentation = 'sidebar' | 'reader';
 
 const PREFIX = 'hotsheet.ticket-editor-height';
@@ -12,7 +12,7 @@ export function ticketEditorSizeStorageKey(kind: TicketEditorKind, presentation:
 }
 
 export function loadTicketEditorSizes(storage: Pick<Storage, 'getItem'>, style: Pick<CSSStyleDeclaration, 'setProperty'>): void {
-  for (const kind of ['details', 'blocked-reason', 'note'] as const) {
+  for (const kind of ['details', 'blocked-reason', 'note', 'new-ticket-details'] as const) {
     for (const presentation of ['sidebar', 'reader'] as const) {
       const value = Number(storage.getItem(ticketEditorSizeStorageKey(kind, presentation)));
       if (Number.isFinite(value) && value > 0) style.setProperty(ticketEditorSizeVariable(kind, presentation), `${Math.round(value)}px`);
@@ -31,5 +31,6 @@ export function ticketEditorKind(name: string): TicketEditorKind | undefined {
   if (name === 'markdown-source') return 'details';
   if (name === 'blocked-reason') return 'blocked-reason';
   if (name === 'note-body') return 'note';
+  if (name === 'new-ticket-details') return 'new-ticket-details';
   return undefined;
 }

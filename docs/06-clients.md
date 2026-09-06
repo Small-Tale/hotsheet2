@@ -359,6 +359,8 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   category and an immediately trailing star toggle; the star creates directly in Up Next
   (and therefore overrides a Backlog-view default to active Not Started). A full-width
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
+  Its chosen height is a device-local preference that survives controlled-value rerenders,
+  cancellation/reopening, and later new-ticket sessions.
   Column presentation always gives TicketRows a
   rounded visible border, including the wide single-column Backlog and Archive boards.
   The composer owns its bottom spacing; while it is rendered, both list and edge-to-edge

@@ -9,6 +9,7 @@ describe('ticket editor size preferences', () => {
     expect(ticketEditorKind('markdown-source')).toBe('details');
     expect(ticketEditorKind('blocked-reason')).toBe('blocked-reason');
     expect(ticketEditorKind('note-body')).toBe('note');
+    expect(ticketEditorKind('new-ticket-details')).toBe('new-ticket-details');
   });
 
   it('rounds, persists, and restores valid heights while ignoring invalid storage', () => {
@@ -21,5 +22,8 @@ describe('ticket editor size preferences', () => {
     saveTicketEditorSize(storage, { setProperty }, 'blocked-reason', 'sidebar', 111.4);
     expect(values.get(ticketEditorSizeStorageKey('blocked-reason', 'sidebar'))).toBe('111');
     expect(setProperty).toHaveBeenCalledWith('--hs-blocked-reason-sidebar-height', '111px');
+    saveTicketEditorSize(storage, { setProperty }, 'new-ticket-details', 'sidebar', 156.6);
+    expect(values.get(ticketEditorSizeStorageKey('new-ticket-details', 'sidebar'))).toBe('157');
+    expect(setProperty).toHaveBeenCalledWith('--hs-new-ticket-details-sidebar-height', '157px');
   });
 });
