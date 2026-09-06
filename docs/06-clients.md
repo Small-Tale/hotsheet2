@@ -297,9 +297,10 @@ prompt can be dismissed and returns on a later open until a source is configured
 
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained thumbnails for browser-compatible image formats,
-  including SVG. A
-  thumbnail or inline image opens the same full-screen gallery; arrows, keyboard arrows,
-  and horizontal swipe move through distinct attached and note-referenced images.
+  including SVG. A thumbnail or inline image opens the same full-screen gallery.
+  Note-referenced images resolve to the same gallery identity as their attached-file
+  thumbnail even though Markdown uses a by-name URL, so button, keyboard-arrow, and
+  horizontal-swipe navigation continue from the image the user actually selected.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher or anywhere on the expanded
   composer, inspect and remove the staged filenames, and cancel to discard the entire
