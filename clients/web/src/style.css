@@ -46,6 +46,26 @@ wa-dialog[data-ticket-source-setup-dialog] { --width: min(32rem, calc(100vw - 2r
 .project-settings h2 { margin-top: 0; }
 .project-settings__source { display: grid; gap: .35rem; margin: 1rem 0; padding: 1rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .75rem; background: var(--wa-color-surface-default); }
 .project-settings__source code { overflow: hidden; text-overflow: ellipsis; color: var(--wa-color-neutral-on-quiet); }
+.project-settings__source strong { display: flex; align-items: center; gap: var(--wa-space-xs); }
+.project-settings__source strong small { padding: .1rem .4rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); font-size: var(--wa-font-size-2xs); }
+.ticket-provider-settings { display: grid; gap: var(--wa-space-xl); }
+.ticket-provider-settings section > h2, .provider-setup-form h2 { margin: 0 0 var(--wa-space-xs); font-size: var(--wa-font-size-m); }
+.ticket-provider-settings section > p, .ticket-provider-settings > p { color: var(--wa-color-neutral-on-quiet); }
+.provider-picker { display: grid; grid-template-columns: 1fr; gap: var(--wa-space-s); }
+.provider-picker button { display: grid; min-width: 0; min-height: 5rem; padding: var(--wa-space-m); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: inherit; background: var(--wa-color-surface-default); cursor: pointer; gap: var(--wa-space-xs); text-align: left; }
+.provider-picker button:hover, .provider-picker button:focus-visible { border-color: var(--wa-color-brand-border-normal); background: var(--wa-color-brand-fill-quiet); outline: var(--wa-focus-ring); }
+.provider-picker span, .provider-setup-form small { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.provider-setup-form { display: grid; padding: var(--wa-space-l); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); gap: var(--wa-space-m); }
+.provider-setup-form header, .provider-setup-form footer { display: flex; align-items: center; justify-content: space-between; gap: var(--wa-space-s); }
+.provider-setup-form header h2 { margin: 0; }
+.provider-setup-form header button { border: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; }
+.provider-setup-form__grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--wa-space-m); }
+.provider-setup-form label { display: grid; min-width: 0; gap: var(--wa-space-2xs); font-size: var(--wa-font-size-xs); font-weight: 650; }
+.provider-setup-form label input:not([type="checkbox"]) { width: 100%; min-height: 2.5rem; padding: 0 var(--wa-space-s); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-s); color: inherit; background: var(--wa-color-surface-default); }
+.provider-setup-form__wide { grid-column: 1 / -1; }
+.provider-setup-form footer { justify-content: flex-end; }
+.provider-setup-form footer button { min-height: 2.5rem; padding: 0 var(--wa-space-m); border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-brand-on-loud); background: var(--wa-color-brand-fill-loud); cursor: pointer; }
+.project-settings__provider-error { color: var(--wa-color-danger-on-quiet) !important; }
 .project-settings__option { display: grid; grid-template-columns: auto 1fr; width: fit-content; align-items: center; gap: .25rem .5rem; cursor: pointer; }
 .project-settings__option span { grid-column: 2; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); }
 .project-settings__permission-grid { display: grid; max-width: 34rem; margin: 1rem 0 1.5rem; grid-template-columns: repeat(2,minmax(0,1fr)); gap: .8rem; }
@@ -56,3 +76,4 @@ wa-dialog[data-ticket-source-setup-dialog] { --width: min(32rem, calc(100vw - 2r
 .notification-inspector-empty { height: 100%; background: var(--wa-color-surface-default); }
 .notification-inspector-empty .toolbar { border-bottom: 0; }
 @media (max-width: 40rem) { .project-settings__permission-grid { grid-template-columns: 1fr; } }
+@media (max-width: 48rem) { .provider-setup-form__grid { grid-template-columns: 1fr; } }

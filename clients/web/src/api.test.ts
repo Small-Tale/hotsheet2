@@ -39,6 +39,21 @@ describe('change polling transport',()=>{
   });
 });
 
+describe('provider onboarding transport',()=>{
+  it('creates a non-secret connection and links it as the checkout default',async()=>{
+    const connection={id:'github-main',provider:'github',locator:'small-tale/hotsheet2',name:'GitHub Issues',default:true,settings:{credential:{secret:'github-small-tale'}}};
+    const fetchMock=vi.spyOn(globalThis,'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(connection),{status:201}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'checkout',root:'/work',alias:'work',stores:[]}),{status:200}));
+    const api=new Api('/api');
+    await api.createConnection(connection);
+    await api.addCheckoutSource('folder with spaces',connection,true);
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/provider-connections',expect.objectContaining({method:'POST',body:JSON.stringify(connection)}));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder%20with%20spaces/sources/github-main',expect.objectContaining({method:'PUT',body:'{"provider":"github","locator":"small-tale/hotsheet2","make_default":true}'}));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('terminal dashboard transport',()=>{
   it('lists terminals, reads a safely encoded snapshot, and creates a project terminal',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch')
