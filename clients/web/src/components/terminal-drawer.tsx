@@ -6,9 +6,9 @@ import { AppTab } from './app-tab';
 import { LucideIcon } from './lucide-icon';
 import { TerminalDashboard,type TerminalDashboardSession,TerminalSession } from './terminal-dashboard';
 
-export interface TerminalDrawerProps {projectId:string;projectName:string;sessions:TerminalDashboardSession[];width:number;height:number;fitAcross:number;fitHigh:number;selectedId:string;magnifiedKey?:string;hiddenKeys?:readonly string[];loading?:boolean;message?:string;maximized?:boolean}
+export interface TerminalDrawerProps {projectId:string;projectName:string;sessions:TerminalDashboardSession[];width:number;height:number;fitAcross:number;fitHigh:number;selectedId:string;magnifiedKey?:string;hiddenKeys?:readonly string[];loading?:boolean;message?:string;maximized?:boolean;contextMenu?:{key:string;x:number;y:number}}
 
-export function TerminalDrawer({projectId,projectName,sessions,width,height,fitAcross,fitHigh,selectedId,magnifiedKey,hiddenKeys=[],loading=false,message='',maximized=false}:TerminalDrawerProps){
+export function TerminalDrawer({projectId,projectName,sessions,width,height,fitAcross,fitHigh,selectedId,magnifiedKey,hiddenKeys=[],loading=false,message='',maximized=false,contextMenu}:TerminalDrawerProps){
   const selected=sessions.some(session=>session.id===selectedId)?selectedId:'grid',selectedSession=sessions.find(session=>session.id===selected),hiddenCount=hiddenKeys.filter(key=>key.startsWith(`${projectId}:`)).length;
   return <section class="terminal-drawer" data-component="terminal-drawer" data-mode={selected==='grid'?'grid':'dedicated'} data-maximized={String(maximized)} data-terminal-drawer-measure="true" aria-label={`${projectName} terminal drawer`}>
     <header class="terminal-drawer__rail" data-action="toggle-terminal-drawer-maximize" title={`Double-click to ${maximized?'restore':'maximize'} terminal drawer`}>
@@ -16,6 +16,6 @@ export function TerminalDrawer({projectId,projectName,sessions,width,height,fitA
       <button type="button" class="terminal-drawer__create" data-action="create-project-terminal" aria-label="New project terminal" title="New terminal"><LucideIcon icon={Plus} name="plus"/></button>
       <div class="terminal-drawer__actions">{hiddenCount>0&&<button type="button" data-action="show-hidden-terminals" aria-label={`Show ${hiddenCount} hidden project terminal${hiddenCount===1?'':'s'}`} title="Show hidden terminals"><LucideIcon icon={Eye} name="eye"/><span>{hiddenCount}</span></button>}<button type="button" data-action="toggle-terminal-drawer" aria-label="Hide terminal drawer" title="Hide terminal drawer"><LucideIcon icon={PanelBottomClose} name="panel-bottom-close"/></button></div>
     </header>
-    <div class="terminal-drawer__content">{selectedSession?<TerminalSession session={selectedSession}/>:<TerminalDashboard groups={[{projectId,projectName,sessions}]} width={width} height={height} fitAcross={fitAcross} fitHigh={fitHigh} grouping="flow" magnifiedKey={magnifiedKey} hiddenKeys={hiddenKeys} loading={loading} message={message}/>}</div>
+    <div class="terminal-drawer__content">{selectedSession?<TerminalSession session={selectedSession}/>:<TerminalDashboard groups={[{projectId,projectName,sessions}]} width={width} height={height} fitAcross={fitAcross} fitHigh={fitHigh} grouping="flow" magnifiedKey={magnifiedKey} hiddenKeys={hiddenKeys} loading={loading} message={message} contextMenu={contextMenu}/>}</div>
   </section>;
 }

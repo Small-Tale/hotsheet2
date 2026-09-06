@@ -776,13 +776,14 @@ remains wholly inside the viewport.
 - the exact 600 px boundary uses height mode. Resize observation recomputes geometry but
   does not change either stored count. Minus/plus disable at the active range limit.
 
-A plain tile activation magnifies that terminal in place over the same grid; activating it
-again or pressing Escape restores the grid. Magnification moves the active viewport claim
-to the enlarged surface and returns it to the tile when dismissed. The explicit dedicated
-action opens the terminal as the sole drawer viewport for its project, while the project
-action jumps to that project and selects the same terminal. These actions must never spawn
-a second PTY. Visibility controls can switch between project-grouped and flowing layouts
-and hide/show terminals without destroying sessions. Focus, resize claims, attention, and
+At the smallest scale, tiles are lightweight, keyboard-focusable previews instead of live
+terminal inputs. A plain activation magnifies and focuses that terminal in place over the
+same grid; clicking the surrounding overlay or pressing Escape restores the grid. A double
+activation, or Open from the tile's shared MenuItem-based context menu, jumps to that
+project and selects the terminal in a maximized drawer. The same context menu offers Hide
+Terminal. Tiles have no permanent special-action buttons. These actions must never spawn a
+second PTY. Visibility controls can switch between project-grouped and flowing layouts and
+hide/show terminals without destroying sessions. Focus, resize claims, attention, and
 selection survive layout and scale changes.
 
 ## 7. Overlays and shared interaction components

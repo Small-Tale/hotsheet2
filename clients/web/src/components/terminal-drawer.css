@@ -18,6 +18,6 @@
 .terminal-drawer__content { min-width: 0; min-height: 0; flex: 1; }
 .terminal-drawer__content .terminal-dashboard__content { padding-top: var(--wa-space-s); }
 .terminal-session { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--hs-terminal-background); }
-.terminal-session .terminal-viewport { position: relative; inset: auto; display: block; width: 100%; height: 100%; padding: 0; background: var(--hs-terminal-background); box-sizing: border-box; }
+.terminal-session .terminal-viewport { position: relative; inset: auto; display: block; width: 100%; height: 100%; padding: var(--wa-space-s); background: var(--hs-terminal-background); box-sizing: border-box; }
 .terminal-session .xterm { background: var(--hs-terminal-background); }
 @media (max-width: 48rem) { .terminal-drawer__rail .terminal-tab__name { min-width: 3rem; max-width: 7rem; } }

@@ -511,6 +511,10 @@ a future visibility-groups dialog), while project/none grouping uses the shared 
 matching contained group with the same trailing-arrow spacing as the workspace sort control.
 That edge-mounted grouping Select uses a trigger-width menu and an 8rem anchor, allowing Web
 Awesome's popup positioning to keep the entire listbox inside the viewport.
+At the smallest fit, tiles stop mounting live inputs: click magnifies and focuses a live
+viewport, click-away restores the grid, double-click opens that terminal in its project's
+maximized drawer, and right-click exposes shared Open/Hide menu items. Tile borders use the
+same terminal background token as the live canvas instead of an unrelated surface border.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.
@@ -525,14 +529,18 @@ mounts, allowing immediate typing without an extra click; this is a one-shot req
 does not make later refreshes steal focus. Project and terminal tabs share one pill-tab primitive, with
 the close button before the label and optional leading/trailing state icons. Right-clicking
 either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
-Tabs; holding Option/Alt when opening the menu changes the directional action to the left.
+Tabs; terminal tabs additionally offer Rename. Human-readable defaults replace generated
+ids, and device-local rename overrides survive refresh/reopen without renaming the PTY
+identity. Holding Option/Alt when opening the menu changes the directional action to the left.
 Closeable tabs reserve the same trailing state slot even when it is empty, balancing the
 leading close control and preventing labels from shifting when status appears. Terminal tabs
 use that shared tab surface directly rather than layering a second selected background inside
-it. A dedicated terminal removes dashboard padding and shares one domain background token
-between its session container, viewport, and xterm theme, so any residual edge area is both
-symmetric and visually continuous with the terminal canvas.
-Closing the selected terminal follows HS1's nearest-neighbor behavior (right first, then
+it. A dedicated terminal uses the same token-sized inset as a dashboard viewport and shares
+one domain background token between its session container, viewport, and xterm theme, so
+the edge area is symmetric and visually continuous with the terminal canvas.
+Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while
+preserving the last manual height. Closing the selected terminal follows HS1's
+nearest-neighbor behavior (right first, then
 left, then the grid). The rail also exposes hidden-session recovery and collapses to
 one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall
 back when WebGL is unavailable, and refit on animation frames while the drawer resizes.

@@ -68,7 +68,7 @@ describe('application shell components', () => {
     const terminal=String(AppTabContextMenu({kind:'terminal',id:'term',x:10,y:20,direction:'left'}));
     for(const label of ['Close Tab','Close Other Tabs','Close Tabs to the Right','Close All Tabs'])expect(project).toContain(label);
     expect(project).toContain('aria-label="Project tab actions"');expect(project).toContain('data-action="project-tab-context-action"');
-    expect(terminal).toContain('aria-label="Terminal tab actions"');expect(terminal).toContain('Close Tabs to the Left');expect(terminal).toContain('data-action="terminal-tab-context-action"');
+    expect(project).not.toContain('Rename…');expect(terminal).toContain('aria-label="Terminal tab actions"');expect(terminal).toContain('Rename…');expect(terminal).toContain('data-tab-action="rename"');expect(terminal).toContain('Close Tabs to the Left');expect(terminal).toContain('data-action="terminal-tab-context-action"');
   });
 
   it('clamps and projects accessible splitters in both axes', () => {

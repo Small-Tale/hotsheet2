@@ -57,6 +57,7 @@ import {
   resizeRegionFromPointer,
 } from '../components/resizable-region';
 import { Select } from '../components/select';
+import { TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
@@ -450,6 +451,10 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
   if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab kind="project" id="project" name="Project tab" selected leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab kind="terminal" id="terminal" name="Terminal tab" leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy"><LucideIcon icon={Activity} name="activity"/></span>}/></section>;
   if (item.id === 'terminal-drawer') return <section class="terminal-drawer-demo"><TerminalDrawer projectId="demo" projectName="Demo project" sessions={[{ id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, scrollback: 'npm run dev\nready on http://127.0.0.1' }]} width={900} height={320} fitAcross={2} fitHigh={2} selectedId="shell"/></section>;
+  if (item.id === 'terminal-dashboard') return <section class="terminal-dashboard-demo"><TerminalDashboard groups={[{ projectId: 'demo', projectName: 'Demo project', sessions: [
+    { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
+    { id: 'tests', projectId: 'demo', projectName: 'Demo project', title: 'Tests', alive: true, busy: false, cwd: '/work/demo', scrollback: '42 tests passed\nwaiting for changes' },
+  ] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={{ key: 'demo:shell', x: 520, y: 280 }}/></section>;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner')
     return <ConnectionStateBannerDemo />;

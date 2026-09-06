@@ -74,6 +74,7 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'terminal', name: 'Drawer and terminals', demos: [
     demo('terminal-drawer', 'TerminalDrawer', 'Project terminal rail and dedicated terminal surface.', 'feature-floor', true, ['app-tab']),
+    demo('terminal-dashboard', 'TerminalDashboard', 'Responsive live grid, preview, and viewport controls.', 'feature-floor', true, ['menu-item']),
     demo('bottom-drawer', 'BottomDrawer', 'Resizable tabbed desktop utility region.', 'desktop'),
     demo('terminal-pane', 'TerminalPane', 'Live shared terminal and actions.', 'desktop'),
     demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),
@@ -99,7 +100,6 @@ export const demoCatalog: DemoCategory[] = [
     demo('provider-connections', 'TicketProviderConnections', 'Configure authoritative ticket sources.', 'later'),
   ]},
   { id: 'later', name: 'Later major surfaces', demos: [
-    demo('terminal-dashboard', 'TerminalDashboard', 'Saved grids and viewport controls.', 'later'),
     demo('analytics-dashboard', 'AnalyticsDashboard', 'Ticket flow, usage, and cost visualizations.', 'later'),
     demo('custom-view-builder', 'CustomViewBuilder', 'Saved query and view construction.', 'later'),
     demo('announcer-overlay', 'AnnouncerOverlay', 'Live and digest narration experience.', 'later'),
