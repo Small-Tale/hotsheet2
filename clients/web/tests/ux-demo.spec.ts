@@ -840,6 +840,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
   await expect(inspector).toContainText('Build TicketList and TicketBoard');
+  const detailsParagraph = inspector.locator('.ticket-inspector__details-surface .markdown-preview > p').first();
+  await expect(detailsParagraph).toHaveCSS('margin-top', '16px');
+  await expect(detailsParagraph).toHaveCSS('margin-bottom', '16px');
   await inspector.getByRole('heading', { name: /Build TicketList/ }).dblclick();
   const titleEditor = inspector.getByRole('textbox', { name: 'Ticket title' });
   await titleEditor.fill('Autosaved inspector title');

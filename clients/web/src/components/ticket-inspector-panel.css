@@ -3,8 +3,8 @@
 .ticket-inspector__section { display: grid; min-width: 0; gap: .55rem; }
 .ticket-inspector__section-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; }
 .ticket-inspector__section-header wa-button::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); }
-.ticket-inspector__content h2 { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.ticket-inspector__content p { margin: 0; color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); line-height: 1.5; }
+.ticket-inspector__content :where(h2) { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.ticket-inspector__content :where(p) { margin: 0; color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); line-height: 1.5; }
 .ticket-inspector__details { min-height: 3rem; cursor: text; }
 .ticket-inspector__details-surface { min-width: 0; max-width: 100%; padding: 0; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: .65rem; background: var(--wa-color-surface-default); }
 .ticket-inspector__details-feedback { display: grid; min-width: 0; padding: .75rem; gap: var(--wa-space-s); }

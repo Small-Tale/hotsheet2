@@ -233,7 +233,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
   `noopener noreferrer`; raw HTML remains escaped and unsafe URL protocols remain inert.
   Paragraphs use a full shared spacing step so separate thoughts remain visually distinct
-  in both compact inspector notes and the larger reader.
+  in both compact inspector notes and the larger reader. Inspector typography is a
+  low-specificity default: nested Markdown headings and paragraphs always retain the
+  renderer's own spacing regardless of stylesheet evaluation order.
   Blockquotes follow email-reply semantics: a compact neutral rail, smaller quiet text,
   and inherited heading size de-emphasize quoted context instead of presenting it as a
   literary pull quote.

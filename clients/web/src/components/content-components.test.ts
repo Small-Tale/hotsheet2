@@ -80,6 +80,9 @@ describe('content components', () => {
     expect(markup).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-preview.css'), 'utf8');
     expect(css).toContain('.markdown-preview p { margin: var(--wa-space-m) 0; }');
+    const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(panelCss).toContain('.ticket-inspector__content :where(p) { margin: 0;');
+    expect(panelCss).not.toContain('.ticket-inspector__content p {');
     expect(css).toMatch(/blockquote \{[^}]*margin-inline: 0;[^}]*border-left: 2px[^}]*font-size: var\(--wa-font-size-xs\);[^}]*line-height: 1\.5;/);
     expect(css).toMatch(/blockquote :is\(h1, h2, h3, h4, h5, h6\) \{ font-size: var\(--wa-font-size-xs\); \}/);
     expect(css).toMatch(/\.markdown-preview img \{[^}]*display: block;[^}]*height: auto;/);
