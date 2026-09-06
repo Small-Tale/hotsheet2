@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 36 -->
+<!-- hotsheet-skill-version: 37 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -43,9 +43,15 @@ completing note.
 
 For user-visible UI work, liberally capture and attach a representative set of real-browser
 screenshots covering the changed components, screens, states, and meaningful wide/narrow
-layouts. Prefer a focused crop when it communicates the change more clearly. Reference
-each useful capture by name (`attachment:filename`) in progress notes and especially the
-completion note. Screenshots supplement behavioral assertions; they do not replace them.
+layouts. **If the ticket already has an image demonstrating the problem or requested
+design, treat a corresponding after screenshot as a required pre-close deliverable:**
+reproduce the same component, state, and viewport as closely as practical, attach the new
+capture to the ticket, and reference it by name (`attachment:filename`) in the completion
+note. Also attach other useful wide/narrow or focused captures; prefer a crop when it
+communicates the change more clearly. Do not silently substitute a local-only screenshot
+for a ticket attachment. If capture or attachment is genuinely impossible after exhausting
+safe alternatives, state the specific reason in the completion note. Screenshots supplement
+behavioral assertions; they do not replace them.
 
 Stop early only for an explicit user ticket/time/budget limit, an empty queue, or a
 genuine blocker requiring user input or unavailable external state. For that current-
