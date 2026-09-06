@@ -108,6 +108,8 @@ Status meanings:
 | github-roster-seed | docs/10-assignment-and-collaboration.md | Seed people roster from GitHub collaborators while reporting private-email omissions | `crates/hotsheet-ticketing/src/roster.rs` | `crates/hotsheet-cli/tests/cli.rs # people_seed_github_uses_public_emails_and_reports_private_ones` | — | double-covered |
 <!-- coverage-matrix:end -->
 
+| source-less-project-onboarding | docs/04-core-server-cli.md; docs/06-clients.md | Projects with zero ticket sources remain open and list zero tickets; the local bridge uses an unlinked bootstrap store and prompts for standalone git or external-provider setup until configured | `clients/web/src/project-bridge.test.ts # creates bootstrap and standalone stores through explicit CLI argument arrays, exposes git ticket-store setup only through the local development bridge`; `crates/hotsheet-server/src/lib.rs` | `crates/hotsheet-server/tests/http.rs # opening_project_without_ticket_sources_keeps_the_checkout_usable`; `clients/web/tests/providers.spec.ts # opens a project without a ticket source and offers setup without blocking the workspace` | `clients/web/tests/providers.spec.ts # source setup wide/compact/configured screenshots` | double-covered |
+
 ## Coverage report layers
 
 - Rust line coverage: `cargo llvm-cov`; CI uploads `rust-coverage-lcov` and enforces

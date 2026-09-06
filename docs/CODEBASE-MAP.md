@@ -46,7 +46,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding HTTP/terminal-WS target resolution; authenticated corrupt-path validation and shell-free platform reveal
     src/terminal-ws-bridge.ts #  Vite WebSocket upgrade bridge; keeps server credentials out of browser URLs and frames
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
-    src/dev-server.ts        #   Hono local project bridge plus dev-only /ux-demo, corrupt-file reveal, and review routes
+    src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup, plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, modern-CSS-color normalization for the legacy screenshot renderer, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)
     src/components/          #   Production domain UI components, including TerminalDashboard/TerminalDrawer, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
     src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder, developmentRepositoryRoot,folderChooserCommand, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder, developmentRepositoryRoot,folderChooserCommand,localStoreInitArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -78,6 +78,16 @@ describe('native folder chooser',()=>{
     expect(await (await app.request('/__hotsheet/folders/choose',{method:'POST'})).json()).toEqual({path:'/work/selected'});
     expect(await (await app.request('/__hotsheet/folders/choose',{method:'POST'})).json()).toEqual({});
     expect((await createDevApp(false).request('/__hotsheet/folders/choose',{method:'POST'})).status).toBe(404);
+  });
+  it('creates bootstrap and standalone stores through explicit CLI argument arrays',()=>{
+    expect(localStoreInitArgs('/tmp/bootstrap')).toEqual(['init','-C','/tmp/bootstrap','--prefix','HS2']);
+    expect(localStoreInitArgs('/work/demo.hs2',true)).toEqual(['init','--standalone','--at','/work/demo.hs2','--prefix','HS2']);
+  });
+  it('exposes git ticket-store setup only through the local development bridge',async()=>{
+    const setup=vi.fn().mockResolvedValue('/work/demo.hs2'),app=createDevApp(true,undefined,undefined,undefined,setup);
+    const response=await app.request('/__hotsheet/projects/setup-git',{method:'POST',headers:{'content-type':'application/json'},body:'{"root":"/work/demo"}'});
+    expect(response.status).toBe(201);expect(await response.json()).toEqual({ticketStore:'/work/demo.hs2'});expect(setup).toHaveBeenCalledWith('/work/demo');
+    expect((await createDevApp(false,undefined,undefined,undefined,setup).request('/__hotsheet/projects/setup-git',{method:'POST'})).status).toBe(404);
   });
 });
 

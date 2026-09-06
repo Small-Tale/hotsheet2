@@ -85,6 +85,13 @@ resolves the local server via `~/.hotsheet/instance.json`; if none is running it
 client quits** (in-flight AI work and terminals survive). Full lifecycle:
 [04-core-server-cli.md](04-core-server-cli.md) §4.3.1.
 
+**Opening before ticket setup.** A valid project folder opens even when it has no sibling
+`.hs2` store and no configured external source. The local bridge uses a machine-local
+bootstrap store only to reach the standalone server; that store is never linked to the
+project. Once the empty checkout is visible, the client asks whether to create and link a
+standalone `<project>.hs2` git repository or configure another provider in Sources. The
+prompt can be dismissed and returns on a later open until a source is configured.
+
 ## 6.3 Web client and Tauri desktop host
 
 - **Web first.** Build and iterate on the Kerf web client in a normal browser before

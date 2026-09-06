@@ -13,6 +13,7 @@ export interface ProjectSession {
   stores: string[];
   apiPath: string;
   compatibility: CompatibilityAssessment;
+  needsTicketSetup: boolean;
 }
 
 interface InstanceInfo { pid:number; url:string; secret:string }
@@ -82,6 +83,32 @@ async function exists(path: string) {
   try { await access(path); return true; } catch { return false; }
 }
 
+function toolBinary() {
+  return process.env.HOTSHEET_CLI_BIN || resolve(developmentRepositoryRoot(), 'target/debug/hotsheet-cli');
+}
+
+export function localStoreInitArgs(path:string,standalone=false):string[]{
+  return standalone?['init','--standalone','--at',path,'--prefix','HS2']:['init','-C',path,'--prefix','HS2'];
+}
+
+async function initializeStore(path:string,standaloneRoot?:string):Promise<void>{
+  const binary=toolBinary();
+  if(!await exists(binary))throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
+  await new Promise<void>((resolveInit,reject)=>{const child=spawn(binary,localStoreInitArgs(path,Boolean(standaloneRoot)),{cwd:standaloneRoot??developmentRepositoryRoot(),stdio:'ignore'});child.once('error',reject);child.once('close',code=>{if(code===0)resolveInit();else reject(new Error(`Hot Sheet store setup exited with status ${code??'unknown'}.`))})});
+}
+
+async function bootstrapStore():Promise<string>{
+  const path=resolve(hotsheetHome(),'server-bootstrap.hs2');
+  if(!await exists(resolve(path,'hotsheet-store.json')))await initializeStore(path);
+  return realpath(path);
+}
+
+export async function createLocalGitTicketStore(rootInput:string):Promise<string>{
+  const root=await realpath(rootInput.trim()),path=`${root}.hs2`;
+  if(!await exists(resolve(path,'hotsheet-store.json')))await initializeStore(path,root);
+  return realpath(path);
+}
+
 export async function suggestedTicketStore(root: string): Promise<string | undefined> {
   const canonical = await realpath(root);
   const candidate = `${canonical}.hs2`;
@@ -123,18 +150,17 @@ async function serverRequest<T>(target: SessionTarget, path: string, init: Reque
 export async function openLocalProject(rootInput: string, ticketStoreInput?: string): Promise<ProjectSession> {
   const root = await realpath(rootInput.trim());
   const ticketStore = ticketStoreInput?.trim() ? await realpath(ticketStoreInput.trim()) : await suggestedTicketStore(root);
-  if (!ticketStore) throw new Error(`No ticket source was found at ${root}.hs2. Choose a git ticket store to continue.`);
-  const instance = await ensureServer(ticketStore);
+  const instance = await ensureServer(ticketStore??await bootstrapStore());
   const target = { url: instance.url, secret: instance.secret };
   const metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
   const compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
   requireCompatibleServer(compatibility);
-  const opened = await serverRequest<{checkout:{id:string;root:string;alias:string;stores:string[]}}>(target, '/projects/open', {
+  const opened = await serverRequest<{checkout:{id:string;root:string;alias:string;stores:string[];sources:unknown[]}}>(target, '/projects/open', {
     method: 'POST',
     body: JSON.stringify({ root, ...(ticketStoreInput?.trim() ? { stores: [ticketStore] } : {}) }),
   });
   sessions.set(opened.checkout.id, target);
-  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility };
+  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility, needsTicketSetup: opened.checkout.sources.length===0 };
 }
 
 export async function proxyProjectRequest(projectId: string, path: string, request: Request): Promise<Response> {

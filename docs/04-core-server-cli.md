@@ -100,7 +100,9 @@ accepts explicit git-store paths or discovers an exact sibling `<checkout>.hs2` 
 hosts those stores, and registers the checkout links. Discovery only accepts a directory
 containing `hotsheet-store.json`; it never creates a store or assumes a checkout has only
 one source. An empty discovered source set remains valid at the core layer so a richer
-client can present provider setup.
+client can present provider setup. Checkout ticket enumeration is also valid for that
+empty source set and returns an empty array; it must not turn a successful project-open
+transaction into a later conflict while the client presents source setup.
 
 ### Headless platform APIs
 

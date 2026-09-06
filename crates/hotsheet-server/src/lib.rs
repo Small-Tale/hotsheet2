@@ -2383,12 +2383,6 @@ async fn list_checkout_tickets(
             result.push(value);
         }
     }
-    if checkout.sources.is_empty() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            format!("checkout {reference} has no linked ticket sources"),
-        ));
-    }
     Ok(Json(result))
 }
 

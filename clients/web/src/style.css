@@ -19,6 +19,15 @@ wa-dialog[data-project-dialog] { --width: min(48rem, calc(100vw - 2rem)); }
 .project-dialog footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
 .project-dialog__error:empty { display: none; }
 .project-dialog__error { color: var(--wa-color-danger-on-quiet) !important; }
+.ticket-source-setup { display: grid; gap: var(--wa-space-m); }
+.ticket-source-setup > p { margin: 0; color: var(--wa-color-neutral-on-quiet); line-height: 1.5; }
+.ticket-source-setup > button { display: grid; width: 100%; padding: var(--wa-space-m); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-l); color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); cursor: pointer; grid-template-columns: var(--wa-space-xl) minmax(0,1fr); align-items: start; gap: var(--wa-space-s); text-align: left; }
+.ticket-source-setup > button:hover, .ticket-source-setup > button:focus-visible { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); outline: var(--wa-focus-ring); outline-offset: 1px; }
+.ticket-source-setup > button svg { width: var(--wa-space-l); height: var(--wa-space-l); color: var(--wa-color-brand-on-quiet); }
+.ticket-source-setup > button span { display: grid; gap: var(--wa-space-2xs); }
+.ticket-source-setup > button small { color: var(--wa-color-neutral-on-quiet); }
+.ticket-source-setup__error { color: var(--wa-color-danger-on-quiet) !important; }
+.ticket-source-setup footer { display: flex; justify-content: flex-end; }
 .app-loading, .app-error, .app-toast { position: fixed; z-index: 1000; right: 1rem; bottom: 1rem; padding: .65rem .85rem; border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
 .app-error { background: var(--wa-color-danger-fill-loud); max-width: 32rem; }
 .ticket-inspector-transition { position: relative; height: 100%; pointer-events: none; }

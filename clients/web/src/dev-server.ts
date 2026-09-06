@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import {chooseLocalFolder, openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
+import {chooseLocalFolder,createLocalGitTicketStore, openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder()): Hono {
+export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string)=>Promise<string>=createLocalGitTicketStore): Hono {
   const app = new Hono();
   app.post('/__hotsheet/projects/open', async context => {
     if (!dev) return context.notFound();
@@ -20,6 +20,10 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
   app.post('/__hotsheet/folders/choose',async context=>{
     if(!dev)return context.notFound();
     try{return context.json({path:await chooseFolder()})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not open the folder chooser.'},400)}
+  });
+  app.post('/__hotsheet/projects/setup-git',async context=>{
+    if(!dev)return context.notFound();
+    try{const body=await context.req.json<{root:string}>();return context.json({ticketStore:await setupGit(body.root)},201)}catch(error){return context.json({error:error instanceof Error?error.message:'Could not create the git ticket store.'},400)}
   });
   app.all('/__hotsheet/project-api/:project/*', async context => {
     if (!dev) return context.notFound();

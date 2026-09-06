@@ -569,6 +569,41 @@ async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
 }
 
 #[tokio::test]
+async fn opening_project_without_ticket_sources_keeps_the_checkout_usable() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+
+    let opened = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let opened = body_json(opened).await;
+    assert!(opened["checkout"]["sources"].as_array().unwrap().is_empty());
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+
+    let tickets = app
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{checkout_id}/tickets"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(tickets.status(), StatusCode::OK);
+    assert!(body_json(tickets).await.as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn checkout_search_matches_slug_details_and_notes() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();
