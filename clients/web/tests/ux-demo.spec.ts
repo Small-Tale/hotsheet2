@@ -945,7 +945,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.getByText('4 events total')).toBeVisible();
   await expect(inspector.locator('.ticket-inspector__timeline > li').first()).toContainText('Claude started work');
   await inspector.getByRole('button', { name: 'Code Review' }).click();
-  await expect(inspector.locator('[data-component="ticket-code-review"] [data-commit-sha]')).toHaveCount(2);
+  await expect(inspector.locator('[data-component="ticket-code-review"] .ticket-code-review__commit')).toHaveCount(2);
   await inspector.getByRole('button', { name: 'Open 2 commit bundle 92ed71a through c4a38be in Glassbox' }).click();
   await expect(page.getByText('Commit range opened in Glassbox')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-pg1hkj-code-review-wide.png', fullPage: true });

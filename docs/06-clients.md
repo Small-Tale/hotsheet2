@@ -119,8 +119,9 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   counters to browser tests. Polling responses that do not change observable state
   must cause zero render passes and zero DOM mutations; tests also budget intentional
   transitions and no-op interactions. In particular, activating an already-selected,
-  fully loaded ticket again performs no detail request, render pass, or DOM mutation and
-  preserves focus plus draft state in an active editor. This makes broad Kerf render
+  fully loaded ticket again performs no detail request, render pass, or DOM mutation;
+  capture-phase pointer handling prevents the click from starting the editor's blur
+  lifecycle, preserving focus plus draft state. This makes broad Kerf render
   dependencies fail loudly instead of becoming
   focus, scroll, or animation regressions. Development builds enable Kerf's
   value-only-render and list-rebind warnings plus throwing list invariants.
