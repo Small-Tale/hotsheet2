@@ -195,7 +195,11 @@ prompt can be dismissed and returns on a later open until a source is configured
   store, hosts it, and records the many-to-many checkout/store link. The roomy 48rem
   dialog accepts an explicit git-store path when the convention does not apply; both
   paths have host-native folder chooser buttons, and Cancel/Escape are controlled by
-  durable dialog state so unrelated renders cannot reopen or strand the surface. The Vite-only bridge
+  durable dialog state so unrelated renders cannot reopen or strand the surface.
+  Source-less project setup uses a bounded dialog with shared multiline menu items whose
+  title and explanation remain inside one selectable row at compact sizes. It waits for
+  the project dialog's completed close event, so the two modal surfaces never overlap.
+  The Vite-only bridge
   discovers or detached-starts the local server and keeps its bearer credential out of
   browser state; Tauri will replace that bridge with its native lifecycle layer.
   Creating a ticket selects it and immediately opens and focuses its Details editor so
