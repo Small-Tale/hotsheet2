@@ -776,15 +776,19 @@ remains wholly inside the viewport.
 - the exact 600 px boundary uses height mode. Resize observation recomputes geometry but
   does not change either stored count. Minus/plus disable at the active range limit.
 
-At the smallest scale, tiles are lightweight, keyboard-focusable previews instead of live
-terminal inputs. A plain activation magnifies and focuses that terminal in place over the
-same grid; clicking the surrounding overlay or pressing Escape restores the grid. A double
+At every scale, dashboard tiles are keyboard-focusable, non-interactive previews: each live
+xterm retains a fixed 1280×960 natural geometry and the complete terminal is uniformly
+scaled into the tile instead of being refit to the tile. This keeps the PTY stable as grid
+zoom changes and keeps the preview, inset frame, and unused terminal area on the terminal
+background color. A plain activation magnifies and focuses an interactive copy in place
+over the same grid; clicking the surrounding overlay or pressing Escape restores the grid. A double
 activation, or Open from the tile's shared MenuItem-based context menu, jumps to that
 project and selects the terminal in a maximized drawer. The same context menu offers Hide
 Terminal. Tiles have no permanent special-action buttons. These actions must never spawn a
 second PTY. Visibility controls can switch between project-grouped and flowing layouts and
-hide/show terminals without destroying sessions. Focus, resize claims, attention, and
-selection survive layout and scale changes.
+hide/show terminals without destroying sessions. The focused magnified or drawer consumer
+must reclaim its fitted dimensions after leaving the dashboard. Focus, resize claims,
+attention, and selection survive layout and scale changes.
 
 ## 7. Overlays and shared interaction components
 

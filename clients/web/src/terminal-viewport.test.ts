@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest';
 
-import { parseTerminalSizeMessage,TERMINAL_RESIZE_SETTLE_MS,terminalBrowserWebSocketUrl,terminalReconnectDelay,terminalResizeClaim,terminalViewportScale,terminalViewportShouldAutoFocus } from './terminal-viewport';
+import { parseTerminalSizeMessage,TERMINAL_PREVIEW_NATURAL_HEIGHT,TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_RESIZE_SETTLE_MS,terminalBrowserWebSocketUrl,terminalPreviewScale,terminalReconnectDelay,terminalResizeClaim,terminalViewportScale,terminalViewportShouldAutoFocus } from './terminal-viewport';
 
 describe('terminal viewport protocol',()=>{
   it('builds a credential-free same-origin attach URL',()=> { expect(terminalBrowserWebSocketUrl('/__hotsheet/project-api/project%20one','codex/main',{protocol:'https:',host:'hs.test'})).toBe('wss://hs.test/__hotsheet/project-api/project%20one/terminals/codex%2Fmain/attach'); });
@@ -10,4 +10,5 @@ describe('terminal viewport protocol',()=>{
   it('sends a final resize claim shortly after a drag settles',()=>{expect(TERMINAL_RESIZE_SETTLE_MS).toBe(120)});
   it('focuses only the exact newly created project terminal',()=>{const request={projectId:'project-a',terminalId:'new-terminal'};expect(terminalViewportShouldAutoFocus(request,'project-a','new-terminal')).toBe(true);expect(terminalViewportShouldAutoFocus(request,'project-a','old-terminal')).toBe(false);expect(terminalViewportShouldAutoFocus(request,'project-b','new-terminal')).toBe(false);expect(terminalViewportShouldAutoFocus(undefined,'project-a','new-terminal')).toBe(false)});
   it('letterboxes smaller PTYs, scales larger PTYs, and preserves a readable floor',()=>{expect(terminalViewportScale(120,40,80,24)).toBe(1);expect(terminalViewportScale(80,24,100,30)).toBe(.8);expect(terminalViewportScale(40,12,120,40)).toBe(.7)});
+  it('uniformly scales the fixed 1280 by 960 dashboard surface into its frame',()=>{expect([TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_PREVIEW_NATURAL_HEIGHT]).toEqual([1280,960]);expect(terminalPreviewScale(640,480)).toBe(.5);expect(terminalPreviewScale(640,240)).toBe(.25);expect(terminalPreviewScale(0,480)).toBe(0)});
 });

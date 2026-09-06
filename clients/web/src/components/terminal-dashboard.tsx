@@ -57,11 +57,12 @@ export function TerminalDashboardControls({ grouping = 'project', hiddenCount = 
   </div>;
 }
 
-function TerminalTile({ session, magnified = false, previewOnly = false }: {session:TerminalDashboardSession;magnified?:boolean;previewOnly?:boolean}) {
+function TerminalTile({ session, magnified = false, dashboardPreview = false }: {session:TerminalDashboardSession;magnified?:boolean;dashboardPreview?:boolean}) {
   const key = keyFor(session);
   const preview = terminalPreviewText(session.scrollback) || 'Terminal is ready.';
-  return <article class="terminal-tile" data-key={key} data-component="terminal-tile" data-terminal-key={key} data-busy={String(session.busy)} data-alive={String(session.alive)} data-magnified={String(magnified)} data-preview-only={String(previewOnly)} data-action={previewOnly&&!magnified?'preview-terminal':undefined} tabindex={previewOnly&&!magnified?'0':undefined} aria-label={previewOnly&&!magnified?`Preview ${session.title??session.id}`:undefined}>
-    <div class="terminal-tile__preview"><pre>{preview}</pre>{!previewOnly&&<div class="terminal-viewport" data-key={`viewport:${key}`} data-morph-skip data-component="terminal-viewport" data-project-id={session.projectId} data-terminal-id={session.id} aria-label={`${session.title??session.id} interactive terminal`}></div>}</div>
+  const viewport=<div class={`terminal-viewport${dashboardPreview?' terminal-viewport--scaled-preview':''}`} data-key={`${dashboardPreview?'preview':'viewport'}:${key}`} data-morph-skip data-component="terminal-viewport" data-project-id={session.projectId} data-terminal-id={session.id} data-display-mode={dashboardPreview?'scaled-preview':'interactive'} aria-hidden={dashboardPreview?'true':undefined} aria-label={dashboardPreview?undefined:`${session.title??session.id} interactive terminal`}></div>;
+  return <article class="terminal-tile" data-key={key} data-component="terminal-tile" data-terminal-key={key} data-busy={String(session.busy)} data-alive={String(session.alive)} data-magnified={String(magnified)} data-preview-only={String(dashboardPreview)} data-action={dashboardPreview?'preview-terminal':undefined} tabindex={dashboardPreview?'0':undefined} aria-label={dashboardPreview?`Preview ${session.title??session.id}`:undefined}>
+    <div class="terminal-tile__preview"><pre>{preview}</pre>{dashboardPreview?<div class="terminal-tile__viewport-frame">{viewport}</div>:viewport}</div>
     <footer class="terminal-tile__footer">
       <span class="terminal-tile__state" aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}></span>
       <span class="terminal-tile__identity"><strong>{session.projectName}<span aria-hidden="true"> › </span>{session.title ?? session.id}</strong>{session.cwd&&<small>{session.cwd}</small>}</span>
@@ -72,13 +73,13 @@ function TerminalTile({ session, magnified = false, previewOnly = false }: {sess
 
 export function TerminalSession({ session }: {session:TerminalDashboardSession}) {
   return <section class="terminal-session" data-key={keyFor(session)} data-component="terminal-session" data-terminal-key={keyFor(session)} aria-label={`${session.title??session.id} terminal`}>
-    <div class="terminal-viewport terminal-viewport--dedicated" data-key={`dedicated-viewport:${keyFor(session)}`} data-morph-skip data-component="terminal-viewport" data-project-id={session.projectId} data-terminal-id={session.id} aria-label={`${session.title??session.id} interactive terminal`}></div>
+    <div class="terminal-viewport terminal-viewport--dedicated" data-key={`dedicated-viewport:${keyFor(session)}`} data-morph-skip data-component="terminal-viewport" data-display-mode="interactive" data-project-id={session.projectId} data-terminal-id={session.id} aria-label={`${session.title??session.id} interactive terminal`}></div>
   </section>;
 }
 
 function Grid({ sessions, layout }: {sessions:TerminalDashboardSession[];layout:ReturnType<typeof terminalGridLayout>}) {
   const style = `--terminal-tile-width:${layout.tileWidth}px;--terminal-tile-height:${layout.tileHeight}px;--terminal-grid-fit:${layout.fit}`;
-  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} style={style}>{sessions.map(session => <TerminalTile session={session} previewOnly={layout.fit===layout.max}/>)}</div>;
+  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} style={style}>{sessions.map(session => <TerminalTile session={session} dashboardPreview/>)}</div>;
 }
 
 export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, grouping = 'project', magnifiedKey, hiddenKeys = [], loading = false, message = '',contextMenu }: TerminalDashboardProps) {

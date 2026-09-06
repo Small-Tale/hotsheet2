@@ -11,12 +11,17 @@ export function parseTerminalSizeMessage(value:string):TerminalSizeMessage|undef
 export const terminalReconnectDelay=(attempt:number)=>Math.min(8_000,250*(2**Math.max(0,attempt)));
 export const TERMINAL_VIEWPORT_MIN_SCALE=.7;
 export const TERMINAL_RESIZE_SETTLE_MS=120;
+export const TERMINAL_PREVIEW_NATURAL_WIDTH=1280;
+export const TERMINAL_PREVIEW_NATURAL_HEIGHT=960;
 export interface TerminalFocusRequest {projectId:string;terminalId:string}
 export function terminalViewportShouldAutoFocus(request:TerminalFocusRequest|undefined,projectId:string,terminalId:string):boolean {
   return request?.projectId===projectId&&request.terminalId===terminalId;
 }
 export function terminalViewportScale(viewportCols:number,viewportRows:number,ptyCols:number,ptyRows:number):number {
   return Math.max(TERMINAL_VIEWPORT_MIN_SCALE,Math.min(1,viewportCols/ptyCols,viewportRows/ptyRows));
+}
+export function terminalPreviewScale(frameWidth:number,frameHeight:number):number {
+  return Math.max(0,Math.min(frameWidth/TERMINAL_PREVIEW_NATURAL_WIDTH,frameHeight/TERMINAL_PREVIEW_NATURAL_HEIGHT));
 }
 
 export function terminalBrowserWebSocketUrl(apiPath:string,terminalId:string,locationValue:Pick<Location,'protocol'|'host'>=location):string {

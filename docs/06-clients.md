@@ -511,10 +511,15 @@ a future visibility-groups dialog), while project/none grouping uses the shared 
 matching contained group with the same trailing-arrow spacing as the workspace sort control.
 That edge-mounted grouping Select uses a trigger-width menu and an 8rem anchor, allowing Web
 Awesome's popup positioning to keep the entire listbox inside the viewport.
-At the smallest fit, tiles stop mounting live inputs: click magnifies and focuses a live
-viewport, click-away restores the grid, double-click opens that terminal in its project's
-maximized drawer, and right-click exposes shared Open/Hide menu items. Tile borders use the
-same terminal background token as the live canvas instead of an unrelated surface border.
+Every dashboard tile mounts a read-only xterm at a stable 1280×960 natural geometry and
+uniformly scales that complete surface into the available 4:3 preview; changing the grid
+fit changes only visual scale and never resizes the PTY to tile dimensions. The preview,
+its inset frame, and its border all use the terminal background token, so unused space
+cannot expose an unrelated gray surface. Dashboard previews never accept terminal input.
+Click magnifies and focuses a separate interactive viewport, click-away restores the grid,
+double-click opens that terminal in its project's maximized drawer, and right-click exposes
+shared Open/Hide menu items. The focused drawer/magnified consumer reclaims sizing after
+the dashboard viewer is released, avoiding cross-surface resize races.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.
