@@ -790,6 +790,9 @@ superseded asks and from reader mode itself. Activating it opens reader mode on 
 scrolls the active source into view, and focuses its response editor. Reader descriptions
 reuse the same Markdown choice selection, inline reply, optional general response, and
 No response needed controls as feedback notes; submitting adds a regular response note.
+An active feedback description uses the same warning border/fill and content insets as a
+feedback note in both inspector and reader. Reader mode also gives it the standard
+circle-alert icon and "Feedback needed" heading so its meaning is explicit in context.
 For note-driven feedback, only an unanswered ask is active: among regular and
 `feedback_needed` notes, the most recent one controls the state. A later regular note is
 the response and clears Needs review; the answered ask then uses the ordinary note

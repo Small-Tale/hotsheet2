@@ -73,12 +73,18 @@ describe('TicketInspector', () => {
     const details='FEEDBACK NEEDED: Which direction?\n\nCHOICE:\n- Keep **A**\n- Use `B`';
     const sidebar=String(TicketInspector({...base,details,feedbackNeeded:true}));
     expect(sidebar).toContain('data-note-id="ticket-details"');
+    expect(sidebar).toContain('data-feedback-needed="true"');
     expect(sidebar).toContain('Respond to Feedback');
     const reader=String(TicketInspector({...base,details,feedbackNeeded:true,presentation:'reader'}));
     expect(reader).toContain('data-details-feedback="true"');
+    expect(reader).toContain('ticket-inspector__details-feedback-header');
+    expect(reader).toContain('Feedback needed');
+    expect(reader).toContain('data-lucide="circle-alert"');
     expect(reader.match(/data-action="toggle-feedback-choice"/g)).toHaveLength(2);
     expect(reader).toContain('aria-label="Feedback response"');
     expect(reader).not.toContain('CHOICE:');
+    const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
+    expect(css).toMatch(/details-surface\[data-feedback-needed="true"\] \{[^}]*padding: \.85rem 1rem;[^}]*warning-border-normal[^}]*warning-fill-quiet/);
   });
 
   it('shows a derived attachment count on the attachments segment', () => {
