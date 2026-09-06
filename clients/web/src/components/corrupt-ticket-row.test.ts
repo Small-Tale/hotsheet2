@@ -52,6 +52,7 @@ describe('CorruptTicketRow', () => {
   it('uses a visibly distinct actionable treatment and platform labels', () => {
     const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
     expect(css).toMatch(/border-left: \.25rem solid/);
+    expect(css).toMatch(/\[data-selected="true"\].*border-left-width: 1px/);
     expect(css).toContain('cursor: pointer');
     expect(revealFileLabel('MacIntel')).toBe('Reveal in Finder');
     expect(revealFileLabel('Win32')).toBe('Show in File Explorer');

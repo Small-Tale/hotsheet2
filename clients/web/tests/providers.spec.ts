@@ -457,6 +457,8 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(corrupt).toHaveAttribute('role','group');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
   await corrupt.getByRole('button',{name:'Open recovery for HS2-QQRY00'}).click();
+  const selectedBorder=await corrupt.evaluate(node=>{const style=getComputedStyle(node);return {widths:[style.borderTopWidth,style.borderRightWidth,style.borderBottomWidth,style.borderLeftWidth],colors:[style.borderTopColor,style.borderRightColor,style.borderBottomColor,style.borderLeftColor],radii:[style.borderTopLeftRadius,style.borderTopRightRadius,style.borderBottomRightRadius,style.borderBottomLeftRadius]}});
+  expect(selectedBorder.widths).toEqual(['1px','1px','1px','1px']);expect(new Set(selectedBorder.colors).size).toBe(1);expect(selectedBorder.radii.every(radius=>Number.parseFloat(radius)>0)).toBe(true);
   const inspector=page.locator('[data-component="corrupt-ticket-inspector"]');
   await expect(inspector).toContainText('Ticket parsing error');
   await expect(inspector).toContainText('unsupported content follows the bounded Notes section');

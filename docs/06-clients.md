@@ -338,7 +338,8 @@ prompt can be dismissed and returns on a later open until a source is configured
   when a newly malformed file cannot be reindexed, so this replacement happens through
   the normal long poll without manual reload. A malformed file therefore cannot suppress healthy rows: the workspace
   remains usable and renders each unreadable file as a selectable warning row with the
-  recovered slug/id or filename and failure state. Selecting it opens the normal
+  recovered slug/id or filename and failure state. Its selected state uses a continuous,
+  uniform brand outline through all four rounded corners. Selecting it opens the normal
   inspector region with the complete error, exact file path, a platform-specific reveal
   action, and an **Attempt AI repair** action. Linked-store diagnostics retain
   server-provided store attribution. The local bridge revalidates that exact path against
