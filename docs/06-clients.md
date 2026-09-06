@@ -240,6 +240,12 @@ client quits** (in-flight AI work and terminals survive). Full lifecycle:
   and inherited heading size de-emphasize quoted context instead of presenting it as a
   literary pull quote.
 
+  Successful action acknowledgements use the shared transient toast and disappear
+  without changing the owning surface's layout. Persistent inline status text is
+  reserved for work that is still pending, actionable warnings, and failures. This
+  applies consistently to diff-tool launches, settings saves, attachment operations,
+  and corrupt-ticket recovery actions.
+
   The shared left project sidebar presents a centered `M open, N up next` summary
   immediately above Drive. Both counts derive from the existing checkout ticket collection:
   open means exactly Not Started + Started (Backlog is not active work), and Up Next

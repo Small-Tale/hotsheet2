@@ -264,7 +264,7 @@ test('lists associated commits and opens a validated commit or range in the conf
   const inspector=page.locator('[data-component="ticket-inspector"]');await inspector.getByRole('button',{name:'Code Review'}).click();const review=inspector.locator('[data-component="ticket-code-review"]');
   const commits=review.locator('.ticket-code-review__commits'),firstCommit=commits.locator(':scope > li').first();const expectFlushCommit=async()=>{expect(Math.abs(await firstCommit.evaluate(node=>node.getBoundingClientRect().left)-await commits.evaluate(node=>node.getBoundingClientRect().left))).toBeLessThanOrEqual(1)};
   await expect(inspector.getByRole('button',{name:'Code Review'}).locator('[data-lucide="message-square-code"]')).toBeVisible();await expect(review).toContainText('Opens in Glassbox');await expect(review.locator('.ticket-code-review__commit')).toHaveCount(4);await expect(review.locator('.ticket-code-review__range')).toHaveCount(2);await expect(review).toContainText('HS2-DEMO01: finish the responsive review segment');await expectFlushCommit();
-  await review.getByRole('button',{name:'Open 2 commit bundle aaa1111 through bbb2222 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='aaa1111'&&action.to==='bbb2222')).toBe(true);await review.getByRole('button',{name:'Open 2 commit bundle ccc3333 through ddd4444 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='ccc3333'&&action.to==='ddd4444')).toBe(true);
+  await review.getByRole('button',{name:'Open 2 commit bundle aaa1111 through bbb2222 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='aaa1111'&&action.to==='bbb2222')).toBe(true);await expect(page.locator('.app-toast')).toContainText('Opened in Glassbox.');await expect(review.locator('.ticket-code-review__message')).toHaveCount(0);await review.getByRole('button',{name:'Open 2 commit bundle ccc3333 through ddd4444 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='range'&&action.from==='ccc3333'&&action.to==='ddd4444')).toBe(true);
   await review.getByRole('button',{name:'Open commit bbb2222 in Glassbox'}).click();await expect.poll(()=>actions.some(action=>action.operation==='code-review'&&action.mode==='commit'&&action.commit==='bbb2222')).toBe(true);
   await page.screenshot({path:'/private/tmp/hs2-ggjed1-code-review-wide.png',fullPage:true});
   await page.setViewportSize({width:1024,height:600});await expect(review.locator('.ticket-code-review__range')).toHaveCount(2);await expectFlushCommit();await page.screenshot({path:'/private/tmp/hs2-ggjed1-code-review-floor.png',fullPage:true});
@@ -371,7 +371,7 @@ test('runs grouped local commands, confirms stop, exposes history, and saves set
   await command.click();await expect(page.getByRole('button',{name:'Running Run checks'})).toBeVisible();
   await page.getByRole('button',{name:'Running Run checks'}).click();const stop=page.locator('[data-component="command-cancellation-dialog"]');await expect(stop).toBeVisible();await stop.getByRole('button',{name:'Stop command'}).click();await expect(page.getByRole('button',{name:'Run checks'})).toHaveAttribute('title',/Last run: cancelled/);
   await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerdown');await page.waitForTimeout(600);await page.getByRole('button',{name:'Run checks'}).dispatchEvent('pointerup');const history=page.locator('[data-component="command-run-dialog"]');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-wide.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:390,height:844});const hiddenNarrowCommand=page.locator('[data-action="run-command"]');await hiddenNarrowCommand.dispatchEvent('pointerdown');await page.waitForTimeout(600);await hiddenNarrowCommand.dispatchEvent('pointerup');await expect(history).toContainText('Stopped by user');await page.screenshot({path:'/private/tmp/hs2-jn3x4w-commands-narrow.png',fullPage:true});await history.getByRole('button',{name:'Close'}).click();await page.setViewportSize({width:1280,height:720});
-  await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();const editor=page.locator('[name="command-settings"]');await editor.fill('[{"id":"review","title":"Review","program":"/usr/bin/true","args":[],"group":"AI"}]');await page.getByRole('button',{name:'Save commands'}).click();await expect(page.getByRole('status')).toContainText('Saved locally.');await page.getByLabel('List view').click();await expect(page.getByRole('button',{name:'Review'})).toBeVisible();
+  await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();const editor=page.locator('[name="command-settings"]');await editor.fill('[{"id":"review","title":"Review","program":"/usr/bin/true","args":[],"group":"AI"}]');await page.getByRole('button',{name:'Save commands'}).click();await expect(page.locator('.app-toast')).toContainText('Saved locally.');await expect(page.locator('.project-settings__commands-actions [role="status"]')).toBeEmpty();await page.getByLabel('List view').click();await expect(page.getByRole('button',{name:'Review'})).toBeVisible();
 });
 
 test('switches settings categories from the project sidebar',async({page})=>{
@@ -444,10 +444,12 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(inspector).toContainText('unsupported content follows the bounded Notes section');
   await expect(inspector).toContainText('01M1DNB977BK0NG7YJ77RVZXTV.md');
   await inspector.getByRole('button',{name:'Reveal in Finder'}).click();
-  await expect(inspector).toContainText('Opened the file location.');
+  await expect(page.locator('.app-toast')).toContainText('Opened the file location.');
+  await expect(inspector).not.toContainText('Opened the file location.');
   expect(recoveryRequests.reveal).toEqual({path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md'});
   await inspector.getByRole('button',{name:'Attempt AI repair'}).click();
-  await expect(inspector).toContainText('Queued HS2-REPAIR for AI repair.');
+  await expect(page.locator('.app-toast')).toContainText('Queued HS2-REPAIR for AI repair.');
+  await expect(inspector).not.toContainText('Queued HS2-REPAIR for AI repair.');
   expect(recoveryRequests.repair).toEqual({path:'/work/demo.hs2/tickets/01/01M1DNB977BK0NG7YJ77RVZXTV.md'});
   await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-wide.png',fullPage:true});
   await page.setViewportSize({width:1024,height:844});await expect(inspector).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-j1f744-corrupt-recovery-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:720});
@@ -738,7 +740,8 @@ test('renders attachment identity from a selected real ticket',async({page})=>{
   await expect(page.locator('[data-attachment-id="A5"]')).toHaveCount(0);
   await page.getByRole('button',{name:'Remove new-proof.txt'}).click();
   await expect(page.locator('[data-attachment-id="A3"]')).toHaveCount(0);
-  await expect(page.getByText('Attachment removed.')).toBeVisible();
+  await expect(page.locator('.app-toast')).toContainText('Attachment removed.');
+  await expect(page.locator('.ticket-attachments__status')).toHaveCount(0);
   await page.getByRole('button',{name:'Info'}).click();const referencedNote=page.locator('article[data-note-id="N3"]'),referencedImage=referencedNote.locator('.markdown-preview__attachment-image');await expect(referencedImage).toBeVisible();await expect.poll(()=>referencedImage.locator('img').evaluate((image:HTMLImageElement)=>image.naturalWidth)).toBeGreaterThan(0);await referencedNote.screenshot({path:'/private/tmp/hs2-b6937s-inline-image-reference.png'});
 });
 
