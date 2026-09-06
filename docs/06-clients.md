@@ -287,7 +287,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   platform's file manager. Inline image controls remain intrinsic-height block content,
   so later Markdown cannot overlap an image while it loads or after it is scaled. Copying
   a reference or resolved host path reports success through the shared transient toast,
-  never by inserting a persistent status label into the attachment panel.
+  never by inserting a persistent status label into the attachment panel. The attachment
+  context menu flips inward from every viewport edge, retains an 8px safe margin, and
+  becomes internally scrollable when the viewport is smaller than the menu.
 
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained thumbnails for browser-compatible image formats,

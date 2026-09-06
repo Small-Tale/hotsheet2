@@ -30,6 +30,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, and terminal discovery/snapshots
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission updates, and global terminal dashboard state
+    src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/terminal-grid-layout.ts # Pure terminal tile axis/fit geometry: >600px fits 1–10 across; <=600px fits 1–3 high
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
     src/terminal-viewport-runtime.ts # Lazy xterm renderer/input plus leased claims, server-size scaling, and reconnect lifecycle
