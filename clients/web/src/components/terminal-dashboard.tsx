@@ -64,8 +64,8 @@ function TerminalTile({ session, magnified = false, dashboardPreview = false }: 
   return <article class="terminal-tile" data-key={key} data-component="terminal-tile" data-terminal-key={key} data-busy={String(session.busy)} data-alive={String(session.alive)} data-magnified={String(magnified)} data-preview-only={String(dashboardPreview)} data-action={dashboardPreview?'preview-terminal':undefined} tabindex={dashboardPreview?'0':undefined} aria-label={dashboardPreview?`Preview ${session.title??session.id}`:undefined}>
     <div class="terminal-tile__preview"><pre>{preview}</pre>{dashboardPreview?<div class="terminal-tile__viewport-frame">{viewport}</div>:viewport}</div>
     <footer class="terminal-tile__footer">
-      <span class="terminal-tile__state" aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}></span>
-      <span class="terminal-tile__identity"><strong>{session.projectName}<span aria-hidden="true"> › </span>{session.title ?? session.id}</strong>{session.cwd&&<small>{session.cwd}</small>}</span>
+      <span class="terminal-tile__state" aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'} title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}></span>
+      <button type="button" class="terminal-tile__identity" data-action="open-terminal-project" data-item-id={key} aria-label={`Open ${session.title??session.id} in ${session.projectName}`}><strong>{session.projectName}<span aria-hidden="true"> › </span>{session.title ?? session.id}</strong></button>
       {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
       {magnified&&<button type="button" class="terminal-tile__open" data-action="open-terminal-project" data-terminal-key={key} aria-label={`Open ${session.title??session.id} in project terminal drawer`} title="Open in project terminal drawer"><LucideIcon icon={ExternalLink} name="external-link"/></button>}
     </footer>

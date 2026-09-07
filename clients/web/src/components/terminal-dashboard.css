@@ -37,10 +37,11 @@
 .terminal-tile__state { width: .5rem; height: .5rem; border-radius: var(--wa-border-radius-circle); background: var(--wa-color-neutral-fill-loud); flex: none; }
 .terminal-tile[data-busy="true"] .terminal-tile__state { background: var(--wa-color-success-fill-loud); box-shadow: 0 0 0 3px var(--wa-color-success-fill-quiet); }
 .terminal-tile[data-alive="false"] .terminal-tile__state { background: var(--wa-color-danger-fill-loud); }
-.terminal-tile__identity { display: flex; min-width: 0; flex: 1; flex-direction: column; }
-.terminal-tile__identity strong, .terminal-tile__identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.terminal-tile__identity { display: flex; min-width: 0; padding: 0; border-radius: var(--wa-border-radius-s); flex: 1; flex-direction: column; text-align: left; }
+.terminal-tile__identity:hover strong { text-decoration: underline; }
+.terminal-tile__identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .terminal-tile__identity strong { color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); }
-.terminal-tile__identity small, .terminal-tile__progress { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.terminal-tile__progress { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 .terminal-tile__open { display: grid; width: 2rem; height: 2rem; padding: 0; border-radius: var(--wa-border-radius-m); flex: none; place-items: center; }
 .terminal-tile__open:hover { background: var(--wa-color-neutral-fill-quiet); }
 .terminal-tile__open svg { width: 1rem; height: 1rem; }

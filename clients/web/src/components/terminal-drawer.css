@@ -7,7 +7,7 @@
 .terminal-drawer__views > [role="tab"] { flex: none; }
 .terminal-drawer__rail > button, .terminal-drawer__views > button, .terminal-drawer__actions > button { display: inline-flex; min-width: 2rem; height: 2rem; padding: 0 var(--wa-space-s); align-items: center; justify-content: center; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; gap: var(--wa-space-xs); font: inherit; }
 .terminal-drawer__views > [role="tab"][aria-selected="true"] { color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-quiet); }
-.terminal-drawer__rail .terminal-tab__name { min-width: 5rem; max-width: 9rem; }
+.terminal-drawer__rail .terminal-tab__name { max-width: 9rem; }
 .terminal-drawer__rail .terminal-tab i { width: .45rem; height: .45rem; border-radius: var(--wa-border-radius-circle); background: var(--wa-color-success-fill-loud); flex: none; }
 .terminal-drawer__rail > button:hover, .terminal-drawer__views > button:hover, .terminal-drawer__actions > button:hover { background: var(--wa-color-neutral-fill-quiet); }
 .terminal-drawer__rail > button:focus-visible, .terminal-drawer__views > button:focus-visible, .terminal-drawer__actions > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
@@ -20,4 +20,4 @@
 .terminal-session { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; background: var(--hs-terminal-background); }
 .terminal-session .terminal-viewport { position: relative; inset: auto; display: block; width: 100%; height: 100%; padding: var(--wa-space-s); background: var(--hs-terminal-background); box-sizing: border-box; }
 .terminal-session .xterm { background: var(--hs-terminal-background); }
-@media (max-width: 48rem) { .terminal-drawer__rail .terminal-tab__name { min-width: 3rem; max-width: 7rem; } }
+@media (max-width: 48rem) { .terminal-drawer__rail .terminal-tab__name { max-width: 7rem; } }
