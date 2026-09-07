@@ -729,6 +729,9 @@ pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str
             continue;
         }
         let candidate = attachment_reference_candidate(tail);
+        if candidate.is_empty() {
+            continue;
+        }
         let warning = format!(
             "attachment reference 'attachment:{}{}' does not match an attachment on {}; add the attachment or correct the filename",
             if ticket_label == owner.slug {
@@ -1849,6 +1852,14 @@ mod tests {
         assert_eq!(warnings.len(), 2);
         assert!(warnings[0].contains("attachment:later.png"));
         assert!(warnings[1].contains("missing ticket 'HS-NOTREAL'"));
+        assert!(
+            attachment_reference_warnings(
+                &store,
+                &owner,
+                "Resolve the longest filename after attachment: liberally.",
+            )
+            .is_empty()
+        );
 
         // The note is accepted before its payload exists; after upload the same text resolves.
         let note = "Upload follows: attachment:later.png.";
