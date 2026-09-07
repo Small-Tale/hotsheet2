@@ -1028,6 +1028,16 @@ test('matches HS1 multi-selection semantics and selected outlines in list and co
   await page.locator('[data-column-id="not-started"] .ticket-board-column__tickets').click({position:{x:240,y:300}});await expect(page.locator('.ticket-board [data-selected="true"]')).toHaveCount(0);await expect(inspector).toContainText('Select a ticket to see and edit its details');await page.screenshot({path:'/private/tmp/hotsheet-zero-selection-placeholder.png'});
 });
 
+test('drops ticket selection across ticket views but preserves it across view modes',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const inspector=page.locator('[data-component="ticket-inspector"]'),active=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');
+  await active.click();await expect(active).toHaveAttribute('data-selected','true');await expect(inspector).toContainText('HS2-DEMO01');
+  await page.getByLabel('Columns view').click();await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]')).toHaveAttribute('data-selected','true');await expect(inspector).toContainText('HS2-DEMO01');
+  await page.locator('[data-action="select-view"][data-item-id="backlog"]').click();await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);await expect(page.getByRole('complementary',{name:'Ticket inspector'})).toContainText('Select a ticket to see and edit its details');
+  const backlog=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-BACK01"]');await backlog.click();await expect(backlog).toHaveAttribute('data-selected','true');
+  await page.locator('[data-action="select-view"][data-item-id="archive"]').click();await expect(page.locator('[data-component="ticket-list-row"][data-selected="true"]')).toHaveCount(0);await expect(page.getByRole('complementary',{name:'Ticket inspector'})).toContainText('Select a ticket to see and edit its details');
+});
+
 test('styles completed and verified titles consistently in list and column rows',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const completed=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DONE01"] strong');await expect(completed).toHaveCSS('text-decoration-line','line-through');const quietColor=await completed.evaluate(node=>{const probe=document.createElement('span');probe.style.color='var(--wa-color-neutral-on-quiet)';node.append(probe);const color=getComputedStyle(probe).color;probe.remove();return color});await expect(completed).toHaveCSS('color',quietColor);

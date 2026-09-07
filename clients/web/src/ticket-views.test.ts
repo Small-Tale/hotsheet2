@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionVisibleInView, ticketsForView } from './ticket-views';
+import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -41,5 +41,12 @@ describe('ticket views', () => {
     expect(selectionVisibleInView(tickets,tickets.map(item=>item.slug),'all')).toEqual(['HS-not_started']);
     expect(selectionVisibleInView(tickets,tickets.map(item=>item.slug),'archive')).toEqual(['HS-archive']);
     expect(selectionVisibleInView(tickets,tickets.map(item=>item.slug),'backlog')).toEqual(['HS-backlog']);
+  });
+
+  it('drops the complete selection only when the ticket view changes', () => {
+    expect(selectionAfterTicketViewChange('all', 'backlog', ['HS-ONE', 'HS-TWO'])).toEqual([]);
+    expect(selectionAfterTicketViewChange('backlog', 'archive', ['HS-BACKLOG'])).toEqual([]);
+    expect(selectionAfterTicketViewChange('archive', 'errors', ['HS-ARCHIVE'])).toEqual([]);
+    expect(selectionAfterTicketViewChange('all', 'all', ['HS-ONE'])).toEqual(['HS-ONE']);
   });
 });

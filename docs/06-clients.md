@@ -56,7 +56,9 @@ Dragging an unselected ticket moves only it, while
   `not_working_report` capability hides the action for
   providers that cannot guarantee all-or-nothing behavior; the client never emulates it
   with uploads, patches, or compensating deletes. Completed/verified selections never
-  offer Up Next.
+  offer Up Next. Changing between Queue, Backlog, Archive, or ticket-error views clears
+  the complete ticket selection and its editing state; changing only the list/column or
+  other presentation mode preserves that selection.
 
 This is the clean client/service split the rewrite is chartered to create, made
 **absolute**: the server is a standalone process even for local use, so the client

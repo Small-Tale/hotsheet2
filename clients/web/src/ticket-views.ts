@@ -33,3 +33,7 @@ export function selectionVisibleInView(tickets: readonly TicketRow[], selectedSl
   const visible = new Set(ticketsForView(tickets, view).map(ticket => ticket.slug));
   return selectedSlugs.filter(slug => visible.has(slug));
 }
+
+export function selectionAfterTicketViewChange(current: TicketView, next: TicketView, selectedSlugs: readonly string[]): string[] {
+  return current === next ? [...selectedSlugs] : [];
+}
