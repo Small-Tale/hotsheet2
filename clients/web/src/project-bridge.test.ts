@@ -84,9 +84,10 @@ describe('native folder chooser',()=>{
     expect(localStoreInitArgs('/work/demo.hs2',true)).toEqual(['init','--standalone','--at','/work/demo.hs2','--prefix','HS2']);
   });
   it('exposes git ticket-store setup only through the local development bridge',async()=>{
-    const setup=vi.fn().mockResolvedValue('/work/demo.hs2'),app=createDevApp(true,undefined,undefined,undefined,setup);
+    const setup=vi.fn().mockResolvedValueOnce('/work/demo.hs2').mockResolvedValueOnce('/chosen/tickets'),app=createDevApp(true,undefined,undefined,undefined,setup);
     const response=await app.request('/__hotsheet/projects/setup-git',{method:'POST',headers:{'content-type':'application/json'},body:'{"root":"/work/demo"}'});
-    expect(response.status).toBe(201);expect(await response.json()).toEqual({ticketStore:'/work/demo.hs2'});expect(setup).toHaveBeenCalledWith('/work/demo');
+    expect(response.status).toBe(201);expect(await response.json()).toEqual({ticketStore:'/work/demo.hs2',connectionId:'719abfebc935ba14'});expect(setup).toHaveBeenCalledWith('/work/demo',undefined);
+    const custom=await app.request('/__hotsheet/projects/setup-git',{method:'POST',headers:{'content-type':'application/json'},body:'{"root":"/work/demo","location":"/chosen/tickets"}'});expect(custom.status).toBe(201);expect(setup).toHaveBeenLastCalledWith('/work/demo','/chosen/tickets');expect(await custom.json()).toMatchObject({ticketStore:'/chosen/tickets',connectionId:expect.stringMatching(/^[a-f0-9]{16}$/)});
     expect((await createDevApp(false,undefined,undefined,undefined,setup).request('/__hotsheet/projects/setup-git',{method:'POST'})).status).toBe(404);
   });
 });

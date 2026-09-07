@@ -19,10 +19,11 @@ export interface MenuItemProps {
   multiline?: boolean;
   state?: string;
   role?: 'menuitem';
+  disabled?: boolean;
 }
 
-export function MenuItem({ label, icon, trailing, selected = false, action, itemId, className = '', style, pressed, accessibleLabel, commandColor, dropStatus, title, multiline = false, state,role }: MenuItemProps) {
-  return <button type="button" role={role} class={`menu-item ${className}`.trim()} style={style} title={title} data-component="menu-item" data-action={action} data-item-id={itemId} data-command-color={commandColor} data-ticket-drop-status={dropStatus} data-multiline={multiline ? 'true' : undefined} data-state={state} aria-label={accessibleLabel} aria-current={selected ? 'page' : undefined} aria-pressed={pressed === undefined ? undefined : String(pressed)}>
+export function MenuItem({ label, icon, trailing, selected = false, action, itemId, className = '', style, pressed, accessibleLabel, commandColor, dropStatus, title, multiline = false, state,role,disabled=false }: MenuItemProps) {
+  return <button type="button" role={role} class={`menu-item ${className}`.trim()} style={style} title={title} disabled={disabled} data-component="menu-item" data-action={action} data-item-id={itemId} data-command-color={commandColor} data-ticket-drop-status={dropStatus} data-multiline={multiline ? 'true' : undefined} data-state={state} aria-label={accessibleLabel} aria-current={selected ? 'page' : undefined} aria-pressed={pressed === undefined ? undefined : String(pressed)}>
     <span class="menu-item__icon">{icon}</span>
     <span class="menu-item__label">{label}</span>
     {trailing && <span class="menu-item__trailing">{trailing}</span>}

@@ -34,16 +34,17 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   const closedTerminals=new Set<string>();
   let folderChoice=0;
   let ticketSourceConfigured=!emptyAtFirst;
+  let gitStores=ticketSourceConfigured?[...project.stores]:[];
   let providerConnectionRecords:Array<{id:string;provider:string;locator:string;name:string|null;default:boolean;settings:Record<string,unknown>}>=[];
   await page.route('**/*', async route => {
     const request=route.request(), url=new URL(request.url()), path=url.pathname;
     if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:ticketSourceConfigured?project:{...project,stores:[],needsTicketSetup:true}});
-    if(path==='/__hotsheet/projects/setup-git'&&request.method()==='POST'){ticketSourceConfigured=true;return route.fulfill({status:201,json:{ticketStore:'/work/demo.hs2'}})}
+    if(path==='/__hotsheet/projects/setup-git'&&request.method()==='POST'){const body=request.postDataJSON(),ticketStore=body.location??'/work/demo.hs2';ticketSourceConfigured=true;return route.fulfill({status:201,json:{ticketStore,connectionId:`git-${gitStores.length+1}`}})}
     if(path==='/__hotsheet/folders/choose'&&request.method()==='POST')return route.fulfill({json:{path:['/picked/project','/picked/tickets.hs2'][folderChoice++]}});
     if(path.endsWith('/provider-connections')&&request.method()==='GET')return route.fulfill({json:providerConnectionRecords});
     if(path.endsWith('/provider-connections')&&request.method()==='POST'){const created=request.postDataJSON();providerConnectionRecords=[...providerConnectionRecords,created];return route.fulfill({status:201,json:created})}
     const providerConnection=path.match(/\/provider-connections\/([^/]+)$/);if(providerConnection&&request.method()==='PATCH'){const id=decodeURIComponent(providerConnection[1]),updated={...request.postDataJSON(),id};providerConnectionRecords=providerConnectionRecords.map(item=>item.id===id?updated:item);return route.fulfill({json:updated})}
-    if(path.includes('/sources/')&&request.method()==='PUT'){ticketSourceConfigured=true;return route.fulfill({json:{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:[],sources:providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,locator:connection.locator})),default_source:request.postDataJSON().make_default?providerConnectionRecords.at(-1)?.id:undefined}})}
+    if(path.includes('/sources/')&&request.method()==='PUT'){const body=request.postDataJSON();ticketSourceConfigured=true;if(body.provider==='git'&&!gitStores.includes(body.locator))gitStores=[...gitStores,body.locator];return route.fulfill({json:{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:gitStores,sources:[...gitStores.map((locator,index)=>({connection_id:`git-${index+1}`,provider:'git',locator})),...providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,locator:connection.locator}))],default_source:body.make_default?path.split('/').pop():undefined}})}
     if(path.endsWith('/default-source')&&request.method()==='PUT')return route.fulfill({json:{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:[],sources:providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,locator:connection.locator})),default_source:request.postDataJSON().connection_id}})
     if(path.endsWith('/providers')){const capabilities={create:true,update:canUpdate,close:true,notes:true,note_edit:canUpdate,note_delete:canUpdate,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,not_working_report:canUpdate,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]};return route.fulfill({json:providerConnectionRecords.length?providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,display_name:connection.name??connection.id,locator:connection.locator,default:connection.default,capabilities})):ticketSourceConfigured?[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities}]:[]})}
     if(path.endsWith('/permissions')&&request.method()==='GET')return route.fulfill({json:[]});
@@ -128,16 +129,19 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
   const setup=page.locator('[data-ticket-source-setup-dialog]'),sourceOptions=setup.locator('.ticket-source-setup__options .menu-item');
   await expect(setup).toHaveJSProperty('open',true);
-  await expect(sourceOptions).toHaveCount(4);
-  await expect(setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository'})).toBeVisible();
+  await expect(sourceOptions).toHaveCount(5);
+  await expect(setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository',exact:true})).toBeVisible();
+  await expect(setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository in a custom location'})).toBeVisible();
   await expect(setup.getByRole('button',{name:'Connect GitHub Issues'})).toBeVisible();
   await expect(setup.getByRole('button',{name:'Connect GitLab Issues'})).toBeVisible();
   await expect(setup.getByRole('button',{name:'Connect Jira Cloud'})).toBeVisible();
-  await expect(sourceOptions.locator('[data-lucide="chevron-right"]')).toHaveCount(4);
+  await expect(sourceOptions.locator('[data-lucide="chevron-right"]')).toHaveCount(5);
+  await expect(sourceOptions.locator('[data-provider-icon="github"]')).toBeVisible();await expect(sourceOptions.locator('[data-provider-icon="gitlab"]')).toBeVisible();await expect(sourceOptions.locator('[data-provider-icon="jira"]')).toBeVisible();
+  await setup.evaluate(async node=>{await Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished))});
   for(const option of await sourceOptions.all()){
     const box=(await option.boundingBox())!,label=(await option.locator('.menu-item__label').boundingBox())!,icon=(await option.locator('.menu-item__icon').boundingBox())!,trailing=(await option.locator('.menu-item__trailing').boundingBox())!;
     expect(label.y).toBeGreaterThanOrEqual(box.y);
-    expect(label.y+label.height).toBeLessThanOrEqual(box.y+box.height);
+    expect(label.y+label.height,(await option.textContent())??undefined).toBeLessThanOrEqual(box.y+box.height);
     expect(Math.abs(icon.y+icon.height/2-(box.y+box.height/2))).toBeLessThanOrEqual(6);
     expect(Math.abs(trailing.y+trailing.height/2-(box.y+box.height/2))).toBeLessThanOrEqual(6);
   }
@@ -148,11 +152,14 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.setViewportSize({width:1100,height:760});
   await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
   await expect(setup).toHaveJSProperty('open',true);
+  await expect(setup).toHaveAttribute('data-navigation','push');
   const providerForm=setup.locator('[data-action="save-provider-connection"]');
   await expect(providerForm).toBeVisible();
+  await expect.poll(()=>providerForm.evaluate(node=>getComputedStyle(node).animationName)).toBe('ticket-source-push');
+  await providerForm.evaluate(async node=>{await Promise.all(node.getAnimations().map(animation=>animation.finished))});
   await page.screenshot({path:'/private/tmp/hs2-y4zpqq-provider-config-dialog-after.png',fullPage:true});
   await providerForm.getByRole('button',{name:'‹ Ticket source types'}).click();
-  await expect(sourceOptions).toHaveCount(4);
+  await expect(setup).toHaveAttribute('data-navigation','pop');await expect(sourceOptions).toHaveCount(5);await expect.poll(()=>setup.locator('.ticket-source-setup__screen').evaluate(node=>getComputedStyle(node).animationName)).toBe('ticket-source-pop');
   await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
   await providerForm.getByLabel('Connection ID').fill('GitHub Main');
   await providerForm.getByLabel('Repository').fill('small-tale/hotsheet2');
@@ -192,6 +199,10 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(setup).toHaveJSProperty('open',false);
   await expect(page.getByRole('button',{name:'Edit GitHub Primary'})).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
+});
+
+test('adds a second git ticket store in a custom location and explains remote backup',async({page})=>{
+  await page.setViewportSize({width:1100,height:840});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Add data source'}).click();const setup=page.locator('[data-ticket-source-setup-dialog]'),recommended=setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository',exact:true});await expect(recommended).toBeDisabled();await expect(recommended).toContainText('Already connected');await setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository in a custom location'}).click();await expect(setup).toHaveAttribute('data-navigation','push');await expect(setup.getByText('Back up this ticket repository')).toBeVisible();await expect(setup).toContainText('git -C /picked/project remote add origin');await setup.evaluate(async node=>{await Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished))});await page.screenshot({path:'/private/tmp/hs2-custom-git-store-remote-guidance.png',fullPage:true});await setup.getByRole('button',{name:'Done'}).click();await expect(setup).toHaveJSProperty('open',false);await expect(page.getByText('This checkout uses 2 git ticket sources')).toBeVisible();await expect(page.getByText('/picked/project',{exact:true})).toBeVisible();
 });
 
 test('uses independent width and height terminal dashboard zoom scales',async({page})=>{

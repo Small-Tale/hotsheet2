@@ -103,11 +103,13 @@ async function bootstrapStore():Promise<string>{
   return realpath(path);
 }
 
-export async function createLocalGitTicketStore(rootInput:string):Promise<string>{
-  const root=await realpath(rootInput.trim()),path=`${root}.hs2`;
+export async function createLocalGitTicketStore(rootInput:string,locationInput?:string):Promise<string>{
+  const root=await realpath(rootInput.trim()),path=locationInput?.trim()?await realpath(locationInput.trim()):`${root}.hs2`;
   if(!await exists(resolve(path,'hotsheet-store.json')))await initializeStore(path,root);
   return realpath(path);
 }
+
+export function gitTicketStoreConnectionId(path:string):string{return createHash('sha256').update(path).digest('hex').slice(0,16)}
 
 export async function suggestedTicketStore(root: string): Promise<string | undefined> {
   const canonical = await realpath(root);

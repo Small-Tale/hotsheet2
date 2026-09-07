@@ -20,10 +20,18 @@ wa-dialog[data-project-dialog] { --width: min(48rem, calc(100vw - 2rem)); }
 .project-dialog__error:empty { display: none; }
 .project-dialog__error { color: var(--wa-color-danger-on-quiet) !important; }
 wa-dialog[data-ticket-source-setup-dialog] { --width: min(36rem, calc(100vw - 2rem)); }
+wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"]::part(header), wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"]::part(footer) { animation:ticket-source-crossfade 180ms ease-out; }
+wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"] .ticket-source-setup__screen, wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"] .provider-setup-form { animation:ticket-source-push 220ms cubic-bezier(.2,.8,.2,1); }
+wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"]::part(header), wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"]::part(footer) { animation:ticket-source-crossfade 180ms ease-out; }
+wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"] .ticket-source-setup__screen, wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"] .provider-setup-form { animation:ticket-source-pop 220ms cubic-bezier(.2,.8,.2,1); }
+@keyframes ticket-source-push { from { opacity:0; transform:translateX(2rem); } to { opacity:1; transform:translateX(0); } }
+@keyframes ticket-source-pop { from { opacity:0; transform:translateX(-2rem); } to { opacity:1; transform:translateX(0); } }
+@keyframes ticket-source-crossfade { from { opacity:.25; } to { opacity:1; } }
 .ticket-source-setup { display: grid; gap: var(--wa-space-m); }
 .ticket-source-setup__intro { margin: 0; color: var(--wa-color-neutral-on-quiet); line-height: 1.5; }
-.ticket-source-setup__options { display: grid; overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); }
+.ticket-source-setup__options { display: grid; overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); grid-auto-rows:max-content; }
 .ticket-source-setup__options .menu-item { position: relative; min-height: 4.25rem; padding: var(--wa-space-s); border-radius: 0; grid-template-columns: var(--wa-space-l) minmax(0,1fr) auto; align-items: center; gap: var(--wa-space-s); }
+.ticket-source-setup__options .menu-item[data-action="create-project-git-source-custom"] { min-height:5.25rem; }
 .ticket-source-setup__options .menu-item + .menu-item::before { position: absolute; top: 0; right: var(--wa-space-s); left: var(--wa-space-s); border-top: 1px solid var(--wa-color-neutral-border-quiet); content: ''; }
 .ticket-source-setup__options .menu-item:hover { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-quiet); }
 .ticket-source-setup__options .menu-item__icon { width: var(--wa-space-l); height: var(--wa-space-l); color: var(--wa-color-brand-on-quiet); }
@@ -38,6 +46,11 @@ wa-dialog[data-ticket-source-setup-dialog] { --width: min(36rem, calc(100vw - 2r
 .ticket-source-setup__option-copy code { white-space: normal; overflow-wrap: anywhere; }
 .ticket-source-setup__error { color: var(--wa-color-danger-on-quiet) !important; }
 .ticket-source-setup footer { display: flex; justify-content: flex-start; margin-top: var(--wa-space-xl); }
+.ticket-source-setup__complete footer { justify-content:flex-end; }
+.ticket-source-setup__remote { display:grid; padding:var(--wa-space-m); border:1px solid var(--wa-color-brand-border-quiet); border-radius:var(--wa-border-radius-l); color:var(--wa-color-brand-on-normal); background:var(--wa-color-brand-fill-quiet); grid-template-columns:var(--wa-space-l) minmax(0,1fr); gap:var(--wa-space-s); }
+.ticket-source-setup__remote > svg { width:var(--wa-space-l); }
+.ticket-source-setup__remote p { margin:var(--wa-space-xs) 0; color:var(--wa-color-neutral-on-quiet); line-height:1.45; }
+.ticket-source-setup__remote code { display:block; padding:var(--wa-space-xs); border-radius:var(--wa-border-radius-s); background:var(--wa-color-surface-default); white-space:normal; overflow-wrap:anywhere; }
 .terminal-rename { display: grid; gap: var(--wa-space-l); }
 .terminal-rename footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
 .app-loading, .app-error, .app-toast { position: fixed; z-index: 1000; right: 1rem; bottom: 1rem; padding: .65rem .85rem; border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
@@ -82,3 +95,4 @@ wa-dialog[data-ticket-source-setup-dialog] { --width: min(36rem, calc(100vw - 2r
 .notification-inspector-empty .toolbar { border-bottom: 0; }
 @media (max-width: 40rem) { .project-settings__permission-grid { grid-template-columns: 1fr; } }
 @media (max-width: 48rem) { .provider-setup-form__grid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { wa-dialog[data-ticket-source-setup-dialog]::part(header), wa-dialog[data-ticket-source-setup-dialog]::part(footer), wa-dialog[data-ticket-source-setup-dialog] .ticket-source-setup__screen, wa-dialog[data-ticket-source-setup-dialog] .provider-setup-form { animation:none !important; } }
