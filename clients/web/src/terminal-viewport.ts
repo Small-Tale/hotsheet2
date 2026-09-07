@@ -11,8 +11,15 @@ export function parseTerminalSizeMessage(value:string):TerminalSizeMessage|undef
 export const terminalReconnectDelay=(attempt:number)=>Math.min(8_000,250*(2**Math.max(0,attempt)));
 export const TERMINAL_RESIZE_SETTLE_MS=120;
 export const TERMINAL_DRAWER_RESIZE_END_EVENT='hotsheet-terminal-drawer-resize-end';
+export const TERMINAL_DASHBOARD_COLS=80;
+export const TERMINAL_DASHBOARD_ROWS=24;
 export const TERMINAL_PREVIEW_NATURAL_WIDTH=1280;
 export const TERMINAL_PREVIEW_NATURAL_HEIGHT=960;
+export function terminalDashboardFontSize(currentFontSize:number,availableCols:number,availableRows:number):number {
+  if(availableCols<=0||availableRows<=0)return currentFontSize;
+  const scale=Math.min(availableCols/TERMINAL_DASHBOARD_COLS,availableRows/TERMINAL_DASHBOARD_ROWS);
+  return Math.max(4,Math.min(72,currentFontSize*scale));
+}
 export interface TerminalFocusRequest {projectId:string;terminalId:string}
 export function terminalViewportShouldAutoFocus(request:TerminalFocusRequest|undefined,projectId:string,terminalId:string):boolean {
   return request?.projectId===projectId&&request.terminalId===terminalId;

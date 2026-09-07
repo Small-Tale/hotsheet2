@@ -574,9 +574,12 @@ groups. Project/none grouping uses the shared Select in a
 matching contained group with the same trailing-arrow spacing as the workspace sort control.
 That edge-mounted grouping Select uses a trigger-width menu and an 8rem anchor, allowing Web
 Awesome's popup positioning to keep the entire listbox inside the viewport.
-Every dashboard tile mounts a read-only xterm at a stable 1280×960 natural geometry and
-uniformly scales that complete surface into the available 4:3 preview; changing the grid
-fit changes only visual scale and never resizes the PTY to tile dimensions. The preview,
+Every dashboard tile mounts a read-only xterm with an exact 80×24 character grid at a
+stable 1280×960 natural geometry and uniformly scales that complete surface into the
+available 4:3 preview. Magnifying a grid tile keeps the same exact 80×24 grid and adjusts
+only its physical font/pixel scale to the larger viewport. Changing grid fit or magnifying
+never derives PTY rows or columns from tile dimensions. Dedicated project-drawer terminals
+remain fitted to their actual interactive viewport. The preview,
 its inset frame, and its border all use the terminal background token, so unused space
 cannot expose an unrelated gray surface, and the computed tile height includes both preview
 and footer so repeated viewport changes cannot push the terminal outside its card. Dashboard
@@ -584,7 +587,7 @@ previews never accept terminal input. Click opens and focuses a separate interac
 centered over a full-browser dimming layer; click-away restores the grid. Its footer exposes
 an external-open action, and both that action and a footer double-click open the terminal in
 its project's maximized drawer. A grid-tile double-click does the same, while right-click
-exposes shared Open/Hide menu items. The focused drawer/magnified consumer re-fits after both
+exposes shared Open/Hide menu items. The focused dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
