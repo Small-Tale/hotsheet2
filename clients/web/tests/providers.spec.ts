@@ -1339,7 +1339,7 @@ test('live project visual review',async({page})=>{
 
 test('anchors ticket context menus to the pointer while preserving scroller positions (HS2-H4MWDB, HS2-SWC9E4)',async({page})=>{
   const base={connection_id:'git-local',native_id:'01',qualified_id:'git-local:01',id:'01',slug:'HS2-DEMO01',title:'Ticket',category:'feature',priority:'high',status:'started',up_next:false,tags:['client'],blocked_by:[],claim_count:0,created_at:'2026-08-30T00:00:00Z',updated_at:'2026-08-30T01:00:00Z'};
-  const many=Array.from({length:40},(_,i)=>({...base,id:String(100+i),native_id:String(100+i),qualified_id:`git-local:${100+i}`,slug:`HS2-ROW${String(i).padStart(2,'0')}`,title:`Scrollable ticket number ${i}`}));
+  const many=Array.from({length:40},(_,i)=>({...base,id:String(100+i),native_id:String(100+i),qualified_id:`git-local:${100+i}`,slug:`HS2-ROW${String(i).padStart(2,'0')}`,title:`Scrollable ticket number ${i}`,...(i===39?{status:'completed'}:{})}));
   const proj={id:'demo-checkout',root:'/work/demo',name:'demo',stores:['/work/demo.hs2'],apiPath:'/__hotsheet/project-api/demo-checkout'};
   await page.route('**/*',async route=>{const req=route.request(),path=new URL(req.url()).pathname;
     if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:proj});
@@ -1371,6 +1371,7 @@ test('anchors ticket context menus to the pointer while preserving scroller posi
   expect(Math.abs(boardMenu.x-board.pointer.x)).toBeLessThanOrEqual(2);expect(Math.abs(boardMenu.y-board.pointer.y)).toBeLessThanOrEqual(2);
   expect(await page.evaluate(id=>{const col=document.querySelector(`[data-column-id="${id}"] .ticket-board-column__tickets`) as HTMLElement;return col.scrollTop},board.colId)).toBe(board.before);
   await page.screenshot({path:'/private/tmp/hs2-swc9e4-scrolled-context-menu.png',fullPage:true});
+  await page.keyboard.press('Escape');const edgePointer={x:600,y:812};await page.evaluate(pointer=>{document.querySelector<HTMLElement>('[data-ticket-slug="HS2-ROW39"]')!.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:pointer.x,clientY:pointer.y}))},edgePointer);await expect(menu).toBeVisible();const edgeMenu=await menu.locator('wa-dropdown').evaluate(node=>{const rect=(node.shadowRoot!.querySelector('[part="menu"]') as HTMLElement).getBoundingClientRect(),host=node.closest('.ticket-context-menu')!.getBoundingClientRect();return{left:rect.left,right:rect.right,top:rect.top,bottom:rect.bottom,host:{left:host.left,top:host.top}}});expect(Math.min(Math.abs(edgeMenu.top-edgePointer.y),Math.abs(edgeMenu.bottom-edgePointer.y)),JSON.stringify({edgeMenu,edgePointer})).toBeLessThanOrEqual(2);await page.screenshot({path:'/private/tmp/hs2-swc9e4-bottom-edge-context-menu.png',fullPage:true});
 });
 
 test('preserves list and every board-column scroll position across ticket mutations (HS2-CEBNAJ)',async({page})=>{

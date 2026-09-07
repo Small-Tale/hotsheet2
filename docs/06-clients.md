@@ -36,7 +36,9 @@ Dragging an unselected ticket moves only it, while
   destinations apply the corresponding status and visibly highlight during dragover.
   Right-clicking either a list or board TicketRow preserves an existing multi-selection
   (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
-  menu. Production handlers cover reader opening, category/status/priority changes, batch
+  menu. Pointer-opened ticket menus retain the raw viewport pointer anchor and delegate
+  all measured popup flipping and shifting to Web Awesome; the app does not pre-clamp
+  against an estimated menu size that can vary with ticket state. Production handlers cover reader opening, category/status/priority changes, batch
   Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. Every bulk
   metadata operation is submitted as one checkout-scoped atomic batch request (never one
   request per selected ticket), with all concurrency tokens validated before any write.
