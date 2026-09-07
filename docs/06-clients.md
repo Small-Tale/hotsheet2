@@ -144,7 +144,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   out before only its source siblings close the gap. Overlay identity and temporary
   hiding survive reactive DOM morphs without duplicate cards. Visual-only ghosts
   expose motion-specific identifiers rather than ticket-row roles, actions, or slugs,
-  so ordinary ticket selectors and assistive technology continue to see one real row.
+  and isolate their visual text from document text queries, so ordinary ticket
+  selectors, text search, and assistive technology continue to see one real row.
+  Pure inspector, sidebar, or viewport layout shifts never trigger collection motion.
   Reduced-motion users get the final layout immediately.
 
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not

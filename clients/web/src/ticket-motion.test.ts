@@ -8,14 +8,14 @@ const pendingAnimation=()=>({finished:new Promise<void>(()=>undefined)}) as unkn
 function root(rows:HTMLElement[]){return{querySelector:()=>({dataset:{presentation:'edge-to-edge'},querySelector:()=>({dataset:{component:'ticket-board'}})}),querySelectorAll:()=>rows} as unknown as ParentNode}
 function row(slug:string,parent:string,box:DOMRect,animate=vi.fn(()=>pendingAnimation())){return{dataset:{ticketSlug:slug},style:{visibility:''},ownerDocument:{body:{append:vi.fn()},head:{append:vi.fn()},querySelectorAll:()=>[],createElement:()=>({dataset:{},textContent:'',remove:vi.fn()}),defaultView:{CSS:{escape:(value:string)=>value}}},getBoundingClientRect:()=>box,closest:()=>({dataset:{columnId:parent}}),animate} as unknown as HTMLElement}
 function snapshot(rows:Array<[string,HTMLElement,string]>):TicketMotionSnapshot{return{scope:'edge-to-edge:ticket-board',rows:new Map(rows.map(([slug,element,parent])=>[slug,{rect:element.getBoundingClientRect(),parent,element}]))}}
-function ghost(){return{ariaHidden:'false',dataset:{} as DOMStringMap,style:{cssText:''},animate:vi.fn(()=>pendingAnimation()),remove:vi.fn()} as unknown as HTMLElement}
+function ghost(slug='HS2-A'){return{ariaHidden:'false',dataset:{ticketSlug:slug} as DOMStringMap,style:{cssText:''},ownerDocument:{createElement:()=>({textContent:''})},prepend:vi.fn(),querySelectorAll:()=>[],animate:vi.fn(()=>pendingAnimation()),remove:vi.fn(),removeAttribute:vi.fn()} as unknown as HTMLElement}
 
 describe('ticket motion',()=>{
   it('lifts a cross-column move into a fixed overlay instead of clipping it in the destination',()=>{
     const previous=row('HS2-A','started',rect(10,20)),current=row('HS2-A','completed',rect(210,80)),overlay=ghost(),append=vi.fn();
     (current as unknown as {cloneNode:()=>HTMLElement}).cloneNode=()=>overlay;(current as unknown as {ownerDocument:{body:{append:(node:HTMLElement)=>void}}}).ownerDocument.body.append=append;
     animateTicketMotion(snapshot([['HS2-A',previous,'started']]),root([current]),false);
-    expect(current.style.visibility).toBe('hidden');expect(append).toHaveBeenCalledWith(overlay);expect(overlay.dataset.ticketMotionGhost).toBe('move');expect(overlay.style.cssText).toContain('position:fixed');expect(overlay.style.cssText).toContain('z-index:1300');expect(overlay.animate).toHaveBeenCalledWith([{transform:'translate(-200px, -60px)',zIndex:'1300'},{transform:'translate(0, 0)',zIndex:'1300'}],expect.objectContaining({duration:240}));
+    expect(current.style.visibility).toBe('hidden');expect(append).toHaveBeenCalledWith(overlay);expect(overlay.dataset.ticketMotionGhost).toBe('move');expect(overlay.dataset.ticketMotionSlug).toBe('HS2-A');expect(overlay.dataset.ticketSlug).toBeUndefined();expect(overlay.style.cssText).toContain('position:fixed');expect(overlay.style.cssText).toContain('z-index:1300');expect(overlay.animate).toHaveBeenCalledWith([{transform:'translate(-200px, -60px)',zIndex:'1300'},{transform:'translate(0, 0)',zIndex:'1300'}],expect.objectContaining({duration:240}));
   });
 
   it('slides retained rows to make room before fading an incoming row',()=>{
@@ -33,4 +33,6 @@ describe('ticket motion',()=>{
   });
 
   it('does not animate when reduced motion is requested',()=>{const previous=row('HS2-A','started',rect(10,20)),current=row('HS2-A','started',rect(10,80));animateTicketMotion(snapshot([['HS2-A',previous,'started']]),root([current]),true);expect(current.animate).not.toHaveBeenCalled()});
+
+  it('ignores pure layout shifts that do not change collection membership or status',()=>{const previous=row('HS2-A','started',rect(10,20)),current=row('HS2-A','started',rect(210,20));animateTicketMotion(snapshot([['HS2-A',previous,'started']]),root([current]),false);expect(current.animate).not.toHaveBeenCalled()});
 });
