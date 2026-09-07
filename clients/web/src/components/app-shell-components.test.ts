@@ -24,6 +24,8 @@ describe('application shell components', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     expect(css).toContain('.app-shell__work-area:focus, .app-shell__work-area:focus-within');
     expect(css).toMatch(/app-shell__work-area:focus-within \{[^}]*outline: 2px solid var\(--wa-color-focus\)/);
+    expect(css).toMatch(/app-shell__work-area::after \{[^}]*z-index: 20[^}]*border: 2px solid transparent[^}]*pointer-events: none/);
+    expect(css).toMatch(/app-shell__work-area:focus-within::after \{[^}]*border-color: var\(--wa-color-focus\)/);
   });
   it('lets the composer own the workspace top rhythm without removing spacing when absent', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');

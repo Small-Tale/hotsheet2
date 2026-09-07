@@ -385,8 +385,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
   Its chosen height is a device-local preference that survives controlled-value rerenders,
   cancellation/reopening, and later new-ticket sessions.
-  Column presentation always gives TicketRows a
-  rounded visible border, including the wide single-column Backlog and Archive boards.
+  Column presentation leaves idle TicketRows borderless, including the wide
+  single-column Backlog and Archive boards, while selection supplies the rounded blue
+  outline. Pointer preview never changes the row fill: a quiet temporary blue outline
+  marks the hovered row instead.
   The composer owns its bottom spacing; while it is rendered, both list and edge-to-edge
   board workspaces remove their otherwise-normal top inset so only one vertical gap is
   present. Composer-free views retain the workspace inset. Likewise, inspector tabs own

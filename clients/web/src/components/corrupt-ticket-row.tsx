@@ -32,7 +32,7 @@ export function CorruptTicketRow({ ticket, recovery, selected = false }: { ticke
   const identity = corruptTicketIdentity(ticket);
   const upgradeRequired = ticket.error_code === 'upgrade_required';
   const key = corruptTicketKey(ticket);
-  return <article class="corrupt-ticket-row" data-component="corrupt-ticket-row" data-selected={String(selected)} role="group" aria-label={`Unreadable ticket ${identity}`}>
+  return <article class={`ticket-list-row ticket-list-row--list corrupt-ticket-row${selected?' ticket-list-row--selected':''}`} data-component="corrupt-ticket-row" data-selected={String(selected)} role="group" aria-label={`Unreadable ticket ${identity}`}>
     <LucideIcon icon={upgradeRequired ? RefreshCw : FileWarning} name={upgradeRequired ? 'refresh-cw' : 'file-warning'} class="corrupt-ticket-row__icon" />
     <div class="corrupt-ticket-row__content">
       <button type="button" class="corrupt-ticket-row__select" data-action="select-corrupt-ticket" data-corrupt-key={key} aria-label={`Open recovery for ${identity}`}>

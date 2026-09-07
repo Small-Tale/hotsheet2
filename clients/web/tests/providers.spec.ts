@@ -587,9 +587,12 @@ test('keeps healthy tickets usable and offers safe reveal plus AI repair recover
   await expect(corrupt).toContainText('Ticket file could not be read');
   await expect(corrupt).toHaveAttribute('role','group');
   await expect(corrupt.locator('[data-lucide="file-warning"]')).toBeVisible();
+  const errorRowBefore=await corrupt.evaluate(node=>{const icon=node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),rail=getComputedStyle(node,'::before');return{iconX:icon.x,railWidth:rail.width,railColor:rail.backgroundColor}});
   await corrupt.getByRole('button',{name:'Open recovery for HS2-QQRY00'}).click();
   const selectedBorder=await corrupt.evaluate(node=>{const style=getComputedStyle(node);return {widths:[style.borderTopWidth,style.borderRightWidth,style.borderBottomWidth,style.borderLeftWidth],colors:[style.borderTopColor,style.borderRightColor,style.borderBottomColor,style.borderLeftColor],radii:[style.borderTopLeftRadius,style.borderTopRightRadius,style.borderBottomRightRadius,style.borderBottomLeftRadius]}});
   expect(selectedBorder.widths).toEqual(['1px','1px','1px','1px']);expect(new Set(selectedBorder.colors).size).toBe(1);expect(selectedBorder.radii.every(radius=>Number.parseFloat(radius)>0)).toBe(true);
+  const errorRowAfter=await corrupt.evaluate(node=>{const icon=node.querySelector('[data-lucide="file-warning"]')!.getBoundingClientRect(),rail=getComputedStyle(node,'::before');return{iconX:icon.x,railWidth:rail.width,railColor:rail.backgroundColor}});
+  expect(errorRowAfter).toEqual(errorRowBefore);
   const inspector=page.locator('[data-component="corrupt-ticket-inspector"]');
   await expect(inspector).toContainText('Ticket parsing error');
   await expect(inspector).toContainText('unsupported content follows the bounded Notes section');
@@ -1075,6 +1078,28 @@ test('drags single and selected tickets across columns, views, and the duplicate
   await page.locator('[data-ticket-drop-status="backlog"]').click();const backlogFirst=page.locator('[data-ticket-slug="HS2-DEMO01"]');await expect(backlogFirst).toBeVisible();await dragTo(backlogFirst,'[data-ticket-drop-status="not_started"][data-item-id="all"]');await expect.poll(()=>patches.filter(patch=>patch.status==='not_started').length).toBe(2);expect(mutations.filter(value=>value.endsWith('/batch'))).toHaveLength(2);
   await page.locator('[data-ticket-drop-status="not_started"][data-item-id="all"]').click();await page.getByLabel('Columns view').click();const boardFirst=page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-DEMO01"]');await boardFirst.click();await dragTo(boardFirst,'[data-column-id="completed"]');await expect.poll(()=>patches.filter(patch=>patch.status==='completed').length).toBe(1);await expect(page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
   await page.getByLabel('List view').click();const duplicateFirst=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),duplicateSecond=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');await duplicateFirst.click();await duplicateSecond.click({modifiers:['Meta']});const createsBefore=mutations.filter(value=>value.endsWith('/tickets')).length;await dragTo(duplicateFirst,'[data-ticket-drop-action="duplicate"]');await expect.poll(()=>mutations.filter(value=>value.endsWith('/tickets')).length).toBe(createsBefore+2);await expect(page.locator('.app-toast')).toContainText('2 tickets copied to demo.');await page.screenshot({path:'/private/tmp/hs2-w2743r-ticket-drag-targets.png',fullPage:true});
+});
+
+test('previews rows with an outline and keeps column cards borderless until selected',async({page})=>{
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const row=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),background=await row.evaluate(node=>getComputedStyle(node).backgroundColor),shadow=await row.evaluate(node=>getComputedStyle(node).boxShadow);
+  await row.hover();
+  await expect(row).toHaveCSS('background-color',background);
+  expect(await row.evaluate(node=>getComputedStyle(node).boxShadow)).not.toBe(shadow);
+  await page.screenshot({path:'/private/tmp/hs2-rxy39s-row-hover-after.png',fullPage:true});
+  await page.getByLabel('Columns view').click();
+  const card=page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]');
+  await expect(card).toHaveCSS('border-color','rgba(0, 0, 0, 0)');
+  await card.click();
+  await expect(card).toHaveCSS('border-color','color(srgb 0.42 0.729333 1)');
+  await page.screenshot({path:'/private/tmp/hs2-2n2tcr-column-border-after.png',fullPage:true});
+  const workArea=page.locator('.app-shell__work-area');
+  await expect.poll(()=>workArea.evaluate(node=>getComputedStyle(node,'::after').borderTopColor)).toBe('rgb(0, 136, 255)');
+  expect(await workArea.evaluate(node=>getComputedStyle(node,'::after').zIndex)).toBe('20');
+  await page.screenshot({path:'/private/tmp/hs2-2rn2hh-work-area-focus-after.png',fullPage:true});
 });
 
 test('drops selected tickets on another project tab to copy them there',async({page})=>{

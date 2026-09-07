@@ -87,7 +87,9 @@ describe('TicketRow', () => {
     expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 3\.9em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__body[^}]*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(css).toMatch(/\.ticket-list-row--column \{[^}]*border-color: var\(--wa-color-neutral-border-quiet\);[^}]*border-radius: \.65rem/);
+    expect(css).toMatch(/\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: \.65rem/);
+    expect(css).toMatch(/\.ticket-list-row:hover \{[^}]*box-shadow: inset 0 0 0 1px color-mix/);
+    expect(css).not.toMatch(/\.ticket-list-row:hover \{[^}]*background:/);
     // Rows carry no drop shadow in any presentation (HS2-VX9E4Z); only selection/focus insets/outlines remain.
     expect(css).not.toContain('box-shadow: 0 .3rem .9rem');
   });

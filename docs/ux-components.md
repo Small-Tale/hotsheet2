@@ -310,8 +310,10 @@ always retain native clipboard behavior.
   - `TicketRowDivider`
 - `TicketRow` — **demo built**: a shared, horizontally responsive ticket-summary
   boundary for list and narrow column use. The comfortable list presentation is a
-  square-cornered, flat, separator-led row that reads as one continuous list; the same component becomes a lightly elevated, rounded card at
-  narrow column widths. Its primary line treats qualified slug and title as one normal
+  square-cornered, flat, separator-led row that reads as one continuous list; the same component becomes a rounded, borderless card at
+  narrow column widths. A quiet inset outline previews pointer hover without changing
+  the row background, while selection supplies the persistent blue outline. Its primary
+  line treats qualified slug and title as one normal
   inline formatting flow, with an explicit two-line limit in lists and three-line
   limit in board columns. The comfortable list keeps the category in its dedicated
   leading slot; compact board rows remove that empty left gutter and place a reduced
@@ -365,7 +367,7 @@ always retain native clipboard behavior.
   board has no extra framing and
   whose title and count provide sufficient grouping without an additional visual
   container around either the board or each column. Each column composes production
-  flat, elevation-free `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
+  flat, elevation-free, idle-borderless `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
   overflow all columns; each ticket region scrolls independently while its heading and
   count remain fixed. A hosting workspace may add its own surrounding surface when
   appropriate.
