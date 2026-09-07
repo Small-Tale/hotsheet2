@@ -2,7 +2,7 @@ import { signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
 import { PageHeader } from '../components/page-header';
-import { QuickTicketComposer } from '../components/quick-ticket-composer';
+import { QuickTicketComposer,QuickTicketLauncher } from '../components/quick-ticket-composer';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
 import { type InspectorTab,TicketInspector } from '../components/ticket-inspector';
@@ -103,6 +103,7 @@ export function PageHeaderDemo() { return <section class="workspace-component-de
 
 export function QuickTicketComposerDemo() {
   return <section class="workspace-component-demo" aria-label="QuickTicketComposer demo">
+    <QuickTicketLauncher />
     <QuickTicketComposer expanded={composerExpanded.value} title={composerTitle.value} details={composerDetails.value} category={composerCategory.value} upNext={composerUpNext.value} providerName="Hot Sheet git" />
     <TicketList tickets={collectionTickets.value.slice(0, 3)} label="Recently updated tickets" />
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>

@@ -1,0 +1,8 @@
+import {describe,expect,it} from 'vitest';
+
+import {activeProjectRoot,loadProjectWorkspaceSession,saveActiveProjectRoot,saveProjectWorkspaceSession} from './workspace-session';
+
+describe('workspace session',()=>{
+  it('round trips restorable project UI state',()=>{const values=new Map<string,string>(),storage={getItem:(key:string)=>values.get(key)??null,setItem:(key:string,value:string)=>values.set(key,value)};const session={selectedView:'backlog' as const,selectedTicketSlugs:['HS2-ONE'],searchOpen:true,searchQuery:'draft',inspectorTab:'timeline' as const,composer:{open:true,title:'Lost thought',details:'Still here',category:'bug',upNext:true,attachments:[{id:'a',name:'proof.png'}]},composingNote:true,newNoteDraft:'note',feedbackReplies:{n:[{offset:4,text:'reply'}]},feedbackSelections:{n:['a']},feedbackNoteId:'n',feedbackDraft:'overall response',notWorking:{ticketId:'1',slug:'HS2-ONE',connectionId:'git',note:'broken',attachments:[]}};saveProjectWorkspaceSession(storage,'project',session);expect(loadProjectWorkspaceSession(storage,'project')).toEqual(session);saveActiveProjectRoot(storage,'/repo');expect(activeProjectRoot(storage)).toBe('/repo')});
+  it('ignores malformed state and sanitizes nested collections',()=>{expect(loadProjectWorkspaceSession({getItem:()=>'{bad'},'p')).toBeUndefined();const value=JSON.stringify({selectedView:'wat',composer:{attachments:[null,{id:'x',name:'x'}]},selectedTicketSlugs:[1,'HS2-X'],feedbackReplies:{n:[null,{offset:1,text:'ok'}]}});expect(loadProjectWorkspaceSession({getItem:()=>value},'p')).toMatchObject({selectedView:'all',selectedTicketSlugs:['HS2-X'],composer:{attachments:[{id:'x',name:'x'}]},feedbackReplies:{n:[{offset:1,text:'ok'}]}})});
+});

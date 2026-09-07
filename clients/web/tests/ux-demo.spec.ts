@@ -1176,12 +1176,13 @@ test('holds the AppShell at its 1024 by 600 supported floor',async({page})=>{
   await page.setViewportSize({width:800,height:500});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]');const bounds=await shell.boundingBox();expect(bounds?.width).toBeGreaterThanOrEqual(1024);expect(bounds?.height).toBeGreaterThanOrEqual(600);await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-501eph-shell-floor.png',fullPage:true});
 });
 
-test('keeps one owned gap below the composer and inspector tabs in list and board views',async({page})=>{
-  await page.setViewportSize({width:1728,height:971});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]'),workArea=shell.locator('.app-shell__work-area'),workspace=shell.locator('.app-shell__workspace'),composer=shell.locator('.app-shell__composer');await expect(workArea).toHaveAttribute('data-has-composer','true');
-  expect(await shell.evaluate(node=>{const composer=node.querySelector<HTMLElement>('.app-shell__composer')!,launcher=composer.querySelector<HTMLElement>('[data-component="quick-ticket-composer"]')!,workspace=node.querySelector<HTMLElement>('.app-shell__workspace')!,list=workspace.querySelector<HTMLElement>('[data-component="ticket-list"]')!,tabs=node.querySelector<HTMLElement>('.ticket-inspector__tabs')!,content=node.querySelector<HTMLElement>('.ticket-inspector__content')!;return{composerPaddingBottom:getComputedStyle(composer).paddingBottom,workspacePaddingTop:getComputedStyle(workspace).paddingTop,launcherToList:list.getBoundingClientRect().top-launcher.getBoundingClientRect().bottom,tabsMarginBottom:getComputedStyle(tabs).marginBottom,contentPaddingTop:getComputedStyle(content).paddingTop,tabsToContent:content.getBoundingClientRect().top-tabs.getBoundingClientRect().bottom}})).toEqual({composerPaddingBottom:'12px',workspacePaddingTop:'0px',launcherToList:12,tabsMarginBottom:'16px',contentPaddingTop:'0px',tabsToContent:16});
-  await shell.getByRole('button',{name:'Columns view'}).click();await expect(workspace).toHaveAttribute('data-presentation','edge-to-edge');expect(await workspace.evaluate(node=>({paddingTop:getComputedStyle(node).paddingTop,boardTop:node.querySelector('.ticket-board')!.getBoundingClientRect().top-node.getBoundingClientRect().top}))).toEqual({paddingTop:'0px',boardTop:0});await page.screenshot({path:'/private/tmp/hs2-f943hj-owned-spacing-wide.png',fullPage:true});
-  await shell.getByRole('button',{name:'Settings view'}).click();await expect(workArea).toHaveAttribute('data-has-composer','false');await expect(workspace).toHaveCSS('padding-top','16px');await shell.getByRole('button',{name:'List view'}).click();await expect(workArea).toHaveAttribute('data-has-composer','true');
-  await page.setViewportSize({width:1024,height:600});await page.locator('.demo-master,.demo-detail__header,.demo-detail__footer').evaluateAll(nodes=>{nodes.forEach(node=>{(node as HTMLElement).style.display='none'})});await page.locator('.demo-shell').evaluate(node=>{(node as HTMLElement).style.gridTemplateColumns='1fr'});await page.locator('.demo-detail,.component-stage').evaluateAll(nodes=>{nodes.forEach(node=>{(node as HTMLElement).style.padding='0';(node as HTMLElement).style.border='0'})});await expect(composer).toHaveCSS('padding-bottom','12px');await expect(workspace).toHaveCSS('padding-top','0px');await page.screenshot({path:'/private/tmp/hs2-f943hj-owned-spacing-narrow.png',fullPage:true});
+test('keeps workspace spacing and the new-ticket action in the page header',async({page})=>{
+  await page.setViewportSize({width:1728,height:971});await page.goto('/ux-demo?component=app-shell');const shell=page.locator('[data-component="app-shell"]'),workArea=shell.locator('.app-shell__work-area'),workspace=shell.locator('.app-shell__workspace'),header=shell.locator('[data-component="page-header"]');await expect(workArea).toHaveAttribute('data-has-composer','false');
+  expect(await shell.evaluate(node=>{const workspace=node.querySelector<HTMLElement>('.app-shell__workspace')!,header=node.querySelector<HTMLElement>('[data-component="page-header"]')!,title=header.querySelector('h1')!,launcher=header.querySelector<HTMLElement>('[data-component="quick-ticket-composer-launcher"]')!,tabs=node.querySelector<HTMLElement>('.ticket-inspector__tabs')!,content=node.querySelector<HTMLElement>('.ticket-inspector__content')!;return{workspacePaddingTop:getComputedStyle(workspace).paddingTop,titleCenter:title.getBoundingClientRect().y+title.getBoundingClientRect().height/2,launcherCenter:launcher.getBoundingClientRect().y+launcher.getBoundingClientRect().height/2,tabsMarginBottom:getComputedStyle(tabs).marginBottom,contentPaddingTop:getComputedStyle(content).paddingTop,tabsToContent:content.getBoundingClientRect().top-tabs.getBoundingClientRect().bottom}})).toEqual({workspacePaddingTop:'16px',titleCenter:expect.any(Number),launcherCenter:expect.any(Number),tabsMarginBottom:'16px',contentPaddingTop:'0px',tabsToContent:16});
+  const centers=await header.evaluate(node=>{const title=node.querySelector('h1')!.getBoundingClientRect(),button=node.querySelector('button')!.getBoundingClientRect();return Math.abs(title.y+title.height/2-(button.y+button.height/2))});expect(centers).toBeLessThan(1);
+  await shell.getByRole('button',{name:'Columns view'}).click();await expect(workspace).toHaveAttribute('data-presentation','edge-to-edge');expect(await workspace.evaluate(node=>({paddingTop:getComputedStyle(node).paddingTop,boardTop:node.querySelector('.ticket-board')!.getBoundingClientRect().top-node.getBoundingClientRect().top}))).toEqual({paddingTop:'16px',boardTop:16});await page.screenshot({path:'/private/tmp/hs2-f943hj-owned-spacing-wide.png',fullPage:true});
+  await shell.getByRole('button',{name:'Settings view'}).click();await expect(header.getByRole('button',{name:/New ticket/})).toHaveCount(0);await expect(workspace).toHaveCSS('padding-top','16px');await shell.getByRole('button',{name:'List view'}).click();await expect(header.getByRole('button',{name:/New ticket/})).toHaveCount(1);
+  await page.setViewportSize({width:1024,height:600});await page.locator('.demo-master,.demo-detail__header,.demo-detail__footer').evaluateAll(nodes=>{nodes.forEach(node=>{(node as HTMLElement).style.display='none'})});await page.locator('.demo-shell').evaluate(node=>{(node as HTMLElement).style.gridTemplateColumns='1fr'});await page.locator('.demo-detail,.component-stage').evaluateAll(nodes=>{nodes.forEach(node=>{(node as HTMLElement).style.padding='0';(node as HTMLElement).style.border='0'})});await expect(workspace).toHaveCSS('padding-top','16px');await page.screenshot({path:'/private/tmp/hs2-f943hj-owned-spacing-narrow.png',fullPage:true});
 });
 
 test('composes and operates the complete ProjectSidebar demo', async ({ page }) => {
@@ -1405,7 +1406,7 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const shellHierarchy = await shell.evaluate(node => {
     const shellRect = node.getBoundingClientRect();
     const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
@@ -1434,9 +1435,8 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(shell.locator('.project-tab-bar')).toHaveCSS('border-bottom-width', '0px');
   await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  const shellComposer = shell.locator('.app-shell__composer');
-  expect((await shellComposer.boundingBox())!.y).toBeLessThan((await shell.locator('.app-shell__workspace').boundingBox())!.y);
-  await shellComposer.getByRole('button', { name: /New ticket/ }).click();
+  await shell.getByRole('button', { name: /New ticket/ }).click();
+  const shellComposer=page.getByRole('dialog',{name:'Create ticket'});
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
   const composerControlHeights = await shellComposer.evaluate(node => {
     const input = node.querySelector('wa-input')!.shadowRoot!.querySelector<HTMLElement>('[part~="base"]')!.getBoundingClientRect();
@@ -1445,7 +1445,7 @@ test('exercises the application-shell component slice and responsive composition
   });
   expect(composerControlHeights.input).toBeCloseTo(composerControlHeights.select, 0);
   await shellComposer.getByRole('button', { name: 'Cancel' }).click();
-  await shellComposer.getByRole('button', { name: /New ticket/ }).click();
+  await shell.getByRole('button', { name: /New ticket/ }).click();
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
   await shellComposer.getByRole('button', { name: 'Cancel' }).click();
   const inspectorToolbarAlignment = await shell.locator('.ticket-inspector__header > [data-component="toolbar"]').evaluate(node => {
@@ -1573,7 +1573,7 @@ test('exercises the application-shell component slice and responsive composition
   }
   await shell.getByRole('button', { name: 'List view' }).click();
   await expect(shell.locator('[data-component="ticket-list"]')).toBeVisible();
-  await expect(shell.locator('[data-component="quick-ticket-composer"]')).toBeVisible();
+  await expect(shell.locator('[data-component="quick-ticket-composer-launcher"]')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await shell.getByRole('button', { name: 'Search tickets' }).click();
   const shellSearch = shell.getByRole('textbox', { name: 'Search tickets' });

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { QuickTicketComposer } from './quick-ticket-composer';
+import { QuickTicketComposer,QuickTicketLauncher } from './quick-ticket-composer';
 
 describe('QuickTicketComposer', () => {
   it('gives the title the available width while keeping category compact', () => {
@@ -11,13 +11,16 @@ describe('QuickTicketComposer', () => {
     expect(css).toMatch(/@media \(max-width: 38rem\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
   });
   it('has distinct collapsed, editable, and provider-disabled presentations', () => {
-    const collapsed = String(QuickTicketComposer({}));
+    const collapsed = String(QuickTicketLauncher());
     expect(collapsed).toContain('data-ticket-drop-action="duplicate"');
     expect(collapsed).toContain('data-action="expand-ticket-composer"');
+    expect(collapsed).toContain('data-component="quick-ticket-composer-launcher"');
     expect(collapsed).toContain('data-new-ticket-drop-target="true"');
-    expect(collapsed).toContain('drop attachment files here');
     const expanded = String(QuickTicketComposer({ expanded: true, title: 'New work', details: 'Why this matters', category: 'bug', upNext: true, attachments: [{ id: 'proof', name: 'proof.png' }] }));
     expect(expanded).toContain('data-ticket-drop-action="duplicate"');
+    expect(expanded).toContain('role="dialog"');
+    expect(expanded).toContain('aria-modal="true"');
+    expect(expanded).toContain('>Create ticket</h2>');
     expect(expanded).toContain('data-action="create-ticket-form"');
     expect(expanded).toContain('value="New work"');
     expect(expanded).toContain('data-lucide="bug"');
@@ -40,7 +43,7 @@ describe('QuickTicketComposer', () => {
   it('keeps one-line details vertically resizable and places Up Next after category',()=>{
     const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8'),markup=String(QuickTicketComposer({expanded:true}));
     expect(markup).toMatch(/new-ticket-category[\s\S]*toggle-new-ticket-up-next[\s\S]*new-ticket-details/);
-    expect(css).toMatch(/__details textarea \{[^}]*min-height: 2\.5rem;[^}]*resize: vertical/);
+    expect(css).toMatch(/__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, 2\.5rem\);[^}]*resize: vertical/);
   });
 
   it('shows creation progress and attachment errors accessibly', () => {
