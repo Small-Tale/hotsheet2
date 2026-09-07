@@ -106,6 +106,7 @@ describe('content components', () => {
     expect(markup).toContain('<span>1</span>');
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('data-presentation="reader"');
+    expect(markup).toContain('data-large-text="false"');
     expect(markup).toContain('data-inspector-tab="attachments"');
     const readerCss = readFileSync(resolve(import.meta.dirname, 'ticket-reader.css'), 'utf8');
     expect(readerCss).toMatch(/\.ticket-reader \{[^}]*height: calc\(100vh - 3rem\);/);

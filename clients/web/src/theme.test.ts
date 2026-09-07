@@ -36,7 +36,7 @@ describe('shared client theme', () => {
     const allCss = [themePath, ...clientCss].map(css).join('\n');
     const definitions = [...allCss.matchAll(/(--hs-[\w-]+)\s*:/g)].map(match => match[1]);
     const references = [...allCss.matchAll(/var\((--hs-[\w-]+)\)/g)].map(match => match[1]);
-    const required = ['--hs-shell-divider', '--hs-terminal-background', '--hs-ticket-state-needs-review', '--hs-ticket-state-up-next'];
+    const required = ['--hs-shell-divider', '--hs-terminal-background', '--hs-ticket-state-needs-review', '--hs-ticket-state-up-next', '--hs-reader-font-size-xs', '--hs-reader-font-size-s', '--hs-reader-font-size-m', '--hs-reader-font-size-l'];
 
     expect(new Set(definitions)).toEqual(new Set(required));
     expect(definitions).toHaveLength(required.length);
@@ -87,7 +87,8 @@ describe('shared client theme', () => {
 
   it('uses the Web Awesome typography scale instead of one-off font sizes', () => {
     const typeToken = 'var\\(--wa-font-size-(?:3xs|2xs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|smaller|larger)\\)';
-    const allowedSize = new RegExp(`^(?:${typeToken}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`);
+    const semanticTypeToken = 'var\\(--hs-reader-font-size-(?:xs|s|m|l)\\)';
+    const allowedSize = new RegExp(`^(?:${typeToken}|${semanticTypeToken}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`);
     for (const path of clientCss) {
       const source = css(path);
       for (const match of source.matchAll(/font-size:\s*([^;}]+)/g)) {
@@ -100,5 +101,6 @@ describe('shared client theme', () => {
     }
     expect(css(resolve(sourceRoot, 'components/workspace-header.css')))
       .toMatch(/view-mode-switcher__badge[^}]*font-size: var\(--wa-font-size-3xs\)/);
+    expect(css(themePath)).toContain('--hs-reader-font-size-s: calc(var(--wa-font-size-s) + var(--wa-font-size-s))');
   });
 });
