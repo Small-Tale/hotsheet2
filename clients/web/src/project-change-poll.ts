@@ -8,6 +8,7 @@ const TICKET_CHANGE_KINDS = new Set([
 export interface ProjectChangePollOptions {
   client: Pick<Api, 'pollEvents'>;
   refresh(): Promise<void>;
+  beforeRefresh?(): Promise<void>;
   onEvents?(response: PollResponse): Promise<void>;
   onError?(reason: unknown): void;
   retryMs?: number;
@@ -40,7 +41,7 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
       try {
         response = await options.client.pollEvents(cursor, controller.signal);
       } catch (reason) {
-        if (controller.signal.aborted) return;
+        if (wasAborted(controller.signal)) return;
         options.onError?.(reason);
         // A failure is not itself a ticket invalidation. In particular, an older
         // server may not implement polling at all. Remember the outage and
@@ -60,7 +61,11 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
       if (!handshake && response.events.length && options.onEvents) await options.onEvents(response).catch((reason: unknown) => { options.onError?.(reason); });
       const reconcile = (handshake && reconnecting) || (!handshake && containsTicketChange(response));
       reconnecting = false;
-      if (reconcile) await options.refresh().catch((reason: unknown) => { options.onError?.(reason); });
+      if (reconcile) {
+        await options.beforeRefresh?.().catch((reason: unknown) => { options.onError?.(reason); });
+        if (wasAborted(controller.signal)) return;
+        await options.refresh().catch((reason: unknown) => { options.onError?.(reason); });
+      }
     }
   })();
   return () => { controller.abort(); };

@@ -955,6 +955,9 @@ Ticket creation follows the same immediate-authority rule: as soon as the create
 response returns, the new ticket is inserted, selected, and opened for Details editing.
 Attachment uploads continue afterward and update the selected ticket in place. Creation
 does not block presentation on a collection, selected-ticket, or repository refresh.
+A long-poll event caused by that same creation waits behind the local projection and its
+ticket motion before performing one authoritative reconciliation, so it cannot replace
+the collection while existing rows make room or while the new row fades in.
 
 CI protects the deterministic contract (one PATCH and no follow-up collection/status
 GET) and the projection/reconciliation logic. `npm run test:performance` is the stricter

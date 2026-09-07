@@ -9,6 +9,18 @@ export interface TicketMotionSnapshot {scope:string;rows:Map<string,TicketMotion
 
 const LAYOUT_DURATION=240,FADE_DURATION=160,MOTION_EASING='cubic-bezier(.2,.8,.2,1)';
 const activeLayoutAnimations=new WeakMap<HTMLElement,Animation>();
+const activeTicketAnimations=new Set<Animation>();
+
+function trackTicketAnimation(animation:Animation){
+  activeTicketAnimations.add(animation);
+  void animation.finished.catch(()=>undefined).finally(()=>{activeTicketAnimations.delete(animation)});
+  return animation;
+}
+
+/** Resolves after every ticket animation that is currently running has settled. */
+export async function waitForTicketMotionSettled(){
+  while(activeTicketAnimations.size)await Promise.all([...activeTicketAnimations].map(animation=>animation.finished.catch(()=>undefined)));
+}
 
 function motionScope(root:ParentNode){const workspace=root.querySelector<HTMLElement>('.app-shell__workspace'),collection=workspace?.querySelector<HTMLElement>('[data-component="ticket-list"], [data-component="ticket-board"]');return`${workspace?.dataset.presentation??''}:${collection?.dataset.component??''}`}
 function motionContainers(root:ParentNode){return [...root.querySelectorAll<HTMLElement>('[data-component="ticket-list-row-container"]')].filter(container=>Boolean(ticketVisual(container)?.dataset.ticketSlug))}
@@ -56,7 +68,7 @@ export function animateTicketMotion(before:TicketMotionSnapshot,root:ParentNode,
 
 function animateLayout(container:HTMLElement,y:number,delay:number){
   activeLayoutAnimations.get(container)?.cancel();
-  const animation=container.animate([{transform:`translate(0px, ${y}px)`},{transform:'translate(0, 0)'}],{delay,duration:LAYOUT_DURATION,easing:MOTION_EASING,fill:'backwards'});
+  const animation=trackTicketAnimation(container.animate([{transform:`translate(0px, ${y}px)`},{transform:'translate(0, 0)'}],{delay,duration:LAYOUT_DURATION,easing:MOTION_EASING,fill:'backwards'}));
   activeLayoutAnimations.set(container,animation);
   animation.finished.finally(()=>{if(activeLayoutAnimations.get(container)===animation)activeLayoutAnimations.delete(container)}).catch(()=>undefined);
 }
@@ -65,7 +77,7 @@ function fadeRemovedTicket(slug:string,previous:TicketMotionRow){
   if(hasGhost(previous.container.ownerDocument,'outgoing',slug))return;
   const ghost=previous.container.cloneNode(true) as HTMLElement;
   prepareGhost(ghost,slug,'outgoing',previous.rect,previous.borderRadius);appendGhost(previous.container.ownerDocument,ghost);
-  removeAfter(ghost.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.985)'}],{duration:FADE_DURATION,easing:'ease-in'}),ghost);
+  removeAfter(trackTicketAnimation(ghost.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.985)'}],{duration:FADE_DURATION,easing:'ease-in'})),ghost);
 }
 
 function animateMovedTicket(current:TicketMotionRow,x:number,y:number){
@@ -73,7 +85,7 @@ function animateMovedTicket(current:TicketMotionRow,x:number,y:number){
   if(hasGhost(current.container.ownerDocument,'move',slug))return;
   const ghost=current.container.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(current.container,slug);
   prepareGhost(ghost,slug,'move',current.rect,current.borderRadius);appendGhost(current.container.ownerDocument,ghost);
-  const animation=ghost.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:'1300'},{transform:'translate(0, 0)',zIndex:'1300'}],{duration:LAYOUT_DURATION,easing:MOTION_EASING});
+  const animation=trackTicketAnimation(ghost.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:'1300'},{transform:'translate(0, 0)',zIndex:'1300'}],{duration:LAYOUT_DURATION,easing:MOTION_EASING}));
   animation.finished.finally(()=>{ghost.remove();hideRule.remove();current.container.style.visibility=visibility}).catch(()=>{ghost.remove();hideRule.remove();current.container.style.visibility=visibility});
 }
 
@@ -82,7 +94,7 @@ function fadeIncomingTicket(slug:string,row:TicketMotionRow,delay:number){
   const ghost=row.container.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(row.container,slug);
   prepareGhost(ghost,slug,'incoming',row.rect,row.borderRadius);appendGhost(row.container.ownerDocument,ghost);
   const stopTracking=trackTicketPosition(row.container.ownerDocument,ghost,slug);
-  const animation=ghost.animate([{opacity:0},{opacity:1}],{delay,duration:FADE_DURATION,easing:'ease-out',fill:'backwards'});
+  const animation=trackTicketAnimation(ghost.animate([{opacity:0},{opacity:1}],{delay,duration:FADE_DURATION,easing:'ease-out',fill:'backwards'}));
   animation.finished.finally(()=>{stopTracking();ghost.remove();hideRule.remove();row.container.style.visibility=visibility}).catch(()=>{stopTracking();ghost.remove();hideRule.remove();row.container.style.visibility=visibility});
 }
 

@@ -87,6 +87,25 @@ describe('project change long polling', () => {
     pending.resolve(response(3));
   });
 
+  it('holds an authoritative refresh behind an in-flight local projection', async () => {
+    const pendingPoll = deferred<PollResponse>();
+    const projection = deferred<undefined>();
+    const pollEvents = vi.fn()
+      .mockResolvedValueOnce(response(8))
+      .mockResolvedValueOnce(response(9, 'created'))
+      .mockReturnValueOnce(pendingPoll.promise);
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const beforeRefresh = vi.fn(() => projection.promise);
+    const stop = startProjectChangePoll({ client: { pollEvents }, refresh, beforeRefresh });
+    await vi.waitFor(() => { expect(beforeRefresh).toHaveBeenCalledTimes(1); });
+    expect(refresh).not.toHaveBeenCalled();
+    projection.resolve(undefined);
+    await vi.waitFor(() => { expect(refresh).toHaveBeenCalledTimes(1); });
+    expect(pollEvents).toHaveBeenCalledTimes(3);
+    stop();
+    pendingPoll.resolve(response(9));
+  });
+
   it('does not reconcile repeatedly while a polling outage continues', async () => {
     const pending = deferred<PollResponse>();
     const pollEvents = vi.fn()
