@@ -70,6 +70,21 @@ describe('shared client theme', () => {
       .toBe(themeLiterals.length);
   });
 
+  it('maps common control and state semantics to the macOS Tahoe system palette', () => {
+    const source = css(themePath);
+    for (const declaration of [
+      '--wa-color-brand-fill-loud: #0088ff',
+      '--wa-color-danger-fill-loud: #ff383c',
+      '--wa-color-warning-fill-loud: #ffcc00',
+      '--wa-color-success-fill-loud: #34c759',
+      '--wa-color-system-orange: #ff8d28',
+      '--wa-color-system-gray: #8e8e93',
+      '--hs-ticket-state-needs-review: #cb30e0',
+    ]) expect(source).toContain(declaration);
+    expect(source).toContain('--wa-color-focus: var(--wa-color-brand-fill-loud)');
+    expect(source).toContain('--hs-shell-divider: var(--wa-color-neutral-border-normal)');
+  });
+
   it('uses the Web Awesome typography scale instead of one-off font sizes', () => {
     const typeToken = 'var\\(--wa-font-size-(?:3xs|2xs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|smaller|larger)\\)';
     const allowedSize = new RegExp(`^(?:${typeToken}|clamp\\(${typeToken}, \\d*\\.?\\d+vw, ${typeToken}\\))$`);

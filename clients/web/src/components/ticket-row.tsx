@@ -37,10 +37,10 @@ export interface TicketRowProps {
 export type TicketRowIndicator = 'needs-review' | 'blocked' | 'up-next' | undefined;
 
 const priorityPresentation: Record<TicketPriority, { icon: IconNode; name: string; color: string }> = {
-  urgent: { icon: ChevronsUp, name: 'chevrons-up', color: '#ef4444' },
-  high: { icon: ChevronUp, name: 'chevron-up', color: '#f97316' },
-  default: { icon: Minus, name: 'minus', color: '#6b7280' },
-  low: { icon: ChevronDown, name: 'chevron-down', color: '#3b82f6' },
+  urgent: { icon: ChevronsUp, name: 'chevrons-up', color: 'var(--wa-color-danger-fill-loud)' },
+  high: { icon: ChevronUp, name: 'chevron-up', color: 'var(--wa-color-system-orange)' },
+  default: { icon: Minus, name: 'minus', color: 'var(--wa-color-system-gray)' },
+  low: { icon: ChevronDown, name: 'chevron-down', color: 'var(--wa-color-brand-fill-loud)' },
 };
 
 export function getPriorityPresentation(priority: TicketPriority) {

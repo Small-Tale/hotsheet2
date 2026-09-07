@@ -4,10 +4,10 @@ import { Select } from './select';
 import type { TicketPriority } from './ticket-row';
 
 const PRIORITIES: readonly { value: TicketPriority; label: string; color: string; icon: IconNode; iconName: string }[] = [
-  { value: 'urgent', label: 'Urgent', color: '#ef4444', icon: ChevronsUp, iconName: 'chevrons-up' },
-  { value: 'high', label: 'High', color: '#f97316', icon: ChevronUp, iconName: 'chevron-up' },
-  { value: 'default', label: 'Default', color: '#6b7280', icon: Minus, iconName: 'minus' },
-  { value: 'low', label: 'Low', color: '#3b82f6', icon: ChevronDown, iconName: 'chevron-down' },
+  { value: 'urgent', label: 'Urgent', color: 'var(--wa-color-danger-fill-loud)', icon: ChevronsUp, iconName: 'chevrons-up' },
+  { value: 'high', label: 'High', color: 'var(--wa-color-system-orange)', icon: ChevronUp, iconName: 'chevron-up' },
+  { value: 'default', label: 'Default', color: 'var(--wa-color-system-gray)', icon: Minus, iconName: 'minus' },
+  { value: 'low', label: 'Low', color: 'var(--wa-color-brand-fill-loud)', icon: ChevronDown, iconName: 'chevron-down' },
 ];
 export interface TicketPrioritySelectProps { name: string; value: TicketPriority; label?: string }
 export function TicketPrioritySelect({ name, value, label = 'Priority' }: TicketPrioritySelectProps) {

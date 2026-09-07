@@ -5,57 +5,63 @@
  * aliases limited to Hot Sheet domain concepts that Web Awesome cannot name.
  */
 :root {
-  /* Hot Sheet's existing light palette, expressed through Web Awesome semantics. */
+  /*
+   * macOS Tahoe light-appearance semantics, expressed through Web Awesome.
+   * Browsers cannot resolve AppKit's dynamic NSColor values, so keep the
+   * documented system hues at this boundary and derive contextual variants.
+   */
   --wa-color-surface-default: #fff;
   --wa-color-surface-raised: var(--wa-color-surface-default);
-  --wa-color-surface-lowered: #f8f9fb;
+  --wa-color-surface-lowered: #f2f2f7;
   --wa-color-surface-border: var(--wa-color-neutral-border-normal);
-  --wa-color-text-normal: #25262b;
-  --wa-color-text-quiet: #656873;
+  --wa-color-text-normal: #1d1d1f;
+  --wa-color-text-quiet: #6e6e73;
   --wa-color-text-link: var(--wa-color-brand-fill-loud);
-  --wa-color-overlay-modal: rgba(32, 35, 42, .34);
-  --wa-color-focus: #3b82f6;
-  --wa-color-brand-fill-quiet: #eff6ff;
-  --wa-color-brand-fill-normal: #dbeafe;
-  --wa-color-brand-fill-loud: #2563eb;
-  --wa-color-brand-border-quiet: #93b4f5;
-  --wa-color-brand-border-normal: #60a5fa;
+  --wa-color-overlay-modal: rgba(29, 29, 31, .34);
+  --wa-color-focus: var(--wa-color-brand-fill-loud);
+  --wa-color-brand-fill-quiet: color-mix(in srgb, var(--wa-color-brand-fill-loud) 8%, var(--wa-color-surface-default));
+  --wa-color-brand-fill-normal: color-mix(in srgb, var(--wa-color-brand-fill-loud) 16%, var(--wa-color-surface-default));
+  --wa-color-brand-fill-loud: #0088ff;
+  --wa-color-brand-border-quiet: color-mix(in srgb, var(--wa-color-brand-fill-loud) 35%, var(--wa-color-surface-default));
+  --wa-color-brand-border-normal: color-mix(in srgb, var(--wa-color-brand-fill-loud) 58%, var(--wa-color-surface-default));
   --wa-color-brand-border-loud: var(--wa-color-brand-fill-loud);
-  --wa-color-brand-on-quiet: #1d4ed8;
-  --wa-color-neutral-fill-quiet: #f1f3f6;
-  --wa-color-neutral-fill-normal: #eceef2;
-  --wa-color-neutral-fill-loud: #374151;
-  --wa-color-neutral-border-quiet: #e8ebf0;
-  --wa-color-neutral-border-normal: #d7dae1;
-  --wa-color-neutral-border-loud: #b9c0cc;
+  --wa-color-brand-on-quiet: #1e6ef4;
+  --wa-color-system-orange: #ff8d28;
+  --wa-color-system-gray: #8e8e93;
+  --wa-color-neutral-fill-quiet: var(--wa-color-surface-lowered);
+  --wa-color-neutral-fill-normal: #e5e5ea;
+  --wa-color-neutral-fill-loud: #48484a;
+  --wa-color-neutral-border-quiet: var(--wa-color-neutral-fill-normal);
+  --wa-color-neutral-border-normal: #d1d1d6;
+  --wa-color-neutral-border-loud: #aeaeb2;
   --wa-color-neutral-on-quiet: var(--wa-color-text-quiet);
   --wa-color-neutral-on-normal: var(--wa-color-text-normal);
   --wa-color-neutral-on-loud: var(--wa-color-surface-default);
-  --wa-color-warning-fill-quiet: #fff9e8;
-  --wa-color-warning-fill-normal: #fff0c9;
-  --wa-color-warning-fill-loud: #eab308;
-  --wa-color-warning-border-normal: #f0c86a;
-  --wa-color-warning-on-quiet: #8a5a08;
-  --wa-color-warning-on-normal: #392900;
-  --wa-color-danger-fill-quiet: #fff7f6;
-  --wa-color-danger-fill-normal: #fff0ee;
-  --wa-color-danger-fill-loud: #b42318;
-  --wa-color-danger-border-quiet: #efb6b2;
-  --wa-color-danger-border-normal: #d99994;
-  --wa-color-danger-border-loud: #b94b44;
-  --wa-color-danger-on-quiet: var(--wa-color-danger-fill-loud);
-  --wa-color-danger-on-normal: #76231e;
-  --wa-color-success-fill-quiet: #dff4e8;
-  --wa-color-success-fill-normal: #22c55e;
-  --wa-color-success-fill-loud: #16a05d;
-  --wa-color-success-on-quiet: #17623c;
+  --wa-color-warning-fill-quiet: color-mix(in srgb, var(--wa-color-warning-fill-loud) 9%, var(--wa-color-surface-default));
+  --wa-color-warning-fill-normal: color-mix(in srgb, var(--wa-color-warning-fill-loud) 22%, var(--wa-color-surface-default));
+  --wa-color-warning-fill-loud: #ffcc00;
+  --wa-color-warning-border-normal: color-mix(in srgb, var(--wa-color-warning-fill-loud) 58%, var(--wa-color-neutral-on-normal));
+  --wa-color-warning-on-quiet: #a16a00;
+  --wa-color-warning-on-normal: #5f3f00;
+  --wa-color-danger-fill-quiet: color-mix(in srgb, var(--wa-color-danger-fill-loud) 7%, var(--wa-color-surface-default));
+  --wa-color-danger-fill-normal: color-mix(in srgb, var(--wa-color-danger-fill-loud) 14%, var(--wa-color-surface-default));
+  --wa-color-danger-fill-loud: #ff383c;
+  --wa-color-danger-border-quiet: color-mix(in srgb, var(--wa-color-danger-fill-loud) 32%, var(--wa-color-surface-default));
+  --wa-color-danger-border-normal: color-mix(in srgb, var(--wa-color-danger-fill-loud) 50%, var(--wa-color-surface-default));
+  --wa-color-danger-border-loud: color-mix(in srgb, var(--wa-color-danger-fill-loud) 78%, var(--wa-color-neutral-on-normal));
+  --wa-color-danger-on-quiet: #c20b20;
+  --wa-color-danger-on-normal: #8e0717;
+  --wa-color-success-fill-quiet: color-mix(in srgb, var(--wa-color-success-fill-loud) 14%, var(--wa-color-surface-default));
+  --wa-color-success-fill-normal: color-mix(in srgb, var(--wa-color-success-fill-loud) 72%, var(--wa-color-surface-default));
+  --wa-color-success-fill-loud: #34c759;
+  --wa-color-success-on-quiet: #008932;
   --wa-border-radius-pill: 999px;
-  --wa-shadow-s: 0 1px 3px rgba(35, 32, 48, .14);
-  --wa-shadow-l: 0 .75rem 2rem rgba(35, 32, 48, .09);
+  --wa-shadow-s: 0 1px 3px rgba(0, 0, 0, .14);
+  --wa-shadow-l: 0 .75rem 2rem rgba(0, 0, 0, .09);
 
   /* Hot Sheet domain states have no generic Web Awesome equivalent. */
-  --hs-shell-divider: #cfd3dc;
-  --hs-ticket-state-needs-review: #8b5cf6;
+  --hs-shell-divider: var(--wa-color-neutral-border-normal);
+  --hs-ticket-state-needs-review: #cb30e0;
   --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
   --hs-terminal-background: #000;
 }

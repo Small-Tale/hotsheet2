@@ -12,9 +12,9 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await page.getByRole('button', { name: 'Dev Review On' }).click();
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   const catalog = page.getByRole('navigation');
-  await expect(catalog.locator('[data-item-id="global-search"]')).toHaveCSS('color', 'rgb(185, 192, 204)');
-  await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(185, 192, 204)');
-  await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(185, 192, 204)');
+  await expect(catalog.locator('[data-item-id="global-search"]')).toHaveCSS('color', 'rgb(174, 174, 178)');
+  await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
+  await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-component="menu-header"]')).not.toHaveCount(0);
   await expect(catalog.locator('[data-component="menu-item"]')).not.toHaveCount(0);
   const firstCatalogList = catalog.locator('.catalog-group ul').first();
@@ -135,7 +135,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
     border: getComputedStyle(node).borderColor,
     divider: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),
     surface: getComputedStyle(node).backgroundColor,
-  }))).toEqual({ border: 'rgb(207, 211, 220)', divider: '#cfd3dc', surface: 'rgb(255, 255, 255)' });
+  }))).toEqual({ border: 'rgb(209, 209, 214)', divider: '#d1d1d6', surface: 'rgb(255, 255, 255)' });
   await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
   await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
@@ -148,7 +148,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
     if (!(image as HTMLImageElement).complete) await new Promise(resolve => { image.addEventListener('load', resolve, { once: true }); });
     const canvas = document.createElement('canvas'); canvas.width = (image as HTMLImageElement).naturalWidth; canvas.height = (image as HTMLImageElement).naturalHeight; const context = canvas.getContext('2d')!; context.drawImage(image as HTMLImageElement, 0, 0); const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data; let green = 0; for (let index = 0; index < pixels.length; index += 4) if (pixels[index] === 12 && pixels[index + 1] === 200 && pixels[index + 2] === 34) green += 1; return { center: [...context.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data], green, width: canvas.width, height: canvas.height };
   });
-  expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([219, 234, 254]);
+  expect(capturedPixels.center.slice(0, 3), JSON.stringify(capturedPixels)).toEqual([214, 236, 255]);
   await dialog.getByRole('button', { name: 'Review captured region 2' }).click();
   await expect(dialog.getByRole('img', { name: 'Captured region 2 preview' })).toBeVisible();
   const attachmentInput = dialog.getByLabel('Add attachments');
@@ -296,7 +296,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');
   // Rows use the colored (filled) status variant like the inspector (HS2-Y3H2Z5).
   await expect(row.locator('[data-component="status-badge"]')).toHaveAttribute('data-appearance', 'filled');
-  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'rgb(219, 234, 254)');
+  await expect(row.locator('[data-component="status-badge"]')).toHaveCSS('background-color', 'color(srgb 0.84 0.925333 1)');
   await expect(row.locator('[data-lucide="bug"]')).toHaveCount(1);
   await expect(row.locator('.ticket-list-row__category')).toHaveCSS('color', 'rgb(239, 68, 68)');
   await categoryColor.evaluate((node: HTMLElement & { value: string }) => { node.value = '#e5e7eb'; node.dispatchEvent(new Event('change', { bubbles: true })); });
@@ -312,7 +312,7 @@ test('round-trips every TicketRow setting and selection action', async ({ page }
   await expect(row).toContainText('Now');
   await expect(row).toHaveAttribute('data-selected', 'true');
   await expect(row.locator('[data-lucide="chevrons-up"]')).toHaveCount(1);
-  await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(239, 68, 68)');
+  await expect(row.locator('.ticket-list-row__priority')).toHaveCSS('color', 'rgb(255, 56, 60)');
   await expect(row.locator('.ticket-list-row__indicator')).toHaveClass(/needs-review/);
   await row.click();
   await expect(selected).toHaveJSProperty('checked', false);
@@ -665,7 +665,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(notificationBadge).toHaveText('7');
   await expect(notificationBadge).toHaveCSS('font-size', '10px');
   await expect(notificationBadge).toHaveCSS('padding', '1px 5px');
-  await expect(notificationBadge).toHaveCSS('background-color', 'rgb(234, 179, 8)');
+  await expect(notificationBadge).toHaveCSS('background-color', 'rgb(255, 204, 0)');
   await notificationBadge.screenshot({ path: '/private/tmp/hs2-x9embf-notification-badge.png' });
   await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-wide.png', fullPage: true });
   await expect(header.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'true');
@@ -710,7 +710,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const sortSelect = header.locator('wa-select[name="workspace-sort"]');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently updated, descending');
   await expect(sortSelect.locator('.select__custom-selected [data-lucide="clock-arrow-down"]')).toBeVisible();
-  await expect(sortSelect.locator('.select__custom-selected')).toHaveCSS('color','rgb(37, 38, 43)');
+  await expect(sortSelect.locator('.select__custom-selected')).toHaveCSS('color','rgb(29, 29, 31)');
   const triggerGeometry=await sortSelect.evaluate(node=>{const root=node.shadowRoot!,combobox=root.querySelector<HTMLElement>('[part~="combobox"]')!,expand=root.querySelector<HTMLElement>('[part~="expand-icon"]')!,selected=node.querySelector<HTMLElement>('.select__custom-selected')!,outer=combobox.getBoundingClientRect(),icon=selected.getBoundingClientRect(),arrow=expand.getBoundingClientRect();return{width:outer.width,gap:arrow.left-icon.right,arrowOverflow:arrow.right-outer.right}});expect(triggerGeometry.width).toBeLessThanOrEqual(46);expect(triggerGeometry.gap).toBeLessThanOrEqual(8);expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
   await sortSelect.click();
   await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="arrow-down"]')).toBeVisible();
@@ -809,8 +809,8 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(category.locator('.select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
   const selectedOption = category.locator('wa-option[value="task"]');
-  await expect(selectedOption).toHaveCSS('background-color', 'rgb(219, 234, 254)');
-  await expect(selectedOption).toHaveCSS('color', 'rgb(29, 78, 216)');
+  await expect(selectedOption).toHaveCSS('background-color', 'color(srgb 0.84 0.925333 1)');
+  await expect(selectedOption).toHaveCSS('color', 'rgb(30, 110, 244)');
   await expect(selectedOption.locator('.select__icon')).toHaveCSS('color', 'rgb(20, 184, 166)');
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -1117,7 +1117,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summary.locator('[data-bar]')).toHaveCount(7);
   await expect(summary.locator('[data-zero="true"]')).toHaveCount(1);
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('height', '1px');
-  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(185, 192, 204)');
+  await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(174, 174, 178)');
 
   await page.goto('/ux-demo?component=repository-summary');
   const repository = page.getByRole('button', { name: 'Repository status for feature/client-sidebar' });
@@ -1545,7 +1545,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'false');
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('border-right-width', '1px');
   const sidebarSeparator = await shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]').evaluate(node => ({ width: getComputedStyle(node, '::after').width, background: getComputedStyle(node, '::after').backgroundColor }));
-  expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(207, 211, 220)' });
+  expect(sidebarSeparator).toEqual({ width: '1px', background: 'rgb(209, 209, 214)' });
   await shell.getByRole('button', { name: 'Columns view' }).click();
   const shellWorkspace = shell.locator('.app-shell__workspace');
   await expect(shellWorkspace).toHaveAttribute('data-presentation', 'edge-to-edge');
@@ -1616,7 +1616,7 @@ test('projects the feedback-needed indicator through list and board compositions
   await expect(listFeedback).toContainText('Needs review');
   await expect(listFeedback.locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   const listRow = page.getByRole('listbox', { name: 'Example ticket list' }).locator('[data-ticket-slug="HS2-R76MMW"]');
-  await expect(listRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(139, 92, 246)');
+  await expect(listRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(203, 48, 224)');
   // A ticket without a feedback_needed note shows no indicator.
   await expect(page.getByRole('listbox', { name: 'Example ticket list' })
     .locator('[data-ticket-slug="HS2-RPVFA4"] .ticket-list-row__feedback')).toHaveCount(0);
@@ -1624,7 +1624,7 @@ test('projects the feedback-needed indicator through list and board compositions
   await page.goto('/ux-demo?component=ticket-board');
   const columnRow = page.getByRole('listbox', { name: 'Example status board' }).locator('[data-ticket-slug="HS2-R76MMW"]');
   await expect(columnRow.locator('.ticket-list-row__feedback')).toContainText('Needs review');
-  await expect(columnRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(139, 92, 246)');
+  await expect(columnRow.locator('.ticket-list-row__indicator--needs-review')).toHaveCSS('background-color', 'rgb(203, 48, 224)');
 
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');
@@ -1633,7 +1633,7 @@ test('projects the feedback-needed indicator through list and board compositions
   expect(await inspector.evaluate(node => {
     const rail = getComputedStyle(node, '::before');
     return { background: rail.backgroundColor, width: rail.width };
-  })).toEqual({ background: 'rgb(139, 92, 246)', width: '4px' });
+  })).toEqual({ background: 'rgb(203, 48, 224)', width: '4px' });
 });
 
 test('dims finished tickets in the list and gives the add-tag control full width', async ({ page }) => {
@@ -1685,7 +1685,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
       warningMatches: feedbackNode !== null && getComputedStyle(feedbackNode).backgroundColor === warning,
     };
   })).toEqual({
-    aliases: ['#cfd3dc', '#8b5cf6', '#eab308'],
+    aliases: ['#d1d1d6', '#cb30e0', '#ffcc00'],
     reviewMatches: true,
     surfaceMatches: true,
     warningMatches: true,
@@ -1706,7 +1706,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
   expect(await sidebarRegion.evaluate(node => ({
     divider: getComputedStyle(node, '::after').backgroundColor,
     token: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),
-  }))).toEqual({ divider: 'rgb(207, 211, 220)', token: '#cfd3dc' });
+  }))).toEqual({ divider: 'rgb(209, 209, 214)', token: '#d1d1d6' });
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-semantic-theme-wide.png', fullPage: true });
   await page.setViewportSize({ width: 940, height: 844 });
   await expect(sidebarRegion).toBeVisible();

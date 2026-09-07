@@ -52,7 +52,7 @@ describe('TicketRow', () => {
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(tokenCss).toContain('--hs-ticket-state-up-next: var(--wa-color-warning-fill-loud)');
-    expect(tokenCss).toContain('--hs-ticket-state-needs-review: #8b5cf6');
+    expect(tokenCss).toContain('--hs-ticket-state-needs-review: #cb30e0');
     expect(rowCss.match(/var\(--hs-ticket-state-up-next\)/g)).toHaveLength(4);
     expect(inspectorCss).toContain('color: var(--hs-ticket-state-up-next)');
   });
@@ -62,8 +62,8 @@ describe('TicketRow', () => {
       const presentation = getPriorityPresentation(priority);
       return [priority, [presentation.name, presentation.color]];
     }))).toEqual({
-      urgent: ['chevrons-up', '#ef4444'], high: ['chevron-up', '#f97316'],
-      default: ['minus', '#6b7280'], low: ['chevron-down', '#3b82f6'],
+      urgent: ['chevrons-up', 'var(--wa-color-danger-fill-loud)'], high: ['chevron-up', 'var(--wa-color-system-orange)'],
+      default: ['minus', 'var(--wa-color-system-gray)'], low: ['chevron-down', 'var(--wa-color-brand-fill-loud)'],
     });
   });
 
