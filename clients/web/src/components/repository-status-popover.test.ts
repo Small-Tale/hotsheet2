@@ -69,6 +69,11 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('aria-label="Compare two commits"');
     expect(markup).toContain('data-action="toggle-repository-comparison"');
     expect(markup).toMatch(/repository-status-popover__actions[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/);
+    expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(2);
+    const controlsCss=readFileSync(resolve(import.meta.dirname,'toolbar-control-group.css'),'utf8');
+    expect(controlsCss).toContain('--toolbar-control-icon-color: var(--wa-color-neutral-on-quiet)');
+    const popoverCss=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8');
+    expect(popoverCss).not.toMatch(/repository-status-popover__refresh[^}]*color:/);
   });
 
   it('keeps the comparison selector compact and separated from its open action',()=>{

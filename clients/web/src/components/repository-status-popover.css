@@ -8,10 +8,7 @@
 .repository-status-popover h2 { font-size: var(--wa-font-size-l); line-height: 1.2; }
 .repository-status-popover header p { margin-top: var(--wa-space-2xs); color: var(--wa-color-text-quiet); }
 .repository-status-popover__actions { display: flex; align-items: center; gap: var(--wa-space-xs); }
-.repository-status-popover__refresh { display: grid; width: 2.5rem; height: 2.5rem; padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-circle); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); cursor: pointer; place-items: center; }
-.repository-status-popover__refresh:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .repository-status-popover__refresh:disabled { opacity: .5; cursor: wait; }
-.repository-status-popover__refresh svg { width: 1.15rem; height: 1.15rem; }
 .repository-status-popover__layout { display: grid; min-width: 0; min-height: 0; height: calc(100% - 4.9rem); grid-template-columns: 27rem minmax(0,1fr); }
 .repository-status-popover__layout > aside { min-width: 0; padding: var(--wa-space-l); overflow: auto; border-right: 1px solid var(--wa-color-surface-border); }
 .repository-status-popover__values { display: grid; margin: 0 0 var(--wa-space-m); overflow: hidden; border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
