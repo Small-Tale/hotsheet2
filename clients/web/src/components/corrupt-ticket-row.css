@@ -1,4 +1,6 @@
 .corrupt-ticket-row { display: grid; grid-template-columns: 2rem minmax(0, 1fr); align-items: start; gap: var(--wa-space-s); padding: .65rem .85rem; }
+.corrupt-ticket-row.ticket-list-row--selected { animation:corrupt-ticket-selected-wiggle 150ms ease-out; }
+@keyframes corrupt-ticket-selected-wiggle { 0%,100% { transform:translateX(0); } 45% { transform:translateX(.35rem); } }
 .corrupt-ticket-row::before { position: absolute; inset: 0 auto 0 0; width: .25rem; background: var(--wa-color-danger-fill-loud); content: ''; }
 .corrupt-ticket-row__icon { width: 1.65rem; height: 1.65rem; color: var(--wa-color-danger-on-quiet); }
 .corrupt-ticket-row__content { display: grid; min-width: 0; gap: .18rem; }
@@ -15,6 +17,7 @@
 .corrupt-ticket-row__content .corrupt-ticket-row__recovery { color: var(--wa-color-success-on-quiet); }
 .corrupt-ticket-row__content .corrupt-ticket-row__recovery--failed { color: var(--wa-color-danger-on-quiet); }
 @media (max-width: 32rem) { .corrupt-ticket-row__actions button { flex: 1 1 10rem; justify-content: center; } }
+@media (prefers-reduced-motion: reduce) { .corrupt-ticket-row.ticket-list-row--selected { animation:none; } }
 .corrupt-ticket-inspector { display: flex; min-width: 0; height: 100%; flex-direction: column; color: var(--wa-color-danger-on-normal); background: var(--wa-color-surface-default); }
 .corrupt-ticket-inspector__header { display: grid; grid-template-columns: 1.35rem minmax(0,1fr) 2rem; align-items: start; gap: .65rem; padding: 1rem; border-bottom: 1px solid var(--wa-color-danger-border-quiet); background: var(--wa-color-danger-fill-quiet); }
 .corrupt-ticket-inspector__header > svg { width: 1.2rem; color: var(--wa-color-danger-on-quiet); }
