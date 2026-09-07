@@ -416,12 +416,26 @@ fn subject_mentions_ticket(subject: &str, ticket_slug: &str) -> bool {
 
 fn commit_mentions_ticket(commit: &CodeReviewCommit, ticket_slug: &str) -> bool {
     subject_mentions_ticket(&commit.subject, ticket_slug)
-        || commit.body.lines().any(|line| {
-            line.split_once(':').is_some_and(|(key, references)| {
-                key.trim().eq_ignore_ascii_case("refs")
-                    && subject_mentions_ticket(references.trim(), ticket_slug)
-            })
-        })
+        || commit
+            .body
+            .lines()
+            .any(|line| refs_line_mentions_ticket(line, ticket_slug))
+}
+
+fn refs_line_mentions_ticket(line: &str, ticket_slug: &str) -> bool {
+    let line = line.trim();
+    let Some(key) = line.get(..4) else {
+        return false;
+    };
+    if !key.eq_ignore_ascii_case("refs") {
+        return false;
+    }
+    let suffix = &line[4..];
+    if !suffix.starts_with(':') && !suffix.starts_with(char::is_whitespace) {
+        return false;
+    }
+    let references = suffix.trim_start_matches(|value: char| value == ':' || value.is_whitespace());
+    !references.is_empty() && subject_mentions_ticket(references, ticket_slug)
 }
 
 fn is_ticket_char(value: char) -> bool {
@@ -497,12 +511,19 @@ mod tests {
     }
 
     #[test]
-    fn explicit_refs_trailers_are_ownership_but_ordinary_body_mentions_are_not() {
+    fn explicit_refs_lines_with_multiple_tickets_are_ownership_but_ordinary_body_mentions_are_not()
+    {
         let mut referenced = commit("aaaa", "workflow documentation", "root");
         referenced.body = "Why this changed.\n\nRefs: HS2-PG1HKJ HS2-OTHER1".into();
         assert!(commit_mentions_ticket(&referenced, "HS2-PG1HKJ"));
+        assert!(commit_mentions_ticket(&referenced, "HS2-OTHER1"));
         assert!(!commit_mentions_ticket(&referenced, "HS2-PG1HK"));
+        referenced.body = "Why this changed.\n\nRefs HS2-PG1HKJ, HS2-OTHER1".into();
+        assert!(commit_mentions_ticket(&referenced, "HS2-PG1HKJ"));
+        assert!(commit_mentions_ticket(&referenced, "HS2-OTHER1"));
         referenced.body = "Follow-up for HS2-PG1HKJ".into();
+        assert!(!commit_mentions_ticket(&referenced, "HS2-PG1HKJ"));
+        referenced.body = "Refresh HS2-PG1HKJ".into();
         assert!(!commit_mentions_ticket(&referenced, "HS2-PG1HKJ"));
     }
 

@@ -1471,7 +1471,10 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
     commit("other\n", "unrelated change");
     let third = commit("three\n", &format!("polish ({slug})"));
     commit("four\n", &format!("{slug}: finish later bundle"));
-    let trailer = commit("trailer\n", &format!("document workflow\n\nRefs: {slug}"));
+    let trailer = commit(
+        "trailer\n",
+        &format!("document workflow\n\nRefs {slug}, HS2-OTHER1"),
+    );
     commit(
         "cross reference\n",
         &format!("different ticket\n\nFollow-up for {slug}"),

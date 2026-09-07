@@ -118,7 +118,8 @@ Checkout-scoped code review is exposed at
 `GET /checkouts/{checkout}/tickets/{ticket}/code-review`. Discovery walks at most the
 newest 2,000 reachable commits, returns each commit's subject and full message body, and
 associates a commit when the ticket slug is a bounded token in its subject or an explicit
-`Refs:` trailer. Ordinary body mentions remain cross-references, not ownership.
+`Refs:`/`Refs …` line containing one or more ticket slugs. Ordinary body mentions remain
+cross-references, not ownership.
 Adjacent matching commits form reviewable ranges without spanning unrelated work. The
 response also reports the checkout's Git `diff.tool`. The matching `POST` accepts only a
 single commit or adjacent range returned by a fresh discovery, rejects arbitrary refs,
