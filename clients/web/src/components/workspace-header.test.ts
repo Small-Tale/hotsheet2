@@ -59,6 +59,16 @@ describe('WorkspaceHeader', () => {
     expect(css).not.toMatch(/\.view-mode-switcher__badge \{[^}]*(?:^|[;{]\s*)height:/);
   });
 
+  it('enables selected-ticket actions and reflects the shared Up Next state', () => {
+    const empty=String(WorkspaceHeader({projectName:'Hot Sheet 2',mode:'list'}));
+    expect(empty).toMatch(/<wa-button[^>]*disabled[^>]*data-action="toggle-selected-up-next"/);
+    expect(empty).toMatch(/<wa-button[^>]*disabled[^>]*data-action="open-selected-ticket-actions"/);
+    const selected=String(WorkspaceHeader({projectName:'Hot Sheet 2',mode:'list',selectedTicketCount:2,selectedTicketsUpNext:true,selectedTicketsUpNextEligible:true}));
+    expect(selected).toMatch(/data-action="toggle-selected-up-next"[^>]*aria-pressed="true"/);
+    expect(selected).not.toMatch(/data-action="toggle-selected-up-next"[^>]*disabled/);
+    expect(selected).not.toMatch(/data-action="open-selected-ticket-actions"[^>]*disabled/);
+  });
+
   it('omits every project control for global shell modes', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Terminals', mode: 'list', controlsVisible: false }));
     expect(markup).toContain('data-controls-visible="false"');

@@ -188,8 +188,10 @@ does not introduce polling or another network request.
   direction when reselected, and a connected list/column/settings workspace. When its owning
   toolbar narrows, lower-priority utility and sort controls yield first; search and then the view
   switcher yield only at otherwise unusable widths. Actions remain contained without clipping
-  downward-opening popovers. Settings disables sort,
-  favorite, overflow, and search actions; global shell modes omit project controls.
+  downward-opening popovers. The star applies Up Next to the current selection and the
+  ellipsis opens the shared TicketRow menu without a duplicate Up Next entry; both are
+  capability-aware and disabled with no selection. Settings disables sort, ticket actions,
+  and search; global shell modes omit project controls.
 - `Toolbar` — **demo built**: shared 56px-high leading/optional-center/trailing layout
   with consistent horizontal padding across the project sidebar, center column, and
   ticket inspector. Trailing content is edge-aligned; when center is omitted, leading

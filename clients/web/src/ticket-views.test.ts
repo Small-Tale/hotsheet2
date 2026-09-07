@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, ticketsForView } from './ticket-views';
+import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionVisibleInView, ticketsForView } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -34,5 +34,12 @@ describe('ticket views', () => {
     const tickets = ['not_started', 'started', 'backlog', 'completed', 'verified', 'archive', 'deleted', 'moved'].map((status, index) => ({ ...ticket(status), up_next: index !== 1 }));
     expect(tickets.filter(isOpenTicket).map(item => item.status)).toEqual(['not_started', 'started']);
     expect(tickets.filter(isUpNextTicket).map(item => item.status)).toEqual(['not_started']);
+  });
+
+  it('drops selections whose status moves them outside the active view', () => {
+    const tickets=[ticket('not_started'),ticket('archive'),ticket('backlog')];
+    expect(selectionVisibleInView(tickets,tickets.map(item=>item.slug),'all')).toEqual(['HS-not_started']);
+    expect(selectionVisibleInView(tickets,tickets.map(item=>item.slug),'archive')).toEqual(['HS-archive']);
+    expect(selectionVisibleInView(tickets,tickets.map(item=>item.slug),'backlog')).toEqual(['HS-backlog']);
   });
 });

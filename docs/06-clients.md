@@ -409,6 +409,11 @@ prompt can be dismissed and returns on a later open until a source is configured
   zero-selection placeholder keeps its close toolbar visually open to the guidance
   area without an unnecessary divider; transitional loading and multi-selection
   placeholders retain their intentional toolbar separator.
+  The main toolbar's star applies the same bulk Up Next toggle as the row menu, while
+  its ellipsis opens that shared menu without duplicating the star action; both disable
+  with no selection or unsupported providers. After a successful status mutation, any
+  ticket no longer present in Queue, Backlog, or Archive is removed from selection, and
+  a hidden single-ticket inspector is cleared.
 
   Workspace chrome preferences are device-local browser state. The client restores the
   last view mode, sort field and direction, project-sidebar and inspector visibility,

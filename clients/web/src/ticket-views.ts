@@ -28,3 +28,8 @@ export function ticketsForView(tickets: readonly TicketRow[], view: TicketView):
   if (view === 'backlog') return tickets.filter(ticket => ticket.status === 'backlog');
   return tickets.filter(isQueuedTicket);
 }
+
+export function selectionVisibleInView(tickets: readonly TicketRow[], selectedSlugs: readonly string[], view: TicketView): string[] {
+  const visible = new Set(ticketsForView(tickets, view).map(ticket => ticket.slug));
+  return selectedSlugs.filter(slug => visible.has(slug));
+}

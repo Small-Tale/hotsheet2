@@ -50,6 +50,10 @@ describe('TicketRowContextMenu', () => {
     expect(String(TicketRowContextMenu({ x: 0, y: 0, upNextEligible: false }))).not.toContain('data-context-action="Toggle Up Next"');
   });
 
+  it('omits Up Next when a colocated toolbar button already owns that action', () => {
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, upNextEligible: true, hideUpNext: true }))).not.toContain('data-context-action="Toggle Up Next"');
+  });
+
   it('capability-disables every mutating bulk action while preserving duplication', () => {
     const markup = String(TicketRowContextMenu({ x: 0, y: 0, canBulkUpdate: false }));
     expect(markup).toContain('data-context-action="Add tag" disabled');

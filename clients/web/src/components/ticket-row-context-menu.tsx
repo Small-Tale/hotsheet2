@@ -45,7 +45,7 @@ function MetadataSubmenu({ field, label, icon, iconName, choices, selected, disa
   </wa-dropdown-item>;
 }
 
-export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; verifyAction?: boolean; notWorkingAction?: boolean; selectionCount?: number; canBulkUpdate?: boolean; allInBacklog?: boolean; allInArchive?: boolean }
+export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; hideUpNext?: boolean; verifyAction?: boolean; notWorkingAction?: boolean; selectionCount?: number; canBulkUpdate?: boolean; allInBacklog?: boolean; allInArchive?: boolean }
 
 /** Shadow-DOM-safe containment check for capture-phase context-menu dismissal. */
 export function eventTargetsContextMenu(event: { composedPath(): unknown[] }, selector = '.ticket-context-menu'): boolean {
@@ -55,7 +55,7 @@ export function eventTargetsContextMenu(event: { composedPath(): unknown[] }, se
   });
 }
 
-export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, verifyAction = false, notWorkingAction = false, selectionCount = 1, canBulkUpdate = true, allInBacklog = false, allInArchive = false }: TicketRowContextMenuProps) {
+export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, hideUpNext = false, verifyAction = false, notWorkingAction = false, selectionCount = 1, canBulkUpdate = true, allInBacklog = false, allInArchive = false }: TicketRowContextMenuProps) {
   const priorityChoices = PRIORITIES.map(choice => { const option = getPriorityPresentation(choice.value); return { ...choice, icon: option.icon, iconName: option.name, color: option.color }; });
   return <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${x}px;top:${y}px`}>
     <wa-dropdown open placement="bottom-start" distance={0}>
@@ -66,7 +66,7 @@ export function TicketRowContextMenu({ x, y, category, priority, status, upNextE
       <MetadataSubmenu field="category" label="Change category" icon={Shapes} iconName="shapes" choices={DEFAULT_TICKET_CATEGORIES} selected={category} disabled={!canBulkUpdate} />
       <MetadataSubmenu field="priority" label="Change priority" icon={Gauge} iconName="gauge" choices={priorityChoices} selected={priority} disabled={!canBulkUpdate} />
       <MetadataSubmenu field="status" label="Change status" icon={CircleDot} iconName="circle-dot" choices={TICKET_STATUS_CHOICES} selected={status} disabled={!canBulkUpdate} />
-      {upNextEligible && <ContextItem item={TICKET_CONTEXT_ACTIONS[4]} disabled={!canBulkUpdate} />}
+      {upNextEligible && !hideUpNext && <ContextItem item={TICKET_CONTEXT_ACTIONS[4]} disabled={!canBulkUpdate} />}
       <wa-divider></wa-divider>
       {TICKET_CONTEXT_ACTIONS.slice(5).map(item => {const alreadyThere=item.action==='Move to Backlog'&&allInBacklog||item.action==='Archive ticket'&&allInArchive;return <ContextItem item={item} disabled={alreadyThere||!canBulkUpdate&&item.action!=='Duplicate ticket'} disabledTitle={alreadyThere?`Every selected ticket is already in ${allInBacklog?'Backlog':'Archive'}.`:undefined} />})}
     </wa-dropdown>

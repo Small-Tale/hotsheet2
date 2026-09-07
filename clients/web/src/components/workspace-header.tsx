@@ -23,6 +23,10 @@ export interface WorkspaceHeaderProps {
   sortDirection?: WorkspaceSortDirection;
   controlsVisible?: boolean;
   notificationCount?: number;
+  selectedTicketCount?: number;
+  selectedTicketsUpNext?: boolean;
+  selectedTicketsUpNextEligible?: boolean;
+  selectedTicketsMutable?: boolean;
 }
 
 export function WorkspaceIdentity({ projectName }: { projectName: string }) {
@@ -64,8 +68,9 @@ export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSo
   return sortTriggerIcons[sort][direction];
 }
 
-export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0 }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
+export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
+  const ticketActionsDisabled=projectActionsDisabled||selectedTicketCount===0||!selectedTicketsMutable;
   const directionIcon=sortDirection==='ascending'?ArrowUp:ArrowDown,directionName=sortDirection==='ascending'?'arrow-up':'arrow-down';
   const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=sortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
   const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
@@ -80,8 +85,8 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
         <Select className="workspace-header__sort" name="workspace-sort" ariaLabel={`Sort tickets: ${sortLabel}, ${sortDirection}`} value={sort} choices={sortChoices} disabled={projectActionsDisabled} renderSelected={()=> <LucideIcon icon={trigger.icon} name={trigger.iconName} />} />
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__utility-group" label="View actions">
-        <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="toggle-favorite" aria-label="Favorite view" title="Favorite view"><LucideIcon icon={Star} name="star" /></wa-button>
-        <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="more-workspace-actions" aria-label="More workspace actions" title="More workspace actions"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
+        <wa-button appearance="plain" disabled={ticketActionsDisabled||!selectedTicketsUpNextEligible} data-action="toggle-selected-up-next" aria-label="Toggle Up Next for selected tickets" aria-pressed={String(selectedTicketsUpNext)} title="Toggle Up Next for selected tickets"><LucideIcon icon={Star} name="star" /></wa-button>
+        <wa-button appearance="plain" disabled={ticketActionsDisabled} data-action="open-selected-ticket-actions" aria-label="More actions for selected tickets" title="More actions for selected tickets"><LucideIcon icon={MoreHorizontal} name="ellipsis" /></wa-button>
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
         {searchOpen
@@ -91,9 +96,9 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
     </div>;
 }
 
-export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0 }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: WorkspaceHeaderProps) {
   return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
     <WorkspaceIdentity projectName={projectName} />
-    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} />}
+    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} selectedTicketCount={selectedTicketCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} selectedTicketsMutable={selectedTicketsMutable} />}
   </header>;
 }
