@@ -81,6 +81,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),
   ]},
   { id: 'shared', name: 'Shared interactions', demos: [
+    demo('content-transition', 'ContentTransition', 'Reusable A/B push and crossfade transitions.', 'feature-floor', true),
     demo('app-tab', 'AppTab', 'Shared project and terminal tab geometry, state, and close action.', 'feature-floor', true),
     demo('select', 'Select', 'Compact icon-bearing single-value selection control.', 'feature-floor', true),
     demo('toolbar', 'Toolbar', 'Shared leading, center, and trailing toolbar geometry.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group']),

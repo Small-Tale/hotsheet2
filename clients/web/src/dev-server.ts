@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import {chooseLocalFolder,createLocalGitTicketStore,gitTicketStoreConnectionId, openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
+import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore): Hono {
+export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote): Hono {
   const app = new Hono();
   app.post('/__hotsheet/projects/open', async context => {
     if (!dev) return context.notFound();
@@ -24,6 +24,10 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
   app.post('/__hotsheet/projects/setup-git',async context=>{
     if(!dev)return context.notFound();
     try{const body=await context.req.json<{root:string;location?:string}>(),ticketStore=await setupGit(body.root,body.location);return context.json({ticketStore,connectionId:gitTicketStoreConnectionId(ticketStore)},201)}catch(error){return context.json({error:error instanceof Error?error.message:'Could not create the git ticket store.'},400)}
+  });
+  app.post('/__hotsheet/projects/setup-git-remote',async context=>{
+    if(!dev)return context.notFound();
+    try{const body=await context.req.json<{store:string;remote:string}>();await connectRemote(body.store,body.remote);return context.json({connected:true})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not connect the Git remote.'},400)}
   });
   app.all('/__hotsheet/project-api/:project/*', async context => {
     if (!dev) return context.notFound();
@@ -81,6 +85,7 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
 const demoEntries: Record<string, string> = {
   'app-shell': 'ux-demo/app-shell-demo.tsx', 'project-tab': 'ux-demo/app-shell-demo.tsx', 'project-tabs': 'ux-demo/app-shell-demo.tsx', 'resizable-region': 'ux-demo/app-shell-demo.tsx', 'connection-state-banner': 'ux-demo/app-shell-demo.tsx', 'connection-details-dialog': 'ux-demo/connection-details-demo.tsx',
   'app-tab': 'components/app-tab.tsx', 'terminal-drawer': 'components/terminal-drawer.tsx',
+  'content-transition': 'ux-demo/content-transition-demo.tsx',
   'project-sidebar': 'ux-demo/project-sidebar-demo.tsx', 'project-summary': 'ux-demo/project-sidebar-demo.tsx', 'repository-summary': 'ux-demo/project-sidebar-demo.tsx', 'view-navigation': 'ux-demo/project-sidebar-demo.tsx', 'command-navigation': 'ux-demo/project-sidebar-demo.tsx', 'drive-control': 'ux-demo/project-sidebar-demo.tsx',
   'repository-status-popover': 'ux-demo/repository-status-demo.tsx',
   'workspace-header': 'ux-demo/workspace-components-demo.tsx', 'page-header': 'ux-demo/workspace-components-demo.tsx', 'quick-ticket-composer': 'ux-demo/workspace-components-demo.tsx', 'ticket-inspector': 'ux-demo/workspace-components-demo.tsx',

@@ -115,6 +115,7 @@ import {
   readerTab,
   TicketReaderDemo,
 } from './content-components-demo';
+import { ContentTransitionDemo, ContentTransitionSettings, transitionDirection, transitionSide, transitionStyle } from './content-transition-demo';
 import { DialogHeaderDemo, ValueTableDemo } from './dialog-layout-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
@@ -437,6 +438,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'toolbar') return <ToolbarDemo />;
   if (item.id === 'dialog-header') return <DialogHeaderDemo />;
   if (item.id === 'value-table') return <ValueTableDemo />;
+  if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
   if (item.id === 'menu-item') return <MenuItemDemo />;
   if (item.id === 'menu-header') return <MenuHeaderDemo />;
@@ -542,6 +544,7 @@ function DemoApp() {
     selected.id === 'ticket-row' ||
     selected.id === 'repository-status-popover' ||
     selected.id === 'connection-details-dialog' ||
+    selected.id === 'content-transition' ||
     selected.id === 'permission-request';
   return (
     <main
@@ -610,6 +613,8 @@ function DemoApp() {
             <RepositoryStatusPopoverSettings />
           ) : selected.id === 'connection-details-dialog' ? (
             <ConnectionDetailsDialogSettings />
+          ) : selected.id === 'content-transition' ? (
+            <ContentTransitionSettings />
           ) : selected.id === 'permission-request' ? (
             <PermissionRequestSettings />
           ) : (
@@ -719,6 +724,22 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 });
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
+});
+delegate(root, 'click', '[data-action="transition-forward"]', () => {
+  transitionDirection.value = 'forward';
+  transitionSide.value = 'b';
+});
+delegate(root, 'click', '[data-action="transition-back"]', () => {
+  transitionDirection.value = 'backward';
+  transitionSide.value = 'a';
+});
+delegate(root, 'change', '[data-settings="content-transition"] [name="transition-style"]', (_event, target) => {
+  transitionStyle.value = (target as FormControl).value as typeof transitionStyle.value;
+});
+delegate(root, 'change', '[data-settings="content-transition"] [name="transition-side"]', (_event, target) => {
+  const side = (target as FormControl).value as typeof transitionSide.value;
+  transitionDirection.value = side === 'b' ? 'forward' : 'backward';
+  transitionSide.value = side;
 });
 delegate(root, 'click', '[data-action="open-repository-status"]', () => {
   sidebarEvent.value = 'Repository status requested.';

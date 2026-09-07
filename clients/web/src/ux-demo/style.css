@@ -27,6 +27,11 @@ body[data-resizing-project-sidebar="true"] { cursor: row-resize; user-select: no
 .component-stage__canvas { display: grid; min-width: min(28rem, 80%); min-height: 10rem; place-items: center; padding: 2rem; border-radius: .75rem; background: repeating-conic-gradient(var(--wa-color-surface-lowered) 0 25%, var(--wa-color-surface-default) 0 50%) 50% / 1.5rem 1.5rem; }
 .component-stage__event { min-height: 1.5rem; margin: 0; color: var(--wa-color-brand-on-quiet) !important; font-weight: 650; }
 .component-stage__guidance { max-width: 38rem; margin: 0; text-align: center; }
+.content-transition-demo { width:min(34rem,100%); margin:auto; overflow:hidden; border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-l); background:var(--wa-color-surface-default); box-shadow:var(--wa-shadow-l); }
+.content-transition-demo__card { min-height:16rem; padding:var(--wa-space-2xl); }
+.content-transition-demo__card h2, .content-transition-demo__card p { margin:var(--wa-space-xs) 0; }
+.content-transition-demo__card small { color:var(--wa-color-brand-on-quiet); font-weight:var(--wa-font-weight-semibold); }
+.content-transition-demo__actions { display:flex; padding:var(--wa-space-m); justify-content:space-between; border-top:1px solid var(--wa-color-neutral-border-quiet); }
 .planned-demo { display: grid; align-content: center; justify-items: center; text-align: center; }
 .planned-demo span { padding: .35rem .65rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); font-size: var(--wa-font-size-xs); font-weight: 700; text-transform: uppercase; }
 .planned-demo p { max-width: 32rem; }

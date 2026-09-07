@@ -202,6 +202,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   Source-less project setup uses a bounded dialog with shared multiline menu items whose
   title and explanation remain inside one selectable row at compact sizes. It waits for
   the project dialog's completed close event, so the two modal surfaces never overlap.
+  Forward and backward setup navigation uses the shared stable A/B `ContentTransition`:
+  the outgoing and incoming content areas move together for an iOS-style push/pop, while
+  crossfade and motion-free replacement remain reusable variants in the UX catalog.
   The Vite-only bridge
   discovers or detached-starts the local server and keeps its bearer credential out of
   browser state; Tauri will replace that bridge with its native lifecycle layer.
@@ -242,6 +245,11 @@ prompt can be dismissed and returns on a later open until a source is configured
   configuration screen within that dialog. Multiple connections of one provider type are
   allowed because connection identity is independent from provider kind. Clicking an
   existing connection row opens that same dialog with its editable non-secret values.
+  After creating a standalone git ticket store, the dialog asks for a clone URL and can
+  add `origin` plus perform the first push without exposing shell commands. A failed first
+  push rolls back that newly added origin so the same form remains retryable. Inline help
+  links to [host-specific remote setup guidance](ticket-repository-remotes.md), including
+  the distinction between Git hosts and issue-only providers such as Jira.
   Creation and editing validate identifiers and locators, persist the connection record,
   update its checkout link, and can select it as the default creation target. Credential
   fields accept only an existing keychain reference; secret values are never returned to

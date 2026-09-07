@@ -824,6 +824,11 @@ On the web, these should use Web Awesome Core where it supplies the needed acces
 primitive. Hot Sheet components wrap those primitives with domain behavior and stable
 semantic actions; Kerf owns state and composition.
 
+`ContentTransition` is the shared two-screen navigation primitive. It retains stable
+A/B DOM sides and supports paired forward push, backward pop, crossfade, and no-motion
+replacement. Inactive content is inert and hidden after the transition. Its UX demo
+exposes every transition style and both visible sides.
+
 ## 8. Setup, settings, and connection management
 
 ### 8.1 Initial client path

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createDevApp } from '../dev-server';
-import { connectionDetailsAssessment,connectionDetailsScenario,ConnectionDetailsDialogSettings,resetConnectionDetailsDemo } from './connection-details-demo';
 import { demoCatalog, demosUsing, findDemo, flattenCatalog } from './catalog';
+import { connectionDetailsAssessment,ConnectionDetailsDialogSettings,connectionDetailsScenario,resetConnectionDetailsDemo } from './connection-details-demo';
 import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
 import { resetTagChipDemo, tagChipSettings } from './tag-chip-demo';
@@ -12,7 +12,7 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'connection-details-dialog', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'not-working-dialog', 'note-composer', 'note-card', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'app-tab', 'select', 'toolbar', 'menu-item', 'menu-header', 'toolbar-control-group', 'toolbar-text', 'dialog-header', 'value-table', 'pending-attachment-picker']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'connection-details-dialog', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'not-working-dialog', 'note-composer', 'note-card', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'content-transition', 'app-tab', 'select', 'toolbar', 'menu-item', 'menu-header', 'toolbar-control-group', 'toolbar-text', 'dialog-header', 'value-table', 'pending-attachment-picker']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);

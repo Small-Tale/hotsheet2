@@ -20,12 +20,7 @@ wa-dialog[data-project-dialog] { --width: min(48rem, calc(100vw - 2rem)); }
 .project-dialog__error:empty { display: none; }
 .project-dialog__error { color: var(--wa-color-danger-on-quiet) !important; }
 wa-dialog[data-ticket-source-setup-dialog] { --width: min(36rem, calc(100vw - 2rem)); }
-wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"]::part(header), wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"]::part(footer) { animation:ticket-source-crossfade 180ms ease-out; }
-wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"] .ticket-source-setup__screen, wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"] .provider-setup-form { animation:ticket-source-push 220ms cubic-bezier(.2,.8,.2,1); }
-wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"]::part(header), wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"]::part(footer) { animation:ticket-source-crossfade 180ms ease-out; }
-wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"] .ticket-source-setup__screen, wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"] .provider-setup-form { animation:ticket-source-pop 220ms cubic-bezier(.2,.8,.2,1); }
-@keyframes ticket-source-push { from { opacity:0; transform:translateX(2rem); } to { opacity:1; transform:translateX(0); } }
-@keyframes ticket-source-pop { from { opacity:0; transform:translateX(-2rem); } to { opacity:1; transform:translateX(0); } }
+wa-dialog[data-ticket-source-setup-dialog][data-navigation="push"]::part(header), wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"]::part(header) { animation:ticket-source-crossfade 180ms ease-out; }
 @keyframes ticket-source-crossfade { from { opacity:.25; } to { opacity:1; } }
 .ticket-source-setup { display: grid; gap: var(--wa-space-m); }
 .ticket-source-setup__intro { margin: 0; color: var(--wa-color-neutral-on-quiet); line-height: 1.5; }
@@ -51,6 +46,9 @@ wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"] .ticket-source
 .ticket-source-setup__remote > svg { width:var(--wa-space-l); }
 .ticket-source-setup__remote p { margin:var(--wa-space-xs) 0; color:var(--wa-color-neutral-on-quiet); line-height:1.45; }
 .ticket-source-setup__remote code { display:block; padding:var(--wa-space-xs); border-radius:var(--wa-border-radius-s); background:var(--wa-color-surface-default); white-space:normal; overflow-wrap:anywhere; }
+.ticket-source-setup__remote-form { display:grid; gap:var(--wa-space-m); }
+.ticket-source-setup__remote-help { color:var(--wa-color-text-link); font-size:var(--wa-font-size-xs); }
+.ticket-source-setup__remote-actions { display:flex; justify-content:flex-end; gap:var(--wa-space-xs); }
 .terminal-rename { display: grid; gap: var(--wa-space-l); }
 .terminal-rename footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
 .app-loading, .app-error, .app-toast { position: fixed; z-index: 1000; right: 1rem; bottom: 1rem; padding: .65rem .85rem; border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
@@ -76,7 +74,8 @@ wa-dialog[data-ticket-source-setup-dialog][data-navigation="pop"] .ticket-source
 .ticket-provider-settings__connections .menu-item__trailing svg { width: var(--wa-space-m); height: var(--wa-space-m); }
 .provider-setup-form small { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 .provider-setup-form { display: grid; gap: var(--wa-space-m); }
-.provider-setup-form__back { width: fit-content; padding: 0; border: 0; color: var(--wa-color-brand-on-normal); background: transparent; cursor: pointer; }
+.provider-setup-form__back { display:flex; width:fit-content; padding:0; align-items:center; border:0; color:var(--wa-color-brand-on-normal); background:transparent; cursor:pointer; gap:var(--wa-space-2xs); }
+.provider-setup-form__back svg { width:1rem; height:1rem; }
 .provider-setup-form__back:focus-visible { outline: var(--wa-focus-ring); outline-offset: 2px; }
 .provider-setup-form__grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--wa-space-m); }
 .provider-setup-form label { display: grid; min-width: 0; gap: var(--wa-space-2xs); font-size: var(--wa-font-size-xs); font-weight: 650; }

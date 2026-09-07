@@ -22,6 +22,7 @@ interface CorruptDiagnostic { path:string }
 
 export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
 export type FolderChooserRunner=(command:string,args:string[])=>Promise<string|undefined>;
+export type GitRunner=(command:string,args:string[])=>Promise<void>;
 
 type ProjectBridgeProcess=typeof process&{__hotsheetProjectSessions?:Map<string,SessionTarget>};
 
@@ -107,6 +108,22 @@ export async function createLocalGitTicketStore(rootInput:string,locationInput?:
   const root=await realpath(rootInput.trim()),path=locationInput?.trim()?await realpath(locationInput.trim()):`${root}.hs2`;
   if(!await exists(resolve(path,'hotsheet-store.json')))await initializeStore(path,root);
   return realpath(path);
+}
+
+const runGit:GitRunner=(command,args)=>new Promise((resolveRun,reject)=>{const child=spawn(command,args,{stdio:'ignore'});child.once('error',reject);child.once('close',code=>{if(code===0)resolveRun();else reject(new Error(`Git exited with status ${code??'unknown'}.`))})});
+
+export async function connectGitTicketStoreRemote(storeInput:string,remoteInput:string,runner:GitRunner=runGit):Promise<void>{
+  const store=await realpath(storeInput.trim()),remote=remoteInput.trim();
+  if(!remote||remote.startsWith('-')||/[\r\n]/.test(remote))throw new Error('Enter a valid Git remote URL.');
+  if(!await exists(resolve(store,'hotsheet-store.json')))throw new Error('The ticket repository is no longer available.');
+  await runner('git',['-C',store,'remote','add','origin',remote]);
+  try{await runner('git',['-C',store,'push','-u','origin','HEAD'])}
+  catch(error){
+    // A failed first push must remain retryable from the setup screen. Roll back only
+    // the origin this operation just added; never leave a half-configured repository.
+    await runner('git',['-C',store,'remote','remove','origin']).catch(()=>undefined);
+    throw error;
+  }
 }
 
 export function gitTicketStoreConnectionId(path:string):string{return createHash('sha256').update(path).digest('hex').slice(0,16)}

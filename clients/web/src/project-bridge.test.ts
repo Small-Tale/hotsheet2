@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder, developmentRepositoryRoot,folderChooserCommand,localStoreInitArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote, developmentRepositoryRoot,folderChooserCommand,localStoreInitArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -90,6 +90,13 @@ describe('native folder chooser',()=>{
     const custom=await app.request('/__hotsheet/projects/setup-git',{method:'POST',headers:{'content-type':'application/json'},body:'{"root":"/work/demo","location":"/chosen/tickets"}'});expect(custom.status).toBe(201);expect(setup).toHaveBeenLastCalledWith('/work/demo','/chosen/tickets');expect(await custom.json()).toMatchObject({ticketStore:'/chosen/tickets',connectionId:expect.stringMatching(/^[a-f0-9]{16}$/)});
     expect((await createDevApp(false,undefined,undefined,undefined,setup).request('/__hotsheet/projects/setup-git',{method:'POST'})).status).toBe(404);
   });
+});
+
+describe('Git ticket-store remote setup',()=>{
+  it('adds origin and performs the first push with argument arrays',async()=>{const calls:Array<[string,string[]]>=[],runner=async(command:string,args:string[])=>{calls.push([command,args])};await connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','git@github.com:Small-Tale/tickets.git',runner);expect(calls).toEqual([['git',['-C','/Users/westphal/Documents/hotsheet2.hs2','remote','add','origin','git@github.com:Small-Tale/tickets.git']],['git',['-C','/Users/westphal/Documents/hotsheet2.hs2','push','-u','origin','HEAD']]])});
+  it('removes the just-added origin when the first push fails so setup can be retried',async()=>{const calls:Array<[string,string[]]>=[],runner=async(command:string,args:string[])=>{calls.push([command,args]);if(args.includes('push'))throw new Error('push failed')};await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','git@example.com:team/tickets.git',runner)).rejects.toThrow('push failed');expect(calls.at(-1)).toEqual(['git',['-C','/Users/westphal/Documents/hotsheet2.hs2','remote','remove','origin']])});
+  it('rejects option-like and multiline remote values before running Git',async()=>{const runner=vi.fn();await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','--upload-pack=bad',runner)).rejects.toThrow(/valid Git remote URL/);await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','good\nbad',runner)).rejects.toThrow(/valid Git remote URL/);expect(runner).not.toHaveBeenCalled()});
+  it('exposes remote connection only through the local bridge',async()=>{const connect=vi.fn().mockResolvedValue(undefined),app=createDevApp(true,undefined,undefined,undefined,undefined,connect),request={method:'POST',headers:{'content-type':'application/json'},body:'{"store":"/tickets","remote":"git@example.com:team/tickets.git"}'};const response=await app.request('/__hotsheet/projects/setup-git-remote',request);expect(response.status).toBe(200);expect(connect).toHaveBeenCalledWith('/tickets','git@example.com:team/tickets.git');expect((await createDevApp(false,undefined,undefined,undefined,undefined,connect).request('/__hotsheet/projects/setup-git-remote',request)).status).toBe(404)});
 });
 
 describe('requireCompatibleServer', () => {

@@ -1,0 +1,16 @@
+.content-transition { position:relative; display:grid; min-width:0; overflow:hidden; }
+.content-transition__side { min-width:0; grid-area:1 / 1; }
+.content-transition__side[data-active="false"] { position:absolute; inset:0; opacity:0; pointer-events:none; }
+.content-transition[data-transition-style="push"][data-active-side="b"][data-transition-direction="forward"] > [data-side="a"] { animation:content-transition-push-out-start 280ms cubic-bezier(.32,.72,0,1); }
+.content-transition[data-transition-style="push"][data-active-side="b"][data-transition-direction="forward"] > [data-side="b"] { animation:content-transition-push-in-end 280ms cubic-bezier(.32,.72,0,1); }
+.content-transition[data-transition-style="push"][data-active-side="a"][data-transition-direction="backward"] > [data-side="a"] { animation:content-transition-push-in-start 280ms cubic-bezier(.32,.72,0,1); }
+.content-transition[data-transition-style="push"][data-active-side="a"][data-transition-direction="backward"] > [data-side="b"] { animation:content-transition-push-out-end 280ms cubic-bezier(.32,.72,0,1); }
+.content-transition[data-transition-style="crossfade"] > [data-active="true"] { animation:content-transition-fade-in 200ms ease-out; }
+.content-transition[data-transition-style="crossfade"] > [data-active="false"] { animation:content-transition-fade-out 200ms ease-out; }
+@keyframes content-transition-push-in-end { from { opacity:.7; transform:translateX(100%); } to { opacity:1; transform:translateX(0); } }
+@keyframes content-transition-push-out-start { from { opacity:1; transform:translateX(0); } to { opacity:.7; transform:translateX(-30%); } }
+@keyframes content-transition-push-in-start { from { opacity:.7; transform:translateX(-30%); } to { opacity:1; transform:translateX(0); } }
+@keyframes content-transition-push-out-end { from { opacity:1; transform:translateX(0); } to { opacity:.7; transform:translateX(100%); } }
+@keyframes content-transition-fade-in { from { opacity:0; } to { opacity:1; } }
+@keyframes content-transition-fade-out { from { opacity:1; } to { opacity:0; } }
+@media (prefers-reduced-motion:reduce) { .content-transition__side { animation-duration:1ms !important; } }

@@ -1,0 +1,8 @@
+import { signal } from 'kerfjs';
+
+import { ContentTransition,type ContentTransitionDirection,type ContentTransitionSide,type ContentTransitionStyle } from '../components/content-transition';
+
+export const transitionSide=signal<ContentTransitionSide>('a'),transitionStyle=signal<ContentTransitionStyle>('push'),transitionDirection=signal<ContentTransitionDirection>('forward');
+const card=(title:string,copy:string)=><article class="content-transition-demo__card"><small>Ticket support</small><h2>{title}</h2><p>{copy}</p></article>;
+export function ContentTransitionDemo(){return <section class="content-transition-demo"><ContentTransition active={transitionSide.value} style={transitionStyle.value} direction={transitionDirection.value} label="Setup navigation preview" a={card('Choose a source','Create a ticket repository or connect an issue provider.')} b={card('Connect repository','Enter a remote URL so tickets are backed up.')}/><div class="content-transition-demo__actions"><wa-button data-action="transition-back">Back</wa-button><wa-button appearance="accent" data-action="transition-forward">Continue</wa-button></div></section>}
+export function ContentTransitionSettings(){return <form class="settings-form" data-settings="content-transition"><wa-select name="transition-style" label="Transition style" value={transitionStyle.value}><wa-option value="push">Push</wa-option><wa-option value="crossfade">Crossfade</wa-option><wa-option value="none">None</wa-option></wa-select><wa-select name="transition-side" label="Visible side" value={transitionSide.value}><wa-option value="a">A</wa-option><wa-option value="b">B</wa-option></wa-select></form>}
