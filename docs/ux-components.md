@@ -218,7 +218,7 @@ does not introduce polling or another network request.
   vertical centering across native and Web Awesome buttons. Its borderless appearance
   keeps identical 40px geometry and hover highlights while omitting the idle border
   and background; sidebar visibility and inspector ticket-action groups use it. Its
-  orthogonal dark tone provides a shared inverse surface, border, icon, and hover palette
+  orthogonal dark tone provides a shared inverse surface, exact `#353536` border, icon, and hover palette
   for overlay toolbars. Opt-in push buttons retain native `aria-pressed` semantics while
   giving a pressed single-button group the shared dark background, matching border, and
   inverse icon treatment. The demo covers resting and pressed push controls plus dark groups.

@@ -811,10 +811,11 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   const dark = demo.getByRole('group', { name: 'Dark navigation' });
   await expect(dark).toHaveAttribute('data-tone', 'dark');
   await expect(dark).toHaveCSS('color', 'rgb(255, 255, 255)');
-  await expect(dark).not.toHaveCSS('border-color', 'rgb(209, 209, 214)');
-  await page.screenshot({ path: '/private/tmp/hs2-toolbar-control-appearance-wide.png', fullPage: true });
+  await expect(dark).toHaveCSS('border-color', 'rgb(53, 53, 54)');
+  await page.screenshot({ path: '/private/tmp/hs2-t3m818-dark-toolbar-border-wide.png', fullPage: true });
   await page.setViewportSize({ width: 760, height: 900 });
-  await page.screenshot({ path: '/private/tmp/hs2-toolbar-control-appearance-narrow.png', fullPage: true });
+  await expect(dark).toHaveCSS('border-color', 'rgb(53, 53, 54)');
+  await page.screenshot({ path: '/private/tmp/hs2-t3m818-dark-toolbar-border-narrow.png', fullPage: true });
   await expect(demo.getByRole('heading', { name: 'Single button' })).toBeVisible();
 });
 

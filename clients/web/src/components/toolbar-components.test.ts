@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { Toolbar } from './toolbar';
@@ -5,6 +8,12 @@ import { ToolbarControlGroup } from './toolbar-control-group';
 import { ToolbarText } from './toolbar-text';
 
 describe('toolbar primitives', () => {
+  it('uses the specified dark-tone border', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'toolbar-control-group.css'), 'utf8');
+    const dark = css.match(/\.toolbar-control-group\[data-tone="dark"\] \{([^}]+)\}/)?.[1] ?? '';
+    expect(dark).toContain('--toolbar-control-border-color: #353536');
+  });
+
   it('exposes orthogonal geometry, tone, and button appearance without changing structure', () => {
     const contained = String(ToolbarControlGroup({ children: 'control' as never }));
     const borderless = String(ToolbarControlGroup({ children: 'control' as never, appearance: 'borderless', single: true }));
