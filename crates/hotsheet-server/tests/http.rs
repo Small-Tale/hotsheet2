@@ -929,6 +929,54 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         by_name.into_body().collect().await.unwrap().to_bytes(),
         "checkout evidence"
     );
+    let by_name_with_sentence_period = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/combo/tickets/{slug}/attachments/by-name/proof.txt."),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(by_name_with_sentence_period.status(), StatusCode::OK);
+    assert_eq!(
+        by_name_with_sentence_period
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes(),
+        "checkout evidence"
+    );
+    let valid_reference = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/combo/tickets/{slug}"),
+                Some(r#"{"note":"See attachment:proof.txt."}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(valid_reference.get("warnings").is_none());
+    let missing_reference = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/combo/tickets/{slug}"),
+                Some(r#"{"note":"Upload follows: attachment:missing-proof.png."}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(
+        missing_reference["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("attachment:missing-proof.png")
+    );
     let path = body_json(
         app.clone()
             .oneshot(authed(

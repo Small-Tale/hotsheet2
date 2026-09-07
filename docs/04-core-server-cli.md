@@ -298,6 +298,12 @@ text, direct `--note` input containing a literal `\n` sequence outside Markdown 
 code or fenced backtick code is rejected with guidance to use `--note-file`. Intentional
 literal text outside code may be passed with `--allow-literal-backslash-n`; the file/stdin
 form also accepts intentional literal sequences without needing the override.
+Appending or editing a note remains successful when an `attachment:` reference does not
+resolve yet, which supports note-before-upload workflows. The CLI prints an actionable warning
+to stderr, and mutation API responses include a non-persisted `warnings` array. Resolution uses
+the longest actual attachment filename after the marker, so sentence punctuation such as the
+last period in `attachment:proof.png.` is retained as prose rather than treated as part of the
+filename.
 
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
 an `x-hotsheet-filename` header. Browser clients percent-encode Unicode filenames and

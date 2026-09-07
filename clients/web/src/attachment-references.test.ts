@@ -25,4 +25,15 @@ describe('attachment references',()=>{
     expect(expanded).toContain('[raw file](/project-api/demo/checkouts/checkout%20one/tickets/HS2-LOCAL/attachments/by-name/data.json');
     expect(attachmentReferences(source)).toEqual([{filename:'diagram.svg'},{filename:'report.pdf'},{ticket:'HS2-OTHER',filename:'screen shot.png'},{filename:'data.json'}]);
   });
+
+  it('uses the longest matching real filename and leaves trailing sentence punctuation alone',()=>{
+    const known={...context,attachments:[{filename:'server-details.png'},{filename:'server-details-narrow.png'}]};
+    const source='See attachment:server-details-narrow.png.';
+    const expanded=expandAttachmentReferences(source,known);
+    expect(expanded).toContain('/attachments/by-name/server-details-narrow.png');
+    expect(expanded).toContain('"attachment:server-details-narrow.png")');
+    expect(expanded.endsWith(').')).toBe(true);
+    expect(attachmentReferences(source,known)).toEqual([{filename:'server-details-narrow.png'}]);
+    expect(expandAttachmentReferences('Cross attachment:[HS2-OTHER]capture.svg.',known)).toContain('/tickets/HS2-OTHER/attachments/by-name/capture.svg');
+  });
 });

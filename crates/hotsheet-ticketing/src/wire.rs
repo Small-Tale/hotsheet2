@@ -67,6 +67,9 @@ pub struct ApiTicket {
     pub schema: u32,
     pub notes: Vec<ApiNote>,
     pub attachments: Vec<ApiAttachment>,
+    /// Non-fatal, mutation-specific feedback for the caller. Never persisted.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
     /// Computed standing guidance; never persisted in the ticket file.
     pub auto_context: Vec<TicketAutoContext>,
 }
@@ -162,6 +165,7 @@ impl ApiTicket {
                     created_at: attachment.created_at.as_str().to_string(),
                 })
                 .collect(),
+            warnings: Vec::new(),
             auto_context: Vec::new(),
         }
     }

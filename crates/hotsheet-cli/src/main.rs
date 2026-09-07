@@ -2721,12 +2721,13 @@ fn cmd_edit(
             blocked_reason.map(Some)
         },
     };
-    let updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
+    let mut updated = ops::update(&store, &ticket.id, now_ts(), patch)?;
     if let Some(text) = note.filter(|t| !t.is_empty()) {
+        let warnings = ops::attachment_reference_warnings(&store, &updated, &text);
         if let Some(note_id) = edit_note {
-            ops::edit_note(&store, &ticket.id, &note_id, now_ts(), text)?;
+            updated = ops::edit_note(&store, &ticket.id, &note_id, now_ts(), text)?;
         } else {
-            ops::add_note_with_summary(
+            updated = ops::add_note_with_summary(
                 &store,
                 &ticket.id,
                 Ulid::new(),
@@ -2735,6 +2736,9 @@ fn cmd_edit(
                 note_summary,
                 text,
             )?;
+        }
+        for warning in warnings {
+            eprintln!("warning: {warning}");
         }
     }
     println!("Updated {}", updated.slug);

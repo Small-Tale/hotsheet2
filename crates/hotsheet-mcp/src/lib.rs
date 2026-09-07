@@ -884,6 +884,7 @@ mod core_backend {
                         return Err(bad_request("note_summary requires a non-empty note"));
                     }
                     let new_note_kind = opt_enum(body, "note_kind")?.unwrap_or(NoteKind::Regular);
+                    let note_text = str_field(body, "note").filter(|text| !text.is_empty());
                     // A present `blocked_by` (even []) replaces the set; absent leaves it.
                     let blocked_by = match body.get("blocked_by").filter(|v| !v.is_null()) {
                         Some(_) => Some(
@@ -919,7 +920,7 @@ mod core_backend {
                     };
                     let updated =
                         ops::update(&self.store, &t.id, (self.now)(), patch).map_err(store_err)?;
-                    let latest = match str_field(body, "note").filter(|s| !s.is_empty()) {
+                    let latest = match note_text.clone() {
                         Some(text) => match edit_note_id {
                             Some(note_id) => {
                                 ops::edit_note(&self.store, &t.id, &note_id, (self.now)(), text)
@@ -938,7 +939,15 @@ mod core_backend {
                         },
                         None => updated,
                     };
-                    self.api(&latest)
+                    let mut response = self.api(&latest)?;
+                    if let Some(text) = note_text {
+                        let warnings =
+                            ops::attachment_reference_warnings(&self.store, &latest, &text);
+                        if !warnings.is_empty() {
+                            response["warnings"] = serde_json::json!(warnings);
+                        }
+                    }
+                    Ok(response)
                 }
                 // Batch (HS2-86): apply the same update to many tickets, reusing PATCH so the
                 // per-ticket behavior is identical. One bad id doesn't abort the rest.
@@ -1962,6 +1971,25 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("requires a non-empty note")
+        );
+
+        let warned = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "note": "Upload follows: attachment:proof.png." }),
+        );
+        assert!(
+            warned["warnings"][0]
+                .as_str()
+                .unwrap()
+                .contains("attachment:proof.png")
+        );
+        assert!(
+            warned["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|note| note["text"] == "Upload follows: attachment:proof.png.")
         );
 
         // update → started, with a progress note appended in the same call

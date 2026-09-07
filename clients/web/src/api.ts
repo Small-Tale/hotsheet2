@@ -11,7 +11,7 @@ export interface CheckoutSource {connection_id:string;provider:string;locator:st
 export interface Checkout {id:string;root:string;alias:string;repository?:string;stores:string[];sources?:CheckoutSource[];default_source?:string}
 export interface TicketRow {connection_id:string;native_id:string;qualified_id:string;id:string;slug:string;title:string;category?:string;priority?:string;status?:string;up_next:boolean;feedback_needed:boolean;tags:string[];blocked_by:string[];claimed_by?:string;claim_lease_expires_at?:string;worker_label?:string;claim_count:number;created_at?:string;updated_at?:string;completed_at?:string}
 export interface CorruptTicket {store:string;store_path:string;path:string;id?:string;slug?:string;error:string;error_code?:'invalid_ticket'|'upgrade_required'}
-export interface FullTicket extends TicketRow {details:string;blocked_reason?:string;notes:Note[];attachments:Attachment[];concurrency_token?:string}
+export interface FullTicket extends TicketRow {details:string;blocked_reason?:string;notes:Note[];attachments:Attachment[];concurrency_token?:string;warnings?:string[]}
 export type RepositoryFileChange='added'|'copied'|'deleted'|'modified'|'renamed'|'type_changed'|'unmerged'|'untracked';
 export interface RepositoryFile {path:string;original_path?:string;staged?:RepositoryFileChange;unstaged?:RepositoryFileChange;untracked:boolean;conflicted:boolean}
 export type RepositoryPlatform='macos'|'windows'|'linux';

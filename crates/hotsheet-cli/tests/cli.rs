@@ -1566,6 +1566,52 @@ fn edit_allows_literal_backslash_n_in_markdown_code_or_with_explicit_override() 
 }
 
 #[test]
+fn edit_accepts_notes_but_warns_about_unresolved_attachment_references() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Attachment reference warnings");
+
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "Upload follows: attachment:proof.png.",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "warning: attachment reference 'attachment:proof.png'",
+        ));
+
+    let proof = p.join("proof.png");
+    std::fs::write(&proof, b"proof").unwrap();
+    hs(p)
+        .arg("attach")
+        .arg(&slug)
+        .arg(&proof)
+        .assert()
+        .success();
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            "Now attached: attachment:proof.png.",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    let ticket =
+        hotsheet_ticketing::ops::resolve(&hotsheet_ticketing::FsStore::open(p).unwrap(), &slug)
+            .unwrap()
+            .unwrap();
+    assert_eq!(ticket.notes.len(), 2, "the warned note is still accepted");
+}
+
+#[test]
 fn attach_adds_stable_metadata_and_nested_payload() {
     let dir = tempfile::tempdir().unwrap();
     let source = tempfile::NamedTempFile::new().unwrap();

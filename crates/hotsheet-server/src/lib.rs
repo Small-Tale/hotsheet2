@@ -2877,7 +2877,16 @@ fn checkout_attachment_by_name(
         .attachments
         .iter()
         .rev()
-        .find(|attachment| attachment.filename == filename)
+        .filter(|attachment| filename.starts_with(&attachment.filename))
+        .fold(
+            None::<&hotsheet_model::Attachment>,
+            |best, attachment| match best {
+                Some(current) if current.filename.len() >= attachment.filename.len() => {
+                    Some(current)
+                }
+                _ => Some(attachment),
+            },
+        )
         .map(|attachment| attachment.id)
         .ok_or_else(|| ApiError::not_found(filename))?;
     Ok((entry, ticket, attachment_id))
@@ -3227,6 +3236,7 @@ fn do_update(
     req: UpdateReq,
 ) -> Result<ApiTicket, ApiError> {
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let note_text = req.note.clone();
     if req
         .expected_token
         .as_deref()
@@ -3304,7 +3314,11 @@ fn do_update(
         None => updated,
     };
     state.changed_in(entry, "updated", &latest);
-    api_ticket(entry, &latest)
+    let mut response = api_ticket(entry, &latest)?;
+    if let Some(text) = note_text.filter(|text| !text.is_empty()) {
+        response.warnings = ops::attachment_reference_warnings(&entry.store, &latest, &text);
+    }
+    Ok(response)
 }
 
 #[derive(Debug, Deserialize)]

@@ -349,6 +349,7 @@ impl GitHubProvider {
                 })
                 .collect(),
             attachments: vec![],
+            warnings: vec![],
             auto_context: vec![],
         }
     }

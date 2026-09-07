@@ -684,6 +684,78 @@ pub fn edit_note(
     Ok(ticket)
 }
 
+/// Return actionable warnings for `attachment:` references which do not resolve yet.
+///
+/// A reference is resolved against real attachment names, longest first. This deliberately
+/// accepts trailing prose punctuation (for example `attachment:proof.png.`) without guessing
+/// which filename characters are legal. Notes remain valid even when warnings are returned so
+/// callers can attach the referenced payload immediately after creating the note.
+pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str) -> Vec<String> {
+    let mut warnings = Vec::new();
+    let mut seen = HashSet::new();
+    for (start, _) in text.match_indices("attachment:") {
+        let suffix = &text[start..];
+        let mut tail = &suffix["attachment:".len()..];
+        let mut target = owner.clone();
+        let mut ticket_label = owner.slug.clone();
+        if let Some(after_open) = tail.strip_prefix('[') {
+            let Some(close) = after_open.find(']') else {
+                let warning = "attachment reference has an unclosed ticket selector; use attachment:[TICKET-SLUG]filename".to_string();
+                if seen.insert(warning.clone()) {
+                    warnings.push(warning);
+                }
+                continue;
+            };
+            ticket_label = after_open[..close].trim().to_string();
+            tail = &after_open[close + 1..];
+            let Some(resolved) = resolve(store, &ticket_label).ok().flatten() else {
+                let warning = format!(
+                    "attachment reference targets missing ticket '{ticket_label}'; correct the ticket slug or create the ticket"
+                );
+                if seen.insert(warning.clone()) {
+                    warnings.push(warning);
+                }
+                continue;
+            };
+            target = resolved;
+        }
+        let matched = target
+            .attachments
+            .iter()
+            .map(|attachment| attachment.filename.as_str())
+            .filter(|filename| tail.starts_with(filename))
+            .max_by_key(|filename| filename.len());
+        if matched.is_some() {
+            continue;
+        }
+        let candidate = attachment_reference_candidate(tail);
+        let warning = format!(
+            "attachment reference 'attachment:{}{}' does not match an attachment on {}; add the attachment or correct the filename",
+            if ticket_label == owner.slug {
+                String::new()
+            } else {
+                format!("[{ticket_label}]")
+            },
+            candidate,
+            ticket_label,
+        );
+        if seen.insert(warning.clone()) {
+            warnings.push(warning);
+        }
+    }
+    warnings
+}
+
+fn attachment_reference_candidate(tail: &str) -> &str {
+    let end = tail
+        .char_indices()
+        .find_map(|(index, character)| character.is_whitespace().then_some(index))
+        .unwrap_or(tail.len());
+    tail[..end].trim_end_matches(|character: char| {
+        matches!(character, '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']')
+    })
+}
+
 /// Delete one note while preserving the ticket and remaining note order.
 pub fn delete_note(
     store: &FsStore,
@@ -1706,6 +1778,91 @@ mod tests {
         assert_eq!(deleted.notes[0].id, n2);
         assert_eq!(deleted.updated_at.as_str(), "2026-08-19T04:00:00Z");
         assert!(delete_note(&store, &id, &n1, ts("t5")).is_err());
+    }
+
+    #[test]
+    fn attachment_reference_warnings_use_the_longest_real_name_and_allow_later_uploads() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let other_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let other = create(
+            &store,
+            other_id,
+            "HS",
+            ts("2026-08-19T00:00:01Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        store
+            .write_attachment(
+                &id,
+                Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
+                ts("2026-08-19T00:01:00Z"),
+                "proof.png",
+                b"short",
+            )
+            .unwrap();
+        let (owner, _) = store
+            .write_attachment(
+                &id,
+                Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB2").unwrap(),
+                ts("2026-08-19T00:01:01Z"),
+                "proof.png.extra",
+                b"long",
+            )
+            .unwrap();
+        store
+            .write_attachment(
+                &other.id,
+                Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB3").unwrap(),
+                ts("2026-08-19T00:01:02Z"),
+                "cross ticket.svg",
+                b"cross",
+            )
+            .unwrap();
+
+        assert!(
+            attachment_reference_warnings(
+                &store,
+                &owner,
+                &format!(
+                    "Local attachment:proof.png.extra. and `attachment:[{}]cross ticket.svg`.",
+                    other.slug
+                ),
+            )
+            .is_empty()
+        );
+
+        let warnings = attachment_reference_warnings(
+            &store,
+            &owner,
+            "Missing attachment:later.png and attachment:[HS-NOTREAL]proof.png.",
+        );
+        assert_eq!(warnings.len(), 2);
+        assert!(warnings[0].contains("attachment:later.png"));
+        assert!(warnings[1].contains("missing ticket 'HS-NOTREAL'"));
+
+        // The note is accepted before its payload exists; after upload the same text resolves.
+        let note = "Upload follows: attachment:later.png.";
+        assert_eq!(attachment_reference_warnings(&store, &owner, note).len(), 1);
+        let (owner, _) = store
+            .write_attachment(
+                &id,
+                Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB4").unwrap(),
+                ts("2026-08-19T00:01:03Z"),
+                "later.png",
+                b"later",
+            )
+            .unwrap();
+        assert!(attachment_reference_warnings(&store, &owner, note).is_empty());
     }
 
     #[test]

@@ -309,7 +309,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   Notes resolve `attachment:filename` and cross-ticket
   `attachment:[TICKET-SLUG]filename` references. Inline-code references preserve spaces;
   ordinary no-space references and standard Markdown link/image destinations are also
-  accepted. Browser-compatible image references render inline, while other references
+  accepted. Matching prefers the longest real attachment filename and leaves any trailing
+  sentence punctuation in the prose, so `attachment:proof.png.` resolves `proof.png`.
+  Missing ticket or filename targets do not reject a note (attachments may be uploaded next),
+  but mutation callers receive prominent actionable warning feedback. Browser-compatible image references render inline, while other references
   ask the host to open the file with its default application. Right-click actions can
   download, copy the durable reference or host path, and reveal the file using the host
   platform's file manager. Inline image controls remain intrinsic-height block content,
