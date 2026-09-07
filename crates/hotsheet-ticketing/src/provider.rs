@@ -1809,18 +1809,17 @@ mod tests {
             .unwrap();
         assert_eq!(result.status, Status::NotStarted);
         assert!(result.up_next);
-        assert!(
-            result
-                .notes
-                .iter()
-                .any(|note| note.text == "Not working: regressed after restart")
+        let added = &result.notes[result.notes.len() - 2..];
+        assert_eq!(added[0].kind, NoteKind::Activity);
+        assert_eq!(
+            added[0].text,
+            "Hot Sheet reported as not working\nregressed after restart"
         );
-        assert!(result.notes.iter().any(|note| {
-            note.kind == NoteKind::Activity
-                && note.text == "Hot Sheet reported as not working\nregressed after restart"
-        }));
+        assert_eq!(added[0].summary.as_deref(), Some("Reported as not working"));
+        assert_eq!(added[1].kind, NoteKind::Regular);
+        assert_eq!(added[1].text, "Not working: regressed after restart");
         assert!(
-            result
+            !result
                 .notes
                 .iter()
                 .any(|note| note.text == "Status changed from Completed to Not Started")

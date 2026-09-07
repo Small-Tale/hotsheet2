@@ -548,16 +548,6 @@ pub fn prepare_not_working(
         .as_ref()
         .map(|(_, text)| summarize_not_working(text))
         .unwrap_or_else(|| "Evidence attached for review.".into());
-    if let Some((id, text)) = note {
-        ticket.notes.push(Note {
-            id,
-            kind: NoteKind::Regular,
-            created_at: now.clone(),
-            edited_at: now.clone(),
-            summary: None,
-            text: format!("Not working: {text}"),
-        });
-    }
     let mut entropy = DefaultHasher::new();
     ticket.id.hash(&mut entropy);
     ticket.notes.len().hash(&mut entropy);
@@ -578,14 +568,22 @@ pub fn prepare_not_working(
             .map(|value| format!("{} reported as not working\n{summary}", value.trim()))
             .unwrap_or_else(|| format!("Reported as not working\n{summary}")),
     });
-    let previous = ticket.status;
+    if let Some((id, text)) = note {
+        ticket.notes.push(Note {
+            id,
+            kind: NoteKind::Regular,
+            created_at: now.clone(),
+            edited_at: now.clone(),
+            summary: None,
+            text: format!("Not working: {text}"),
+        });
+    }
     ticket.status = Status::NotStarted;
     ticket.up_next = true;
     clear_claim_fields(ticket);
     ticket.close_reason = None;
     ticket.closed_at = None;
     ticket.duplicate_of = None;
-    append_status_transition(ticket, previous, ticket.status, &now);
     ticket.updated_at = now;
     Ok(())
 }

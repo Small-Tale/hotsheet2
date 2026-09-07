@@ -48,9 +48,10 @@ Dragging an unselected ticket moves only it, while
   while interactions inside the menu remain open; Escape also dismisses it. A
   single completed selection also exposes Verified and Not Working. The latter accepts
   notes and/or attachments and submits them through one provider-neutral operation that
-  atomically appends the note, publishes all evidence, records an attributed timeline
-  activity with a concise single-line summary, and returns the ticket to Not Started +
-  Up Next. The actor comes from the store's git `user.name`; when no name is configured,
+  atomically records one attributed timeline activity before the user's regular note,
+  publishes all evidence, and returns the ticket to Not Started + Up Next. The activity
+  subsumes the implied status transition rather than adding a second status event and
+  carries a concise single-line summary. The actor comes from the store's git `user.name`; when no name is configured,
   the timeline uses an unattributed `Reported as not working` label. The explicit
   `not_working_report` capability hides the action for
   providers that cannot guarantee all-or-nothing behavior; the client never emulates it

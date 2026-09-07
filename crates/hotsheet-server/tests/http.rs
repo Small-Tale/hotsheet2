@@ -262,12 +262,16 @@ async fn provider_not_working_atomically_reopens_with_note_and_evidence() {
     let ticket = body_json(response).await;
     assert_eq!(ticket["status"], "not_started");
     assert_eq!(ticket["up_next"], true);
+    let notes = ticket["notes"].as_array().unwrap();
+    let added = &notes[notes.len() - 2..];
+    assert_eq!(added[0]["kind"], "activity");
+    assert_eq!(added[0]["summary"], "Reported as not working");
+    assert_eq!(added[1]["kind"], "regular");
+    assert_eq!(added[1]["text"], "Not working: failed after restart");
     assert!(
-        ticket["notes"]
-            .as_array()
-            .unwrap()
+        !notes
             .iter()
-            .any(|note| note["text"] == "Not working: failed after restart")
+            .any(|note| note["text"] == "Status changed from Completed to Not Started")
     );
     assert_eq!(ticket["attachments"][0]["filename"], "proof.txt");
     let attachment_id = ticket["attachments"][0]["id"].as_str().unwrap();
