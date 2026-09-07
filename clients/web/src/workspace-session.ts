@@ -9,6 +9,7 @@ export interface ProjectWorkspaceSession {
   searchOpen:boolean;
   searchQuery:string;
   inspectorTab:InspectorTab;
+  readerTab:InspectorTab;
   composer:{open:boolean;title:string;details:string;category:string;upNext:boolean;attachments:StoredPendingAttachment[]};
   composingNote:boolean;
   newNoteDraft:string;
@@ -35,12 +36,13 @@ export function loadProjectWorkspaceSession(storage:Pick<Storage,'getItem'>,proj
     const value=recordValue(JSON.parse(storage.getItem(PREFIX+projectId)??'null'));
     const composer=recordValue(value.composer);
     if(Object.keys(value).length===0||Object.keys(composer).length===0)return undefined;
-    const selectedView=stringValue(value.selectedView),inspectorTab=stringValue(value.inspectorTab),notWorking=recordValue(value.notWorking);
+    const selectedView=stringValue(value.selectedView),inspectorTab=stringValue(value.inspectorTab),readerTab=stringValue(value.readerTab),notWorking=recordValue(value.notWorking);
     return {
       selectedView:(['all','backlog','archive','errors'].includes(selectedView)?selectedView:'all') as TicketView,
       selectedTicketSlugs:Array.isArray(value.selectedTicketSlugs)?value.selectedTicketSlugs.filter((item):item is string=>typeof item==='string'):[],
       searchOpen:booleanValue(value.searchOpen),searchQuery:stringValue(value.searchQuery),
       inspectorTab:(['info','timeline','attachments','code-review'].includes(inspectorTab)?inspectorTab:'info') as InspectorTab,
+      readerTab:(['info','timeline','attachments','code-review'].includes(readerTab)?readerTab:'info') as InspectorTab,
       composer:{open:booleanValue(composer.open),title:stringValue(composer.title),details:stringValue(composer.details),category:stringValue(composer.category,'task'),upNext:booleanValue(composer.upNext),attachments:validAttachments(composer.attachments)},
       composingNote:booleanValue(value.composingNote),newNoteDraft:stringValue(value.newNoteDraft),
       feedbackReplies:validRecord(value.feedbackReplies),feedbackSelections:validSelections(value.feedbackSelections),

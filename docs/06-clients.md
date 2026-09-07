@@ -874,6 +874,10 @@ Details and note-content size from its own ordinary semantic size, including par
 lists, headings, quotations, code, tables, activity text, and edit fields. It does not
 enlarge the ticket title, tabs, note metadata, or other reader chrome. The preference is
 remembered when the reader closes and applies the next time any ticket opens.
+The sidebar inspector and reader each own and persist their selected tab for the project.
+Changing one surface's tab never changes the other; reopening or restoring the project
+returns each surface to its own last selection. Feedback-response entry intentionally
+opens the reader's Info tab without disturbing the sidebar selection.
 Leaving the details editor flushes its pending autosave and returns that surface to
 preview. When a pointer action outside the editor causes that blur, the save begins
 immediately but the editor remains mounted until the originating click has reached its
