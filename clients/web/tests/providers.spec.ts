@@ -117,6 +117,23 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.project-dialog__error')).toBeEmpty();await expect(page.locator('.app-error')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
 });
 
+test('keeps the project dialog dismissed after an inline error',async({page})=>{
+  await mockProject(page);
+  await page.route('**/__hotsheet/folders/choose',async route=>{await new Promise(resolve=>setTimeout(resolve,250));await route.fulfill({status:500,json:{error:'The native folder chooser failed.'}})});
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.getByRole('button',{name:'Add project'}).click();
+  const dialog=page.locator('[data-project-dialog]');
+  await page.getByRole('button',{name:'Browse for project folder'}).click();
+  await dialog.getByRole('button',{name:'Close'}).click();
+  await expect(dialog).toBeHidden();
+  await page.waitForTimeout(500);
+  await expect(dialog).toBeHidden();
+  await expect(dialog).toHaveJSProperty('open',false);
+});
+
 test('uses one provider dialog for onboarding, repeated connection creation, and editing',async({page})=>{
   await page.setViewportSize({width:1100,height:760});
   await mockProject(page,true,false,0,0,0,true);

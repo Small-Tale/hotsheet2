@@ -523,7 +523,7 @@ mount(appRoot,()=>{pendingTicketScrollState??=captureTicketScrollState();const t
 
 delegate(document.body,'click','[data-action="add-project"]',()=>{error.value='';projectDialogError.value='';projectDialogOpen.value=true});
 delegate(document.body,'click','[data-action="cancel-open-project"]',()=>{projectDialogOpen.value=false});
-delegate(document.body,'wa-request-close','[data-project-dialog]',()=>{projectDialogOpen.value=false});
+delegate(document.body,'wa-hide','[data-project-dialog]',()=>{projectDialogOpen.value=false});
 delegate(document.body,'wa-request-close','[data-ticket-source-setup-dialog]',()=>{ticketSourceSetupProject.value=undefined;providerSetupKind.value=undefined;providerEditingId.value=undefined;providerSettingsError.value='';createdGitTicketStore.value=''});
 delegate(document.body,'click','[data-action="dismiss-ticket-source-setup"]',()=>{ticketSourceSetupProject.value=undefined;providerSetupKind.value=undefined;providerEditingId.value=undefined;providerSettingsError.value='';createdGitTicketStore.value=''});
 delegate(document.body,'click','[data-action="create-project-git-source"]',()=>{void createProjectGitSource()});
