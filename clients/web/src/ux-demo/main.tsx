@@ -186,6 +186,7 @@ import {
   TicketPrioritySelectDemo,
   TicketStatusMenuDemo,
   TicketTimelineDemo,
+  zoomGalleryDemo,
 } from './ticket-metadata-demo';
 import {
   resetTicketRowDemo,
@@ -1914,6 +1915,9 @@ delegate(root, 'click', '[data-action="previous-gallery-image"]', () => {
 });
 delegate(root, 'click', '[data-action="next-gallery-image"]', () => {
   shiftGalleryDemo(1);
+});
+delegate(root, 'click', '[data-action="zoom-gallery-image"]', (_event, target) => {
+  zoomGalleryDemo(target.getAttribute('data-zoom-direction') === 'out' ? 'out' : 'in');
 });
 addEventListener('pointerdown', (event) => {
   if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
