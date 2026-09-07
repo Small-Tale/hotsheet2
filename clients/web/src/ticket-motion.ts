@@ -27,7 +27,7 @@ export function captureTicketMotion(root:ParentNode):TicketMotionSnapshot{
 }
 
 export function animateTicketMotion(before:TicketMotionSnapshot,root:ParentNode,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches){
-  if(reduceMotion||before.rows.size===0||before.scope!==motionScope(root))return;
+  if(reduceMotion||before.scope!==motionScope(root))return;
   const after=new Map<string,TicketMotionRow>();
   for(const container of motionContainers(root)){const row=currentRow(container),slug=row?.visual.dataset.ticketSlug;if(row&&slug)after.set(slug,row)}
   const removed=[...before.rows].filter(([slug])=>!after.has(slug)),incoming=[...after].filter(([slug])=>!before.rows.has(slug)),removedParents=new Set(removed.map(([,row])=>row.parent));

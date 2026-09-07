@@ -75,6 +75,13 @@ describe('ticket motion',()=>{
     expect(retained.animate).toHaveBeenCalledWith([{transform:'translate(0px, -71px)'},{transform:'translate(0, 0)'}],expect.objectContaining({delay:0,duration:240,fill:'backwards'}));expect(incoming.container.style.visibility).toBe('hidden');expect(overlay.dataset.ticketMotionGhost).toBe('incoming');expect(overlay.animate).toHaveBeenCalledWith([{opacity:0},{opacity:1}],expect.objectContaining({delay:240,duration:160,fill:'backwards'}));
   });
 
+  it('fades the first incoming row when the visible collection was empty',()=>{
+    const document=mockDocument(),incoming=row('HS2-FIRST','not-started',rect(10,20,190,63),undefined,document),overlay=ghost('HS2-FIRST',document);
+    (incoming.container as unknown as {cloneNode:()=>HTMLElement}).cloneNode=()=>overlay;
+    animateTicketMotion({scope:'edge-to-edge:ticket-board',rows:new Map()},root([incoming]),false);
+    expect(incoming.container.style.visibility).toBe('hidden');expect(overlay.dataset.ticketMotionGhost).toBe('incoming');expect(overlay.animate).toHaveBeenCalledWith([{opacity:0},{opacity:1}],expect.objectContaining({delay:0,duration:160,fill:'backwards'}));
+  });
+
   it('fades an outgoing container ghost before closing its exact source space',()=>{
     const document=mockDocument(),removed=row('HS2-A','started',rect(10,20,190,67),undefined,document),overlay=ghost('HS2-A',document),previousSibling=row('HS2-B','started',rect(10,95,190,44),undefined,document),retained=row('HS2-B','started',rect(10,20,190,44),undefined,document);
     (removed.container as unknown as {cloneNode:()=>HTMLElement}).cloneNode=()=>overlay;

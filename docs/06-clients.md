@@ -140,7 +140,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   fixed, workspace-level overlay so it can cross column scroll and clipping
   boundaries while the source and destination siblings close and open their space
   together. A newly created ticket first lets its siblings slide apart by exactly
-  the new row height, then fades into the reserved space; a departing ticket fades
+  the new row height, then fades into the reserved space, including when it is the
+  first visible ticket. Ticket-owned scrollports disable browser scroll anchoring so
+  native anchor correction cannot cancel this measured movement; Hot Sheet's explicit
+  scroll restoration remains authoritative. A departing ticket fades
   out before only its source siblings close the gap. Overlay identity and temporary
   hiding survive reactive DOM morphs without duplicate cards. Visual-only ghosts
   expose motion-specific identifiers rather than ticket-row roles, actions, or slugs,
