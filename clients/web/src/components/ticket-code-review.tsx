@@ -28,7 +28,7 @@ export interface TicketCodeReviewProps {
   expandedCommits?: readonly string[];
 }
 
-export function TicketCodeReview({ review, loading = false, message = '', title = 'Code Review', emptyMessage = 'No commits with this ticket in the subject were found.', loadingMessage = 'Finding ticket commits…', action = 'open-code-review', embedded = false, comparison, expandedCommits = [] }: TicketCodeReviewProps) {
+export function TicketCodeReview({ review, loading = false, message = '', title = 'Code Review', emptyMessage = 'No commits referencing this ticket were found.', loadingMessage = 'Finding ticket commits…', action = 'open-code-review', embedded = false, comparison, expandedCommits = [] }: TicketCodeReviewProps) {
   const enabled = Boolean(review?.difftool);
   const compareReady = Boolean(comparison?.a && comparison.b && comparison.a !== comparison.b);
   const heading = <div class="ticket-code-review__heading"><h2>{title}</h2>{review?.difftool && <span>Opens in {review.difftool}</span>}</div>;

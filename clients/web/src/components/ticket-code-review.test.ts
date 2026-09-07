@@ -53,7 +53,7 @@ describe('TicketCodeReview', () => {
 
   it('renders loading and empty states', () => {
     expect(String(TicketCodeReview({ loading: true }))).toContain('Finding ticket commits');
-    expect(String(TicketCodeReview({ review: { commits: [], ranges: [], difftool: 'meld', truncated: false } }))).toContain('No commits with this ticket');
+    expect(String(TicketCodeReview({ review: { commits: [], ranges: [], difftool: 'meld', truncated: false } }))).toContain('No commits referencing this ticket');
   });
 
   it('supports the repository dialog while preserving the shared commit presentation', () => {

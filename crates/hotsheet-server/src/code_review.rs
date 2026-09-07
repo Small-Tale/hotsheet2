@@ -1,9 +1,10 @@
 //! Ticket-associated commit discovery and safe configured-difftool launching.
 //!
-//! A commit belongs to a ticket only when the ticket slug appears as a bounded token in
-//! its subject. Bodies are deliberately ignored: they commonly cross-reference tickets
-//! whose code the commit did not implement. Launch requests are checked against a fresh
-//! discovery result, then passed to `git difftool` as an argument array (never a shell).
+//! A commit belongs to a ticket when the ticket slug appears as a bounded token in its
+//! subject or an explicit `Refs:` trailer. Other body text is deliberately ignored: it
+//! commonly cross-references tickets whose code the commit did not implement. Launch
+//! requests are checked against a fresh discovery result, then passed to `git difftool`
+//! as an argument array (never a shell).
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -78,7 +79,7 @@ pub fn discover(root: &Path, ticket_slug: &str) -> Result<CodeReview, CodeReview
     let (all, difftool, truncated) = discover_commits(root)?;
     let commits = all
         .iter()
-        .filter(|commit| subject_mentions_ticket(&commit.subject, ticket_slug))
+        .filter(|commit| commit_mentions_ticket(commit, ticket_slug))
         .cloned()
         .collect::<Vec<_>>();
     let ranges = contiguous_ranges(&all, &commits);
@@ -413,6 +414,16 @@ fn subject_mentions_ticket(subject: &str, ticket_slug: &str) -> bool {
     })
 }
 
+fn commit_mentions_ticket(commit: &CodeReviewCommit, ticket_slug: &str) -> bool {
+    subject_mentions_ticket(&commit.subject, ticket_slug)
+        || commit.body.lines().any(|line| {
+            line.split_once(':').is_some_and(|(key, references)| {
+                key.trim().eq_ignore_ascii_case("refs")
+                    && subject_mentions_ticket(references.trim(), ticket_slug)
+            })
+        })
+}
+
 fn is_ticket_char(value: char) -> bool {
     value.is_ascii_alphanumeric() || value == '_' || value == '-'
 }
@@ -469,7 +480,7 @@ mod tests {
     }
 
     #[test]
-    fn matching_is_case_insensitive_bounded_and_subject_only() {
+    fn subject_matching_is_case_insensitive_and_bounded() {
         assert!(subject_mentions_ticket(
             "HS2-PG1HKJ: add review",
             "hs2-pg1hkj"
@@ -483,6 +494,16 @@ mod tests {
             "XHS2-PG1HKJ: different ticket",
             "HS2-PG1HKJ"
         ));
+    }
+
+    #[test]
+    fn explicit_refs_trailers_are_ownership_but_ordinary_body_mentions_are_not() {
+        let mut referenced = commit("aaaa", "workflow documentation", "root");
+        referenced.body = "Why this changed.\n\nRefs: HS2-PG1HKJ HS2-OTHER1".into();
+        assert!(commit_mentions_ticket(&referenced, "HS2-PG1HKJ"));
+        assert!(!commit_mentions_ticket(&referenced, "HS2-PG1HK"));
+        referenced.body = "Follow-up for HS2-PG1HKJ".into();
+        assert!(!commit_mentions_ticket(&referenced, "HS2-PG1HKJ"));
     }
 
     #[test]

@@ -1470,7 +1470,8 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
     let second = commit("two\n", &format!("{slug}: second part"));
     commit("other\n", "unrelated change");
     let third = commit("three\n", &format!("polish ({slug})"));
-    let fourth = commit("four\n", &format!("{slug}: finish later bundle"));
+    commit("four\n", &format!("{slug}: finish later bundle"));
+    let trailer = commit("trailer\n", &format!("document workflow\n\nRefs: {slug}"));
     commit(
         "cross reference\n",
         &format!("different ticket\n\nFollow-up for {slug}"),
@@ -1488,12 +1489,12 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
     assert_eq!(response.status(), StatusCode::OK);
     let review = body_json(response).await;
     assert_eq!(review["difftool"], "hs2-test");
-    assert_eq!(review["commits"].as_array().unwrap().len(), 4);
-    assert_eq!(review["commits"][0]["sha"], fourth);
+    assert_eq!(review["commits"].as_array().unwrap().len(), 5);
+    assert_eq!(review["commits"][0]["sha"], trailer);
     assert_eq!(review["ranges"].as_array().unwrap().len(), 2);
     assert_eq!(review["ranges"][0]["from"], third);
-    assert_eq!(review["ranges"][0]["to"], fourth);
-    assert_eq!(review["ranges"][0]["count"], 2);
+    assert_eq!(review["ranges"][0]["to"], trailer);
+    assert_eq!(review["ranges"][0]["count"], 3);
     assert_eq!(review["ranges"][1]["from"], first);
     assert_eq!(review["ranges"][1]["to"], second);
     assert_eq!(review["ranges"][1]["count"], 2);
@@ -1514,7 +1515,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .oneshot(authed(
             "POST",
             &format!("/checkouts/review/tickets/{id}/code-review"),
-            Some(&serde_json::json!({"mode":"range","from":third,"to":fourth}).to_string()),
+            Some(&serde_json::json!({"mode":"range","from":third,"to":trailer}).to_string()),
         ))
         .await
         .unwrap();
