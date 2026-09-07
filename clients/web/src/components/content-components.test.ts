@@ -117,5 +117,18 @@ describe('content components', () => {
     expect(shellCss).toMatch(/\.ticket-reader-backdrop \{[^}]*padding: 1\.5rem;/);
   });
 
+  it('forwards every shared code-review state through the reader inspector', () => {
+    const review = { difftool: 'Glassbox', truncated: false, ranges: [], commits: [{ sha: 'abcdef', short_sha: 'abcdef', subject: 'Reader parity', body: 'First line\n\nExpanded detail', committed_at: '2026-09-07T00:00:00Z' }] };
+    const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', activeTab: 'code-review', codeReview: review, codeReviewMessage: 'Shared launch state', expandedCodeReviewCommits: ['abcdef'] }));
+    expect(markup).toContain('data-presentation="reader"');
+    expect(markup).toContain('data-component="ticket-code-review"');
+    expect(markup).toContain('Opens in Glassbox');
+    expect(markup).toContain('Reader parity');
+    expect(markup).toContain('Expanded detail');
+    expect(markup).toContain('Shared launch state');
+    expect(markup).toContain('data-expanded="true"');
+    expect(String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', activeTab: 'code-review', codeReviewLoading: true }))).toContain('Finding ticket commits');
+  });
+
   it('keeps the feedback catchall at half the ordinary note-editor minimum height',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).toMatch(/textarea\[data-note-response="true"\] \{ min-height: 2\.5rem; \}/)});
 });

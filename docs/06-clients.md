@@ -224,6 +224,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   dialog. It reports the running server application version, build revision, current local
   source revision, client revision, both protocol ranges, and server start time when the
   authenticated handshake supplied them. Missing values are labeled rather than guessed.
+  The dialog uses the same shared icon/title/subtitle header and borderless inset-separator
+  value table as repository status. Because this metadata is safely recoverable, the
+  native popover is dismissed by clicking outside or pressing Escape and has no redundant
+  Close button. Every compatibility and recovery state is represented in `/ux-demo`.
   Recovery guidance distinguishes safe compatible skew, stale local source, old client,
   old server, and unavailable metadata; it never offers automatic restart without the
   same explicit restart plus quiescence capability gate.
@@ -346,7 +350,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   established icons. Commit rows are flush with the review list instead of inheriting
   the component library's native list-item indentation. Loading and launch errors stay in
   the segment and do not replace ticket content or use the foreground project-loading
-  indicator. All discovery, target validation, and process launch remain server-owned.
+  indicator. Reader and sidebar presentations render the same `TicketInspector` tab and
+  receive the same review result, loading, launch-message, and expanded-commit state; the
+  larger reader therefore cannot fall back to an empty, separately implemented panel.
+  All discovery, target validation, and process launch remain server-owned.
 
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. Live diagnostics supersede any stale indexed row with the same recovered
