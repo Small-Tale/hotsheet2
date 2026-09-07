@@ -228,11 +228,17 @@ prompt can be dismissed and returns on a later open until a source is configured
   `hotsheet-settings.local.json`: those remain shared/local preferences. Git sources are
   checkout/store links in the machine registry, while external provider connections are
   non-secret records in the ticket store's `providers.json` (credentials remain keychain
-  references). The real Sources settings view lists active git and external connections,
-  offers GitHub, GitLab, and Jira-specific setup, validates their non-secret identifiers
-  and locators, creates the connection record, links it to the checkout, and can select it
-  as the default creation target. Credential fields accept only an existing keychain
-  reference; secret values are never returned to browser JavaScript.
+  references). The real Sources settings view lists active git and external connections
+  without embedding setup forms. Its Add data source action opens the same dialog used by
+  source-less project onboarding: the first screen selects GitHub, GitLab, or Jira (and,
+  during initial setup, a standalone Hot Sheet git store), then pushes the provider-specific
+  configuration screen within that dialog. Multiple connections of one provider type are
+  allowed because connection identity is independent from provider kind. Clicking an
+  existing connection row opens that same dialog with its editable non-secret values.
+  Creation and editing validate identifiers and locators, persist the connection record,
+  update its checkout link, and can select it as the default creation target. Credential
+  fields accept only an existing keychain reference; secret values are never returned to
+  browser JavaScript.
 
   Workspace search delegates to the checkout index rather than filtering compact rows
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text

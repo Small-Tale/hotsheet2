@@ -42,7 +42,9 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path==='/__hotsheet/folders/choose'&&request.method()==='POST')return route.fulfill({json:{path:['/picked/project','/picked/tickets.hs2'][folderChoice++]}});
     if(path.endsWith('/provider-connections')&&request.method()==='GET')return route.fulfill({json:providerConnectionRecords});
     if(path.endsWith('/provider-connections')&&request.method()==='POST'){const created=request.postDataJSON();providerConnectionRecords=[...providerConnectionRecords,created];return route.fulfill({status:201,json:created})}
+    const providerConnection=path.match(/\/provider-connections\/([^/]+)$/);if(providerConnection&&request.method()==='PATCH'){const id=decodeURIComponent(providerConnection[1]),updated={...request.postDataJSON(),id};providerConnectionRecords=providerConnectionRecords.map(item=>item.id===id?updated:item);return route.fulfill({json:updated})}
     if(path.includes('/sources/')&&request.method()==='PUT'){ticketSourceConfigured=true;return route.fulfill({json:{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:[],sources:providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,locator:connection.locator})),default_source:request.postDataJSON().make_default?providerConnectionRecords.at(-1)?.id:undefined}})}
+    if(path.endsWith('/default-source')&&request.method()==='PUT')return route.fulfill({json:{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:[],sources:providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,locator:connection.locator})),default_source:request.postDataJSON().connection_id}})
     if(path.endsWith('/providers')){const capabilities={create:true,update:canUpdate,close:true,notes:true,note_edit:canUpdate,note_delete:canUpdate,attachments:true,assignment:true,review_requests:true,dependencies:true,up_next:true,close_reasons:true,claims:true,atomic_batch:true,not_working_report:canUpdate,offline_mutation:true,history:true,watch:true,provider_idempotency:true,query_fields:[]};return route.fulfill({json:providerConnectionRecords.length?providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,display_name:connection.name??connection.id,locator:connection.locator,default:connection.default,capabilities})):ticketSourceConfigured?[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/tickets',default:true,capabilities}]:[]})}
     if(path.endsWith('/permissions')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/connections')&&request.method()==='GET')return route.fulfill({json:[]});
@@ -114,13 +116,82 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.project-dialog__error')).toBeEmpty();await expect(page.locator('.app-error')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
 });
 
-test('opens a project without a ticket source and offers setup without blocking the workspace',async({page})=>{
-  await page.setViewportSize({width:1100,height:760});await mockProject(page,true,false,0,0,0,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await expect(page.locator('[data-project-dialog]')).toBeHidden();await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();await expect(page.locator('.app-error')).toHaveCount(0);await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
-  const setup=page.locator('[data-ticket-source-setup-dialog]');await expect(setup).toHaveJSProperty('open',true);const sourceOptions=setup.locator('.ticket-source-setup__options .menu-item');await expect(sourceOptions).toHaveCount(2);await expect(setup.getByRole('button',{name:/Create a Hot Sheet 2 git ticket repository/})).toBeVisible();await expect(setup.getByRole('button',{name:/Connect GitHub Issues/})).toBeVisible();await expect(sourceOptions.locator('[data-lucide="chevron-right"]')).toHaveCount(2);const gitDescription=sourceOptions.first().locator('small'),optionBox=(await sourceOptions.first().boundingBox())!,descriptionBox=(await gitDescription.boundingBox())!;expect(descriptionBox.y).toBeGreaterThanOrEqual(optionBox.y);expect(descriptionBox.y+descriptionBox.height).toBeLessThanOrEqual(optionBox.y+optionBox.height);await page.waitForTimeout(300);await page.screenshot({path:'/private/tmp/hs2-2zw24f-source-setup-wide.png',fullPage:true});
-  await page.setViewportSize({width:1024,height:600});const compactOptionBox=(await sourceOptions.first().boundingBox())!,compactDescriptionBox=(await gitDescription.boundingBox())!;expect(compactDescriptionBox.y+compactDescriptionBox.height).toBeLessThanOrEqual(compactOptionBox.y+compactOptionBox.height);await page.screenshot({path:'/private/tmp/hs2-2zw24f-source-setup-compact.png',fullPage:true});await page.setViewportSize({width:1100,height:760});
-  await setup.getByRole('button',{name:/Connect GitHub Issues/}).click();await expect(setup).toHaveJSProperty('open',false);await expect(page.getByRole('heading',{name:'Ticket sources'})).toBeVisible();const providerForm=page.locator('[data-action="create-provider-connection"]');await expect(providerForm.getByRole('heading',{name:'Connect GitHub Issues'})).toBeVisible();await providerForm.getByLabel('Connection ID').fill('GitHub Main');await providerForm.getByLabel('Repository').fill('small-tale/hotsheet2');await providerForm.getByLabel('Credential reference').fill('github-small-tale');await providerForm.getByRole('button',{name:'Connect provider'}).click();await expect(page.getByRole('alert')).toContainText('lowercase letters');
-  await providerForm.getByLabel('Connection ID').fill('github-main');await providerForm.getByLabel('Display name').fill('GitHub Issues');await providerForm.getByRole('button',{name:'Connect provider'}).click();await expect(page.getByText('GitHub IssuesDefault')).toBeVisible();await expect(page.getByText('small-tale/hotsheet2')).toBeVisible();await expect(page.getByRole('status')).toContainText('GitHub Issues connected.');await page.screenshot({path:'/private/tmp/hs2-external-provider-configured.png',fullPage:true});await page.getByRole('button',{name:'List view'}).click();await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();await expect(page.locator('.app-error')).toHaveCount(0);
+test('uses one provider dialog for onboarding, repeated connection creation, and editing',async({page})=>{
+  await page.setViewportSize({width:1100,height:760});
+  await mockProject(page,true,false,0,0,0,true);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(0);
+  const setup=page.locator('[data-ticket-source-setup-dialog]'),sourceOptions=setup.locator('.ticket-source-setup__options .menu-item');
+  await expect(setup).toHaveJSProperty('open',true);
+  await expect(sourceOptions).toHaveCount(4);
+  await expect(setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository'})).toBeVisible();
+  await expect(setup.getByRole('button',{name:'Connect GitHub Issues'})).toBeVisible();
+  await expect(setup.getByRole('button',{name:'Connect GitLab Issues'})).toBeVisible();
+  await expect(setup.getByRole('button',{name:'Connect Jira Cloud'})).toBeVisible();
+  await expect(sourceOptions.locator('[data-lucide="chevron-right"]')).toHaveCount(4);
+  for(const option of await sourceOptions.all()){
+    const box=(await option.boundingBox())!,label=(await option.locator('.menu-item__label').boundingBox())!,icon=(await option.locator('.menu-item__icon').boundingBox())!,trailing=(await option.locator('.menu-item__trailing').boundingBox())!;
+    expect(label.y).toBeGreaterThanOrEqual(box.y);
+    expect(label.y+label.height).toBeLessThanOrEqual(box.y+box.height);
+    expect(Math.abs(icon.y+icon.height/2-(box.y+box.height/2))).toBeLessThanOrEqual(6);
+    expect(Math.abs(trailing.y+trailing.height/2-(box.y+box.height/2))).toBeLessThanOrEqual(6);
+  }
+  await page.screenshot({path:'/private/tmp/hs2-b2kpnw-source-setup-after.png',fullPage:true});
+  await page.setViewportSize({width:620,height:680});
+  await expect.poll(async()=>sourceOptions.evaluateAll(options=>options.every(option=>{const box=option.getBoundingClientRect(),label=option.querySelector('.menu-item__label')!.getBoundingClientRect();return label.right<=box.right&&label.bottom<=box.bottom}))).toBe(true);
+  await page.screenshot({path:'/private/tmp/hs2-b2kpnw-source-setup-compact-after.png',fullPage:true});
+  await page.setViewportSize({width:1100,height:760});
+  await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
+  await expect(setup).toHaveJSProperty('open',true);
+  const providerForm=setup.locator('[data-action="save-provider-connection"]');
+  await expect(providerForm).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-y4zpqq-provider-config-dialog-after.png',fullPage:true});
+  await providerForm.getByRole('button',{name:'‹ Ticket source types'}).click();
+  await expect(sourceOptions).toHaveCount(4);
+  await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
+  await providerForm.getByLabel('Connection ID').fill('GitHub Main');
+  await providerForm.getByLabel('Repository').fill('small-tale/hotsheet2');
+  await providerForm.getByLabel('Credential reference').fill('github-small-tale');
+  await providerForm.getByRole('button',{name:'Connect provider'}).click();
+  await expect(setup.getByRole('alert')).toContainText('lowercase letters');
+  await providerForm.getByLabel('Connection ID').fill('github-main');
+  await providerForm.getByLabel('Display name').fill('GitHub Issues');
+  await providerForm.getByRole('button',{name:'Connect provider'}).click();
+  await expect(setup).toHaveJSProperty('open',false);
+  await expect(page.getByRole('status')).toContainText('GitHub Issues connected.');
+  await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
+  await page.getByLabel('Settings view').click();
+  await expect(page.getByRole('heading',{name:'Connected sources'})).toBeVisible();
+  await expect(page.locator('[data-action="save-provider-connection"]')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Add data source'})).toBeVisible();
+  const primaryConnection=page.getByRole('button',{name:'Edit GitHub Issues'});
+  await expect(primaryConnection).toContainText('small-tale/hotsheet2');
+  await expect(primaryConnection.locator('[data-lucide="chevron-right"]')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-y4zpqq-provider-settings-list-after.png',fullPage:true});
+  await page.getByRole('button',{name:'Add data source'}).click();
+  await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
+  await providerForm.getByLabel('Connection ID').fill('github-secondary');
+  await providerForm.getByLabel('Display name').fill('GitHub Secondary');
+  await providerForm.getByLabel('Repository').fill('small-tale/secondary');
+  await providerForm.getByLabel('Credential reference').fill('github-small-tale');
+  await providerForm.getByLabel('Use as the default ticket source').uncheck();
+  await providerForm.getByRole('button',{name:'Connect provider'}).click();
+  await expect(setup).toHaveJSProperty('open',false);
+  await expect(page.getByRole('button',{name:'Edit GitHub Issues'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Edit GitHub Secondary'})).toBeVisible();
+  await page.getByRole('button',{name:'Edit GitHub Issues'}).click();
+  await expect(providerForm.getByLabel('Connection ID')).toBeDisabled();
+  await expect(providerForm.getByLabel('Repository')).toHaveValue('small-tale/hotsheet2');
+  await providerForm.getByLabel('Display name').fill('GitHub Primary');
+  await providerForm.getByRole('button',{name:'Save changes'}).click();
+  await expect(setup).toHaveJSProperty('open',false);
+  await expect(page.getByRole('button',{name:'Edit GitHub Primary'})).toBeVisible();
+  await expect(page.locator('.app-error')).toHaveCount(0);
 });
 
 test('uses independent width and height terminal dashboard zoom scales',async({page})=>{
