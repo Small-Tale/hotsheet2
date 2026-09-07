@@ -14,7 +14,7 @@ export const TERMINAL_DRAWER_RESIZE_END_EVENT='hotsheet-terminal-drawer-resize-e
 export const TERMINAL_DASHBOARD_COLS=80;
 export const TERMINAL_DASHBOARD_ROWS=24;
 export const TERMINAL_PREVIEW_NATURAL_WIDTH=1280;
-export const TERMINAL_PREVIEW_NATURAL_HEIGHT=960;
+export const TERMINAL_PREVIEW_NATURAL_HEIGHT=768;
 export interface TerminalDashboardTypography {fontSize:number;letterSpacing:number;lineHeight:number}
 export function terminalDashboardTypography(current:TerminalDashboardTypography,screenWidth:number,screenHeight:number,targetWidth:number,targetHeight:number):TerminalDashboardTypography {
   if([screenWidth,screenHeight,targetWidth,targetHeight].some(value=>!Number.isFinite(value)||value<=0))return current;
@@ -35,6 +35,15 @@ export function terminalViewportScale(viewportCols:number,viewportRows:number,pt
 }
 export function terminalPreviewScale(frameWidth:number,frameHeight:number):number {
   return Math.max(0,Math.min(frameWidth/TERMINAL_PREVIEW_NATURAL_WIDTH,frameHeight/TERMINAL_PREVIEW_NATURAL_HEIGHT));
+}
+
+export function terminalPhysicalScale(screenWidth:number,screenHeight:number,targetWidth:number,targetHeight:number):number {
+  if([screenWidth,screenHeight,targetWidth,targetHeight].some(value=>!Number.isFinite(value)||value<=0))return 0;
+  return Math.min(targetWidth/screenWidth,targetHeight/screenHeight);
+}
+
+export function terminalDedicatedGridSize(cols:number,rows:number) {
+  return {cols:Math.max(1,cols),rows:Math.max(1,rows-1)};
 }
 
 export function terminalShouldAdoptServerSize(scaledPreview:boolean,locallyFocused:boolean,drivenByViewer:boolean):boolean {

@@ -1,4 +1,4 @@
-.terminal-dashboard { position: relative; display: flex; min-width: 0; min-height: 0; height: 100%; overflow: hidden; flex-direction: column; background: var(--wa-color-surface-lowered); }
+.terminal-dashboard { --terminal-tile-frame-inset: var(--wa-space-s); --terminal-tile-footer-height: 2.7rem; --terminal-tile-border-width: 1px; position: relative; display: flex; min-width: 0; min-height: 0; height: 100%; overflow: hidden; flex-direction: column; background: var(--wa-color-surface-lowered); }
 .terminal-dashboard-controls { display: flex; align-items: center; gap: var(--wa-space-xs); }
 .terminal-dashboard-controls__visibility-group { display:flex; align-items:center; gap:var(--wa-space-xs); }
 .terminal-dashboard-controls__count { position: absolute; top: -.25rem; right: -.2rem; display: grid; min-width: 1rem; height: 1rem; padding: 0 .2rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-warning-on-normal); background: var(--wa-color-warning-fill-loud); font-size: var(--wa-font-size-3xs); font-weight: 700; line-height: 1; place-items: center; }
@@ -15,26 +15,25 @@
 .terminal-dashboard__project h2 { display: flex; margin: 0 0 .45rem; color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); font-weight: 700; align-items: center; gap: .45rem; }
 .terminal-dashboard__project h2 span { display: grid; min-width: 1.35rem; height: 1.35rem; padding: 0 .25rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); font-size: var(--wa-font-size-xs); place-items: center; }
 .terminal-grid { display: grid; min-width: min-content; gap: .75rem; align-content: start; }
-.terminal-grid[data-basis="across"] { width: 100%; grid-template-columns: repeat(var(--terminal-grid-fit), minmax(0, 1fr)); }
+.terminal-grid[data-basis="across"] { width: 100%; grid-template-columns: repeat(var(--terminal-grid-fit), var(--terminal-tile-width)); }
 .terminal-grid[data-basis="high"] { width: 100%; grid-template-columns: repeat(auto-fill, var(--terminal-tile-width)); }
 .terminal-grid[data-basis="high"][data-fit="1"] { width: max-content; height: 100%; grid-auto-flow: column; grid-template-columns: none; grid-template-rows: var(--terminal-tile-height); grid-auto-columns: var(--terminal-tile-width); }
 .terminal-dashboard[data-basis="high"] .terminal-dashboard__content, .terminal-dashboard[data-basis="high"][data-fit="1"] .terminal-dashboard__project { height: 100%; }
-.terminal-tile { display: flex; min-width: 0; width: var(--terminal-tile-width); height: var(--terminal-tile-height); overflow: hidden; border: 1px solid var(--hs-terminal-background); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); flex-direction: column; }
+.terminal-tile { display: flex; min-width: 0; width: var(--terminal-tile-width); height: var(--terminal-tile-height); overflow: hidden; border: var(--terminal-tile-border-width) solid var(--hs-terminal-background); border-radius: var(--wa-border-radius-l); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); flex-direction: column; }
 .terminal-tile[data-preview-only="true"] { cursor: zoom-in; }
 .terminal-tile[data-preview-only="true"]:focus-visible { outline: var(--wa-focus-ring); outline-offset: 2px; }
-.terminal-grid[data-basis="across"] .terminal-tile { width: auto; }
 .terminal-dashboard .terminal-tile__preview { position: relative; display: block; min-height: 0; width: 100%; padding: .65rem; overflow: hidden; color: var(--wa-color-neutral-on-loud); background: var(--hs-terminal-background); text-align: left; flex: 1; }
 .terminal-tile__preview pre { height: 100%; margin: 0; overflow: hidden; color: var(--wa-color-neutral-on-loud); font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-xs); line-height: 1.4; white-space: pre-wrap; }
-.terminal-tile__viewport-frame { position: absolute; inset: var(--wa-space-s); overflow: hidden; background: var(--hs-terminal-background); pointer-events: none; }
+.terminal-tile__viewport-frame { position: absolute; inset: var(--terminal-tile-frame-inset); overflow: hidden; background: var(--hs-terminal-background); pointer-events: none; }
 .terminal-viewport { position: absolute; inset: var(--wa-space-s); display: none; overflow: auto; }
-.terminal-tile__viewport-frame .terminal-viewport--scaled-preview { inset: 0 auto auto 0; width: 1280px; height: 960px; overflow: hidden; transform-origin: top left; pointer-events: none; user-select: none; }
+.terminal-tile__viewport-frame .terminal-viewport--scaled-preview { inset: 0 auto auto 0; width: 1280px; height: 768px; overflow: hidden; transform-origin: top left; pointer-events: none; user-select: none; }
 .terminal-viewport[data-connection="connected"], .terminal-viewport[data-connection="reconnecting"] { display: block; }
 .terminal-tile__preview:has(.terminal-viewport[data-connection="connected"],.terminal-viewport[data-connection="reconnecting"]) > pre { visibility: hidden; }
 .terminal-viewport .xterm { height: 100%; }
 .terminal-viewport:not(.terminal-viewport--scaled-preview) .terminal { transform-origin: top left; }
 .terminal-viewport .xterm-viewport { overflow-y: auto; }
 .terminal-viewport[data-driving="false"]::after { position: sticky; z-index: 2; left: var(--wa-space-xs); bottom: var(--wa-space-xs); display: inline-block; padding: var(--wa-space-2xs) var(--wa-space-xs); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-normal); background: color-mix(in srgb,var(--wa-color-surface-default) 88%,transparent); box-shadow: var(--wa-shadow-s); content: attr(data-viewing-label); font-size: var(--wa-font-size-2xs); }
-.terminal-tile__footer { display: flex; min-height: 2.7rem; padding: .35rem .4rem .35rem .55rem; align-items: center; gap: .4rem; }
+.terminal-tile__footer { display: flex; min-height: var(--terminal-tile-footer-height); height: var(--terminal-tile-footer-height); padding: .35rem .4rem .35rem .55rem; align-items: center; flex: none; gap: .4rem; }
 .terminal-tile__state { width: .5rem; height: .5rem; border-radius: var(--wa-border-radius-circle); background: var(--wa-color-neutral-fill-loud); flex: none; }
 .terminal-tile[data-busy="true"] .terminal-tile__state { background: var(--wa-color-success-fill-loud); box-shadow: 0 0 0 3px var(--wa-color-success-fill-quiet); }
 .terminal-tile[data-alive="false"] .terminal-tile__state { background: var(--wa-color-danger-fill-loud); }

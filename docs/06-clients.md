@@ -583,15 +583,19 @@ always shows its project's terminals and has no visibility controls. Newly creat
 appear in Default and start hidden in existing named groups. The dashboard always uses one
 ungrouped flow, so there is no redundant project/none grouping selector.
 Every dashboard tile mounts a read-only xterm with an exact 80×24 character grid at a
-stable 1280×960 natural geometry. Measured cell metrics tune font size plus row and column
-spacing, followed by a subpixel physical correction, so all 80 columns and 24 rows fill the
-available preview without clipping. Magnifying a grid tile preserves the same exact grid and
-repeats that physical fit for its larger viewport. Changing grid fit or magnifying
+stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to the black PTY
+viewport: the surrounding card adds the measured spacing-token inset, border, and footer
+height outside that viewport. Measured cell metrics tune font size plus row and column
+spacing, followed only by a uniform subpixel correction, so all 80 columns and 24 rows fill
+the available preview without horizontal/vertical stretching. Magnifying a grid tile preserves
+the same exact grid and terminal-screen aspect. Changing grid fit or magnifying
 never derives PTY rows or columns from tile dimensions. Dedicated project-drawer terminals
-remain fitted to their actual interactive viewport. The preview,
+remain fitted to their actual interactive viewport and reserve one physical containment row;
+server size echoes cannot restore the edge row that would otherwise be clipped. The preview,
 its inset frame, and its border all use the terminal background token, so unused space
-cannot expose an unrelated gray surface, and the computed tile height includes both preview
-and footer so repeated viewport changes cannot push the terminal outside its card. Dashboard
+cannot expose an unrelated gray surface. The computed tile height derives the 5:3 preview
+from the card width, then adds the tokenized frame/footer chrome, so repeated viewport changes
+cannot push the terminal outside its card. Dashboard
 previews never accept terminal input. Click opens and focuses a separate interactive viewport
 centered over a full-browser dimming layer; click-away restores the grid. Its footer exposes
 an external-open action, and both that action and a footer double-click open the terminal in

@@ -6,7 +6,12 @@ export const TERMINAL_GRID_DEFAULT_ACROSS = 4;
 export const TERMINAL_GRID_DEFAULT_HIGH = 2;
 export const TERMINAL_GRID_GAP = 12;
 export const TERMINAL_GRID_CONTENT_PADDING = 12;
-export const TERMINAL_TILE_ASPECT = 4 / 3;
+export const TERMINAL_VIEWPORT_ASPECT = 5 / 3;
+export const TERMINAL_TILE_FRAME_INSET = 12;
+export const TERMINAL_TILE_BORDER_WIDTH = 1;
+export const TERMINAL_TILE_FOOTER_HEIGHT = 43.2;
+export const TERMINAL_TILE_HORIZONTAL_CHROME = 2 * (TERMINAL_TILE_BORDER_WIDTH + TERMINAL_TILE_FRAME_INSET);
+export const TERMINAL_TILE_VERTICAL_CHROME = 2 * (TERMINAL_TILE_BORDER_WIDTH + TERMINAL_TILE_FRAME_INSET) + TERMINAL_TILE_FOOTER_HEIGHT;
 export const TERMINAL_DRAWER_MIN_TILE_HEIGHT = 160;
 export const TERMINAL_DRAWER_MIN_LAYOUT_WIDTH = 240;
 
@@ -18,6 +23,16 @@ export interface TerminalGridLayout {
   max: number;
   tileWidth: number;
   tileHeight: number;
+}
+
+export function terminalTileHeight(tileWidth:number):number {
+  const viewportWidth=Math.max(1,tileWidth-TERMINAL_TILE_HORIZONTAL_CHROME);
+  return Math.max(1,Math.round(viewportWidth/TERMINAL_VIEWPORT_ASPECT+TERMINAL_TILE_VERTICAL_CHROME));
+}
+
+export function terminalTileWidth(tileHeight:number):number {
+  const viewportHeight=Math.max(1,tileHeight-TERMINAL_TILE_VERTICAL_CHROME);
+  return Math.max(1,Math.round(viewportHeight*TERMINAL_VIEWPORT_ASPECT+TERMINAL_TILE_HORIZONTAL_CHROME));
 }
 
 export function terminalGridContentSize(width:number,height:number,padding=TERMINAL_GRID_CONTENT_PADDING) {
@@ -40,10 +55,10 @@ export function terminalGridLayout(width: number, height: number, fitAcross: num
   const max = basis === 'across' ? TERMINAL_GRID_MAX_ACROSS : TERMINAL_GRID_MAX_HIGH;
   if (basis === 'across') {
     const tileWidth = Math.max(1, Math.floor((Math.max(0, width) - TERMINAL_GRID_GAP * (fit - 1)) / fit));
-    return { basis, fit, max, tileWidth, tileHeight: Math.max(1, Math.floor(tileWidth / TERMINAL_TILE_ASPECT)) };
+    return { basis, fit, max, tileWidth, tileHeight:terminalTileHeight(tileWidth) };
   }
   const tileHeight = Math.max(1, Math.floor((Math.max(0, height) - TERMINAL_GRID_GAP * (fit - 1)) / fit));
-  return { basis, fit, max, tileWidth: Math.max(1, Math.floor(tileHeight * TERMINAL_TILE_ASPECT)), tileHeight };
+  return { basis, fit, max, tileWidth:terminalTileWidth(tileHeight), tileHeight };
 }
 
 /** The short bottom drawer deliberately has a different scale from the global
@@ -51,9 +66,9 @@ export function terminalGridLayout(width: number, height: number, fitAcross: num
  * columns across the available width and may scroll vertically. */
 export function terminalDrawerGridLayout(width:number,height:number,fitHigh:number):TerminalGridLayout{
   const basis:TerminalGridBasis='high',fit=clampTerminalFit(fitHigh,basis),max=TERMINAL_GRID_MAX_HIGH;
-  if(fit===1){const tileHeight=Math.max(TERMINAL_DRAWER_MIN_TILE_HEIGHT,Math.floor(Math.max(0,height)));return{basis,fit,max,tileWidth:Math.max(1,Math.floor(tileHeight*TERMINAL_TILE_ASPECT)),tileHeight}}
+  if(fit===1){const tileHeight=Math.max(TERMINAL_DRAWER_MIN_TILE_HEIGHT,Math.floor(Math.max(0,height)));return{basis,fit,max,tileWidth:terminalTileWidth(tileHeight),tileHeight}}
   const available=Math.max(TERMINAL_DRAWER_MIN_LAYOUT_WIDTH,Math.max(0,width)),tileWidth=Math.max(1,Math.floor((available-TERMINAL_GRID_GAP*(fit-1))/fit));
-  return{basis,fit,max,tileWidth,tileHeight:Math.max(1,Math.floor(tileWidth/TERMINAL_TILE_ASPECT))};
+  return{basis,fit,max,tileWidth,tileHeight:terminalTileHeight(tileWidth)};
 }
 
 export function adjustTerminalFit(value: number, basis: TerminalGridBasis, direction: 'in' | 'out'): number {

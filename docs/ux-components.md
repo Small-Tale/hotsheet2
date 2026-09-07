@@ -802,11 +802,13 @@ splitter gesture, existing dedicated and grid terminal geometry remains frozen; 
 tile recomputation, and PTY size claims happen once after pointer release.
 
 At every scale, dashboard tiles are keyboard-focusable, non-interactive previews: each live
-xterm retains a fixed 1280×960 natural geometry and the complete terminal is uniformly
+xterm retains a fixed 1280×768 natural geometry and the complete terminal is uniformly
 scaled into the tile instead of being refit to the tile. This keeps the PTY stable as grid
 zoom changes and keeps the preview, inset frame, and unused terminal area on the terminal
-background color. A plain activation magnifies and focuses an interactive copy in place
-over the same grid; clicking the surrounding overlay or pressing Escape restores the grid. A double
+background color. Only the black viewport follows that 5:3 aspect; the tile card adds its
+measured spacing-token inset, border, and footer height outside the viewport. A plain activation
+magnifies and focuses an interactive copy in place over the same grid; clicking the surrounding
+overlay or pressing Escape restores the grid. A double
 activation, or Open from the tile's shared MenuItem-based context menu, jumps to that
 project and selects the terminal in a maximized drawer. The same context menu offers Hide
 Terminal. Tiles have no permanent special-action buttons. These actions must never spawn a
