@@ -145,7 +145,10 @@ does not introduce polling or another network request.
 - `ProjectSummary` — **demo built**: typed seven-day ticket-completion trend,
   completed-today count, and current in-progress count. The ambiguous day-over-day
   percentage from the wireframe is intentionally omitted. Zero-completion days retain
-  a one-pixel neutral baseline mark so all seven day positions remain visible.
+  a one-pixel neutral baseline mark so all seven day positions remain visible. Production
+  derives each bar from ticket completion timestamps in the corresponding local calendar
+  day. The whole summary is an accessible action that opens the selected project's
+  statistics surface; HS2-38RJMK owns the full charts behind the current placeholder.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `RepositorySummary` — **production built**: one accessible branch/status action with

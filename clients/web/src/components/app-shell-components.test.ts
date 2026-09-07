@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { describe, expect, it } from 'vitest';
 
-import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resizeDemoWidth, selectProjectTab, setRegionSize, shellMode } from '../ux-demo/app-shell-demo';
+import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resizeDemoWidth, selectProjectTab, setRegionSize, shellMode, shellStatsProjectName } from '../ux-demo/app-shell-demo';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
 import { PageHeader } from './page-header';
@@ -150,6 +150,7 @@ describe('application shell components', () => {
     shellMode.value = 'stats';
     selectProjectTab('two');
     expect(shellMode.value).toBe('project');
+    expect(shellStatsProjectName.value).toBeUndefined();
     expect(projectTabs.value.map(tab => [tab.id, tab.selected])).toEqual([['one', false], ['two', true]]);
     closeProjectTab('two');
     expect(projectTabs.value).toMatchObject([{ id: 'one', selected: true }]);

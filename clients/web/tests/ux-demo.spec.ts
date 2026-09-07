@@ -1125,6 +1125,9 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summary.locator('[data-zero="true"]')).toHaveCount(1);
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('height', '1px');
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(174, 174, 178)');
+  await expect(summary).toHaveCSS('cursor','pointer');
+  await summary.click();
+  await expect(page.getByText('Hot Sheet 2 project statistics requested.')).toBeVisible();
 
   await page.goto('/ux-demo?component=repository-summary');
   const repository = page.getByRole('button', { name: 'Repository status for feature/client-sidebar' });

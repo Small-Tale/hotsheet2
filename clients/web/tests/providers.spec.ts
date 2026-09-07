@@ -934,6 +934,25 @@ test('shows reactive open and Up Next counts immediately above Drive',async({pag
   await page.locator('[data-ticket-slug="HS2-NEXT01"]').click();const statusSelect=page.locator('wa-select[name="inspector-status"]');await statusSelect.click();await statusSelect.locator('wa-option[value="completed"]').click();await expect(summary).toHaveText('5 open, 1 up next, 0 active');await page.keyboard.press('Escape');await page.setViewportSize({width:940,height:844});await expect(summary).toBeVisible();await expect(drive).toBeVisible();expect(await summary.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-a94d3h-project-work-summary-narrow.png',fullPage:true});
 });
 
+test('derives the seven-day completion chart and opens project-scoped statistics',async({page})=>{
+  const completedAt=(daysAgo:number)=>{const value=new Date();value.setHours(12,0,0,0);value.setDate(value.getDate()-daysAgo);return value.toISOString()};
+  const datedRows=[{...row,completed_at:completedAt(6)},{...backlogRow,completed_at:completedAt(3)},{...completedRow,completed_at:completedAt(0)},verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
+  await mockProject(page);
+  await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/tickets',route=>route.request().method()==='GET'?route.fulfill({json:datedRows}):route.fallback());
+  await page.setViewportSize({width:1280,height:800});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const summary=page.locator('[data-component="project-summary"]'),chart=summary.locator('[role="img"]');
+  await expect(summary).toHaveAccessibleName('Open project statistics: 1 completed today, 5 in progress');
+  await expect(chart).toHaveAttribute('aria-label','Tickets completed over the last 7 days: 1, 0, 0, 1, 0, 0, 1');
+  await expect(summary.locator('[data-zero="false"]')).toHaveCount(3);
+  await page.screenshot({path:'/private/tmp/hs2-y51ehn-completion-chart-wide.png',fullPage:true});
+  await summary.click();
+  const shell=page.locator('[data-component="app-shell"]');await expect(shell).toHaveAttribute('data-mode','stats');await expect(page.getByRole('region',{name:'demo project statistics'})).toContainText('Detailed ticket-flow and usage charts are coming');
+  await page.screenshot({path:'/private/tmp/hs2-y51ehn-project-stats-wide.png',fullPage:true});
+  await page.getByRole('tab',{name:'demo'}).click();await expect(shell).toHaveAttribute('data-mode','project');
+  await page.setViewportSize({width:1024,height:600});await expect(summary).toBeVisible();await page.evaluate(()=>(document.activeElement as HTMLElement|null)?.blur());await page.mouse.move(1000,580);await expect(summary).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-y51ehn-completion-chart-narrow.png',fullPage:true});await summary.click();await expect(page.getByRole('region',{name:'demo project statistics'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-y51ehn-project-stats-narrow.png',fullPage:true});
+  await page.getByRole('button',{name:'Cross-project stats'}).click();await expect(page.getByRole('heading',{name:'Cross-project stats'})).toBeVisible();
+});
+
 test('focuses the ticket title every time the real composer expands',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const launcher=page.getByRole('button',{name:'New ticket…'});await launcher.click();const title=page.locator('wa-input[name="new-ticket-title"]');await expect(title).toBeFocused();await page.getByRole('button',{name:'Cancel'}).click();await launcher.click();await expect(title).toBeFocused();
 });

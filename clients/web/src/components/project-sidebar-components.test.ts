@@ -36,6 +36,8 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('Tickets completed over the last 2 days: 1, 4');
     expect(markup).toContain('8 completed today');
     expect(markup).toContain('2 in progress');
+    expect(markup).toContain('data-action="open-project-stats"');
+    expect(markup).toContain('aria-label="Open project statistics: 8 completed today, 2 in progress"');
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
   });
 

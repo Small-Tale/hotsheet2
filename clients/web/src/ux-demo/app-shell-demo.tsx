@@ -30,6 +30,7 @@ const initialTabs: ProjectTabProps[] = [
 export const projectTabs = signal<ProjectTabProps[]>(initialTabs.map(tab => ({ ...tab })));
 export const shellConnectionState = signal<ConnectionState | undefined>('reconnecting');
 export const shellMode = signal<ProjectTabBarMode>('project');
+export const shellStatsProjectName = signal<string | undefined>(undefined);
 export const shellSidebarSize = signal(272);
 export const shellSidebarVisible = signal(true);
 export const shellInspectorSize = signal(352);
@@ -64,6 +65,7 @@ export function setRegionSize(id: string, size: number): void {
 
 export function selectProjectTab(id: string): void {
   shellMode.value = 'project';
+  shellStatsProjectName.value = undefined;
   projectTabs.value = projectTabs.value.map(tab => ({ ...tab, selected: tab.id === id }));
   shellEvent.value = `${projectTabs.value.find(tab => tab.id === id)?.name ?? 'Project'} selected.`;
 }
@@ -159,7 +161,9 @@ export function AppShellDemo() {
   const workspace = shellMode.value === 'terminals'
     ? <section class="shell-mode-surface" aria-label="Terminal dashboard workspace"><h2>Terminal dashboard</h2><p>Monitor and arrange terminal sessions across connected projects.</p></section>
     : shellMode.value === 'stats'
-      ? <section class="shell-mode-surface" aria-label="Cross-project stats workspace"><h2>Cross-project stats</h2><p>Compare ticket flow and activity across connected projects.</p></section>
+      ? shellStatsProjectName.value
+        ? <section class="shell-mode-surface" aria-label={`${shellStatsProjectName.value} project statistics`}><h2>{shellStatsProjectName.value} project statistics</h2><p>Detailed ticket-flow and usage charts are coming in a future Hot Sheet update.</p></section>
+        : <section class="shell-mode-surface" aria-label="Cross-project stats workspace"><h2>Cross-project stats</h2><p>Compare ticket flow and activity across connected projects.</p></section>
       : projectWorkspace;
   const projectName = shellMode.value === 'terminals' ? 'Terminals' : shellMode.value === 'stats' ? 'Stats' : 'Hot Sheet 2';
   const viewName = shellMode.value === 'terminals' ? 'Terminal Dashboard' : shellMode.value === 'stats' ? 'Cross-project Stats' : 'Queue';

@@ -84,6 +84,7 @@ import {
   shellEvent,
   shellMode,
   shellSidebarVisible,
+  shellStatsProjectName,
 } from './app-shell-demo';
 import {
   demoCatalog,
@@ -859,6 +860,7 @@ delegate(root, 'click', '[data-action="toggle-project-sidebar"]', () => {
     : 'Project sidebar hidden.';
 });
 delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
+  shellStatsProjectName.value = undefined;
   shellMode.value = (target as HTMLElement).dataset
     .shellMode as typeof shellMode.value;
   workspaceSearchOpen.value = false;
@@ -867,6 +869,15 @@ delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
     shellMode.value === 'terminals'
       ? 'Terminal dashboard selected.'
       : 'Cross-project stats selected.';
+});
+delegate(root, 'click', '[data-action="open-project-stats"]', () => {
+  const name = projectTabs.value.find(tab => tab.selected)?.name ?? 'Project';
+  shellStatsProjectName.value = name;
+  shellMode.value = 'stats';
+  workspaceSearchOpen.value = false;
+  workspaceSearchQuery.value = '';
+  sidebarEvent.value = `${name} project statistics requested.`;
+  shellEvent.value = `${name} project statistics selected.`;
 });
 delegate(root, 'click', '[data-action="toggle-resizable-collapse"]', () => {
   resizeDemoCollapsed.value = !resizeDemoCollapsed.value;
