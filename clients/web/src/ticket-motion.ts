@@ -1,6 +1,8 @@
 interface TicketMotionRow {rect:DOMRect;parent:string;element:HTMLElement}
 export interface TicketMotionSnapshot {scope:string;rows:Map<string,TicketMotionRow>}
 
+const LAYOUT_DURATION=240,FADE_DURATION=160,MOTION_EASING='cubic-bezier(.2,.8,.2,1)';
+
 function motionScope(root:ParentNode){const workspace=root.querySelector<HTMLElement>('.app-shell__workspace'),collection=workspace?.querySelector<HTMLElement>('[data-component="ticket-list"], [data-component="ticket-board"]');return`${workspace?.dataset.presentation??''}:${collection?.dataset.component??''}`}
 function motionRows(root:ParentNode){return [...root.querySelectorAll<HTMLElement>('[data-component="ticket-list-row"][data-ticket-slug]')]}
 function parentKey(row:HTMLElement){return row.closest<HTMLElement>('[data-column-id]')?.dataset.columnId??row.closest<HTMLElement>('[data-component="ticket-list"]')?.dataset.component??''}
@@ -12,22 +14,80 @@ export function captureTicketMotion(root:ParentNode):TicketMotionSnapshot{
 export function animateTicketMotion(before:TicketMotionSnapshot,root:ParentNode,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches){
   if(reduceMotion||before.rows.size===0||before.scope!==motionScope(root))return;
   const after=new Map(motionRows(root).map(row=>[row.dataset.ticketSlug!,row]));
-  const hasRemovedRows=[...before.rows.keys()].some(slug=>!after.has(slug));
+  const removed=[...before.rows].filter(([slug])=>!after.has(slug)),removedParents=new Set(removed.map(([,row])=>row.parent));
+  const layoutMotion=new Map<string,{row:HTMLElement;previous:TicketMotionRow;rect:DOMRect;x:number;y:number;movedColumn:boolean}>();
   for(const [slug,previous] of before.rows){
     const row=after.get(slug);
-    if(!row){fadeRemovedTicket(previous);continue}
+    if(!row)continue;
     const rect=row.getBoundingClientRect(),x=previous.rect.left-rect.left,y=previous.rect.top-rect.top;
     if(Math.abs(x)<.5&&Math.abs(y)<.5)continue;
     const movedColumn=previous.parent!==parentKey(row);
-    row.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:movedColumn?'30':'2'},{transform:'translate(0, 0)',zIndex:movedColumn?'30':'2'}],{delay:hasRemovedRows?130:0,duration:240,easing:'cubic-bezier(.2,.8,.2,1)',fill:'backwards'});
+    layoutMotion.set(slug,{row,previous,rect,x,y,movedColumn});
   }
-  for(const [slug,row] of after)if(!before.rows.has(slug))row.animate([{opacity:0},{opacity:0,offset:.45},{opacity:1}],{duration:260,easing:'ease-out'});
+  for(const [,previous] of removed)fadeRemovedTicket(previous);
+  for(const {row,previous,rect,x,y,movedColumn} of layoutMotion.values()){
+    if(movedColumn){animateMovedTicket(previous,row,rect,x,y);continue}
+    const delay=removedParents.has(previous.parent)?FADE_DURATION:0;
+    row.animate([{transform:`translate(${x}px, ${y}px)`},{transform:'translate(0, 0)'}],{delay,duration:LAYOUT_DURATION,easing:MOTION_EASING,fill:'backwards'});
+  }
+  for(const [slug,row] of after){
+    if(before.rows.has(slug))continue;
+    const parent=parentKey(row),makesRoom=[...layoutMotion.values()].some(item=>!item.movedColumn&&parentKey(item.row)===parent);
+    fadeIncomingTicket(row,makesRoom?LAYOUT_DURATION:0);
+  }
 }
 
 function fadeRemovedTicket(previous:TicketMotionRow){
   const ghost=previous.element.cloneNode(true) as HTMLElement,rect=previous.rect;
-  ghost.ariaHidden='true';ghost.style.cssText=`position:fixed;z-index:1300;pointer-events:none;margin:0;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px`;
+  if(hasGhost(previous.element.ownerDocument,'outgoing',previous.element.dataset.ticketSlug??''))return;
+  prepareGhost(ghost,'outgoing',rect);appendGhost(previous.element.ownerDocument,ghost);
+  removeAfter(ghost.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.985)'}],{duration:FADE_DURATION,easing:'ease-in'}),ghost);
+}
+
+function animateMovedTicket(previous:TicketMotionRow,row:HTMLElement,rect:DOMRect,x:number,y:number){
+  const slug=row.dataset.ticketSlug??'';
+  if(hasGhost(row.ownerDocument,'move',slug))return;
+  const ghost=row.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(row);
+  prepareGhost(ghost,'move',rect);appendGhost(row.ownerDocument,ghost);
+  const animation=ghost.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:'1300'},{transform:'translate(0, 0)',zIndex:'1300'}],{duration:LAYOUT_DURATION,easing:MOTION_EASING});
+  animation.finished.finally(()=>{ghost.remove();hideRule.remove();row.style.visibility=visibility}).catch(()=>{ghost.remove();hideRule.remove();row.style.visibility=visibility});
+}
+
+function fadeIncomingTicket(row:HTMLElement,delay:number){
+  const slug=row.dataset.ticketSlug??'';
+  if(hasGhost(row.ownerDocument,'incoming',slug))return;
+  const ghost=row.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(row);
+  prepareGhost(ghost,'incoming',row.getBoundingClientRect());appendGhost(row.ownerDocument,ghost);
+  const stopTracking=trackTicketPosition(row.ownerDocument,ghost,slug);
+  const animation=ghost.animate([{opacity:0},{opacity:1}],{delay,duration:FADE_DURATION,easing:'ease-out',fill:'backwards'});
+  animation.finished.finally(()=>{stopTracking();ghost.remove();hideRule.remove();row.style.visibility=visibility}).catch(()=>{stopTracking();ghost.remove();hideRule.remove();row.style.visibility=visibility});
+}
+
+function hideRealTicket(row:HTMLElement){
+  const visibility=row.style.visibility,hideRule=row.ownerDocument.createElement('style'),slug=row.dataset.ticketSlug??'';
+  hideRule.dataset.ticketMotionHide=slug;hideRule.textContent=`[data-component="ticket-list-row"][data-ticket-slug="${row.ownerDocument.defaultView?.CSS.escape(slug)??slug}"]:not([data-ticket-motion-ghost]){visibility:hidden!important}`;row.ownerDocument.head.append(hideRule);row.style.visibility='hidden';
+  return{visibility,hideRule};
+}
+
+function prepareGhost(ghost:HTMLElement,kind:'move'|'incoming'|'outgoing',rect:DOMRect){
+  ghost.ariaHidden='true';ghost.dataset.ticketMotionGhost=kind;ghost.style.cssText=`position:fixed;z-index:1300;pointer-events:none;margin:0;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;will-change:transform,opacity`;
+}
+
+function hasGhost(document:Document,kind:string,slug:string){return[...document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]')].some(existing=>existing.dataset.ticketMotionGhost===kind&&existing.dataset.ticketSlug===slug)}
+
+function trackTicketPosition(document:Document,ghost:HTMLElement,slug:string){
+  const view=document.defaultView;
+  if(!view?.requestAnimationFrame)return()=>undefined;
+  let frame=0;
+  const update=()=>{const row=[...document.querySelectorAll<HTMLElement>('[data-component="ticket-list-row"][data-ticket-slug]:not([data-ticket-motion-ghost])')].find(candidate=>candidate.dataset.ticketSlug===slug);if(row){const rect=row.getBoundingClientRect();ghost.style.left=`${rect.left}px`;ghost.style.top=`${rect.top}px`;ghost.style.width=`${rect.width}px`;ghost.style.height=`${rect.height}px`}frame=view.requestAnimationFrame(update)};
+  frame=view.requestAnimationFrame(update);return()=>{view.cancelAnimationFrame(frame)};
+}
+
+function appendGhost(document:Document,ghost:HTMLElement){
+  for(const existing of document.querySelectorAll<HTMLElement>('[data-ticket-motion-ghost]'))if(existing.dataset.ticketMotionGhost===ghost.dataset.ticketMotionGhost&&existing.dataset.ticketSlug===ghost.dataset.ticketSlug)existing.remove();
   document.body.append(ghost);
-  const animation=ghost.animate([{opacity:1,transform:'scale(1)'},{opacity:0,transform:'scale(.985)'}],{duration:150,easing:'ease-in'});
-  animation.finished.finally(()=>{ghost.remove()}).catch(()=>{ghost.remove()});
+}
+
+function removeAfter(animation:Animation,element:HTMLElement){
+  animation.finished.finally(()=>{element.remove()}).catch(()=>{element.remove()});
 }

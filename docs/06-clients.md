@@ -136,6 +136,15 @@ prompt can be dismissed and returns on a later open until a source is configured
   focus, scroll, or animation regressions. Development builds enable Kerf's
   value-only-render and list-rebind warnings plus throwing list invariants.
 
+- **Ticket collection motion.** A status change lifts the moving ticket into a
+  fixed, workspace-level overlay so it can cross column scroll and clipping
+  boundaries while the source and destination siblings close and open their space
+  together. A newly created ticket first lets its siblings slide apart by exactly
+  the new row height, then fades into the reserved space; a departing ticket fades
+  out before only its source siblings close the gap. Overlay identity and temporary
+  hiding survive reactive DOM morphs without duplicate cards, and reduced-motion
+  users get the final layout immediately.
+
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not
   editing immediately. An active text draft adopts a remote-only update when still
   untouched, preserves a local-only edit, and stays quiet when both sides converge.
