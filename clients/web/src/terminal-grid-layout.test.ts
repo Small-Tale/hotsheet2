@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { adjustTerminalFit, clampTerminalFit, terminalGridBasis, terminalGridLayout, terminalPreviewText } from './terminal-grid-layout';
+import { adjustTerminalFit, clampTerminalFit, terminalGridBasis, terminalGridContentSize, terminalGridLayout, terminalPreviewText } from './terminal-grid-layout';
 
 describe('terminal grid layout', () => {
   it('switches axes only above the exact 600px boundary', () => {
@@ -15,6 +15,11 @@ describe('terminal grid layout', () => {
     expect(adjustTerminalFit(2, 'across', 'in')).toBe(1);
     expect(adjustTerminalFit(2, 'high', 'out')).toBe(3);
     expect(adjustTerminalFit(3, 'high', 'out')).toBe(3);
+  });
+
+  it('removes both container insets before fitting drawer tiles',()=>{
+    expect(terminalGridContentSize(900,320)).toEqual({width:876,height:296});
+    expect(terminalGridLayout(876,296,2,1)).toMatchObject({basis:'high',fit:1,tileWidth:394,tileHeight:296});
   });
 
   it('strips terminal controls and keeps only the recent preview tail', () => {

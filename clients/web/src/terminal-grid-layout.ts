@@ -5,6 +5,7 @@ export const TERMINAL_GRID_MAX_HIGH = 3;
 export const TERMINAL_GRID_DEFAULT_ACROSS = 4;
 export const TERMINAL_GRID_DEFAULT_HIGH = 2;
 export const TERMINAL_GRID_GAP = 12;
+export const TERMINAL_GRID_CONTENT_PADDING = 12;
 export const TERMINAL_TILE_ASPECT = 4 / 3;
 
 export type TerminalGridBasis = 'across' | 'high';
@@ -15,6 +16,10 @@ export interface TerminalGridLayout {
   max: number;
   tileWidth: number;
   tileHeight: number;
+}
+
+export function terminalGridContentSize(width:number,height:number,padding=TERMINAL_GRID_CONTENT_PADDING) {
+  return {width:Math.max(1,width-padding*2),height:Math.max(1,height-padding*2)};
 }
 
 export function terminalGridBasis(containerHeight: number): TerminalGridBasis {

@@ -80,7 +80,7 @@ export function TerminalSession({ session }: {session:TerminalDashboardSession})
 
 function Grid({ sessions, layout }: {sessions:TerminalDashboardSession[];layout:ReturnType<typeof terminalGridLayout>}) {
   const style = `--terminal-tile-width:${layout.tileWidth}px;--terminal-tile-height:${layout.tileHeight}px;--terminal-grid-fit:${layout.fit}`;
-  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} style={style}>{sessions.map(session => <TerminalTile session={session} dashboardPreview/>)}</div>;
+  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{sessions.map(session => <TerminalTile session={session} dashboardPreview/>)}</div>;
 }
 
 export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, grouping = 'project', magnifiedKey, hiddenKeys = [], loading = false, message = '',contextMenu }: TerminalDashboardProps) {
