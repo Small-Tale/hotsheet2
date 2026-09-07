@@ -862,6 +862,11 @@ ticket's details + notes on one large scrollable surface with no separate top-le
 mode. The reader uses the available browser height with exactly 24px of backdrop above
 and below; it has no desktop-height cap that leaves unnecessary vertical space. Details
 and ordinary notes expose their normal edit interactions immediately.
+Its **A Large Small** action toggles a user-global preference that doubles every rendered
+Details and note-content size from its own ordinary semantic size, including paragraphs,
+lists, headings, quotations, code, tables, activity text, and edit fields. It does not
+enlarge the ticket title, tabs, note metadata, or other reader chrome. The preference is
+remembered when the reader closes and applies the next time any ticket opens.
 Leaving the details editor flushes its pending autosave and returns that surface to
 preview. When a pointer action outside the editor causes that blur, the save begins
 immediately but the editor remains mounted until the originating click has reached its

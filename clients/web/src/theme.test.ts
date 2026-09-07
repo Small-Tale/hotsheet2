@@ -36,7 +36,7 @@ describe('shared client theme', () => {
     const allCss = [themePath, ...clientCss].map(css).join('\n');
     const definitions = [...allCss.matchAll(/(--hs-[\w-]+)\s*:/g)].map(match => match[1]);
     const references = [...allCss.matchAll(/var\((--hs-[\w-]+)\)/g)].map(match => match[1]);
-    const required = ['--hs-shell-divider', '--hs-terminal-background', '--hs-ticket-state-needs-review', '--hs-ticket-state-up-next', '--hs-reader-font-size-xs', '--hs-reader-font-size-s', '--hs-reader-font-size-m', '--hs-reader-font-size-l'];
+    const required = ['--hs-shell-divider', '--hs-terminal-background', '--hs-ticket-state-needs-review', '--hs-ticket-state-up-next', '--hs-reader-font-size-s', '--hs-reader-font-size-m', '--hs-reader-font-size-l'];
 
     expect(new Set(definitions)).toEqual(new Set(required));
     expect(definitions).toHaveLength(required.length);
