@@ -1,10 +1,10 @@
+import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './terminal-dashboard.css';
 
 import { ExternalLink, Eye, EyeOff, LayoutGrid, Minus, Plus, Rows3 } from 'lucide';
 
 import { terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
 import { LucideIcon } from './lucide-icon';
-import { MenuItem } from './menu-item';
 import { Select, type SelectChoice } from './select';
 import { ToolbarControlGroup } from './toolbar-control-group';
 
@@ -98,6 +98,6 @@ export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, g
       <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="in" disabled={layout.fit <= 1} aria-label={`Zoom in, fit fewer terminals ${layout.basis}`} title="Zoom in"><LucideIcon icon={Plus} name="plus" /></button>
     </div>
     {magnified && <div class="terminal-dashboard__magnified" role="dialog" aria-modal="true" aria-label={`Magnified ${magnified.title ?? magnified.id}`} data-action="dismiss-magnified-terminal"><TerminalTile session={magnified} magnified /></div>}
-    {contextMenu&&<div class="terminal-dashboard__context-menu" data-component="terminal-context-menu" role="menu" style={`left:${contextMenu.x}px;top:${contextMenu.y}px`} data-terminal-key={contextMenu.key}><MenuItem role="menuitem" action="open-terminal-project" itemId={contextMenu.key} label="Open" icon={<LucideIcon icon={ExternalLink} name="external-link"/>}/><MenuItem role="menuitem" action="hide-dashboard-terminal" itemId={contextMenu.key} label="Hide Terminal" icon={<LucideIcon icon={EyeOff} name="eye-off"/>}/></div>}
+    {contextMenu&&<div class="terminal-dashboard__context-menu" data-component="terminal-context-menu" role="menu" style={`left:${contextMenu.x}px;top:${contextMenu.y}px`} data-terminal-key={contextMenu.key}><wa-dropdown-item data-action="open-terminal-project" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={ExternalLink} name="external-link"/></span>Open</wa-dropdown-item><wa-dropdown-item data-action="hide-dashboard-terminal" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={EyeOff} name="eye-off"/></span>Hide Terminal</wa-dropdown-item></div>}
   </section>;
 }

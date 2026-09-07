@@ -54,7 +54,9 @@
 .terminal-dashboard__magnified .terminal-tile { width: min(100%, 72rem); height: 100%; max-height: 48rem; }
 .terminal-dashboard__magnified .terminal-tile__preview { height: auto; min-height: 0; flex: 1; }
 .terminal-dashboard__context-menu { position: fixed; z-index: 8; display: grid; width: 14rem; padding: var(--wa-space-2xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
-.terminal-dashboard__context-menu .menu-item { width: 100%; }
+.terminal-dashboard__context-menu wa-dropdown-item { cursor: pointer; }
+.terminal-dashboard__context-menu [slot="icon"] { display: inline-flex; color: var(--wa-color-neutral-on-quiet); }
+.terminal-dashboard__context-menu [slot="icon"] svg { width: 1rem; height: 1rem; }
 .terminal-dashboard__empty { display: grid; height: 100%; color: var(--wa-color-neutral-on-quiet); text-align: center; place-content: center; gap: .35rem; }
 .terminal-dashboard__empty strong { color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-s); }
 @media (prefers-reduced-motion: reduce) { .terminal-dashboard__magnified { backdrop-filter: none; } }
