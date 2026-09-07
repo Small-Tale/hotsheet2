@@ -1156,6 +1156,7 @@ fn claim_next_release_and_renew() {
         .assert()
         .success()
         .stdout(predicate::str::contains("claimed_by: w1"))
+        .stdout(predicate::str::contains("status: started"))
         .stdout(predicate::str::contains("claim_count: 1"));
 
     // The only ticket is now claimed → nothing left to claim.
@@ -1196,7 +1197,7 @@ fn claim_next_release_and_renew() {
 }
 
 #[test]
-fn exact_claim_accepts_slug_and_ulid_without_changing_status_or_retry_count() {
+fn exact_claim_accepts_slug_and_ulid_and_starts_without_changing_retry_count() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
     hs(p).arg("init").assert().success();
@@ -1220,7 +1221,7 @@ fn exact_claim_accepts_slug_and_ulid_without_changing_status_or_retry_count() {
         .args(["show", &slug])
         .assert()
         .success()
-        .stdout(predicate::str::contains("status: not_started"))
+        .stdout(predicate::str::contains("status: started"))
         .stdout(predicate::str::contains("claimed_by: agent-1"))
         .stdout(predicate::str::contains("worker_label: Codex"))
         .stdout(predicate::str::contains("claim_count: 1"));

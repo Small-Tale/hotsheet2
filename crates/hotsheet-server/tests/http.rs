@@ -5230,8 +5230,8 @@ async fn exact_ticket_claim_accepts_slug_and_rejects_a_live_second_worker() {
     assert_eq!(claimed["claimed_by"], "orchestrator-1");
     assert_eq!(claimed["worker_label"], "Codex");
     assert_eq!(
-        claimed["status"], "not_started",
-        "claim does not start the ticket"
+        claimed["status"], "started",
+        "claim starts the ticket atomically"
     );
     assert_eq!(claimed["claim_count"], 1);
 

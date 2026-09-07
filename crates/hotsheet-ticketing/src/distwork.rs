@@ -127,6 +127,7 @@ fn record_local_claim(
     t.claim_lease_expires_at = Some(expires.clone());
     t.claim_count += 1;
     t.updated_at = now.clone();
+    ops::start_claimed_ticket(&mut t, now);
     store.write_ticket_committing(&t).map_err(store_err)?;
     Ok(())
 }
@@ -233,6 +234,10 @@ mod tests {
         assert_eq!(
             a.read_ticket(&a_got).unwrap().claimed_by.as_deref(),
             Some("worker-a")
+        );
+        assert_eq!(
+            a.read_ticket(&a_got).unwrap().status,
+            hotsheet_model::Status::Started
         );
 
         // The queue is now exhausted for a third worker.

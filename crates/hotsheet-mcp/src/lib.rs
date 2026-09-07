@@ -2158,7 +2158,7 @@ mod tests {
         );
         assert_eq!(exact["claimed_by"], "orchestrator");
         assert_eq!(exact["worker_label"], "Codex");
-        assert_eq!(exact["status"], "not_started");
+        assert_eq!(exact["status"], "started");
         assert_eq!(exact["claim_count"], 1);
         let retry = call(
             &backend,
@@ -2192,6 +2192,7 @@ mod tests {
         );
         assert_eq!(claimed["slug"], slug);
         assert_eq!(claimed["claimed_by"], "agent-1");
+        assert_eq!(claimed["status"], "started");
         assert_eq!(claimed["auto_context"][0]["key"], "issue");
 
         // Renew extends the lease (holder only).

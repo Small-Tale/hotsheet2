@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 41 -->
+<!-- hotsheet-skill-version: 42 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -23,7 +23,7 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
 3. **Work each ticket end to end under an exact claim lease.** Choose one stable,
    session-specific worker id. Immediately before active work, claim the assigned ticket
    with the atomic CLI form
-   `hotsheet-cli claim <id> --worker <worker> [--label <label>] [--lease-minutes N] --start`,
+   `hotsheet-cli claim <id> --worker <worker> [--label <label>] [--lease-minutes N]`,
    which acquires the claim and changes Not Started to Started in one durable write.
    Do not issue separate claim and status commands. Renew
    before the lease expires and before lengthy work with `hotsheet_renew` or

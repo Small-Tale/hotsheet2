@@ -60,7 +60,8 @@ first-line fallback.
 Treat a live, renewable ticket claim lease as the authoritative signal that an AI is
 actively working on that ticket. `started` is durable workflow state and may remain set
 while nobody is working; `claim_count` is historical retry/poison metadata. Workers
-claim before active work, renew during long work, and release when they stop. Never
+claim before active work; claiming atomically advances a Not Started ticket to Started.
+Workers renew during long work and release when they stop. Never
 derive live activity from status or claim count. Self-claim workers use `claim-next`;
 general orchestration and delegated agents use exact `claim <slug-or-id>`, then renew and
 release that same ticket with one stable, session-specific worker id.

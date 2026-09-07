@@ -275,8 +275,8 @@ hotsheet edit HS-7f3k9q --status completed --note "fixed the pre-theme paint"
 printf '%s' "$MARKDOWN" | hotsheet edit HS-7f3k9q --note-file - --note-kind feedback_needed
 hotsheet edit HS-7f3k9q --blocked-by HS-abc123 --blocked-by HS-def456   # set blockers (slug|ULID)
 hotsheet edit HS-7f3k9q --clear-blocked-by                              # remove all blockers
-hotsheet claim-next --worker worker-1                       # self-select + claim
-hotsheet claim HS-7f3k9q --worker orchestrator-1 --label Codex # exact assigned ticket
+hotsheet claim-next --worker worker-1                       # self-select + claim + start
+hotsheet claim HS-7f3k9q --worker orchestrator-1 --label Codex # exact claim + start
 hotsheet renew HS-7f3k9q --worker orchestrator-1             # extend active lease
 hotsheet release HS-7f3k9q --worker orchestrator-1           # stop advertising work
 hotsheet key set openai                    # hidden terminal prompt

@@ -434,7 +434,7 @@ enum Cmd {
         /// Lease length in minutes.
         #[arg(long, default_value_t = 30)]
         lease_minutes: i64,
-        /// Also transition a Not Started ticket to Started in the same write.
+        /// Compatibility flag; exact claims now always start Not Started tickets.
         #[arg(long)]
         start: bool,
     },
@@ -2604,11 +2604,8 @@ fn cmd_claim(
     let now_dt = OffsetDateTime::now_utc();
     let now = Timestamp::from_datetime(now_dt);
     let lease = lease_until(now_dt, lease_minutes);
-    let claimed = if start {
-        ops::claim_and_start(&store, &ticket.id, &now, lease, worker, label)?
-    } else {
-        ops::claim(&store, &ticket.id, &now, lease, worker, label)?
-    };
+    let _ = start;
+    let claimed = ops::claim(&store, &ticket.id, &now, lease, worker, label)?;
     println!(
         "Claimed {} for {worker} (lease {lease_minutes}m)",
         claimed.slug

@@ -3,7 +3,7 @@ name: hotsheet-worker
 description: Run as a self-claim worker — continuously claim, work, and release Up Next tickets
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
-<!-- hotsheet-skill-version: 30 -->
+<!-- hotsheet-skill-version: 31 -->
 
 You are an HS2 self-claim worker. Work one ready ticket at a time using the git-backed
 store. Pick one stable worker id for the session and use it for every claim, renewal,
@@ -14,22 +14,21 @@ and release.
 1. Claim work with `hotsheet_claim_next` using `worker`, `label`, and optional
    `lease_minutes`. CLI fallback:
    `hotsheet-cli claim-next --worker <id> --label <id> [--lease-minutes N]`.
-   A null/no-ticket result means the actionable queue is drained.
-2. Mark the claimed ticket started with `hotsheet_update` and its `id`, or
-   `hotsheet-cli edit <id> --status started`.
-3. Implement only that ticket. Renew before lengthy work with `hotsheet_renew` using
+   A successful claim atomically advances Not Started to Started; a null/no-ticket result
+   means the actionable queue is drained.
+2. Implement only that ticket. Renew before lengthy work with `hotsheet_renew` using
    `id`, `worker`, and `lease_minutes`, or `hotsheet-cli renew <id> --worker <id>`.
    If renewal fails, stop; another worker may now own the lease.
-4. Run proportionate checks and commit only this ticket's changes. Never push without
+3. Run proportionate checks and commit only this ticket's changes. Never push without
    explicit maintainer permission.
-5. Before completion, finish and verify scope; update required tests, coverage, and docs;
+4. Before completion, finish and verify scope; update required tests, coverage, and docs;
    scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented-but-
    unimplemented behavior, open questions, and known gaps. Immediately create a ticket
    for every incomplete item without asking, waiting, or leaving it only in a note/TODO.
    Then complete with `hotsheet_update` using `status: "completed"` and a required note,
    or `hotsheet-cli edit <id> --status completed --note "what changed"`; include the
    result, verification, and every follow-up slug in that note.
-6. Release with `hotsheet_release` using `id` and `worker`, or
+5. Release with `hotsheet_release` using `id` and `worker`, or
    `hotsheet-cli release <id> --worker <id>`, then return to step 1.
 
 ## Coordination

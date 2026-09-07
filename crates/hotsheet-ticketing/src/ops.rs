@@ -966,6 +966,7 @@ pub fn claim_next(
     t.worker_label = label;
     t.claim_count += 1;
     t.updated_at = now.clone();
+    start_claimed_ticket(&mut t, now);
     store.write_ticket_committing(&t)?;
     Ok(Some(t))
 }
@@ -981,7 +982,8 @@ pub fn claim(
     worker: &str,
     label: Option<String>,
 ) -> Result<Ticket, OpError> {
-    let t = prepare_claim(store, id, now, lease_expires, worker, label)?;
+    let mut t = prepare_claim(store, id, now, lease_expires, worker, label)?;
+    start_claimed_ticket(&mut t, now);
     store.write_ticket_committing(&t)?;
     Ok(t)
 }
@@ -997,14 +999,15 @@ pub fn claim_and_start(
     worker: &str,
     label: Option<String>,
 ) -> Result<Ticket, OpError> {
-    let mut t = prepare_claim(store, id, now, lease_expires, worker, label)?;
-    if t.status == Status::NotStarted {
-        let previous = t.status;
-        t.status = Status::Started;
-        append_status_transition(&mut t, previous, Status::Started, now);
+    claim(store, id, now, lease_expires, worker, label)
+}
+
+pub(crate) fn start_claimed_ticket(ticket: &mut Ticket, now: &Timestamp) {
+    if ticket.status != Status::NotStarted {
+        return;
     }
-    store.write_ticket_committing(&t)?;
-    Ok(t)
+    ticket.status = Status::Started;
+    append_status_transition(ticket, Status::NotStarted, Status::Started, now);
 }
 
 fn prepare_claim(
@@ -2427,9 +2430,15 @@ mod tests {
         .unwrap();
         assert_eq!(
             first.status,
-            Status::NotStarted,
-            "claiming never changes durable status"
+            Status::Started,
+            "claiming starts durable work"
         );
+        assert!(first.notes.iter().any(|note| {
+            note.kind == NoteKind::Activity
+                && note
+                    .text
+                    .contains("Status changed from Not Started to Started")
+        }));
         assert_eq!(first.claim_count, 1);
 
         let retry = claim(

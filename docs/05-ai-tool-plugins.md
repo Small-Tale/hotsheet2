@@ -280,11 +280,11 @@ indicator. This is deliberately independent of the durable `started`
 status, and `claim_count` remains retry history rather than presence. The client schedules
 the nearest lease expiry locally so the indicator clears on time without network polling.
 Self-claim workers acquire through `claim-next`; general orchestration and delegated
-workers acquire their assigned slug/ULID through exact `claim`, renew before expiry or
+workers acquire and atomically start their assigned slug/ULID through exact `claim`, renew before expiry or
 lengthy work, and release on completion, handoff, error, or feedback. A same-worker exact
 claim retry is idempotent and does not inflate `claim_count`; another live holder is a
-conflict, while an expired lease can be acquired as a new attempt. Claiming never changes
-the durable ticket status.
+conflict, while an expired lease can be acquired as a new attempt. Every successful claim
+advances Not Started to Started in the same durable write; later status values are preserved.
 
 ## 5.7 Permissions & user prompts (permission checks and other prompts)
 
