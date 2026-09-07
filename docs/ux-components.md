@@ -112,6 +112,12 @@ Supporting components:
 - `ConnectionStateBanner` — **demo built**: connecting, reconnecting, offline,
   incompatible-server, and authentication variants with state-specific Lucide icons,
   live-region semantics, details, and relevant recovery actions.
+- `ConnectionDetailsDialog` — **demo built**: every compatible-skew, stale-source,
+  old-server, old-client, and unavailable-metadata state using the shared `DialogHeader`
+  and `ValueTable` presentation. Safely recoverable details dismiss through the native
+  popover light-dismiss behavior rather than a redundant Close action.
+- `DialogHeader` / `ValueTable` — **demo built**: shared dialog icon/title/subtitle/action
+  geometry and borderless static metadata cells with inset separators.
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
   (HS2-R6P8MZ).
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.

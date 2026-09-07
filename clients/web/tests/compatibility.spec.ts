@@ -59,9 +59,12 @@ test('tells development users to restart a server built from older local source'
   await expect(dialog).toContainText('source-sha256:client');
   await expect(dialog).toContainText('Client 1–1 · Server 1–1');
   await expect(dialog).toContainText('cargo build -p hotsheet-server');
-  await page.screenshot({ path: '/private/tmp/hs2-f6e6py-server-details-wide.png', fullPage: true });
+  await expect(dialog.locator('[data-component="dialog-header"]')).toBeVisible();
+  await expect(dialog.locator('[data-component="value-table"]')).toBeVisible();
+  await expect(dialog.getByRole('button',{name:'Close'})).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-xrs9s4-server-details-wide.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: '/private/tmp/hs2-f6e6py-server-details-narrow.png', fullPage: true });
-  await dialog.getByRole('button', { name: 'Close' }).click();
-  await expect(dialog).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/hs2-xrs9s4-server-details-narrow.png', fullPage: true });
+  await page.mouse.click(4,4);
+  await expect(dialog).not.toBeVisible();
 });

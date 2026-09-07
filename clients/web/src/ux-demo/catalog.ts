@@ -11,7 +11,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'menu-item', 'menu-header']),
     demo('project-summary', 'ProjectSummary', 'Seven-day completion history and current ticket counts.', 'feature-floor', true),
     demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
-    demo('repository-status-popover', 'RepositoryStatusPopover', 'Master/detail repository files, commits, and host actions.', 'feature-floor', true, ['menu-item', 'menu-header', 'ticket-code-review']),
+    demo('repository-status-popover', 'RepositoryStatusPopover', 'Master/detail repository files, commits, and host actions.', 'feature-floor', true, ['dialog-header','value-table','menu-item', 'menu-header', 'ticket-code-review']),
     demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
     demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
     demo('drive-control', 'DriveControl', 'Primary AI drive start and stop action.', 'feature-floor', true),
@@ -21,6 +21,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('project-tabs', 'ProjectTabBar', 'Local and remote project connection tabs.', 'feature-floor', true, ['project-tab']),
     demo('resizable-region', 'ResizableRegion', 'Accessible horizontal and vertical shell splitters.', 'feature-floor', true),
     demo('connection-state-banner', 'ConnectionStateBanner', 'Connection progress, interruption, compatibility, and authentication states.', 'feature-floor', true),
+    demo('connection-details-dialog', 'ConnectionDetailsDialog', 'Dismissible client/server compatibility metadata and recovery guidance.', 'feature-floor', true, ['dialog-header','value-table']),
   ]},
   { id: 'tickets', name: 'Ticket workspace', children: [
     { id: 'ticket-list', name: 'List', demos: [
@@ -87,6 +88,8 @@ export const demoCatalog: DemoCategory[] = [
     demo('menu-header', 'MenuHeader', 'Aligned section heading and optional action for menu groups.', 'feature-floor', true),
     demo('toolbar-control-group', 'ToolbarControlGroup', 'Consistent rounded grouping for toolbar controls.', 'feature-floor', true),
     demo('toolbar-text', 'ToolbarText', 'Vertically aligned large, default, and small toolbar identity text.', 'feature-floor', true),
+    demo('dialog-header', 'DialogHeader', 'Shared icon, title, subtitle, actions, and divider geometry for dialogs.', 'feature-floor', true),
+    demo('value-table', 'ValueTable', 'Shared static key/value rows with inset separators.', 'feature-floor', true),
     demo('pending-attachment-picker', 'PendingAttachmentPicker', 'Drop, browse, review, and remove evidence before submission.', 'feature-floor', true),
     demo('confirmation-dialog', 'ConfirmationDialog', 'Reusable consequential confirmation.'),
     demo('empty-state', 'EmptyState', 'Actionable absence of content.'),

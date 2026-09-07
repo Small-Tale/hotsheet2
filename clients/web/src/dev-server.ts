@@ -79,7 +79,7 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
 }
 
 const demoEntries: Record<string, string> = {
-  'app-shell': 'ux-demo/app-shell-demo.tsx', 'project-tab': 'ux-demo/app-shell-demo.tsx', 'project-tabs': 'ux-demo/app-shell-demo.tsx', 'resizable-region': 'ux-demo/app-shell-demo.tsx', 'connection-state-banner': 'ux-demo/app-shell-demo.tsx',
+  'app-shell': 'ux-demo/app-shell-demo.tsx', 'project-tab': 'ux-demo/app-shell-demo.tsx', 'project-tabs': 'ux-demo/app-shell-demo.tsx', 'resizable-region': 'ux-demo/app-shell-demo.tsx', 'connection-state-banner': 'ux-demo/app-shell-demo.tsx', 'connection-details-dialog': 'ux-demo/connection-details-demo.tsx',
   'app-tab': 'components/app-tab.tsx', 'terminal-drawer': 'components/terminal-drawer.tsx',
   'project-sidebar': 'ux-demo/project-sidebar-demo.tsx', 'project-summary': 'ux-demo/project-sidebar-demo.tsx', 'repository-summary': 'ux-demo/project-sidebar-demo.tsx', 'view-navigation': 'ux-demo/project-sidebar-demo.tsx', 'command-navigation': 'ux-demo/project-sidebar-demo.tsx', 'drive-control': 'ux-demo/project-sidebar-demo.tsx',
   'repository-status-popover': 'ux-demo/repository-status-demo.tsx',
@@ -87,7 +87,7 @@ const demoEntries: Record<string, string> = {
   'ticket-list': 'ux-demo/ticket-collections-demo.tsx', 'ticket-row': 'ux-demo/ticket-row-demo.tsx', 'ticket-board': 'ux-demo/ticket-collections-demo.tsx', 'ticket-board-column': 'ux-demo/ticket-collections-demo.tsx',
   'ticket-info-panel': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-timeline': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-attachments': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-category-select': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-priority-select': 'ux-demo/ticket-metadata-demo.tsx', 'ticket-status-menu': 'ux-demo/ticket-metadata-demo.tsx',
   'ticket-reader': 'ux-demo/content-components-demo.tsx', 'markdown-editor': 'ux-demo/content-components-demo.tsx', 'note-card': 'ux-demo/content-components-demo.tsx', 'note-composer': 'ux-demo/content-components-demo.tsx', 'tag-chip': 'ux-demo/tag-chip-demo.tsx', 'status-badge': 'ux-demo/status-badge-demo.tsx',
-  'select': 'ux-demo/select-demo.tsx', 'toolbar': 'ux-demo/toolbar-demo.tsx', 'menu-item': 'ux-demo/menu-item-demo.tsx', 'menu-header': 'ux-demo/menu-header-demo.tsx', 'toolbar-control-group': 'ux-demo/toolbar-control-group-demo.tsx', 'toolbar-text': 'ux-demo/toolbar-text-demo.tsx',
+  'select': 'ux-demo/select-demo.tsx', 'toolbar': 'ux-demo/toolbar-demo.tsx', 'menu-item': 'ux-demo/menu-item-demo.tsx', 'menu-header': 'ux-demo/menu-header-demo.tsx', 'toolbar-control-group': 'ux-demo/toolbar-control-group-demo.tsx', 'toolbar-text': 'ux-demo/toolbar-text-demo.tsx', 'dialog-header': 'ux-demo/dialog-layout-demo.tsx', 'value-table': 'ux-demo/dialog-layout-demo.tsx',
 };
 
 async function demoModifiedTimes(sourceRoot: string): Promise<Record<string, string>> {

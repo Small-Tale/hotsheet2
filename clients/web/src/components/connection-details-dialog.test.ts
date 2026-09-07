@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import type { CompatibilityAssessment } from '../compatibility';
@@ -33,8 +36,22 @@ describe('ConnectionDetailsDialog', () => {
     expect(markup).toContain('source-sha256:current');
     expect(markup).toContain('source-sha256:client');
     expect(markup).toContain('Client 1–1 · Server 1–1');
-    expect(markup).toContain('popoverTargetAction="hide"');
+    expect(markup).toContain('class="dialog-surface connection-details-dialog"');
+    expect(markup).toContain('data-component="dialog-header"');
+    expect(markup).toContain('data-component="value-table"');
+    expect(markup).not.toContain('>Close</button>');
+    expect(markup).not.toContain('connection-details-dialog__footer');
     expect(connectionRecoveryGuidance(stale)).toContain('cargo build -p hotsheet-server');
+    const css=readFileSync(resolve(import.meta.dirname,'connection-details-dialog.css'),'utf8');
+    expect(css).not.toMatch(/__metadata[^}]*border:/);
+    expect(css).not.toContain('__footer');
+  });
+
+  it('supports an embedded deterministic demo without changing production dismissal',()=>{
+    expect(String(ConnectionDetailsDialog({assessment:stale}))).toContain('popover="auto"');
+    const embedded=String(ConnectionDetailsDialog({assessment:stale,embedded:true}));
+    expect(embedded).toContain('data-embedded="true"');
+    expect(embedded).not.toContain('popover="auto"');
   });
 
   it('does not imply an unsafe automatic restart when quiescence is unavailable', () => {

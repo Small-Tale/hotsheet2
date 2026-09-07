@@ -92,6 +92,7 @@ import {
   demosUsing,
   findDemo,
 } from './catalog';
+import { ConnectionDetailsDialogDemo, ConnectionDetailsDialogSettings, connectionDetailsScenario, resetConnectionDetailsDemo } from './connection-details-demo';
 import {
   editingNoteId,
   inspectorBlockedReason,
@@ -114,6 +115,7 @@ import {
   readerTab,
   TicketReaderDemo,
 } from './content-components-demo';
+import { DialogHeaderDemo, ValueTableDemo } from './dialog-layout-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import {
@@ -358,6 +360,7 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     },
     'repository-summary': { icon: GitBranch, name: 'git-branch' },
     'repository-status-popover': { icon: FolderGit2, name: 'folder-git-2' },
+    'connection-details-dialog': { icon: Wrench, name: 'wrench' },
     'view-navigation': { icon: ListTree, name: 'list-tree' },
     'command-navigation': { icon: Command, name: 'command' },
     'drive-control': { icon: Play, name: 'play' },
@@ -388,6 +391,8 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'settings-window': { icon: Settings, name: 'settings' },
     'permission-request': { icon: ShieldCheck, name: 'shield-check' },
     'notification-center': { icon: Bell, name: 'bell' },
+    'dialog-header': { icon: AppWindow, name: 'app-window' },
+    'value-table': { icon: Menu, name: 'menu' },
   };
   return (
     exact[id] ??
@@ -430,6 +435,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'toolbar-control-group') return <ToolbarControlGroupDemo />;
   if (item.id === 'toolbar-text') return <ToolbarTextDemo />;
   if (item.id === 'toolbar') return <ToolbarDemo />;
+  if (item.id === 'dialog-header') return <DialogHeaderDemo />;
+  if (item.id === 'value-table') return <ValueTableDemo />;
   if (item.id === 'select') return <SelectDemo />;
   if (item.id === 'menu-item') return <MenuItemDemo />;
   if (item.id === 'menu-header') return <MenuHeaderDemo />;
@@ -445,6 +452,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
   if (item.id === 'repository-summary') return <RepositorySummaryDemo />;
   if (item.id === 'repository-status-popover') return <RepositoryStatusPopoverDemo />;
+  if (item.id === 'connection-details-dialog') return <ConnectionDetailsDialogDemo />;
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
   if (item.id === 'drive-control') return <DriveControlDemo />;
@@ -533,6 +541,7 @@ function DemoApp() {
     selected.id === 'status-badge' ||
     selected.id === 'ticket-row' ||
     selected.id === 'repository-status-popover' ||
+    selected.id === 'connection-details-dialog' ||
     selected.id === 'permission-request';
   return (
     <main
@@ -599,6 +608,8 @@ function DemoApp() {
             <TicketRowSettings />
           ) : selected.id === 'repository-status-popover' ? (
             <RepositoryStatusPopoverSettings />
+          ) : selected.id === 'connection-details-dialog' ? (
+            <ConnectionDetailsDialogSettings />
           ) : selected.id === 'permission-request' ? (
             <PermissionRequestSettings />
           ) : (
@@ -1013,10 +1024,14 @@ delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'status-badge') resetStatusBadgeDemo(root);
   if (selectedId.value === 'ticket-row') resetTicketRowDemo(root);
   if (selectedId.value === 'repository-status-popover') resetRepositoryStatusDemo(root);
+  if (selectedId.value === 'connection-details-dialog') resetConnectionDetailsDemo(root);
   if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
 });
 delegate(root, 'change', '[data-settings="repository-status-popover"] [name="scenario"]', (_event, target) => {
   repositoryDemoScenario.value = (target as FormControl).value as typeof repositoryDemoScenario.value;
+});
+delegate(root, 'change', '[data-settings="connection-details-dialog"] [name="scenario"]', (_event, target) => {
+  connectionDetailsScenario.value = (target as FormControl).value as typeof connectionDetailsScenario.value;
 });
 delegate(
   root,

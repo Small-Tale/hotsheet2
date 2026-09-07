@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createDevApp } from '../dev-server';
+import { connectionDetailsAssessment,connectionDetailsScenario,ConnectionDetailsDialogSettings,resetConnectionDetailsDemo } from './connection-details-demo';
 import { demoCatalog, demosUsing, findDemo, flattenCatalog } from './catalog';
 import { repositoryDemoScenario, repositoryStatusForScenario, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { resetStatusBadgeDemo, statusBadgeSettings } from './status-badge-demo';
@@ -11,7 +12,7 @@ describe('UX demo catalog', () => {
   it('has unique routes and the implemented component set', () => {
     const entries = flattenCatalog(demoCatalog);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
-    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'not-working-dialog', 'note-composer', 'note-card', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'app-tab', 'select', 'toolbar', 'menu-item', 'menu-header', 'toolbar-control-group', 'toolbar-text', 'pending-attachment-picker']);
+    expect(entries.filter(entry => entry.implemented).map(entry => entry.id)).toEqual(['app-shell', 'project-sidebar', 'project-summary', 'repository-summary', 'repository-status-popover', 'view-navigation', 'command-navigation', 'drive-control', 'workspace-header', 'page-header', 'project-tab', 'project-tabs', 'resizable-region', 'connection-state-banner', 'connection-details-dialog', 'quick-ticket-composer', 'ticket-list', 'ticket-row', 'ticket-board', 'ticket-board-column', 'ticket-inspector', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'status-badge', 'tag-chip', 'ticket-reader', 'markdown-editor', 'attachment-gallery', 'not-working-dialog', 'note-composer', 'note-card', 'permission-request', 'notification-center', 'terminal-drawer', 'terminal-dashboard', 'app-tab', 'select', 'toolbar', 'menu-item', 'menu-header', 'toolbar-control-group', 'toolbar-text', 'dialog-header', 'value-table', 'pending-attachment-picker']);
     expect(findDemo('tag-chip')?.name).toBe('TagChip');
     expect(findDemo('ticket-row')?.uses).toEqual(['status-badge', 'tag-chip']);
     expect(demosUsing('tag-chip').map(entry => entry.id)).toEqual(['ticket-row', 'ticket-info-panel']);
@@ -23,7 +24,8 @@ describe('UX demo catalog', () => {
     expect(demosUsing('project-tab').map(entry => entry.id)).toEqual(['project-tabs']);
     expect(findDemo('ticket-inspector')?.uses).toEqual(['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'note-card', 'note-composer']);
     expect(findDemo('ticket-reader')?.uses).toEqual(['ticket-inspector']);
-    expect(findDemo('repository-status-popover')?.uses).toEqual(['menu-item','menu-header','ticket-code-review']);
+    expect(findDemo('repository-status-popover')?.uses).toEqual(['dialog-header','value-table','menu-item','menu-header','ticket-code-review']);
+    expect(findDemo('connection-details-dialog')?.uses).toEqual(['dialog-header','value-table']);
     expect(demosUsing('note-card').map(entry => entry.id)).toEqual(['ticket-inspector', 'ticket-info-panel']);
     expect(entries.flatMap(entry => entry.uses ?? []).every(id => findDemo(id))).toBe(true);
   });
@@ -95,6 +97,13 @@ describe('UX demo catalog', () => {
     repositoryDemoScenario.value='clean';
     resetRepositoryStatusDemo();
     expect(repositoryDemoScenario.value).toBe('conflicted');
+  });
+
+  it('offers and resets every server compatibility detail state',()=>{
+    const settings=String(ConnectionDetailsDialogSettings()),scenarios=['source-stale','revision-mismatch','server-too-old-safe','server-too-old-manual','client-too-old','unknown'] as const;
+    for(const scenario of scenarios)expect(settings).toContain(`value="${scenario}"`);
+    expect(scenarios.map(scenario=>connectionDetailsAssessment(scenario).kind)).toEqual(['compatible','compatible','server_too_old','server_too_old','client_too_old','unknown']);
+    connectionDetailsScenario.value='unknown';resetConnectionDetailsDemo();expect(connectionDetailsScenario.value).toBe('source-stale');
   });
 
   it('resets every canonical TicketRow demo setting', () => {
