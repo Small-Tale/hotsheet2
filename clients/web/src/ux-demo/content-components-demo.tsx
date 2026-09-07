@@ -32,6 +32,7 @@ export const READER_NOTES = [
 export const readerNotes = signal(READER_NOTES);
 export const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({'reader-feedback':['choice-1']});
 export const readerTab = signal<InspectorTab>('info');
+export const readerLargeText = signal(false);
 export const readerAttachments = signal([{ id: 'wireframe', name: 'reader-wireframe.png' }, { id: 'notes', name: 'reader-notes.md' }]);
 export const editingNoteId = signal<string | undefined>(undefined);
 export const noteDraft = signal('');
@@ -40,7 +41,7 @@ export const inspectorBlockedReasonDraft = signal(inspectorBlockedReason.value);
 export const inspectorBlockedReasonEditing = signal(false);
 
 export function TicketReaderDemo() {
-  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} feedbackChoiceSelections={readerFeedbackChoiceSelections.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={readerAttachments.value} attachmentContext={{checkout:'ux-demo',ticket:'HS2-H892P1'}} timelineEntries={[{ id: 'started', time: '1h ago', title: 'Development started', subtitle: 'The reader composition work is underway.', emphasized: true }, { id: 'reviewed', time: 'Now', title: 'Reader composition reviewed', subtitle: 'Shared inspector behavior is ready for review.', emphasized: true }]} /></section>;
+  return <section class="ticket-reader-demo" aria-label="TicketReader demo"><TicketReader slug="HS2-H892P1" title="Build TicketReader component and UX demo" status="started" priority="high" category="feature" tags={['client', 'ux', 'reader']} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} feedbackChoiceSelections={readerFeedbackChoiceSelections.value} blockedReason={inspectorBlockedReason.value} blockedReasonEditing={inspectorBlockedReasonEditing.value} blockedReasonDraft={inspectorBlockedReasonDraft.value} providerName="Hot Sheet git" updatedLabel="Updated now" activeTab={readerTab.value} attachments={readerAttachments.value} attachmentContext={{checkout:'ux-demo',ticket:'HS2-H892P1'}} timelineEntries={[{ id: 'started', time: '1h ago', title: 'Development started', subtitle: 'The reader composition work is underway.', emphasized: true }, { id: 'reviewed', time: 'Now', title: 'Reader composition reviewed', subtitle: 'Shared inspector behavior is ready for review.', emphasized: true }]} largeText={readerLargeText.value} /></section>;
 }
 
 export const MARKDOWN_INITIAL = `## Implementation notes

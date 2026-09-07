@@ -50,6 +50,9 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-lucide="x"');
     expect(markup).toContain('data-lucide="a-large-small"');
     expect(markup).toContain('aria-label="Use large reader text size"');
+    expect(markup).toMatch(/data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*data-action="toggle-reader-text-size"/);
+    const largeMarkup = String(TicketInspector({ ...base, presentation: 'reader', largeText: true }));
+    expect(largeMarkup).toContain('aria-label="Use standard reader text size" aria-pressed="true"');
     expect(markup).toContain('data-component="note-card"');
     expect(markup).not.toContain('data-action="edit-ticket-reader"');
     expect(markup).toContain('data-action="edit-markdown"');

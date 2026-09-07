@@ -1,17 +1,14 @@
 .attachment-gallery { position: fixed; z-index: 1400; inset: 0; display: grid; overflow: hidden; background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 92%, transparent); grid-template-rows: auto minmax(0,1fr); }
 .attachment-gallery__toolbar { z-index: 2; padding: var(--wa-space-s) var(--wa-space-m); color: var(--wa-color-neutral-on-loud); background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent); backdrop-filter: blur(.75rem); }
 .attachment-gallery__toolbar .toolbar__trailing { gap: var(--wa-space-s); }
-.attachment-gallery__toolbar .toolbar-control-group { --toolbar-control-background: color-mix(in srgb, var(--wa-color-surface-default) 15%, transparent); --toolbar-control-border-color: color-mix(in srgb, var(--wa-color-surface-default) 18%, transparent); }
-.attachment-gallery__filename { max-width: min(42rem,55vw); overflow: hidden; color: inherit; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-gallery__toolbar .attachment-gallery__filename { max-width: min(42rem,55vw); overflow: hidden; color: var(--wa-color-neutral-on-loud); text-overflow: ellipsis; white-space: nowrap; }
 .attachment-gallery__count { display: inline-grid; min-width: 3.75rem; padding-inline: var(--wa-space-xs); place-items: center; font-variant-numeric: tabular-nums; }
-.attachment-gallery button { color: inherit; }
-.attachment-gallery button:hover, .attachment-gallery button:focus-visible { background: color-mix(in srgb, var(--wa-color-surface-default) 28%, transparent); outline: var(--wa-focus-ring); }
 .attachment-gallery button:disabled { opacity: .35; cursor: default; }
 .attachment-gallery svg { width: var(--wa-space-l); height: var(--wa-space-l); }
 .attachment-gallery__stage { min-width: 0; min-height: 0; overflow: auto; }
 .attachment-gallery__canvas { display: grid; width: max-content; min-width: 100%; height: max-content; min-height: 100%; padding: var(--wa-space-xl); box-sizing: border-box; place-items: center; }
 .attachment-gallery img { display: block; min-width: 0; min-height: 0; max-width: none; max-height: none; object-fit: fill; box-shadow: var(--wa-shadow-xl); }
-.attachment-gallery__zoom { position: fixed; z-index: 2; right: var(--wa-space-m); bottom: var(--wa-space-m); color: var(--wa-color-neutral-on-loud); background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent); backdrop-filter: blur(.75rem); }
+.attachment-gallery__zoom { position: fixed; z-index: 2; right: var(--wa-space-m); bottom: var(--wa-space-m); backdrop-filter: blur(.75rem); }
 .attachment-context-menu { position: fixed; z-index: 1410; display: grid; width: 14rem; max-width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); padding: var(--wa-space-2xs); overflow: auto; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
 .attachment-context-menu button { display: grid; min-height: 2.2rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-text-normal); background: transparent; cursor: pointer; grid-template-columns: 1rem minmax(0,1fr); align-items: center; gap: var(--wa-space-s); font: inherit; text-align: left; }
 .attachment-context-menu button:hover, .attachment-context-menu button:focus-visible { background: var(--wa-color-neutral-fill-quiet); outline: var(--wa-focus-ring); }

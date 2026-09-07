@@ -64,7 +64,7 @@
   --hs-ticket-state-needs-review: #cb30e0;
   --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
   --hs-terminal-background: #000;
-  --hs-reader-font-size-s: calc(var(--wa-font-size-s) + var(--wa-font-size-s));
-  --hs-reader-font-size-m: calc(var(--wa-font-size-m) + var(--wa-font-size-m));
-  --hs-reader-font-size-l: calc(var(--wa-font-size-l) + var(--wa-font-size-l));
+  --hs-reader-font-size-s: calc(1.5 * var(--wa-font-size-s));
+  --hs-reader-font-size-m: calc(1.5 * var(--wa-font-size-m));
+  --hs-reader-font-size-l: calc(1.5 * var(--wa-font-size-l));
 }

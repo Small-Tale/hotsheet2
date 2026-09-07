@@ -112,6 +112,7 @@ import {
   noteDraft,
   readerAttachments,
   readerFeedbackChoiceSelections,
+  readerLargeText,
   readerNotes,
   readerTab,
   TicketReaderDemo,
@@ -169,7 +170,7 @@ import {
   TagChipSettings,
   tagChipSettings,
 } from './tag-chip-demo';
-import { addTerminalVisibilityDemoGroup, removeTerminalVisibilityDemoGroup, renameTerminalVisibilityDemoGroup, selectTerminalVisibilityDemoGroup, setAllTerminalVisibilityDemo, TerminalVisibilityDialogDemo, toggleTerminalVisibilityDemo } from './terminal-visibility-demo';
+import { cancelTerminalVisibilityDemoName, promptAddTerminalVisibilityDemoGroup, promptRenameTerminalVisibilityDemoGroup, removeTerminalVisibilityDemoGroup, selectTerminalVisibilityDemoGroup, setAllTerminalVisibilityDemo, showTerminalVisibilityDemoContextMenu, submitTerminalVisibilityDemoName, TerminalVisibilityDialogDemo, toggleTerminalVisibilityDemo } from './terminal-visibility-demo';
 import {
   collectionTickets,
   recordCollectionEvent,
@@ -732,12 +733,22 @@ delegate(root, 'click', '[data-action="select-terminal-visibility-tab"]', (_even
   selectTerminalVisibilityDemoGroup((target as HTMLElement).dataset.itemId ?? 'default');
 });
 delegate(root, 'click', '[data-action="add-terminal-visibility-group"]', () => {
-  addTerminalVisibilityDemoGroup();
-  requestAnimationFrame(() => root.querySelector<HTMLElement>('[name="terminal-visibility-group-name"]')?.focus());
+  promptAddTerminalVisibilityDemoGroup();
+  requestAnimationFrame(() => root.querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')?.focus());
 });
-delegate(root, 'change', '[name="terminal-visibility-group-name"]', (_event, target) => {
-  renameTerminalVisibilityDemoGroup((target as FormControl).value);
+delegate(root, 'contextmenu', '[data-visibility-group-id]', (event, target) => {
+  event.preventDefault();
+  showTerminalVisibilityDemoContextMenu((target as HTMLElement).dataset.visibilityGroupId ?? '', (event as MouseEvent).clientX, (event as MouseEvent).clientY);
 });
+delegate(root, 'click', '[data-action="rename-terminal-visibility-group"]', () => {
+  promptRenameTerminalVisibilityDemoGroup();
+  requestAnimationFrame(() => root.querySelector<HTMLElement>('[data-terminal-visibility-name-dialog] [name="terminal-visibility-group-name"]')?.focus());
+});
+delegate(root, 'submit', '[data-action="submit-terminal-visibility-name"]', (event, target) => {
+  event.preventDefault();
+  submitTerminalVisibilityDemoName((target.querySelector('[name="terminal-visibility-group-name"]') as FormControl).value);
+});
+delegate(root, 'click', '[data-action="cancel-terminal-visibility-name"]', cancelTerminalVisibilityDemoName);
 delegate(root, 'click', '[data-action="remove-terminal-visibility-group"]', () => {
   removeTerminalVisibilityDemoGroup();
 });
@@ -1539,6 +1550,9 @@ delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => {
 });
 delegate(root, 'click', '[data-action="close-ticket-reader"]', () => {
   selectDemo('ticket-info-panel');
+});
+delegate(root, 'click', '[data-action="toggle-reader-text-size"]', () => {
+  readerLargeText.value = !readerLargeText.value;
 });
 const addMockAttachments = (files: FileList | File[], target: HTMLElement) => {
   const added = Array.from(files).map((file, index) => ({

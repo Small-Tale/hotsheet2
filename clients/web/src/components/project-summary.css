@@ -1,4 +1,5 @@
-.project-summary { display: grid; width: 100%; padding: .75rem; border: 0; border-radius: var(--wa-border-radius-m); color: inherit; background: transparent; cursor: pointer; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--wa-space-s); font: inherit; text-align: left; }
+.project-summary { display: block; width: 100%; min-height:calc(3.2rem + 1.5rem); padding: .75rem; border: 0; border-radius: var(--wa-border-radius-m); color: inherit; background: transparent; cursor: pointer; font: inherit; text-align: left; }
+.project-summary__content { display:grid; width:100%; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:var(--wa-space-s); }
 .project-summary:hover { background: var(--wa-color-neutral-fill-quiet); }
 .project-summary:focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: -2px; }
 .project-summary__chart { display: flex; height: 3.2rem; align-items: end; gap: .3rem; }

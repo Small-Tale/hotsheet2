@@ -15,10 +15,16 @@ export const TERMINAL_DASHBOARD_COLS=80;
 export const TERMINAL_DASHBOARD_ROWS=24;
 export const TERMINAL_PREVIEW_NATURAL_WIDTH=1280;
 export const TERMINAL_PREVIEW_NATURAL_HEIGHT=960;
-export function terminalDashboardFontSize(currentFontSize:number,availableCols:number,availableRows:number):number {
-  if(availableCols<=0||availableRows<=0)return currentFontSize;
-  const scale=Math.min(availableCols/TERMINAL_DASHBOARD_COLS,availableRows/TERMINAL_DASHBOARD_ROWS);
-  return Math.max(4,Math.min(72,currentFontSize*scale));
+export interface TerminalDashboardTypography {fontSize:number;letterSpacing:number;lineHeight:number}
+export function terminalDashboardTypography(current:TerminalDashboardTypography,screenWidth:number,screenHeight:number,targetWidth:number,targetHeight:number):TerminalDashboardTypography {
+  if([screenWidth,screenHeight,targetWidth,targetHeight].some(value=>!Number.isFinite(value)||value<=0))return current;
+  const scale=Math.min(targetWidth/screenWidth,targetHeight/screenHeight),fontSize=Math.max(4,Math.min(72,current.fontSize*scale)),fontScale=fontSize/current.fontSize;
+  const scaledWidth=screenWidth*fontScale,scaledHeight=screenHeight*fontScale;
+  return {
+    fontSize:Math.round(fontSize*100)/100,
+    letterSpacing:Math.round(Math.max(0,current.letterSpacing+(targetWidth-scaledWidth)/TERMINAL_DASHBOARD_COLS)*100)/100,
+    lineHeight:Math.round(Math.max(1,Math.min(5,current.lineHeight*targetHeight/scaledHeight))*1000)/1000,
+  };
 }
 export interface TerminalFocusRequest {projectId:string;terminalId:string}
 export function terminalViewportShouldAutoFocus(request:TerminalFocusRequest|undefined,projectId:string,terminalId:string):boolean {

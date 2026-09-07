@@ -1,4 +1,5 @@
-.toolbar-control-group { --toolbar-control-icon-color: var(--wa-color-neutral-on-quiet); display: inline-flex; align-items: center; flex: 0 0 auto; gap: .15rem; box-sizing: border-box; height: 2.525rem; padding: .2rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-normal); }
+.toolbar-control-group { --toolbar-control-background: var(--wa-color-neutral-fill-normal); --toolbar-control-border-color: var(--wa-color-neutral-border-normal); --toolbar-control-icon-color: var(--wa-color-neutral-on-quiet); --toolbar-control-hover-background: var(--wa-color-surface-default); --toolbar-control-pressed-background: var(--wa-color-neutral-fill-loud); --toolbar-control-pressed-border-color: var(--wa-color-neutral-border-loud); --toolbar-control-pressed-icon-color: var(--wa-color-neutral-on-loud); display: inline-flex; align-items: center; flex: 0 0 auto; gap: .15rem; box-sizing: border-box; height: 2.525rem; padding: .2rem; border: 1px solid var(--toolbar-control-border-color); border-radius: var(--wa-border-radius-pill); color: var(--toolbar-control-icon-color); background: var(--toolbar-control-background); }
+.toolbar-control-group[data-tone="dark"] { --toolbar-control-background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent); --toolbar-control-border-color: color-mix(in srgb, var(--wa-color-neutral-on-loud) 28%, transparent); --toolbar-control-icon-color: var(--wa-color-neutral-on-loud); --toolbar-control-hover-background: color-mix(in srgb, var(--wa-color-surface-default) 28%, transparent); }
 .toolbar-control-group[data-appearance="borderless"] { border-color: transparent; background: transparent; }
 .toolbar-control-group > button { border: 0; }
 .toolbar-control-group > wa-button { min-width: 2rem; height: 2rem; }
@@ -8,13 +9,17 @@
 .toolbar-control-group[data-single="true"] > wa-dropdown > wa-button { width: 3rem; height: 2rem; }
 .toolbar-control-group[data-single="true"] > wa-dropdown > wa-button::part(base) { width: 3rem; height: 2rem; }
 .toolbar-control-group wa-button::part(base) { border: 0; }
-.toolbar-control-group[data-single="true"]:hover { background: var(--wa-color-surface-default); }
+.toolbar-control-group[data-single="true"]:hover { background: var(--toolbar-control-hover-background); }
 .toolbar-control-group[data-single="true"] wa-button { --wa-color-fill-quiet: transparent; }
 .toolbar-control-group[data-single="false"] wa-button { width: 2rem; height: 2rem; border-radius: var(--wa-border-radius-pill); --wa-color-fill-quiet: transparent; }
-.toolbar-control-group[data-single="false"] wa-button:hover { background: var(--wa-color-surface-default); }
+.toolbar-control-group[data-single="false"] wa-button:hover { background: var(--toolbar-control-hover-background); }
 .toolbar-control-group[data-single="true"] wa-button:hover::part(base) { background: transparent; }
 .toolbar-control-group[data-single="false"] wa-button:hover::part(base) { background: transparent; }
 .toolbar-control-group > button { display: grid; min-width: 2rem; height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); color: var(--toolbar-control-icon-color); background: transparent; cursor: pointer; place-items: center; }
-.toolbar-control-group > button:hover { background: var(--wa-color-surface-default); }
+.toolbar-control-group > button:hover { background: var(--toolbar-control-hover-background); }
 .toolbar-control-group > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .toolbar-control-group > button svg { width: 1rem; height: 1rem; }
+.toolbar-control-group[data-button-appearance="push"][data-single="true"]:has(> :is(button, wa-button)[aria-pressed="true"]) { border-color: var(--toolbar-control-pressed-border-color); color: var(--toolbar-control-pressed-icon-color); background: var(--toolbar-control-pressed-background); --toolbar-control-icon-color: var(--toolbar-control-pressed-icon-color); }
+.toolbar-control-group[data-button-appearance="push"][data-single="true"] > :is(button, wa-button)[aria-pressed="true"] { color: var(--toolbar-control-pressed-icon-color); }
+.toolbar-control-group[data-button-appearance="push"][data-single="true"]:has(> :is(button, wa-button)[aria-pressed="true"]):hover { background: var(--toolbar-control-pressed-background); }
+.toolbar-control-group[data-button-appearance="push"][data-single="true"] > :is(button, wa-button)[aria-pressed="true"]:hover { background: transparent; }

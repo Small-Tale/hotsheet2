@@ -217,7 +217,11 @@ does not introduce polling or another network request.
   the 40px shell. Slotted Lucide icons share explicit sizing, block layout, and
   vertical centering across native and Web Awesome buttons. Its borderless appearance
   keeps identical 40px geometry and hover highlights while omitting the idle border
-  and background; sidebar visibility and inspector ticket-action groups use it.
+  and background; sidebar visibility and inspector ticket-action groups use it. Its
+  orthogonal dark tone provides a shared inverse surface, border, icon, and hover palette
+  for overlay toolbars. Opt-in push buttons retain native `aria-pressed` semantics while
+  giving a pressed single-button group the shared dark background, matching border, and
+  inverse icon treatment. The demo covers resting and pressed push controls plus dark groups.
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, notifications, and project settings**
   with accessible pressed state. The notifications mode projects its pending count in
@@ -768,8 +772,7 @@ completion, and disconnection without spawning a PTY.
 The project bottom drawer and global Terminals screen share one tile-grid contract. The
 drawer keeps its compact tab rail above the grid; the global screen removes the project
 sidebar and ticket inspector, keeps the project-tab strip for navigation, and groups live
-terminal tiles by project. Following the exported global-dashboard wireframe, visibility
-and grouping live in the main toolbar, while zoom remains anchored to the grid's bottom
+terminal tiles in one ungrouped flow. Visibility lives in the main toolbar, while zoom remains anchored to the grid's bottom
 right corner. Each tile has a 4:3 preview, terminal and project identity,
 busy/idle/exited state, and pending-attention treatment. An empty project is omitted from
 the global grid unless it is the only available project, in which case the screen explains
@@ -778,8 +781,8 @@ how to create or open a terminal.
 Grid scale is a discrete fit count controlled by icon-only minus/plus buttons with visible
 tooltip and accessible names. Plus zooms in (fewer terminals on the controlling axis);
 minus zooms out (more terminals). The active count is announced as “N across” or “N high”:
-the right-edge Group control constrains its menu to the 8rem trigger width so its popup
-remains wholly inside the viewport.
+the visibility-group label select constrains its menu to its compact trigger width so its
+popup remains wholly inside the viewport.
 
 - when the grid container is taller than 600 px, scale means how many terminal tiles fit
   across the available content width, preserving HS1's integer 1–10 column model;
@@ -808,11 +811,12 @@ activation, or Open from the tile's shared MenuItem-based context menu, jumps to
 project and selects the terminal in a maximized drawer. The same context menu offers Hide
 Terminal. Tiles have no permanent special-action buttons. These actions must never spawn a
 second PTY. The eye opens `TerminalVisibilityDialog`, built from the shared dialog, Select,
-and MenuItem vocabulary. Its tabs create, select, rename, and remove device-local visibility
-groups; Default cannot be renamed or removed. Each row toggles one terminal and Show all /
-Hide all act on the selected group. An adjacent group Select switches immediately, while an
-eye badge reports the active group's hidden count. The global dashboard and each project
-drawer remember their active group independently, and a drawer limits rows to its project.
+MenuHeader, and MenuItem vocabulary. Adding prompts for the name before creation; pill tabs
+select groups and named-tab context menus rename or delete them, while Default has no context
+menu. Each row toggles one terminal and Hide all / Show all act on the selected group. An
+adjacent compact label Select switches immediately, while an eye badge reports the active
+group's hidden count. The project drawer always shows its local terminals and exposes no
+visibility controls.
 New terminals appear in Default and begin hidden in named groups. Visibility and grouping
 changes never destroy sessions. The focused magnified or drawer consumer
 must reclaim its fitted dimensions after leaving the dashboard. Focus, resize claims,

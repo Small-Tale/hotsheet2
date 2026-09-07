@@ -101,6 +101,6 @@ describe('shared client theme', () => {
     }
     expect(css(resolve(sourceRoot, 'components/workspace-header.css')))
       .toMatch(/view-mode-switcher__badge[^}]*font-size: var\(--wa-font-size-3xs\)/);
-    expect(css(themePath)).toContain('--hs-reader-font-size-s: calc(var(--wa-font-size-s) + var(--wa-font-size-s))');
+    expect(css(themePath)).toContain('--hs-reader-font-size-s: calc(1.5 * var(--wa-font-size-s))');
   });
 });

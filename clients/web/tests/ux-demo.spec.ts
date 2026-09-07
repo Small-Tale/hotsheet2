@@ -59,7 +59,7 @@ test('represents the production terminal dashboard and its shared context menu i
 });
 
 test('represents interactive terminal visibility groups in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-visibility-dialog');const dialog=page.locator('[data-terminal-visibility-dialog]');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.getByRole('tab',{name:'Focus'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:'Add visibility group'}).click();const name=dialog.getByRole('textbox',{name:'Group name'});await expect(name).toBeFocused();await name.fill('Review');await name.press('Tab');await expect(dialog.getByRole('tab',{name:'Review'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:/Hide Development/}).click();await expect(dialog.getByRole('button',{name:/Show Development/})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-ztyjkd-visibility-dialog-demo.png',fullPage:true});
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-visibility-dialog');const dialog=page.locator('[data-terminal-visibility-dialog]');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.getByRole('tab',{name:'Focus'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:'Add visibility group'}).click();const nameDialog=page.locator('[data-terminal-visibility-name-dialog]'),name=nameDialog.getByRole('textbox',{name:'Group name'});await expect(nameDialog).toHaveJSProperty('open',true);await expect(name).toBeFocused();await name.fill('Review');await nameDialog.getByRole('button',{name:'Add'}).click();await expect(nameDialog).toHaveJSProperty('open',false);const review=dialog.getByRole('tab',{name:'Review'});await expect(review).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:/Hide Development/}).click();await expect(dialog.getByRole('button',{name:/Show Development/})).toBeVisible();await review.click({button:'right'});const menu=dialog.getByRole('menu',{name:'Visibility group actions'});await expect(menu.getByText('Rename…')).toBeVisible();await expect(menu.getByText('Delete')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-wf0xqa-visibility-dialog-demo.png',fullPage:true});
 });
 
 test('captures, reviews, cancels, and submits dev-review feedback', async ({ page }) => {
@@ -760,7 +760,7 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   await page.goto('/ux-demo?component=toolbar-control-group');
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
   const groups = demo.locator('.toolbar-control-group');
-  await expect(groups).toHaveCount(5);
+  await expect(groups).toHaveCount(8);
   for (const icon of ['arrow-down-a-z', 'star', 'ellipsis', 'pin', 'panel-left-open']) await expect(demo.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   const heights = await groups.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
   expect(new Set(heights).size).toBe(1);
@@ -802,7 +802,71 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
   await expect(borderless).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await borderless.getByRole('button').hover();
   await expect(borderless).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  const restingPush = demo.getByRole('button', { name: 'Resting comparison' }).locator('..');
+  const pressedPush = demo.getByRole('button', { name: 'Pressed comparison' }).locator('..');
+  await expect(restingPush).toHaveAttribute('data-button-appearance', 'push');
+  await expect(pressedPush).toHaveCSS('background-color', 'rgb(72, 72, 74)');
+  await expect(pressedPush).toHaveCSS('border-color', 'rgb(174, 174, 178)');
+  await expect(pressedPush.getByRole('button')).toHaveCSS('color', 'rgb(255, 255, 255)');
+  const dark = demo.getByRole('group', { name: 'Dark navigation' });
+  await expect(dark).toHaveAttribute('data-tone', 'dark');
+  await expect(dark).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(dark).not.toHaveCSS('border-color', 'rgb(209, 209, 214)');
+  await page.screenshot({ path: '/private/tmp/hs2-toolbar-control-appearance-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.screenshot({ path: '/private/tmp/hs2-toolbar-control-appearance-narrow.png', fullPage: true });
   await expect(demo.getByRole('heading', { name: 'Single button' })).toBeVisible();
+});
+
+test('shows the reader text push state at exactly one and a half times normal size', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-reader');
+  const reader = page.locator('[data-component="ticket-reader"]');
+  const paragraph = reader.locator('.ticket-inspector__details-surface .markdown-preview p').first();
+  const ordinarySize = parseFloat(await paragraph.evaluate(node => getComputedStyle(node).fontSize));
+  const toggle = reader.locator('[data-action="toggle-reader-text-size"]');
+  await expect(toggle).toHaveAccessibleName('Use large reader text size');
+  const pushGroup = toggle.locator('..');
+  await expect(pushGroup).toHaveAttribute('data-button-appearance', 'push');
+  await toggle.click();
+  await expect(reader).toHaveAttribute('data-large-text', 'true');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(toggle).toHaveAccessibleName('Use standard reader text size');
+  await expect.poll(async () => parseFloat(await paragraph.evaluate(node => getComputedStyle(node).fontSize))).toBeCloseTo(ordinarySize * 1.5, 1);
+  await expect(pushGroup).toHaveCSS('background-color', 'rgb(72, 72, 74)');
+  await expect(pushGroup).toHaveCSS('border-color', 'rgb(174, 174, 178)');
+  await expect(toggle).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await page.screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-wide.png', fullPage: true });
+  await reader.locator('.ticket-inspector__header').screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-header.png' });
+  await page.setViewportSize({ width: 1024, height: 700 });
+  await reader.locator('[data-component="ticket-notes"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: '/private/tmp/hs2-28frr0-reader-pressed-narrow.png', fullPage: true });
+  await toggle.click();
+  await expect(reader).toHaveAttribute('data-large-text', 'false');
+});
+
+test('shows repository comparison as a shared pressed toolbar control', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=repository-status-popover');
+  const dialog = page.locator('[data-component="repository-status-popover"]');
+  await dialog.getByRole('button', { name: /Commits/ }).click();
+  const compare = dialog.getByRole('button', { name: 'Compare two commits' });
+  const group = compare.locator('..');
+  await expect(group).toHaveAttribute('data-button-appearance', 'push');
+  await compare.click();
+  await expect(compare).toHaveAttribute('aria-pressed', 'true');
+  await expect(group).toHaveCSS('background-color', 'rgb(72, 72, 74)');
+  await expect(group).toHaveCSS('border-color', 'rgb(174, 174, 178)');
+  await expect(compare).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await dialog.screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-wide.png' });
+  await dialog.locator('[data-component="dialog-header"]').screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-header.png' });
+  await page.addStyleTag({ content: 'body{min-width:0}.demo-shell{display:block}.demo-master,.demo-detail__header,.demo-detail__footer,.settings-toggle{display:none}.demo-detail{min-height:0;padding:12px}' });
+  await page.setViewportSize({ width: 760, height: 640 });
+  await page.mouse.move(740, 620);
+  await page.waitForTimeout(150);
+  await dialog.screenshot({ path: '/private/tmp/hs2-7cnf5b-compare-pressed-narrow.png' });
+  await compare.click();
+  await expect(compare).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('expands, validates, creates, and cancels through QuickTicketComposer', async ({ page }) => {
@@ -1023,7 +1087,7 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
 });
 
 test('navigates and zooms the standalone attachment gallery demo',async({page})=>{
-  await page.goto('/ux-demo?component=attachment-gallery');let gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toHaveAttribute('aria-label',/Image 1 of 2/);await expect(gallery.locator('[data-component="toolbar"]')).toBeVisible();const image=gallery.locator('[data-gallery-image="true"]'),fitWidth=await image.evaluate(node=>(node as HTMLElement).getBoundingClientRect().width);await gallery.getByRole('button',{name:'Zoom in'}).click();expect(await image.evaluate(node=>(node as HTMLElement).getBoundingClientRect().width)).toBeGreaterThan(fitWidth);await gallery.getByRole('button',{name:'Next image'}).click();await expect(gallery).toHaveAttribute('aria-label',/Image 2 of 2/);await gallery.screenshot({path:'/private/tmp/hs2-ddpkts-gallery-ux-after.png'});await gallery.getByRole('button',{name:'Close image gallery'}).click();await expect(gallery).toHaveCount(0);await page.getByRole('button',{name:'Open gallery'}).click();gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toBeVisible();
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=attachment-gallery');let gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toHaveAttribute('aria-label',/Image 1 of 2/);await expect(gallery.locator('[data-component="toolbar"]')).toBeVisible();const darkGroups=gallery.locator('[data-component="toolbar-control-group"]');await expect(darkGroups).toHaveCount(4);for(const group of await darkGroups.all()){await expect(group).toHaveAttribute('data-tone','dark');await expect(group).toHaveCSS('color','rgb(255, 255, 255)');await expect(group).not.toHaveCSS('border-color','rgb(209, 209, 214)')}await expect(gallery.locator('.attachment-gallery__filename')).toHaveCSS('color','rgb(255, 255, 255)');const image=gallery.locator('[data-gallery-image="true"]'),fitWidth=await image.evaluate(node=>(node as HTMLElement).getBoundingClientRect().width);await gallery.getByRole('button',{name:'Zoom in'}).click();expect(await image.evaluate(node=>(node as HTMLElement).getBoundingClientRect().width)).toBeGreaterThan(fitWidth);await gallery.getByRole('button',{name:'Next image'}).click();await expect(gallery).toHaveAttribute('aria-label',/Image 2 of 2/);await gallery.screenshot({path:'/private/tmp/hs2-ddpkts-gallery-dark-wide.png'});await gallery.locator('[data-component="toolbar"]').screenshot({path:'/private/tmp/hs2-ddpkts-gallery-dark-toolbar.png'});await page.setViewportSize({width:760,height:640});await gallery.screenshot({path:'/private/tmp/hs2-ddpkts-gallery-dark-narrow.png'});await gallery.getByRole('button',{name:'Close image gallery'}).click();await expect(gallery).toHaveCount(0);await page.getByRole('button',{name:'Open gallery'}).click();gallery=page.locator('[data-component="attachment-gallery"]');await expect(gallery).toBeVisible();
 });
 
 test('opens the shared TicketReader intent when a composed row is double-clicked', async ({ page }) => {
@@ -1130,6 +1194,9 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('height', '1px');
   await expect(summary.locator('[data-zero="true"]')).toHaveCSS('background-color', 'rgb(174, 174, 178)');
   await expect(summary).toHaveCSS('cursor','pointer');
+  const summaryGeometry=await summary.evaluate(node=>{const button=node.getBoundingClientRect(),chart=node.querySelector('.project-summary__chart')!.getBoundingClientRect(),counts=node.querySelector('.project-summary__counts')!.getBoundingClientRect();return{button:{top:button.top,bottom:button.bottom},contentTop:Math.min(chart.top,counts.top),contentBottom:Math.max(chart.bottom,counts.bottom)}});
+  expect(summaryGeometry.button.top).toBeLessThanOrEqual(summaryGeometry.contentTop);expect(summaryGeometry.button.bottom).toBeGreaterThanOrEqual(summaryGeometry.contentBottom);
+  await summary.hover();await page.screenshot({path:'/private/tmp/hs2-j5c5xg-project-summary-hit-area.png',fullPage:true});
   await summary.click();
   await expect(page.getByText('Hot Sheet 2 project statistics requested.')).toBeVisible();
 

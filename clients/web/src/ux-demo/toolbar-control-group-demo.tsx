@@ -2,7 +2,7 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
-import { ArrowDownAZ, Columns3, List, MoreHorizontal, PanelLeftOpen, Pin, Settings, Star } from 'lucide';
+import { ArrowDownAZ, ChevronLeft, ChevronRight, Columns3, GitCompare, List, MoreHorizontal, PanelLeftOpen, Pin, Settings, Star } from 'lucide';
 
 import { LucideIcon } from '../components/lucide-icon';
 import { ToolbarControlGroup } from '../components/toolbar-control-group';
@@ -23,5 +23,8 @@ export function ToolbarControlGroupDemo() {
     </ToolbarControlGroup></div>
     <div><h2>Single button</h2><ToolbarControlGroup single><wa-button appearance="plain" aria-label="Pin view"><LucideIcon icon={Pin} name="pin" /></wa-button></ToolbarControlGroup></div>
     <div><h2>Borderless group</h2><ToolbarControlGroup appearance="borderless" single><button type="button" aria-label="Show sidebar"><LucideIcon icon={PanelLeftOpen} name="panel-left-open" /></button></ToolbarControlGroup></div>
+    <div><h2>Push button, resting</h2><ToolbarControlGroup buttonAppearance="push" single><button type="button" aria-label="Resting comparison" aria-pressed="false"><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup></div>
+    <div><h2>Push button, pressed</h2><ToolbarControlGroup buttonAppearance="push" single><button type="button" aria-label="Pressed comparison" aria-pressed="true"><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup></div>
+    <div><h2>Dark group</h2><ToolbarControlGroup label="Dark navigation" tone="dark"><button type="button" aria-label="Previous"><LucideIcon icon={ChevronLeft} name="chevron-left" /></button><button type="button" aria-label="Next"><LucideIcon icon={ChevronRight} name="chevron-right" /></button></ToolbarControlGroup></div>
   </section>;
 }

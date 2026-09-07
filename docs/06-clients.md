@@ -338,6 +338,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained thumbnails for browser-compatible image formats,
   including SVG. A thumbnail or inline image opens the same full-screen gallery.
+  Its filename uses inverse toolbar text, while navigation, action, close, and zoom
+  controls all use the shared dark ToolbarControlGroup tone so translucent backgrounds,
+  borders, icons, and hover states retain contrast over arbitrary images.
   Note-referenced images resolve to the same gallery identity as their attached-file
   thumbnail even though Markdown uses a by-name URL, so button, keyboard-arrow, and
   horizontal-swipe navigation continue from the image the user actually selected.
@@ -563,21 +566,20 @@ The long tail of HS1 UI (custom views/query builder, stats, Announcer, telemetry
 dashboards, print) remains **deferred**, each its own ticket after the floor lands. The
 terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
-project/flow grouping, magnification/hiding, and independent persisted width/high zoom
+flow layout, magnification/hiding, and independent persisted width/high zoom
 controls. HS2-ZTYJKD completes that visibility action: the eye opens a shared-component
 Show / Hide Terminals dialog, its badge counts terminals hidden by the active group, and the
 adjacent Select switches among device-local named groups. Default is permanent; named groups
 can be created, renamed, and removed, and each group records terminal inclusion without
-destroying sessions. The global dashboard and each project drawer remember their active group
-independently. Newly created terminals appear in Default and start hidden in existing named
-groups. Project/none grouping uses the shared Select in a
-matching contained group with the same trailing-arrow spacing as the workspace sort control.
-That edge-mounted grouping Select uses a trigger-width menu and an 8rem anchor, allowing Web
-Awesome's popup positioning to keep the entire listbox inside the viewport.
+destroying sessions. Visibility groups apply only to the global dashboard; the project drawer
+always shows its project's terminals and has no visibility controls. Newly created terminals
+appear in Default and start hidden in existing named groups. The dashboard always uses one
+ungrouped flow, so there is no redundant project/none grouping selector.
 Every dashboard tile mounts a read-only xterm with an exact 80×24 character grid at a
-stable 1280×960 natural geometry and uniformly scales that complete surface into the
-available 4:3 preview. Magnifying a grid tile keeps the same exact 80×24 grid and adjusts
-only its physical font/pixel scale to the larger viewport. Changing grid fit or magnifying
+stable 1280×960 natural geometry. Measured cell metrics tune font size plus row and column
+spacing, followed by a subpixel physical correction, so all 80 columns and 24 rows fill the
+available preview without clipping. Magnifying a grid tile preserves the same exact grid and
+repeats that physical fit for its larger viewport. Changing grid fit or magnifying
 never derives PTY rows or columns from tile dimensions. Dedicated project-drawer terminals
 remain fitted to their actual interactive viewport. The preview,
 its inset frame, and its border all use the terminal background token, so unused space
@@ -615,9 +617,8 @@ the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while
 preserving the last manual height. Closing the selected terminal follows HS1's
 nearest-neighbor behavior (right first, then
-left, then the grid). The rail exposes the same eye, hidden-count badge, group selector, and
-Show / Hide Terminals dialog as the global dashboard, scoped to that project, and collapses to
-one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall
+left, then the grid). The rail deliberately omits global visibility/group controls and collapses
+to one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall
 back when WebGL is unavailable, and refit only after a drawer resize gesture settles. While
 the splitter is held, neither dedicated xterms nor grid-tile geometry is recomputed and no
 intermediate PTY size claims are sent; this avoids the old debounce behavior that still fired
@@ -910,9 +911,10 @@ ticket's details + notes on one large scrollable surface with no separate top-le
 mode. The reader uses the available browser height with exactly 24px of backdrop above
 and below; it has no desktop-height cap that leaves unnecessary vertical space. Details
 and ordinary notes expose their normal edit interactions immediately.
-Its **A Large Small** action toggles a user-global preference that doubles every rendered
+Its **A Large Small** action toggles a user-global preference that renders every
 Details and note-content size from its own ordinary semantic size, including paragraphs,
-lists, headings, quotations, code, tables, activity text, and edit fields. It does not
+lists, headings, quotations, code, tables, activity text, and edit fields, at exactly 1.5×.
+Its enabled state uses the shared pressed-toolbar treatment around the icon. It does not
 enlarge the ticket title, tabs, note metadata, or other reader chrome. The preference is
 remembered when the reader closes and applies the next time any ticket opens.
 The sidebar inspector and reader each own and persist their selected tab for the project.
@@ -983,7 +985,9 @@ multi-commit range presentation as ticket Code Review. Both individual commits a
 unpushed range are rediscovered and validated by the server immediately before launch;
 arbitrary browser-supplied paths or revisions are rejected. Its Git Compare toolbar
 action sits first in its own contained group, with Refresh last; it switches to Commits and toggles
-a light-purple selection banner without a redundant Cancel action. Compact A/B segmented
+a light-purple selection banner without a redundant Cancel action. While enabled, its
+shared push-button appearance uses a darker semantic background, matching border, and
+inverse icon so the mode remains visible independently of the banner. Compact A/B segmented
 controls choose which side the next commit click sets and remain separated from Open;
 selecting A advances to B, both
 commits receive visible side labels, and Open remains disabled until two distinct sides

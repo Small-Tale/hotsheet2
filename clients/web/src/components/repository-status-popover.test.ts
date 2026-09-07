@@ -68,6 +68,7 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('data-review-mode="range"');
     expect(markup).toContain('aria-label="Compare two commits"');
     expect(markup).toContain('data-action="toggle-repository-comparison"');
+    expect(markup).toMatch(/data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*toggle-repository-comparison/);
     expect(markup).toMatch(/dialog-header__actions[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/);
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(2);
     const controlsCss=readFileSync(resolve(import.meta.dirname,'toolbar-control-group.css'),'utf8');
@@ -79,6 +80,7 @@ describe('RepositoryStatusPopover',()=>{
   it('keeps the comparison selector compact and separated from its open action',()=>{
     const markup=String(RepositoryStatusPopover({status:status(),view:'commits',comparison:{active:true,side:'a'}}));
     expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain('data-button-appearance="push"');
     expect(markup).not.toContain('cancel-repository-comparison');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-code-review.css'),'utf8');
     expect(css).toMatch(/__compare-banner \{[^}]*grid-template-columns: auto minmax\(0,1fr\) auto/);
