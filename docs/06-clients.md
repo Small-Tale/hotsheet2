@@ -576,7 +576,9 @@ controls. HS2-ZTYJKD completes that visibility action: the eye opens a shared-co
 Show / Hide Terminals dialog, its badge counts terminals hidden by the active group, and the
 adjacent Select switches among device-local named groups. Default is permanent; named groups
 can be created, renamed, and removed, and each group records terminal inclusion without
-destroying sessions. Visibility groups apply only to the global dashboard; the project drawer
+destroying sessions. The dialog's tab toolbar remains transparent against the white dialog
+surface rather than introducing a separate gray band. Visibility groups apply only to the
+global dashboard; the project drawer
 always shows its project's terminals and has no visibility controls. Newly created terminals
 appear in Default and start hidden in existing named groups. The dashboard always uses one
 ungrouped flow, so there is no redundant project/none grouping selector.
