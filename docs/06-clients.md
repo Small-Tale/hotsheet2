@@ -526,11 +526,14 @@ Every dashboard tile mounts a read-only xterm at a stable 1280×960 natural geom
 uniformly scales that complete surface into the available 4:3 preview; changing the grid
 fit changes only visual scale and never resizes the PTY to tile dimensions. The preview,
 its inset frame, and its border all use the terminal background token, so unused space
-cannot expose an unrelated gray surface. Dashboard previews never accept terminal input.
-Click magnifies and focuses a separate interactive viewport, click-away restores the grid,
-double-click opens that terminal in its project's maximized drawer, and right-click exposes
-shared Open/Hide menu items. The focused drawer/magnified consumer reclaims sizing after
-the dashboard viewer is released, avoiding cross-surface resize races.
+cannot expose an unrelated gray surface, and the computed tile height includes both preview
+and footer so repeated viewport changes cannot push the terminal outside its card. Dashboard
+previews never accept terminal input. Click opens and focuses a separate interactive viewport
+centered over a full-browser dimming layer; click-away restores the grid. Its footer exposes
+an external-open action, and both that action and a footer double-click open the terminal in
+its project's maximized drawer. A grid-tile double-click does the same, while right-click
+exposes shared Open/Hide menu items. The focused drawer/magnified consumer re-fits after both
+the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.

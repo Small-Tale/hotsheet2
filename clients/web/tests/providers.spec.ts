@@ -146,6 +146,62 @@ test('streams ANSI terminal output, input, viewport leases, driver state, and re
   const before=await page.evaluate(()=>(window as unknown as {__terminalSockets:unknown[]}).__terminalSockets.length);await page.evaluate(()=> { (window as unknown as {__terminalSockets:Array<{sent:unknown[];close():void}>}).__terminalSockets.filter(socket=>socket.sent.some(value=>typeof value==='string'&&value.includes('viewer_id'))).at(-1)!.close(); });await expect.poll(()=>page.evaluate(()=>(window as unknown as {__terminalSockets:unknown[]}).__terminalSockets.length)).toBeGreaterThan(before);
 });
 
+test('keeps dashboard terminals inset and scaled through aggressive viewport resizing',async({page})=>{
+  await page.setViewportSize({width:1440,height:1100});
+  await installFakeTerminalSockets(page,true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Terminal dashboard'}).click();
+  const dashboard=page.getByRole('region',{name:'Terminal dashboard'}),tile=dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]'),preview=tile.locator('[data-display-mode="scaled-preview"]');
+  await expect(preview).toHaveAttribute('data-connection','connected');
+  const initialScale=Number(await preview.getAttribute('data-scale'));
+  await dashboard.getByRole('button',{name:/Zoom in, fit fewer terminals across/}).click();
+  await expect.poll(async()=>Number(await preview.getAttribute('data-scale'))).toBeGreaterThan(initialScale);
+  for(const size of [{width:980,height:590},{width:1600,height:1000},{width:840,height:560},{width:1280,height:820}]){
+    await page.setViewportSize(size);
+    await expect.poll(async()=>tile.evaluate(element=>{
+      const box=element.getBoundingClientRect(),body=element.querySelector('.terminal-tile__preview')!.getBoundingClientRect(),footer=element.querySelector('.terminal-tile__footer')!.getBoundingClientRect();
+      return Math.abs(box.height-(body.height+footer.height))<=2.5&&footer.bottom<=box.bottom+1&&body.top>=box.top-1;
+    })).toBe(true);
+    await expect(preview).toHaveAttribute('data-natural-size','1280x960');
+    expect(Number(await preview.getAttribute('data-scale'))).toBeGreaterThan(0);
+  }
+  await page.screenshot({path:'/private/tmp/hs2-281qc8-terminal-resize-after.png',fullPage:true});
+});
+
+test('centers, focuses, and opens the magnified terminal from its footer',async({page})=>{
+  await page.setViewportSize({width:1180,height:760});
+  await installFakeTerminalSockets(page,true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Terminal dashboard'}).click();
+  const dashboard=page.getByRole('region',{name:'Terminal dashboard'}),tile=dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]');
+  await tile.click();
+  const magnified=page.getByRole('dialog',{name:'Magnified Codex Main'}),magnifiedTile=magnified.locator('[data-component="terminal-tile"]');
+  await expect(magnified.locator('.xterm-helper-textarea')).toBeFocused();
+  const geometry=await magnified.evaluate(element=>{const overlay=element.getBoundingClientRect(),tile=element.querySelector('[data-component="terminal-tile"]')!.getBoundingClientRect();return{overlay:{x:overlay.x,y:overlay.y,width:overlay.width,height:overlay.height},tileCenter:{x:tile.x+tile.width/2,y:tile.y+tile.height/2},viewport:{width:innerWidth,height:innerHeight}}});
+  expect(geometry.overlay).toEqual({x:0,y:0,width:geometry.viewport.width,height:geometry.viewport.height});
+  expect(Math.abs(geometry.tileCenter.x-geometry.viewport.width/2)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.tileCenter.y-geometry.viewport.height/2)).toBeLessThanOrEqual(1);
+  await expect(magnified.getByRole('button',{name:'Open Codex Main in project terminal drawer'})).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-kc7tv2-magnified-terminal-after.png',fullPage:true});
+  await magnified.getByRole('button',{name:'Open Codex Main in project terminal drawer'}).click();
+  const drawer=page.locator('[data-component="terminal-drawer"]');
+  await expect(drawer).toHaveAttribute('data-maximized','true');
+  await expect(drawer).toHaveAttribute('data-mode','dedicated');
+  await page.getByRole('button',{name:'Terminal dashboard'}).click();
+  await dashboard.locator('[data-terminal-key="demo-checkout:codex-main"]').click();
+  const reopened=page.getByRole('dialog',{name:'Magnified Codex Main'});
+  await reopened.locator('.terminal-tile__footer').dblclick();
+  await expect(drawer).toHaveAttribute('data-maximized','true');
+  await expect(drawer).toHaveAttribute('data-mode','dedicated');
+  await expect(magnifiedTile).toHaveCount(0);
+});
+
 test('opens, navigates, resizes, zooms, creates, hides, and restores the project terminal drawer',async({page})=>{
   await page.setViewportSize({width:1440,height:900});await installFakeTerminalSockets(page,true);await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.getByRole('button',{name:'Show terminal drawer'})).toBeVisible();
   const projectTab=page.locator('[data-component="project-tab"]');await expect(projectTab.locator('.app-tab__trailing')).toHaveCount(1);expect(parseFloat(await projectTab.locator('.app-tab__trailing').evaluate(element=>getComputedStyle(element).minWidth))).toBeGreaterThan(19);await projectTab.click({button:'right',modifiers:['Alt']});const projectMenu=page.getByRole('menu',{name:'Project tab actions'});await expect(projectMenu.getByText('Close Tabs to the Left')).toBeVisible();await page.keyboard.press('Escape');

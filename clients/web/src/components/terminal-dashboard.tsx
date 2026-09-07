@@ -67,6 +67,7 @@ function TerminalTile({ session, magnified = false, dashboardPreview = false }: 
       <span class="terminal-tile__state" aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}></span>
       <span class="terminal-tile__identity"><strong>{session.projectName}<span aria-hidden="true"> › </span>{session.title ?? session.id}</strong>{session.cwd&&<small>{session.cwd}</small>}</span>
       {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
+      {magnified&&<button type="button" class="terminal-tile__open" data-action="open-terminal-project" data-terminal-key={key} aria-label={`Open ${session.title??session.id} in project terminal drawer`} title="Open in project terminal drawer"><LucideIcon icon={ExternalLink} name="external-link"/></button>}
     </footer>
   </article>;
 }
