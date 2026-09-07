@@ -31,7 +31,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, and terminal discovery/snapshots
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission updates, and global terminal dashboard state
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
-    src/terminal-grid-layout.ts # Pure terminal tile axis/fit geometry: >600px fits 1–10 across; <=600px fits 1–3 high
+    src/terminal-grid-layout.ts # Pure terminal tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
+    src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, and terminal inclusion rules
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
     src/terminal-viewport-runtime.ts # Lazy xterm renderer/input plus leased claims, server-size scaling, and reconnect lifecycle
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
@@ -50,9 +51,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup, plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, modern-CSS-color normalization for the legacy screenshot renderer, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)
-    src/components/          #   Production domain UI components, including stable A/B ContentTransition, TerminalDashboard/TerminalDrawer, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
+    src/components/          #   Production domain UI components, including stable A/B ContentTransition, TerminalDashboard/TerminalDrawer/TerminalVisibilityDialog, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
     src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
+      terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app

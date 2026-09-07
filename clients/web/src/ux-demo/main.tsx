@@ -169,6 +169,7 @@ import {
   TagChipSettings,
   tagChipSettings,
 } from './tag-chip-demo';
+import { addTerminalVisibilityDemoGroup, removeTerminalVisibilityDemoGroup, renameTerminalVisibilityDemoGroup, selectTerminalVisibilityDemoGroup, setAllTerminalVisibilityDemo, TerminalVisibilityDialogDemo, toggleTerminalVisibilityDemo } from './terminal-visibility-demo';
 import {
   collectionTickets,
   recordCollectionEvent,
@@ -467,6 +468,7 @@ function demoContent(item: DemoDefinition) {
     { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
     { id: 'tests', projectId: 'demo', projectName: 'Demo project', title: 'Tests', alive: true, busy: false, cwd: '/work/demo', scrollback: '42 tests passed\nwaiting for changes' },
   ] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={{ key: 'demo:shell', x: 520, y: 280 }}/></section>;
+  if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner')
     return <ConnectionStateBannerDemo />;
@@ -725,6 +727,28 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 });
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
+});
+delegate(root, 'click', '[data-action="select-terminal-visibility-tab"]', (_event, target) => {
+  selectTerminalVisibilityDemoGroup((target as HTMLElement).dataset.itemId ?? 'default');
+});
+delegate(root, 'click', '[data-action="add-terminal-visibility-group"]', () => {
+  addTerminalVisibilityDemoGroup();
+  requestAnimationFrame(() => root.querySelector<HTMLElement>('[name="terminal-visibility-group-name"]')?.focus());
+});
+delegate(root, 'change', '[name="terminal-visibility-group-name"]', (_event, target) => {
+  renameTerminalVisibilityDemoGroup((target as FormControl).value);
+});
+delegate(root, 'click', '[data-action="remove-terminal-visibility-group"]', () => {
+  removeTerminalVisibilityDemoGroup();
+});
+delegate(root, 'click', '[data-action="toggle-terminal-visibility"]', (_event, target) => {
+  toggleTerminalVisibilityDemo((target as HTMLElement).dataset.itemId ?? '');
+});
+delegate(root, 'click', '[data-action="show-all-terminals-in-group"]', () => {
+  setAllTerminalVisibilityDemo(true);
+});
+delegate(root, 'click', '[data-action="hide-all-terminals-in-group"]', () => {
+  setAllTerminalVisibilityDemo(false);
 });
 delegate(root, 'click', '[data-action="transition-forward"]', () => {
   transitionDirection.value = 'forward';

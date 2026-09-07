@@ -7,6 +7,8 @@ export const TERMINAL_GRID_DEFAULT_HIGH = 2;
 export const TERMINAL_GRID_GAP = 12;
 export const TERMINAL_GRID_CONTENT_PADDING = 12;
 export const TERMINAL_TILE_ASPECT = 4 / 3;
+export const TERMINAL_DRAWER_MIN_TILE_HEIGHT = 160;
+export const TERMINAL_DRAWER_MIN_LAYOUT_WIDTH = 240;
 
 export type TerminalGridBasis = 'across' | 'high';
 
@@ -42,6 +44,16 @@ export function terminalGridLayout(width: number, height: number, fitAcross: num
   }
   const tileHeight = Math.max(1, Math.floor((Math.max(0, height) - TERMINAL_GRID_GAP * (fit - 1)) / fit));
   return { basis, fit, max, tileWidth: Math.max(1, Math.floor(tileHeight * TERMINAL_TILE_ASPECT)), tileHeight };
+}
+
+/** The short bottom drawer deliberately has a different scale from the global
+ * dashboard: level one fits one full-height row, while levels two and three mean
+ * columns across the available width and may scroll vertically. */
+export function terminalDrawerGridLayout(width:number,height:number,fitHigh:number):TerminalGridLayout{
+  const basis:TerminalGridBasis='high',fit=clampTerminalFit(fitHigh,basis),max=TERMINAL_GRID_MAX_HIGH;
+  if(fit===1){const tileHeight=Math.max(TERMINAL_DRAWER_MIN_TILE_HEIGHT,Math.floor(Math.max(0,height)));return{basis,fit,max,tileWidth:Math.max(1,Math.floor(tileHeight*TERMINAL_TILE_ASPECT)),tileHeight}}
+  const available=Math.max(TERMINAL_DRAWER_MIN_LAYOUT_WIDTH,Math.max(0,width)),tileWidth=Math.max(1,Math.floor((available-TERMINAL_GRID_GAP*(fit-1))/fit));
+  return{basis,fit,max,tileWidth,tileHeight:Math.max(1,Math.floor(tileWidth/TERMINAL_TILE_ASPECT))};
 }
 
 export function adjustTerminalFit(value: number, basis: TerminalGridBasis, direction: 'in' | 'out'): number {

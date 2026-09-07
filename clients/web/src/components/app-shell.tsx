@@ -3,6 +3,7 @@ import './app-shell.css';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelBottomOpen, PanelLeftOpen, PanelRightOpen } from 'lucide';
 
+import { TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
 import { LucideIcon } from './lucide-icon';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
@@ -56,7 +57,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
         {composer && <div class="app-shell__composer">{composer}</div>}
         <section class="app-shell__workspace" data-key="app-shell-workspace" data-ticket-scroll-owner="workspace" data-presentation={workspacePresentation} aria-label="Ticket workspace">{workspace}</section>
       </div>
-      {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={180} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible} transitioning={terminalDrawerTransitioning}>{terminalDrawer}</ResizableRegion>}
+      {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={TERMINAL_DRAWER_MIN_SIZE} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible} transitioning={terminalDrawerTransitioning}>{terminalDrawer}</ResizableRegion>}
       {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&!terminalDrawerTransitioning&&<button type="button" class="app-shell__terminal-drawer-restore" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button>}
     </main>
     {mode === 'project' && inspector && <ResizableRegion id="app-inspector" label="Ticket inspector" size={inspectorSize} min={280} max={520} edge="start" collapsed={!inspectorVisible}>{inspector}</ResizableRegion>}

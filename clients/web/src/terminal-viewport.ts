@@ -10,6 +10,7 @@ export function parseTerminalSizeMessage(value:string):TerminalSizeMessage|undef
 
 export const terminalReconnectDelay=(attempt:number)=>Math.min(8_000,250*(2**Math.max(0,attempt)));
 export const TERMINAL_RESIZE_SETTLE_MS=120;
+export const TERMINAL_DRAWER_RESIZE_END_EVENT='hotsheet-terminal-drawer-resize-end';
 export const TERMINAL_PREVIEW_NATURAL_WIDTH=1280;
 export const TERMINAL_PREVIEW_NATURAL_HEIGHT=960;
 export interface TerminalFocusRequest {projectId:string;terminalId:string}

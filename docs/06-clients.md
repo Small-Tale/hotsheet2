@@ -142,8 +142,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   together. A newly created ticket first lets its siblings slide apart by exactly
   the new row height, then fades into the reserved space; a departing ticket fades
   out before only its source siblings close the gap. Overlay identity and temporary
-  hiding survive reactive DOM morphs without duplicate cards, and reduced-motion
-  users get the final layout immediately.
+  hiding survive reactive DOM morphs without duplicate cards. Visual-only ghosts
+  expose motion-specific identifiers rather than ticket-row roles, actions, or slugs,
+  so ordinary ticket selectors and assistive technology continue to see one real row.
+  Reduced-motion users get the final layout immediately.
 
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not
   editing immediately. An active text draft adopts a remote-only update when still
@@ -560,8 +562,13 @@ dashboards, print) remains **deferred**, each its own ticket after the floor lan
 terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
 project/flow grouping, magnification/hiding, and independent persisted width/high zoom
-controls. Its visibility action uses a contained standard toolbar button group (reserved for
-a future visibility-groups dialog), while project/none grouping uses the shared Select in a
+controls. HS2-ZTYJKD completes that visibility action: the eye opens a shared-component
+Show / Hide Terminals dialog, its badge counts terminals hidden by the active group, and the
+adjacent Select switches among device-local named groups. Default is permanent; named groups
+can be created, renamed, and removed, and each group records terminal inclusion without
+destroying sessions. The global dashboard and each project drawer remember their active group
+independently. Newly created terminals appear in Default and start hidden in existing named
+groups. Project/none grouping uses the shared Select in a
 matching contained group with the same trailing-arrow spacing as the workspace sort control.
 That edge-mounted grouping Select uses a trigger-width menu and an 8rem anchor, allowing Web
 Awesome's popup positioning to keep the entire listbox inside the viewport.
@@ -603,18 +610,27 @@ the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while
 preserving the last manual height. Closing the selected terminal follows HS1's
 nearest-neighbor behavior (right first, then
-left, then the grid). The rail also exposes hidden-session recovery and collapses to
+left, then the grid). The rail exposes the same eye, hidden-count badge, group selector, and
+Show / Hide Terminals dialog as the global dashboard, scoped to that project, and collapses to
 one floating restore button. Dedicated sessions use xterm's WebGL renderer by default, fall
-back when WebGL is unavailable, and refit on animation frames while the drawer resizes.
+back when WebGL is unavailable, and refit only after a drawer resize gesture settles. While
+the splitter is held, neither dedicated xterms nor grid-tile geometry is recomputed and no
+intermediate PTY size claims are sent; this avoids the old debounce behavior that still fired
+during a slow drag.
 Their library-owned DOM is protected from application morphs, so committing a resize keeps
 the same xterm instance and WebSocket instead of reconnecting the shell.
 Global project/terminal jump actions open this drawer on the matching project and terminal.
 Drawer visibility, height, selected terminal per project, and independent short-container
-zoom are device-local. Its accessible vertical splitter persists heights from 180px
+zoom are device-local. Drawer scale always uses the 1–3 short-container model. Level 1 makes
+one 160px-minimum row fit the available drawer height and flows additional terminals
+horizontally. Levels 2 and 3 instead mean columns across the available width (treating widths
+below 240px as 240px), wrap left-to-right into additional rows, and scroll vertically. Its
+accessible vertical splitter persists heights from 228px
 through the live boundary immediately below `PageHeader`, so it can consume the full
-ticket work area on taller windows instead of stopping at the former 520px cap. Grid
-zoom continues to select its across/high model from the drawer's actual measured height
-and is not shown for a dedicated full-size terminal.
+ticket work area on taller windows instead of stopping at the former 520px cap. At the minimum,
+continued shrink resists for a 48px overshoot; releasing within that range keeps the 228px
+drawer, while persisting beyond it is treated as an intentional collapse. Grid zoom is not
+shown for a dedicated full-size terminal.
 Double-clicking non-interactive space in the drawer rail toggles that measured maximum
 and the last manually resized height (or 320px before the first resize); tab and action
 buttons do not trigger the toggle. Maximizing is temporary and does not overwrite the

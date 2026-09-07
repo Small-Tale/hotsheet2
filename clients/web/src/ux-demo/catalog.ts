@@ -76,6 +76,7 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'terminal', name: 'Drawer and terminals', demos: [
     demo('terminal-drawer', 'TerminalDrawer', 'Project terminal rail and dedicated terminal surface.', 'feature-floor', true, ['app-tab']),
     demo('terminal-dashboard', 'TerminalDashboard', 'Responsive live grid, preview, and viewport controls.', 'feature-floor', true, ['menu-item']),
+    demo('terminal-visibility-dialog', 'TerminalVisibilityDialog', 'Named visibility groups and per-terminal inclusion.', 'feature-floor', true, ['menu-item']),
     demo('bottom-drawer', 'BottomDrawer', 'Resizable tabbed desktop utility region.', 'desktop'),
     demo('terminal-pane', 'TerminalPane', 'Live shared terminal and actions.', 'desktop'),
     demo('terminal-size-notice', 'TerminalSizeMismatchNotice', 'PTY size ownership and resize affordance.', 'desktop'),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { adjustTerminalFit, clampTerminalFit, terminalGridBasis, terminalGridContentSize, terminalGridLayout, terminalPreviewText } from './terminal-grid-layout';
+import { adjustTerminalFit, clampTerminalFit, terminalDrawerGridLayout, terminalGridBasis, terminalGridContentSize, terminalGridLayout, terminalPreviewText } from './terminal-grid-layout';
 
 describe('terminal grid layout', () => {
   it('switches axes only above the exact 600px boundary', () => {
@@ -20,6 +20,17 @@ describe('terminal grid layout', () => {
   it('removes both container insets before fitting drawer tiles',()=>{
     expect(terminalGridContentSize(900,320)).toEqual({width:876,height:296});
     expect(terminalGridLayout(876,296,2,1)).toMatchObject({basis:'high',fit:1,tileWidth:394,tileHeight:296});
+  });
+
+  it('fits drawer level one by height but levels two and three by width',()=>{
+    expect(terminalDrawerGridLayout(876,296,1)).toMatchObject({basis:'high',fit:1,tileWidth:394,tileHeight:296});
+    expect(terminalDrawerGridLayout(876,296,2)).toMatchObject({basis:'high',fit:2,tileWidth:432,tileHeight:324});
+    expect(terminalDrawerGridLayout(876,296,3)).toMatchObject({basis:'high',fit:3,tileWidth:284,tileHeight:213});
+  });
+
+  it('keeps a 160px level-one tile and treats narrower layout widths as 240px',()=>{
+    expect(terminalDrawerGridLayout(180,100,1)).toMatchObject({tileWidth:213,tileHeight:160});
+    expect(terminalDrawerGridLayout(180,300,2)).toMatchObject({tileWidth:114,tileHeight:85});
   });
 
   it('strips terminal controls and keeps only the recent preview tail', () => {

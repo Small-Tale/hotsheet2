@@ -1,0 +1,19 @@
+[data-terminal-visibility-dialog] { --width:min(42rem,calc(100vw - 2rem)); }
+.terminal-visibility-dialog { display:grid; min-width:0; width:100%; max-height:min(44rem,calc(100vh - 8rem)); grid-template-rows:auto auto minmax(0,1fr) auto; }
+.terminal-visibility-dialog__tabs { display:flex; min-width:0; padding:0 var(--wa-space-l); overflow-x:auto; align-items:end; border-bottom:1px solid var(--wa-color-surface-border); gap:var(--wa-space-2xs); }
+.terminal-visibility-dialog__tabs button { display:inline-flex; min-height:2.75rem; padding:0 var(--wa-space-m); align-items:center; border:0; border-bottom:2px solid transparent; color:var(--wa-color-neutral-on-quiet); background:transparent; cursor:pointer; font:inherit; white-space:nowrap; }
+.terminal-visibility-dialog__tabs button[aria-selected="true"] { border-bottom-color:var(--wa-color-brand-border-loud); color:var(--wa-color-neutral-on-normal); }
+.terminal-visibility-dialog__tabs button:focus-visible { outline:var(--wa-focus-ring); outline-offset:-2px; }
+.terminal-visibility-dialog__tabs .terminal-visibility-dialog__add { width:2.5rem; padding:0; justify-content:center; }
+.terminal-visibility-dialog__tabs svg { width:1rem; height:1rem; }
+.terminal-visibility-dialog__group { display:flex; padding:var(--wa-space-m) var(--wa-space-l); align-items:end; border-bottom:1px solid var(--wa-color-surface-border); gap:var(--wa-space-s); }
+.terminal-visibility-dialog__group wa-input { min-width:0; flex:1; }
+.terminal-visibility-dialog__group wa-button svg { width:1rem; height:1rem; }
+.terminal-visibility-dialog__body { min-height:0; padding:var(--wa-space-m) var(--wa-space-l); overflow:auto; }
+.terminal-visibility-dialog__project + .terminal-visibility-dialog__project { margin-top:var(--wa-space-l); }
+.terminal-visibility-dialog__project h2 { margin:0 0 var(--wa-space-xs); color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); letter-spacing:.08em; text-transform:uppercase; }
+.terminal-visibility-dialog__rows { display:grid; gap:var(--wa-space-2xs); }
+.terminal-visibility-dialog__row[data-state="hidden"] { color:var(--wa-color-neutral-on-quiet); }
+.terminal-visibility-dialog__row-state { color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); text-transform:uppercase; }
+.terminal-visibility-dialog__footer { display:flex; padding:var(--wa-space-m) var(--wa-space-l); justify-content:flex-end; border-top:1px solid var(--wa-color-surface-border); gap:var(--wa-space-xs); }
+@media (max-width:48rem) { .terminal-visibility-dialog { max-height:calc(100vh - 4rem); } .terminal-visibility-dialog__group { align-items:stretch; flex-direction:column; } }

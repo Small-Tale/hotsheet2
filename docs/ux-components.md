@@ -741,7 +741,9 @@ notification model.
 
 The shipped terminal drawer is a center-column-only vertical `ResizableRegion` with a
 compact grid/terminal tab rail, explicit new-terminal action, hidden-session recovery,
-persisted 180 px-to-workspace-boundary height, and a floating restore button when collapsed. Grid and
+persisted 228 px-to-workspace-boundary height, and a floating restore button when collapsed. The
+splitter resists below 228 px and treats a continued 48 px overshoot as an intentional collapse.
+Grid and
 dedicated tabs attach viewports to existing sessions; only the plus action creates a PTY.
 Activity and command-output tab kinds remain later extensions.
 
@@ -789,6 +791,13 @@ remains wholly inside the viewport.
 - the exact 600 px boundary uses height mode. Resize observation recomputes geometry but
   does not change either stored count. Minus/plus disable at the active range limit.
 
+The bottom drawer specializes that scale: it always offers levels 1–3. Level 1 is one
+full-height row (never shorter than 160 px) with additional terminals flowing horizontally.
+Levels 2 and 3 are columns across the drawer width, wrap left-to-right, and overflow
+vertically. Layout math treats a drawer narrower than 240 px as 240 px. During a held
+splitter gesture, existing dedicated and grid terminal geometry remains frozen; xterm fit,
+tile recomputation, and PTY size claims happen once after pointer release.
+
 At every scale, dashboard tiles are keyboard-focusable, non-interactive previews: each live
 xterm retains a fixed 1280×960 natural geometry and the complete terminal is uniformly
 scaled into the tile instead of being refit to the tile. This keeps the PTY stable as grid
@@ -798,8 +807,14 @@ over the same grid; clicking the surrounding overlay or pressing Escape restores
 activation, or Open from the tile's shared MenuItem-based context menu, jumps to that
 project and selects the terminal in a maximized drawer. The same context menu offers Hide
 Terminal. Tiles have no permanent special-action buttons. These actions must never spawn a
-second PTY. Visibility controls can switch between project-grouped and flowing layouts and
-hide/show terminals without destroying sessions. The focused magnified or drawer consumer
+second PTY. The eye opens `TerminalVisibilityDialog`, built from the shared dialog, Select,
+and MenuItem vocabulary. Its tabs create, select, rename, and remove device-local visibility
+groups; Default cannot be renamed or removed. Each row toggles one terminal and Show all /
+Hide all act on the selected group. An adjacent group Select switches immediately, while an
+eye badge reports the active group's hidden count. The global dashboard and each project
+drawer remember their active group independently, and a drawer limits rows to its project.
+New terminals appear in Default and begin hidden in named groups. Visibility and grouping
+changes never destroy sessions. The focused magnified or drawer consumer
 must reclaim its fitted dimensions after leaving the dashboard. Focus, resize claims,
 attention, and selection survive layout and scale changes.
 

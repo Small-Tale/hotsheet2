@@ -58,6 +58,10 @@ test('represents the production terminal dashboard and its shared context menu i
   await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-dashboard');const dashboard=page.getByRole('region',{name:'Terminal dashboard'});await expect(dashboard).toBeVisible();await expect(dashboard).toHaveAttribute('data-basis','high');await expect(dashboard).toHaveAttribute('data-fit','3');await expect(dashboard.locator('[data-preview-only="true"]')).toHaveCount(2);const menu=dashboard.getByRole('menu');await expect(menu.getByRole('menuitem')).toHaveCount(2);await expect(menu.getByText('Open')).toBeVisible();await expect(menu.getByText('Hide Terminal')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-terminal-dashboard-ux-demo.png',fullPage:true});
 });
 
+test('represents interactive terminal visibility groups in the UX catalog',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-visibility-dialog');const dialog=page.locator('[data-terminal-visibility-dialog]');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.getByRole('tab',{name:'Focus'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:'Add visibility group'}).click();const name=dialog.getByRole('textbox',{name:'Group name'});await expect(name).toBeFocused();await name.fill('Review');await name.press('Tab');await expect(dialog.getByRole('tab',{name:'Review'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:/Hide Development/}).click();await expect(dialog.getByRole('button',{name:/Show Development/})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-ztyjkd-visibility-dialog-demo.png',fullPage:true});
+});
+
 test('captures, reviews, cancels, and submits dev-review feedback', async ({ page }) => {
   let submitted: Record<string, unknown> | undefined;
   await page.route('**/__hotsheet/dev-review/tickets', async route => {
@@ -1611,6 +1615,11 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.locator('[data-component="project-sidebar"]')).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toBeVisible();
+  await shell.locator('[data-component="project-summary"]').click();
+  await expect(shell).toHaveAttribute('data-mode','stats');
+  await expect(shell.getByRole('region',{name:'Hot Sheet 2 project statistics'})).toBeVisible();
+  await shell.getByRole('tab',{name:/Hot Sheet 2/}).click();
+  await expect(shell).toHaveAttribute('data-mode','project');
   await page.setViewportSize({ width: 760, height: 900 });
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-sidebar"]')).toBeVisible();
   await expect(shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]')).toBeVisible();

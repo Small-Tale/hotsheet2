@@ -85,6 +85,7 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
 const demoEntries: Record<string, string> = {
   'app-shell': 'ux-demo/app-shell-demo.tsx', 'project-tab': 'ux-demo/app-shell-demo.tsx', 'project-tabs': 'ux-demo/app-shell-demo.tsx', 'resizable-region': 'ux-demo/app-shell-demo.tsx', 'connection-state-banner': 'ux-demo/app-shell-demo.tsx', 'connection-details-dialog': 'ux-demo/connection-details-demo.tsx',
   'app-tab': 'components/app-tab.tsx', 'terminal-drawer': 'components/terminal-drawer.tsx',
+  'terminal-visibility-dialog': 'components/terminal-visibility-dialog.tsx',
   'content-transition': 'ux-demo/content-transition-demo.tsx',
   'project-sidebar': 'ux-demo/project-sidebar-demo.tsx', 'project-summary': 'ux-demo/project-sidebar-demo.tsx', 'repository-summary': 'ux-demo/project-sidebar-demo.tsx', 'view-navigation': 'ux-demo/project-sidebar-demo.tsx', 'command-navigation': 'ux-demo/project-sidebar-demo.tsx', 'drive-control': 'ux-demo/project-sidebar-demo.tsx',
   'repository-status-popover': 'ux-demo/repository-status-demo.tsx',

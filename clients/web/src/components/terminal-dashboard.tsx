@@ -3,7 +3,8 @@ import './terminal-dashboard.css';
 
 import { ExternalLink, Eye, EyeOff, LayoutGrid, Minus, Plus, Rows3 } from 'lucide';
 
-import { terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
+import { terminalDrawerGridLayout, terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
+import type { TerminalVisibilityGroup } from '../terminal-visibility';
 import { LucideIcon } from './lucide-icon';
 import { Select, type SelectChoice } from './select';
 import { ToolbarControlGroup } from './toolbar-control-group';
@@ -33,6 +34,10 @@ export interface TerminalDashboardProps {
   fitAcross: number;
   fitHigh: number;
   grouping?: 'project' | 'flow';
+  layoutMode?:'responsive'|'drawer';
+  visibilityGroups?:readonly TerminalVisibilityGroup[];
+  activeVisibilityGroupId?:string;
+  visibilityScope?:string;
   magnifiedKey?: string;
   hiddenKeys?: readonly string[];
   loading?: boolean;
@@ -46,11 +51,14 @@ const GROUPING_CHOICES: readonly SelectChoice<'project'|'flow'>[] = [
   { value: 'flow', label: 'None', icon: LayoutGrid, iconName: 'layout-grid' },
 ];
 
-export function TerminalDashboardControls({ grouping = 'project', hiddenCount = 0 }: {grouping?:'project'|'flow';hiddenCount?:number}) {
+export function TerminalVisibilityControls({hiddenCount=0,groups=[],activeId='default',scope='dashboard'}:{hiddenCount?:number;groups?:readonly TerminalVisibilityGroup[];activeId?:string;scope?:string}){
+  const choices=groups.map(group=>({value:group.id,label:group.name}));
+  return <div class="terminal-dashboard-controls__visibility-group" data-visibility-scope={scope}><ToolbarControlGroup single><button type="button" class="terminal-dashboard-controls__visibility" data-action="open-terminal-visibility" aria-label="Manage terminal visibility" title="Show / Hide Terminals"><LucideIcon icon={Eye} name="eye" />{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</button></ToolbarControlGroup><ToolbarControlGroup><Select className="terminal-dashboard-controls__visibility-select" name="terminal-visibility-group" ariaLabel="Terminal visibility group" value={activeId} choices={choices} fitMenu /></ToolbarControlGroup></div>;
+}
+
+export function TerminalDashboardControls({ grouping = 'project', hiddenCount = 0,visibilityGroups=[],activeVisibilityGroupId='default',visibilityScope='dashboard' }: {grouping?:'project'|'flow';hiddenCount?:number;visibilityGroups?:readonly TerminalVisibilityGroup[];activeVisibilityGroupId?:string;visibilityScope?:string}) {
   return <div class="terminal-dashboard-controls" data-component="terminal-dashboard-controls">
-    <ToolbarControlGroup single>
-      <button type="button" class="terminal-dashboard-controls__visibility" data-action="show-hidden-terminals" disabled={hiddenCount===0} aria-label="Show hidden terminals" title={hiddenCount?'Show hidden terminals':'No hidden terminals'}><LucideIcon icon={Eye} name="eye" />{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</button>
-    </ToolbarControlGroup>
+    <TerminalVisibilityControls hiddenCount={hiddenCount} groups={visibilityGroups} activeId={activeVisibilityGroupId} scope={visibilityScope}/>
     <ToolbarControlGroup className="terminal-dashboard-controls__grouping">
       <Select className="terminal-dashboard-controls__grouping-select" name="terminal-grouping" ariaLabel={`Group terminals: ${grouping==='project'?'Project':'None'}`} value={grouping} choices={GROUPING_CHOICES} fitMenu renderSelected={()=><span>Group</span>} />
     </ToolbarControlGroup>
@@ -83,13 +91,13 @@ function Grid({ sessions, layout }: {sessions:TerminalDashboardSession[];layout:
   return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{sessions.map(session => <TerminalTile session={session} dashboardPreview/>)}</div>;
 }
 
-export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, grouping = 'project', magnifiedKey, hiddenKeys = [], loading = false, message = '',contextMenu }: TerminalDashboardProps) {
+export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, grouping = 'project',layoutMode='responsive', magnifiedKey, hiddenKeys = [], loading = false, message = '',contextMenu }: TerminalDashboardProps) {
   const hidden = new Set(hiddenKeys);
   const visibleGroups = groups.map(group => ({ ...group, sessions: group.sessions.filter(session => !hidden.has(keyFor(session))) })).filter(group => group.sessions.length > 0);
   const sessions = visibleGroups.flatMap(group => group.sessions);
-  const layout = terminalGridLayout(width, height, fitAcross, fitHigh);
+  const layout = layoutMode==='drawer'?terminalDrawerGridLayout(width,height,fitHigh):terminalGridLayout(width, height, fitAcross, fitHigh);
   const magnified = groups.flatMap(group => group.sessions).find(session => keyFor(session) === magnifiedKey);
-  return <section class="terminal-dashboard" data-component="terminal-dashboard" data-basis={layout.basis} data-fit={String(layout.fit)} aria-label="Terminal dashboard">
+  return <section class="terminal-dashboard" data-component="terminal-dashboard" data-layout-mode={layoutMode} data-basis={layout.basis} data-fit={String(layout.fit)} aria-label="Terminal dashboard">
     <div class="terminal-dashboard__content" data-terminal-grid-measure="true">
       {loading ? <div class="terminal-dashboard__empty" role="status">Loading terminals…</div> : message ? <div class="terminal-dashboard__empty" role="status">{message}</div> : sessions.length === 0 ? <div class="terminal-dashboard__empty"><strong>No active terminals</strong><span>Open a project terminal to add it to this dashboard.</span></div> : grouping === 'flow' ? <Grid sessions={sessions} layout={layout} /> : visibleGroups.map(group => <section class="terminal-dashboard__project" data-key={group.projectId} data-project-id={group.projectId}><h2>{group.projectName}<span>{group.sessions.length}</span></h2><Grid sessions={group.sessions} layout={layout} /></section>)}
     </div>
