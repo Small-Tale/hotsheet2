@@ -121,4 +121,12 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).not.toContain('Project commands');
   });
 
+  it('gates the conversation action until a live connection can accept turns',()=>{
+    const base={completedToday:0,inProgress:0,completionTrend:[],branch:'main',unpushed:0,uncommitted:0,views:[],selectedViewId:'all',commandGroupLabel:'Commands',commands:[],commandGroupExpanded:true,driveRunning:false,driveTool:'Codex',openCount:0,upNextCount:0,activeCount:0};
+    expect(String(ProjectSidebar(base))).toContain('data-action="open-conversation" aria-label="Open Codex conversation" title="Start Codex to open a conversation" aria-pressed="false" disabled');
+    const available=String(ProjectSidebar({...base,conversationAvailable:true,conversationOpen:true}));
+    expect(available).toContain('data-action="open-conversation" aria-label="Open Codex conversation" title="Open conversation" aria-pressed="true"');
+    expect(available).not.toContain('aria-pressed="true" disabled');
+  });
+
 });

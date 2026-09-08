@@ -73,7 +73,7 @@ export const demoCatalog: DemoCategory[] = [
     ]},
   ]},
   { id: 'ai', name: 'AI and attention', demos: [
-    demo('drive-launcher', 'DriveLauncher', 'Launch, observe, and stop an AI drive session.'),
+    demo('ai-conversation', 'AIConversation', 'Multi-turn streamed AI conversation with inline permissions and interruption.', 'feature-floor', true, ['permission-request','drive-control']),
     demo('busy-indicator', 'BusyIndicator', 'Tool and connection activity state.'),
     demo('permission-request', 'PermissionRequestCard', 'Human approval with timeout, project identity, and supported decision scopes.', 'feature-floor', true),
     demo('command-button', 'CommandButton', 'Configured safe command action.', 'later'),

@@ -336,6 +336,16 @@ prompt can be dismissed and returns on a later open until a source is configured
   disabled with a reason until the deferred custom-view feature exists; no enabled sidebar
   action may be owned only by `/ux-demo`.
 
+  Once that connection can accept turns, a MessageSquare action beside Drive opens the
+  production `AIConversation` dialog. Kerf retains an ordered transcript and composer draft
+  per connection; each submit appends a user message and one assistant message whose Markdown
+  content grows in place from attributed `turn_event` output. Native activity and permission
+  events provide specific progress text, and connection-matched permission requests reuse the
+  standard decision card inline. Completed, failed, and interrupted outcomes remain on their
+  turn. Stop appears only for a busy connection advertising `interrupt`; Enter sends and
+  Shift+Enter adds a line. Connection refresh and transcript updates share the existing
+  replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
+
   The repository row is also the checkout's compact status chip. It distinguishes clean,
   dirty, ahead, behind, conflicted, and unavailable states from the checkout-scoped status
   snapshot. Activating it opens a repository popover with branch/upstream identity and the

@@ -1,6 +1,6 @@
 import './project-sidebar.css';
 
-import { PanelLeftClose } from 'lucide';
+import { MessageSquare,PanelLeftClose } from 'lucide';
 
 import { CommandNavigation, type CommandNavigationItem } from './command-navigation';
 import { DriveControl } from './drive-control';
@@ -30,6 +30,8 @@ export interface ProjectSidebarProps {
   driveTool: string;
   driveDisabled?: boolean;
   driveDisabledReason?: string;
+  conversationAvailable?: boolean;
+  conversationOpen?: boolean;
   openCount: number;
   upNextCount: number;
   activeCount: number;
@@ -47,7 +49,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
     </div>
     <footer class="project-sidebar__footer">
       <p class="project-sidebar__work-summary" data-component="project-work-summary">{props.openCount} open, {props.upNextCount} up next, {props.activeCount} active</p>
-      <DriveControl running={props.driveRunning} tool={props.driveTool} disabled={props.driveDisabled} disabledReason={props.driveDisabledReason} />
+      <div class="project-sidebar__drive-row"><DriveControl running={props.driveRunning} tool={props.driveTool} disabled={props.driveDisabled} disabledReason={props.driveDisabledReason} /><button type="button" class="project-sidebar__conversation" data-action="open-conversation" aria-label={`Open ${props.driveTool} conversation`} title={props.conversationAvailable?'Open conversation':'Start Codex to open a conversation'} aria-pressed={props.conversationOpen?'true':'false'} disabled={!props.conversationAvailable}><LucideIcon icon={MessageSquare} name="message-square"/></button></div>
     </footer>
   </aside>;
 }

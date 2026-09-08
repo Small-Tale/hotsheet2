@@ -1247,8 +1247,9 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await views.getByRole('button', { name: /Needs Review/ }).click();
   await expect(views.getByRole('button', { name: /Needs Review/ })).toHaveAttribute('aria-current', 'page');
   await expect(views.getByRole('button', { name: /Queue/ })).not.toHaveAttribute('aria-current', 'page');
-  await views.getByRole('button', { name: 'Add view' }).click();
-  await expect(page.getByText('New view editor requested.')).toBeVisible();
+  const addView = views.getByRole('button', { name: 'Add view' });
+  await expect(addView).toBeDisabled();
+  await expect(addView).toHaveAttribute('title', 'Custom views are not available yet.');
 
   await page.goto('/ux-demo?component=command-navigation');
   const commands = page.locator('[data-component="command-navigation"]');
@@ -1959,4 +1960,10 @@ test('previews and resets important PermissionRequestCard variants', async ({ pa
   const [cardBox, settingsBox] = await Promise.all([card.boundingBox(), settings.boundingBox()]);
   expect(cardBox!.x + cardBox!.width).toBeLessThanOrEqual(settingsBox!.x);
   await page.screenshot({ path: '/private/tmp/hotsheet-permission-settings-narrow.png', fullPage: true });
+});
+
+test('previews AIConversation public states at wide and narrow sizes',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});await page.goto('/ux-demo?component=ai-conversation');const conversationHost=page.locator('[data-component="ai-conversation"]'),dialog=conversationHost.getByRole('dialog');await expect(dialog).toBeVisible();await expect(conversationHost).toContainText('Running the focused browser test');await expect(conversationHost.getByRole('button',{name:'Stop Codex'})).toBeVisible();await dialog.screenshot({path:'/private/tmp/hs2-s3j29e-ai-conversation-demo-wide.png'});
+  await conversationHost.getByRole('button',{name:'Close conversation'}).click();await expect(dialog).toBeHidden();await page.locator('[data-action="toggle-settings"]').click();const scenario=page.locator('[data-settings="ai-conversation"] [name="scenario"]');for(const value of ['empty','permission','completed','failed','interrupted'] as const){await scenario.evaluate((node:HTMLElement&{value:string},next)=>{node.value=next;node.dispatchEvent(new Event('change',{bubbles:true}))},value);await expect(dialog).toBeVisible();if(value==='empty')await expect(conversationHost).toContainText('Start a conversation');if(value==='permission')await expect(conversationHost.locator('[data-component="permission-request-card"]')).toBeVisible();if(value==='failed')await expect(conversationHost).toContainText('The tool turn failed.');if(value==='interrupted')await expect(conversationHost).toContainText('Stopped before the suite completed.');await conversationHost.getByRole('button',{name:'Close conversation'}).click();await expect(dialog).toBeHidden()}
+  await page.setViewportSize({width:760,height:640});await page.locator('[data-action="open-ai-conversation-demo"]').last().click();await expect(dialog).toBeVisible();await dialog.screenshot({path:'/private/tmp/hs2-s3j29e-ai-conversation-demo-narrow.png'});
 });

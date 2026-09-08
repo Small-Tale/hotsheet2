@@ -187,6 +187,31 @@ does not introduce polling or another network request.
   - active tool/connection state from the shared long-poll event stream and stop confirmation
   - explicit disabled reason when the active connection cannot be interrupted
 
+- `AIConversation` — **production + demo built**: a project-scoped
+  dialog opened from a compact MessageSquare action beside Drive once a client-owned
+  connection exists. It keeps the ticket workspace visible behind a bounded, vertically
+  scrollable transcript rather than replacing the project route.
+  - header: tool identity, persistent connection/session context, close action, and a Stop
+    action only while the active connection advertises `interrupt`; absence hides Stop
+    rather than rendering an inert control
+  - transcript: ordered user messages and one progressively appended assistant response per
+    submitted turn; output chunks update that response in place, unknown additive events do
+    not break it, and completed/failed/interrupted terminal state remains attached to the turn
+  - working row: an icon plus specific live text (`Reviewing the project…`, `Responding…`,
+    `Waiting for permission…`, or a bounded native-activity description), never a generic
+    spinner without explanation
+  - permission requests: the existing `PermissionRequestCard` list presentation appears in
+    transcript order for this connection and uses the same global decision handlers/history
+  - composer: multiline free-form input plus an explicit Send action; Enter sends while
+    Shift+Enter inserts a line break; sending is disabled for blank input and while the same
+    connection is busy, with the reason exposed accessibly
+  - state: Kerf owns per-connection transcript/draft/open state; the existing replay-safe
+    WebSocket/long-poll stream is the only live update source, and no conversation timer
+    issues network requests
+  - public demo states: empty/idle, composing, streaming output, waiting for permission,
+    completed, failed, interrupted, and narrow layout; the production ProjectSidebar
+    composition exercises open, send, streamed rerender, inline permission, stop, and close
+
 ### 2.3 `WorkspaceHeader` — feature floor
 
 - `WorkspaceHeader` — **demo built**: responsive project identity, compact

@@ -64,6 +64,7 @@ import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
+import { AIConversationDemo, aiConversationDemoOpen, aiConversationDraft, aiConversationScenario, AIConversationSettings } from './ai-conversation-demo';
 import {
   addDemoProject,
   AppShellDemo,
@@ -470,6 +471,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
   if (item.id === 'drive-control') return <DriveControlDemo />;
+  if (item.id === 'ai-conversation') return <AIConversationDemo />;
   if (item.id === 'project-tab') return <ProjectTabDemo />;
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
   if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab kind="project" id="project" name="Project tab" selected leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab kind="terminal" id="terminal" name="Terminal tab" leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy"><LucideIcon icon={Activity} name="activity"/></span>}/></section>;
@@ -567,7 +569,8 @@ function DemoApp() {
     selected.id === 'repository-status-popover' ||
     selected.id === 'connection-details-dialog' ||
     selected.id === 'content-transition' ||
-    selected.id === 'permission-request';
+    selected.id === 'permission-request' ||
+    selected.id === 'ai-conversation';
   return (
     <main
       class={
@@ -639,6 +642,8 @@ function DemoApp() {
             <ContentTransitionSettings />
           ) : selected.id === 'permission-request' ? (
             <PermissionRequestSettings />
+          ) : selected.id === 'ai-conversation' ? (
+            <AIConversationSettings />
           ) : (
             <p>This demo has no adjustable settings.</p>
           )}
@@ -1119,6 +1124,36 @@ delegate(root, 'click', '[data-action="reset-settings"]', () => {
   if (selectedId.value === 'repository-status-popover') resetRepositoryStatusDemo(root);
   if (selectedId.value === 'connection-details-dialog') resetConnectionDetailsDemo(root);
   if (selectedId.value === 'permission-request') resetPermissionRequestDemo(root);
+});
+const openAIConversationDemo = () => {
+  aiConversationDemoOpen.value = true;
+  queueMicrotask(() => {
+    root.querySelector<HTMLElement & { show?():void }>('[data-component="ai-conversation"]')?.show?.();
+  });
+};
+delegate(root, 'change', '[data-settings="ai-conversation"] [name="scenario"]', (_event, target) => {
+  aiConversationScenario.value = (target as FormControl).value as typeof aiConversationScenario.value;
+  openAIConversationDemo();
+});
+delegate(root, 'click', '[data-action="open-ai-conversation-demo"]', () => {
+  openAIConversationDemo();
+});
+delegate(root, 'click', '[data-action="close-conversation"]', () => {
+  root.querySelector<HTMLElement & { hide?():void }>('[data-component="ai-conversation"]')?.hide?.();
+  aiConversationDemoOpen.value = false;
+});
+delegateCapture(root, 'wa-hide', '[data-component="ai-conversation"]', () => {
+  aiConversationDemoOpen.value = false;
+});
+delegate(root, 'input', '[name="conversation-draft"]', (_event, target) => {
+  aiConversationDraft.value = (target as HTMLTextAreaElement).value;
+});
+delegate(root, 'submit', '[data-action="send-conversation-turn"]', (event) => {
+  event.preventDefault();
+  aiConversationScenario.value = 'streaming';
+});
+delegate(root, 'click', '[data-action="stop-conversation"]', () => {
+  aiConversationScenario.value = 'interrupted';
 });
 delegate(root, 'change', '[data-settings="repository-status-popover"] [name="scenario"]', (_event, target) => {
   repositoryDemoScenario.value = (target as FormControl).value as typeof repositoryDemoScenario.value;
