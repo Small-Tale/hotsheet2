@@ -21,13 +21,44 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
-/// The directory holding the running `hotsheet-cli` executable — so its siblings
-/// (`hotsheet-cli`, `hotsheet-mcp`) resolve when it's placed on the child PATH.
-pub fn exe_dir() -> Result<PathBuf> {
-    let exe = std::env::current_exe().context("locating the running hotsheet-cli executable")?;
-    exe.parent()
-        .map(Path::to_path_buf)
-        .context("the hotsheet-cli executable has no parent directory")
+/// Locate the real `hotsheet-cli` that a safety shim must execute. The caller may be the
+/// CLI itself, the sibling server binary, or a Cargo test under `target/*/deps`.
+pub fn hotsheet_cli() -> Result<PathBuf> {
+    let current = std::env::current_exe().context("locating the running Hot Sheet executable")?;
+    resolve_hotsheet_cli(&current, std::env::var_os("PATH").as_deref())
+}
+
+fn resolve_hotsheet_cli(current: &Path, path: Option<&std::ffi::OsStr>) -> Result<PathBuf> {
+    let binary = format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX);
+    if current
+        .file_name()
+        .is_some_and(|name| name == binary.as_str())
+    {
+        return Ok(current.to_path_buf());
+    }
+    let parent = current
+        .parent()
+        .context("the running Hot Sheet executable has no parent directory")?;
+    for candidate in [
+        parent.join(&binary),
+        parent.parent().unwrap_or(parent).join(&binary),
+    ] {
+        if is_executable_file(&candidate) {
+            return Ok(candidate);
+        }
+    }
+    if let Some(path) = path {
+        if let Some(candidate) = std::env::split_paths(path)
+            .map(|dir| dir.join(&binary))
+            .find(|candidate| is_executable_file(candidate))
+        {
+            return Ok(candidate);
+        }
+    }
+    bail!(
+        "hotsheet-cli is not installed beside {} or on PATH",
+        current.display()
+    )
 }
 
 /// The `hotsheet-mcp` command string to record in a tool's MCP config — the core resolver
@@ -72,8 +103,10 @@ fn write_shim(dir: &Path, hotsheet_cli: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn write_shim(_dir: &Path, _hotsheet_cli: &Path) -> Result<()> {
-    bail!("`hotsheet-cli trigger` launch safety is only implemented on unix");
+fn write_shim(dir: &Path, hotsheet_cli: &Path) -> Result<()> {
+    let shim = dir.join("hotsheet.cmd");
+    let script = format!("@echo off\r\n\"{}\" %*\r\n", hotsheet_cli.display());
+    std::fs::write(&shim, script).with_context(|| format!("writing shim {}", shim.display()))
 }
 
 /// The user's real `CODEX_HOME` — the ambient `$CODEX_HOME` if set, else `~/.codex`. Used
@@ -226,20 +259,25 @@ fn isolated_codex_config(server_name: &str, command: &str, args: &[String]) -> S
 /// Build a child `PATH` with `dirs` prepended (in order) ahead of `base`, dropping
 /// duplicates so the shim keeps priority.
 pub fn prepend_path(dirs: &[&Path], base: &str) -> String {
-    let mut out: Vec<String> = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut push = |s: String, out: &mut Vec<String>| {
-        if seen.insert(s.clone()) {
-            out.push(s);
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+    let mut push = |path: PathBuf, out: &mut Vec<PathBuf>| {
+        if seen.insert(path.clone()) {
+            out.push(path);
         }
     };
     for d in dirs {
-        push(d.to_string_lossy().into_owned(), &mut out);
+        push((*d).to_path_buf(), &mut out);
     }
-    for part in base.split(':').filter(|s| !s.is_empty()) {
-        push(part.to_string(), &mut out);
+    for part in std::env::split_paths(std::ffi::OsStr::new(base)) {
+        if !part.as_os_str().is_empty() {
+            push(part, &mut out);
+        }
     }
-    out.join(":")
+    std::env::join_paths(out)
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Refuse to drive a tool in a project that still holds an HS1 PGLite store. The
@@ -274,10 +312,23 @@ pub fn assert_hotsheet_resolves(path: &str, shim_dir: &Path) -> Result<()> {
 }
 
 fn first_dir_with_executable(path: &str, name: &str) -> Option<PathBuf> {
-    path.split(':')
-        .filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .find(|dir| is_executable_file(&dir.join(name)))
+    std::env::split_paths(std::ffi::OsStr::new(path))
+        .find(|dir| executable_named(dir, name).is_some())
+}
+
+fn executable_named(dir: &Path, name: &str) -> Option<PathBuf> {
+    let exact = dir.join(name);
+    if is_executable_file(&exact) {
+        return Some(exact);
+    }
+    #[cfg(windows)]
+    for suffix in [".exe", ".cmd", ".bat", ".com"] {
+        let candidate = dir.join(format!("{name}{suffix}"));
+        if is_executable_file(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 /// Resolve a manifest-declared program to an executable absolute path without invoking a
@@ -296,7 +347,7 @@ pub fn resolve_program(program: &str) -> Result<PathBuf> {
     }
     let path = std::env::var("PATH").unwrap_or_default();
     first_dir_with_executable(&path, program)
-        .map(|dir| dir.join(program))
+        .and_then(|dir| executable_named(&dir, program))
         .with_context(|| format!("launch program '{program}' was not found on PATH"))
 }
 
@@ -329,6 +380,25 @@ mod tests {
     #[test]
     fn prepend_path_handles_an_empty_base() {
         assert_eq!(prepend_path(&[Path::new("/shim")], ""), "/shim");
+    }
+
+    #[test]
+    fn resolves_cli_beside_server_or_above_a_cargo_test() {
+        let root = tempfile::tempdir().unwrap();
+        let bin = root.path().join("bin");
+        let deps = bin.join("deps");
+        std::fs::create_dir_all(&deps).unwrap();
+        let cli = bin.join(format!("hotsheet-cli{}", std::env::consts::EXE_SUFFIX));
+        std::fs::write(&cli, "cli").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let server = bin.join(format!("hotsheet-server{}", std::env::consts::EXE_SUFFIX));
+        let test = deps.join(format!("http-test{}", std::env::consts::EXE_SUFFIX));
+        assert_eq!(resolve_hotsheet_cli(&server, None).unwrap(), cli);
+        assert_eq!(resolve_hotsheet_cli(&test, None).unwrap(), cli);
     }
 
     #[test]

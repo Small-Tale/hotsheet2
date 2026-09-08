@@ -14,7 +14,7 @@ use crate::codex::{
     CodexAppServer, StdioTransport, UdsWsTransport, codex_control_socket_path,
     ensure_codex_daemon_in,
 };
-use crate::drive::{DoneReason, DriveCtx, TurnEvent};
+use crate::drive::{DoneReason, DriveCtx, TurnControl, TurnEvent};
 use crate::host::{TriggerError, trigger};
 use crate::registry::{ConnectionRegistry, Role};
 use crate::system::SystemSpawner;
@@ -83,6 +83,18 @@ pub fn run_trigger(
     registry: &mut ConnectionRegistry,
     on_event: &mut dyn FnMut(&TurnEvent),
 ) -> Result<TurnDone, LiveError> {
+    run_trigger_controlled(plugin, t, registry, None, on_event)
+}
+
+/// Drive a real turn with an optional external interrupt request. The concrete turn
+/// handle remains owned by this thread; only the atomic request crosses threads.
+pub fn run_trigger_controlled(
+    plugin: &Plugin,
+    t: &LiveTrigger,
+    registry: &mut ConnectionRegistry,
+    control: Option<&TurnControl>,
+    on_event: &mut dyn FnMut(&TurnEvent),
+) -> Result<TurnDone, LiveError> {
     let spec = plugin
         .manifest
         .drive
@@ -116,7 +128,7 @@ pub fn run_trigger(
                 channel: Some(&channel),
                 acp: None,
             };
-            drive_and_stream(plugin, t, &ctx, registry, on_event)
+            drive_and_stream(plugin, t, &ctx, registry, control, on_event)
         }
         "app-server" => {
             // Two shapes of the persistent app-server (docs/13 §13.5):
@@ -156,7 +168,7 @@ pub fn run_trigger(
                 channel: None,
                 acp: None,
             };
-            drive_and_stream(plugin, t, &ctx, registry, on_event)
+            drive_and_stream(plugin, t, &ctx, registry, control, on_event)
         }
         "acp" => {
             let transport =
@@ -173,7 +185,7 @@ pub fn run_trigger(
                 channel: None,
                 acp: Some(&acp),
             };
-            drive_and_stream(plugin, t, &ctx, registry, on_event)
+            drive_and_stream(plugin, t, &ctx, registry, control, on_event)
         }
         "spawn" => {
             let ctx = DriveCtx {
@@ -184,7 +196,7 @@ pub fn run_trigger(
                 channel: None,
                 acp: None,
             };
-            drive_and_stream(plugin, t, &ctx, registry, on_event)
+            drive_and_stream(plugin, t, &ctx, registry, control, on_event)
         }
         _ => Err(LiveError::NotDrivable(plugin.id().to_string())),
     }
@@ -226,6 +238,7 @@ fn drive_and_stream(
     t: &LiveTrigger,
     ctx: &DriveCtx,
     registry: &mut ConnectionRegistry,
+    control: Option<&TurnControl>,
     on_event: &mut dyn FnMut(&TurnEvent),
 ) -> Result<TurnDone, LiveError> {
     let project = t.cwd.display().to_string();
@@ -273,6 +286,7 @@ fn drive_and_stream(
         &conn_id,
         registry,
         &mut clock,
+        control,
         &mut capability_event,
     );
     // Surface the session/thread id so the caller can resume the same session next turn
@@ -295,16 +309,30 @@ fn pump_turn(
     conn_id: &str,
     registry: &mut ConnectionRegistry,
     clock: &mut dyn FnMut() -> u64,
+    control: Option<&TurnControl>,
     on_event: &mut dyn FnMut(&TurnEvent),
 ) -> DoneReason {
     let reason = loop {
+        if control.is_some_and(TurnControl::interrupt_requested) && turn.interrupt() {
+            break DoneReason::Interrupted;
+        }
         match turn.next_event() {
             Some(TurnEvent::Done(r)) => break r,
             Some(ev) => {
                 on_event(&ev);
                 registry.note_activity(conn_id, clock());
             }
-            // Non-streaming drives (spawn / app-server): no events, just the terminal wait.
+            // For a controlled non-streaming drive, poll busy so the owner can invoke its
+            // concrete interrupt. Uncontrolled callers keep the historical blocking wait.
+            None if control.is_some() => {
+                while turn.is_busy() {
+                    if control.is_some_and(TurnControl::interrupt_requested) && turn.interrupt() {
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(25));
+                }
+                break turn.wait();
+            }
             None => break turn.wait(),
         }
     };
@@ -384,7 +412,7 @@ mod pump_tests {
         let mut reg = reg_with("c1");
         let mut clock = || 0u64;
         let mut seen = Vec::new();
-        pump_turn(&mut turn, "c1", &mut reg, &mut clock, &mut |ev| {
+        pump_turn(&mut turn, "c1", &mut reg, &mut clock, None, &mut |ev| {
             seen.push(format!("{ev:?}"))
         });
         // Usage is emitted, and it comes immediately before Done.
@@ -426,7 +454,7 @@ mod pump_tests {
         };
         let mut seen = Vec::new();
 
-        let reason = pump_turn(&mut turn, "c1", &mut reg, &mut clock, &mut |ev| {
+        let reason = pump_turn(&mut turn, "c1", &mut reg, &mut clock, None, &mut |ev| {
             seen.push(format!("{ev:?}"))
         });
 
@@ -461,7 +489,7 @@ mod pump_tests {
         };
         let mut reg = reg_with("c1");
         let mut clock = || 1_000u64;
-        let _ = pump_turn(&mut turn, "c1", &mut reg, &mut clock, &mut |_| {});
+        let _ = pump_turn(&mut turn, "c1", &mut reg, &mut clock, None, &mut |_| {});
         // 1_100 is well inside the 5s window of the 1_000 heartbeat, yet Done idled it.
         assert!(!reg.is_busy("c1", 1_100), "Done drops busy immediately");
     }
@@ -486,9 +514,54 @@ mod pump_tests {
             "c1",
             &mut reg,
             &mut || panic!("a non-streaming turn must not heartbeat"),
+            None,
             &mut |_| {},
         );
         assert_eq!(reason, DoneReason::Failed(3));
         assert!(!reg.is_busy("c1", 1_100), "idled on the terminal wait");
+    }
+
+    #[test]
+    fn controlled_non_streaming_turn_interrupts_on_its_owner_thread() {
+        struct InterruptibleTurn {
+            interrupted: bool,
+        }
+        impl TurnHandle for InterruptibleTurn {
+            fn is_busy(&mut self) -> bool {
+                !self.interrupted
+            }
+            fn wait(&mut self) -> DoneReason {
+                if self.interrupted {
+                    DoneReason::Interrupted
+                } else {
+                    DoneReason::Completed
+                }
+            }
+            fn interrupt(&mut self) -> bool {
+                self.interrupted = true;
+                true
+            }
+        }
+
+        let control = TurnControl::default();
+        let request = control.clone();
+        let requester = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            request.request_interrupt();
+        });
+        let mut turn = InterruptibleTurn { interrupted: false };
+        let mut reg = reg_with("c1");
+        let reason = pump_turn(
+            &mut turn,
+            "c1",
+            &mut reg,
+            &mut || 1_000,
+            Some(&control),
+            &mut |_| {},
+        );
+        requester.join().unwrap();
+
+        assert_eq!(reason, DoneReason::Interrupted);
+        assert!(!reg.is_busy("c1", 1_001));
     }
 }

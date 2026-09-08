@@ -2,6 +2,7 @@
 
 use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
+use hotsheet_server::client_drive::{ClientDriveBackend, PrepareDrive, PreparedClientDrive};
 use hotsheet_server::source_revision::{SourceRevisionMonitor, revision_for_source_root};
 use hotsheet_server::{AppState, MAX_ATTACHMENT_BODY_BYTES, app};
 use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, Scope, Settings, StoreMetadata};
@@ -18,11 +19,76 @@ use hotsheet_extsync::{
 };
 
 const SECRET: &str = "test-secret";
+type RecordedClientTurns = Arc<Mutex<Vec<(String, Option<String>)>>>;
 
 fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
     (dir, AppState::new(store, SECRET.into()).unwrap())
+}
+
+#[derive(Default)]
+struct FakeClientDriveBackend {
+    turns: RecordedClientTurns,
+    supports_interrupt: bool,
+}
+
+struct FakePreparedClientDrive {
+    tool: String,
+    turns: RecordedClientTurns,
+    supports_interrupt: bool,
+}
+
+impl ClientDriveBackend for FakeClientDriveBackend {
+    fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
+        Ok(Arc::new(FakePreparedClientDrive {
+            tool: request.tool,
+            turns: self.turns.clone(),
+            supports_interrupt: self.supports_interrupt,
+        }))
+    }
+}
+
+impl PreparedClientDrive for FakePreparedClientDrive {
+    fn tool(&self) -> &str {
+        &self.tool
+    }
+
+    fn supports_interrupt(&self) -> bool {
+        self.supports_interrupt
+    }
+
+    fn run_turn(
+        &self,
+        prompt: &str,
+        resume: Option<&str>,
+        _connection_id: &str,
+        control: &hotsheet_aitools::TurnControl,
+        on_event: &mut dyn FnMut(&hotsheet_aitools::TurnEvent),
+    ) -> Result<hotsheet_aitools::TurnDone, String> {
+        self.turns
+            .lock()
+            .unwrap()
+            .push((prompt.into(), resume.map(str::to_owned)));
+        on_event(&hotsheet_aitools::TurnEvent::Output("fake output".into()));
+        if prompt == "hold" {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while !control.interrupt_requested() && std::time::Instant::now() < deadline {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            if !control.interrupt_requested() {
+                return Err("fake interrupt timed out".into());
+            }
+            return Ok(hotsheet_aitools::TurnDone {
+                reason: hotsheet_aitools::DoneReason::Interrupted,
+                session_id: resume.map(str::to_owned),
+            });
+        }
+        Ok(hotsheet_aitools::TurnDone {
+            reason: hotsheet_aitools::DoneReason::Completed,
+            session_id: Some("thread-1".into()),
+        })
+    }
 }
 
 fn authed(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
@@ -161,6 +227,190 @@ async fn health_needs_no_secret() {
     assert_eq!(health["api_version"], 1);
     assert_eq!(health["ticket_prefix"], "HS");
     assert_eq!(health["store_schema"], STORE_SCHEMA_VERSION);
+}
+
+#[tokio::test]
+async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
+    let (dir, base) = state();
+    let backend = Arc::new(FakeClientDriveBackend {
+        supports_interrupt: true,
+        ..FakeClientDriveBackend::default()
+    });
+    let turns = backend.turns.clone();
+    let state = base.with_client_drive_backend(backend);
+    let mut live = state.subscribe();
+    let router = app(state);
+
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"fake","connection_id":"client-1"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+    assert_eq!(created["project"], dir.path().display().to_string());
+    assert_eq!(
+        created["actions"],
+        serde_json::json!(["send_turn", "interrupt"])
+    );
+    assert!(!created["busy"].as_bool().unwrap());
+    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
+
+    let started = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/client-1/turns",
+            Some(r#"{"content":"complete"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::ACCEPTED);
+    assert!(body_json(started).await["busy"].as_bool().unwrap());
+    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
+    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
+
+    let listed = router
+        .clone()
+        .oneshot(authed("GET", "/connections", None))
+        .await
+        .unwrap();
+    let listed = body_json(listed).await;
+    assert!(!listed[0]["busy"].as_bool().unwrap());
+    assert_eq!(listed[0]["session_id"], "thread-1");
+
+    let held = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/client-1/turns",
+            Some(r#"{"content":"hold"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(held.status(), StatusCode::ACCEPTED);
+    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
+    let interrupted = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/client-1/interrupt",
+            Some("{}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(interrupted.status(), StatusCode::ACCEPTED);
+    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
+    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
+
+    let listed = router
+        .oneshot(authed("GET", "/connections", None))
+        .await
+        .unwrap();
+    assert!(!body_json(listed).await[0]["busy"].as_bool().unwrap());
+    assert_eq!(
+        *turns.lock().unwrap(),
+        vec![
+            ("complete".into(), None),
+            ("hold".into(), Some("thread-1".into()))
+        ]
+    );
+}
+
+#[tokio::test]
+async fn client_drive_omits_and_rejects_an_unsupported_interrupt() {
+    let (_dir, base) = state();
+    let router = app(base.with_client_drive_backend(Arc::new(FakeClientDriveBackend::default())));
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"fake","connection_id":"no-interrupt"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(created).await["actions"],
+        serde_json::json!(["send_turn"])
+    );
+    let rejected = router
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/no-interrupt/interrupt",
+            Some("{}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+/// Live tier: prove the public server route can prepare and drive the real Codex plugin,
+/// rather than only exercising the injectable fake boundary above.
+#[tokio::test]
+#[ignore = "live: needs a real codex + credentials; set HOTSHEET_CODEX_LIVE=1"]
+async fn client_drive_route_runs_a_real_codex_turn() {
+    if std::env::var("HOTSHEET_CODEX_LIVE").as_deref() != Ok("1") {
+        return;
+    }
+    let (_dir, state) = state();
+    let router = app(state);
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"codex","connection_id":"live-client"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+    assert!(
+        created["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a == "interrupt")
+    );
+
+    let started = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/live-client/turns",
+            Some(r#"{"content":"Reply with exactly: hotsheet client drive ready"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::ACCEPTED);
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    loop {
+        let listed = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let connection = &listed.as_array().unwrap()[0];
+        if !connection["busy"].as_bool().unwrap() {
+            assert!(connection["last_error"].is_null(), "{connection}");
+            assert!(connection["session_id"].as_str().is_some(), "{connection}");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "real Codex turn timed out"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 
 #[tokio::test]

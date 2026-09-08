@@ -252,12 +252,30 @@ Every plugin with a `drive` passes:
 - **Cancellation:** capable drives expose explicit `TurnHandle::interrupt`; dropping a
   handle is not the cancellation contract.
 
-## 13.9 Build plan (follow-ups)
+## 13.9 Client-owned drive lifecycle (HS2-5DGFG2)
+
+The server retains a prepared drive and its isolated tool home across sequential client
+turns. A client creates/attaches it with `POST /drive/connections`, sends arbitrary text
+with `POST /drive/connections/{id}/turns`, and resumes from either the retained session id
+or an explicit one. Only one turn may run per connection. A thread-safe `TurnControl`
+delivers interruption back to the concrete turn on its owner thread; the wire advertises
+`interrupt` in `actions` only when that drive actually implements it.
+
+Connection changes emit replayable `drive_updated` events. Clients refresh from that
+signal over the existing WebSocket or long-poll fallback; simple periodic polling is not
+part of this contract. Preparation and running remain plugin-routed through `SafeTrigger`,
+including HS1 refusal, an isolated Codex home, permission bridging, and the cross-platform
+`hotsheet` shim resolving the real sibling `hotsheet-cli` rather than the server process.
+Unix hosts reuse the shared Codex daemon; Windows uses the direct app-server transport
+because the daemon control channel is Unix-domain-socket based.
+The HTTP lifecycle is fake-backend E2E tested and has a credentials-gated real Codex test.
+
+## 13.10 Build plan (follow-ups)
 - HS2-67 (this) = the spec. Implementation lands in **HS2-9** (plugin host + Claude
   drive) and **HS2-66** (Codex drive); the conformance checklist is built in **HS2-64**.
   No new ticket needed — those three own the build.
 
-## 13.10 Cross-references
+## 13.11 Cross-references
 - Drive/trigger overview + optional caps: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.5
 - Connection registry + busy: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.6
 - Permission bridge: [05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.7

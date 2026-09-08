@@ -10,7 +10,10 @@ use anyhow::{Context, Result, bail};
 
 use crate::launch_safety;
 use crate::registry::ConnectionRegistry;
-use crate::{LiveError, LiveTrigger, Role, TurnDone, TurnEvent, run_trigger};
+use crate::{
+    LiveError, LiveTrigger, Role, TurnControl, TurnDone, TurnEvent, drive_for, run_trigger,
+    run_trigger_controlled,
+};
 
 /// A resolved tool + its HS2-103 launch isolation, reusable across turns.
 pub struct SafeTrigger {
@@ -107,15 +110,17 @@ pub fn prepare_trigger(
 
     // Put a `hotsheet` → `hotsheet-cli` shim (and the CLI's own dir) at the front of the
     // launched tool's PATH, so a bare `hotsheet` hits our safe CLI (not an HS1 launcher).
-    let exe_dir = launch_safety::exe_dir()?;
-    let hotsheet_cli = std::env::current_exe()?;
+    let hotsheet_cli = launch_safety::hotsheet_cli()?;
+    let exe_dir = hotsheet_cli
+        .parent()
+        .context("the hotsheet-cli executable has no parent directory")?;
     let shim = launch_safety::ShimDir::create(&hotsheet_cli)?;
     let base_path = env
         .iter()
         .find(|(k, _)| k == "PATH")
         .map(|(_, v)| v.clone())
         .unwrap_or_else(|| std::env::var("PATH").unwrap_or_default());
-    let child_path = launch_safety::prepend_path(&[shim.path(), &exe_dir], &base_path);
+    let child_path = launch_safety::prepend_path(&[shim.path(), exe_dir], &base_path);
     launch_safety::assert_hotsheet_resolves(&child_path, shim.path())?;
     env.retain(|(k, _)| k != "PATH");
     env.push(("PATH".to_string(), child_path));
@@ -167,6 +172,11 @@ impl SafeTrigger {
         self.plugin.id()
     }
 
+    /// Whether the resolved concrete drive exposes a working interrupt operation.
+    pub fn supports_interrupt(&self) -> bool {
+        drive_for(&self.plugin).is_some_and(|drive| drive.supports_interrupt())
+    }
+
     /// Attach a live permission bridge so a driven codex's approvals **block for a human**
     /// (the server route-back) instead of auto-approving (HS2-Q1F6HV). Builder-style.
     pub fn with_permission_bridge(
@@ -216,5 +226,44 @@ impl SafeTrigger {
             }
             other => anyhow::Error::new(other),
         })
+    }
+
+    /// Drive one turn while accepting a thread-safe external interrupt request.
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_turn_controlled(
+        &self,
+        prompt: &str,
+        resume: Option<&str>,
+        worker: bool,
+        conn_id: String,
+        registry: &mut ConnectionRegistry,
+        control: &TurnControl,
+        on_event: &mut dyn FnMut(&TurnEvent),
+    ) -> Result<TurnDone> {
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let t = LiveTrigger {
+            cwd: self.cwd.clone(),
+            prompt: prompt.to_string(),
+            role: if worker { Role::Worker } else { Role::Main },
+            conn_id,
+            resume: resume.map(str::to_string),
+            mcp_config: self.mcp_config.clone(),
+            permission_mode: Some(self.permission_mode.clone()),
+            env: self.env.clone(),
+            shared_daemon: self.shared_daemon,
+            permission_bridge: self.permission_bridge.clone(),
+            now_ms,
+        };
+        run_trigger_controlled(&self.plugin, &t, registry, Some(control), on_event).map_err(
+            |error| match error {
+                LiveError::NotDrivable(id) => anyhow::anyhow!(
+                    "'{id}' is not drivable (no [drive], or its transport isn't built yet)"
+                ),
+                other => anyhow::Error::new(other),
+            },
+        )
     }
 }

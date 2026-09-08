@@ -7,6 +7,8 @@
 //! drift from reality.
 
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::ports::{AcpClient, AppServerClient, ProcessSpawner};
 
@@ -100,6 +102,21 @@ pub enum TurnEvent {
     },
     /// The turn finished; terminal.
     Done(DoneReason),
+}
+
+/// Thread-safe external control for a running turn. The owning pump consumes the request
+/// and invokes the concrete handle, so protocol/process handles never cross threads.
+#[derive(Clone, Default)]
+pub struct TurnControl(Arc<AtomicBool>);
+
+impl TurnControl {
+    pub fn request_interrupt(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn interrupt_requested(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
 }
 
 /// A handle to observe one running turn, **uniform across transports** (`docs/13`

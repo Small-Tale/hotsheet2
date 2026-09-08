@@ -5,6 +5,7 @@
 //! it fresh and broadcasts change events, so a CLI/git edit shows up live. Terminals
 //! (HS2-10) and the detached lifecycle (HS2-59) are separate.
 
+pub mod client_drive;
 pub mod code_review;
 pub mod commands;
 pub mod dist_work_loop;
@@ -136,6 +137,8 @@ pub struct AppState {
         Arc<Mutex<std::collections::HashMap<String, hotsheet_ticketing::DistillationPipeline>>>,
     /// Per-session admission state keeps a noisy tool from flooding disk or live clients.
     activity_volume: Arc<Mutex<hotsheet_ticketing::ActivityVolumeGuard>>,
+    /// Human/client-owned AI connections, separate from the autonomous work queue.
+    client_drives: client_drive::ClientDriveManager,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -242,6 +245,7 @@ impl AppState {
             activity_volume: Arc::new(Mutex::new(
                 hotsheet_ticketing::ActivityVolumeGuard::default(),
             )),
+            client_drives: client_drive::ClientDriveManager::default(),
         }
     }
 
@@ -261,6 +265,15 @@ impl AppState {
 
     pub fn with_tts_providers(mut self, providers: Vec<Arc<dyn tts::TtsProvider>>) -> Self {
         self.tts = tts::TtsProviders::new(providers);
+        self
+    }
+
+    /// Inject the client-drive adapter (hermetic server/API tests).
+    pub fn with_client_drive_backend(
+        mut self,
+        backend: Arc<dyn client_drive::ClientDriveBackend>,
+    ) -> Self {
+        self.client_drives = client_drive::ClientDriveManager::new(backend);
         self
     }
 
@@ -634,6 +647,18 @@ impl AppState {
             id: String::new(),
             slug: String::new(),
             message: Some(message),
+            activity: None,
+            assignment: None,
+        });
+    }
+
+    fn emit_drive_updated(&self, info: &client_drive::ClientConnectionInfo) {
+        self.emit(ChangeEvent {
+            store: multistore::store_url_id(&self.store),
+            kind: "drive_updated".into(),
+            id: info.id.clone(),
+            slug: info.tool.clone(),
+            message: None,
             activity: None,
             assignment: None,
         });
@@ -1058,6 +1083,12 @@ pub fn app(state: AppState) -> Router {
         .route("/permissions/ask", post(ask_permission))
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
+        .route("/drive/connections", post(create_drive_connection))
+        .route("/drive/connections/{id}/turns", post(send_drive_turn))
+        .route(
+            "/drive/connections/{id}/interrupt",
+            post(interrupt_drive_turn),
+        )
         .route("/analytics/tickets", get(ticket_flow_summary))
         .route("/analytics/usage", get(usage_metrics_summary))
         .route("/commands", get(list_commands).put(save_commands))
@@ -4124,6 +4155,14 @@ struct ConnectionInfo {
     role: String,
     /// Whether the connection is busy (a turn is actively streaming) right now.
     busy: bool,
+    /// Available semantic actions. Capability is represented by presence, never an inert
+    /// `can_interrupt` boolean.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    actions: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_error: Option<String>,
 }
 
 /// `GET /connections` — what the server's driving loop is currently running (HS2-TCV3BF):
@@ -4143,9 +4182,145 @@ async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionI
             project: c.project.clone(),
             role: format!("{:?}", c.role).to_lowercase(),
             busy: reg.is_busy(&c.id, now),
+            actions: Vec::new(),
+            session_id: None,
+            last_error: None,
         })
-        .collect();
+        .collect::<Vec<_>>();
+    drop(reg);
+    let mut infos = infos;
+    for client in state.client_drives.list() {
+        if infos.iter().any(|existing| existing.id == client.id) {
+            continue;
+        }
+        infos.push(ConnectionInfo {
+            id: client.id,
+            tool: client.tool,
+            project: client.project,
+            role: client.role,
+            busy: client.busy,
+            actions: client.actions,
+            session_id: client.session_id,
+            last_error: client.last_error,
+        });
+    }
+    infos.sort_by(|left, right| left.id.cmp(&right.id));
     Json(infos)
+}
+
+#[derive(Deserialize)]
+struct CreateDriveConnectionReq {
+    tool: String,
+    #[serde(default)]
+    connection_id: Option<String>,
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+async fn create_drive_connection(
+    State(state): State<AppState>,
+    Json(request): Json<CreateDriveConnectionReq>,
+) -> Result<(StatusCode, Json<client_drive::ClientConnectionInfo>), ApiError> {
+    if request.tool.trim().is_empty() {
+        return Err(ApiError::new(StatusCode::BAD_REQUEST, "tool is required"));
+    }
+    let project_path = state.store.root().to_path_buf();
+    let mut env = vec![format!("HOTSHEET_PROJECT={}", project_path.display())];
+    if let Some(url) = state
+        .terminal_server_url
+        .lock()
+        .ok()
+        .and_then(|value| value.clone())
+    {
+        env.push(format!("HOTSHEET_SERVER={url}"));
+        env.push(format!("HOTSHEET_SECRET={}", state.secret));
+    }
+    let info = state
+        .client_drives
+        .create_or_attach(
+            client_drive::PrepareDrive {
+                store_path: state.store.root().to_path_buf(),
+                project_path,
+                tool: request.tool,
+                env,
+                permission_bridge: state.permission_bridge(),
+            },
+            request.connection_id,
+            request.session_id,
+        )
+        .map_err(client_drive_api_error)?;
+    state.emit_drive_updated(&info);
+    Ok((StatusCode::CREATED, Json(info)))
+}
+
+#[derive(Deserialize)]
+struct SendDriveTurnReq {
+    content: String,
+    #[serde(default)]
+    session_id: Option<String>,
+}
+
+async fn send_drive_turn(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(request): Json<SendDriveTurnReq>,
+) -> Result<(StatusCode, Json<client_drive::ClientConnectionInfo>), ApiError> {
+    if request.content.trim().is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "content is required",
+        ));
+    }
+    let job = state
+        .client_drives
+        .begin_turn(&id, request.session_id)
+        .map_err(client_drive_api_error)?;
+    let info = state
+        .client_drives
+        .get(&id)
+        .map_err(client_drive_api_error)?;
+    state.emit_drive_updated(&info);
+
+    let manager = state.client_drives.clone();
+    let thread_state = state.clone();
+    let prompt = request.content;
+    let thread_id = id.clone();
+    std::thread::spawn(move || {
+        let result = job.run(&prompt, &mut |_| {});
+        manager.finish_turn(&thread_id, &result);
+        if let Ok(info) = manager.get(&thread_id) {
+            thread_state.emit_drive_updated(&info);
+        }
+    });
+    Ok((StatusCode::ACCEPTED, Json(info)))
+}
+
+async fn interrupt_drive_turn(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<client_drive::ClientConnectionInfo>), ApiError> {
+    state
+        .client_drives
+        .interrupt(&id)
+        .map_err(client_drive_api_error)?;
+    let info = state
+        .client_drives
+        .get(&id)
+        .map_err(client_drive_api_error)?;
+    state.emit_drive_updated(&info);
+    Ok((StatusCode::ACCEPTED, Json(info)))
+}
+
+fn client_drive_api_error(error: client_drive::ClientDriveError) -> ApiError {
+    use client_drive::ClientDriveError as Error;
+    let status = match error {
+        Error::NotFound(_) => StatusCode::NOT_FOUND,
+        Error::Conflict(_) => StatusCode::CONFLICT,
+        Error::Unsupported(_) => StatusCode::METHOD_NOT_ALLOWED,
+        Error::Prepare(_) => StatusCode::BAD_REQUEST,
+        Error::Unavailable => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    ApiError::new(status, error.to_string())
 }
 
 /// Wall-clock epoch milliseconds (the driving loop's busy-tracking time base).

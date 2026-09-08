@@ -27,7 +27,7 @@ export interface CodeReviewSummary {files:{total:number;docs:number;tests:number
 export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean;summary?:CodeReviewSummary}
 export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:string;to:string}|{mode:'compare';from:string;to:string};
 export interface PermissionRequest {id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean}
-export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}
+export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean;actions?:Array<'send_turn'|'interrupt'>;session_id?:string;last_error?:string}
 export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;link?:string;progress?:number}
 export interface TerminalSettings {inherit_global_shell_history:boolean}
 export interface TerminalRead extends TerminalInfo {scrollback:string}
@@ -80,6 +80,9 @@ export class Api {
   openCodeReview=(checkout:string,id:string,target:CodeReviewTarget)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,{method:'POST',body:JSON.stringify(target)});
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
   activeToolConnections=()=>this.request<ToolConnection[]>('/connections');
+  createToolConnection=(value:{tool:string;connection_id?:string;session_id?:string})=>this.request<ToolConnection>('/drive/connections',{method:'POST',body:JSON.stringify(value)});
+  sendToolTurn=(id:string,content:string,session_id?:string)=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/turns`,{method:'POST',body:JSON.stringify({content,...(session_id?{session_id}:{})})});
+  interruptToolTurn=(id:string)=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/interrupt`,{method:'POST'});
   terminals=()=>this.request<TerminalInfo[]>('/terminals');
   terminalSettings=()=>this.request<TerminalSettings>('/terminal-settings');
   saveTerminalSettings=(value:TerminalSettings)=>this.request<TerminalSettings>('/terminal-settings',{method:'PUT',body:JSON.stringify(value)});

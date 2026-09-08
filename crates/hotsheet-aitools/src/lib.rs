@@ -36,10 +36,10 @@ pub use codex::{
 };
 pub use drive::{
     BackingService, ClaudeChannelClient, DoneReason, Drive, DriveCtx, DriveError, DriveInfo,
-    PermReq, Target, Transport, TurnEvent, TurnHandle, Usage,
+    PermReq, Target, Transport, TurnControl, TurnEvent, TurnHandle, Usage,
 };
 pub use host::{TriggerError, Triggered, drive_for, trigger};
-pub use live::{LiveError, LiveTrigger, TurnDone, run_trigger};
+pub use live::{LiveError, LiveTrigger, TurnDone, run_trigger, run_trigger_controlled};
 pub use permission::{
     DEFAULT_PERMISSION_TIMEOUT, Decision as PermissionDecision, Outcome as PermissionOutcome,
     PermissionBridge, Request as PermissionRequest, Resolved as PermissionResolved,

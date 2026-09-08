@@ -113,7 +113,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       tests/cli.rs, tests/migrate.rs #  E2E for each binary (assert_cmd)
       tests/plugin_conformance.rs #  HS2-64 hard gate: every plugin (builtin + on-disk) validated — capabilities + headless-setup E2E; a new tool inherits it by existing
     hotsheet-server/         # `hotsheet-server` binary (axum HTTP + WS)
-      src/lib.rs             #   app() router + ticket/terminal/permission/activity APIs; provider discovery/scoped routes plus idempotent /provider-transfers/copy|move; /stores remains compatible
+      src/lib.rs             #   app() router + ticket/terminal/permission/activity/client-drive APIs; provider discovery/scoped routes plus idempotent /provider-transfers/copy|move; /stores remains compatible
+      src/client_drive.rs    #   client-owned prepared AI connections: plugin-neutral create/attach, sequential resumable turns, capability-present interrupt, and injectable fake/native backends (HS2-5DGFG2)
       src/main.rs            #   bind + serve (loopback = Tier-0 plaintext; off-loopback = Tier-1 mTLS via tls::build_server_config + serve_tls, HS2-VT3JMF); instance file + writer lock + graceful shutdown + --stop (lifecycle, HS2-59); prints port + secret
       src/tls.rs             #   Tier-1 mTLS (HS2-VT3JMF/MPC0QF): required client cert + live revocation verifier; serve_tls_with_acl fingerprints each peer and applies live optional read-only/read-write/deny authorization before routing HTTP
       src/dist_work_loop.rs  #   server-hosted distributed driving loop: SafeTrigger per claimed ticket, permission bridge, attributed usage, coarse activity, and Codex/Claude native mapper events through the persistence+broadcast sink (HS2-SW655F)
@@ -154,10 +155,10 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/codex.rs           #   CodexAppServer: real AppServerClient + Codex 0.152.1 completed transcript-item streaming, stdio/shared-daemon transports, daemon lifecycle, and usage mapping; loopback + scripted-WS tests
       src/claude.rs          #   ClaudeChannelDrive + ClaudeChannel: persistent stream-json turns with hook lifecycle capture enabled, assistant tool_use → verified PreToolUse native activity, result usage mapping, and scripted tests
       src/procio.rs          #   StreamChild: shared piped-stdio plumbing (spawn -> RpcWriter/RpcReader) for the stream transports
-      src/live.rs            #   run_trigger → TurnDone{reason, session_id}: spawn a REAL tool per its [drive] transport (codex app-server: StdioTransport, or shared-daemon UdsWsTransport when --shared-daemon), build DriveCtx, pump_turn one turn (behind `hotsheet-cli trigger`); pump_turn heartbeats ConnectionRegistry busy at a LIVE clock per streamed event + emits TurnEvent::Usage + idle on Done (HS2-34X6BW); surfaces the tool session/thread id for cross-turn resume (HS2-3C1XK3)
-      src/launch_safety.rs   #   HS2-103 safety: hotsheet->hotsheet-cli PATH shim, assert_no_hs1, shell-free executable resolution, absolute hotsheet-mcp path, IsolatedCodexHome (auto MCP-free CODEX_HOME, HS2-YRDQNX) — moved here so CLI + server share it (HS2-1TY7GC)
+      src/live.rs            #   run_trigger/run_trigger_controlled → TurnDone{reason, session_id}: drive a REAL tool per its [drive] transport, pump events/busy state, and marshal thread-safe client interrupt requests onto the turn-owner thread (HS2-5DGFG2)
+      src/launch_safety.rs   #   HS2-103 safety: cross-platform hotsheet->real sibling hotsheet-cli PATH shim, assert_no_hs1, shell-free executable resolution, absolute hotsheet-mcp path, IsolatedCodexHome (auto MCP-free CODEX_HOME, HS2-YRDQNX) — shared by CLI + server
       tests/fixtures/       #   sanitized, version-pinned real Codex/Claude protocol cassettes replayed in fast CI (live drift oracle remains ignored/creds-gated)
-      src/safe_trigger.rs    #   SafeTrigger + prepare_trigger: resolve a tool + assemble launch safety once, run_turn(on_event sink, conn_id) per turn; shared by `hotsheet-cli trigger`/`work` and the server driving loop (HS2-1TY7GC)
+      src/safe_trigger.rs    #   SafeTrigger + prepare_trigger: resolve a tool + assemble launch safety once, run ordinary or externally controlled turns; shared by CLI, autonomous server work, and client-owned connections
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()
       src/ports.rs           #   ProcessSpawner/SpawnedProcess + AcpClient + AppServerClient/Turn + RpcTransport/Reader/Writer (injected) + SpawnSpec
       src/system.rs          #   SystemSpawner (real std::process adapter)
