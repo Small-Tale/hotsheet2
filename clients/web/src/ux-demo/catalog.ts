@@ -34,8 +34,14 @@ export const demoCatalog: DemoCategory[] = [
       demo('ticket-board-column', 'TicketBoardColumn', 'One titled, independently scrollable ticket column.', 'feature-floor', true, ['ticket-row']),
     ]},
     { id: 'search', name: 'Search and filtering', demos: [
-      demo('global-search', 'GlobalSearchOverlay', 'FTS search, scope, and suggestions.'),
-      demo('filter-chip', 'FilterChip', 'Active removable query constraint.'),
+      demo('global-search', 'GlobalSearchOverlay', 'Provider-indexed search across scopes, filters, and results.', 'feature-floor', true, ['search-query-input','search-scope-picker','search-suggestion-list','search-result-row','active-filter-bar','saved-view-action']),
+      demo('search-query-input', 'SearchQueryInput', 'Full-text query input with stable loading affordance.', 'feature-floor', true),
+      demo('search-scope-picker', 'SearchScopePicker', 'Working, current-view, and all-ticket search scope.', 'feature-floor', true, ['select']),
+      demo('search-suggestion-list', 'SearchSuggestionList', 'Discoverable lifecycle and state filter suggestions.', 'feature-floor', true, ['filter-chip']),
+      demo('search-result-row', 'SearchResultRow', 'Provider-qualified result with an explicit match reason.', 'feature-floor', true, ['menu-item']),
+      demo('active-filter-bar', 'ActiveFilterBar', 'Active removable query constraints.', 'feature-floor', true, ['filter-chip']),
+      demo('filter-chip', 'FilterChip', 'One active removable query constraint.', 'feature-floor', true),
+      demo('saved-view-action', 'SavedViewAction', 'Handoff from an active search to the saved-view editor.', 'feature-floor', true),
     ]},
   ]},
   { id: 'inspector', name: 'Ticket inspector', children: [

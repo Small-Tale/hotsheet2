@@ -32,8 +32,8 @@ view. Exact-slug lookup can surface a matching Backlog, Archive, or Deleted tick
 known identity is never hidden by view scope. Advanced search exposes explicit scope and
 filter chips for including normally excluded lifecycle states rather than HS1's special
 inline “Include N …” result rows. Ticket-reference mentions may participate in results
-only when the client labels why the ticket matched. Client completion is tracked by
-HS2-383D6K.
+only when the client labels why the ticket matched. The shipped client surface and its
+saved-view handoff are covered by HS2-383D6K.
 
 **The invariant (repeated because it's load-bearing): the index is a disposable
 cache.** It can be deleted and rebuilt from configured providers. For the git

@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
-import { ArrowDown, ArrowDownAZ, ArrowDownWideNarrow, ArrowUp, ArrowUpAZ, ArrowUpNarrowWide, Bell, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
+import { ArrowDown, ArrowDownAZ, ArrowDownWideNarrow, ArrowUp, ArrowUpAZ, ArrowUpNarrowWide, Bell, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, SlidersHorizontal, Star, X } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { Select, type SelectChoice } from './select';
@@ -92,6 +92,9 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
         {searchOpen
           ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} disabled={projectActionsDisabled} autofocus><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span>{searchQuery && <button type="button" slot="end" class="workspace-header__search-clear" data-action="clear-workspace-search" aria-label="Clear search" title="Clear search"><LucideIcon icon={X} name="x" /></button>}</wa-input>
           : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
+      </ToolbarControlGroup>
+      <ToolbarControlGroup className="workspace-header__advanced-search-group" single>
+        <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="open-global-search" aria-label="Advanced search" title="Advanced search (⌘K)"><LucideIcon icon={SlidersHorizontal} name="sliders-horizontal" /></wa-button>
       </ToolbarControlGroup>
     </div>;
 }

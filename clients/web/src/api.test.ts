@@ -81,6 +81,12 @@ describe('ticket search transport',()=>{
     expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/tickets?text=HS2-QQRY00',expect.any(Object));
     fetchMock.mockRestore();
   });
+  it('requests non-compact provider-indexed rows for advanced search',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('[]',{status:200}));
+    await new Api('/api').checkoutTickets('demo',{text:' referenced ticket ',compact:false,up_next:true});
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/demo/tickets?text=referenced+ticket&compact=false&up_next=true',expect.any(Object));
+    fetchMock.mockRestore();
+  });
 });
 
 describe('checkout bulk update transport',()=>{

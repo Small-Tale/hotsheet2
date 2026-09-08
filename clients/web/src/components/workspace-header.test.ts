@@ -23,8 +23,9 @@ describe('WorkspaceHeader', () => {
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
     expect(markup).toContain('slot="start"');
     expect(markup).not.toContain('data-action="open-workspace-search"');
+    expect(markup).toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
-    expect(markup.match(/disabled/g)).toHaveLength(4);
+    expect(markup.match(/disabled/g)).toHaveLength(5);
   });
 
   it.each([

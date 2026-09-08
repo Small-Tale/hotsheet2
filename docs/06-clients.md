@@ -289,8 +289,11 @@ prompt can be dismissed and returns on a later open until a source is configured
   immediate return to the unfiltered view when search is cleared. Search semantics do not
   inherit the selected sidebar view: ordinary queries cover the normal working statuses,
   exact-slug lookup can reveal Backlog/Archive/Deleted matches, and explicit scope/filter
-  chips opt into normally excluded lifecycle states. Reference-mention matches must say
-  why they matched. HS2-383D6K owns the remaining advanced-search client work.
+  chips opt into normally excluded lifecycle states. Reference-mention matches say why
+  they matched, every result names its provider, and the global overlay can hand its
+  current query/scope/filter payload to the separately owned saved-view editor without
+  replacing the compact workspace search. The overlay is available from the toolbar and
+  the platform Search shortcut (`Command-K`/`Control-K`).
 
   Empty ticket collections use the shared `TicketEmptyState` composition in both list
   and board modes. A project with no tickets invites its first ticket, a populated

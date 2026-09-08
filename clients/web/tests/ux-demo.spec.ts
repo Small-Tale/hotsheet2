@@ -2,6 +2,11 @@ import { expect, test } from '@playwright/test';
 
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 
+test('represents every advanced-search component with the real responsive overlay',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});await page.goto('/ux-demo?component=global-search');const overlay=page.locator('[data-component="global-search-overlay"]');await expect(overlay).toBeVisible();for(const component of ['active-filter-bar','filter-chip','select','menu-item'])await expect(overlay.locator(`[data-component="${component}"]`).first()).toBeVisible();await expect(overlay.getByText('Ticket reference',{exact:true})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-383d6k-ux-search-wide.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});await expect(overlay).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-383d6k-ux-search-narrow.png',fullPage:true});
+});
+
 test('navigates the catalog and preserves URL-addressable selection', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
@@ -12,7 +17,7 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await page.getByRole('button', { name: 'Dev Review On' }).click();
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   const catalog = page.getByRole('navigation');
-  await expect(catalog.locator('[data-item-id="global-search"]')).toHaveCSS('color', 'rgb(174, 174, 178)');
+  await expect(catalog.locator('[data-item-id="global-search"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-item-id="app-shell"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-item-id="ticket-row"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
   await expect(catalog.locator('[data-component="menu-header"]')).not.toHaveCount(0);
