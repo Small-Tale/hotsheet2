@@ -600,8 +600,8 @@ appear in Default and start hidden in existing named groups. The dashboard alway
 ungrouped flow, so there is no redundant project/none grouping selector.
 Every dashboard tile mounts a read-only xterm with an exact 80×24 character grid at a
 stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to the black PTY
-viewport: the surrounding card adds the measured spacing-token inset, border, and footer
-height outside that viewport. One canonical font geometry is established when the 80×24 xterm
+viewport: the surrounding card adds the measured spacing-token inset and footer height outside
+that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
 is constructed, then a single uniform physical scale fits it to the available preview without
 changing rows, columns, or glyph proportions. Magnifying a grid tile preserves
 the same exact grid and terminal-screen aspect. Changing grid fit or magnifying
@@ -611,8 +611,8 @@ server size echoes cannot restore the edge row that would otherwise be clipped. 
 changes such as maximize explicitly publish a post-layout resize boundary on the next animation
 frame, with a settled follow-up, instead of depending on an observer that can remain one resize
 behind the container. Fixed-grid surfaces reveal after one physical-scale pass, avoiding the
-incremental typography loop while moving from a drawer to the dashboard or magnifying a card. The preview,
-its inset frame, and its border all use the terminal background token, so unused space
+incremental typography loop while moving from a drawer to the dashboard or magnifying a card. The preview
+and its inset frame use the terminal background token, so unused space
 cannot expose an unrelated gray surface. The computed tile height derives the 5:3 preview
 from the card width, then adds the tokenized frame/footer chrome, so repeated viewport changes
 cannot push the terminal outside its card. Dashboard
@@ -630,6 +630,10 @@ claimed/grid geometry and visible xterm-screen containment. It samples the post-
 through maximize and both fixed-grid mounts, so a stale or malformed intermediate frame cannot
 pass on a correct final state alone. Returning from the dashboard to an already-open drawer is
 idempotent and settles geometry without replaying the drawer's show animation.
+The UX catalog mounts the same xterm frontend over deterministic ANSI fixtures rather than
+substituting a text placeholder. Its preview is constrained to a realistic grid-card width,
+the magnified variant receives the remaining stage width, and both demonstrate the canonical
+code font and complete Nano screen.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.

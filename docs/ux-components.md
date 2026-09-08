@@ -812,8 +812,8 @@ At every scale, dashboard tiles are keyboard-focusable, non-interactive previews
 xterm retains a fixed 1280×768 natural geometry and the complete terminal is uniformly
 scaled into the tile instead of being refit to the tile. This keeps the PTY stable as grid
 zoom changes and keeps the preview, inset frame, and unused terminal area on the terminal
-background color. Only the black viewport follows that 5:3 aspect; the tile card adds its
-measured spacing-token inset, border, and footer height outside the viewport. `FixedAspectTerminalCard`
+background color. Only the black viewport follows that 5:3 aspect; the borderless tile card adds its
+measured spacing-token inset and footer height outside the viewport. `FixedAspectTerminalCard`
 owns this structure for both grid-preview and magnified-interactive variants. It withholds the
 xterm surface until bounded font-metric fitting is stable, so transitions do not expose each
 intermediate fitting pass. A plain activation
@@ -837,7 +837,8 @@ must reclaim its fitted dimensions after leaving the dashboard. Focus, resize cl
 attention, and selection survive layout and scale changes.
 
 `FixedAspectTerminalCard` is also a first-class UX catalog entry. Its catalog page renders
-both supported public variants together, and `TerminalDashboard` lists it as a related
+both supported public variants with the real xterm frontend, a deterministic ANSI fixture,
+and representative preview-versus-magnified sizing. `TerminalDashboard` lists it as a related
 component so the production composition is explicit rather than only inferable from source.
 
 ## 7. Overlays and shared interaction components

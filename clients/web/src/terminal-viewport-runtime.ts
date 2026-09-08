@@ -6,6 +6,19 @@ import { Terminal } from '@xterm/xterm';
 
 import { parseTerminalSizeMessage,TERMINAL_DASHBOARD_COLS,TERMINAL_DASHBOARD_FONT_SIZE,TERMINAL_DASHBOARD_LINE_HEIGHT,TERMINAL_DASHBOARD_ROWS,TERMINAL_DRAWER_RESIZE_END_EVENT,TERMINAL_PREVIEW_NATURAL_HEIGHT,TERMINAL_PREVIEW_NATURAL_WIDTH,TERMINAL_RESIZE_SETTLE_MS,terminalDedicatedGridSize,terminalPhysicalScale,terminalPreviewScale,terminalReconnectDelay,terminalResizeClaim,terminalScrollbackLimit,terminalShouldAdoptServerSize,terminalViewportClaimsSizingFocus,terminalViewportScale } from './terminal-viewport';
 
+export function mountStaticTerminalViewportRuntime(element:HTMLElement,{output,autoFocus=false}:{output:string;autoFocus?:boolean}):()=>void {
+  const scaledPreview=element.dataset.displayMode==='scaled-preview',background=getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim()||'#000';
+  if(scaledPreview){element.style.width=`${TERMINAL_PREVIEW_NATURAL_WIDTH}px`;element.style.height=`${TERMINAL_PREVIEW_NATURAL_HEIGHT}px`;element.dataset.naturalSize=`${TERMINAL_PREVIEW_NATURAL_WIDTH}x${TERMINAL_PREVIEW_NATURAL_HEIGHT}`}
+  const terminal=new Terminal({cols:TERMINAL_DASHBOARD_COLS,rows:TERMINAL_DASHBOARD_ROWS,lineHeight:TERMINAL_DASHBOARD_LINE_HEIGHT,cursorBlink:!scaledPreview,disableStdin:scaledPreview,convertEol:false,scrollback:terminalScrollbackLimit(element.dataset.displayMode,true),fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace',fontSize:TERMINAL_DASHBOARD_FONT_SIZE,theme:{background}});
+  terminal.open(element);element.dataset.renderer='dom';element.dataset.connection='connected';element.dataset.driving='true';element.dataset.ptySize=`${TERMINAL_DASHBOARD_COLS}x${TERMINAL_DASHBOARD_ROWS}`;element.dataset.gridSize=`${TERMINAL_DASHBOARD_COLS}x${TERMINAL_DASHBOARD_ROWS}`;element.dataset.sizingFocus='true';element.dataset.viewportVisible='true';element.dataset.fontSize=String(TERMINAL_DASHBOARD_FONT_SIZE);element.dataset.letterSpacing='0';element.dataset.lineHeight=String(TERMINAL_DASHBOARD_LINE_HEIGHT);element.dataset.scrollbackLimit=String(terminalScrollbackLimit(element.dataset.displayMode,true));element.dataset.geometryReady='false';
+  let frame:number|undefined,disposed=false;
+  const fill=()=>{frame=undefined;if(disposed||!terminal.element)return;const screen=terminal.element.querySelector<HTMLElement>('.xterm-screen');if(!screen||screen.offsetWidth<=0||screen.offsetHeight<=0)return;const target=element.parentElement??element,scale=terminalPhysicalScale(screen.offsetWidth,screen.offsetHeight,Math.max(1,target.clientWidth-1),Math.max(1,target.clientHeight-1));if(scale<=0)return;terminal.element.style.transform=`scale(${scale})`;element.dataset.scale=String(scale);element.dataset.physicalScale=String(scale);element.dataset.geometryReady='true';if(autoFocus)terminal.focus()};
+  const schedule=()=>{if(frame===undefined)frame=window.requestAnimationFrame(fill)};
+  const render=terminal.onRender(schedule),resize=new ResizeObserver(schedule);resize.observe(element.parentElement??element);terminal.write(output,schedule);schedule();
+  const focus=()=>{terminal.focus()};if(!scaledPreview)element.addEventListener('click',focus);
+  return()=>{disposed=true;if(frame!==undefined)window.cancelAnimationFrame(frame);resize.disconnect();render.dispose();if(!scaledPreview)element.removeEventListener('click',focus);terminal.dispose()};
+}
+
 export function mountTerminalViewportRuntime(element:HTMLElement,{url,viewerId,autoFocus=false}:{url:string;viewerId:string;autoFocus?:boolean}):()=>void {
   const scaledPreview=element.dataset.displayMode==='scaled-preview',fixedDashboardGrid=element.dataset.gridPolicy==='dashboard-80x24',settledResize=element.classList.contains('terminal-viewport--dedicated'),insideDrawer=Boolean(element.closest('[data-region-id="app-terminal-drawer"]'));
   const background=getComputedStyle(element).getPropertyValue('--hs-terminal-background').trim()||'#000';

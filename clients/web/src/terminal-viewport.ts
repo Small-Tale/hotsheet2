@@ -63,3 +63,10 @@ export function mountTerminalViewport(element:HTMLElement,{url,viewerId=crypto.r
   void import('./terminal-viewport-runtime').then(({mountTerminalViewportRuntime})=>{if(disposed)return;disposeRuntime=mountTerminalViewportRuntime(element,{url,viewerId,autoFocus})});
   return ()=>{disposed=true;disposeRuntime?.()};
 }
+
+export function mountStaticTerminalViewport(element:HTMLElement,{output,autoFocus=false}:{output:string;autoFocus?:boolean}):()=>void {
+  let disposed=false,disposeRuntime:(()=>void)|undefined;
+  element.dataset.connection='loading';
+  void import('./terminal-viewport-runtime').then(({mountStaticTerminalViewportRuntime})=>{if(disposed)return;disposeRuntime=mountStaticTerminalViewportRuntime(element,{output,autoFocus})});
+  return ()=>{disposed=true;disposeRuntime?.()};
+}

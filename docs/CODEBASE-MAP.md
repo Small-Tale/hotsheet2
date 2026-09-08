@@ -34,7 +34,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/terminal-grid-layout.ts # Pure terminal tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, and terminal inclusion rules
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
-    src/terminal-viewport-runtime.ts # Lazy xterm renderer/input plus leased claims, server-size scaling, and reconnect lifecycle
+    src/terminal-viewport-runtime.ts # Lazy live/static xterm rendering, input, leased claims, server-size scaling, and reconnect lifecycle
+    src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     src/project-change-poll.ts # Replay-safe selected-project long poll; coalesced ticket refresh, overflow/reconnect recovery, and abortable lifecycle
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers

@@ -170,6 +170,7 @@ import {
   TagChipSettings,
   tagChipSettings,
 } from './tag-chip-demo';
+import { syncTerminalDemoViewports } from './terminal-demo';
 import { cancelTerminalVisibilityDemoName, closeTerminalVisibilityDemo, promptAddTerminalVisibilityDemoGroup, promptRenameTerminalVisibilityDemoGroup, removeTerminalVisibilityDemoGroup, selectTerminalVisibilityDemoGroup, setAllTerminalVisibilityDemo, showTerminalVisibilityDemo, showTerminalVisibilityDemoContextMenu, submitTerminalVisibilityDemoName, TerminalVisibilityDialogDemo, toggleTerminalVisibilityDemo } from './terminal-visibility-demo';
 import {
   collectionTickets,
@@ -674,6 +675,12 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
+const terminalDemoMounts = new Map<HTMLElement, () => void>();
+const syncDemoTerminals = () => {
+  syncTerminalDemoViewports(root, terminalDemoMounts);
+};
+new MutationObserver(syncDemoTerminals).observe(root, { childList: true, subtree: true });
+queueMicrotask(syncDemoTerminals);
 startPermissionRequestDemoCountdown(root, () => selectedId.value === 'permission-request');
 if (import.meta.env.DEV)
   void fetch('/__hotsheet/demo-modified')
