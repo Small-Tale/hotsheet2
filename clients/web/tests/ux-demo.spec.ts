@@ -106,9 +106,8 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   const initialScroll = await scroller.evaluate(node => node.scrollTop);
   await scroller.evaluate(node => { node.scrollBy(0, -80); });
   await expect.poll(() => scroller.evaluate(node => node.scrollTop)).toBeLessThan(initialScroll);
-  const scrolled = await selection.boundingBox();
   const scrollDelta = await scroller.evaluate((node, start) => node.scrollTop - start, initialScroll);
-  expect(scrolled!.y).toBeCloseTo(beforeScroll!.y - scrollDelta, 0);
+  await expect.poll(async () => (await selection.boundingBox())!.y).toBeCloseTo(beforeScroll!.y - scrollDelta, 0);
   const stableSelectionNode = await selection.elementHandle();
   const before = await selection.boundingBox();
   const resize = selection.getByRole('button', { name: /Resize capture 1 from se/ });
@@ -1677,7 +1676,8 @@ test('exercises the application-shell component slice and responsive composition
   await shell.getByRole('button', { name: 'Terminal dashboard' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
   await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCount(0);
-  await expect(shell.locator('[data-component="ticket-inspector"]')).toHaveCount(0);
+  await expect(shell.getByRole('region', { name: 'Ticket rail' })).toBeVisible();
+  await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
   await expect(shell.getByText('Terminals', { exact: true })).toBeVisible();
   await expect(shell.getByRole('region', { name: 'Terminal dashboard workspace' })).toBeVisible();
