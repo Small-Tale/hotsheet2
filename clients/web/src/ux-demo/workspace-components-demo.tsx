@@ -3,12 +3,13 @@ import { signal } from 'kerfjs';
 import type { CodeReview } from '../api';
 import { PageHeader } from '../components/page-header';
 import { QuickTicketComposer,QuickTicketLauncher } from '../components/quick-ticket-composer';
+import { TerminalTicketRail } from '../components/terminal-ticket-rail';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';
 import { DEFAULT_TICKET_CATEGORIES } from '../components/ticket-category-select';
 import { type InspectorTab,TicketInspector } from '../components/ticket-inspector';
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
-import { applyWorkspaceSortDirection, defaultWorkspaceSortDirection, WorkspaceHeader, type WorkspaceSort, type WorkspaceSortDirection, type WorkspaceViewMode } from '../components/workspace-header';
+import { applyWorkspaceSortDirection, defaultWorkspaceSortDirection, WorkspaceControls, WorkspaceHeader, type WorkspaceSort, type WorkspaceSortDirection, type WorkspaceViewMode } from '../components/workspace-header';
 import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
@@ -48,6 +49,10 @@ export function focusWorkspaceSearch(root: ParentNode): boolean {
   if (!input) return false;
   input.focus({ preventScroll: true });
   return true;
+}
+
+export function TerminalTicketRailDemo(){
+  return <section class="terminal-ticket-rail-demo"><TerminalTicketRail projects={[{id:'demo',name:'Demo project'},{id:'docs',name:'Documentation'}]} selectedProjectId="demo" controls={<WorkspaceControls mode="list" sort="updated" notificationCount={2}/>} content={<TicketList tickets={collectionTickets.value.slice(0,7)} label="Demo project tickets"/>} inspector={<TicketInspectorDemo/>} active="root" action={<QuickTicketLauncher/>}/></section>;
 }
 
 export function filteredWorkspaceTickets(): TicketRowProps[] {

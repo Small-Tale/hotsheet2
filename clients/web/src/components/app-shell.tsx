@@ -60,6 +60,6 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
       {mode==='project'&&terminalDrawer&&<ResizableRegion id="app-terminal-drawer" label="Terminal drawer" size={terminalDrawerSize} min={TERMINAL_DRAWER_MIN_SIZE} max={terminalDrawerMax} axis="vertical" edge="start" collapsed={!terminalDrawerVisible} transitioning={terminalDrawerTransitioning}>{terminalDrawer}</ResizableRegion>}
       {mode==='project'&&terminalDrawer&&!terminalDrawerVisible&&!terminalDrawerTransitioning&&<button type="button" class="app-shell__terminal-drawer-restore" data-action="toggle-terminal-drawer" aria-label="Show terminal drawer" title="Show terminal drawer"><LucideIcon icon={PanelBottomOpen} name="panel-bottom-open"/></button>}
     </main>
-    {mode === 'project' && inspector && <ResizableRegion id="app-inspector" label="Ticket inspector" size={inspectorSize} min={280} max={520} edge="start" collapsed={!inspectorVisible}>{inspector}</ResizableRegion>}
+    {mode !== 'stats' && inspector && <ResizableRegion id="app-inspector" label={mode==='terminals'?'Ticket rail':'Ticket inspector'} size={inspectorSize} min={280} max={520} edge="start" collapsed={!inspectorVisible}>{inspector}</ResizableRegion>}
   </section>;
 }

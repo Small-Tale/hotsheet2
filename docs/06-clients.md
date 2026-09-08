@@ -598,6 +598,12 @@ global dashboard; the project drawer
 always shows its project's terminals and has no visibility controls. Newly created terminals
 appear in Default and start hidden in existing named groups. The dashboard always uses one
 ungrouped flow, so there is no redundant project/none grouping selector.
+The dashboard keeps a resizable right ticket rail open by default. That rail reuses the
+selected project's list and notification views, compact workspace actions, project selector,
+and quick-ticket launcher; board and settings modes are deliberately absent. Selecting one
+ticket pushes the shared inspector into the rail, and its Back action pops to the stable list
+through the shared `ContentTransition`. Terminal sessions and the dashboard grid remain mounted
+throughout rail navigation and project switching.
 Every dashboard tile mounts a read-only xterm with an exact 80×24 character grid at a
 stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to the black PTY
 viewport: the surrounding card adds the measured spacing-token inset and footer height outside

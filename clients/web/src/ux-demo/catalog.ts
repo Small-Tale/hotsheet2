@@ -76,6 +76,7 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'terminal', name: 'Drawer and terminals', demos: [
     demo('terminal-drawer', 'TerminalDrawer', 'Project terminal rail and dedicated terminal surface.', 'feature-floor', true, ['app-tab']),
     demo('terminal-dashboard', 'TerminalDashboard', 'Responsive live grid, preview, and viewport controls.', 'feature-floor', true, ['fixed-aspect-terminal-card','menu-item']),
+    demo('terminal-ticket-rail', 'TerminalTicketRail', 'Compact list and notifications rail with push navigation into ticket detail.', 'feature-floor', true, ['ticket-list','ticket-inspector','content-transition','workspace-header']),
     demo('fixed-aspect-terminal-card', 'FixedAspectTerminalCard', 'Shared 5:3 terminal viewport card in preview and magnified variants.', 'feature-floor', true),
     demo('terminal-visibility-dialog', 'TerminalVisibilityDialog', 'Named visibility groups and per-terminal inclusion.', 'feature-floor', true, ['menu-item']),
     demo('bottom-drawer', 'BottomDrawer', 'Resizable tabbed desktop utility region.', 'desktop'),

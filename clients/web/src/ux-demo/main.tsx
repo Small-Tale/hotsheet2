@@ -226,6 +226,7 @@ import {
   inspectorTitleEditing,
   PageHeaderDemo,
   QuickTicketComposerDemo,
+  TerminalTicketRailDemo,
   TicketInspectorDemo,
   WorkspaceHeaderDemo,
   workspaceMode,
@@ -473,6 +474,7 @@ function demoContent(item: DemoDefinition) {
     { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
     { id: 'tests', projectId: 'demo', projectName: 'Demo project', title: 'Tests', alive: true, busy: false, cwd: '/work/demo', scrollback: '42 tests passed\nwaiting for changes' },
   ] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={{ key: 'demo:shell', x: 520, y: 280 }}/></section>;
+  if (item.id === 'terminal-ticket-rail') return <TerminalTicketRailDemo/>;
   if (item.id === 'fixed-aspect-terminal-card') {
     const session = {
       id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development',

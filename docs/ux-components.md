@@ -841,6 +841,11 @@ both supported public variants with the real xterm frontend, a deterministic ANS
 and representative preview-versus-magnified sizing. `TerminalDashboard` lists it as a related
 component so the production composition is explicit rather than only inferable from source.
 
+`TerminalTicketRail` is the dashboard's compact right-side companion. It composes the shared
+project selector, list/notification workspace controls, ticket list, quick-ticket launcher,
+ticket inspector, and forward/backward `ContentTransition`. It remains independently resizable
+beside the terminal grid and is represented directly in the UX catalog.
+
 ## 7. Overlays and shared interaction components
 
 - `PopoverMenu`

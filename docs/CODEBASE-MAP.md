@@ -32,6 +32,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission updates, and global terminal dashboard state
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/terminal-grid-layout.ts # Pure terminal tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
+    src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, and terminal inclusion rules
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
     src/terminal-viewport-runtime.ts # Lazy live/static xterm rendering, input, leased claims, server-size scaling, and reconnect lifecycle

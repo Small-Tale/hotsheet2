@@ -93,6 +93,13 @@ describe('application shell components', () => {
     const collapsed=String(AppShell({tabs:[],sidebar:'side' as never,header:'head' as never,workspace:'work' as never,terminalDrawer:'drawer' as never}));expect(collapsed).toContain('data-collapsed="true"');expect(collapsed).toContain('aria-label="Show terminal drawer"');
   });
 
+  it('keeps the ticket rail beside the terminal dashboard',()=>{
+    const markup=String(AppShell({tabs:[],mode:'terminals',sidebar:'side' as never,header:'Terminals' as never,workspace:'dashboard' as never,inspector:'ticket rail' as never}));
+    expect(markup).not.toContain('data-region-id="app-sidebar"');
+    expect(markup).toContain('data-region-id="app-inspector"');
+    expect(markup).toContain('aria-label="Ticket rail"');
+  });
+
   it('renders all connection semantics and only valid actions', () => {
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('role="status"');
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).not.toContain('<button');
