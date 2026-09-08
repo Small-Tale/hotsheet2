@@ -1110,6 +1110,16 @@ test('shows view-specific feedback when a populated project has no tickets in th
   const empty=page.locator('[data-component="ticket-empty-state"]');await expect(empty).toHaveAttribute('data-kind','view');await expect(empty).toContainText('No tickets in Queue');await expect(empty).toContainText('Tickets will appear here when they enter this view.');await page.screenshot({path:'/private/tmp/hs2-ydrmad-empty-queue-list-wide.png',fullPage:true});await page.getByLabel('Columns view').click();await expect(page.locator('[data-component="ticket-board"] [data-component="ticket-empty-state"]')).toHaveCount(1);await expect(empty).toContainText('No tickets in Queue');await page.screenshot({path:'/private/tmp/hs2-ydrmad-empty-queue-board-wide.png',fullPage:true});
 });
 
+test('does not announce an empty project while its initial ticket collection is unresolved',async({page})=>{
+  let releaseTickets!:()=>void;const ticketsReady=new Promise<void>(resolve=>{releaseTickets=resolve});await mockProject(page);await page.route('**/tickets*',async route=>{const url=new URL(route.request().url());if(route.request().method()!=='GET'||url.searchParams.has('text'))return route.fallback();await ticketsReady;return route.fulfill({json:[]})});await page.setViewportSize({width:1920,height:1040});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.getByRole('status').filter({hasText:'Loading…'})).toBeVisible();await page.getByLabel('Columns view').click();await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();await expect(page.locator('[data-component="ticket-empty-state"]')).toHaveCount(0);await expect(page.getByText('No tickets yet')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-csyqhx-loading-board-wide.png',fullPage:true});releaseTickets();await expect(page.getByText('No tickets yet')).toBeVisible();
+});
+
+test('leaves individual empty board columns blank when another column has tickets',async({page})=>{
+  await mockProject(page);await page.route('**/tickets*',route=>route.request().method()==='GET'?route.fulfill({json:[row]}):route.fallback());await page.setViewportSize({width:1920,height:1040});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();
+  const verified=page.getByRole('region',{name:'Verified column'});await expect(verified.getByLabel('0 tickets')).toBeVisible();await expect(verified.locator('[data-component="ticket-empty-state"]')).toHaveCount(0);await expect(verified.getByText('No tickets in Verified')).toHaveCount(0);await page.waitForTimeout(500);await page.screenshot({path:'/private/tmp/hs2-m0frwd-empty-column-wide.png',fullPage:true});
+});
+
 test('derives board columns from the selected view and merges Verified by project setting',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await page.getByLabel('Columns view').click();
@@ -1142,6 +1152,19 @@ test('derives board columns from the selected view and merges Verified by projec
   await expect(board.locator('.ticket-board-column__title')).toHaveText(['Archive']);
   await expect(board.locator('[data-column-id="archive"]')).toContainText('Archived ticket');
   const archiveCards=board.locator('[data-column-id="archive"] [data-component="ticket-list-row"]');await expect(archiveCards).toHaveCount(3);const archiveCard=archiveCards.first();expect(await archiveCard.evaluate(node=>parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);await expect(archiveCard).toHaveCSS('border-style','solid');await page.screenshot({path:'/private/tmp/hs2-rzd9d4-archive-column.png',fullPage:true});
+});
+
+test('switches large ticket views without cloning every row into motion ghosts',async({page})=>{
+  const statuses:Array<'not_started'|'backlog'|'archive'>=[...Array.from({length:60},()=> 'not_started' as const),...Array.from({length:18},()=> 'backlog' as const),...Array.from({length:675},()=> 'archive' as const)];
+  const largeRows=statuses.map((status,index)=>({...row,id:`large-${index}`,native_id:`large-${index}`,qualified_id:`git-local:large-${index}`,slug:`HS2-LARGE${index}`,title:`Large collection ticket ${index}`,status,up_next:false}));
+  await mockProject(page);
+  await page.route('**/tickets*',route=>route.request().method()==='GET'?route.fulfill({json:largeRows}):route.fallback());
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(60);
+  for(const [view,count] of [['Backlog',18],['Archive',675],['Queue',60]] as const){
+    const started=performance.now();await page.getByRole('button',{name:new RegExp(view)}).click();await expect(page.getByRole('heading',{name:view})).toBeVisible();
+    expect(performance.now()-started).toBeLessThan(750);await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count);
+  }
 });
 
 test('matches HS1 multi-selection semantics and selected outlines in list and column views',async({page})=>{

@@ -55,7 +55,11 @@ test('represents every server-build details state with shared dialog geometry',a
 });
 
 test('represents the production terminal dashboard and its shared context menu in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-dashboard');const dashboard=page.getByRole('region',{name:'Terminal dashboard'});await expect(dashboard).toBeVisible();await expect(dashboard).toHaveAttribute('data-basis','high');await expect(dashboard).toHaveAttribute('data-fit','3');await expect(dashboard.locator('[data-preview-only="true"]')).toHaveCount(2);const menu=dashboard.getByRole('menu');await expect(menu.getByRole('menuitem')).toHaveCount(2);await expect(menu.getByText('Open')).toBeVisible();await expect(menu.getByText('Hide Terminal')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-terminal-dashboard-ux-demo.png',fullPage:true});
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-dashboard');const dashboard=page.getByRole('region',{name:'Terminal dashboard'});await expect(dashboard).toBeVisible();await expect(dashboard).toHaveAttribute('data-basis','high');await expect(dashboard).toHaveAttribute('data-fit','3');await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(2);const menu=dashboard.getByRole('menu');await expect(menu.getByRole('menuitem')).toHaveCount(2);await expect(menu.getByText('Open')).toBeVisible();await expect(menu.getByText('Hide Terminal')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-terminal-dashboard-ux-demo.png',fullPage:true});
+});
+
+test('catalogs both FixedAspectTerminalCard variants and their dashboard relationship',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=fixed-aspect-terminal-card');const stage=page.getByRole('region',{name:'Fixed aspect terminal card variants'}),preview=stage.locator('[data-fixed-aspect-terminal-card="preview"]'),magnified=stage.locator('[data-fixed-aspect-terminal-card="magnified"]');await expect(preview).toBeVisible();await expect(magnified).toBeVisible();await expect(preview.locator('[data-display-mode="scaled-preview"]')).toHaveCount(1);await expect(magnified.locator('[data-display-mode="interactive"]')).toHaveCount(1);const relationships=page.locator('.demo-relationships');await expect(relationships.locator('.select__group')).toHaveAttribute('aria-label','Used by');await expect(relationships.locator('wa-option',{hasText:'TerminalDashboard'})).toHaveCount(1);await page.screenshot({path:'/private/tmp/hs2-ap9dsm-fixed-card-demo-wide-after.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(preview).toBeVisible();await expect(magnified).toBeVisible();await expect.poll(()=>stage.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-ap9dsm-fixed-card-demo-narrow-after.png',fullPage:true});
 });
 
 test('represents interactive terminal visibility groups in the UX catalog',async({page})=>{
@@ -673,10 +677,9 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const columnDemo = page.locator('[data-component="ticket-board-column"]');
   await expect(columnStage).toHaveCSS('min-width', '250px');
   expect((await columnDemo.first().boundingBox())!.width).toBeGreaterThanOrEqual(250);
-  await expect(columnDemo).toHaveCount(2);
+  await expect(columnDemo).toHaveCount(1);
   await expect(columnDemo.first().getByLabel('7 tickets')).toBeVisible();
   await expect(columnDemo.first().locator('.ticket-board-column__tickets')).toHaveCSS('overflow-y', 'auto');
-  await expect(columnDemo.nth(1).getByText('No tickets in Completed')).toBeVisible();
 });
 
 test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {

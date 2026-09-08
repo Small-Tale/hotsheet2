@@ -389,8 +389,8 @@ always retain native clipboard behavior.
   overflow all columns; each ticket region scrolls independently while its heading and
   count remain fixed. A hosting workspace may add its own surrounding surface when
   appropriate. If the whole board is empty, it retains the column headings and places
-  one shared `TicketEmptyState` across the board body; nonempty boards instead use a
-  concise per-column placeholder for each individually empty column.
+  one shared `TicketEmptyState` across the board body; individual empty columns remain
+  blank when other columns contain tickets.
 - `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
   collection, fixed header, independently scrolling ticket region, visible scroll
   affordance, and a full-width heading control that selects every ticket in that column.
@@ -398,8 +398,8 @@ always retain native clipboard behavior.
   control has an explicit compact 2rem height, so native heading metrics cannot expand
   the board's header track.
   It also has a standalone demo that preserves the 250px production minimum and shared
-  responsive `TicketRow` composition. Its empty variant composes the compact shared
-  `TicketEmptyState`; loading and mutation-error variants are tracked by HS2-0W67Y6.
+  responsive `TicketRow` composition. Loading and mutation-error variants are tracked
+  by HS2-0W67Y6; an empty column intentionally retains only its heading and count.
 - The real Queue board uses `Not Started`, `Started`, `Completed`, and `Verified`
   columns. A per-project setting can hide `Verified`, merging those tickets into
   `Completed`. Backlog and Archive views each use one eponymous column because the
@@ -835,6 +835,10 @@ New terminals appear in Default and begin hidden in named groups. Visibility and
 changes never destroy sessions. The focused magnified or drawer consumer
 must reclaim its fitted dimensions after leaving the dashboard. Focus, resize claims,
 attention, and selection survive layout and scale changes.
+
+`FixedAspectTerminalCard` is also a first-class UX catalog entry. Its catalog page renders
+both supported public variants together, and `TerminalDashboard` lists it as a related
+component so the production composition is explicit rather than only inferable from source.
 
 ## 7. Overlays and shared interaction components
 

@@ -34,6 +34,13 @@ describe('TicketList', () => {
     expect(markup).not.toContain('data-action="reveal-corrupt-ticket"');
   });
 
+  it('can reserve an unresolved empty collection without projecting empty-state copy', () => {
+    const markup = String(TicketList({ tickets: [] }));
+    expect(markup).toContain('data-empty="true"');
+    expect(markup).not.toContain('data-component="ticket-empty-state"');
+    expect(markup).not.toContain('No tickets');
+  });
+
   it('overlaps only adjacent selected list-row borders into one seam', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
     expect(css).toContain(':has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected)');

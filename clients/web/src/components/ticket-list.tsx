@@ -14,9 +14,10 @@ export interface TicketListProps {
   emptyState?: TicketEmptyStateProps;
 }
 
-export function TicketList({ tickets, corruptTickets = [], corruptRecovery = {}, selectedCorruptKey, label = 'Tickets',emptyState={kind:'view'} }: TicketListProps) {
-  return <section class="ticket-list" data-key="ticket-list" data-component="ticket-list">
+export function TicketList({ tickets, corruptTickets = [], corruptRecovery = {}, selectedCorruptKey, label = 'Tickets',emptyState }: TicketListProps) {
+  const empty=tickets.length===0&&corruptTickets.length===0;
+  return <section class="ticket-list" data-key="ticket-list" data-component="ticket-list" data-empty={empty?'true':undefined}>
     {corruptTickets.length>0&&<div class="ticket-list__diagnostics" aria-label="Unreadable tickets">{corruptTickets.map(ticket => <CorruptTicketRow ticket={ticket} recovery={corruptRecovery[corruptTicketKey(ticket)]} selected={selectedCorruptKey===corruptTicketKey(ticket)} />)}</div>}
-    <div class="ticket-list__tickets" data-ticket-selection-root="true" role="listbox" aria-label={label} aria-multiselectable="true">{tickets.length===0&&corruptTickets.length===0?<TicketEmptyState {...emptyState}/>:tickets.map(ticket => <TicketRow {...ticket} presentation="list" />)}</div>
+    <div class="ticket-list__tickets" data-ticket-selection-root="true" role="listbox" aria-label={label} aria-multiselectable="true">{empty&&emptyState?<TicketEmptyState {...emptyState}/>:tickets.map(ticket => <TicketRow {...ticket} presentation="list" />)}</div>
   </section>;
 }

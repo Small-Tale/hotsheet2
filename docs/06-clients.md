@@ -152,6 +152,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   and isolate their visual text from document text queries, so ordinary ticket
   selectors, text search, and assistive technology continue to see one real row.
   Pure inspector, sidebar, or viewport layout shifts never trigger collection motion.
+  Queue, Backlog, Archive, and ticket-error views have distinct motion scopes, so
+  replacing a whole collection never creates per-row transition ghosts; within-view
+  ticket arrivals, departures, and moves retain their normal motion.
   Reduced-motion users get the final layout immediately.
 
 - **Field-aware live editing.** A ticket refresh merges fields that the user is not
@@ -287,7 +290,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   project's empty view names that view, an in-flight search reports that it is still
   searching, and a settled empty search repeats the query and suggests changing it.
   When every board column is empty, the board renders one board-wide message beneath
-  the retained column headings instead of repeating a placeholder in every column.
+  the retained column headings. Individual empty columns remain blank rather than
+  repeating per-column placeholders. No empty-state copy is projected while the
+  initial ticket collection is unresolved or another loading operation is active.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
@@ -613,6 +618,11 @@ its project's maximized drawer. A grid-tile double-click does the same, while ri
 exposes shared Open/Hide menu items. A Lucide ellipsis in the shared grid/magnified card footer
 opens that exact same menu from the keyboard or pointer. The focused dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
+The browser regression follows the complete user path with a newly created terminal: enter
+Nano, resize the drawer up and down, abruptly maximize, move to the dashboard grid, magnify
+and dismiss, then double-click back into the drawer. Every boundary asserts the current
+claimed/grid geometry and visible xterm-screen containment, so a terminal that is one
+transition behind cannot pass on a correct final state alone.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.

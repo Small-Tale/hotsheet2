@@ -57,7 +57,7 @@ import {
   resizeRegionFromPointer,
 } from '../components/resizable-region';
 import { Select } from '../components/select';
-import { TerminalDashboard } from '../components/terminal-dashboard';
+import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
@@ -472,6 +472,14 @@ function demoContent(item: DemoDefinition) {
     { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
     { id: 'tests', projectId: 'demo', projectName: 'Demo project', title: 'Tests', alive: true, busy: false, cwd: '/work/demo', scrollback: '42 tests passed\nwaiting for changes' },
   ] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={{ key: 'demo:shell', x: 520, y: 280 }}/></section>;
+  if (item.id === 'fixed-aspect-terminal-card') {
+    const session = {
+      id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development',
+      alive: true, busy: true, cwd: '/work/demo', progress: 68,
+      scrollback: 'GNU nano 8.4\n80 columns × 24 rows\n^X Exit',
+    };
+    return <section class="fixed-aspect-terminal-card-demo terminal-dashboard" aria-label="Fixed aspect terminal card variants"><div><h2>Grid preview</h2><FixedAspectTerminalCard session={session}/></div><div class="fixed-aspect-terminal-card-demo__magnified"><h2>Magnified interactive</h2><FixedAspectTerminalCard session={session} mode="magnified"/></div></section>;
+  }
   if (item.id === 'terminal-visibility-dialog') return <TerminalVisibilityDialogDemo />;
   if (item.id === 'resizable-region') return <ResizableRegionDemo />;
   if (item.id === 'connection-state-banner')

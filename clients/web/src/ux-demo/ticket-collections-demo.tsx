@@ -93,7 +93,6 @@ export function TicketBoardColumnDemo() {
   const tickets = collectionTickets.value.filter(ticket => ticket.status === 'started');
   return <section class="collection-demo collection-demo--column" aria-label="TicketBoardColumn demo">
     <TicketBoardColumn id="in-progress-demo" title="In progress" tickets={tickets} />
-    <TicketBoardColumn id="empty-demo" title="Completed" tickets={[]} />
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
     <p class="component-stage__guidance">The column owns its fixed heading, derived count, independently scrollable ticket region, and shared responsive TicketRow composition.</p>
   </section>;

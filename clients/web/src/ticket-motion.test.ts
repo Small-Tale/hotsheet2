@@ -53,6 +53,13 @@ function snapshot(rows:Array<[string,MockRow,string]>):TicketMotionSnapshot{
 }
 
 describe('ticket motion',()=>{
+  it('does not clone or animate rows when the ticket collection view changes',()=>{
+    const previous=row('HS2-A','ticket-list',rect(10,20)),incoming=row('HS2-B','ticket-list',rect(10,20));
+    const before=captureTicketMotion(root([previous]),'queue');
+    animateTicketMotion(before,root([incoming]),false,'archive');
+    expect(incoming.animate).not.toHaveBeenCalled();
+  });
+
   it('captures keyed outer-container geometry instead of the inset article geometry',()=>{
     const item=row('HS2-A','started',rect(10,20,180,72),rect(14,24,172,64));
     const captured=captureTicketMotion(root([item])).rows.get('HS2-A');

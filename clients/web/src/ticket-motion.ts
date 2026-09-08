@@ -23,6 +23,7 @@ export async function waitForTicketMotionSettled(){
 }
 
 function motionScope(root:ParentNode){const workspace=root.querySelector<HTMLElement>('.app-shell__workspace'),collection=workspace?.querySelector<HTMLElement>('[data-component="ticket-list"], [data-component="ticket-board"]');return`${workspace?.dataset.presentation??''}:${collection?.dataset.component??''}`}
+function scopedMotionScope(root:ParentNode,collectionKey:string){const scope=motionScope(root);return collectionKey?`${collectionKey}:${scope}`:scope}
 function motionContainers(root:ParentNode){return [...root.querySelectorAll<HTMLElement>('[data-component="ticket-list-row-container"]')].filter(container=>Boolean(ticketVisual(container)?.dataset.ticketSlug))}
 function ticketVisual(container:HTMLElement){return container.querySelector<HTMLElement>(':scope > [data-component="ticket-list-row"][data-ticket-slug]')}
 function parentKey(container:HTMLElement){return container.closest<HTMLElement>('[data-column-id]')?.dataset.columnId??container.closest<HTMLElement>('[data-component="ticket-list"]')?.dataset.component??''}
@@ -32,14 +33,14 @@ function currentRow(container:HTMLElement):TicketMotionRow|undefined{
   return{rect:container.getBoundingClientRect(),parent:parentKey(container),container,visual,borderRadius:container.ownerDocument.defaultView?.getComputedStyle(visual).borderRadius??''};
 }
 
-export function captureTicketMotion(root:ParentNode):TicketMotionSnapshot{
+export function captureTicketMotion(root:ParentNode,collectionKey=''):TicketMotionSnapshot{
   const rows=new Map<string,TicketMotionRow>();
   for(const container of motionContainers(root)){const row=currentRow(container),slug=row?.visual.dataset.ticketSlug;if(row&&slug)rows.set(slug,row)}
-  return{scope:motionScope(root),rows};
+  return{scope:scopedMotionScope(root,collectionKey),rows};
 }
 
-export function animateTicketMotion(before:TicketMotionSnapshot,root:ParentNode,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches){
-  if(reduceMotion||before.scope!==motionScope(root))return;
+export function animateTicketMotion(before:TicketMotionSnapshot,root:ParentNode,reduceMotion=matchMedia('(prefers-reduced-motion: reduce)').matches,collectionKey=''){
+  if(reduceMotion||before.scope!==scopedMotionScope(root,collectionKey))return;
   const after=new Map<string,TicketMotionRow>();
   for(const container of motionContainers(root)){const row=currentRow(container),slug=row?.visual.dataset.ticketSlug;if(row&&slug)after.set(slug,row)}
   const removed=[...before.rows].filter(([slug])=>!after.has(slug)),incoming=[...after].filter(([slug])=>!before.rows.has(slug)),removedParents=new Set(removed.map(([,row])=>row.parent));
