@@ -44,6 +44,7 @@ http-body-util = "0.1"
 ureq = "2"
 rpassword = "7.5"
 security-framework = "3.7"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
 notify = "6"

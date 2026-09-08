@@ -14,6 +14,9 @@ When automation lands, remove the manual-only step and record it below.
    `${HOTSHEET_HOME}/keys.json` nor any settings file contains the value.
 3. Repeat on Linux with a live Secret Service session. An unavailable service must fail
    closed; `HOTSHEET_API_KEY_TEST_PROVIDER` is the explicit read-only fallback.
+4. On Windows, repeat set/get/list/delete and confirm the generic credential appears in
+   Credential Manager under `com.smalltale.hotsheet2/test-provider`. Confirm a missing
+   credential is reported as absent and other Win32 failures remain visible.
 
 ### Cross-device terminal sizing
 

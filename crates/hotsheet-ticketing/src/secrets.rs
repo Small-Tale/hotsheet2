@@ -2,8 +2,9 @@
 //!
 //! Secret values never enter Hot Sheet settings or the ticket store. The global registry
 //! persists only provider metadata under `${HOTSHEET_HOME}/keys.json`; values live in the
-//! macOS Keychain or Linux Secret Service. A provider-specific environment variable is the
-//! only fallback and is read-only/explicit — there is no plaintext-on-disk fallback.
+//! macOS Keychain, Linux Secret Service, or Windows Credential Manager. A provider-specific
+//! environment variable is the only fallback and is read-only/explicit — there is no
+//! plaintext-on-disk fallback.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -139,19 +140,116 @@ fn platform_delete(account: &str) -> Result<bool, SecretError> {
         .map_err(|e| SecretError::Unavailable(e.to_string()))
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(target_os = "windows")]
+fn platform_set(account: &str, secret: &str) -> Result<(), SecretError> {
+    use windows_sys::Win32::Security::Credentials::{
+        CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredWriteW,
+    };
+
+    let mut target = windows_target(account);
+    let mut username = windows_wide(account);
+    let blob_size = u32::try_from(secret.len())
+        .map_err(|_| SecretError::Backend("credential is too large for Windows".into()))?;
+    let credential = CREDENTIALW {
+        Type: CRED_TYPE_GENERIC,
+        TargetName: target.as_mut_ptr(),
+        CredentialBlobSize: blob_size,
+        CredentialBlob: secret.as_ptr().cast_mut(),
+        Persist: CRED_PERSIST_LOCAL_MACHINE,
+        UserName: username.as_mut_ptr(),
+        ..Default::default()
+    };
+
+    if unsafe { CredWriteW(&credential, 0) } == 0 {
+        Err(windows_backend_error("writing credential"))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn platform_get(account: &str) -> Result<Option<String>, SecretError> {
+    use std::{ptr, slice};
+    use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
+    use windows_sys::Win32::Security::Credentials::{
+        CRED_TYPE_GENERIC, CREDENTIALW, CredFree, CredReadW,
+    };
+
+    let target = windows_target(account);
+    let mut raw: *mut CREDENTIALW = ptr::null_mut();
+    if unsafe { CredReadW(target.as_ptr(), CRED_TYPE_GENERIC, 0, &mut raw) } == 0 {
+        let error = std::io::Error::last_os_error();
+        return if error.raw_os_error() == Some(ERROR_NOT_FOUND as i32) {
+            Ok(None)
+        } else {
+            Err(SecretError::Backend(format!("reading credential: {error}")))
+        };
+    }
+
+    // CredReadW owns the returned allocation. Copy the blob before releasing it so every
+    // conversion path frees the native credential exactly once.
+    let bytes = unsafe {
+        let credential = &*raw;
+        let bytes = slice::from_raw_parts(
+            credential.CredentialBlob.cast_const(),
+            credential.CredentialBlobSize as usize,
+        )
+        .to_vec();
+        CredFree(raw.cast());
+        bytes
+    };
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|error| SecretError::Backend(format!("credential is not valid UTF-8: {error}")))
+}
+
+#[cfg(target_os = "windows")]
+fn platform_delete(account: &str) -> Result<bool, SecretError> {
+    use windows_sys::Win32::Foundation::ERROR_NOT_FOUND;
+    use windows_sys::Win32::Security::Credentials::{CRED_TYPE_GENERIC, CredDeleteW};
+
+    let target = windows_target(account);
+    if unsafe { CredDeleteW(target.as_ptr(), CRED_TYPE_GENERIC, 0) } != 0 {
+        return Ok(true);
+    }
+    let error = std::io::Error::last_os_error();
+    if error.raw_os_error() == Some(ERROR_NOT_FOUND as i32) {
+        Ok(false)
+    } else {
+        Err(SecretError::Backend(format!(
+            "deleting credential: {error}"
+        )))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_wide(value: &str) -> Vec<u16> {
+    value.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+#[cfg(target_os = "windows")]
+fn windows_target(account: &str) -> Vec<u16> {
+    windows_wide(&format!("{SERVICE}/{account}"))
+}
+
+#[cfg(target_os = "windows")]
+fn windows_backend_error(operation: &str) -> SecretError {
+    SecretError::Backend(format!("{operation}: {}", std::io::Error::last_os_error()))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn platform_set(_: &str, _: &str) -> Result<(), SecretError> {
     Err(unsupported_platform())
 }
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn platform_get(_: &str) -> Result<Option<String>, SecretError> {
     Err(unsupported_platform())
 }
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn platform_delete(_: &str) -> Result<bool, SecretError> {
     Err(unsupported_platform())
 }
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
 fn unsupported_platform() -> SecretError {
     SecretError::Unavailable("this platform has no implemented credential-store adapter".into())
 }
@@ -401,5 +499,25 @@ mod tests {
         unsafe { std::env::set_var("HOTSHEET_API_KEY_TEST_ENV", "from-env") };
         assert_eq!(registry.get("test-env").unwrap(), "from-env");
         unsafe { std::env::remove_var("HOTSHEET_API_KEY_TEST_ENV") };
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_credential_manager_round_trip() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let account = format!("hotsheet-test-{}-{nonce}", std::process::id());
+        let secret = "native-windows-credential-secret";
+
+        let _ = platform_delete(&account);
+        platform_set(&account, secret).unwrap();
+        assert_eq!(platform_get(&account).unwrap().as_deref(), Some(secret));
+        assert!(platform_delete(&account).unwrap());
+        assert_eq!(platform_get(&account).unwrap(), None);
+        assert!(!platform_delete(&account).unwrap());
     }
 }
