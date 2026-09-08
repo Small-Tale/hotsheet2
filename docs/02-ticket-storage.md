@@ -310,7 +310,11 @@ should the fix also cover the dashboard dedicated view?
 - **Attachments** carry frontmatter metadata `{id, filename, created_at}` and store
   payloads under `attachments/<ticket-id>/<attachment-id>/<filename>`. The attachment
   ULID remains stable across rename/copy/move; `created_at` is immutable. Concurrent
-  additions union by attachment id. Legacy payloads directly under the ticket directory
+  additions union by attachment id. Host-generated Finder `.DS_Store` metadata is
+  ignored during legacy attachment discovery, and every opened store maintains a
+  recursive `.DS_Store` ignore rule; the next committing mutation also removes metadata
+  tracked by older clients from Git without deleting the local Finder files. Legacy
+  payloads directly under the ticket directory
   derive a deterministic id from ticket id + filename and use the ticket's `created_at`
   (never filesystem mtime) until the next canonical ticket write persists metadata.
 

@@ -29,6 +29,7 @@ const GUARDED_STORE_SCHEMA_V2: &str = "hotsheet/v2-guarded-tickets";
 const GUARDED_STORE_SCHEMA_V3: &str = "hotsheet/v3-random-suffix-shards";
 const SHARD_ID_PREFIX_2: &str = "id-prefix-2";
 const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
+const FINDER_METADATA_FILE: &str = ".DS_Store";
 
 /// Store metadata (`hotsheet-store.json`, `docs/02` §2.3). camelCase on disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,10 +196,12 @@ impl FsStore {
         fs::create_dir_all(root.join("tickets"))?;
         let json = serde_json::to_string_pretty(meta)?;
         fs::write(root.join(STORE_METADATA_FILE), format!("{json}\n"))?;
-        Ok(Self {
+        let store = Self {
             root,
             push_after_commit: true,
-        })
+        };
+        store.ensure_managed_gitignore()?;
+        Ok(store)
     }
 
     /// Open an existing store, erroring if `root` is not a Hot Sheet store.
@@ -207,10 +210,14 @@ impl FsStore {
         if !root.join(STORE_METADATA_FILE).is_file() {
             return Err(StoreError::NotAStore(root));
         }
-        Ok(Self {
+        let store = Self {
             root,
             push_after_commit: true,
-        })
+        };
+        if let Err(error) = store.ensure_managed_gitignore() {
+            eprintln!("warning: could not maintain store .gitignore: {error}");
+        }
+        Ok(store)
     }
 
     /// Let an owning service publish commits itself (for example, the server's
@@ -224,6 +231,28 @@ impl FsStore {
     /// The store root directory.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Keep host-generated Finder metadata out of every store directory. The plain
+    /// filename pattern applies recursively, including inside legacy and current
+    /// attachment layouts.
+    fn ensure_managed_gitignore(&self) -> Result<(), StoreError> {
+        let path = self.root.join(".gitignore");
+        let existing = fs::read_to_string(&path).unwrap_or_default();
+        if existing
+            .lines()
+            .any(|line| line.trim() == FINDER_METADATA_FILE)
+        {
+            return Ok(());
+        }
+        let mut content = existing;
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(FINDER_METADATA_FILE);
+        content.push('\n');
+        fs::write(path, content)?;
+        Ok(())
     }
 
     /// Read the store metadata.
@@ -422,6 +451,22 @@ impl FsStore {
         {
             return Ok(false);
         }
+        self.ensure_managed_gitignore()?;
+        // Older clients may already have committed Finder's metadata. Remove only
+        // those exact generated paths from the index while leaving local files intact.
+        git(
+            &self.root,
+            &[
+                "rm",
+                "-q",
+                "-f",
+                "--cached",
+                "--ignore-unmatch",
+                "--",
+                FINDER_METADATA_FILE,
+                ":(glob)**/.DS_Store",
+            ],
+        )?;
         git(&self.root, &["add", "-A"])?;
         // Nothing staged → nothing to commit (idempotent re-writes, no-op edits).
         if git_ok(&self.root, &["diff", "--cached", "--quiet"]) {
@@ -482,6 +527,9 @@ impl FsStore {
             path: path.to_path_buf(),
             source,
         })?;
+        ticket
+            .attachments
+            .retain(|attachment| attachment.filename != FINDER_METADATA_FILE);
         self.add_legacy_attachment_metadata(&mut ticket)?;
         Ok(ticket)
     }
@@ -751,6 +799,9 @@ impl FsStore {
                 continue;
             }
             let filename = entry.file_name().to_string_lossy().to_string();
+            if filename == FINDER_METADATA_FILE {
+                continue;
+            }
             let id = Self::legacy_attachment_id(&ticket.id, &filename);
             if !ticket.attachments.iter().any(|item| item.id == id) {
                 ticket.attachments.push(Attachment {
@@ -1424,6 +1475,72 @@ mod tests {
             first.attachments[0].id,
             FsStore::legacy_attachment_id(&ticket.id, "legacy.txt")
         );
+    }
+
+    #[test]
+    fn finder_metadata_is_ignored_as_attachment_and_removed_from_git_tracking() {
+        let (dir, store) = temp_store();
+        let mut ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        ticket.attachments.push(Attachment {
+            id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
+            filename: FINDER_METADATA_FILE.into(),
+            created_at: ticket.created_at.clone(),
+        });
+        store.write_ticket(&ticket).unwrap();
+        let attachment_dir = store.attachment_dir(&ticket.id);
+        fs::create_dir_all(&attachment_dir).unwrap();
+        fs::write(attachment_dir.join("legacy.txt"), b"evidence").unwrap();
+        fs::write(attachment_dir.join(FINDER_METADATA_FILE), b"finder").unwrap();
+
+        let loaded = store.read_ticket(&ticket.id).unwrap();
+        assert_eq!(
+            loaded
+                .attachments
+                .iter()
+                .map(|attachment| attachment.filename.as_str())
+                .collect::<Vec<_>>(),
+            vec!["legacy.txt"]
+        );
+        fs::write(dir.path().join(".gitignore"), "worklist.md\n").unwrap();
+        let store = FsStore::open(dir.path()).unwrap();
+        let ignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
+        assert!(ignore.lines().any(|line| line == "worklist.md"));
+        assert!(ignore.lines().any(|line| line == FINDER_METADATA_FILE));
+
+        git(dir.path(), &["init", "-q"]).unwrap();
+        git(dir.path(), &["add", "-A"]).unwrap();
+        git(
+            dir.path(),
+            &[
+                "add",
+                "-f",
+                attachment_dir.join(FINDER_METADATA_FILE).to_str().unwrap(),
+            ],
+        )
+        .unwrap();
+        git(
+            dir.path(),
+            &[
+                "-c",
+                "user.name=Hot Sheet Test",
+                "-c",
+                "user.email=test@localhost",
+                "commit",
+                "-q",
+                "-m",
+                "legacy metadata",
+            ],
+        )
+        .unwrap();
+
+        store.write_ticket_committing(&loaded).unwrap();
+        let tracked = git_stdout(dir.path(), &["ls-files"]).unwrap();
+        assert!(
+            !tracked
+                .lines()
+                .any(|path| path.ends_with(FINDER_METADATA_FILE))
+        );
+        assert!(attachment_dir.join(FINDER_METADATA_FILE).is_file());
     }
 
     #[test]
