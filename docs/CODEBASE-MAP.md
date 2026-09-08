@@ -28,8 +28,9 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   rust-toolchain.toml        # pinned stable + rustfmt + clippy
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
-    src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, and terminal discovery/snapshots
-    src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission updates, and global terminal dashboard state
+    src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
+    src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission/drive updates, and global terminal dashboard state
+    src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/terminal-grid-layout.ts # Pure terminal tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation

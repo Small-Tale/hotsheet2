@@ -28,6 +28,9 @@ describe('ProjectSidebar component slice', () => {
     expect(action).toContain('data-component="menu-header"');
     expect(action).toContain('aria-label="Add view"');
     expect(toggle).toContain('aria-expanded="false"');
+    const disabled = String(MenuHeader({ label: 'Views', action: 'add', actionLabel: 'Add view', actionIcon: Plus, actionIconName: 'plus', actionDisabled: true, disabledReason: 'Not available yet.' }));
+    expect(disabled).toContain('disabled');
+    expect(disabled).toContain('title="Not available yet."');
   });
   it('derives project progress bars and accessible summary text from props', () => {
     const markup = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4] }));
@@ -68,6 +71,8 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-attention="true"');
     expect(markup).toContain('aria-label="Add view"');
+    expect(markup).toContain('title="Custom views are not available yet."');
+    expect(markup).toContain('disabled');
   });
 
   it('gives parsing errors a distinct shared navigation item', () => {
@@ -98,6 +103,9 @@ describe('ProjectSidebar component slice', () => {
     const running = String(DriveControl({ running: true, tool: 'Codex' }));
     expect(running).toContain('Stop Codex');
     expect(running).toContain('data-lucide="square"');
+    const disabled = String(DriveControl({ running: true, tool: 'Codex', disabled: true, disabledReason: 'Cannot stop here.' }));
+    expect(disabled).toContain('disabled');
+    expect(disabled).toContain('title="Cannot stop here."');
   });
 
   it('composes the five sidebar boundaries without duplicating their markup', () => {

@@ -181,10 +181,11 @@ does not introduce polling or another network request.
   - `CommandButton`
   - `CommandGroup` with collapsible heading
   - running, stopping, last-run, success, and failure states
-- `DriveControl` — **demo built**: primary start/stop action with explicit tool and
-  running semantics, preceded by the centered open/Up Next project summary
+- `DriveControl` — **production + demo built**: primary start/stop action with explicit
+  tool and running semantics, preceded by the centered open/Up Next project summary
   - primary launch/resume action
-  - active tool/connection state and stop confirmation
+  - active tool/connection state from the shared long-poll event stream and stop confirmation
+  - explicit disabled reason when the active connection cannot be interrupted
 
 ### 2.3 `WorkspaceHeader` — feature floor
 

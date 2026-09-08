@@ -2,5 +2,8 @@
 .drive-control:hover { background: var(--wa-color-success-fill-loud); }
 .drive-control[data-running="true"] { background: var(--wa-color-neutral-fill-loud); }
 .drive-control[data-running="true"]:hover { background: var(--wa-color-neutral-on-normal); }
+.drive-control:disabled { cursor: not-allowed; opacity: .62; }
+.drive-control:disabled:hover { background: var(--wa-color-success-fill-normal); }
+.drive-control[data-running="true"]:disabled:hover { background: var(--wa-color-neutral-fill-loud); }
 .drive-control:focus-visible { outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 35%, transparent); outline-offset: 2px; }
 .drive-control svg { width: 1rem; height: 1rem; fill: currentColor; }

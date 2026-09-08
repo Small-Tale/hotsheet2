@@ -327,6 +327,15 @@ prompt can be dismissed and returns on a later open until a source is configured
   additionally requires the Up Next flag. Mutations and long-poll-driven collection refreshes
   update the summary reactively; the summary itself performs no polling or network request.
 
+  Drive is a production control, not demo-only state. On first activation it prepares the
+  stable project-scoped Codex connection and sends the `$hotsheet` workflow turn; later
+  activations reuse that connection and its retained session. The sidebar derives running
+  state from `GET /connections`, refreshes it only from replayable `drive_updated` events,
+  and confirms before interrupting an active turn. A busy connection that does not advertise
+  `interrupt` remains visible but is disabled with the reason. The Views add action is likewise
+  disabled with a reason until the deferred custom-view feature exists; no enabled sidebar
+  action may be owned only by `/ux-demo`.
+
   The repository row is also the checkout's compact status chip. It distinguishes clean,
   dirty, ahead, behind, conflicted, and unavailable states from the checkout-scoped status
   snapshot. Activating it opens a repository popover with branch/upstream identity and the

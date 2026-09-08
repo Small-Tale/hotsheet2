@@ -28,6 +28,8 @@ export interface ProjectSidebarProps {
   commandGroupExpanded: boolean;
   driveRunning: boolean;
   driveTool: string;
+  driveDisabled?: boolean;
+  driveDisabledReason?: string;
   openCount: number;
   upNextCount: number;
   activeCount: number;
@@ -45,7 +47,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
     </div>
     <footer class="project-sidebar__footer">
       <p class="project-sidebar__work-summary" data-component="project-work-summary">{props.openCount} open, {props.upNextCount} up next, {props.activeCount} active</p>
-      <DriveControl running={props.driveRunning} tool={props.driveTool} />
+      <DriveControl running={props.driveRunning} tool={props.driveTool} disabled={props.driveDisabled} disabledReason={props.driveDisabledReason} />
     </footer>
   </aside>;
 }
