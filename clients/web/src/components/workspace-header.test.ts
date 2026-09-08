@@ -88,4 +88,10 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).toContain('@container toolbar (max-width: 11rem) { .workspace-header__actions > .view-mode-switcher { display: none; } }');
     expect(headerCss).not.toContain('overflow: hidden; } .workspace-header__actions');
   });
+
+  it('does not paint an uneven group hover ring behind the sort select', () => {
+    const groupCss = readFileSync(resolve(import.meta.dirname, 'toolbar-control-group.css'), 'utf8');
+    expect(groupCss).toContain('.toolbar-control-group[data-single="true"]:has(> :is(button, wa-button, wa-dropdown)):hover');
+    expect(groupCss).not.toContain('.toolbar-control-group[data-single="true"]:hover');
+  });
 });
