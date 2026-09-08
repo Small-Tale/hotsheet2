@@ -281,6 +281,19 @@ events per kind, coalesces exact dropped counts immediately before an always-pre
 `done`, and truncates a pathological individual output chunk at 65,536 characters.
 Native activity payloads above 65,536 encoded bytes become a small typed truncation marker.
 
+**Durable resume (HS2-KH8FBA):** completed client turns update a machine-local session
+catalog under `${HOTSHEET_HOME}/drive/<project>/sessions.json`; `/drive/sessions` returns
+that project's most-recent-first choices. Recreating a connection with an explicit session
+targets Claude `--resume` or Codex `thread/resume`. Client-owned Codex records the opaque
+home identity with each session and reuses that durable, MCP-isolated home even when a
+different client connection resumes it after server restart. On Unix,
+the persistent directory is reached through a stable short `/tmp/hs2d-*` symlink solely to
+keep the daemon control socket within `sun_path`; Windows uses the durable directory
+directly with app-server. Two connections may attach to one session, but a manager-level
+session gate permits only one simultaneous turn; interrupt releases the gate for a later
+resume. Autonomous ticket driving similarly retains a per-ticket session id across
+Continued passes and uses a stable isolated home for each ticket.
+
 ## 13.10 Build plan (follow-ups)
 - HS2-67 (this) = the spec. Implementation lands in **HS2-9** (plugin host + Claude
   drive) and **HS2-66** (Codex drive); the conformance checklist is built in **HS2-64**.

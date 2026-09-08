@@ -37,12 +37,12 @@ ulid.workspace = true
 time.workspace = true
 notify.workspace = true
 sha2.workspace = true
+tempfile.workspace = true
 
 [build-dependencies]
 sha2.workspace = true
 
 [dev-dependencies]
-tempfile.workspace = true
 tower.workspace = true
 http-body-util.workspace = true
 hotsheet-aitools.workspace = true

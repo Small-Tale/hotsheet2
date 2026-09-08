@@ -118,17 +118,31 @@ pub fn default_codex_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".codex"))
 }
 
-/// A transient, MCP-free `CODEX_HOME` for a headless codex launch (HS2-YRDQNX). Codex reads
+/// An MCP-free `CODEX_HOME` for a headless codex launch (HS2-YRDQNX). Codex reads
 /// its MCP servers from `$CODEX_HOME/config.toml`, so `--mcp-config` can't isolate it the
 /// way it isolates Claude; instead we hand codex a throwaway home whose ONLY `mcp_servers`
 /// entry is the Hot Sheet shim — never the user's global servers (which may include an HS1
-/// channel that could kill the dev instance). Cleaned on drop, so keep it alive for as long
-/// as the launched tool runs.
+/// channel that could kill the dev instance). One-shot homes are cleaned on drop; durable
+/// client/session homes retain thread metadata across server restarts.
 pub struct IsolatedCodexHome {
-    dir: tempfile::TempDir,
+    dir: CodexHomeDir,
     /// The tool program whose daemon runs against this home. `Some` for a daemon home —
     /// its daemon is stopped on drop so a run can't orphan it (HS2-9M6T68).
     daemon_program: Option<String>,
+}
+
+enum CodexHomeDir {
+    Temporary(tempfile::TempDir),
+    Persistent { _storage: PathBuf, runtime: PathBuf },
+}
+
+impl CodexHomeDir {
+    fn path(&self) -> &Path {
+        match self {
+            Self::Temporary(dir) => dir.path(),
+            Self::Persistent { runtime, .. } => runtime,
+        }
+    }
 }
 
 impl IsolatedCodexHome {
@@ -160,6 +174,32 @@ impl IsolatedCodexHome {
         Self::build(source_home, server_name, command, args, Some(program))
     }
 
+    /// Build the same isolated daemon home at a durable machine-local path. Used by
+    /// client-owned conversations so Codex's thread metadata survives a server restart.
+    pub fn create_persistent_for_daemon(
+        path: &Path,
+        source_home: &Path,
+        server_name: &str,
+        command: &str,
+        args: &[String],
+        program: Option<&str>,
+    ) -> Result<Self> {
+        std::fs::create_dir_all(path)
+            .with_context(|| format!("creating persistent CODEX_HOME {}", path.display()))?;
+        let runtime = persistent_runtime_path(path, program.is_some())?;
+        Self::populate(
+            CodexHomeDir::Persistent {
+                _storage: path.to_path_buf(),
+                runtime,
+            },
+            source_home,
+            server_name,
+            command,
+            args,
+            program,
+        )
+    }
+
     fn build(
         source_home: &Path,
         server_name: &str,
@@ -179,6 +219,24 @@ impl IsolatedCodexHome {
         }
         .context("creating the isolated CODEX_HOME")?;
 
+        Self::populate(
+            CodexHomeDir::Temporary(dir),
+            source_home,
+            server_name,
+            command,
+            args,
+            daemon_program,
+        )
+    }
+
+    fn populate(
+        dir: CodexHomeDir,
+        source_home: &Path,
+        server_name: &str,
+        command: &str,
+        args: &[String],
+        daemon_program: Option<&str>,
+    ) -> Result<Self> {
         let auth = source_home.join("auth.json");
         if auth.is_file() {
             std::fs::copy(&auth, dir.path().join("auth.json")).with_context(|| {
@@ -191,11 +249,11 @@ impl IsolatedCodexHome {
         )
         .context("writing the isolated CODEX_HOME config.toml")?;
 
-        if for_daemon {
+        if daemon_program.is_some() {
             // The daemon manages a standalone install under `<home>/packages`; symlink the
             // user's so it needn't re-download into the throwaway home.
             let src_pkgs = source_home.join("packages");
-            if src_pkgs.exists() {
+            if src_pkgs.exists() && !dir.path().join("packages").exists() {
                 symlink_dir(&src_pkgs, &dir.path().join("packages")).with_context(|| {
                     format!(
                         "symlinking {} into the isolated CODEX_HOME",
@@ -214,6 +272,43 @@ impl IsolatedCodexHome {
     pub fn path(&self) -> &Path {
         self.dir.path()
     }
+}
+
+#[cfg(unix)]
+fn persistent_runtime_path(storage: &Path, needs_short_socket_path: bool) -> Result<PathBuf> {
+    use std::hash::{Hash, Hasher};
+    if !needs_short_socket_path {
+        return Ok(storage.to_path_buf());
+    }
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    storage.hash(&mut hasher);
+    let runtime = PathBuf::from(format!("/tmp/hs2d-{:016x}", hasher.finish()));
+    if runtime.exists() {
+        let actual = runtime.canonicalize()?;
+        let expected = storage.canonicalize()?;
+        if actual != expected {
+            bail!(
+                "persistent CODEX_HOME alias {} points to {} instead of {}",
+                runtime.display(),
+                actual.display(),
+                expected.display()
+            );
+        }
+    } else {
+        std::os::unix::fs::symlink(storage, &runtime).with_context(|| {
+            format!(
+                "linking short CODEX_HOME {} to {}",
+                runtime.display(),
+                storage.display()
+            )
+        })?;
+    }
+    Ok(runtime)
+}
+
+#[cfg(not(unix))]
+fn persistent_runtime_path(storage: &Path, _needs_short_socket_path: bool) -> Result<PathBuf> {
+    Ok(storage.to_path_buf())
 }
 
 impl Drop for IsolatedCodexHome {
@@ -603,6 +698,46 @@ mod tests {
                 .unwrap();
         assert!(!home.path().join("auth.json").exists());
         assert!(home.path().join("config.toml").is_file());
+    }
+
+    #[test]
+    fn persistent_codex_home_keeps_thread_storage_across_owner_drop() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let storage = root.path().join("durable");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::write(source.join("auth.json"), "{}").unwrap();
+        let home = IsolatedCodexHome::create_persistent_for_daemon(
+            &storage,
+            &source,
+            "hotsheet",
+            "hotsheet-mcp",
+            &[],
+            None,
+        )
+        .unwrap();
+        std::fs::write(home.path().join("thread-state.json"), "state").unwrap();
+        drop(home);
+        assert_eq!(
+            std::fs::read_to_string(storage.join("thread-state.json")).unwrap(),
+            "state"
+        );
+        assert!(storage.join("config.toml").is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persistent_daemon_home_uses_a_short_alias_to_durable_storage() {
+        let root = tempfile::tempdir().unwrap();
+        let storage = root.path().join("a-very-long-machine-local-drive-home");
+        std::fs::create_dir(&storage).unwrap();
+        let runtime = persistent_runtime_path(&storage, true).unwrap();
+        assert!(runtime.to_string_lossy().len() < 40);
+        assert_eq!(
+            runtime.canonicalize().unwrap(),
+            storage.canonicalize().unwrap()
+        );
+        std::fs::remove_file(runtime).unwrap();
     }
     // `mcp_command` now lives in `hotsheet-plugins` (its resolver is tested there, HS2-91).
 }

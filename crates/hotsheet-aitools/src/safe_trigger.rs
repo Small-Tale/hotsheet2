@@ -46,6 +46,29 @@ pub fn prepare_trigger(
     envs: Vec<String>,
     shared_daemon: bool,
 ) -> Result<SafeTrigger> {
+    prepare_trigger_with_home(
+        store_path,
+        tool,
+        project,
+        mcp_config,
+        permission_mode,
+        envs,
+        shared_daemon,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_trigger_with_home(
+    store_path: &Path,
+    tool: &str,
+    project: Option<PathBuf>,
+    mcp_config: Option<PathBuf>,
+    permission_mode: Option<String>,
+    envs: Vec<String>,
+    shared_daemon: bool,
+    persistent_codex_home: Option<PathBuf>,
+) -> Result<SafeTrigger> {
     let plugin = hotsheet_plugins::find(tool)
         .with_context(|| format!("unknown tool '{tool}' (no such plugin)"))?;
     let cwd = project.unwrap_or_else(|| store_path.to_path_buf());
@@ -87,7 +110,14 @@ pub fn prepare_trigger(
         let name = &plugin.manifest.mcp.server_name;
         // For the shared daemon, the home must be daemon-ready (packages symlinked, short
         // socket path); otherwise the plain isolated home is enough for a direct app-server.
-        let home = if shared_daemon {
+        let home = if let Some(path) = persistent_codex_home {
+            let program = shared_daemon
+                .then(|| plugin.manifest.drive.as_ref().map(|d| d.program.as_str()))
+                .flatten();
+            launch_safety::IsolatedCodexHome::create_persistent_for_daemon(
+                &path, &source, name, &command, &args, program,
+            )?
+        } else if shared_daemon {
             let program = plugin.manifest.drive.as_ref().map(|d| d.program.as_str());
             launch_safety::IsolatedCodexHome::create_for_daemon(
                 &source,

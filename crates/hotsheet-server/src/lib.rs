@@ -279,6 +279,31 @@ impl AppState {
         self
     }
 
+    pub fn with_client_drive_persistence(
+        mut self,
+        session_path: std::path::PathBuf,
+        home_root: std::path::PathBuf,
+    ) -> Result<Self, client_drive::ClientDriveError> {
+        self.client_drives = client_drive::ClientDriveManager::with_persistence(
+            Arc::new(client_drive::NativeClientDriveBackend),
+            session_path,
+            home_root,
+        )?;
+        Ok(self)
+    }
+
+    /// Inject a hermetic backend while retaining the real durable session catalog.
+    pub fn with_client_drive_backend_persistence(
+        mut self,
+        backend: Arc<dyn client_drive::ClientDriveBackend>,
+        session_path: std::path::PathBuf,
+        home_root: std::path::PathBuf,
+    ) -> Result<Self, client_drive::ClientDriveError> {
+        self.client_drives =
+            client_drive::ClientDriveManager::with_persistence(backend, session_path, home_root)?;
+        Ok(self)
+    }
+
     /// Override local-build source monitoring (primarily for embedders and tests).
     pub fn with_source_revision_monitor(
         mut self,
@@ -1132,6 +1157,7 @@ pub fn app(state: AppState) -> Router {
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
         .route("/drive/connections", post(create_drive_connection))
+        .route("/drive/sessions", get(list_drive_sessions))
         .route("/drive/connections/{id}/turns", post(send_drive_turn))
         .route(
             "/drive/connections/{id}/interrupt",
@@ -4296,6 +4322,7 @@ async fn create_drive_connection(
                 tool: request.tool,
                 env,
                 permission_bridge: state.permission_bridge(),
+                persistent_home: None,
             },
             request.connection_id,
             request.session_id,
@@ -4303,6 +4330,16 @@ async fn create_drive_connection(
         .map_err(client_drive_api_error)?;
     state.emit_drive_updated(&info);
     Ok((StatusCode::CREATED, Json(info)))
+}
+
+async fn list_drive_sessions(
+    State(state): State<AppState>,
+) -> Json<Vec<client_drive::ClientSessionInfo>> {
+    Json(
+        state
+            .client_drives
+            .sessions(&state.store.root().display().to_string()),
+    )
 }
 
 #[derive(Deserialize)]
@@ -4382,7 +4419,7 @@ fn client_drive_api_error(error: client_drive::ClientDriveError) -> ApiError {
         Error::Conflict(_) => StatusCode::CONFLICT,
         Error::Unsupported(_) => StatusCode::METHOD_NOT_ALLOWED,
         Error::Prepare(_) => StatusCode::BAD_REQUEST,
-        Error::Unavailable => StatusCode::INTERNAL_SERVER_ERROR,
+        Error::Unavailable | Error::Persistence(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     ApiError::new(status, error.to_string())
 }

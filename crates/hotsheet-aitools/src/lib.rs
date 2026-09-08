@@ -52,7 +52,7 @@ pub use ports::{
     RpcReader, RpcTransport, RpcWriter, SpawnSpec, SpawnedProcess,
 };
 pub use registry::{Connection, ConnectionRegistry, Role};
-pub use safe_trigger::{SafeTrigger, prepare_trigger};
+pub use safe_trigger::{SafeTrigger, prepare_trigger, prepare_trigger_with_home};
 pub use spawn::{ContentMode, SpawnConfig, SpawnDrive};
 pub use system::SystemSpawner;
 

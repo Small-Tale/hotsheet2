@@ -128,9 +128,17 @@ async fn main() -> Result<()> {
     println!("index: {}", index_path.display());
     // A real run persists the indexes of any POST /stores-registered store too.
     let permission_rules_path = hotsheet_server::multistore::permission_rules_path_for(&store)?;
+    let store_id = hotsheet_server::multistore::store_url_id(&store);
+    let drive_root = hotsheet_plugins::hotsheet_home()
+        .join("drive")
+        .join(&store_id);
     let mut state = AppState::with_index(store, secret.clone(), index)
         .with_persistent_registered_indexes()
-        .with_permission_rules(permission_rules_path);
+        .with_permission_rules(permission_rules_path)
+        .with_client_drive_persistence(
+            drive_root.join("sessions.json"),
+            drive_root.join("homes"),
+        )?;
 
     // Opt-in detached terminal broker (HS2-ERT00F): host terminals in a separate process so
     // they survive a server restart. Spawns/discovers the broker for the primary store.
@@ -220,6 +228,8 @@ async fn main() -> Result<()> {
                     state.emit_turn_event(store, connection, ticket, tool, event);
                 })
             }),
+            worker_sessions: Some(Default::default()),
+            persistent_home_root: Some(drive_root.join("workers")),
         };
         let drive = live_drive(cfg.tool.clone(), cfg.prompt.clone(), ctx);
         Some(spawn_dist_work_loop(

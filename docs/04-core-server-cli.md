@@ -182,7 +182,8 @@ Responsibilities:
   /drive/connections/{id}/turns` sends a free-form turn and resumes the retained tool
   session; and `/interrupt` exists as an advertised connection action only when the
   concrete drive implements interruption. `GET /connections` reports state, session,
-  errors, and semantic actions. Busy/idle transitions emit replayable `drive_updated`
+  errors, and semantic actions; `GET /drive/sessions` lists machine-local resumable
+  sessions for the project. Busy/idle transitions emit replayable `drive_updated`
   events over WS/long-poll, so clients never poll connection state once per second
   (HS2-5DGFG2).
 - **Tiered auth** (§4.6).

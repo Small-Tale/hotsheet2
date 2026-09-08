@@ -20,6 +20,7 @@ use hotsheet_extsync::{
 
 const SECRET: &str = "test-secret";
 type RecordedClientTurns = Arc<Mutex<Vec<(String, Option<String>)>>>;
+type RecordedClientHomes = Arc<Mutex<Vec<Option<std::path::PathBuf>>>>;
 
 fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
@@ -30,6 +31,7 @@ fn state() -> (tempfile::TempDir, AppState) {
 #[derive(Default)]
 struct FakeClientDriveBackend {
     turns: RecordedClientTurns,
+    homes: RecordedClientHomes,
     supports_interrupt: bool,
 }
 
@@ -41,6 +43,7 @@ struct FakePreparedClientDrive {
 
 impl ClientDriveBackend for FakeClientDriveBackend {
     fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
+        self.homes.lock().unwrap().push(request.persistent_home);
         Ok(Arc::new(FakePreparedClientDrive {
             tool: request.tool,
             turns: self.turns.clone(),
@@ -416,6 +419,197 @@ async fn raw_turn_event_is_ticket_attributed_and_carries_its_ws_replay_cursor() 
     let turn = event.turn.unwrap();
     assert_eq!(turn.connection_id, "worker-1");
     assert_eq!(turn.ticket.as_deref(), Some("HS-ABC123"));
+}
+
+#[tokio::test]
+async fn client_sessions_survive_restart_and_serialize_shared_session_turns() {
+    let (store_dir, base) = state();
+    let machine = tempfile::tempdir().unwrap();
+    let sessions = machine.path().join("sessions.json");
+    let homes = machine.path().join("homes");
+    let first_backend = Arc::new(FakeClientDriveBackend {
+        supports_interrupt: true,
+        ..FakeClientDriveBackend::default()
+    });
+    let first = app(base
+        .with_client_drive_backend_persistence(
+            first_backend.clone(),
+            sessions.clone(),
+            homes.clone(),
+        )
+        .unwrap());
+    assert!(
+        body_json(
+            first
+                .clone()
+                .oneshot(authed("GET", "/drive/sessions", None))
+                .await
+                .unwrap()
+        )
+        .await
+        .as_array()
+        .unwrap()
+        .is_empty()
+    );
+    first
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(r#"{"tool":"fake","connection_id":"first"}"#),
+        ))
+        .await
+        .unwrap();
+    first
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/first/turns",
+            Some(r#"{"content":"complete"}"#),
+        ))
+        .await
+        .unwrap();
+    let first_home = first_backend.homes.lock().unwrap()[0].clone();
+    let session_deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let listed = body_json(
+            first
+                .clone()
+                .oneshot(authed("GET", "/drive/sessions", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if !listed.as_array().unwrap().is_empty() {
+            assert_eq!(listed[0]["session_id"], "thread-1");
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < session_deadline,
+            "first session was not persisted"
+        );
+        tokio::task::yield_now().await;
+    }
+    drop(first);
+
+    let reopened_store = FsStore::open(store_dir.path()).unwrap();
+    let restarted = AppState::new(reopened_store, SECRET.into()).unwrap();
+    let second_backend = Arc::new(FakeClientDriveBackend {
+        supports_interrupt: true,
+        ..FakeClientDriveBackend::default()
+    });
+    let second_turns = second_backend.turns.clone();
+    let restarted = app(restarted
+        .with_client_drive_backend_persistence(second_backend.clone(), sessions, homes)
+        .unwrap());
+    let restored = body_json(
+        restarted
+            .clone()
+            .oneshot(authed("GET", "/drive/sessions", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(restored[0]["session_id"], "thread-1");
+
+    for id in ["left", "right"] {
+        restarted
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections",
+                Some(&format!(
+                    r#"{{"tool":"fake","connection_id":"{id}","session_id":"thread-1"}}"#
+                )),
+            ))
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        second_backend.homes.lock().unwrap().as_slice(),
+        &[first_home.clone(), first_home]
+    );
+    restarted
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/left/turns",
+            Some(r#"{"content":"hold"}"#),
+        ))
+        .await
+        .unwrap();
+    let collision = restarted
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/right/turns",
+            Some(r#"{"content":"complete"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(collision.status(), StatusCode::CONFLICT);
+    restarted
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/left/interrupt",
+            Some("{}"),
+        ))
+        .await
+        .unwrap();
+    let idle_deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let connections = body_json(
+            restarted
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if connections
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|connection| connection["id"] == "left")
+            .is_some_and(|connection| connection["busy"] == false)
+        {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < idle_deadline,
+            "interrupted connection stayed busy"
+        );
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(
+        restarted
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections/right/turns",
+                Some(r#"{"content":"complete"}"#),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::ACCEPTED
+    );
+    let resumed_deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        if second_turns.lock().unwrap().len() == 2 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < resumed_deadline,
+            "resumed turn did not complete"
+        );
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(
+        second_turns.lock().unwrap()[1].1.as_deref(),
+        Some("thread-1")
+    );
 }
 
 /// Live tier: prove the public server route can prepare and drive the real Codex plugin,

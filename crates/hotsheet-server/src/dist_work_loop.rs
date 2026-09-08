@@ -203,6 +203,11 @@ pub struct LiveDriveCtx {
     pub activity_sink: Option<ActivitySink>,
     /// Bounded raw turn events for the client transcript/replay stream.
     pub turn_sink: Option<TurnSink>,
+    /// Per-ticket tool session ids retained across Continued work passes.
+    pub worker_sessions:
+        Option<std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, String>>>>,
+    /// Durable isolated homes keyed per ticket, so a fresh SafeTrigger can resume Codex.
+    pub persistent_home_root: Option<std::path::PathBuf>,
 }
 
 pub type ActivitySink =
@@ -246,7 +251,7 @@ fn drive_one_ticket(
     prompt: &str,
     ctx: &LiveDriveCtx,
 ) -> anyhow::Result<WorkOutcome> {
-    use hotsheet_aitools::{ConnectionRegistry, prepare_trigger};
+    use hotsheet_aitools::{ConnectionRegistry, prepare_trigger_with_home};
     let before = store.read_ticket(id)?;
     let ticket_slug = before.slug.clone();
     // Inject the server's URL+secret so a driven tool's permission hook can reach the
@@ -259,8 +264,20 @@ fn drive_one_ticket(
         ],
         None => Vec::new(),
     };
-    // Fresh launch isolation per ticket (throwaway CODEX_HOME + PATH shim; HS2-103).
-    let mut safe = prepare_trigger(store.root(), tool, None, None, None, envs, false)?;
+    let session_key = worker_session_key(store, id);
+    let resume = worker_resume(ctx, &session_key);
+    let persistent_home = worker_home(ctx, &session_key);
+    // Fresh drive handle per pass, but a stable isolated home/session for this ticket.
+    let mut safe = prepare_trigger_with_home(
+        store.root(),
+        tool,
+        None,
+        None,
+        None,
+        envs,
+        false,
+        persistent_home,
+    )?;
     // Attach the server's permission bridge so a driven codex's approvals block for a human
     // answering over POST /permissions instead of auto-approving (HS2-Q1F6HV).
     if let Some(bridge) = &ctx.permission_bridge {
@@ -300,29 +317,36 @@ fn drive_one_ticket(
     // Capture usage for ticket metrics and project the bounded raw stream for clients.
     let mut usage: Option<hotsheet_aitools::Usage> = None;
     let mut turn_guard = crate::turn_stream::TurnStreamGuard::default();
-    let turn = safe.run_turn(prompt, None, true, conn.clone(), &mut registry, &mut |ev| {
-        if let Some(sink) = &ctx.turn_sink {
-            for event in turn_guard.observe(ev) {
-                sink(store, &conn, tool, Some(ticket_slug.clone()), event);
+    let turn = safe.run_turn(
+        prompt,
+        resume.as_deref(),
+        true,
+        conn.clone(),
+        &mut registry,
+        &mut |ev| {
+            if let Some(sink) = &ctx.turn_sink {
+                for event in turn_guard.observe(ev) {
+                    sink(store, &conn, tool, Some(ticket_slug.clone()), event);
+                }
             }
-        }
-        match ev {
-            hotsheet_aitools::TurnEvent::Usage(u) => usage = Some(u.clone()),
-            hotsheet_aitools::TurnEvent::PermissionAsked(req) => emit_coarse_activity(
-                ctx,
-                store,
-                id,
-                tool,
-                &conn,
-                hotsheet_ticketing::ActivityKind::Permission,
-                serde_json::json!({ "name": req.tool, "text": req.summary }),
-            ),
-            hotsheet_aitools::TurnEvent::NativeActivity { source, payload } => {
-                emit_native_activity(ctx, store, id, tool, &conn, source, payload)
+            match ev {
+                hotsheet_aitools::TurnEvent::Usage(u) => usage = Some(u.clone()),
+                hotsheet_aitools::TurnEvent::PermissionAsked(req) => emit_coarse_activity(
+                    ctx,
+                    store,
+                    id,
+                    tool,
+                    &conn,
+                    hotsheet_ticketing::ActivityKind::Permission,
+                    serde_json::json!({ "name": req.tool, "text": req.summary }),
+                ),
+                hotsheet_aitools::TurnEvent::NativeActivity { source, payload } => {
+                    emit_native_activity(ctx, store, id, tool, &conn, source, payload)
+                }
+                _ => {}
             }
-            _ => {}
-        }
-    });
+        },
+    );
     let done = match turn {
         Ok(done) => done,
         Err(error) => {
@@ -343,6 +367,9 @@ fn drive_one_ticket(
             return Err(error);
         }
     };
+    if let Some(session_id) = done.session_id.clone() {
+        remember_worker_session(ctx, session_key, session_id);
+    }
     let done = done.reason;
     emit_coarse_activity(
         ctx,
@@ -376,6 +403,31 @@ fn drive_one_ticket(
         hotsheet_ticketing::ops::is_open(&after),
         progressed,
     ))
+}
+
+fn worker_session_key(store: &FsStore, id: &hotsheet_model::Ulid) -> String {
+    format!("{}:{id}", crate::multistore::store_url_id(store))
+}
+
+fn worker_resume(ctx: &LiveDriveCtx, key: &str) -> Option<String> {
+    ctx.worker_sessions
+        .as_ref()
+        .and_then(|sessions| sessions.lock().ok()?.get(key).cloned())
+}
+
+fn remember_worker_session(ctx: &LiveDriveCtx, key: String, session_id: String) {
+    if let Some(sessions) = &ctx.worker_sessions
+        && let Ok(mut sessions) = sessions.lock()
+    {
+        sessions.insert(key, session_id);
+    }
+}
+
+fn worker_home(ctx: &LiveDriveCtx, key: &str) -> Option<std::path::PathBuf> {
+    ctx.persistent_home_root.as_ref().map(|root| {
+        let home_id = &hotsheet_index::hash_bytes(key.as_bytes())[..16];
+        root.join(home_id)
+    })
 }
 
 fn emit_coarse_activity(
@@ -515,6 +567,34 @@ mod tests {
         assert_eq!(
             outcome_from_turn(DoneReason::Interrupted, false, true),
             WorkOutcome::Failed
+        );
+    }
+
+    #[test]
+    fn continued_worker_pass_reuses_ticket_session_and_home() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        let id = Ulid::new();
+        let sessions = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+        let ctx = LiveDriveCtx {
+            worker_sessions: Some(sessions),
+            persistent_home_root: Some(dir.path().join("worker-homes")),
+            ..LiveDriveCtx::default()
+        };
+        let key = worker_session_key(&store, &id);
+        let home = worker_home(&ctx, &key).unwrap();
+        assert_eq!(worker_resume(&ctx, &key), None);
+
+        remember_worker_session(&ctx, key.clone(), "thread-continued".into());
+
+        assert_eq!(
+            worker_resume(&ctx, &key).as_deref(),
+            Some("thread-continued")
+        );
+        assert_eq!(worker_home(&ctx, &key).unwrap(), home);
+        assert_ne!(
+            worker_home(&ctx, &worker_session_key(&store, &Ulid::new())).unwrap(),
+            home
         );
     }
 
