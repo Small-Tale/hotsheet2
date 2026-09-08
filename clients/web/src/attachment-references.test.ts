@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {attachmentReferences,attachmentReferenceUrl,expandAttachmentReferences,isImageAttachment,parseAttachmentReference} from './attachment-references';
+import {attachmentReferences,attachmentReferenceUrl,expandAttachmentReferences,isGalleryMediaAttachment,isImageAttachment,isVideoAttachment,parseAttachmentReference} from './attachment-references';
 
 const context={baseUrl:'/project-api/demo',checkout:'checkout one',ticket:'HS2-LOCAL'};
 
@@ -14,6 +14,8 @@ describe('attachment references',()=>{
   it('builds encoded checkout URLs and recognizes browser image formats',()=>{
     expect(attachmentReferenceUrl(context,{ticket:'HS2-OTHER',filename:'wide view.svg'})).toBe('/project-api/demo/checkouts/checkout%20one/tickets/HS2-OTHER/attachments/by-name/wide%20view.svg');
     expect(isImageAttachment('capture.SVG')).toBe(true);expect(isImageAttachment('notes.md')).toBe(false);
+    expect(isVideoAttachment('walkthrough.MP4')).toBe(true);expect(isVideoAttachment('poster.png')).toBe(false);
+    expect(isGalleryMediaAttachment('capture.mov')).toBe(true);expect(isGalleryMediaAttachment('notes.md')).toBe(false);
   });
 
   it('expands code and standard Markdown references while retaining a discoverable list',()=>{

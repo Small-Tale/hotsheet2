@@ -363,14 +363,16 @@ prompt can be dismissed and returns on a later open until a source is configured
   becomes internally scrollable when the viewport is smaller than the menu.
 
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
-  grid of 160px square contained thumbnails for browser-compatible image formats,
-  including SVG. A thumbnail or inline image opens the same full-screen gallery.
+  grid of 160px square contained previews for browser-compatible image and video
+  formats, including SVG, MP4, MOV, M4V, OGV, and WebM. Grid videos preload only
+  metadata and never autoplay. A preview or inline image opens the same full-screen
+  media gallery; videos have native playback controls and also remain paused initially.
   Its filename uses inverse toolbar text, while navigation, action, close, and zoom
   controls all use the shared dark ToolbarControlGroup tone so translucent backgrounds,
   borders, icons, and hover states retain contrast over arbitrary images.
   Note-referenced images resolve to the same gallery identity as their attached-file
   thumbnail even though Markdown uses a by-name URL, so button, keyboard-arrow, and
-  horizontal-swipe navigation continue from the image the user actually selected.
+  horizontal-swipe navigation continue from the media item the user actually selected.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher or anywhere on the expanded
   composer, inspect and remove the staged filenames, and cancel to discard the entire

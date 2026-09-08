@@ -63,7 +63,6 @@ import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/tic
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
 import { createDebouncedAutosave } from '../debounced-autosave';
-import {GlobalSearchDemo} from './search-demo';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import {
   addDemoProject,
@@ -158,6 +157,7 @@ import {
   ViewNavigationDemo,
 } from './project-sidebar-demo';
 import { repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
+import { GlobalSearchDemo } from './search-demo';
 import { SelectDemo } from './select-demo';
 import {
   resetStatusBadgeDemo,
@@ -432,7 +432,7 @@ function demoNavigation(category: DemoCategory) {
 }
 
 function demoContent(item: DemoDefinition) {
-  if (['global-search','search-query-input','search-scope-picker','search-suggestion-list','search-result-row','active-filter-bar','filter-chip','saved-view-action'].includes(item.id)) return <GlobalSearchDemo/>;
+  if (['global-search', 'search-query-input', 'search-scope-picker', 'search-suggestion-list', 'search-result-row', 'active-filter-bar', 'filter-chip', 'saved-view-action'].includes(item.id)) return <GlobalSearchDemo/>;
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
   if (item.id === 'tag-chip') return <TagChipDemo />;
   if (item.id === 'ticket-row') return <TicketRowDemo />;

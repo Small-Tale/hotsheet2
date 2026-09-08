@@ -2,9 +2,11 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './global-search-overlay.css';
 
-import {Archive,ArrowRight,Clock3,Filter,FolderSearch2,MessageSquareMore,Search,Star,TriangleAlert,X} from 'lucide';
+import type {Filter} from 'lucide';
+import {Archive,ArrowRight,Clock3,FolderSearch2,MessageSquareMore,Search,Star,TriangleAlert,X} from 'lucide';
+
+import {type SearchFilter,searchFilters,type SearchScope,searchScopeChoices} from '../advanced-search';
 import type {TicketRow} from '../api';
-import {searchFilters,searchScopeChoices,type SearchFilter,type SearchScope} from '../advanced-search';
 import {LucideIcon} from './lucide-icon';
 import {MenuItem} from './menu-item';
 import {Select} from './select';

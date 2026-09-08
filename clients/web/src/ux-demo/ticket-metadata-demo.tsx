@@ -15,7 +15,7 @@ export function TicketPrioritySelectDemo() { return <section class="metadata-con
 export function TicketStatusMenuDemo() { return <section class="metadata-control-demo" aria-label="TicketStatusMenu demo"><div><span>Status</span><TicketStatusMenu value="started" /></div></section>; }
 export function TicketInfoPanelDemo() { return <section class="inspector-panel-demo" aria-label="TicketInfoPanel demo"><TicketInfoPanel status="started" priority="high" category="feature" tags={['client', 'ux']} details={'## Implementation notes\n\nBuild the reusable metadata and details presentation independently from the inspector shell.'} blockedReason="Waiting for final design review." notes={[{ id: 'review', kind: 'regular', author: 'Claude', time: '10 minutes ago', body: 'The metadata and notes now share the inspector’s controlled state.' }]} providerName="Hot Sheet git" updatedLabel="Updated 2 minutes ago" /></section>; }
 export function TicketTimelineDemo() { return <section class="inspector-panel-demo" aria-label="TicketTimeline demo"><TicketTimeline /></section>; }
-const demoImages=[{id:'wide',name:'wide-layout.svg',url:'/ux-gallery-preview.svg'},{id:'narrow',name:'narrow-layout.svg',url:'/ux-gallery-preview.svg?variant=narrow'}];
+const demoImages=[{id:'wide',name:'wide-layout.svg',url:'/ux-gallery-preview.svg'},{id:'narrow',name:'narrow-layout.svg',url:'/ux-gallery-preview.svg?variant=narrow'},{id:'video',name:'walkthrough.mp4',url:'/ux-gallery-video.mp4'}];
 export const galleryDemoUrl=signal<string|undefined>(demoImages[0].url);
 export const galleryDemoScale=signal<number|undefined>(undefined);
 const galleryDemoGeometry={naturalWidth:1600,naturalHeight:1000,availableWidth:1100,availableHeight:650};

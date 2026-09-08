@@ -64,7 +64,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('class="ticket-attachments__image-grid"');
     expect(attachments).toContain('data-action="open-attachment-gallery"');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
-    expect(css).toMatch(/ticket-attachments__image-grid img \{[^}]*object-fit: contain/);
+    expect(css).toMatch(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
     expect(attachments).toContain('aria-label="More actions for one.png" title="More actions for one.png"');
     expect(attachments).toContain('title="one.png — double-click to open"');
     expect(attachments).toContain('data-lucide="more-horizontal"');
@@ -73,6 +73,15 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(unsupported).not.toContain('name="ticket-attachments"');
     expect(unsupported).not.toContain('data-action="open-attachment-menu"');
     expect(unsupported).not.toContain('data-action="open-attachment-row"');
+  });
+
+  it('shows videos in the media grid without starting playback', () => {
+    const attachments = String(TicketAttachments({ attachments: [{ id: 'clip', name: 'walkthrough.webm',url:'/attachment/clip' }] }));
+    expect(attachments).toContain('aria-label="Attached media"');
+    expect(attachments).toContain('<video');
+    expect(attachments).toContain('preload="metadata"');
+    expect(attachments).not.toContain('autoplay');
+    expect(attachments).toContain('Open walkthrough.webm in media gallery');
   });
 
   it('gives the attachment menu trigger visible hover and keyboard-focus feedback', () => {

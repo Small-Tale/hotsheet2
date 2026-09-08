@@ -16,6 +16,14 @@ describe('AttachmentGallery',()=>{
     expect(attachmentGalleryImageIndex(aliased,alias)).toBe(1);
     expect(String(AttachmentGallery({images:aliased,activeUrl:alias}))).toContain('Image 2 of 2: b.svg');
   });
+  it('renders videos paused by default with standard playback controls',()=>{
+    const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4'}));
+    expect(markup).toContain('Video 1 of 1: walkthrough.mp4');
+    expect(markup).toContain('<video');
+    expect(markup).toContain(' controls');
+    expect(markup).not.toContain('autoplay');
+    expect(markup).toContain('data-gallery-media="true"');
+  });
   it.each([
     [{naturalWidth:2000,naturalHeight:1000,availableWidth:1000,availableHeight:800},[.5,.8,1]],
     [{naturalWidth:1000,naturalHeight:1000,availableWidth:2000,availableHeight:1500},[1,1.5,2]],

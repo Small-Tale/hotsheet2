@@ -50,4 +50,4 @@
 .ticket-attachments__image-grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--wa-space-xs); }
 .ticket-attachments__image-grid button { display: grid; width: 10rem; height: 10rem; flex: none; padding: var(--wa-space-2xs); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); cursor: zoom-in; place-items: center; }
 .ticket-attachments__image-grid button:hover, .ticket-attachments__image-grid button:focus-visible { border-color: var(--wa-color-focus); outline: var(--wa-focus-ring); outline-offset: 1px; }
-.ticket-attachments__image-grid img { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+.ticket-attachments__image-grid :is(img,video) { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }

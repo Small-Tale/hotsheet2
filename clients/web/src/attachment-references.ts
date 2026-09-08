@@ -2,10 +2,20 @@ export interface AttachmentReference { ticket?: string; filename: string }
 export interface AttachmentReferenceContext { baseUrl?: string; checkout: string; ticket: string; attachments?:readonly {ticket?:string;filename:string}[] }
 
 const IMAGE_EXTENSIONS = new Set(['avif','bmp','gif','ico','jpeg','jpg','png','svg','webp']);
+const VIDEO_EXTENSIONS = new Set(['m4v','mov','mp4','ogv','webm']);
 
 export function isImageAttachment(filename:string):boolean {
   const extension=filename.split('.').pop()?.toLocaleLowerCase();
   return Boolean(extension&&IMAGE_EXTENSIONS.has(extension));
+}
+
+export function isVideoAttachment(filename:string):boolean {
+  const extension=filename.split('.').pop()?.toLocaleLowerCase();
+  return Boolean(extension&&VIDEO_EXTENSIONS.has(extension));
+}
+
+export function isGalleryMediaAttachment(filename:string):boolean {
+  return isImageAttachment(filename)||isVideoAttachment(filename);
 }
 
 export function parseAttachmentReference(value:string):AttachmentReference|undefined {

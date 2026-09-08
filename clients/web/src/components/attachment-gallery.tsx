@@ -2,6 +2,7 @@ import './attachment-gallery.css';
 
 import {ChevronLeft,ChevronRight,Minus,MoreHorizontal,Plus,X} from 'lucide';
 
+import {isVideoAttachment} from '../attachment-references';
 import {LucideIcon} from './lucide-icon';
 import {Toolbar} from './toolbar';
 import {ToolbarControlGroup} from './toolbar-control-group';
@@ -42,15 +43,15 @@ function GalleryButton({action,label,icon,disabled=false,className='' }:{action:
 
 export function AttachmentGallery({images,activeUrl,geometry={naturalWidth:0,naturalHeight:0,availableWidth:0,availableHeight:0},selectedScale}:{images:readonly AttachmentGalleryImage[];activeUrl:string;geometry?:AttachmentGalleryGeometry;selectedScale?:number}) {
   if(images.length===0)return null;
-  const index=Math.max(0,attachmentGalleryImageIndex(images,activeUrl)),image=images[index],zoom=attachmentGalleryZoomModel(geometry,selectedScale);
+  const index=Math.max(0,attachmentGalleryImageIndex(images,activeUrl)),image=images[index],video=isVideoAttachment(image.name),noun=video?'video':'image',zoom=attachmentGalleryZoomModel(geometry,selectedScale);
   const imageData={'data-attachment-url':image.url,'data-attachment-name':image.name,'data-attachment-ticket':image.ticket,'data-gallery-attachment-id':image.attachmentId};
-  return <div class="attachment-gallery" data-component="attachment-gallery" role="dialog" aria-modal="true" aria-label={`Image ${index+1} of ${images.length}: ${image.name}`}>
+  return <div class="attachment-gallery" data-component="attachment-gallery" role="dialog" aria-modal="true" aria-label={`${video?'Video':'Image'} ${index+1} of ${images.length}: ${image.name}`}>
     <Toolbar className="attachment-gallery__toolbar" divider={false} leading={<ToolbarText className="attachment-gallery__filename" text={image.name}/>} trailing={<>
-      <ToolbarControlGroup label="Image navigation" tone="dark"><GalleryButton action="previous-gallery-image" label="Previous image" icon={ChevronLeft} disabled={images.length<2}/><span class="attachment-gallery__count">{index+1} / {images.length}</span><GalleryButton action="next-gallery-image" label="Next image" icon={ChevronRight} disabled={images.length<2}/></ToolbarControlGroup>
-      <ToolbarControlGroup label="Image actions" tone="dark" single><GalleryButton action="open-gallery-attachment-menu" label="More image actions" icon={MoreHorizontal}/></ToolbarControlGroup>
-      <ToolbarControlGroup label="Close gallery" tone="dark" single><GalleryButton action="close-attachment-gallery" label="Close image gallery" icon={X}/></ToolbarControlGroup>
+      <ToolbarControlGroup label="Media navigation" tone="dark"><GalleryButton action="previous-gallery-image" label={`Previous ${noun}`} icon={ChevronLeft} disabled={images.length<2}/><span class="attachment-gallery__count">{index+1} / {images.length}</span><GalleryButton action="next-gallery-image" label={`Next ${noun}`} icon={ChevronRight} disabled={images.length<2}/></ToolbarControlGroup>
+      <ToolbarControlGroup label="Media actions" tone="dark" single><GalleryButton action="open-gallery-attachment-menu" label={`More ${noun} actions`} icon={MoreHorizontal}/></ToolbarControlGroup>
+      <ToolbarControlGroup label="Close gallery" tone="dark" single><GalleryButton action="close-attachment-gallery" label={`Close ${noun} gallery`} icon={X}/></ToolbarControlGroup>
     </>}/>
-    <div class="attachment-gallery__stage" data-gallery-zoom-stage="true"><div class="attachment-gallery__canvas"><img {...imageData} data-gallery-image="true" src={image.url} alt={image.name} style={validDimension(geometry.naturalWidth)&&validDimension(geometry.naturalHeight)?`width:${geometry.naturalWidth*zoom.scale}px;height:${geometry.naturalHeight*zoom.scale}px`:undefined}/></div></div>
-    <ToolbarControlGroup className="attachment-gallery__zoom" label="Image zoom" tone="dark"><button type="button" data-action="zoom-gallery-image" data-zoom-direction="out" aria-label="Zoom out" title="Zoom out" disabled={!zoom.canZoomOut}><LucideIcon icon={Minus} name="minus"/></button><button type="button" data-action="zoom-gallery-image" data-zoom-direction="in" aria-label="Zoom in" title="Zoom in" disabled={!zoom.canZoomIn}><LucideIcon icon={Plus} name="plus"/></button></ToolbarControlGroup>
+    <div class="attachment-gallery__stage" data-gallery-zoom-stage="true"><div class="attachment-gallery__canvas">{video?<video {...imageData} data-gallery-media="true" src={image.url} aria-label={image.name} controls playsInline preload="metadata" style={validDimension(geometry.naturalWidth)&&validDimension(geometry.naturalHeight)?`width:${geometry.naturalWidth*zoom.scale}px;height:${geometry.naturalHeight*zoom.scale}px`:undefined}/>:<img {...imageData} data-gallery-media="true" data-gallery-image="true" src={image.url} alt={image.name} style={validDimension(geometry.naturalWidth)&&validDimension(geometry.naturalHeight)?`width:${geometry.naturalWidth*zoom.scale}px;height:${geometry.naturalHeight*zoom.scale}px`:undefined}/>}</div></div>
+    <ToolbarControlGroup className="attachment-gallery__zoom" label="Media zoom" tone="dark"><button type="button" data-action="zoom-gallery-image" data-zoom-direction="out" aria-label="Zoom out" title="Zoom out" disabled={!zoom.canZoomOut}><LucideIcon icon={Minus} name="minus"/></button><button type="button" data-action="zoom-gallery-image" data-zoom-direction="in" aria-label="Zoom in" title="Zoom in" disabled={!zoom.canZoomIn}><LucideIcon icon={Plus} name="plus"/></button></ToolbarControlGroup>
   </div>;
 }
