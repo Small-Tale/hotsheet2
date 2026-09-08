@@ -10,6 +10,8 @@
 .markdown-preview li { margin-inline-start: 0; }
 .markdown-preview li + li { margin-top: .2rem; }
 .markdown-preview a { color: var(--wa-color-text-link); text-decoration-thickness: 1px; text-underline-offset: .14em; }
+.markdown-preview__ticket-reference { font-weight: 650; text-decoration: none; }
+.markdown-preview__ticket-reference:hover, .markdown-preview__ticket-reference:focus-visible { text-decoration: underline; }
 .markdown-preview code { padding: .1rem .28rem; border-radius: .3rem; background: var(--wa-color-neutral-fill-normal); font: var(--wa-font-size-s)/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .markdown-preview pre { padding: .8rem; overflow: auto; border-radius: .55rem; background: var(--wa-color-neutral-on-normal); color: var(--wa-color-neutral-on-loud); }
 .markdown-preview pre code { padding: 0; background: transparent; color: inherit; }

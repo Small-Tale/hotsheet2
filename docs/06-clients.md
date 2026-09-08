@@ -362,6 +362,12 @@ prompt can be dismissed and returns on a later open until a source is configured
   context menu flips inward from every viewport edge, retains an 8px safe margin, and
   becomes internally scrollable when the viewport is smaller than the menu.
 
+  Plain uppercase ticket references such as `HS2-BD09B6` in details and notes render
+  as accessible links. Activating an unambiguous reference selects that ticket and
+  changes to its lifecycle view when needed; ambiguous or currently unloaded references
+  open an exact global search for explicit selection. References already inside Markdown
+  links, inline/fenced code, or attachment controls remain unchanged.
+
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained previews for browser-compatible image and video
   formats, including SVG, MP4, MOV, M4V, OGV, and WebM. Grid videos preload only

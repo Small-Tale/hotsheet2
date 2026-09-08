@@ -20,6 +20,23 @@ function attachmentUrlInfo(href:string):{ticket:string;filename:string}|undefine
   try{return{ticket:decodeURIComponent(match[1]),filename:decodeURIComponent(match[2])}}catch{return undefined}
 }
 
+const TICKET_REFERENCE=/\b([A-Z][A-Z0-9]{1,15}-[A-Z0-9]{2,24})\b/g;
+const REFERENCE_SUPPRESSING_TAGS=new Set(['a','button','code','pre']);
+
+/** Link plain-text ticket references after Markdown rendering, without touching code or links. */
+export function linkTicketReferences(html:string):string {
+  let suppressed=0;
+  return html.split(/(<[^>]+>)/g).map(part=>{
+    if(part.startsWith('<')){
+      const match=/^<\/?([a-z0-9]+)/i.exec(part),tag=match?.[1]?.toLocaleLowerCase();
+      if(tag&&REFERENCE_SUPPRESSING_TAGS.has(tag))suppressed+=part.startsWith('</')?-1:part.endsWith('/>')?0:1;
+      return part;
+    }
+    if(suppressed>0)return part;
+    return part.replace(TICKET_REFERENCE,(reference:string)=>`<a class="markdown-preview__ticket-reference" href="#ticket-${reference}" data-action="open-linked-ticket" data-ticket-slug="${reference}" title="Open ${reference}">${reference}</a>`);
+  }).join('');
+}
+
 marked.setOptions({ breaks: true, gfm: true });
 marked.use({ renderer: {
   html({ text }) { return escapeMarkdownHtml(text); },
@@ -28,7 +45,7 @@ marked.use({ renderer: {
 } });
 
 export function renderMarkdown(source: string,attachmentContext?:AttachmentReferenceContext): string {
-  return marked.parse(expandAttachmentReferences(source,attachmentContext), { async: false });
+  return linkTicketReferences(marked.parse(expandAttachmentReferences(source,attachmentContext), { async: false }));
 }
 
 export function MarkdownPreview({ source, emptyLabel = 'Nothing to preview.',attachmentContext }: { source: string; emptyLabel?: string;attachmentContext?:AttachmentReferenceContext }) {

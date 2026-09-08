@@ -89,6 +89,18 @@ describe('content components', () => {
     expect(css).toMatch(/\.markdown-preview__attachment-image \{[^}]*width: fit-content;[^}]*height: auto;[^}]*overflow: hidden;/);
   });
 
+  it('links plain ticket references in details and notes without nesting links or changing code',()=>{
+    const markup=String(MarkdownPreview({source:'Depends on HS2-BD09B6 and HS2-OTHER2. Keep `HS2-CODE12` literal and preserve [HS2-LINK12](/tickets).'}));
+    expect(markup.match(/data-action="open-linked-ticket"/g)).toHaveLength(2);
+    expect(markup).toContain('data-ticket-slug="HS2-BD09B6"');
+    expect(markup).toContain('data-ticket-slug="HS2-OTHER2"');
+    expect(markup).toContain('<code>HS2-CODE12</code>');
+    expect(markup).toContain('>HS2-LINK12</a>');
+    expect(markup).not.toContain('data-ticket-slug="HS2-LINK12"');
+    const css=readFileSync(resolve(import.meta.dirname,'markdown-preview.css'),'utf8');
+    expect(css).toContain('.markdown-preview__ticket-reference:hover');
+  });
+
   it('renders filename attachment references as host actions and inline gallery images',()=>{
     const context={baseUrl:'/project-api/demo',checkout:'checkout',ticket:'HS2-LOCAL'};
     const markup=String(MarkdownPreview({source:'`attachment:report.pdf`\n\n`attachment:[HS2-OTHER]screen shot.svg`',attachmentContext:context}));
