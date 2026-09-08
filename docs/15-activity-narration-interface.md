@@ -131,12 +131,19 @@ the returned text through `distill`/`write_distilled_note`. Apple frameworks are
 client adapter, never a server dependency; other clients can inject another
 `LocalActivitySummarizer` or leave the feature disabled.
 
-### 15.7.1 Remaining stream considerations
+### 15.7.1 Bounded stream ingestion
 
 - **Importance heuristic — shipped:** default mapping from `kind` → `importance`,
   overridable by the producer.
-- **Volume/rate — HS2-26M48F:** cap/coalesce events per turn or session so a chatty
-  tool cannot flood persistence or clients.
+- **Volume/rate — shipped (HS2-26M48F):** the host admits at most 128 ordinary events
+  per active session turn. Once exhausted, it preserves a separately bounded allowance
+  of up to eight late events for each critical milestone kind (permission, decision,
+  blocked transition, and ticket status), drops the remaining burst, and emits one
+  deterministic `summary` event with exact per-kind counts immediately before `turn_end`.
+  The boundary is applied before both persistence and live broadcast, so disk and clients
+  see the same bounded sequence. `turn_end` always passes and resets the turn budget.
+  At most 256 unfinished sessions are retained in memory; least-recently-used abandoned
+  state is evicted. Repeated starts cannot reset an unfinished turn's budget.
 
 ## 15.8 Build plan (follow-ups)
 - HS2-70 (this) = the spec.

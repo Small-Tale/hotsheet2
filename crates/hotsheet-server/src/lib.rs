@@ -134,6 +134,8 @@ pub struct AppState {
     /// effect immediately and no shared setting can enable distillation.
     activity_distillation:
         Arc<Mutex<std::collections::HashMap<String, hotsheet_ticketing::DistillationPipeline>>>,
+    /// Per-session admission state keeps a noisy tool from flooding disk or live clients.
+    activity_volume: Arc<Mutex<hotsheet_ticketing::ActivityVolumeGuard>>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -237,6 +239,9 @@ impl AppState {
             tts: Default::default(),
             source_revision: source_revision::SourceRevisionMonitor::current_build(),
             activity_distillation: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            activity_volume: Arc::new(Mutex::new(
+                hotsheet_ticketing::ActivityVolumeGuard::default(),
+            )),
         }
     }
 
@@ -642,17 +647,24 @@ impl AppState {
         store: &FsStore,
         event: hotsheet_ticketing::ActivityEvent,
     ) -> std::io::Result<()> {
-        hotsheet_ticketing::activity::record(store, &event)?;
-        self.emit(ChangeEvent {
-            store: multistore::store_url_id(store),
-            kind: "activity".to_string(),
-            id: event.id.clone(),
-            slug: String::new(),
-            message: None,
-            activity: Some(event.clone()),
-            assignment: None,
-        });
-        self.maybe_distill_activity(store, &event);
+        let admitted = self
+            .activity_volume
+            .lock()
+            .map_err(|_| std::io::Error::other("activity volume guard is unavailable"))?
+            .observe(event);
+        for event in admitted {
+            hotsheet_ticketing::activity::record(store, &event)?;
+            self.emit(ChangeEvent {
+                store: multistore::store_url_id(store),
+                kind: "activity".to_string(),
+                id: event.id.clone(),
+                slug: String::new(),
+                message: None,
+                activity: Some(event.clone()),
+                assignment: None,
+            });
+            self.maybe_distill_activity(store, &event);
+        }
         Ok(())
     }
 
@@ -6229,5 +6241,44 @@ mod activity_distillation_tests {
         event.session = Some("session-1".into());
         state.record_activity(&store, event).unwrap();
         assert!(store.read_ticket(&ticket_id).unwrap().notes.is_empty());
+    }
+
+    #[test]
+    fn noisy_activity_is_bounded_before_persistence_and_broadcast() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(root.path(), &StoreMetadata::new("HS")).unwrap();
+        let state = AppState::new(store.clone(), "secret".into()).unwrap();
+        let mut live = state.subscribe();
+
+        for index in 0..140 {
+            let mut event = ActivityEvent::new(
+                format!("01ARZ3NDEKTSV4RRFFQ{index:06}"),
+                "2026-09-02T01:00:00Z",
+                "codex",
+                ActivityKind::Command,
+                json!({"command": "chatty"}),
+            );
+            event.session = Some("noisy-session".into());
+            state.record_activity(&store, event).unwrap();
+        }
+        let mut done = ActivityEvent::new(
+            "01ARZ3NDEKTSV4RRFFQ999999",
+            "2026-09-02T01:01:00Z",
+            "codex",
+            ActivityKind::TurnEnd,
+            json!({}),
+        );
+        done.session = Some("noisy-session".into());
+        state.record_activity(&store, done).unwrap();
+
+        let recorded = hotsheet_ticketing::activity::read_recent(&store).unwrap();
+        assert_eq!(recorded.len(), 130);
+        assert_eq!(recorded[128].kind, ActivityKind::Summary);
+        assert_eq!(recorded[128].detail["coalesced"], 12);
+        assert_eq!(recorded[129].kind, ActivityKind::TurnEnd);
+
+        let broadcast = std::iter::from_fn(|| live.try_recv().ok()).collect::<Vec<_>>();
+        assert_eq!(broadcast.len(), recorded.len());
+        assert_eq!(broadcast[128].activity.as_ref(), Some(&recorded[128]));
     }
 }

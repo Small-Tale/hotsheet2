@@ -10,6 +10,7 @@
 //! and **digest** ([`timeline`] — read the stored window for a ticket/session). Same data,
 //! different read.
 
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
@@ -25,7 +26,7 @@ pub const MAX_RECENT_ACTIVITY_AGE_DAYS: i64 = 14;
 
 /// The **closed** activity-kind vocabulary (`docs/15` §15.2) — not free-form, so consumers
 /// style/emphasize consistently. Serialized as its snake-ish lowercase string.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActivityKind {
     TurnStart,
@@ -38,6 +39,8 @@ pub enum ActivityKind {
     Permission,
     Note,
     TicketStatus,
+    /// A host-generated bounded-ingestion marker replacing a dropped burst.
+    Summary,
     TurnEnd,
 }
 
@@ -48,7 +51,7 @@ impl ActivityKind {
         use ActivityKind::*;
         match self {
             TurnStart | TurnEnd | Blocked | Permission | Decision => Importance::High,
-            Plan | Edit | Command | ToolCall | TicketStatus => Importance::Normal,
+            Plan | Edit | Command | ToolCall | TicketStatus | Summary => Importance::Normal,
             Note => Importance::Low,
         }
     }
@@ -83,8 +86,162 @@ impl ActivityKind {
             (Note, None) => format!("{tool} left a note"),
             (TicketStatus, Some(t)) => format!("ticket status: {t}"),
             (TicketStatus, None) => "ticket status changed".to_string(),
+            (Summary, Some(t)) => t.to_string(),
+            (Summary, None) => format!("{tool} activity was coalesced"),
         }
     }
+}
+
+/// Deterministic limits for one active tool turn. The ordinary-event cap is a hard
+/// persistence/client budget; a small, separately bounded milestone allowance keeps late
+/// permissions, decisions, blocked transitions, and ticket-state changes visible.
+#[derive(Debug, Clone, Copy)]
+pub struct ActivityVolumePolicy {
+    pub max_events_per_turn: usize,
+    pub max_late_milestones_per_kind: usize,
+    pub max_tracked_sessions: usize,
+}
+
+impl Default for ActivityVolumePolicy {
+    fn default() -> Self {
+        Self {
+            max_events_per_turn: 128,
+            max_late_milestones_per_kind: 8,
+            max_tracked_sessions: 256,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct SessionVolume {
+    emitted: usize,
+    late_milestones: HashMap<ActivityKind, usize>,
+    dropped: HashMap<ActivityKind, usize>,
+    first_dropped: Option<ActivityEvent>,
+}
+
+/// Per-session activity admission guard. It emits at most one deterministic summary for a
+/// dropped burst, immediately before `turn_end`, and forgets the session at that boundary.
+/// The tracked-session LRU also bounds memory when a producer disappears without ending.
+#[derive(Debug)]
+pub struct ActivityVolumeGuard {
+    policy: ActivityVolumePolicy,
+    sessions: HashMap<String, SessionVolume>,
+    lru: VecDeque<String>,
+}
+
+impl Default for ActivityVolumeGuard {
+    fn default() -> Self {
+        Self::new(ActivityVolumePolicy::default())
+    }
+}
+
+impl ActivityVolumeGuard {
+    pub fn new(policy: ActivityVolumePolicy) -> Self {
+        Self {
+            policy,
+            sessions: HashMap::new(),
+            lru: VecDeque::new(),
+        }
+    }
+
+    /// Admit, coalesce, or drop one input event. Returned events are already ordered for
+    /// persistence and broadcast and are the only events consumers should observe.
+    pub fn observe(&mut self, event: ActivityEvent) -> Vec<ActivityEvent> {
+        let key = activity_session_key(&event);
+        if event.kind == ActivityKind::TurnEnd {
+            let state = self.sessions.remove(&key).unwrap_or_default();
+            self.lru.retain(|candidate| candidate != &key);
+            let mut output = coalesced_summary(state);
+            output.push(event);
+            return output;
+        }
+
+        self.touch(&key);
+        let state = self.sessions.entry(key).or_default();
+        if state.emitted < self.policy.max_events_per_turn {
+            state.emitted += 1;
+            return vec![event];
+        }
+
+        if is_late_milestone(event.kind) {
+            let count = state.late_milestones.entry(event.kind).or_default();
+            if *count < self.policy.max_late_milestones_per_kind {
+                *count += 1;
+                return vec![event];
+            }
+        }
+
+        *state.dropped.entry(event.kind).or_default() += 1;
+        state.first_dropped.get_or_insert(event);
+        Vec::new()
+    }
+
+    fn touch(&mut self, key: &str) {
+        self.lru.retain(|candidate| candidate != key);
+        self.lru.push_back(key.to_owned());
+        let limit = self.policy.max_tracked_sessions.max(1);
+        while self.sessions.len() >= limit && !self.sessions.contains_key(key) {
+            let Some(oldest) = self.lru.pop_front() else {
+                break;
+            };
+            self.sessions.remove(&oldest);
+        }
+    }
+}
+
+fn activity_session_key(event: &ActivityEvent) -> String {
+    format!(
+        "{}\u{1f}{}\u{1f}{}",
+        event.project.as_deref().unwrap_or_default(),
+        event.tool,
+        event
+            .session
+            .as_deref()
+            .or(event.ticket.as_deref())
+            .unwrap_or("unattributed")
+    )
+}
+
+fn is_late_milestone(kind: ActivityKind) -> bool {
+    matches!(
+        kind,
+        ActivityKind::Blocked
+            | ActivityKind::Permission
+            | ActivityKind::Decision
+            | ActivityKind::TicketStatus
+    )
+}
+
+fn coalesced_summary(mut state: SessionVolume) -> Vec<ActivityEvent> {
+    let Some(mut event) = state.first_dropped.take() else {
+        return Vec::new();
+    };
+    let total: usize = state.dropped.values().sum();
+    let mut kinds = state
+        .dropped
+        .into_iter()
+        .map(|(kind, count)| (activity_kind_name(kind), count))
+        .collect::<Vec<_>>();
+    kinds.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+    event.kind = ActivityKind::Summary;
+    event.summary = format!("Coalesced {total} additional activity events");
+    event.detail = serde_json::json!({
+        "coalesced": total,
+        "kinds": kinds
+            .into_iter()
+            .map(|(kind, count)| (kind, Value::from(count)))
+            .collect::<serde_json::Map<String, Value>>()
+    });
+    event.importance = Importance::Normal;
+    vec![event]
+}
+
+fn activity_kind_name(kind: ActivityKind) -> String {
+    serde_json::to_value(kind)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "unknown".into())
 }
 
 /// Narration emphasis (`docs/15` §15.2).
@@ -468,6 +625,100 @@ mod tests {
         let e = ev("01B", "2026-08-19", ActivityKind::TurnEnd, Value::Null);
         assert_eq!(e.summary, "codex finished a turn");
         assert_eq!(e.importance, Importance::High);
+    }
+
+    fn session_ev(id: &str, kind: ActivityKind) -> ActivityEvent {
+        let mut event = ev(id, "2026-08-19", kind, Value::Null);
+        event.session = Some("session-1".into());
+        event
+    }
+
+    #[test]
+    fn volume_guard_bounds_a_chatty_turn_and_reports_exact_drops() {
+        let mut guard = ActivityVolumeGuard::new(ActivityVolumePolicy {
+            max_events_per_turn: 3,
+            max_late_milestones_per_kind: 1,
+            max_tracked_sessions: 4,
+        });
+        let mut output = Vec::new();
+        for (id, kind) in [
+            ("01", ActivityKind::TurnStart),
+            ("02", ActivityKind::Command),
+            ("03", ActivityKind::Edit),
+            ("04", ActivityKind::Command),
+            ("05", ActivityKind::Command),
+            ("06", ActivityKind::Edit),
+        ] {
+            output.extend(guard.observe(session_ev(id, kind)));
+        }
+        output.extend(guard.observe(session_ev("07", ActivityKind::TurnEnd)));
+
+        assert_eq!(
+            output
+                .iter()
+                .map(|event| event.id.as_str())
+                .collect::<Vec<_>>(),
+            ["01", "02", "03", "04", "07"]
+        );
+        assert_eq!(output[3].kind, ActivityKind::Summary);
+        assert_eq!(output[3].detail["coalesced"], 3);
+        assert_eq!(output[3].detail["kinds"]["command"], 2);
+        assert_eq!(output[3].detail["kinds"]["edit"], 1);
+    }
+
+    #[test]
+    fn volume_guard_preserves_bounded_late_milestones_and_resets_after_done() {
+        let mut guard = ActivityVolumeGuard::new(ActivityVolumePolicy {
+            max_events_per_turn: 1,
+            max_late_milestones_per_kind: 1,
+            max_tracked_sessions: 2,
+        });
+        assert_eq!(
+            guard.observe(session_ev("01", ActivityKind::Command)).len(),
+            1
+        );
+        assert_eq!(
+            guard
+                .observe(session_ev("02", ActivityKind::Permission))
+                .len(),
+            1
+        );
+        assert!(
+            guard
+                .observe(session_ev("03", ActivityKind::Permission))
+                .is_empty()
+        );
+        let done = guard.observe(session_ev("04", ActivityKind::TurnEnd));
+        assert_eq!(done.len(), 2, "drop summary plus the terminal milestone");
+
+        assert_eq!(
+            guard.observe(session_ev("05", ActivityKind::Command)).len(),
+            1,
+            "a completed turn releases its full budget"
+        );
+    }
+
+    #[test]
+    fn volume_guard_bounds_unfinished_session_memory() {
+        let mut guard = ActivityVolumeGuard::new(ActivityVolumePolicy {
+            max_events_per_turn: 1,
+            max_late_milestones_per_kind: 0,
+            max_tracked_sessions: 2,
+        });
+        for session in ["a", "b", "c"] {
+            let mut event = session_ev(session, ActivityKind::Command);
+            event.session = Some(session.into());
+            assert_eq!(guard.observe(event).len(), 1);
+        }
+        assert_eq!(guard.sessions.len(), 2);
+        assert_eq!(
+            guard
+                .lru
+                .iter()
+                .map(|key| key.rsplit('\u{1f}').next().unwrap())
+                .collect::<Vec<_>>(),
+            ["b", "c"]
+        );
     }
 
     #[test]

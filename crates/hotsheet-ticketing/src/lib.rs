@@ -29,7 +29,10 @@ pub mod store;
 pub mod sync;
 pub mod wire;
 pub mod worklist;
-pub use activity::{ActivityEvent, ActivityKind, Importance, TimelineFilter};
+pub use activity::{
+    ActivityEvent, ActivityKind, ActivityVolumeGuard, ActivityVolumePolicy, Importance,
+    TimelineFilter,
+};
 pub use activity_distillation::{
     ActivityWindowProvenance, CandidateTrigger, DeterministicActivitySummarizer,
     DistillationPipeline, DistillationPolicy, DistillationRequest, DistilledActivityNote,
