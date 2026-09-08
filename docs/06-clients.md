@@ -717,6 +717,24 @@ visibility changes, and a five-second lease heartbeat. The heartbeat renews serv
 it is not request polling. Disconnects retry with bounded exponential backoff, while
 dispose closes the socket so the server removes that viewer and self-heals its chosen size.
 
+Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
+Full-size dedicated drawer terminals use xterm's WebGL addon (with DOM fallback after load
+failure or context loss). The fixed 80×24 dashboard grid and magnified surfaces use xterm's
+DOM renderer because those surfaces are uniformly CSS-scaled; scaling a WebGL raster makes
+the terminal blurry and can produce misleading intermediate canvas geometry. Retina browser
+coverage therefore checks the dedicated WebGL canvas backing-store size separately from the
+scaled DOM surfaces instead of treating `.xterm-screen` bounds as proof of a completed paint.
+
+A visible fixed 80×24 surface is an active sizing claimant even though its grid preview is
+read-only and never accepts keyboard input. This ensures entering the dashboard actually
+resizes the PTY to the promised 80×24 contract rather than merely drawing an 80×24 xterm over
+output that the TUI emitted for the drawer's previous size. Conversely, viewports start with
+`visible: false` until intersection observation proves them on-screen, so an unpainted or
+hidden fixed-grid mount cannot take sizing control. Finishing a drawer drag or maximize
+returns input focus to the selected dedicated terminal before its final claim; clicking the
+drawer rail must not leave the server holding the old PTY size while only the WebGL canvas
+grows around stale TUI output.
+
 ### 6.7.1 The fundamental constraint
 
 A PTY has **exactly one size** (cols × rows) at any instant. Resizing it sends
@@ -767,6 +785,10 @@ Default policy (= tmux `window-size latest`, which is exactly the maintainer's a
   When focus moves from the big macOS pane to the small iPhone view, the PTY
   resizes to the iPhone (after the guards below); when focus returns, it resizes
   back. `activityAt` breaks ties if two devices both believe they're focused.
+- Activating the read-only dashboard counts each visible fixed 80×24 tile as that
+  PTY's local sizing focus. A grid tile cannot accept keyboard input, but entering
+  the terminal-specific surface is still a deliberate request to render its TUI at
+  the grid contract rather than at an obsolete hidden-drawer size.
 - **A focused, actively-typing viewport's size is locked in** — a background device
   cannot resize the PTY out from under someone mid-keystroke. To change the size,
   take focus (which transfers the size).

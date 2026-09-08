@@ -48,6 +48,10 @@ export function terminalShouldAdoptServerSize(scaledPreview:boolean,locallyFocus
   return !scaledPreview&&!locallyFocused&&!drivenByViewer;
 }
 
+export function terminalViewportClaimsSizingFocus(scaledPreview:boolean,fixedDashboardGrid:boolean,focusRequested:boolean,containsActiveElement:boolean):boolean {
+  return fixedDashboardGrid||(!scaledPreview&&(focusRequested||containsActiveElement));
+}
+
 export function terminalBrowserWebSocketUrl(apiPath:string,terminalId:string,locationValue:Pick<Location,'protocol'|'host'>=location):string {
   const protocol=locationValue.protocol==='https:'?'wss:':'ws:';
   return `${protocol}//${locationValue.host}${apiPath}/terminals/${encodeURIComponent(terminalId)}/attach`;
