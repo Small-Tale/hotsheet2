@@ -1941,6 +1941,22 @@ mod tests {
         assert_eq!(created["priority"], "high");
         assert_eq!(created["status"], "not_started");
 
+        let created_updated_at = created["updated_at"].clone();
+        let unqueued = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "up_next": false }),
+        );
+        assert_eq!(unqueued["up_next"], false);
+        assert_eq!(unqueued["updated_at"], created_updated_at);
+        let mixed = call(
+            &backend,
+            "hotsheet_update",
+            json!({ "id": id, "up_next": true, "category": "task" }),
+        );
+        assert_eq!(mixed["up_next"], true);
+        assert_ne!(mixed["updated_at"], created_updated_at);
+
         // get by slug (resolve is case-insensitive)
         let got = call(
             &backend,

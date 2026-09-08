@@ -11,7 +11,8 @@ describe('toolbar primitives', () => {
   it('uses the specified dark-tone border', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'toolbar-control-group.css'), 'utf8');
     const dark = css.match(/\.toolbar-control-group\[data-tone="dark"\] \{([^}]+)\}/)?.[1] ?? '';
-    expect(dark).toContain('--toolbar-control-border-color: #353536');
+    expect(dark).toContain('--toolbar-control-border-color: var(--hs-toolbar-control-dark-border)');
+    expect(readFileSync(resolve(import.meta.dirname, '../theme.css'), 'utf8')).toContain('--hs-toolbar-control-dark-border: #353536');
   });
 
   it('exposes orthogonal geometry, tone, and button appearance without changing structure', () => {

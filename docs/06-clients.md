@@ -282,6 +282,13 @@ prompt can be dismissed and returns on a later open until a source is configured
   chips opt into normally excluded lifecycle states. Reference-mention matches must say
   why they matched. HS2-383D6K owns the remaining advanced-search client work.
 
+  Empty ticket collections use the shared `TicketEmptyState` composition in both list
+  and board modes. A project with no tickets invites its first ticket, a populated
+  project's empty view names that view, an in-flight search reports that it is still
+  searching, and a settled empty search repeats the query and suggests changing it.
+  When every board column is empty, the board renders one board-wide message beneath
+  the retained column headings instead of repeating a placeholder in every column.
+
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
   `noopener noreferrer`; raw HTML remains escaped and unsafe URL protocols remain inert.
@@ -361,12 +368,11 @@ prompt can be dismissed and returns on a later open until a source is configured
   creates `Fix selection` with `client` and `Needs-Review` tags. The client sends the
   original title and renders the authoritative normalized ticket returned by the server,
   keeping Git and external-provider creation behavior identical (HS2-CHZKR5).
-  When the selected provider advertises attachment support, each attachment exposes
-  icon actions to open, download, copy its checkout-qualified reference, or remove it;
-  every icon action has an action-and-filename accessible name, matching hover title,
-  and visible hover/focus feedback. Double-clicking the attachment row invokes the same
-  open path as its Open icon, while double-clicks on the other action buttons remain
-  scoped to those buttons. Upload/removal progress and failures remain visible in the
+  When the selected provider advertises attachment support, each attachment exposes one
+  accessible Lucide ellipsis button. Activating it or right-clicking anywhere on the row
+  opens the same shared MenuItem-based menu for Open, Download, Copy reference, and
+  Remove. Double-clicking the attachment row remains a direct Open shortcut, while
+  activating the ellipsis never opens the file. Upload/removal progress and failures remain visible in the
   attachment panel. Browser clients use download where a native Tauri host can later
   offer Reveal in Finder.
 
@@ -591,7 +597,11 @@ the available preview without horizontal/vertical stretching. Magnifying a grid 
 the same exact grid and terminal-screen aspect. Changing grid fit or magnifying
 never derives PTY rows or columns from tile dimensions. Dedicated project-drawer terminals
 remain fitted to their actual interactive viewport and reserve one physical containment row;
-server size echoes cannot restore the edge row that would otherwise be clipped. The preview,
+server size echoes cannot restore the edge row that would otherwise be clipped. Abrupt drawer
+changes such as maximize fit on the next animation frame, with a settled follow-up, instead of
+remaining one resize behind the container. Fixed-grid typography remains unpainted until its
+bounded metric passes converge, avoiding incremental resizing while moving from a drawer to the
+dashboard or magnifying a card. The preview,
 its inset frame, and its border all use the terminal background token, so unused space
 cannot expose an unrelated gray surface. The computed tile height derives the 5:3 preview
 from the card width, then adds the tokenized frame/footer chrome, so repeated viewport changes
@@ -600,7 +610,8 @@ previews never accept terminal input. Click opens and focuses a separate interac
 centered over a full-browser dimming layer; click-away restores the grid. Its footer exposes
 an external-open action, and both that action and a footer double-click open the terminal in
 its project's maximized drawer. A grid-tile double-click does the same, while right-click
-exposes shared Open/Hide menu items. The focused dedicated drawer consumer re-fits after both
+exposes shared Open/Hide menu items. A Lucide ellipsis in the shared grid/magnified card footer
+opens that exact same menu from the keyboard or pointer. The focused dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
@@ -679,6 +690,14 @@ one process-scoped registry; a successful project open must make terminal upgrad
 immediately attachable rather than leaving the viewport indefinitely connecting. A future
 Tauri host must provide the same bridge boundary rather
 than exposing the server secret to web content.
+
+The dashboard's metadata refresh reads only the terminal list. It does not fetch and retain
+a second full REST scrollback snapshot for every tile: each xterm's attach WebSocket is the
+single source for live output and its initial replay. Read-only grid previews keep no xterm
+history, temporary magnified dashboard viewers keep 1,000 lines, and dedicated interactive
+terminals retain the full 5,000-line client history. Disposing a viewport cancels its frames,
+timers, observers, xterm subscriptions/addons, and socket; repeated magnify/dismiss cycles are
+covered as a stable-resource lifecycle rather than allowing detached viewers to accumulate.
 
 The viewport renders ANSI/VT output with xterm, forwards typed input as terminal text, and
 sends `{viewer_id, cols, rows, focus, visible}` claims on connection, geometry/focus/

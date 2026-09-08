@@ -170,7 +170,7 @@ import {
   TagChipSettings,
   tagChipSettings,
 } from './tag-chip-demo';
-import { cancelTerminalVisibilityDemoName, promptAddTerminalVisibilityDemoGroup, promptRenameTerminalVisibilityDemoGroup, removeTerminalVisibilityDemoGroup, selectTerminalVisibilityDemoGroup, setAllTerminalVisibilityDemo, showTerminalVisibilityDemoContextMenu, submitTerminalVisibilityDemoName, TerminalVisibilityDialogDemo, toggleTerminalVisibilityDemo } from './terminal-visibility-demo';
+import { cancelTerminalVisibilityDemoName, closeTerminalVisibilityDemo, promptAddTerminalVisibilityDemoGroup, promptRenameTerminalVisibilityDemoGroup, removeTerminalVisibilityDemoGroup, selectTerminalVisibilityDemoGroup, setAllTerminalVisibilityDemo, showTerminalVisibilityDemo, showTerminalVisibilityDemoContextMenu, submitTerminalVisibilityDemoName, TerminalVisibilityDialogDemo, toggleTerminalVisibilityDemo } from './terminal-visibility-demo';
 import {
   collectionTickets,
   recordCollectionEvent,
@@ -182,9 +182,12 @@ import {
   toggleCollectionTicketUpNext,
 } from './ticket-collections-demo';
 import {
+  attachmentDemoMenu,
   AttachmentGalleryDemo,
+  closeAttachmentDemoMenu,
   setGalleryDemo,
   shiftGalleryDemo,
+  showAttachmentDemoMenu,
   TicketAttachmentsDemo,
   TicketCategorySelectDemo,
   TicketCodeReviewDemo,
@@ -729,6 +732,8 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
 });
+delegate(root, 'click', '[data-action="show-terminal-visibility-demo"]', showTerminalVisibilityDemo);
+delegate(root, 'wa-hide', '[data-terminal-visibility-dialog]', closeTerminalVisibilityDemo);
 delegate(root, 'click', '[data-action="select-terminal-visibility-tab"]', (_event, target) => {
   selectTerminalVisibilityDemoGroup((target as HTMLElement).dataset.itemId ?? 'default');
 });
@@ -2004,12 +2009,28 @@ delegate(root, 'click', '[data-action="next-gallery-image"]', () => {
 delegate(root, 'click', '[data-action="zoom-gallery-image"]', (_event, target) => {
   zoomGalleryDemo(target.getAttribute('data-zoom-direction') === 'out' ? 'out' : 'in');
 });
+delegate(root, 'click', '[data-action="open-attachment-menu"]', (event, target) => {
+  event.stopPropagation();
+  const rect = target.getBoundingClientRect();
+  showAttachmentDemoMenu(rect.right, rect.bottom);
+});
+delegate(root, 'contextmenu', '[data-component="ticket-attachment-item"]', (event) => {
+  event.preventDefault();
+  const pointer = event as MouseEvent;
+  showAttachmentDemoMenu(pointer.clientX, pointer.clientY);
+});
+delegate(root, 'click', '[data-action="attachment-menu-action"]', (_event, target) => {
+  recordCollectionEvent(`${target.textContent?.trim() ?? 'Attachment action'} selected`);
+  closeAttachmentDemoMenu();
+});
 addEventListener('pointerdown', (event) => {
   if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
   if (tabContextMenu.value && !eventTargetsContextMenu(event, '.project-tab-context-menu')) tabContextMenu.value = undefined;
+  if (attachmentDemoMenu.value && !(event.target as Element).closest('[data-component="attachment-context-menu"], [data-action="open-attachment-menu"]')) closeAttachmentDemoMenu();
 }, { capture: true });
 addEventListener('keydown', (event) => {
   if (event.key === 'Escape') contextMenu.value = undefined;
+  if (event.key === 'Escape') closeAttachmentDemoMenu();
 });
 addEventListener('popstate', () => {
   selectDemo(fromUrl(), false);

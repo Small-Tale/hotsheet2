@@ -130,10 +130,10 @@ one **live** ticket (see the move tombstones in §2.13).
 <store-root>/
   hotsheet-store.json         # store metadata (schema version, prefix, id strategy)
   tickets/
-    01/                       # 2-char shard by id prefix (see §2.5)
+    6X/                       # final 2 random ULID characters (see §2.5)
       01J9ZK3M7Q8F2N4V6X.md
-    7f/
-      7f2a…​.md
+    AV/
+      01ARZ3NDEKTSV4RRFFQ69G5FAV.md
   attachments/
     01J9ZK3M7Q8F2N4V6X/
       screenshot.png
@@ -142,17 +142,17 @@ one **live** ticket (see the move tombstones in §2.13).
 `hotsheet-store.json`:
 ```jsonc
 {
-  "schemaVersion": "hotsheet/v2-guarded-tickets",
+  "schemaVersion": "hotsheet/v3-random-suffix-shards",
   "ticketPrefix": "HS",       // display prefix; the dash is added automatically
   "idStrategy": "ulid",
-  "shard": "id-prefix-2"      // 2-char id-prefix sharding (confirmed 2026-08-19)
+  "shard": "id-suffix-2"      // final 2 random ULID characters
 }
 ```
 
-**Sharding is id-prefix (2-char)** — decided (maintainer, 2026-08-19) — so a store
-scales to tens of thousands of tickets with bounded, evenly-filled directories (a
-ULID's trailing random bits distribute uniformly across the 256 shard buckets),
-without a flat `tickets/` directory growing unwieldy.
+**Sharding uses the final two ULID characters.** ULID prefixes encode time, so active
+stores otherwise concentrate nearly every ticket in the same `01/` directory. The
+final characters come from the random component and distribute tickets across the
+1024 Crockford-base32 buckets without coordination.
 
 ### 2.3.1 Corruption resilience — one bad file never hides the store
 
@@ -179,24 +179,17 @@ emits **no** notes block at all, so it can never leave a dangling
 `<!-- hotsheet:notes:begin -->` without its `…:end` marker (the exact shape that first
 triggered this).
 
-Store schema 2 also prevents an already-built, pre-bounded-notes CLI, MCP, or server
-process from silently creating or downgrading a ticket. Current metadata writes the
-intentionally guarded `schemaVersion: "hotsheet/v2-guarded-tickets"`; current readers
-normalize it to numeric store schema 2, while an old `schemaVersion: u32` deserializer
-rejects it before a stale create. Current canonical ticket files independently write the
-guarded `schema: hotsheet/v2-bounded-notes` marker, which stops a stale edit even during
-the transitional migration. An ordinary write to a schema-1 store is rejected with
-explicit activation guidance. `hotsheet-cli activate-format
---acknowledge-pre-release-breakage` rewrites every healthy legacy ticket to the guarded
-bounded form, preserving its body and complete note history, and only then advances
-`hotsheet-store.json` to the guarded schema-2 marker. It announces the boundary before
-modifying bytes and requires older processes to be stopped. A
-transitional numeric `schemaVersion: 2` is accepted and deliberately preserved by
-ordinary ticket writes so installing a new CLI cannot break an older server that is
-already running against the store. Guard activation for such an existing store must be
-a deliberate lifecycle migration after its owning processes have stopped; it is never
-an incidental consequence of editing a ticket. A current writer rejects a store schema
-newer than it supports. See
+Store schema 3 retains the bounded-notes guard and changes ticket placement from the
+first two ULID characters to the final two. Schema-2 stores remain fully readable and
+writable at legacy prefix paths until explicit activation, so installing or rebuilding
+a client does not alter a live store underneath older processes. Schema-1 writes still
+require activation. `hotsheet-cli activate-format
+--acknowledge-pre-release-breakage` writes every healthy ticket to its suffix shard,
+removes the corresponding legacy path, and advances metadata to
+`hotsheet/v3-random-suffix-shards` only after all moves succeed. Corrupt ticket bytes
+stay in place for recovery. The migration is safely repeatable after interruption and
+announces that older processes must be stopped. An older HS2 binary rejects the schema-3
+guard with upgrade guidance instead of writing a duplicate prefix-path ticket. See
 `docs/TEST-COVERAGE.md` → `corruption-resilience`.
 
 The complete lifecycle contract is in [19](19-format-compatibility.md).
@@ -401,6 +394,13 @@ normalizes it off for all other statuses, update operations reapply that invaria
 when a patch only tries to set Up Next, and queries/projectors defensively ignore stale
 legacy flags. Thus backlog, completed, verified, archive, deleted, and moved tickets can
 never participate in the Up Next queue.
+
+Up Next is queue-position metadata rather than substantive ticket content. A patch whose
+only effective change is `up_next` preserves `updated_at`, so starring or unstarring a
+ticket cannot reorder a recently-updated view. A mixed patch that changes any other field
+still advances `updated_at`. Status transitions remain substantive even when they also
+clear `up_next`; an attempted requeue of an already-inactive ticket is normalized away
+without changing its timestamp.
 
 **Freeform vs. structured.** `close_reason` is the *structured* tag (filterable,
 reportable). A **note** still carries any freeform explanation ("closing — we chose

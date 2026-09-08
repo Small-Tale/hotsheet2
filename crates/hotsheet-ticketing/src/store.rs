@@ -7,7 +7,7 @@
 //! ```text
 //! <root>/
 //!   hotsheet-store.json      # metadata (prefix, id strategy, sharding)
-//!   tickets/<2-char shard>/<ULID>.md
+//!   tickets/<2-char random-suffix shard>/<ULID>.md
 //! ```
 
 use std::fs;
@@ -22,9 +22,13 @@ use sha2::{Digest, Sha256};
 
 /// The store metadata file at a store root.
 pub const STORE_METADATA_FILE: &str = "hotsheet-store.json";
-/// Store version whose ticket files carry the stale-writer schema guard.
-pub const STORE_SCHEMA_VERSION: u32 = 2;
+/// Current store version. Schema 3 replaces time-prefix sharding with random-suffix
+/// sharding and retains the schema-2 stale-writer ticket guard.
+pub const STORE_SCHEMA_VERSION: u32 = 3;
 const GUARDED_STORE_SCHEMA_V2: &str = "hotsheet/v2-guarded-tickets";
+const GUARDED_STORE_SCHEMA_V3: &str = "hotsheet/v3-random-suffix-shards";
+const SHARD_ID_PREFIX_2: &str = "id-prefix-2";
+const SHARD_ID_SUFFIX_2: &str = "id-suffix-2";
 
 /// Store metadata (`hotsheet-store.json`, `docs/02` §2.3). camelCase on disk.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,10 +46,10 @@ pub struct StoreMetadata {
 }
 
 fn serialize_store_schema<S: Serializer>(version: &u32, serializer: S) -> Result<S::Ok, S::Error> {
-    if *version == STORE_SCHEMA_VERSION {
-        serializer.serialize_str(GUARDED_STORE_SCHEMA_V2)
-    } else {
-        serializer.serialize_u32(*version)
+    match *version {
+        2 => serializer.serialize_str(GUARDED_STORE_SCHEMA_V2),
+        STORE_SCHEMA_VERSION => serializer.serialize_str(GUARDED_STORE_SCHEMA_V3),
+        version => serializer.serialize_u32(version),
     }
 }
 
@@ -59,7 +63,8 @@ fn deserialize_store_schema<'de, D: Deserializer<'de>>(deserializer: D) -> Resul
 
     match DiskSchema::deserialize(deserializer)? {
         DiskSchema::Number(version) => Ok(version),
-        DiskSchema::Guard(guard) if guard == GUARDED_STORE_SCHEMA_V2 => Ok(STORE_SCHEMA_VERSION),
+        DiskSchema::Guard(guard) if guard == GUARDED_STORE_SCHEMA_V2 => Ok(2),
+        DiskSchema::Guard(guard) if guard == GUARDED_STORE_SCHEMA_V3 => Ok(STORE_SCHEMA_VERSION),
         DiskSchema::Guard(guard) => Err(de::Error::custom(format!(
             "unsupported store schema marker '{guard}'"
         ))),
@@ -73,7 +78,7 @@ impl StoreMetadata {
             schema_version: STORE_SCHEMA_VERSION,
             ticket_prefix: ticket_prefix.into(),
             id_strategy: "ulid".to_string(),
-            shard: "id-prefix-2".to_string(),
+            shard: SHARD_ID_SUFFIX_2.to_string(),
         }
     }
 }
@@ -231,10 +236,12 @@ impl FsStore {
         })?;
         let value: serde_json::Value = serde_json::from_str(&text)?;
         if let Some(version) = value.get("schemaVersion") {
-            let supported = GUARDED_STORE_SCHEMA_V2.to_string();
-            let known = version.as_u64() == Some(1)
-                || version.as_u64() == Some(STORE_SCHEMA_VERSION.into())
-                || version.as_str() == Some(GUARDED_STORE_SCHEMA_V2);
+            let supported = GUARDED_STORE_SCHEMA_V3.to_string();
+            let known = version
+                .as_u64()
+                .is_some_and(|version| (1..=u64::from(STORE_SCHEMA_VERSION)).contains(&version))
+                || version.as_str() == Some(GUARDED_STORE_SCHEMA_V2)
+                || version.as_str() == Some(GUARDED_STORE_SCHEMA_V3);
             if !known {
                 return Err(StoreError::UpgradeRequired {
                     format: "ticket store",
@@ -246,34 +253,65 @@ impl FsStore {
         Ok(serde_json::from_value(value)?)
     }
 
-    /// The on-disk path for a ticket id: `tickets/<2-char shard>/<ULID>.md`.
+    /// The on-disk path for a ticket id. Current stores use the final two random ULID
+    /// characters; an existing legacy prefix path remains readable until activation.
     pub fn ticket_path(&self, id: &Ulid) -> PathBuf {
-        let s = id.to_string();
+        let suffix = self.ticket_path_for_shard(id, SHARD_ID_SUFFIX_2);
+        if suffix.exists() {
+            return suffix;
+        }
+        let prefix = self.ticket_path_for_shard(id, SHARD_ID_PREFIX_2);
+        if prefix.exists() {
+            return prefix;
+        }
+        if self
+            .metadata()
+            .is_ok_and(|metadata| metadata.shard == SHARD_ID_PREFIX_2)
+        {
+            prefix
+        } else {
+            suffix
+        }
+    }
+
+    fn ticket_path_for_shard(&self, id: &Ulid, shard: &str) -> PathBuf {
+        let id = id.to_string();
+        let shard_name = match shard {
+            SHARD_ID_PREFIX_2 => &id[..2],
+            SHARD_ID_SUFFIX_2 => &id[id.len() - 2..],
+            _ => &id[id.len() - 2..],
+        };
         self.root
             .join("tickets")
-            .join(&s[..2])
-            .join(format!("{s}.md"))
+            .join(shard_name)
+            .join(format!("{id}.md"))
     }
 
     /// Write a ticket file (creating its shard directory), returning the path.
     ///
-    /// Opening a version-1 store remains read-compatible. Its first current write
-    /// upgrades every healthy ticket to the guarded schema before applying the
-    /// requested mutation. The guard is deliberately not parseable by pre-bounded-
-    /// notes binaries, so an already-built stale CLI/MCP fails before it can discard
-    /// note history.
+    /// Legacy prefix-sharded stores remain readable, but require explicit format
+    /// activation before a current writer can mutate them. This prevents a stale
+    /// process and a current process from creating two paths for the same ticket.
     pub fn write_ticket(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
         self.ensure_current_writer_format()?;
         self.write_ticket_unchecked(ticket)
     }
 
     fn write_ticket_unchecked(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
+        let path = self.ticket_path(&ticket.id);
+        self.write_ticket_unchecked_at(ticket, path)
+    }
+
+    fn write_ticket_unchecked_at(
+        &self,
+        ticket: &Ticket,
+        path: PathBuf,
+    ) -> Result<PathBuf, StoreError> {
         let mut normalized = ticket.clone();
         normalized.schema = SCHEMA_VERSION;
         if !normalized.status.is_active() {
             normalized.up_next = false;
         }
-        let path = self.ticket_path(&ticket.id);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|source| StoreError::IoAt {
                 operation: "creating ticket directory",
@@ -297,12 +335,14 @@ impl FsStore {
                 supported: STORE_SCHEMA_VERSION,
             });
         }
-        if metadata.schema_version == STORE_SCHEMA_VERSION {
-            // Numeric schema 2 is an intentional compatibility window for a store
-            // already owned by a running pre-guard process. Ordinary ticket writes
-            // must not silently replace its metadata with the guarded string and
-            // break that process underneath the user. New stores and actual
-            // schema-1 migrations still write the guarded marker.
+        if metadata.schema_version == STORE_SCHEMA_VERSION && metadata.shard == SHARD_ID_SUFFIX_2 {
+            return Ok(());
+        }
+        // Keep an already-running schema-2 store writable until its owner chooses the
+        // explicit activation boundary. Both old and current processes then continue
+        // using the same prefix path; merely rebuilding a client cannot split a ticket
+        // across prefix and suffix shards.
+        if metadata.schema_version == 2 && metadata.shard == SHARD_ID_PREFIX_2 {
             return Ok(());
         }
 
@@ -322,17 +362,33 @@ impl FsStore {
                 supported: STORE_SCHEMA_VERSION,
             });
         }
-        if metadata.schema_version == STORE_SCHEMA_VERSION {
+        if metadata.schema_version == STORE_SCHEMA_VERSION && metadata.shard == SHARD_ID_SUFFIX_2 {
             return Ok(());
         }
 
-        // Write guarded tickets first and the store-version marker last. An
-        // interrupted migration is safely repeatable, while marking the store first
-        // could strand still-legacy files as falsely protected.
-        for ticket in self.list_tickets_resilient()?.tickets {
-            self.write_ticket_unchecked(&ticket)?;
+        // Write each healthy ticket to its random-suffix destination before removing
+        // its old prefix path. Corrupt files remain exactly where they were so the
+        // recovery UI can still diagnose them. The metadata marker is written last,
+        // making an interrupted migration safely repeatable.
+        for source in self.ticket_file_paths()? {
+            let Ok(ticket) = self.read_ticket_at(&source) else {
+                continue;
+            };
+            let destination = self.ticket_path_for_shard(&ticket.id, SHARD_ID_SUFFIX_2);
+            self.write_ticket_unchecked_at(&ticket, destination.clone())?;
+            if source != destination {
+                fs::remove_file(&source).map_err(|source_error| StoreError::IoAt {
+                    operation: "removing migrated ticket path",
+                    path: source.clone(),
+                    source: source_error,
+                })?;
+                if let Some(parent) = source.parent() {
+                    let _ = fs::remove_dir(parent);
+                }
+            }
         }
         metadata.schema_version = STORE_SCHEMA_VERSION;
+        metadata.shard = SHARD_ID_SUFFIX_2.to_string();
         let json = serde_json::to_string_pretty(&metadata)?;
         fs::write(self.root.join(STORE_METADATA_FILE), format!("{json}\n"))?;
         Ok(())
@@ -978,7 +1034,8 @@ mod tests {
         let (dir, store) = temp_store();
         assert_eq!(store.metadata().unwrap(), StoreMetadata::new("HS"));
         let raw = fs::read_to_string(dir.path().join(STORE_METADATA_FILE)).unwrap();
-        assert!(raw.contains(r#""schemaVersion": "hotsheet/v2-guarded-tickets""#));
+        assert!(raw.contains(r#""schemaVersion": "hotsheet/v3-random-suffix-shards""#));
+        assert!(raw.contains(r#""shard": "id-suffix-2""#));
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct LegacyMetadata {
@@ -991,7 +1048,7 @@ mod tests {
     }
 
     #[test]
-    fn an_ordinary_write_preserves_a_numeric_schema_two_compatibility_window() {
+    fn schema_two_prefix_store_remains_read_write_compatible_until_explicit_activation() {
         let (_dir, store) = temp_store();
         let raw = r#"{
   "schemaVersion": 2,
@@ -1002,9 +1059,26 @@ mod tests {
 "#;
         fs::write(store.root().join(STORE_METADATA_FILE), raw).unwrap();
         let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        let legacy_path = store.ticket_path_for_shard(&ticket.id, SHARD_ID_PREFIX_2);
+        fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        fs::write(&legacy_path, to_file_string(&ticket)).unwrap();
+
+        assert_eq!(store.read_ticket(&ticket.id).unwrap(), ticket);
         store.write_ticket(&ticket).unwrap();
         let preserved = fs::read_to_string(store.root().join(STORE_METADATA_FILE)).unwrap();
         assert_eq!(preserved, raw);
+        assert!(legacy_path.is_file());
+        assert!(
+            !store
+                .ticket_path_for_shard(&ticket.id, SHARD_ID_SUFFIX_2)
+                .exists()
+        );
+
+        store.activate_current_format().unwrap();
+        let migrated = store.ticket_path_for_shard(&ticket.id, SHARD_ID_SUFFIX_2);
+        assert!(migrated.is_file());
+        assert!(!legacy_path.exists());
+        assert_eq!(store.read_ticket(&ticket.id).unwrap(), ticket);
     }
 
     #[test]
@@ -1012,7 +1086,7 @@ mod tests {
         let (_dir, store) = temp_store();
         let t = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
         let path = store.write_ticket(&t).unwrap();
-        assert!(path.ends_with("tickets/01/01ARZ3NDEKTSV4RRFFQ69G5FAV.md"));
+        assert!(path.ends_with("tickets/AV/01ARZ3NDEKTSV4RRFFQ69G5FAV.md"));
         assert_eq!(store.read_ticket(&t.id).unwrap(), t);
     }
 
@@ -1021,6 +1095,7 @@ mod tests {
         let (_dir, store) = temp_store();
         let mut metadata = store.metadata().unwrap();
         metadata.schema_version = 1;
+        metadata.shard = SHARD_ID_PREFIX_2.to_string();
         fs::write(
             store.root().join(STORE_METADATA_FILE),
             format!("{}\n", serde_json::to_string_pretty(&metadata).unwrap()),
@@ -1040,6 +1115,12 @@ mod tests {
             );
             plant_raw(&store, id, &legacy);
         }
+        let corrupt_id = ulid("3ZARZ3NDEKTSV4RRFFQ69G5FAA");
+        let corrupt_path = plant_raw(
+            &store,
+            &corrupt_id,
+            &missing_notes_end(&corrupt_id, "HS-BROKEN"),
+        );
 
         let mut changed = store.read_ticket(&ids[0]).unwrap();
         changed.title = "Current writer mutation".into();
@@ -1048,14 +1129,22 @@ mod tests {
             Err(StoreError::FormatActivationRequired { .. })
         ));
         store.activate_current_format().unwrap();
+        store.activate_current_format().unwrap();
         store.write_ticket(&changed).unwrap();
 
         assert_eq!(
             store.metadata().unwrap().schema_version,
             STORE_SCHEMA_VERSION
         );
+        assert_eq!(store.metadata().unwrap().shard, SHARD_ID_SUFFIX_2);
+        assert!(corrupt_path.is_file());
+        assert_eq!(store.list_tickets_resilient().unwrap().corrupt.len(), 1);
         for (index, id) in ids.iter().enumerate() {
-            let raw = fs::read_to_string(store.ticket_path(id)).unwrap();
+            let migrated = store.ticket_path_for_shard(id, SHARD_ID_SUFFIX_2);
+            let legacy = store.ticket_path_for_shard(id, SHARD_ID_PREFIX_2);
+            assert!(migrated.is_file());
+            assert!(!legacy.exists());
+            let raw = fs::read_to_string(migrated).unwrap();
             assert!(raw.contains("schema: hotsheet/v2-bounded-notes"));
             let reparsed = store.read_ticket(id).unwrap();
             assert_eq!(reparsed.notes.len(), 1);
@@ -1116,7 +1205,15 @@ mod tests {
         store.write_ticket(&b).unwrap();
         store.write_ticket(&a).unwrap();
         // A stray non-ticket file must be ignored.
-        fs::write(store.root().join("tickets/01/README.txt"), "ignore me").unwrap();
+        fs::write(
+            store
+                .ticket_path(&a.id)
+                .parent()
+                .unwrap()
+                .join("README.txt"),
+            "ignore me",
+        )
+        .unwrap();
 
         let listed = store.list_tickets().unwrap();
         assert_eq!(listed.len(), 2);
@@ -1216,7 +1313,7 @@ mod tests {
             &format!("---\nid: {truncated_id}\ntitle: t\nno closing fence\n"),
         );
         // A stray non-ticket file beside a corrupt one must be ignored, not reported.
-        fs::write(store.root().join("tickets/3Z/notes.txt"), "just some notes").unwrap();
+        fs::write(empty.parent().unwrap().join("notes.txt"), "just some notes").unwrap();
 
         let listing = store.list_tickets_resilient().unwrap();
         assert_eq!(listing.tickets.len(), 2, "both healthy tickets enumerate");

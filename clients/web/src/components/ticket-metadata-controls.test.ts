@@ -58,35 +58,27 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('data-attachment-drop-target="true"');
     expect(attachments).toContain('aria-label="Browse and add attachments"');
     expect(attachments).toContain('aria-label="Drop or browse attachments"');
-    expect(attachments).toContain('data-action="open-attachment"');
     expect(attachments).toContain('data-action="open-attachment-row"');
-    expect(attachments).toContain('data-action="download-attachment"');
-    expect(attachments).toContain('data-action="copy-attachment-reference"');
-    expect(attachments).toContain('data-action="remove-attachment"');
+    expect(attachments).toContain('data-action="open-attachment-menu"');
+    expect(attachments).toContain('data-attachment-menu-kind="item"');
     expect(attachments).toContain('class="ticket-attachments__image-grid"');
     expect(attachments).toContain('data-action="open-attachment-gallery"');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
     expect(css).toMatch(/ticket-attachments__image-grid img \{[^}]*object-fit: contain/);
-    for (const label of ['Open one.png', 'Download one.png', 'Copy reference to one.png', 'Remove one.png']) {
-      expect(attachments).toContain(`aria-label="${label}" title="${label}"`);
-    }
+    expect(attachments).toContain('aria-label="More actions for one.png" title="More actions for one.png"');
     expect(attachments).toContain('title="one.png — double-click to open"');
-    expect(attachments).toContain('data-lucide="external-link"');
-    expect(attachments).toContain('data-lucide="download"');
-    expect(attachments).toContain('data-lucide="clipboard"');
-    expect(attachments).toContain('data-lucide="trash-2"');
+    expect(attachments).toContain('data-lucide="more-horizontal"');
     const unsupported = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png' }], enabled: false }));
     expect(unsupported).toContain('does not support attachment actions');
     expect(unsupported).not.toContain('name="ticket-attachments"');
-    expect(unsupported).not.toContain('data-action="remove-attachment"');
+    expect(unsupported).not.toContain('data-action="open-attachment-menu"');
     expect(unsupported).not.toContain('data-action="open-attachment-row"');
   });
 
-  it('gives every attachment action visible hover and keyboard-focus feedback', () => {
+  it('gives the attachment menu trigger visible hover and keyboard-focus feedback', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(css).toContain('.ticket-inspector__attachment[data-action="open-attachment-row"]:hover');
-    expect(css).toContain('.ticket-inspector__attachment-actions button:hover, .ticket-inspector__attachment-actions button:focus-visible');
-    expect(css).toContain('.ticket-inspector__attachment-actions button:last-child:hover, .ticket-inspector__attachment-actions button:last-child:focus-visible');
+    expect(css).toContain('.ticket-inspector__attachment-menu:hover, .ticket-inspector__attachment-menu:focus-visible');
     expect(css).toContain('outline: var(--wa-focus-ring)');
   });
 });

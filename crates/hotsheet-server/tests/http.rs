@@ -1885,6 +1885,35 @@ async fn create_get_update_close_and_query() {
     assert_eq!(created["auto_context"][0]["source"], "category");
     assert_eq!(created["auto_context"][0]["key"], "bug");
 
+    let created_updated_at = created["updated_at"].clone();
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{slug}"),
+            Some(r#"{"up_next":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let unqueued = body_json(resp).await;
+    assert_eq!(unqueued["up_next"], false);
+    assert_eq!(unqueued["updated_at"], created_updated_at);
+
+    let resp = app
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/tickets/{slug}"),
+            Some(r#"{"up_next":true,"details":"mixed mutation"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let mixed = body_json(resp).await;
+    assert_eq!(mixed["up_next"], true);
+    assert_ne!(mixed["updated_at"], created_updated_at);
+
     // get (by slug)
     let resp = app
         .clone()

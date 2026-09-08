@@ -85,7 +85,7 @@ describe('TicketRow', () => {
     expect(column.indexOf('ticket-list-row__category')).toBeGreaterThan(column.indexOf('ticket-list-row__identity'));
     expect(column.indexOf('ticket-list-row__category')).toBeLessThan(column.indexOf('ticket-list-row__slug'));
     expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
-    expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 3\.9em/);
+    expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 5\.2em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__body[^}]*grid-template-columns: minmax\(0, 1fr\)/);
     expect(css).toMatch(/\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: \.65rem/);
     expect(css).toMatch(/\.ticket-list-row:hover \{ border-color: var\(--wa-color-brand-border-normal\); \}/);

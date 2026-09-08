@@ -15,6 +15,13 @@ export const TERMINAL_DASHBOARD_COLS=80;
 export const TERMINAL_DASHBOARD_ROWS=24;
 export const TERMINAL_PREVIEW_NATURAL_WIDTH=1280;
 export const TERMINAL_PREVIEW_NATURAL_HEIGHT=768;
+export const TERMINAL_PREVIEW_SCROLLBACK=0;
+export const TERMINAL_MAGNIFIED_SCROLLBACK=1_000;
+export const TERMINAL_DEDICATED_SCROLLBACK=5_000;
+export function terminalScrollbackLimit(displayMode:string|undefined,fixedDashboardGrid:boolean):number {
+  if(displayMode==='scaled-preview')return TERMINAL_PREVIEW_SCROLLBACK;
+  return fixedDashboardGrid?TERMINAL_MAGNIFIED_SCROLLBACK:TERMINAL_DEDICATED_SCROLLBACK;
+}
 export interface TerminalDashboardTypography {fontSize:number;letterSpacing:number;lineHeight:number}
 export function terminalDashboardTypography(current:TerminalDashboardTypography,screenWidth:number,screenHeight:number,targetWidth:number,targetHeight:number):TerminalDashboardTypography {
   if([screenWidth,screenHeight,targetWidth,targetHeight].some(value=>!Number.isFinite(value)||value<=0))return current;

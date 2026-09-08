@@ -59,7 +59,7 @@ test('represents the production terminal dashboard and its shared context menu i
 });
 
 test('represents interactive terminal visibility groups in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-visibility-dialog');const dialog=page.locator('[data-terminal-visibility-dialog]');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(dialog.getByRole('tab',{name:'Focus'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:'Add visibility group'}).click();const nameDialog=page.locator('[data-terminal-visibility-name-dialog]'),name=nameDialog.getByRole('textbox',{name:'Group name'});await expect(nameDialog).toHaveJSProperty('open',true);await expect(name).toBeFocused();await name.fill('Review');await nameDialog.getByRole('button',{name:'Add'}).click();await expect(nameDialog).toHaveJSProperty('open',false);const review=dialog.getByRole('tab',{name:'Review'});await expect(review).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:/Hide Development/}).click();await expect(dialog.getByRole('button',{name:/Show Development/})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-wf0xqa-transparent-tab-bar-demo-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-wf0xqa-transparent-tab-bar-demo-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:900});await review.click({button:'right'});const menu=dialog.getByRole('menu',{name:'Visibility group actions'});await expect(menu.getByText('Rename…')).toBeVisible();await expect(menu.getByText('Delete')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-wf0xqa-visibility-dialog-demo.png',fullPage:true});
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-visibility-dialog');const show=page.getByRole('button',{name:'Show / Hide Terminals'}),dialog=page.locator('[data-terminal-visibility-dialog]');await expect(show).toBeVisible();await expect(dialog).toHaveJSProperty('open',false);await show.click();await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await expect(dialog.getByRole('tab',{name:'Focus'})).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:'Add visibility group'}).click();const nameDialog=page.locator('[data-terminal-visibility-name-dialog]'),name=nameDialog.getByRole('textbox',{name:'Group name'});await expect(nameDialog).toHaveJSProperty('open',true);await expect(name).toBeFocused();await name.fill('Review');await nameDialog.getByRole('button',{name:'Add'}).click();await expect(nameDialog).toHaveJSProperty('open',false);const review=dialog.getByRole('tab',{name:'Review'});await expect(review).toHaveAttribute('aria-selected','true');await dialog.getByRole('button',{name:/Hide Development/}).click();await expect(dialog.getByRole('button',{name:/Show Development/})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-z0m2vv-visibility-demo-open-wide.png',fullPage:true});await page.keyboard.press('Escape');await expect(dialog).toHaveJSProperty('open',false);await expect(show).toBeVisible();await show.click();await expect(dialog).toHaveJSProperty('open',true);await page.setViewportSize({width:390,height:844});await expect(dialog.locator('.terminal-visibility-dialog__toolbar')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-z0m2vv-visibility-demo-open-narrow.png',fullPage:true});await page.setViewportSize({width:1280,height:900});await review.click({button:'right'});const menu=dialog.getByRole('menu',{name:'Visibility group actions'});await expect(menu.getByText('Rename…')).toBeVisible();await expect(menu.getByText('Delete')).toBeVisible();
 });
 
 test('captures, reviews, cancels, and submits dev-review feedback', async ({ page }) => {
@@ -546,6 +546,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const list = page.getByRole('listbox', { name: 'Example ticket list' });
   const listRows = list.locator('[data-component="ticket-list-row"]');
   await expect(listRows).toHaveCount(20);
+  const emptyExamples=page.getByLabel('TicketList empty states');await expect(emptyExamples.getByText('No tickets yet')).toBeVisible();await expect(emptyExamples.getByText('No tickets in Backlog')).toBeVisible();await expect(emptyExamples.getByText('No tickets match “parser”')).toBeVisible();
   await expect(list.locator('..')).toHaveCSS('border-radius', '10.4px');
   const listRow = listRows.first();
   await expect(listRow).toHaveAttribute('data-presentation', 'list');
@@ -563,6 +564,12 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(listRows.first()).toHaveCSS('border-radius', '10.4px 10.4px 0px 0px');
   await expect(listRows.nth(1)).toHaveCSS('border-radius', '0px');
   await expect(listRows.last()).toHaveCSS('border-radius', '0px 0px 10.4px 10.4px');
+  await list.evaluate(node => { (node.parentElement as HTMLElement).style.width = '320px'; });
+  await expect(listRows.first()).toHaveCSS('border-radius', '10.4px 10.4px 0px 0px');
+  await expect(listRows.nth(1)).toHaveCSS('border-radius', '0px');
+  await expect(listRows.last()).toHaveCSS('border-radius', '0px 0px 10.4px 10.4px');
+  await list.screenshot({ path: '/private/tmp/hs2-y4de25-narrow-list-edge-rounding.png' });
+  await list.evaluate(node => { (node.parentElement as HTMLElement).style.width = ''; });
   await expect(listRow).toHaveCSS('box-shadow', 'none');
   await listRow.click();
   await expect(listRow).toHaveAttribute('data-selected', 'true');
@@ -585,6 +592,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('listbox', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
+  const emptyBoard=page.getByRole('listbox',{name:'Empty search board'});await expect(emptyBoard.locator('[data-component="ticket-empty-state"]')).toHaveCount(1);await expect(emptyBoard.getByText('No tickets match “parser”')).toBeVisible();
   expect(await board.locator('.ticket-board-column__header').evaluateAll(headers => headers.map(header => header.getBoundingClientRect().height))).toEqual([32, 32, 32]);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
@@ -623,7 +631,12 @@ test('uses the identical responsive TicketRow in list and board compositions', a
     const style = getComputedStyle(node);
     return { lineHeight: Number.parseFloat(style.lineHeight), maxHeight: Number.parseFloat(style.maxHeight) };
   });
-  expect(columnTitleMetrics.maxHeight / columnTitleMetrics.lineHeight).toBeCloseTo(3, 1);
+  expect(columnTitleMetrics.maxHeight / columnTitleMetrics.lineHeight).toBeCloseTo(4, 1);
+  const longColumnRow = board.locator('[data-ticket-slug="HS2-SG1BKJ"]');
+  const longColumnTitle = longColumnRow.locator('.ticket-list-row__identity strong');
+  await longColumnRow.scrollIntoViewIfNeeded();
+  expect(await longColumnTitle.evaluate(node => node.getClientRects().length)).toBe(4);
+  await longColumnRow.screenshot({ path: '/private/tmp/hs2-0tfhhs-four-line-column-title-wide.png' });
   const boardWidth = await narrowRow.evaluate(node => node.getBoundingClientRect().width);
   expect(boardWidth).toBeLessThan(384);
   await expect(narrowRow).toHaveCSS('border-radius', '10.4px');
@@ -659,10 +672,11 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   const columnStage = page.locator('.collection-demo--column');
   const columnDemo = page.locator('[data-component="ticket-board-column"]');
   await expect(columnStage).toHaveCSS('min-width', '250px');
-  expect((await columnDemo.boundingBox())!.width).toBeGreaterThanOrEqual(250);
-  await expect(columnDemo).toHaveCount(1);
-  await expect(columnDemo.getByLabel('7 tickets')).toBeVisible();
-  await expect(columnDemo.locator('.ticket-board-column__tickets')).toHaveCSS('overflow-y', 'auto');
+  expect((await columnDemo.first().boundingBox())!.width).toBeGreaterThanOrEqual(250);
+  await expect(columnDemo).toHaveCount(2);
+  await expect(columnDemo.first().getByLabel('7 tickets')).toBeVisible();
+  await expect(columnDemo.first().locator('.ticket-board-column__tickets')).toHaveCSS('overflow-y', 'auto');
+  await expect(columnDemo.nth(1).getByText('No tickets in Completed')).toBeVisible();
 });
 
 test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {
@@ -732,6 +746,9 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(page.getByText('Sorted by priority, ascending')).toBeVisible();
   await expect(sortSelect).toHaveJSProperty('value', 'priority');
   await expect(sortSelect.locator('.select__custom-selected [data-lucide="arrow-up-narrow-wide"]')).toBeVisible();
+  const ascendingPriorities = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__priority').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')?.split(' ')[0]));
+  expect(ascendingPriorities.map(value => ['low','default','high','urgent'].indexOf(value ?? ''))).toEqual([...ascendingPriorities].map(value => ['low','default','high','urgent'].indexOf(value ?? '')).sort((a,b)=>a-b));
+  await page.screenshot({path:'/private/tmp/hs2-5avfng-priority-ascending.png',fullPage:true});
   const ascendingTitles = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__identity strong').allTextContents();
   await sortSelect.click();
   await prioritySort.click();
@@ -739,14 +756,15 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(sortSelect.locator('.select__custom-selected [data-lucide="arrow-down-wide-narrow"]')).toBeVisible();
   const descendingTitles = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__identity strong').allTextContents();
   expect(descendingTitles).toEqual([...ascendingTitles].reverse());
-  for (const [value,firstIcon,secondIcon] of [['title','arrow-down-a-z','arrow-up-a-z'],['status','list-sort-ascending','list-sort-descending'],['updated','clock-arrow-down','clock-arrow-up']] as const) {
+  const statusOption=sortSelect.locator('wa-option[value="status"]');if(!await statusOption.isVisible())await sortSelect.click();await expect(statusOption).toBeVisible();await statusOption.click();const ascendingStatuses=await page.getByRole('listbox',{name:'Workspace tickets'}).locator('[data-component="ticket-list-row"]').evaluateAll(nodes=>nodes.map(node=>(node as HTMLElement).dataset.status));expect(ascendingStatuses.map(value=>['backlog','not_started','started','completed','verified','archive'].indexOf(value??''))).toEqual([...ascendingStatuses].map(value=>['backlog','not_started','started','completed','verified','archive'].indexOf(value??'')).sort((a,b)=>a-b));await page.screenshot({path:'/private/tmp/hs2-4penqq-status-ascending.png',fullPage:true});
+  for (const [value,firstIcon,secondIcon] of [['title','arrow-down-a-z','arrow-up-a-z'],['updated','clock-arrow-down','clock-arrow-up']] as const) {
     const option=sortSelect.locator(`wa-option[value="${value}"]`);await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.select__custom-selected [data-lucide="${firstIcon}"]`)).toBeVisible();await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.select__custom-selected [data-lucide="${secondIcon}"]`)).toBeVisible();
   }
   await page.setViewportSize({width:1024,height:600});await sortSelect.click();await page.screenshot({path:'/private/tmp/hs2-0dcczk-sort-select-floor.png',fullPage:true});await page.keyboard.press('Escape');
   await header.getByRole('button', { name: 'Settings view' }).click();
   await expect(header.getByRole('button', { name: 'Settings view' })).toHaveAttribute('aria-pressed', 'true');
   await expect(sortSelect).toHaveAttribute('disabled', '');
-  for (const name of ['Favorite view', 'More workspace actions', 'Search tickets']) await expect(header.getByRole('button', { name })).toHaveAttribute('disabled', '');
+  for (const name of ['Toggle Up Next for selected tickets', 'More actions for selected tickets', 'Search tickets']) await expect(header.getByRole('button', { name })).toHaveAttribute('disabled', '');
   await expect(page.getByRole('region', { name: 'Project settings' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Workspace board' })).toHaveCount(0);
   await header.getByRole('button', { name: 'List view' }).click();
@@ -1064,27 +1082,10 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
     await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`)).first()).toBeVisible();
   }
   await page.goto('/ux-demo?component=ticket-attachments');
-  const actions = page.locator('[data-attachment-id="demo-video"] .ticket-inspector__attachment-actions button');
-  await expect(actions).toHaveCount(4);
-  const labels = ['Open choppy.mov', 'Download choppy.mov', 'Copy reference to choppy.mov', 'Remove choppy.mov'];
-  for (const [index, button] of (await actions.all()).entries()) {
-    await expect(button).toHaveAttribute('aria-label', labels[index]);
-    await expect(button).toHaveAttribute('title', labels[index]);
-    const icon = button.locator('svg');
-    await expect(icon).toBeVisible();
-    const [buttonBox, iconBox] = await Promise.all([button.boundingBox(), icon.boundingBox()]);
-    expect(iconBox!.width).toBeLessThan(buttonBox!.width);
-    expect(iconBox!.height).toBeLessThan(buttonBox!.height);
-    await button.hover();
-    await expect(button).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  }
-  await page.screenshot({ path: '/private/tmp/hs2-pngaw7-attachment-actions-ux-wide.png' });
+  const item=page.locator('[data-attachment-id="demo-video"]'),trigger=item.getByRole('button',{name:'More actions for choppy.mov'});await expect(item.getByRole('button')).toHaveCount(1);await expect(trigger).toHaveAttribute('title','More actions for choppy.mov');await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();await trigger.click();let menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu.locator('[data-component="menu-item"]')).toHaveCount(4);await expect(menu.getByRole('menuitem').allTextContents()).resolves.toEqual(['Open','Download','Copy reference','Remove']);
+  await page.screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-ux-wide.png' });await menu.getByRole('menuitem',{name:'Copy reference'}).click();await expect(menu).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(actions).toHaveCount(4);
-  await actions.first().scrollIntoViewIfNeeded();
-  await actions.first().hover();
-  for (const button of await actions.all()) await expect(button.locator('svg')).toBeVisible();
-  await page.locator('[data-component="ticket-attachments"]').screenshot({ path: '/private/tmp/hs2-pngaw7-attachment-actions-ux-narrow.png' });
+  await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.locator('[data-component="menu-item"]')).toHaveCount(4);await page.screenshot({ path: '/private/tmp/hs2-vqvf5b-attachment-menu-ux-narrow.png',fullPage:true });
 });
 
 test('navigates and zooms the standalone attachment gallery demo',async({page})=>{

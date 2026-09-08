@@ -61,6 +61,7 @@
 
   /* Hot Sheet domain states have no generic Web Awesome equivalent. */
   --hs-shell-divider: var(--wa-color-neutral-border-normal);
+  --hs-toolbar-control-dark-border: #353536;
   --hs-ticket-state-needs-review: #cb30e0;
   --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
   --hs-terminal-background: #000;

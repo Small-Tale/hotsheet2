@@ -193,8 +193,9 @@ does not introduce polling or another network request.
   compact shared `Select` sort control whose popup carries simple direction arrows while
   its tightly spaced trigger uses a semantic field-and-direction icon and accessible
   label without clipping the chevron, and toggles
-  ascending/descending
-  direction when reselected, and a connected list/column/settings workspace. When its owning
+  ascending/descending direction when reselected. Status follows workflow order, ascending
+  priority runs from low through urgent, and list/column views remember independent sort
+  settings. The demo connects those controls to its list/column/settings workspace. When its owning
   toolbar narrows, lower-priority utility and sort controls yield first; search and then the view
   switcher yield only at otherwise unusable widths. Actions remain contained without clipping
   downward-opening popovers. The star applies Up Next to the current selection and the
@@ -319,6 +320,8 @@ always retain native clipboard behavior.
   range, arrow-key range extension, and Select All semantics and no parallel row
   markup; it fills the width supplied by its host (which owns the standard workspace
   margins), and the list shell and its first/last rows share rounded outer corners
+  - composes the shared `TicketEmptyState` when no healthy or corrupt row exists,
+    with distinct new-project, empty-view, searching, and no-match language
   - later data integration: virtualization for exceptionally large result sets
   - incremental paging and live insertion/reordering
   - `TicketListSection` where grouping is active
@@ -385,7 +388,9 @@ always retain native clipboard behavior.
   flat, elevation-free, idle-borderless `TicketRow` at narrow width. The deterministic demo carries enough live tickets to
   overflow all columns; each ticket region scrolls independently while its heading and
   count remain fixed. A hosting workspace may add its own surrounding surface when
-  appropriate.
+  appropriate. If the whole board is empty, it retains the column headings and places
+  one shared `TicketEmptyState` across the board body; nonempty boards instead use a
+  concise per-column placeholder for each individually empty column.
 - `TicketBoardColumn` — **demo built**: owns one heading, count derived from its ticket
   collection, fixed header, independently scrolling ticket region, visible scroll
   affordance, and a full-width heading control that selects every ticket in that column.
@@ -393,8 +398,8 @@ always retain native clipboard behavior.
   control has an explicit compact 2rem height, so native heading metrics cannot expand
   the board's header track.
   It also has a standalone demo that preserves the 250px production minimum and shared
-  responsive `TicketRow` composition. Loading, empty, and mutation-error variants are
-  tracked by HS2-0W67Y6.
+  responsive `TicketRow` composition. Its empty variant composes the compact shared
+  `TicketEmptyState`; loading and mutation-error variants are tracked by HS2-0W67Y6.
 - The real Queue board uses `Not Started`, `Started`, `Completed`, and `Verified`
   columns. A per-project setting can hide `Verified`, merging those tickets into
   `Completed`. Backlog and Archive views each use one eponymous column because the
@@ -519,7 +524,9 @@ multi-selection placeholders keep the divider to preserve their intentional stat
 - `TicketTagsSection` — **built**: controlled chips with capability-aware removal,
   duplicate-safe creation, and native autocomplete suggestions shared by inspector
   and reader
-- `TicketAttachmentsSection` — **built**: complete attachment action list plus a
+- `TicketAttachmentsSection` — **built**: a single accessible Lucide ellipsis per file,
+  with click/right-click parity through the shared MenuItem-based Open, Download, Copy
+  reference, and Remove context menu, plus a
   responsive, wrapping 160px square contained image-preview grid feeding the shared full-screen
   arrow/keyboard/swipe gallery
 - `TicketNotesSection`
@@ -806,19 +813,24 @@ xterm retains a fixed 1280×768 natural geometry and the complete terminal is un
 scaled into the tile instead of being refit to the tile. This keeps the PTY stable as grid
 zoom changes and keeps the preview, inset frame, and unused terminal area on the terminal
 background color. Only the black viewport follows that 5:3 aspect; the tile card adds its
-measured spacing-token inset, border, and footer height outside the viewport. A plain activation
+measured spacing-token inset, border, and footer height outside the viewport. `FixedAspectTerminalCard`
+owns this structure for both grid-preview and magnified-interactive variants. It withholds the
+xterm surface until bounded font-metric fitting is stable, so transitions do not expose each
+intermediate fitting pass. A plain activation
 magnifies and focuses an interactive copy in place over the same grid; clicking the surrounding
 overlay or pressing Escape restores the grid. A double
 activation, or Open from the tile's shared MenuItem-based context menu, jumps to that
 project and selects the terminal in a maximized drawer. The same context menu offers Hide
-Terminal. Tiles have no permanent special-action buttons. These actions must never spawn a
+Terminal. A permanent Lucide ellipsis footer button opens the same shared Open/Hide menu as
+right-click. These actions must never spawn a
 second PTY. The eye opens `TerminalVisibilityDialog`, built from the shared dialog, Select,
 MenuHeader, and MenuItem vocabulary. Adding prompts for the name before creation; pill tabs
 select groups and named-tab context menus rename or delete them, while Default has no context
 menu. Each row toggles one terminal and Hide all / Show all act on the selected group. An
 adjacent compact label Select switches immediately, while an eye badge reports the active
 group's hidden count. The project drawer always shows its local terminals and exposes no
-visibility controls.
+visibility controls. Its UX demo initially presents an explicit Show / Hide Terminals button;
+the dialog opens only after activation and can be dismissed and reopened repeatedly.
 New terminals appear in Default and begin hidden in named groups. Visibility and grouping
 changes never destroy sessions. The focused magnified or drawer consumer
 must reclaim its fitted dimensions after leaving the dashboard. Focus, resize claims,

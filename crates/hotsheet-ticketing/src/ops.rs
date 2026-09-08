@@ -414,7 +414,8 @@ pub struct TicketPatch {
 }
 
 /// Apply a patch to an existing ticket and write it. A move to a terminal status
-/// stamps `completed_at`/`verified_at`. Bumps `updated_at` to `now`.
+/// stamps `completed_at`/`verified_at`. Bumps `updated_at` to `now` when any
+/// substantive state changes; changing only `up_next` preserves it.
 pub fn update(
     store: &FsStore,
     id: &Ulid,
@@ -422,6 +423,7 @@ pub fn update(
     patch: TicketPatch,
 ) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
+    let before = t.clone();
     let previous_status = t.status;
     if let Some(v) = patch.title {
         t.title = v;
@@ -489,9 +491,19 @@ pub fn update(
         t.up_next = false;
         clear_claim_fields(&mut t);
     }
-    t.updated_at = now;
+    if has_substantive_change(&before, &t) {
+        t.updated_at = now;
+    }
     store.write_ticket_committing(&t)?;
     Ok(t)
+}
+
+fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
+    let mut before = before.clone();
+    let after = after.clone();
+    before.up_next = after.up_next;
+    before.updated_at = after.updated_at.clone();
+    before != after
 }
 
 fn clear_claim_fields(ticket: &mut Ticket) {
@@ -2042,6 +2054,117 @@ mod tests {
             .unwrap()
             .is_empty()
         );
+    }
+
+    #[test]
+    fn up_next_only_preserves_updated_at_across_adversarial_status_transitions() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        create(
+            &store,
+            id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "Stable chronology".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let queued = update(
+            &store,
+            &id,
+            ts("2026-08-19T01:00:00Z"),
+            TicketPatch {
+                up_next: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(queued.up_next);
+        assert_eq!(queued.updated_at.as_str(), "2026-08-19T00:00:00Z");
+
+        let unqueued = update(
+            &store,
+            &id,
+            ts("2026-08-19T02:00:00Z"),
+            TicketPatch {
+                up_next: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!unqueued.up_next);
+        assert_eq!(unqueued.updated_at, queued.updated_at);
+
+        let mixed = update(
+            &store,
+            &id,
+            ts("2026-08-19T03:00:00Z"),
+            TicketPatch {
+                title: Some("Substantive chronology".into()),
+                up_next: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(mixed.up_next);
+        assert_eq!(mixed.updated_at.as_str(), "2026-08-19T03:00:00Z");
+
+        let completed = update(
+            &store,
+            &id,
+            ts("2026-08-19T04:00:00Z"),
+            TicketPatch {
+                status: Some(Status::Completed),
+                up_next: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!completed.up_next);
+        assert_eq!(completed.updated_at.as_str(), "2026-08-19T04:00:00Z");
+
+        let inactive_requeue = update(
+            &store,
+            &id,
+            ts("2026-08-19T05:00:00Z"),
+            TicketPatch {
+                up_next: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!inactive_requeue.up_next);
+        assert_eq!(inactive_requeue.updated_at, completed.updated_at);
+
+        let reopened = update(
+            &store,
+            &id,
+            ts("2026-08-19T06:00:00Z"),
+            TicketPatch {
+                status: Some(Status::Started),
+                up_next: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(reopened.up_next);
+        assert_eq!(reopened.updated_at.as_str(), "2026-08-19T06:00:00Z");
+
+        let no_op_substantive_patch = update(
+            &store,
+            &id,
+            ts("2026-08-19T07:00:00Z"),
+            TicketPatch {
+                title: Some(reopened.title.clone()),
+                up_next: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(no_op_substantive_patch.updated_at, reopened.updated_at);
     }
 
     fn store_pfx(prefix: &str) -> (tempfile::TempDir, FsStore) {

@@ -1,0 +1,4 @@
+.attachment-context-menu { position: fixed; z-index: 1410; display: grid; width: 14rem; max-width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); padding: var(--wa-space-2xs); overflow: auto; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
+.attachment-context-menu hr { width: calc(100% - 1.1rem); margin: var(--wa-space-2xs) .55rem; border: 0; border-top: 1px solid var(--wa-color-surface-border); }
+.attachment-context-menu .attachment-context-menu__danger { color: var(--wa-color-danger-on-quiet); }
+.attachment-context-menu .attachment-context-menu__danger:hover, .attachment-context-menu .attachment-context-menu__danger:focus-visible { background: var(--wa-color-danger-fill-normal); }

@@ -23,6 +23,51 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn edit_preserves_updated_at_for_up_next_only_but_not_mixed_mutations() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    let slug = new_ticket(p, "Stable chronology");
+    let updated_at = |output: &[u8]| {
+        String::from_utf8_lossy(output)
+            .lines()
+            .find_map(|line| line.strip_prefix("updated_at: "))
+            .unwrap()
+            .to_string()
+    };
+    let show = || {
+        hs(p)
+            .args(["show", &slug])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone()
+    };
+
+    let created_at = updated_at(&show());
+    hs(p).args(["edit", &slug, "--up-next"]).assert().success();
+    assert_eq!(updated_at(&show()), created_at);
+
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--title",
+            "Changed chronology",
+            "--no-up-next",
+        ])
+        .assert()
+        .success();
+    let substantively_updated_at = updated_at(&show());
+    assert_ne!(substantively_updated_at, created_at);
+
+    hs(p).args(["edit", &slug, "--up-next"]).assert().success();
+    assert_eq!(updated_at(&show()), substantively_updated_at);
+}
+
+#[test]
 fn reopening_verified_ticket_starts_a_fresh_completion_cycle() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
@@ -110,11 +155,36 @@ fn format_activation_requires_an_explicit_pre_release_acknowledgement() {
         .args(["init", "--prefix", "HS"])
         .assert()
         .success();
+    let slug = new_ticket(dir.path(), "Migrate my shard");
+    let store = hotsheet_ticketing::FsStore::open(dir.path()).unwrap();
+    let ticket = store
+        .list_tickets()
+        .unwrap()
+        .into_iter()
+        .find(|ticket| ticket.slug == slug)
+        .unwrap();
+    let suffix_path = store.ticket_path(&ticket.id);
+    let id = ticket.id.to_string();
+    let prefix_path = dir
+        .path()
+        .join("tickets")
+        .join(&id[..2])
+        .join(format!("{id}.md"));
+    std::fs::create_dir_all(prefix_path.parent().unwrap()).unwrap();
+    std::fs::rename(&suffix_path, &prefix_path).unwrap();
     std::fs::write(
         dir.path().join("hotsheet-store.json"),
-        r#"{"schemaVersion":1,"ticketPrefix":"HS","idStrategy":"ulid","shard":"id-prefix-2"}"#,
+        r#"{"schemaVersion":2,"ticketPrefix":"HS","idStrategy":"ulid","shard":"id-prefix-2"}"#,
     )
     .unwrap();
+
+    hs(dir.path()).args(["show", &slug]).assert().success();
+    hs(dir.path())
+        .args(["edit", &slug, "--title", "Still writable before activation"])
+        .assert()
+        .success();
+    assert!(prefix_path.is_file());
+    assert!(!suffix_path.exists());
 
     hs(dir.path())
         .arg("activate-format")
@@ -136,6 +206,12 @@ fn format_activation_requires_an_explicit_pre_release_acknowledgement() {
             .schema_version,
         hotsheet_ticketing::STORE_SCHEMA_VERSION,
     );
+    assert!(suffix_path.is_file());
+    assert!(!prefix_path.exists());
+    hs(dir.path())
+        .args(["edit", &slug, "--title", "Writable after activation"])
+        .assert()
+        .success();
 }
 
 #[test]

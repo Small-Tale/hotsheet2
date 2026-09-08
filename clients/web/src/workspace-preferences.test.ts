@@ -12,8 +12,10 @@ describe('workspace preferences', () => {
     const stored = JSON.stringify({ viewMode: 'board', sort: 'priority', sidebarVisible: false, inspectorVisible: false, commandGroupExpanded: false });
     expect(loadWorkspacePreferences({ getItem: () => stored })).toEqual({
       viewMode: 'board',
-      sort: 'priority',
-      sortDirection: 'ascending',
+      sorts: {
+        list: { sort: 'priority', sortDirection: 'ascending' },
+        board: { sort: 'priority', sortDirection: 'ascending' },
+      },
       sidebarVisible: false,
       inspectorVisible: false,
       commandGroupExpanded: false,
@@ -26,16 +28,20 @@ describe('workspace preferences', () => {
     const values = new Map<string, string>();
     saveWorkspacePreferences({ setItem: (key, value) => values.set(key, value) }, {
       viewMode: 'settings',
-      sort: 'title',
-      sortDirection: 'descending',
+      sorts: {
+        list: { sort: 'title', sortDirection: 'descending' },
+        board: { sort: 'priority', sortDirection: 'ascending' },
+      },
       sidebarVisible: false,
       inspectorVisible: true,
       commandGroupExpanded: false,
     });
     expect(loadWorkspacePreferences({ getItem: key => values.get(key) ?? null })).toEqual({
       viewMode: 'settings',
-      sort: 'title',
-      sortDirection: 'descending',
+      sorts: {
+        list: { sort: 'title', sortDirection: 'descending' },
+        board: { sort: 'priority', sortDirection: 'ascending' },
+      },
       sidebarVisible: false,
       inspectorVisible: true,
       commandGroupExpanded: false,

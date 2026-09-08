@@ -29,6 +29,7 @@ describe('TicketBoard', () => {
     expect(markup).toContain('aria-label="0 tickets"');
     expect(markup.match(/data-component="ticket-list-row"/g)).toHaveLength(1);
     expect(markup).toContain('data-presentation="column"');
+    expect(markup).toContain('No tickets in Done');
     expect(markup).not.toContain('ticket-card');
   });
 
@@ -66,5 +67,10 @@ describe('TicketBoard', () => {
 
   it('maps the Not Started column id to the wire status used by ticket drops', () => {
     expect(String(TicketBoardColumn({ id: 'not-started', title: 'Not Started', tickets: [] }))).toContain('data-ticket-drop-status="not_started"');
+  });
+
+  it('shows one differentiated board-wide placeholder when every column is empty',()=>{
+    const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[]},{id:'started',title:'Started',tickets:[]}],emptyState:{kind:'search',query:'missing'}}));
+    expect(markup.match(/data-component="ticket-empty-state"/g)).toHaveLength(1);expect(markup).toContain('No tickets match “missing”');expect(markup).not.toContain('No tickets in Started');
   });
 });

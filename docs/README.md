@@ -136,7 +136,7 @@ and don't imply reading order — read by group.
 > SwiftUI macOS → iOS → Android · plugin-only AI tools.
 >
 > **Round-2 confirmations (2026-08-19, §9.11):** one server per machine · per-project
-> MCP shim · close-reason open/closed axis · id-prefix sharding · PTY sizing
+> MCP shim · close-reason open/closed axis · random-suffix sharding · PTY sizing
 > focus-follows · assignment = git email + committed `people.json` + one control +
 > soft review · orchestration **live-mount only** (no auto-clone) · multi-machine =
 > **git-native self-claim** (ref/tag CAS, no coordinator) · UI = **Kerf (`kerfjs`) + Web Awesome Core** (validated custom-element stack; see 06 §6.3 / 09 §9.5) · deferred

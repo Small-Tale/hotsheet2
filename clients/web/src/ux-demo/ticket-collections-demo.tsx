@@ -64,6 +64,11 @@ export function toggleCollectionTicketUpNext(slug: string): void {
 export function TicketListDemo() {
   return <section class="collection-demo" aria-label="TicketList demo">
     <TicketList tickets={collectionTickets.value} label="Example ticket list" />
+    <div class="collection-demo__empty-states" aria-label="TicketList empty states">
+      <article><h3>New project</h3><TicketList tickets={[]} emptyState={{kind:'project'}} label="Empty new project"/></article>
+      <article><h3>Empty view</h3><TicketList tickets={[]} emptyState={{kind:'view',viewLabel:'Backlog'}} label="Empty Backlog"/></article>
+      <article><h3>No search results</h3><TicketList tickets={[]} emptyState={{kind:'search',query:'parser'}} label="Empty search"/></article>
+    </div>
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
     <p class="component-stage__guidance">The list gives TicketRow the full content width for fast scanning while preserving the same selection and metadata contract used in columns.</p>
   </section>;
@@ -78,6 +83,7 @@ export function TicketBoardDemo() {
   ];
   return <section class="collection-demo collection-demo--board" aria-label="TicketBoard demo">
     <TicketBoard columns={columns} label="Example status board" />
+    <article class="collection-demo__empty-board"><h3>Empty search</h3><TicketBoard columns={columns.map(column=>({...column,tickets:[]}))} emptyState={{kind:'search',query:'parser'}} label="Empty search board"/></article>
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
     <p class="component-stage__guidance">Each narrow column activates TicketRow’s own card presentation; no TicketCard component or parallel summary markup is involved.</p>
   </section>;
@@ -87,6 +93,7 @@ export function TicketBoardColumnDemo() {
   const tickets = collectionTickets.value.filter(ticket => ticket.status === 'started');
   return <section class="collection-demo collection-demo--column" aria-label="TicketBoardColumn demo">
     <TicketBoardColumn id="in-progress-demo" title="In progress" tickets={tickets} />
+    <TicketBoardColumn id="empty-demo" title="Completed" tickets={[]} />
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>
     <p class="component-stage__guidance">The column owns its fixed heading, derived count, independently scrollable ticket region, and shared responsive TicketRow composition.</p>
   </section>;

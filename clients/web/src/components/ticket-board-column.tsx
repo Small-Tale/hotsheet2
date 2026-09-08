@@ -1,5 +1,6 @@
 import './ticket-board-column.css';
 
+import { TicketEmptyState } from './ticket-empty-state';
 import { TicketRow, type TicketRowProps } from './ticket-row';
 
 export interface TicketBoardColumnProps {
@@ -7,9 +8,16 @@ export interface TicketBoardColumnProps {
   title: string;
   tickets: TicketRowProps[];
   selectionRoot?: boolean;
+  emptyPlaceholder?: boolean;
 }
 
-export function TicketBoardColumn({ id, title, tickets, selectionRoot = true }: TicketBoardColumnProps) {
+export function TicketBoardColumn({
+  id,
+  title,
+  tickets,
+  selectionRoot = true,
+  emptyPlaceholder = true,
+}: TicketBoardColumnProps) {
   const dropStatus = id === 'not-started' ? 'not_started' : id;
   return <section class="ticket-board-column" data-key={`ticket-column:${id}`} data-component="ticket-board-column" data-column-id={id} data-ticket-drop-status={dropStatus} aria-label={`${title} column`}>
     <header>
@@ -19,7 +27,9 @@ export function TicketBoardColumn({ id, title, tickets, selectionRoot = true }: 
       </button></h2>
     </header>
     <div class="ticket-board-column__tickets" data-key={`ticket-column-scroll:${id}`} data-ticket-scroll-owner={`column:${id}`} data-ticket-selection-root={selectionRoot ? 'true' : undefined} role={selectionRoot ? 'listbox' : 'group'} aria-label={`${title} tickets`} aria-multiselectable={selectionRoot ? 'true' : undefined}>
-      {tickets.map(ticket => <TicketRow {...ticket} presentation="column" />)}
+      {tickets.length === 0 && emptyPlaceholder
+        ? <TicketEmptyState kind="view" viewLabel={title} compact />
+        : tickets.map(ticket => <TicketRow {...ticket} presentation="column" />)}
     </div>
   </section>;
 }

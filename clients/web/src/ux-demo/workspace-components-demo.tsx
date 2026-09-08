@@ -9,6 +9,7 @@ import { type InspectorTab,TicketInspector } from '../components/ticket-inspecto
 import { TicketList } from '../components/ticket-list';
 import type { TicketRowProps } from '../components/ticket-row';
 import { applyWorkspaceSortDirection, defaultWorkspaceSortDirection, WorkspaceHeader, type WorkspaceSort, type WorkspaceSortDirection, type WorkspaceViewMode } from '../components/workspace-header';
+import { compareWorkspaceTickets } from '../workspace-ticket-sort';
 import { editingNoteId, inspectorBlockedReason, inspectorBlockedReasonDraft, inspectorBlockedReasonEditing, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
 import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 
@@ -52,14 +53,9 @@ export function focusWorkspaceSearch(root: ParentNode): boolean {
 export function filteredWorkspaceTickets(): TicketRowProps[] {
   const query = workspaceSearchQuery.value.trim().toLocaleLowerCase();
   const tickets = query ? collectionTickets.value.filter(ticket => `${ticket.slug} ${ticket.title} ${ticket.tags.join(' ')}`.toLocaleLowerCase().includes(query)) : collectionTickets.value;
-  const priority = { urgent: 0, high: 1, default: 2, low: 3 } as const;
-  return [...tickets].sort((left, right) => applyWorkspaceSortDirection(
-    workspaceSort.value === 'priority' ? priority[left.priority] - priority[right.priority] || left.slug.localeCompare(right.slug)
-      : workspaceSort.value === 'title' ? left.title.localeCompare(right.title) || left.slug.localeCompare(right.slug)
-        : workspaceSort.value === 'status' ? left.status.localeCompare(right.status) || left.slug.localeCompare(right.slug)
-          : collectionTickets.value.indexOf(right) - collectionTickets.value.indexOf(left),
-    workspaceSortDirection.value,
-  ));
+  return [...tickets].sort((left, right) => workspaceSort.value === 'updated'
+    ? applyWorkspaceSortDirection(collectionTickets.value.indexOf(right) - collectionTickets.value.indexOf(left), workspaceSortDirection.value)
+    : compareWorkspaceTickets(left, right, workspaceSort.value, workspaceSortDirection.value));
 }
 
 export function workspaceColumns(tickets = filteredWorkspaceTickets()): TicketColumnProps[] {

@@ -51,7 +51,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup, plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, modern-CSS-color normalization for the legacy screenshot renderer, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)
-    src/components/          #   Production domain UI components, including stable A/B ContentTransition, TerminalDashboard/TerminalDrawer/TerminalVisibilityDialog, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
+    src/components/          #   Production domain UI components, including stable A/B ContentTransition, AttachmentContextMenu, TerminalDashboard/TerminalDrawer/TerminalVisibilityDialog, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
     src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
@@ -85,7 +85,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/merge.rs           #   merge_tickets: semantic 3-way merge (field-by-field/set-union/notes-union/reviews-union-by-ULID/body) behind `hotsheet merge-driver` (HS2-18, HS2-20)
       src/sync.rs            #   sync_once: one fetch → rebase-through-merge-driver → push cycle (offline/conflict-tolerant) behind `hotsheet sync` (HS2-19)
       src/ports.rs           #   Clock, Rng (FileSystem/GitLocal/... to come)
-      src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; schema-1 first-write migration to the stale-writer-resistant guarded schema 2; list_tickets_resilient -> StoreListing{tickets,corrupt:Vec<CorruptTicket>} so one unparseable file never blocks project open (HS2-PRVPCQ); git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
+      src/store.rs           #   FsStore: init/open/read/write/list + StoreMetadata; explicit schema-1/2 migration to guarded random-suffix schema 3; list_tickets_resilient -> StoreListing{tickets,corrupt:Vec<CorruptTicket>} so one unparseable file never blocks project open (HS2-PRVPCQ); git-diff fast path (head_commit/is_working_tree_clean/changed_ticket_ids_between, HS2-90)
       src/registry.rs        #   StoreRegistry: resolve a ULID across multiple stores, follow moved_to_store tombstones (docs/02 §2.2.1, HS2-4)
       src/settings.rs        #   Settings: global (${HOTSHEET_HOME}) / shared (committed) / local (gitignored) scopes; effective precedence global<shared<local (HS2-34)
       src/auto_context.rs    #   HS1-compatible category/tag guidance defaults + override/suppression/matching (HS2-BZBVAS)
@@ -220,7 +220,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 
 ## Data / formats
 
-- **Ticket file:** `tickets/<2-char shard>/<ULID>.md` — YAML frontmatter + explicitly
+- **Ticket file:** `tickets/<final 2 ULID characters>/<ULID>.md` — YAML frontmatter + explicitly
   bounded, collision-escaped Markdown body (`details`) and notes. Notes have stable
   ULIDs, five kinds, and `created_at`/`edited_at`; legacy one-sided note files remain
   readable and migrate deterministically. Schema: [17](17-ticket-file-format.md).
@@ -228,8 +228,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   `{id, filename, created_at}` lives in ticket frontmatter. Legacy direct children use
   deterministic metadata based on ticket identity, never filesystem mtime.
 - **Store metadata:** `hotsheet-store.json` (camelCase: guarded `schemaVersion`,
-  `ticketPrefix`, `idStrategy`, `shard`). The schema-2 string marker deliberately
-  blocks stale numeric-schema writers from creating legacy tickets. See
+  `ticketPrefix`, `idStrategy`, `shard`). The schema-3 string marker protects the
+  random-suffix layout from stale prefix-shard writers. See
   `store.rs::StoreMetadata`.
 - **Settings:** `hotsheet-settings.json` (shared, committed) + `hotsheet-settings.local.json`
   (local, gitignored), plus **global** `${HOTSHEET_HOME}/settings.json` (machine-wide) —

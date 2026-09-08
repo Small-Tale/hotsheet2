@@ -40,6 +40,15 @@ describe('TicketList', () => {
     expect(css).toContain('margin-top: -1px');
   });
 
+  it('keeps narrow-list rounding on the outer edges rather than every row', () => {
+    const listCss = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
+    const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
+    const narrowListRule = rowCss.match(/\.ticket-list-row--list \{([^}]*)\}/)?.[1] ?? '';
+    expect(narrowListRule).not.toContain('border-radius');
+    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row { border-radius: .65rem .65rem 0 0; }');
+    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 .65rem .65rem; }');
+  });
+
   it('fills the width supplied by its host instead of imposing an internal cap', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-list.css'), 'utf8');
     const listRule = css.match(/\.ticket-list \{([^}]*)\}/)?.[1] ?? '';

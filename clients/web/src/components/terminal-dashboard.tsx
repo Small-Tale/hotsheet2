@@ -1,7 +1,7 @@
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './terminal-dashboard.css';
 
-import { ExternalLink, Eye, EyeOff, Minus, Plus } from 'lucide';
+import { Ellipsis, ExternalLink, Eye, EyeOff, Minus, Plus } from 'lucide';
 
 import { terminalDrawerGridLayout, terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
 import type { TerminalVisibilityGroup } from '../terminal-visibility';
@@ -57,16 +57,18 @@ export function TerminalDashboardControls({ hiddenCount = 0,visibilityGroups=[],
   </div>;
 }
 
-function TerminalTile({ session, magnified = false, dashboardPreview = false }: {session:TerminalDashboardSession;magnified?:boolean;dashboardPreview?:boolean}) {
+export function FixedAspectTerminalCard({ session, mode = 'preview' }: {session:TerminalDashboardSession;mode?:'preview'|'magnified'}) {
   const key = keyFor(session);
+  const dashboardPreview=mode==='preview',magnified=mode==='magnified';
   const preview = terminalPreviewText(session.scrollback) || 'Terminal is ready.';
   const viewport=<div class={`terminal-viewport${dashboardPreview?' terminal-viewport--scaled-preview':''}`} data-key={`${dashboardPreview?'preview':'viewport'}:${key}`} data-morph-skip data-component="terminal-viewport" data-project-id={session.projectId} data-terminal-id={session.id} data-display-mode={dashboardPreview?'scaled-preview':'interactive'} data-grid-policy="dashboard-80x24" aria-hidden={dashboardPreview?'true':undefined} aria-label={dashboardPreview?undefined:`${session.title??session.id} interactive terminal`}></div>;
   return <article class="terminal-tile" data-key={key} data-component="terminal-tile" data-terminal-key={key} data-busy={String(session.busy)} data-alive={String(session.alive)} data-magnified={String(magnified)} data-preview-only={String(dashboardPreview)} data-action={dashboardPreview?'preview-terminal':undefined} tabindex={dashboardPreview?'0':undefined} aria-label={dashboardPreview?`Preview ${session.title??session.id}`:undefined}>
-    <div class="terminal-tile__preview"><pre>{preview}</pre>{dashboardPreview?<div class="terminal-tile__viewport-frame">{viewport}</div>:viewport}</div>
+    <div class="terminal-tile__preview"><pre>{preview}</pre><div class="terminal-tile__viewport-frame">{viewport}</div></div>
     <footer class="terminal-tile__footer">
       <span class="terminal-tile__state" aria-label={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'} title={session.busy ? 'Busy' : session.alive ? 'Idle' : 'Exited'}></span>
       <button type="button" class="terminal-tile__identity" data-action="open-terminal-project" data-item-id={key} aria-label={`Open ${session.title??session.id} in ${session.projectName}`}><strong>{session.projectName}<span aria-hidden="true"> › </span>{session.title ?? session.id}</strong></button>
       {session.progress !== undefined && <span class="terminal-tile__progress">{session.progress}%</span>}
+      <button type="button" class="terminal-tile__menu" data-action="open-terminal-context-menu" data-item-id={key} aria-label={`More actions for ${session.title??session.id}`} title="More actions"><LucideIcon icon={Ellipsis} name="ellipsis"/></button>
       {magnified&&<button type="button" class="terminal-tile__open" data-action="open-terminal-project" data-terminal-key={key} aria-label={`Open ${session.title??session.id} in project terminal drawer`} title="Open in project terminal drawer"><LucideIcon icon={ExternalLink} name="external-link"/></button>}
     </footer>
   </article>;
@@ -80,7 +82,7 @@ export function TerminalSession({ session }: {session:TerminalDashboardSession})
 
 function Grid({ sessions, layout }: {sessions:TerminalDashboardSession[];layout:ReturnType<typeof terminalGridLayout>}) {
   const style = `--terminal-tile-width:${layout.tileWidth}px;--terminal-tile-height:${layout.tileHeight}px;--terminal-grid-fit:${layout.fit}`;
-  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{sessions.map(session => <TerminalTile session={session} dashboardPreview/>)}</div>;
+  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{sessions.map(session => <FixedAspectTerminalCard session={session}/>)}</div>;
 }
 
 export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, grouping = 'flow',layoutMode='responsive', magnifiedKey, hiddenKeys = [], loading = false, message = '',contextMenu }: TerminalDashboardProps) {
@@ -97,7 +99,7 @@ export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, g
       <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="out" disabled={layout.fit >= layout.max} aria-label={`Zoom out, fit more terminals ${layout.basis}`} title="Zoom out"><LucideIcon icon={Minus} name="minus" /></button>
       <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="in" disabled={layout.fit <= 1} aria-label={`Zoom in, fit fewer terminals ${layout.basis}`} title="Zoom in"><LucideIcon icon={Plus} name="plus" /></button>
     </div>
-    {magnified && <div class="terminal-dashboard__magnified" role="dialog" aria-modal="true" aria-label={`Magnified ${magnified.title ?? magnified.id}`} data-action="dismiss-magnified-terminal"><TerminalTile session={magnified} magnified /></div>}
+    {magnified && <div class="terminal-dashboard__magnified" role="dialog" aria-modal="true" aria-label={`Magnified ${magnified.title ?? magnified.id}`} data-action="dismiss-magnified-terminal"><FixedAspectTerminalCard session={magnified} mode="magnified" /></div>}
     {contextMenu&&<div class="terminal-dashboard__context-menu" data-component="terminal-context-menu" role="menu" style={`left:${contextMenu.x}px;top:${contextMenu.y}px`} data-terminal-key={contextMenu.key}><wa-dropdown-item data-action="open-terminal-project" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={ExternalLink} name="external-link"/></span>Open</wa-dropdown-item><wa-dropdown-item data-action="hide-dashboard-terminal" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={EyeOff} name="eye-off"/></span>Hide Terminal</wa-dropdown-item></div>}
   </section>;
 }
