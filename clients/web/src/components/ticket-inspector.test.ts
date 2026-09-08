@@ -103,7 +103,7 @@ describe('TicketInspector', () => {
   it('keeps attachment names shrinkable while preserving the compact menu trigger', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(css).toContain('.ticket-inspector__attachment { display: flex; width: 100%; min-width: 0;');
-    expect(css).toContain('span:nth-child(2) { min-width: 0; overflow: hidden; flex: 1;');
+    expect(css).toContain('.ticket-inspector__attachment > span { min-width: 0; overflow: hidden; flex: 1;');
     expect(css).toContain('.ticket-inspector__attachment-menu { display: inline-grid; width: 1.75rem; height: 1.75rem; margin-left: auto;');
   });
 
