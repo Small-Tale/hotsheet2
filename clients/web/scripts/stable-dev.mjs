@@ -59,22 +59,27 @@ async function main() {
   console.log('Workspace edits will be visible after this command is restarted.');
 
   let stoppingSignal;
+  const signalHandlers = new Map();
   for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.on(signal, () => {
+    const handler = () => {
       if (stoppingSignal) return;
       stoppingSignal = signal;
       child.kill(signal);
-    });
+    };
+    signalHandlers.set(signal, handler);
+    process.on(signal, handler);
   }
-  child.on('error', error => {
-    console.error(error);
-    process.exitCode = 1;
+  const result = await new Promise((resolveClose, rejectClose) => {
+    child.once('error', rejectClose);
+    child.once('close', (code, signal) => resolveClose({ code, signal }));
   });
-  child.on('close', async (code, signal) => {
+  try {
     await removeStableSnapshot(snapshotRoot);
-    const exitSignal = stoppingSignal ?? signal;
-    process.exitCode = code ?? (exitSignal === 'SIGINT' ? 130 : 143);
-  });
+  } finally {
+    for (const [signal, handler] of signalHandlers) process.off(signal, handler);
+  }
+  const exitSignal = stoppingSignal ?? result.signal;
+  process.exitCode = result.code ?? (exitSignal === 'SIGINT' ? 130 : 143);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -33,14 +33,6 @@ async function waitForSource(url) {
   throw lastError ?? new Error(`Timed out waiting for ${url}`);
 }
 
-async function waitForEmptyDirectory(path) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if ((await readdir(path)).length === 0) return;
-    await new Promise(resolveWait => setTimeout(resolveWait, 20));
-  }
-  expect(await readdir(path)).toEqual([]);
-}
-
 it('serves the startup snapshot until the stable dev process restarts', async () => {
   const fixture = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-e2e-'));
   const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
@@ -108,7 +100,7 @@ it('does not reload when a later route first imports another dependency', async 
     await browser.close();
     child.kill('SIGTERM');
     await new Promise(resolveExit => child.once('exit', resolveExit));
-    await waitForEmptyDirectory(runtimeTemp);
+    expect(await readdir(runtimeTemp)).toEqual([]);
     await rm(runtimeTemp, { recursive: true, force: true });
   }
 }, 30_000);
