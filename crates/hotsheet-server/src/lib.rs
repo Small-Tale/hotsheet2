@@ -1016,6 +1016,10 @@ pub fn app(state: AppState) -> Router {
         // Terminals (HS2-A6R5QV): open a PTY, list them, feed input, read the scrollback,
         // kill one — the HTTP attach surface over the in-process TerminalManager.
         .route("/terminals", get(list_terminals).post(open_terminal))
+        .route(
+            "/terminal-settings",
+            get(get_terminal_settings).put(put_terminal_settings),
+        )
         .route("/terminals/{id}", get(read_terminal).delete(kill_terminal))
         .route("/terminals/{id}/input", post(write_terminal))
         // Activity timeline (HS2-KP31ZE): ingest a tool's activity event, and read the
@@ -3766,6 +3770,46 @@ struct OpenTerminalReq {
     connect: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+struct TerminalSettings {
+    #[serde(default)]
+    inherit_global_shell_history: bool,
+}
+
+fn read_terminal_settings(state: &AppState) -> Result<TerminalSettings, ApiError> {
+    let inherit_global_shell_history = Settings::new(state.store.root())
+        .get(
+            INHERIT_GLOBAL_SHELL_HISTORY_SETTING,
+            hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    Ok(TerminalSettings {
+        inherit_global_shell_history,
+    })
+}
+
+async fn get_terminal_settings(
+    State(state): State<AppState>,
+) -> Result<Json<TerminalSettings>, ApiError> {
+    Ok(Json(read_terminal_settings(&state)?))
+}
+
+async fn put_terminal_settings(
+    State(state): State<AppState>,
+    Json(value): Json<TerminalSettings>,
+) -> Result<Json<TerminalSettings>, ApiError> {
+    Settings::new(state.store.root())
+        .set(
+            INHERIT_GLOBAL_SHELL_HISTORY_SETTING,
+            serde_json::Value::Bool(value.inherit_global_shell_history),
+            hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(value))
+}
+
 /// One terminal as reported by `GET /terminals`.
 #[derive(Serialize)]
 struct TerminalInfo {
@@ -3833,8 +3877,8 @@ async fn open_terminal(
     State(state): State<AppState>,
     Json(req): Json<OpenTerminalReq>,
 ) -> Result<Json<TerminalInfo>, ApiError> {
-    let launch = terminal_launch(&state, &req)?;
-    let id = req.id.unwrap_or_else(|| Ulid::new().to_string());
+    let id = req.id.clone().unwrap_or_else(|| Ulid::new().to_string());
+    let launch = terminal_launch(&state, &req, &id)?;
 
     // Broker mode: the PTY lives in the detached broker (survives a server restart).
     if let Some(tb) = &state.terminal_broker {
@@ -3908,19 +3952,21 @@ struct PreparedTerminalLaunch {
 fn terminal_launch(
     state: &AppState,
     req: &OpenTerminalReq,
+    terminal_id: &str,
 ) -> Result<PreparedTerminalLaunch, ApiError> {
     if let Some(command) = &req.command {
         return Ok(PreparedTerminalLaunch {
             command: command.clone(),
             args: req.args.clone(),
-            env: Vec::new(),
+            env: terminal_shell_history_env(state, req, terminal_id, command)?,
         });
     }
     let Some(tool) = req.connect.as_deref() else {
+        let command = user_default_shell();
         return Ok(PreparedTerminalLaunch {
-            command: user_default_shell(),
+            env: terminal_shell_history_env(state, req, terminal_id, &command)?,
+            command,
             args: req.args.clone(),
-            env: Vec::new(),
         });
     };
     let root = state.store.root();
@@ -3967,6 +4013,203 @@ fn user_default_shell() -> String {
         .filter(|value| !value.is_empty())
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_else(|| fallback.to_string())
+}
+
+const INHERIT_GLOBAL_SHELL_HISTORY_SETTING: &str = "terminal.inherit_global_shell_history";
+
+fn terminal_history_home() -> std::path::PathBuf {
+    std::env::var_os("HOTSHEET_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".hotsheet2"))
+        })
+        .unwrap_or_else(std::env::temp_dir)
+        .join("terminal-history")
+}
+
+fn history_key(value: &str) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(value.as_bytes()))[..16].to_string()
+}
+
+fn shell_history_environment(
+    history_home: &FsPath,
+    project: &FsPath,
+    terminal_id: &str,
+    command: &str,
+    inherit: bool,
+) -> std::io::Result<Vec<(String, String)>> {
+    if inherit {
+        return Ok(Vec::new());
+    }
+    let shell = FsPath::new(command)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(command)
+        .trim_start_matches('-');
+    let project_key = history_key(&project.to_string_lossy());
+    let terminal_key = history_key(terminal_id);
+    match shell {
+        "bash" => {
+            let directory = history_home.join(&project_key).join(&terminal_key);
+            std::fs::create_dir_all(&directory)?;
+            Ok(vec![(
+                "HISTFILE".into(),
+                directory
+                    .join(format!("{shell}_history"))
+                    .to_string_lossy()
+                    .into_owned(),
+            )])
+        }
+        "zsh" => {
+            let directory = history_home.join(&project_key).join(&terminal_key);
+            let zdotdir = directory.join("zdotdir");
+            let history = directory.join("zsh_history");
+            std::fs::create_dir_all(&zdotdir)?;
+            let original = std::env::var_os("ZDOTDIR")
+                .map(std::path::PathBuf::from)
+                .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from));
+            let quoted = |path: &FsPath| path.to_string_lossy().replace('\'', "'\\''");
+            for name in [".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout"] {
+                let source = original
+                    .as_ref()
+                    .map(|root| root.join(name))
+                    .filter(|path| path != &zdotdir.join(name));
+                let source_line = source.map_or_else(String::new, |path| {
+                    format!(
+                        "[[ -r '{}' ]] && source '{}'\n",
+                        quoted(&path),
+                        quoted(&path)
+                    )
+                });
+                std::fs::write(
+                    zdotdir.join(name),
+                    format!(
+                        "{source_line}export ZDOTDIR='{}'\nexport HISTFILE='{}'\nexport SHELL_SESSIONS_DISABLE=1\n",
+                        quoted(&zdotdir),
+                        quoted(&history)
+                    ),
+                )?;
+            }
+            Ok(vec![
+                ("HISTFILE".into(), history.to_string_lossy().into_owned()),
+                ("ZDOTDIR".into(), zdotdir.to_string_lossy().into_owned()),
+                ("SHELL_SESSIONS_DISABLE".into(), "1".into()),
+            ])
+        }
+        // Fish selects a durable history file by session name. Keeping XDG_DATA_HOME intact
+        // preserves the user's functions and universal variables while isolating recall.
+        "fish" => Ok(vec![(
+            "fish_history".into(),
+            format!("hotsheet_{project_key}_{terminal_key}"),
+        )]),
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn terminal_shell_history_env(
+    state: &AppState,
+    req: &OpenTerminalReq,
+    terminal_id: &str,
+    command: &str,
+) -> Result<Vec<(String, String)>, ApiError> {
+    let inherit = read_terminal_settings(state)?.inherit_global_shell_history;
+    let project = req
+        .cwd
+        .as_deref()
+        .map(FsPath::new)
+        .unwrap_or_else(|| state.store.root());
+    shell_history_environment(
+        &terminal_history_home(),
+        project,
+        terminal_id,
+        command,
+        inherit,
+    )
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("preparing terminal history: {error}"),
+        )
+    })
+}
+
+#[cfg(test)]
+mod terminal_history_tests {
+    use super::shell_history_environment;
+    #[test]
+    fn isolates_bash_and_zsh_by_project_and_terminal_with_restart_stable_paths() {
+        let home = tempfile::tempdir().unwrap();
+        let project_a = home.path().join("project-a");
+        let project_b = home.path().join("project-b");
+        let bash_a =
+            shell_history_environment(home.path(), &project_a, "one", "/bin/bash", false).unwrap();
+        let bash_again =
+            shell_history_environment(home.path(), &project_a, "one", "/bin/bash", false).unwrap();
+        let bash_other_terminal =
+            shell_history_environment(home.path(), &project_a, "two", "/bin/bash", false).unwrap();
+        let bash_other_project =
+            shell_history_environment(home.path(), &project_b, "one", "/bin/bash", false).unwrap();
+        let zsh =
+            shell_history_environment(home.path(), &project_a, "one", "/bin/zsh", false).unwrap();
+        assert_eq!(bash_a, bash_again);
+        assert_ne!(bash_a, bash_other_terminal);
+        assert_ne!(bash_a, bash_other_project);
+        assert!(bash_a[0].1.ends_with("bash_history"));
+        assert!(
+            zsh.iter()
+                .any(|(key, value)| key == "HISTFILE" && value.ends_with("zsh_history"))
+        );
+        assert!(
+            zsh.iter()
+                .any(|(key, value)| key == "SHELL_SESSIONS_DISABLE" && value == "1")
+        );
+        let zdotdir = zsh.iter().find(|(key, _)| key == "ZDOTDIR").unwrap();
+        assert!(std::path::Path::new(&zdotdir.1).join(".zshrc").is_file());
+        if std::path::Path::new("/bin/zsh").is_file() {
+            let output = std::process::Command::new("/bin/zsh")
+                .args(["-ic", "print -r -- $HISTFILE"])
+                .envs(zsh.iter().cloned())
+                .output()
+                .unwrap();
+            let printed = String::from_utf8_lossy(&output.stdout);
+            assert_eq!(
+                printed.trim(),
+                zsh.iter().find(|(key, _)| key == "HISTFILE").unwrap().1
+            )
+        }
+        assert!(
+            std::path::Path::new(&bash_a[0].1)
+                .parent()
+                .unwrap()
+                .is_dir()
+        )
+    }
+    #[test]
+    fn gives_fish_a_stable_isolated_session_and_supports_global_opt_out() {
+        let home = tempfile::tempdir().unwrap();
+        let project = home.path().join("project");
+        let fish = shell_history_environment(
+            home.path(),
+            &project,
+            "terminal-1",
+            "/opt/homebrew/bin/fish",
+            false,
+        )
+        .unwrap();
+        assert_eq!(fish[0].0, "fish_history");
+        assert!(fish[0].1.starts_with("hotsheet_"));
+        assert!(
+            shell_history_environment(home.path(), &project, "terminal-1", "/bin/zsh", true)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            shell_history_environment(home.path(), &project, "terminal-1", "python", false)
+                .unwrap()
+                .is_empty()
+        )
+    }
 }
 
 /// Register a launched-in-terminal tool as a `Pty` connection on the shared registry and

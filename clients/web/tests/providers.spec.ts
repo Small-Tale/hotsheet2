@@ -29,6 +29,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   const evidenceByTicket = new Map<string,Array<{id:string;filename:string;created_at:string}>>();
   const patches: Record<string,unknown>[] = [];
   let commandDefinitions=[{id:'check',title:'Run checks',program:'/usr/bin/true',args:[],group:'Quality'}];
+  let terminalSettings={inherit_global_shell_history:false};
   let commandRuns:Array<{id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:Array<{seq:number;stream:string;text:string}>}>=[];
   let createdTerminal=false;
   const closedTerminals=new Set<string>();
@@ -52,6 +53,8 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/connections')&&request.method()==='GET')return route.fulfill({json:[]});
     if(path.endsWith('/commands')&&request.method()==='GET')return route.fulfill({json:commandDefinitions});
     if(path.endsWith('/commands')&&request.method()==='PUT'){commandDefinitions=request.postDataJSON();return route.fulfill({json:commandDefinitions})}
+    if(path.endsWith('/terminal-settings')&&request.method()==='GET')return route.fulfill({json:terminalSettings});
+    if(path.endsWith('/terminal-settings')&&request.method()==='PUT'){terminalSettings=request.postDataJSON();return route.fulfill({json:terminalSettings})}
     if(path.endsWith('/command-runs')&&request.method()==='GET')return route.fulfill({json:commandRuns});
     if(path.endsWith('/terminals')&&request.method()==='POST'){createdTerminal=true;return route.fulfill({json:{id:'terminal-new',alive:true,busy:false,cwd:'/work/demo'}})}
     if(path.endsWith('/terminals')&&request.method()==='GET')return route.fulfill({json:[{id:'codex-main',alive:true,busy:true,cwd:'/work/demo',progress:68},{id:'tests',alive:true,busy:false,cwd:'/work/demo'},...(createdTerminal?[{id:'terminal-new',alive:true,busy:false,cwd:'/work/demo'}]:[])].filter(item=>!closedTerminals.has(item.id))});
@@ -1090,6 +1093,10 @@ test('keeps backlog and archived tickets out of the active Queue',async({page})=
   await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.getByText('Archived ticket')).toHaveCount(0);
   await page.getByRole('button',{name:/Backlog/}).click();const backlog=page.locator('[data-ticket-slug="HS2-BACK01"]'),menu=page.getByRole('menu',{name:'Ticket actions'});await expect(backlog).toBeVisible();await backlog.click({button:'right'});await expect(menu.locator('[data-context-action="Move to Backlog"]')).toHaveAttribute('disabled','');await expect(menu.locator('[data-context-action="Archive ticket"]')).not.toHaveAttribute('disabled','');await page.keyboard.press('Escape');await expect(page.getByText('Use real project tickets')).toHaveCount(0);await page.getByRole('button',{name:'New ticket…'}).click();await page.getByRole('textbox',{name:'Ticket title'}).fill('Created directly in backlog');await page.getByRole('button',{name:'Create ticket'}).click();const created=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');await expect(created).toBeVisible();await expect(created).toHaveAttribute('data-status','backlog');
   await page.getByRole('button',{name:/Archive/}).click();for(const slug of ['HS2-ARCH01','HS2-DEL001','HS2-MOVED1']){const archived=page.locator(`[data-ticket-slug="${slug}"]`);await expect(archived).toBeVisible();await archived.click({button:'right'});await expect(menu.locator('[data-context-action="Archive ticket"]')).toHaveAttribute('disabled','');await expect(menu.locator('[data-context-action="Move to Backlog"]')).not.toHaveAttribute('disabled','');await page.keyboard.press('Escape')}await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
+});
+
+test('stores the shell-history inheritance opt-out locally and applies it only to new terminals',async({page})=>{
+  const writes:Array<{inherit_global_shell_history:boolean}>=[];await mockProject(page);page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/terminal-settings'))writes.push(request.postDataJSON())});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Terminals',exact:true}).click();const option=page.getByLabel('Use my global shell history');await expect(option).not.toBeChecked();await expect(page.getByText(/each terminal keeps private/)).toBeVisible();await option.check();await expect.poll(()=>writes).toEqual([{inherit_global_shell_history:true}]);await expect(page.getByRole('status')).toContainText('Saved locally. New terminals will use this setting.');await page.screenshot({path:'/private/tmp/hs2-a5v801-terminal-history-setting-wide.png',fullPage:true});await page.setViewportSize({width:760,height:700});await page.screenshot({path:'/private/tmp/hs2-a5v801-terminal-history-setting-narrow.png',fullPage:true});
 });
 
 test('searches indexed ticket details and notes without discarding the full project list',async({page})=>{

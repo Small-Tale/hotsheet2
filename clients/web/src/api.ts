@@ -25,6 +25,7 @@ export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:st
 export interface PermissionRequest {id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean}
 export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}
 export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;link?:string;progress?:number}
+export interface TerminalSettings {inherit_global_shell_history:boolean}
 export interface TerminalRead extends TerminalInfo {scrollback:string}
 export interface CommandDefinition {id:string;title:string;program:string;args:string[];group?:string;confirmation?:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}
@@ -71,6 +72,8 @@ export class Api {
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
   activeToolConnections=()=>this.request<ToolConnection[]>('/connections');
   terminals=()=>this.request<TerminalInfo[]>('/terminals');
+  terminalSettings=()=>this.request<TerminalSettings>('/terminal-settings');
+  saveTerminalSettings=(value:TerminalSettings)=>this.request<TerminalSettings>('/terminal-settings',{method:'PUT',body:JSON.stringify(value)});
   terminal=(id:string)=>this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
   createTerminal=(value:{id?:string;command?:string;args?:string[];cwd?:string;connect?:string}={})=>this.request<TerminalInfo>('/terminals',{method:'POST',body:JSON.stringify(value)});
   deleteTerminal=(id:string)=>this.request<void>(`/terminals/${encodeURIComponent(id)}`,{method:'DELETE'});

@@ -419,6 +419,9 @@ hotsheet settings get <key> [--scope shared|local]
 hotsheet settings set <key> <value> [--scope shared|local]
 hotsheet settings list [--scope shared|local]
 ```
+Terminal history isolation is the default. The explicit opt-out is local-only:
+`hotsheet-cli settings set terminal.inherit_global_shell_history true --scope local`.
+The browser's Project Settings → Terminals control writes the same key.
 
 The **HS1→HS2 migrator is a separate, disposable bundled tool** (may be Node),
 **not** part of this long-lived CLI — it runs once per old project and is retired

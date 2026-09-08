@@ -4,7 +4,7 @@ use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
 use hotsheet_server::source_revision::{SourceRevisionMonitor, revision_for_source_root};
 use hotsheet_server::{AppState, MAX_ATTACHMENT_BODY_BYTES, app};
-use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, StoreMetadata};
+use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, Scope, Settings, StoreMetadata};
 use http_body_util::BodyExt;
 use std::collections::{HashMap, VecDeque};
 use std::convert::Infallible;
@@ -40,6 +40,45 @@ fn authed(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
 async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).unwrap()
+}
+
+#[tokio::test]
+async fn terminal_history_opt_out_is_machine_local_and_round_trips() {
+    let (dir, state) = state();
+    let router = app(state);
+    let initial = router
+        .clone()
+        .oneshot(authed("GET", "/terminal-settings", None))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(initial).await,
+        serde_json::json!({"inherit_global_shell_history":false})
+    );
+    let saved = router
+        .oneshot(authed(
+            "PUT",
+            "/terminal-settings",
+            Some(r#"{"inherit_global_shell_history":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(saved).await,
+        serde_json::json!({"inherit_global_shell_history":true})
+    );
+    assert_eq!(
+        Settings::new(dir.path())
+            .get("terminal.inherit_global_shell_history", Scope::Local)
+            .unwrap(),
+        Some(serde_json::Value::Bool(true))
+    );
+    assert!(
+        std::fs::read_to_string(dir.path().join(".gitignore"))
+            .unwrap()
+            .lines()
+            .any(|line| line == "hotsheet-settings.local.json")
+    );
 }
 
 #[tokio::test]

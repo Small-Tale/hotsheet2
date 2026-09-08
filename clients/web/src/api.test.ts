@@ -74,6 +74,10 @@ describe('terminal dashboard transport',()=>{
   });
 });
 
+describe('terminal settings transport',()=>{
+  it('keeps the global-history opt-out behind a machine-local host API',async()=>{const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response('{"inherit_global_shell_history":true}',{status:200}));const api=new Api('/api');await expect(api.terminalSettings()).resolves.toEqual({inherit_global_shell_history:true});await api.saveTerminalSettings({inherit_global_shell_history:false});expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/terminal-settings',expect.any(Object));expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/terminal-settings',expect.objectContaining({method:'PUT',body:'{"inherit_global_shell_history":false}'}));fetchMock.mockRestore()});
+});
+
 describe('ticket search transport',()=>{
   it('sends trimmed text through the comprehensive checkout query',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('[]',{status:200}));

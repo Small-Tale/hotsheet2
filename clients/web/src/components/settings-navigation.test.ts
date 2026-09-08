@@ -8,6 +8,7 @@ describe('SettingsNavigation', () => {
     expect(markup).toContain('aria-label="Settings categories"');
     expect(markup).toContain('data-item-id="sources"');
     expect(markup).toContain('data-item-id="commands"');
+    expect(markup).toContain('data-item-id="terminals"');
     expect(markup).toContain('data-item-id="permissions" aria-current="page"');
     expect(markup).toContain('data-item-id="columns"');
     expect(markup).toContain('aria-label="Hide settings sidebar"');
@@ -17,6 +18,7 @@ describe('SettingsNavigation', () => {
   it('uses the same category labels for navigation and workspace headings', () => {
     expect(settingsCategoryTitle('sources')).toBe('Ticket sources');
     expect(settingsCategoryTitle('commands')).toBe('Commands');
+    expect(settingsCategoryTitle('terminals')).toBe('Terminals');
     expect(settingsCategoryTitle('permissions')).toBe('Permissions');
     expect(settingsCategoryTitle('columns')).toBe('Column view');
   });

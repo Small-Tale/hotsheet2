@@ -882,8 +882,12 @@ checkout/project and terminal id. Two terminals therefore do not silently share 
 and one project's commands do not enter another project's history. A local-only terminal
 preference may explicitly inherit the user's normal global shell history when that is
 more useful. The terminal host owns shell-specific environment wiring and persistence;
-no history path or command content is committed to a ticket store. Implementation is
-tracked by HS2-A5V801.
+no history path or command content is committed to a ticket store. The built host hashes
+the checkout path and terminal id into stable machine-local identities: bash and zsh use
+separate `HISTFILE` paths under the Hot Sheet home, while fish uses a separate durable
+`fish_history` session name. Project Settings → Terminals exposes the local-only **Use my
+global shell history** opt-out; it affects newly created terminals and persists as
+`terminal.inherit_global_shell_history` in `hotsheet-settings.local.json` (HS2-A5V801).
 
 ## 6.8 Notes, reader mode & editing
 

@@ -7,11 +7,12 @@ import { MenuItem } from './menu-item';
 import { Toolbar } from './toolbar';
 import { ToolbarControlGroup } from './toolbar-control-group';
 
-export type SettingsCategory = 'sources' | 'commands' | 'permissions' | 'columns';
+export type SettingsCategory = 'sources' | 'commands' | 'terminals' | 'permissions' | 'columns';
 
 const categories = [
   { id: 'sources', label: 'Ticket sources', icon: Database, iconName: 'database' },
   { id: 'commands', label: 'Commands', icon: TerminalSquare, iconName: 'terminal-square' },
+  { id: 'terminals', label: 'Terminals', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck, iconName: 'shield-check' },
   { id: 'columns', label: 'Column view', icon: Columns3, iconName: 'columns-3' },
 ] as const;
