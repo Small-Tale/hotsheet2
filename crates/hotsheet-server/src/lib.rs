@@ -73,6 +73,9 @@ pub struct AppState {
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive (the default
     /// store's watcher is held by the server binary). Never read — just not dropped.
     watchers: Arc<Mutex<Vec<WatchHandle>>>,
+    /// One native recursive watcher per open code checkout. It emits only invalidation
+    /// events; clients obtain the authoritative status through the existing endpoint.
+    repository_watchers: Arc<Mutex<std::collections::HashMap<String, WatchHandle>>>,
     /// Whether a `POST /stores`-registered store gets a **file-backed** index
     /// (`${HOTSHEET_HOME}/index/<id>.sqlite`, persists + restores) or an in-memory one.
     /// Off by default so tests stay hermetic (they never touch the machine home); the
@@ -205,6 +208,7 @@ impl AppState {
             host,
             injected_providers: ProviderRegistry::default(),
             watchers: Arc::new(Mutex::new(Vec::new())),
+            repository_watchers: Arc::new(Mutex::new(std::collections::HashMap::new())),
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
             instance_guards: Arc::new(Mutex::new(Vec::new())),
@@ -439,6 +443,33 @@ impl AppState {
         // Advertise the newly-hosted store for discovery (real run only; a no-op in tests).
         self.register_store_instance(&store_root);
         Ok(true)
+    }
+
+    fn watch_checkout_repository(&self, checkout: &hotsheet_ticketing::checkouts::Checkout) {
+        let Ok(mut watchers) = self.repository_watchers.lock() else {
+            return;
+        };
+        if watchers.contains_key(&checkout.id) {
+            return;
+        }
+        let root = std::path::PathBuf::from(&checkout.root);
+        if !root.join(".git").exists() {
+            return;
+        }
+        match spawn_repository_watcher(
+            root.clone(),
+            checkout.id.clone(),
+            self.events.clone(),
+            self.event_log.clone(),
+        ) {
+            Ok(handle) => {
+                watchers.insert(checkout.id.clone(), handle);
+            }
+            Err(error) => eprintln!(
+                "repository watcher for {} failed to start: {error}",
+                root.display()
+            ),
+        }
     }
 
     /// Record the machine server's coordinates (URL + start time; a real run, after bind)
@@ -1959,6 +1990,7 @@ async fn open_project(
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     hotsheet_ticketing::worklist::regenerate_checkout(&checkout)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    state.watch_checkout_repository(&checkout);
     Ok((
         StatusCode::CREATED,
         Json(OpenProjectResponse {
@@ -2003,6 +2035,7 @@ async fn register_checkout(
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     hotsheet_ticketing::worklist::regenerate_checkout(&entry)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    state.watch_checkout_repository(&entry);
     Ok((StatusCode::CREATED, Json(entry)))
 }
 
@@ -5524,6 +5557,61 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
     Ok(WatchHandle { _watcher: watcher })
 }
 
+fn repository_change_event(checkout_id: &str) -> ChangeEvent {
+    ChangeEvent {
+        store: checkout_id.to_string(),
+        kind: "repository_changed".to_string(),
+        id: checkout_id.to_string(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+    }
+}
+
+/// Watch a checkout recursively through the filesystem watcher backend. Bursts from an
+/// editor save, index update, commit, or push collapse to one lightweight invalidation;
+/// no status command runs on the watcher thread and clients never poll repository status.
+fn spawn_repository_watcher(
+    root: std::path::PathBuf,
+    checkout_id: String,
+    events: broadcast::Sender<ChangeEvent>,
+    event_log: Arc<Mutex<EventLog>>,
+) -> anyhow::Result<WatchHandle> {
+    use notify::{RecursiveMode, Watcher};
+
+    let (tx, rx) = std::sync::mpsc::channel();
+    let mut watcher = match registered_watcher_backend() {
+        WatcherBackend::Recommended => {
+            HeldWatcher::Recommended(notify::recommended_watcher(move |result| {
+                let _ = tx.send(result);
+            })?)
+        }
+        WatcherBackend::Poll => HeldWatcher::Poll(notify::PollWatcher::new(
+            move |result| {
+                let _ = tx.send(result);
+            },
+            notify::Config::default().with_poll_interval(Duration::from_millis(250)),
+        )?),
+    };
+    match &mut watcher {
+        HeldWatcher::Recommended(watcher) => watcher.watch(&root, RecursiveMode::Recursive)?,
+        HeldWatcher::Poll(watcher) => watcher.watch(&root, RecursiveMode::Recursive)?,
+    }
+    std::thread::spawn(move || {
+        while let Ok(first) = rx.recv() {
+            let mut changed = first.is_ok();
+            while let Ok(next) = rx.recv_timeout(Duration::from_millis(175)) {
+                changed |= next.is_ok();
+            }
+            if changed {
+                emit_change(&event_log, &events, repository_change_event(&checkout_id));
+            }
+        }
+    });
+    Ok(WatchHandle { _watcher: watcher })
+}
+
 fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, target: WatchTarget) {
     use std::time::Duration;
 
@@ -5656,7 +5744,9 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
 
 #[cfg(test)]
 mod watcher_tests {
-    use super::{WatcherBackend, expand_ticket_files, registered_watcher_backend};
+    use super::{
+        WatcherBackend, expand_ticket_files, registered_watcher_backend, repository_change_event,
+    };
 
     #[test]
     fn registered_store_watcher_avoids_a_second_fsevents_stream() {
@@ -5691,6 +5781,15 @@ mod watcher_tests {
         );
         // Non-.md paths are ignored.
         assert!(expand_ticket_files(vec![shard.join("README.txt")]).is_empty());
+    }
+
+    #[test]
+    fn repository_invalidation_is_checkout_scoped_and_not_a_ticket_change() {
+        let event = repository_change_event("checkout-42");
+        assert_eq!(event.kind, "repository_changed");
+        assert_eq!(event.store, "checkout-42");
+        assert_eq!(event.id, "checkout-42");
+        assert!(event.slug.is_empty());
     }
 }
 

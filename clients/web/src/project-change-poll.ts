@@ -19,6 +19,9 @@ export interface ProjectChangePollOptions {
 export const containsTicketChange = (response: PollResponse): boolean =>
   response.overflow || response.events.some(event => TICKET_CHANGE_KINDS.has(event.kind));
 
+export const containsRepositoryChange = (response: PollResponse,checkoutId:string): boolean =>
+  response.events.some(event=>event.kind==='repository_changed'&&event.id===checkoutId);
+
 const abortableWait = (milliseconds: number, signal: AbortSignal): Promise<void> => new Promise(resolve => {
   const timeout = window.setTimeout(resolve, milliseconds);
   signal.addEventListener('abort', () => { window.clearTimeout(timeout); resolve(); }, { once: true });

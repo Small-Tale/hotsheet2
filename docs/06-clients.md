@@ -332,7 +332,12 @@ prompt can be dismissed and returns on a later open until a source is configured
   snapshot. Activating it opens a repository popover with branch/upstream identity and the
   complete ahead, behind, staged, unstaged, untracked, and conflicted counts. Repository
   failures remain local to this surface instead of hiding the project, and its explicit
-  Refresh action performs one request; the status surface never introduces simple polling.
+  Refresh action performs one request. The server watches each open checkout through a
+  recursive filesystem watcher (native where safe; the established FSEvents-safe watcher
+  backend on macOS), coalesces bursts, and sends checkout-scoped
+  `repository_changed` invalidations over the existing WebSocket/long-poll stream. The
+  active client then fetches one authoritative snapshot; the status surface never
+  introduces simple polling.
 
   The real inspector's attachment surface materializes ordinary-sized browsed and
   dropped files before upload, so a macOS promised screenshot cannot disappear while

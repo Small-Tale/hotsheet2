@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { PollResponse } from './api';
-import { containsTicketChange, startProjectChangePoll } from './project-change-poll';
+import { containsRepositoryChange, containsTicketChange, startProjectChangePoll } from './project-change-poll';
 
 const response = (cursor: number, kind?: string, overflow = false): PollResponse => ({
   cursor,
@@ -21,6 +21,13 @@ describe('project change long polling', () => {
     expect(containsTicketChange(response(1, 'claimed'))).toBe(true);
     expect(containsTicketChange(response(1, 'activity'))).toBe(false);
     expect(containsTicketChange(response(1, undefined, true))).toBe(true);
+  });
+
+  it('scopes repository invalidations to their checkout without treating them as ticket changes',()=>{
+    const changed=response(2,'repository_changed');changed.events[0].id='checkout-one';
+    expect(containsRepositoryChange(changed,'checkout-one')).toBe(true);
+    expect(containsRepositoryChange(changed,'checkout-two')).toBe(false);
+    expect(containsTicketChange(changed)).toBe(false);
   });
 
   it('handshakes, coalesces batches, ignores unrelated events, and refreshes overflow', async () => {
