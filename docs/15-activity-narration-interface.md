@@ -144,6 +144,13 @@ client adapter, never a server dependency; other clients can inject another
   see the same bounded sequence. `turn_end` always passes and resets the turn budget.
   At most 256 unfinished sessions are retained in memory; least-recently-used abandoned
   state is evicted. Repeated starts cannot reset an unfinished turn's budget.
+- **Raw conversation stream — shipped (HS2-060HQJ):** raw `TurnEvent`s use a separate
+  per-turn client admission guard before the replay ring: 128 ordinary output/native
+  events, eight late permission/usage events per kind, an exact dropped-count coalescing
+  notice, and an always-preserved terminal `done`. A single output chunk is capped at
+  65,536 characters, and an oversized native payload becomes a bounded truncation marker.
+  This protects live transcript consumers without changing the
+  independently persisted, semantically mapped activity sequence above.
 
 ## 15.8 Build plan (follow-ups)
 - HS2-70 (this) = the spec.

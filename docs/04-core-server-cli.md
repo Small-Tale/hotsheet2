@@ -169,7 +169,10 @@ Responsibilities:
   authenticate without exposing credentials to browser JavaScript. The bridge uses
   both forms on its loopback-only hop so a newer client can still long-poll a running
   pre-header-auth server during an unsynchronized rollout. Watcher events enter the
-  same replay ring as API mutations.
+  same replay ring as API mutations. Replayable events carry their monotonic cursor on
+  both transports. A caught-up long poll blocks; after wake it snapshots the whole
+  available span and its exact cursor atomically, so a burst cannot be skipped and an
+  idle client cannot form a tight request loop.
 - **MCP** endpoint(s): the `hotsheet_*` tool surface for AI tools
   ([05-ai-tool-plugins.md](05-ai-tool-plugins.md) §5.8).
 - **Owns the filesystem watcher** (→ incremental reindex) and the **terminal/PTY

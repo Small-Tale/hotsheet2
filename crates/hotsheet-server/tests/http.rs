@@ -79,11 +79,17 @@ impl PreparedClientDrive for FakePreparedClientDrive {
             if !control.interrupt_requested() {
                 return Err("fake interrupt timed out".into());
             }
+            on_event(&hotsheet_aitools::TurnEvent::Done(
+                hotsheet_aitools::DoneReason::Interrupted,
+            ));
             return Ok(hotsheet_aitools::TurnDone {
                 reason: hotsheet_aitools::DoneReason::Interrupted,
                 session_id: resume.map(str::to_owned),
             });
         }
+        on_event(&hotsheet_aitools::TurnEvent::Done(
+            hotsheet_aitools::DoneReason::Completed,
+        ));
         Ok(hotsheet_aitools::TurnDone {
             reason: hotsheet_aitools::DoneReason::Completed,
             session_id: Some("thread-1".into()),
@@ -237,9 +243,7 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         ..FakeClientDriveBackend::default()
     });
     let turns = backend.turns.clone();
-    let state = base.with_client_drive_backend(backend);
-    let mut live = state.subscribe();
-    let router = app(state);
+    let router = app(base.with_client_drive_backend(backend));
 
     let created = router
         .clone()
@@ -258,7 +262,16 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         serde_json::json!(["send_turn", "interrupt"])
     );
     assert!(!created["busy"].as_bool().unwrap());
-    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
+    let replay_cursor = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await["cursor"]
+        .as_u64()
+        .unwrap();
 
     let started = router
         .clone()
@@ -271,17 +284,46 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .unwrap();
     assert_eq!(started.status(), StatusCode::ACCEPTED);
     assert!(body_json(started).await["busy"].as_bool().unwrap());
-    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
-    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
-
-    let listed = router
-        .clone()
-        .oneshot(authed("GET", "/connections", None))
-        .await
-        .unwrap();
-    let listed = body_json(listed).await;
+    let listed = loop {
+        let listed = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if !listed[0]["busy"].as_bool().unwrap() {
+            break listed;
+        }
+        tokio::task::yield_now().await;
+    };
     assert!(!listed[0]["busy"].as_bool().unwrap());
     assert_eq!(listed[0]["session_id"], "thread-1");
+    let replay = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/ws/poll?since={replay_cursor}&timeout_ms=0"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let replayed = replay["events"].as_array().unwrap();
+    let turn_types = replayed
+        .iter()
+        .filter_map(|event| event["turn"]["event"]["type"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(turn_types, ["output", "done"]);
+    assert!(
+        replayed
+            .windows(2)
+            .all(|pair| pair[0]["cursor"].as_u64() < pair[1]["cursor"].as_u64()),
+        "replayable events carry monotonically increasing WS cursors"
+    );
 
     let held = router
         .clone()
@@ -293,7 +335,6 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .await
         .unwrap();
     assert_eq!(held.status(), StatusCode::ACCEPTED);
-    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
     let interrupted = router
         .clone()
         .oneshot(authed(
@@ -304,14 +345,20 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .await
         .unwrap();
     assert_eq!(interrupted.status(), StatusCode::ACCEPTED);
-    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
-    assert_eq!(live.recv().await.unwrap().kind, "drive_updated");
-
-    let listed = router
-        .oneshot(authed("GET", "/connections", None))
-        .await
-        .unwrap();
-    assert!(!body_json(listed).await[0]["busy"].as_bool().unwrap());
+    loop {
+        let listed = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if !listed[0]["busy"].as_bool().unwrap() {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
     assert_eq!(
         *turns.lock().unwrap(),
         vec![
@@ -347,6 +394,28 @@ async fn client_drive_omits_and_rejects_an_unsupported_interrupt() {
         .await
         .unwrap();
     assert_eq!(rejected.status(), StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[tokio::test]
+async fn raw_turn_event_is_ticket_attributed_and_carries_its_ws_replay_cursor() {
+    let (dir, state) = state();
+    let store = FsStore::open(dir.path()).unwrap();
+    let mut live = state.subscribe();
+    state.emit_turn_event(
+        &store,
+        "worker-1",
+        Some("HS-ABC123".into()),
+        "fake",
+        hotsheet_server::turn_stream::ClientTurnEvent::Output {
+            content: "working".into(),
+            truncated: false,
+        },
+    );
+    let event = live.recv().await.unwrap();
+    assert_eq!(event.cursor, Some(1));
+    let turn = event.turn.unwrap();
+    assert_eq!(turn.connection_id, "worker-1");
+    assert_eq!(turn.ticket.as_deref(), Some("HS-ABC123"));
 }
 
 /// Live tier: prove the public server route can prepare and drive the real Codex plugin,

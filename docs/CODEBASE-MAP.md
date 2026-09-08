@@ -123,6 +123,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/repository_browser.rs # rich repository status/commit discovery plus freshly validated host-native file open/reveal actions (HS2-323XHG)
       src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
+      src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
       src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up)
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F): TerminalBroker::ensure (discover/spawn the broker per project under ${HOTSHEET_HOME}/broker) + call (per-request BrokerClient round-trip); `serve --terminal-broker` routes /terminals ops + the live WS attach (bridged to a BrokerStream — broker_attach_loop in lib.rs) + the connect busy feed (polls the broker's Read) through it so terminals survive a server restart; idle-GC/health is a follow-up (HS2-SV3XS8)
@@ -289,6 +290,6 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 | Stable web development launcher | `clients/web/scripts/stable-dev.mjs` (temporary source snapshot and private dependency cache; `npm run dev`), `clients/web/vite.config.ts` (stable runtime discovery disabled), and the Playwright/Vitest configs (isolated disposable test caches), [06](06-clients.md) §6.3 |
 | Adapter seams (Clock/Rng/…) | `hotsheet-ticketing/src/ports.rs`, [12](12-code-organization-and-testing.md) §12.1 |
 | AI-tool plugins (loader + first-party) | `hotsheet-plugins/src/lib.rs`, `plugins/`, [05](05-ai-tool-plugins.md) §5.11 |
-| Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs` |
+| Wire DTOs (server + MCP JSON shape) | `hotsheet-ticketing/src/wire.rs`; raw AI turn stream in `hotsheet-server/src/turn_stream.rs` |
 | Requirements status | [README.md](README.md) |
 | This project's own tickets (dogfood) | A **standalone HS2 store** in its own git repo (separate from this code repo, so ticket churn stays out of code history — docs/02 §2.8 option 2). Migrated from HS1. Read with `hotsheet-cli -C <store> ls`; the store path is per-machine (not committed here — `.mcp.json` is gitignored). |

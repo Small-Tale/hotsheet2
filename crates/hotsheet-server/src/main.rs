@@ -214,6 +214,12 @@ async fn main() -> Result<()> {
                     }
                 })
             }),
+            turn_sink: Some({
+                let state = state.clone();
+                std::sync::Arc::new(move |store, connection, tool, ticket, event| {
+                    state.emit_turn_event(store, connection, ticket, tool, event);
+                })
+            }),
         };
         let drive = live_drive(cfg.tool.clone(), cfg.prompt.clone(), ctx);
         Some(spawn_dist_work_loop(

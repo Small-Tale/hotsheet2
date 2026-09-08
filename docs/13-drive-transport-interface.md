@@ -270,6 +270,17 @@ Unix hosts reuse the shared Codex daemon; Windows uses the direct app-server tra
 because the daemon control channel is Unix-domain-socket based.
 The HTTP lifecycle is fake-backend E2E tested and has a credentials-gated real Codex test.
 
+**Raw client stream (HS2-060HQJ):** every `TurnEvent` is projected into a stable tagged
+`turn_event` envelope carrying connection id and, for autonomous ticket work, ticket id.
+It rides the existing WS and genuine-long-poll replay ring; each replayable WS event carries
+the same monotonic cursor a reconnecting client supplies to `/ws/poll`. Output,
+permission requests, usage, native activity, a coalescing notice, and terminal done are
+additive event variants. Clients retain unknown variants without failing their live loop.
+Per turn, the server admits 128 ordinary events, then up to eight late permission/usage
+events per kind, coalesces exact dropped counts immediately before an always-preserved
+`done`, and truncates a pathological individual output chunk at 65,536 characters.
+Native activity payloads above 65,536 encoded bytes become a small typed truncation marker.
+
 ## 13.10 Build plan (follow-ups)
 - HS2-67 (this) = the spec. Implementation lands in **HS2-9** (plugin host + Claude
   drive) and **HS2-66** (Codex drive); the conformance checklist is built in **HS2-64**.

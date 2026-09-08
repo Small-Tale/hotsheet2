@@ -34,8 +34,18 @@ export interface TerminalRead extends TerminalInfo {scrollback:string}
 export interface CommandDefinition {id:string;title:string;program:string;args:string[];group?:string;confirmation?:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}
 export interface CommandRun {id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:CommandOutputLine[]}
-export interface ChangeEvent {store:string;kind:string;id:string;slug:string;message?:string}
+export type ClientTurnEvent=
+  |{type:'output';content:string;truncated:boolean}
+  |{type:'permission_asked';tool:string;summary:string}
+  |{type:'usage';model?:string;tokens_in:number;tokens_out:number;cost_usd?:number}
+  |{type:'native_activity';source:string;payload:unknown}
+  |{type:'coalesced';total:number;kinds:Record<string,number>}
+  |{type:'done';reason:'completed'|'failed'|'interrupted';exit_code?:number}
+  |{type:string;[key:string]:unknown};
+export interface TurnStreamEnvelope {connection_id:string;ticket?:string;event:ClientTurnEvent}
+export interface ChangeEvent {cursor?:number;store:string;kind:string;id:string;slug:string;message?:string;turn?:TurnStreamEnvelope}
 export interface PollResponse {cursor:number;events:ChangeEvent[];overflow:boolean}
+export const turnStreamEvents=(response:PollResponse):TurnStreamEnvelope[]=>response.events.flatMap(event=>event.kind==='turn_event'&&event.turn?[event.turn]:[]);
 export const encodeAttachmentFilename=(filename:string)=>encodeURIComponent(filename);
 export class Api {
   constructor(private origin='',private secret=''){}

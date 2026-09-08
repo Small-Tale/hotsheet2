@@ -1,6 +1,6 @@
 import { describe,expect,it,vi } from 'vitest';
 
-import { Api, encodeAttachmentFilename } from './api';
+import { Api, encodeAttachmentFilename, turnStreamEvents } from './api';
 
 describe('attachment filename transport',()=>{
   it('encodes macOS screenshot names as an ASCII-safe header value',()=>{
@@ -43,6 +43,13 @@ describe('change polling transport',()=>{
     await expect(new Api('/api').pollEvents(7,controller.signal,1234)).resolves.toMatchObject({cursor:8});
     expect(fetchMock).toHaveBeenCalledWith('/api/ws/poll?timeout_ms=1234&since=7',expect.objectContaining({signal:controller.signal}));
     fetchMock.mockRestore();
+  });
+  it('projects known turn events and safely carries unknown newer event types',()=>{
+    const response={cursor:12,overflow:false,events:[
+      {cursor:11,store:'s',kind:'turn_event',id:'c',slug:'codex',turn:{connection_id:'c',event:{type:'output',content:'hello',truncated:false}}},
+      {cursor:12,store:'s',kind:'turn_event',id:'c',slug:'codex',turn:{connection_id:'c',event:{type:'future_server_event',value:1}}},
+    ]};
+    expect(turnStreamEvents(response).map(item=>item.event.type)).toEqual(['output','future_server_event']);
   });
 });
 

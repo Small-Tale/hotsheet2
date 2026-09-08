@@ -201,10 +201,18 @@ pub struct LiveDriveCtx {
     pub server_env: Option<(String, String)>,
     /// Best-effort activity persistence + live broadcast supplied by the server host.
     pub activity_sink: Option<ActivitySink>,
+    /// Bounded raw turn events for the client transcript/replay stream.
+    pub turn_sink: Option<TurnSink>,
 }
 
 pub type ActivitySink =
     std::sync::Arc<dyn Fn(&FsStore, hotsheet_ticketing::ActivityEvent) + Send + Sync + 'static>;
+pub type TurnSink = std::sync::Arc<
+    dyn Fn(&FsStore, &str, &str, Option<String>, crate::turn_stream::ClientTurnEvent)
+        + Send
+        + Sync
+        + 'static,
+>;
 
 pub fn live_drive(
     tool: String,
@@ -240,6 +248,7 @@ fn drive_one_ticket(
 ) -> anyhow::Result<WorkOutcome> {
     use hotsheet_aitools::{ConnectionRegistry, prepare_trigger};
     let before = store.read_ticket(id)?;
+    let ticket_slug = before.slug.clone();
     // Inject the server's URL+secret so a driven tool's permission hook can reach the
     // route-back (HS2-XCTAHM); without it the hook defers to the tool's own flow.
     let envs = match &ctx.server_env {
@@ -288,16 +297,16 @@ fn drive_one_ticket(
         hotsheet_ticketing::ActivityKind::TurnStart,
         serde_json::Value::Null,
     );
-    // Capture any usage the turn reports so it can be recorded against this ticket
-    // (HS2-0WCRZY). Output is otherwise streamed to a quiet sink (logged elsewhere).
+    // Capture usage for ticket metrics and project the bounded raw stream for clients.
     let mut usage: Option<hotsheet_aitools::Usage> = None;
-    let turn = safe.run_turn(
-        prompt,
-        None,
-        true,
-        conn.clone(),
-        &mut registry,
-        &mut |ev| match ev {
+    let mut turn_guard = crate::turn_stream::TurnStreamGuard::default();
+    let turn = safe.run_turn(prompt, None, true, conn.clone(), &mut registry, &mut |ev| {
+        if let Some(sink) = &ctx.turn_sink {
+            for event in turn_guard.observe(ev) {
+                sink(store, &conn, tool, Some(ticket_slug.clone()), event);
+            }
+        }
+        match ev {
             hotsheet_aitools::TurnEvent::Usage(u) => usage = Some(u.clone()),
             hotsheet_aitools::TurnEvent::PermissionAsked(req) => emit_coarse_activity(
                 ctx,
@@ -312,11 +321,16 @@ fn drive_one_ticket(
                 emit_native_activity(ctx, store, id, tool, &conn, source, payload)
             }
             _ => {}
-        },
-    );
+        }
+    });
     let done = match turn {
         Ok(done) => done,
         Err(error) => {
+            if let Some(sink) = &ctx.turn_sink {
+                for event in turn_guard.transport_failed() {
+                    sink(store, &conn, tool, Some(ticket_slug.clone()), event);
+                }
+            }
             emit_coarse_activity(
                 ctx,
                 store,

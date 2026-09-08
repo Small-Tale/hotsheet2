@@ -18,6 +18,7 @@ pub mod sync_loop;
 pub mod terminal_broker;
 pub mod tls;
 pub mod tts;
+pub mod turn_stream;
 
 use std::path::Path as FsPath;
 use std::sync::{Arc, Mutex};
@@ -172,6 +173,7 @@ impl AppState {
             let log = event_log.clone();
             permissions.set_on_pending(move |req| {
                 let ev = ChangeEvent {
+                    cursor: None,
                     store: req.project.clone(),
                     kind: "permission_asked".to_string(),
                     id: req.id.to_string(),
@@ -179,11 +181,9 @@ impl AppState {
                     message: None,
                     activity: None,
                     assignment: None,
+                    turn: None,
                 };
-                if let Ok(mut l) = log.lock() {
-                    l.push(ev.clone());
-                }
-                let _ = events.send(ev);
+                emit_change(&log, &events, ev);
             });
         }
         let command_defs =
@@ -197,6 +197,7 @@ impl AppState {
                     &command_event_log,
                     &command_events,
                     ChangeEvent {
+                        cursor: None,
                         store: String::new(),
                         kind: "command_updated".into(),
                         id: run.id,
@@ -204,6 +205,7 @@ impl AppState {
                         message: Some(run.state),
                         activity: None,
                         assignment: None,
+                        turn: None,
                     },
                 );
             }));
@@ -623,6 +625,7 @@ impl AppState {
             let _ = index.upsert(t, &path, &hash_bytes(text.as_bytes()));
         }
         self.emit(ChangeEvent {
+            cursor: None,
             store: multistore::store_url_id(&entry.store),
             kind: kind.to_string(),
             id: t.id.to_string(),
@@ -630,6 +633,7 @@ impl AppState {
             message: None,
             activity: None,
             assignment: None,
+            turn: None,
         });
         // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
         self.kick_sync();
@@ -642,6 +646,7 @@ impl AppState {
     pub fn announce(&self, store: String, message: String) {
         // WS-only: intentionally skip the EventLog ring (ephemeral, unlike `emit`).
         let _ = self.events.send(ChangeEvent {
+            cursor: None,
             store,
             kind: "announce".to_string(),
             id: String::new(),
@@ -649,11 +654,13 @@ impl AppState {
             message: Some(message),
             activity: None,
             assignment: None,
+            turn: None,
         });
     }
 
     fn emit_drive_updated(&self, info: &client_drive::ClientConnectionInfo) {
         self.emit(ChangeEvent {
+            cursor: None,
             store: multistore::store_url_id(&self.store),
             kind: "drive_updated".into(),
             id: info.id.clone(),
@@ -661,6 +668,32 @@ impl AppState {
             message: None,
             activity: None,
             assignment: None,
+            turn: None,
+        });
+    }
+
+    pub fn emit_turn_event(
+        &self,
+        store: &FsStore,
+        connection_id: &str,
+        ticket: Option<String>,
+        tool: &str,
+        event: turn_stream::ClientTurnEvent,
+    ) {
+        self.emit(ChangeEvent {
+            cursor: None,
+            store: multistore::store_url_id(store),
+            kind: "turn_event".into(),
+            id: connection_id.into(),
+            slug: tool.into(),
+            message: None,
+            activity: None,
+            assignment: None,
+            turn: Some(turn_stream::TurnStreamEnvelope {
+                connection_id: connection_id.into(),
+                ticket,
+                event,
+            }),
         });
     }
 
@@ -680,6 +713,7 @@ impl AppState {
         for event in admitted {
             hotsheet_ticketing::activity::record(store, &event)?;
             self.emit(ChangeEvent {
+                cursor: None,
                 store: multistore::store_url_id(store),
                 kind: "activity".to_string(),
                 id: event.id.clone(),
@@ -687,6 +721,7 @@ impl AppState {
                 message: None,
                 activity: Some(event.clone()),
                 assignment: None,
+                turn: None,
             });
             self.maybe_distill_activity(store, &event);
         }
@@ -749,6 +784,10 @@ impl AppState {
 /// A live-change event pushed over `/ws/sync`.
 #[derive(Clone, Debug, Serialize)]
 pub struct ChangeEvent {
+    /// Monotonic replay cursor. Present for durable/replayable events; absent for ephemeral
+    /// WS-only announcements.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<u64>,
     /// The URL id of the store the change happened in (multi-store, HS2-87).
     pub store: String,
     pub kind: String,
@@ -764,6 +803,9 @@ pub struct ChangeEvent {
     /// For `kind == "assignment"`: newly assigned/requested recipients.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assignment: Option<AssignmentEvent>,
+    /// For `kind == "turn_event"`: bounded raw tool output/usage/activity/done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<turn_stream::TurnStreamEnvelope>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -794,20 +836,23 @@ fn emit_change(
     event: ChangeEvent,
 ) {
     // Record first so a long poll racing the broadcast can always replay by cursor.
-    if let Ok(mut log) = event_log.lock() {
-        log.push(event.clone());
-    }
+    let event = event_log
+        .lock()
+        .map(|mut log| log.push(event.clone()))
+        .unwrap_or(event);
     let _ = events.send(event); // Err just means no live subscribers.
 }
 
 impl EventLog {
     /// Record an event, assigning it the next seq.
-    fn push(&mut self, event: ChangeEvent) {
+    fn push(&mut self, mut event: ChangeEvent) -> ChangeEvent {
         self.seq += 1;
-        self.ring.push_back((self.seq, event));
+        event.cursor = Some(self.seq);
+        self.ring.push_back((self.seq, event.clone()));
         while self.ring.len() > EVENT_LOG_CAP {
             self.ring.pop_front();
         }
+        event
     }
 
     /// Events with `seq > since`, plus whether `since` fell off the back of the ring
@@ -834,6 +879,7 @@ mod event_log_tests {
 
     fn ev(n: usize) -> ChangeEvent {
         ChangeEvent {
+            cursor: None,
             store: "s".into(),
             kind: "created".into(),
             id: format!("id-{n}"),
@@ -841,6 +887,7 @@ mod event_log_tests {
             message: None,
             activity: None,
             assignment: None,
+            turn: None,
         }
     }
 
@@ -855,6 +902,7 @@ mod event_log_tests {
         let (all, of) = log.since(0);
         assert_eq!(all.len(), 3);
         assert!(!of);
+        assert_eq!(all[0].cursor, Some(1));
         assert_eq!(log.since(2).0.len(), 1);
         assert!(log.since(3).0.is_empty(), "caught up → none");
         // A future/equal cursor is not an overflow.
@@ -3547,6 +3595,7 @@ async fn publish_notification(
 ) -> (StatusCode, Json<notifications::Notification>) {
     let n = state.notifications.publish(body);
     state.emit(ChangeEvent {
+        cursor: None,
         store: n.store.clone().unwrap_or_default(),
         kind: "notification".into(),
         id: n.id.clone(),
@@ -3554,6 +3603,7 @@ async fn publish_notification(
         message: Some(n.message.clone()),
         activity: None,
         assignment: None,
+        turn: None,
     });
     (StatusCode::CREATED, Json(n))
 }
@@ -3810,6 +3860,7 @@ fn do_assign(
     state.changed_in(entry, "assigned", &ticket);
     let requested_by = hotsheet_ticketing::current_user_email(entry.store.root());
     state.emit(ChangeEvent {
+        cursor: None,
         store: multistore::store_url_id(&entry.store),
         kind: "assignment".into(),
         id: ticket.id.to_string(),
@@ -3821,6 +3872,7 @@ fn do_assign(
             review_requested: review_requested.clone(),
             requested_by: requested_by.clone(),
         }),
+        turn: None,
     });
     for (recipient, action) in newly_assigned
         .iter()
@@ -4283,10 +4335,22 @@ async fn send_drive_turn(
 
     let manager = state.client_drives.clone();
     let thread_state = state.clone();
+    let thread_store = state.store.clone();
+    let tool = info.tool.clone();
     let prompt = request.content;
     let thread_id = id.clone();
     std::thread::spawn(move || {
-        let result = job.run(&prompt, &mut |_| {});
+        let mut guard = turn_stream::TurnStreamGuard::default();
+        let result = job.run(&prompt, &mut |event| {
+            for event in guard.observe(event) {
+                thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
+            }
+        });
+        if result.is_err() {
+            for event in guard.transport_failed() {
+                thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
+            }
+        }
         manager.finish_turn(&thread_id, &result);
         if let Ok(info) = manager.get(&thread_id) {
             thread_state.emit_drive_updated(&info);
@@ -5336,6 +5400,7 @@ async fn resolve_permission(
     // Resolution can happen through another client or transport. Publish a replayable
     // nudge so every notification inbox reconciles the now-absent request into history.
     state.emit(ChangeEvent {
+        cursor: None,
         store: resolved.project.clone(),
         kind: "permission_resolved".to_string(),
         id: id.to_string(),
@@ -5343,6 +5408,7 @@ async fn resolve_permission(
         message: Some(format!("{event_decision}:{event_scope}")),
         activity: None,
         assignment: None,
+        turn: None,
     });
     Ok(Json(PermissionResolved {
         connection: resolved.connection,
@@ -5627,13 +5693,16 @@ async fn poll_events(
     // Subscribe BEFORE reading the log, so an event emitted in the gap isn't missed: it
     // either lands in the log we read, or wakes the receiver below.
     let mut rx = state.events.subscribe();
-    let (backlog, overflow) = match state.event_log.lock() {
-        Ok(log) => log.since(since),
-        Err(_) => (Vec::new(), false),
+    let (backlog, overflow, snapshot_cursor) = match state.event_log.lock() {
+        Ok(log) => {
+            let (events, overflow) = log.since(since);
+            (events, overflow, log.seq)
+        }
+        Err(_) => (Vec::new(), false, since),
     };
     if overflow || !backlog.is_empty() {
         return Json(PollResponse {
-            cursor: state.event_cursor(),
+            cursor: snapshot_cursor,
             events: backlog,
             overflow,
         })
@@ -5647,8 +5716,17 @@ async fn poll_events(
             .unwrap_or(POLL_DEFAULT_MS)
             .min(POLL_MAX_MS),
     );
-    let events = match tokio::time::timeout(wait, rx.recv()).await {
-        Ok(Ok(ev)) => vec![ev],
+    let (events, cursor, overflow) = match tokio::time::timeout(wait, rx.recv()).await {
+        // Re-read the ring rather than returning only the wake-up event. This atomically
+        // captures every event + the exact cursor through that span, so a burst racing the
+        // response cannot advance the cursor past an event the client never received.
+        Ok(Ok(_)) => match state.event_log.lock() {
+            Ok(log) => {
+                let (events, overflow) = log.since(since);
+                (events, log.seq, overflow)
+            }
+            Err(_) => (Vec::new(), since, false),
+        },
         // Lagged (fell behind the broadcast buffer) → signal overflow so the client re-syncs.
         Ok(Err(broadcast::error::RecvError::Lagged(_))) => {
             return Json(PollResponse {
@@ -5658,12 +5736,14 @@ async fn poll_events(
             })
             .into_response();
         }
-        Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => Vec::new(),
+        Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => {
+            (Vec::new(), state.event_cursor(), false)
+        }
     };
     Json(PollResponse {
-        cursor: state.event_cursor(),
+        cursor,
         events,
-        overflow: false,
+        overflow,
     })
     .into_response()
 }
@@ -6107,6 +6187,7 @@ fn spawn_watcher_for(target: WatchTarget, backend: WatcherBackend) -> anyhow::Re
 
 fn repository_change_event(checkout_id: &str) -> ChangeEvent {
     ChangeEvent {
+        cursor: None,
         store: checkout_id.to_string(),
         kind: "repository_changed".to_string(),
         id: checkout_id.to_string(),
@@ -6114,6 +6195,7 @@ fn repository_change_event(checkout_id: &str) -> ChangeEvent {
         message: None,
         activity: None,
         assignment: None,
+        turn: None,
     }
 }
 
@@ -6238,6 +6320,7 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
             &target.event_log,
             &target.events,
             ChangeEvent {
+                cursor: None,
                 store: target.store_id.clone(),
                 kind: kind.to_string(),
                 id,
@@ -6245,6 +6328,7 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
                 message: None,
                 activity: None,
                 assignment: None,
+                turn: None,
             },
         );
     };
