@@ -98,6 +98,14 @@ Metrics can be shared across a team **through git** — no server sync needed:
 - The **cost widget** + **analytics/stats dashboards** (HS2-47) read via §14.3.
 - Cross-project + cross-person rollups feed a team cost view (from the shared rollups,
   §14.4).
+- The production web `AIConversation` consumes the same per-turn `Usage` projection that
+  feeds this interface. Each assistant turn shows input/output token totals and the dialog
+  sums only usage events received for that connection; it does not maintain an independent
+  estimator or poll analytics. A reported or price-table-enriched `cost_usd` is shown with
+  an approximation cue and sensible sub-cent precision. When cost is absent (for example,
+  a tool omits both a priceable model and reported cost), the UI says “Cost unavailable”
+  rather than treating unknown as zero. This keeps the conversation truthful while the
+  raw/rollup store remains authoritative for historical reporting.
 
 ## 14.6 Resolved implementation decisions
 - **Price table maintenance** ships a default with a local override (HS2-8BCRHS).
@@ -124,6 +132,10 @@ Metrics can be shared across a team **through git** — no server sync needed:
   same way — `claude_result_usage` reads the in-band stream-json `result` event's `usage`
   (declared `[metrics] source="claude-usage"`), `ClaudeTurn::usage()` surfaces it, and it
   flows through `TurnEvent::Usage` + the driving-loop recorder unchanged.
+- **Client conversation projection (HS2-BXSPMN):** client-owned turns now pass usage through
+  the same store price table before both recording and live projection. Their stable
+  connection id is the metrics session key, so transcript totals and historical raw/rollup
+  reads share one attribution boundary; no browser-side pricing table or counter exists.
 - **Live-verified + hardened (HS2-CQ6B96):** Codex 0.148 emits per-turn camelCase counts
   under `thread/tokenUsage/updated.params.tokenUsage.last`; `inputTokens` already includes
   its `cachedInputTokens` subset (`totalTokens == inputTokens + outputTokens`), so cached

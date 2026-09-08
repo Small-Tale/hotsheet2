@@ -211,6 +211,17 @@ does not introduce polling or another network request.
   - public demo states: empty/idle, composing, streaming output, waiting for permission,
     completed, failed, interrupted, and narrow layout; the production ProjectSidebar
     composition exercises open, send, streamed rerender, inline permission, stop, and close
+  - each assistant turn ends with a compact usage line when the metrics projection reports
+    tokens: input and output remain separately accessible, while the visible total stays
+    glanceable. Cost is shown as an approximate USD value only when `cost_usd` exists; an
+    unpriced event says “cost unavailable” rather than displaying `$0.00` or inventing precision
+  - the dialog header carries a conversation-total disclosure derived only from those received
+    usage events, never a parallel client counter or analytics poll
+  - narratable normalized activity for the connection/session appears as a bounded “Activity”
+    sequence alongside the transcript. Every item keeps persistent tool/AI attribution and the
+    group carries the accessible cue “AI-generated summaries may contain errors.” Raw native
+    activity may drive the immediate working label, but it does not substitute for normalized
+    activity entries in this sequence
 
 ### 2.3 `WorkspaceHeader` — feature floor
 

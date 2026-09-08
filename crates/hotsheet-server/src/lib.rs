@@ -4587,7 +4587,51 @@ async fn send_drive_turn(
     std::thread::spawn(move || {
         let mut guard = turn_stream::TurnStreamGuard::default();
         let result = job.run(&prompt, &mut |event| {
-            for event in guard.observe(event) {
+            let projected = match event {
+                hotsheet_aitools::TurnEvent::Usage(usage) => {
+                    let priced = hotsheet_ticketing::metrics::price_event(
+                        &thread_store,
+                        hotsheet_ticketing::metrics::UsageEvent {
+                            ts: now().as_str().to_string(),
+                            tool: tool.clone(),
+                            model: usage.model.clone(),
+                            tokens_in: usage.tokens_in,
+                            tokens_out: usage.tokens_out,
+                            cost_usd: usage.cost_usd,
+                            ticket: None,
+                            session: Some(thread_id.clone()),
+                        },
+                    );
+                    let _ = hotsheet_ticketing::metrics::record(&thread_store, &priced);
+                    hotsheet_aitools::TurnEvent::Usage(hotsheet_aitools::Usage {
+                        model: priced.model,
+                        tokens_in: priced.tokens_in,
+                        tokens_out: priced.tokens_out,
+                        cost_usd: priced.cost_usd,
+                    })
+                }
+                hotsheet_aitools::TurnEvent::NativeActivity { source, payload } => {
+                    let id = Ulid::new().to_string();
+                    let ts = now().as_str().to_string();
+                    let mapped = match source.as_str() {
+                        "codex-transcript" => {
+                            hotsheet_ticketing::activity::codex_activity(payload, &id, &ts)
+                        }
+                        "claude-hooks" => {
+                            hotsheet_ticketing::activity::claude_activity(payload, &id, &ts)
+                        }
+                        _ => None,
+                    };
+                    if let Some(mut activity) = mapped {
+                        activity.session = Some(thread_id.clone());
+                        activity.project = Some(thread_store.root().display().to_string());
+                        let _ = thread_state.record_activity(&thread_store, activity);
+                    }
+                    event.clone()
+                }
+                _ => event.clone(),
+            };
+            for event in guard.observe(&projected) {
                 thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
             }
         });

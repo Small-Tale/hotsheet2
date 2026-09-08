@@ -7,11 +7,12 @@ const permission:PermissionItem={id:1,connection:'connection-1',tool:'Bash',acti
 
 describe('AIConversation',()=>{
   it('renders ordered Markdown turns, progress, and an inline permission request',()=>{
-    const markup=String(AIConversation({open:true,tool:'Codex',sessionId:'session-1',messages:[{id:'one',role:'user',content:'Please **check** this.'},{id:'two',role:'assistant',content:'Checking `main.tsx`.',status:'streaming'}],draft:'Follow up',busy:true,progress:'Waiting for permission…',interruptible:true,permissions:[permission]}));
+    const markup=String(AIConversation({open:true,tool:'Codex',sessionId:'session-1',messages:[{id:'one',role:'user',content:'Please **check** this.'},{id:'two',role:'assistant',content:'Checking `main.tsx`.',status:'streaming',usage:{tokensIn:12_000,tokensOut:840,costUsd:.0423,model:'codex-5.6'}}],draft:'Follow up',busy:true,progress:'Waiting for permission…',interruptible:true,permissions:[permission],activity:[{id:'activity-1',tool:'Codex',kind:'edit',summary:'Edited main.tsx',importance:'normal'}],totalUsage:{tokensIn:12_000,tokensOut:840,costUsd:.0423}}));
     expect(markup.indexOf('Please <strong>check</strong> this.')).toBeLessThan(markup.indexOf('Checking <code>main.tsx</code>.'));
     expect(markup).toContain('data-action="stop-conversation"');
     expect(markup).toContain('data-component="permission-request-card"');
     expect(markup).toContain('Waiting for permission');
+    expect(markup).toContain('12.8K tokens');expect(markup).toContain('≈$0.04');expect(markup).toContain('Edited main.tsx');expect(markup).toContain('AI-generated · may contain errors');
   });
 
   it('hides stop when interruption is unavailable and exposes terminal failures',()=>{

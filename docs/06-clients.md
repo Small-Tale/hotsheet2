@@ -345,6 +345,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   turn. Stop appears only for a busy connection advertising `interrupt`; Enter sends and
   Shift+Enter adds a line. Connection refresh and transcript updates share the existing
   replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
+  Usage events attach token/cost metadata to the active assistant turn and derive a
+  conversation total without a second counter; unknown cost is labeled unavailable. The same
+  stream's normalized activity events are session/connection matched into a bounded activity
+  sequence with persistent AI/tool attribution and an accessible may-contain-errors cue.
 
   The repository row is also the checkout's compact status chip. It distinguishes clean,
   dirty, ahead, behind, conflicted, and unavailable states from the checkout-scoped status

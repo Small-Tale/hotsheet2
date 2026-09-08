@@ -90,6 +90,18 @@ impl PreparedClientDrive for FakePreparedClientDrive {
                 session_id: resume.map(str::to_owned),
             });
         }
+        on_event(&hotsheet_aitools::TurnEvent::Usage(
+            hotsheet_aitools::Usage {
+                model: Some("claude-opus-4-8".into()),
+                tokens_in: 1_000,
+                tokens_out: 100,
+                cost_usd: None,
+            },
+        ));
+        on_event(&hotsheet_aitools::TurnEvent::NativeActivity {
+            source: "codex-transcript".into(),
+            payload: serde_json::json!({"type":"commandExecution","command":"cargo test"}),
+        });
         on_event(&hotsheet_aitools::TurnEvent::Done(
             hotsheet_aitools::DoneReason::Completed,
         ));
@@ -320,7 +332,30 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .iter()
         .filter_map(|event| event["turn"]["event"]["type"].as_str())
         .collect::<Vec<_>>();
-    assert_eq!(turn_types, ["output", "done"]);
+    assert_eq!(turn_types, ["output", "usage", "native_activity", "done"]);
+    let usage = replayed
+        .iter()
+        .find(|event| event["turn"]["event"]["type"] == "usage")
+        .unwrap();
+    assert!(
+        usage["turn"]["event"]["cost_usd"].as_f64().unwrap() > 0.0,
+        "client usage is price-table enriched before projection"
+    );
+    let activity = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/activity?session=client-1", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(activity[0]["summary"], "codex ran `cargo test`");
+    assert!(
+        hotsheet_ticketing::metrics::summary(&FsStore::open(dir.path()).unwrap())
+            .unwrap()
+            .cost_usd
+            > 0.0
+    );
     assert!(
         replayed
             .windows(2)

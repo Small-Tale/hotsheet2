@@ -155,7 +155,7 @@ pub fn rollup(events: &[UsageEvent]) -> Rollup {
 
 /// Record a usage event, filling `cost_usd` from the store's price table (`docs/14` §14.2)
 /// when the tool didn't report a cost and the model is priced — so cost is always present.
-pub fn record_priced(store: &FsStore, mut event: UsageEvent) -> io::Result<()> {
+pub fn price_event(store: &FsStore, mut event: UsageEvent) -> UsageEvent {
     if event.cost_usd.is_none() {
         if let Some(model) = &event.model {
             let prices = crate::pricing::load_prices(store);
@@ -163,7 +163,11 @@ pub fn record_priced(store: &FsStore, mut event: UsageEvent) -> io::Result<()> {
                 crate::pricing::cost(&prices, model, event.tokens_in, event.tokens_out);
         }
     }
-    record(store, &event)
+    event
+}
+
+pub fn record_priced(store: &FsStore, event: UsageEvent) -> io::Result<()> {
+    record(store, &price_event(store, event))
 }
 
 /// The store's usage rollup — read the raw JSONL and aggregate (the DB-free read path).
