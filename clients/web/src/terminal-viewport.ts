@@ -13,6 +13,8 @@ export const TERMINAL_RESIZE_SETTLE_MS=120;
 export const TERMINAL_DRAWER_RESIZE_END_EVENT='hotsheet-terminal-drawer-resize-end';
 export const TERMINAL_DASHBOARD_COLS=80;
 export const TERMINAL_DASHBOARD_ROWS=24;
+export const TERMINAL_DASHBOARD_FONT_SIZE=24;
+export const TERMINAL_DASHBOARD_LINE_HEIGHT=1.085;
 export const TERMINAL_PREVIEW_NATURAL_WIDTH=1280;
 export const TERMINAL_PREVIEW_NATURAL_HEIGHT=768;
 export const TERMINAL_PREVIEW_SCROLLBACK=0;
@@ -21,17 +23,6 @@ export const TERMINAL_DEDICATED_SCROLLBACK=5_000;
 export function terminalScrollbackLimit(displayMode:string|undefined,fixedDashboardGrid:boolean):number {
   if(displayMode==='scaled-preview')return TERMINAL_PREVIEW_SCROLLBACK;
   return fixedDashboardGrid?TERMINAL_MAGNIFIED_SCROLLBACK:TERMINAL_DEDICATED_SCROLLBACK;
-}
-export interface TerminalDashboardTypography {fontSize:number;letterSpacing:number;lineHeight:number}
-export function terminalDashboardTypography(current:TerminalDashboardTypography,screenWidth:number,screenHeight:number,targetWidth:number,targetHeight:number):TerminalDashboardTypography {
-  if([screenWidth,screenHeight,targetWidth,targetHeight].some(value=>!Number.isFinite(value)||value<=0))return current;
-  const scale=Math.min(targetWidth/screenWidth,targetHeight/screenHeight),fontSize=Math.max(4,Math.min(72,current.fontSize*scale)),fontScale=fontSize/current.fontSize;
-  const scaledWidth=screenWidth*fontScale,scaledHeight=screenHeight*fontScale;
-  return {
-    fontSize:Math.round(fontSize*100)/100,
-    letterSpacing:Math.round(Math.max(0,current.letterSpacing+(targetWidth-scaledWidth)/TERMINAL_DASHBOARD_COLS)*100)/100,
-    lineHeight:Math.round(Math.max(1,Math.min(5,current.lineHeight*targetHeight/scaledHeight))*1000)/1000,
-  };
 }
 export interface TerminalFocusRequest {projectId:string;terminalId:string}
 export function terminalViewportShouldAutoFocus(request:TerminalFocusRequest|undefined,projectId:string,terminalId:string):boolean {

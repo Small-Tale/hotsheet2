@@ -596,17 +596,17 @@ ungrouped flow, so there is no redundant project/none grouping selector.
 Every dashboard tile mounts a read-only xterm with an exact 80×24 character grid at a
 stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to the black PTY
 viewport: the surrounding card adds the measured spacing-token inset, border, and footer
-height outside that viewport. Measured cell metrics tune font size plus row and column
-spacing, followed only by a uniform subpixel correction, so all 80 columns and 24 rows fill
-the available preview without horizontal/vertical stretching. Magnifying a grid tile preserves
+height outside that viewport. One canonical font geometry is established when the 80×24 xterm
+is constructed, then a single uniform physical scale fits it to the available preview without
+changing rows, columns, or glyph proportions. Magnifying a grid tile preserves
 the same exact grid and terminal-screen aspect. Changing grid fit or magnifying
 never derives PTY rows or columns from tile dimensions. Dedicated project-drawer terminals
 remain fitted to their actual interactive viewport and reserve one physical containment row;
 server size echoes cannot restore the edge row that would otherwise be clipped. Abrupt drawer
-changes such as maximize fit on the next animation frame, with a settled follow-up, instead of
-remaining one resize behind the container. Fixed-grid typography remains unpainted until its
-bounded metric passes converge, avoiding incremental resizing while moving from a drawer to the
-dashboard or magnifying a card. The preview,
+changes such as maximize explicitly publish a post-layout resize boundary on the next animation
+frame, with a settled follow-up, instead of depending on an observer that can remain one resize
+behind the container. Fixed-grid surfaces reveal after one physical-scale pass, avoiding the
+incremental typography loop while moving from a drawer to the dashboard or magnifying a card. The preview,
 its inset frame, and its border all use the terminal background token, so unused space
 cannot expose an unrelated gray surface. The computed tile height derives the 5:3 preview
 from the card width, then adds the tokenized frame/footer chrome, so repeated viewport changes
@@ -621,8 +621,10 @@ the immediate and settled layout passes, avoiding clipped cells and cross-surfac
 The browser regression follows the complete user path with a newly created terminal: enter
 Nano, resize the drawer up and down, abruptly maximize, move to the dashboard grid, magnify
 and dismiss, then double-click back into the drawer. Every boundary asserts the current
-claimed/grid geometry and visible xterm-screen containment, so a terminal that is one
-transition behind cannot pass on a correct final state alone.
+claimed/grid geometry and visible xterm-screen containment. It samples the post-paint frames
+through maximize and both fixed-grid mounts, so a stale or malformed intermediate frame cannot
+pass on a correct final state alone. Returning from the dashboard to an already-open drawer is
+idempotent and settles geometry without replaying the drawer's show animation.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.
