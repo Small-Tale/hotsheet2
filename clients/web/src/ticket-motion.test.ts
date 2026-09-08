@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- DOM method spies are intentionally extracted for assertions. */
 import {describe,expect,it,vi} from 'vitest';
 
-import {animateTicketMotion,captureTicketMotion,type TicketMotionSnapshot} from './ticket-motion';
+import {animateTicketMotion,captureTicketMotion,TICKET_MOTION_LAYER,type TicketMotionSnapshot} from './ticket-motion';
 
 const rect=(left:number,top:number,width=100,height=50)=>({left,top,width,height} as DOMRect);
 const pendingAnimation=()=>({finished:new Promise<void>(()=>undefined),cancel:vi.fn()}) as unknown as Animation;
@@ -70,8 +70,8 @@ describe('ticket motion',()=>{
     const document=mockDocument(),previous=row('HS2-A','started',rect(10,20,180,72),undefined,document),current=row('HS2-A','completed',rect(210,80,220,88),undefined,document),overlay=ghost('HS2-A',document);
     (current.container as unknown as {cloneNode:()=>HTMLElement}).cloneNode=()=>overlay;
     animateTicketMotion(snapshot([['HS2-A',previous,'started']]),root([current]),false);
-    expect(current.container.style.visibility).toBe('hidden');expect(document.body.append).toHaveBeenCalledWith(overlay);expect(overlay.dataset.ticketMotionGhost).toBe('move');expect(overlay.dataset.ticketMotionSlug).toBe('HS2-A');expect(overlay.style.cssText).toContain('width:220px');expect(overlay.style.cssText).toContain('height:88px');expect(overlay.style.cssText).toContain('z-index:1300');
-    expect(overlay.animate).toHaveBeenCalledWith([{transform:'translate(-200px, -60px)',zIndex:'1300'},{transform:'translate(0, 0)',zIndex:'1300'}],expect.objectContaining({duration:240}));
+    expect(current.container.style.visibility).toBe('hidden');expect(document.body.append).toHaveBeenCalledWith(overlay);expect(overlay.dataset.ticketMotionGhost).toBe('move');expect(overlay.dataset.ticketMotionSlug).toBe('HS2-A');expect(overlay.style.cssText).toContain('width:220px');expect(overlay.style.cssText).toContain('height:88px');expect(overlay.style.cssText).toContain(`z-index:${TICKET_MOTION_LAYER}`);
+    expect(overlay.animate).toHaveBeenCalledWith([{transform:'translate(-200px, -60px)',zIndex:TICKET_MOTION_LAYER},{transform:'translate(0, 0)',zIndex:TICKET_MOTION_LAYER}],expect.objectContaining({duration:240}));
     const clonedVisual=(overlay as unknown as {visual:HTMLElement}).visual;expect(clonedVisual.dataset.ticketSlug).toBeUndefined();expect(clonedVisual.dataset.component).toBeUndefined();expect(clonedVisual.style.borderRadius).toBe('10px');
   });
 

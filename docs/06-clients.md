@@ -153,7 +153,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   scroll restoration remains authoritative. A departing ticket fades
   out before only its source siblings close the gap. Overlay identity and temporary
   hiding survive reactive DOM morphs without duplicate cards. Visual-only ghosts
-  expose motion-specific identifiers rather than ticket-row roles, actions, or slugs,
+  stay on the workspace layer below every modal/dialog backdrop, so opening a dialog
+  during a move cannot paint the moving card over the dialog. They expose
+  motion-specific identifiers rather than ticket-row roles, actions, or slugs,
   and isolate their visual text from document text queries, so ordinary ticket
   selectors, text search, and assistive technology continue to see one real row.
   Pure inspector, sidebar, or viewport layout shifts never trigger collection motion.

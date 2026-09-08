@@ -8,6 +8,7 @@ interface TicketMotionRow {
 export interface TicketMotionSnapshot {scope:string;rows:Map<string,TicketMotionRow>}
 
 const LAYOUT_DURATION=240,FADE_DURATION=160,MOTION_EASING='cubic-bezier(.2,.8,.2,1)';
+export const TICKET_MOTION_LAYER='90';
 const activeLayoutAnimations=new WeakMap<HTMLElement,Animation>();
 const activeTicketAnimations=new Set<Animation>();
 
@@ -86,7 +87,7 @@ function animateMovedTicket(current:TicketMotionRow,x:number,y:number){
   if(hasGhost(current.container.ownerDocument,'move',slug))return;
   const ghost=current.container.cloneNode(true) as HTMLElement,{visibility,hideRule}=hideRealTicket(current.container,slug);
   prepareGhost(ghost,slug,'move',current.rect,current.borderRadius);appendGhost(current.container.ownerDocument,ghost);
-  const animation=trackTicketAnimation(ghost.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:'1300'},{transform:'translate(0, 0)',zIndex:'1300'}],{duration:LAYOUT_DURATION,easing:MOTION_EASING}));
+  const animation=trackTicketAnimation(ghost.animate([{transform:`translate(${x}px, ${y}px)`,zIndex:TICKET_MOTION_LAYER},{transform:'translate(0, 0)',zIndex:TICKET_MOTION_LAYER}],{duration:LAYOUT_DURATION,easing:MOTION_EASING}));
   animation.finished.finally(()=>{ghost.remove();hideRule.remove();current.container.style.visibility=visibility}).catch(()=>{ghost.remove();hideRule.remove();current.container.style.visibility=visibility});
 }
 
@@ -113,7 +114,7 @@ function prepareGhost(ghost:HTMLElement,slug:string,kind:'move'|'incoming'|'outg
     element.removeAttribute('role');element.removeAttribute('tabindex');element.removeAttribute('aria-selected');element.removeAttribute('aria-label');element.removeAttribute('draggable');element.removeAttribute('id');
   }
   const visual=ghost.querySelector<HTMLElement>('.ticket-list-row');if(visual&&borderRadius)visual.style.borderRadius=borderRadius;
-  ghost.style.cssText=`position:fixed;z-index:1300;pointer-events:none;margin:0;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;will-change:transform,opacity`;
+  ghost.style.cssText=`position:fixed;z-index:${TICKET_MOTION_LAYER};pointer-events:none;margin:0;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;height:${rect.height}px;will-change:transform,opacity`;
 }
 
 function isolateGhostText(ghost:HTMLElement){
