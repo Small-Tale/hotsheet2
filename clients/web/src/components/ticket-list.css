@@ -8,3 +8,4 @@
 .ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 .65rem .65rem; }
 .ticket-list__tickets > .ticket-list-row-container:only-child .ticket-list-row { border-radius: .65rem; }
 .ticket-list__tickets > .ticket-list-row-container:has(> .ticket-list-row--selected) + .ticket-list-row-container:has(> .ticket-list-row--selected) { position: relative; margin-top: -1px; }
+.ticket-list__progress { padding: var(--wa-space-m); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); text-align: center; }

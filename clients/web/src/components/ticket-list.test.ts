@@ -21,6 +21,14 @@ describe('TicketList', () => {
     expect(markup).not.toContain('ticket-card');
   });
 
+  it('reports progressive rendering without losing the authoritative total',()=>{
+    const markup=String(TicketList({tickets:[ticket],totalCount:250,label:'Archive tickets'}));
+    expect(markup).toContain('data-rendered-count="1"');
+    expect(markup).toContain('data-total-count="250"');
+    expect(markup).toContain('data-ticket-progressive-loading="true"');
+    expect(markup).toContain('Loading more tickets…');
+  });
+
   it('keeps actionable corrupt diagnostics outside the healthy-ticket listbox', () => {
     const markup = String(TicketList({
       tickets: [ticket],

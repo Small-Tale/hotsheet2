@@ -11,3 +11,4 @@
 .ticket-board-column__tickets::-webkit-scrollbar { width: .5rem; }
 .ticket-board-column__tickets::-webkit-scrollbar-track { background: transparent; }
 .ticket-board-column__tickets::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-border-loud); background-clip: padding-box; }
+.ticket-board-column__progress { padding: var(--wa-space-s); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); text-align: center; }

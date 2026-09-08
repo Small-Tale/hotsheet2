@@ -65,6 +65,12 @@ describe('TicketBoard', () => {
     expect(css).toMatch(/ticket-board-column__tickets[^}]*overflow-y: auto/);
   });
 
+  it('keeps a column total authoritative while progressively rendering rows',()=>{
+    const markup=String(TicketBoardColumn({id:'archive',title:'Archive',tickets:[ticket],totalCount:300}));
+    expect(markup).toContain('aria-label="300 tickets"');
+    expect(markup).toContain('data-ticket-progressive-loading="true"');
+  });
+
   it('maps the Not Started column id to the wire status used by ticket drops', () => {
     expect(String(TicketBoardColumn({ id: 'not-started', title: 'Not Started', tickets: [] }))).toContain('data-ticket-drop-status="not_started"');
   });

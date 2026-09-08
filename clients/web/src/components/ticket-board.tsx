@@ -12,7 +12,7 @@ export interface TicketBoardProps {
 }
 
 export function TicketBoard({ columns, label = 'Ticket board',emptyState }: TicketBoardProps) {
-  const empty=columns.every(column=>column.tickets.length===0);
+  const empty=columns.every(column=>(column.totalCount??column.tickets.length)===0);
   return <section class="ticket-board" data-key="ticket-board" data-component="ticket-board" data-ticket-selection-root="true" role="listbox" aria-multiselectable="true" aria-label={label}>
     <div class="ticket-board__columns" style={`--ticket-board-column-count:${columns.length};--ticket-board-min-width:${columns.length * 250}px`}>
       {columns.map(column => <TicketBoardColumn {...column} selectionRoot={false}/>)}
