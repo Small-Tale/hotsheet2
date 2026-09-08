@@ -76,6 +76,9 @@ pub struct AppState {
     /// One native recursive watcher per open code checkout. It emits only invalidation
     /// events; clients obtain the authoritative status through the existing endpoint.
     repository_watchers: Arc<Mutex<std::collections::HashMap<String, WatchHandle>>>,
+    /// Server-owned GitHub device flows. Browser clients see only user codes and terminal
+    /// states; OAuth device/access/refresh tokens never cross this boundary.
+    github_auth_sessions: Arc<Mutex<std::collections::HashMap<String, Arc<GitHubAuthSession>>>>,
     /// Whether a `POST /stores`-registered store gets a **file-backed** index
     /// (`${HOTSHEET_HOME}/index/<id>.sqlite`, persists + restores) or an in-memory one.
     /// Off by default so tests stay hermetic (they never touch the machine home); the
@@ -209,6 +212,7 @@ impl AppState {
             injected_providers: ProviderRegistry::default(),
             watchers: Arc::new(Mutex::new(Vec::new())),
             repository_watchers: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            github_auth_sessions: Arc::new(Mutex::new(std::collections::HashMap::new())),
             persist_indexes: false,
             instance: Arc::new(Mutex::new(None)),
             instance_guards: Arc::new(Mutex::new(Vec::new())),
@@ -1015,6 +1019,15 @@ pub fn app(state: AppState) -> Router {
             "/provider-connections/{connection_id}",
             patch(update_provider_connection).delete(delete_provider_connection),
         )
+        .route("/github-auth/device", post(start_github_device_auth))
+        .route(
+            "/github-auth/device/{session_id}",
+            get(wait_github_device_auth).delete(cancel_github_device_auth),
+        )
+        .route(
+            "/github-auth/device/{session_id}/repositories",
+            get(list_github_auth_repositories),
+        )
         .route("/provider-attachments/copy", post(copy_provider_attachment))
         // Authenticated application/protocol negotiation. `/health` intentionally remains
         // a small unauthenticated liveness probe.
@@ -1320,6 +1333,233 @@ async fn list_stores(State(state): State<AppState>) -> Json<Vec<StoreInfo>> {
     Json(state.host.list())
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+enum GitHubAuthStatus {
+    Pending,
+    Authorized { credential_reference: String },
+    Denied,
+    Expired,
+    Cancelled,
+    Error { message: String },
+}
+
+struct GitHubAuthSession {
+    status: tokio::sync::watch::Sender<GitHubAuthStatus>,
+    client_id: String,
+    web_base: String,
+    credential_reference: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct StartGitHubAuthBody {
+    #[serde(default = "default_github_web_base")]
+    web_base: String,
+}
+
+fn default_github_web_base() -> String {
+    "https://github.com".into()
+}
+
+#[derive(Debug, Serialize)]
+struct StartGitHubAuthResponse {
+    session_id: String,
+    user_code: String,
+    verification_uri: String,
+    expires_in: u64,
+}
+
+async fn start_github_device_auth(
+    State(state): State<AppState>,
+    Json(body): Json<StartGitHubAuthBody>,
+) -> Result<(StatusCode, Json<StartGitHubAuthResponse>), ApiError> {
+    let client_id = std::env::var("HOTSHEET_GITHUB_APP_CLIENT_ID").unwrap_or_default();
+    let web_base = body.web_base.trim_end_matches('/').to_owned();
+    let client = hotsheet_extsync::GitHubDeviceClient::live(client_id.clone(), web_base.clone());
+    let authorization = tokio::task::spawn_blocking(move || client.start())
+        .await
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+        .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
+    let session_id = ulid::Ulid::new().to_string();
+    let credential_reference = format!("github-app-{}", session_id.to_ascii_lowercase());
+    let (status, _) = tokio::sync::watch::channel(GitHubAuthStatus::Pending);
+    let session = Arc::new(GitHubAuthSession {
+        status,
+        client_id: client_id.clone(),
+        web_base: web_base.clone(),
+        credential_reference: credential_reference.clone(),
+    });
+    state
+        .github_auth_sessions
+        .lock()
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GitHub sign-in state is unavailable",
+            )
+        })?
+        .insert(session_id.clone(), session.clone());
+    let device_code = authorization.device_code.clone();
+    let mut interval = authorization.interval.max(1);
+    std::thread::spawn(move || {
+        let client =
+            hotsheet_extsync::GitHubDeviceClient::live(client_id.clone(), web_base.clone());
+        loop {
+            std::thread::sleep(Duration::from_secs(interval));
+            if !matches!(*session.status.borrow(), GitHubAuthStatus::Pending) {
+                break;
+            }
+            match client.poll(&device_code) {
+                Ok(hotsheet_extsync::DevicePoll::Pending) => {}
+                Ok(hotsheet_extsync::DevicePoll::SlowDown) => interval = interval.saturating_add(5),
+                Ok(hotsheet_extsync::DevicePoll::Expired) => {
+                    let _ = session.status.send(GitHubAuthStatus::Expired);
+                    break;
+                }
+                Ok(hotsheet_extsync::DevicePoll::Denied) => {
+                    let _ = session.status.send(GitHubAuthStatus::Denied);
+                    break;
+                }
+                Ok(hotsheet_extsync::DevicePoll::Authorized(bundle)) => {
+                    let stored = serde_json::json!({"kind":"github_app","client_id":client_id,"web_base":web_base,"obtained_at":OffsetDateTime::now_utc().unix_timestamp(),"token":bundle});
+                    let result = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
+                        .set(&credential_reference, &stored.to_string());
+                    let next = match result {
+                        Ok(()) => GitHubAuthStatus::Authorized {
+                            credential_reference: credential_reference.clone(),
+                        },
+                        Err(error) => GitHubAuthStatus::Error {
+                            message: error.to_string(),
+                        },
+                    };
+                    let _ = session.status.send(next);
+                    break;
+                }
+                Err(error) => {
+                    let _ = session.status.send(GitHubAuthStatus::Error {
+                        message: error.to_string(),
+                    });
+                    break;
+                }
+            }
+        }
+    });
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(StartGitHubAuthResponse {
+            session_id,
+            user_code: authorization.user_code,
+            verification_uri: authorization.verification_uri,
+            expires_in: authorization.expires_in,
+        }),
+    ))
+}
+
+async fn wait_github_device_auth(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<GitHubAuthStatus>, ApiError> {
+    let session = state
+        .github_auth_sessions
+        .lock()
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GitHub sign-in state is unavailable",
+            )
+        })?
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found(&session_id))?;
+    let mut status = session.status.subscribe();
+    let pending = matches!(*status.borrow(), GitHubAuthStatus::Pending);
+    if pending {
+        let _ = status.changed().await;
+    }
+    let result = status.borrow().clone();
+    Ok(Json(result))
+}
+
+async fn cancel_github_device_auth(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let session = state
+        .github_auth_sessions
+        .lock()
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GitHub sign-in state is unavailable",
+            )
+        })?
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found(&session_id))?;
+    let _ = session.status.send(GitHubAuthStatus::Cancelled);
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Debug, Serialize)]
+struct GitHubRepositoriesResponse {
+    repositories: Vec<String>,
+}
+
+async fn list_github_auth_repositories(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<Json<GitHubRepositoriesResponse>, ApiError> {
+    let session = state
+        .github_auth_sessions
+        .lock()
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "GitHub sign-in state is unavailable",
+            )
+        })?
+        .get(&session_id)
+        .cloned()
+        .ok_or_else(|| ApiError::not_found(&session_id))?;
+    if !matches!(
+        *session.status.borrow(),
+        GitHubAuthStatus::Authorized { .. }
+    ) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "GitHub sign-in is not complete",
+        ));
+    }
+    let raw = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
+        .get(&session.credential_reference)
+        .map_err(provider_transfer_error)?;
+    let stored: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            format!("stored GitHub authorization is invalid: {error}"),
+        )
+    })?;
+    let token: hotsheet_extsync::GitHubTokenBundle = serde_json::from_value(
+        stored.get("token").cloned().unwrap_or_default(),
+    )
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            format!("stored GitHub authorization is invalid: {error}"),
+        )
+    })?;
+    let client = hotsheet_extsync::GitHubDeviceClient::live(
+        session.client_id.clone(),
+        session.web_base.clone(),
+    );
+    let repositories =
+        tokio::task::spawn_blocking(move || client.installed_repositories(&token.access_token))
+            .await
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?
+            .map_err(|error| ApiError::new(StatusCode::BAD_GATEWAY, error.to_string()))?;
+    Ok(Json(GitHubRepositoriesResponse { repositories }))
+}
+
 /// `GET /providers` — capability-bearing ticket-provider connections. The current
 /// implementation registers every hosted store as a built-in git provider.
 async fn list_providers(
@@ -1417,6 +1657,74 @@ fn save_provider_connections(
         .map_err(provider_transfer_error)
 }
 
+fn connection_token(connection: &ProviderConnection) -> Result<String, ApiError> {
+    let credential =
+        hotsheet_extsync::credential_reference(connection).map_err(provider_transfer_error)?;
+    let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
+    let raw = keys.get(credential).map_err(provider_transfer_error)?;
+    if connection.provider != "github" {
+        return Ok(raw);
+    }
+    let Ok(mut stored) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return Ok(raw);
+    };
+    if stored.get("kind").and_then(serde_json::Value::as_str) != Some("github_app") {
+        return Ok(raw);
+    }
+    let mut token: hotsheet_extsync::GitHubTokenBundle = serde_json::from_value(
+        stored.get("token").cloned().unwrap_or_default(),
+    )
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            format!("stored GitHub authorization is invalid: {error}"),
+        )
+    })?;
+    let obtained = stored
+        .get("obtained_at")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let expires = token.expires_in.unwrap_or(u64::MAX);
+    let refresh_due = OffsetDateTime::now_utc().unix_timestamp()
+        >= obtained
+            .saturating_add(i64::try_from(expires).unwrap_or(i64::MAX))
+            .saturating_sub(60);
+    if refresh_due {
+        let refresh = token.refresh_token.as_deref().ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "GitHub authorization expired; sign in with GitHub again",
+            )
+        })?;
+        let client_id = stored
+            .get("client_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let web_base = stored
+            .get("web_base")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("https://github.com");
+        let previous_refresh = token.refresh_token.clone();
+        token = hotsheet_extsync::GitHubDeviceClient::live(client_id, web_base)
+            .refresh(refresh)
+            .map_err(|error| {
+                ApiError::new(
+                    StatusCode::UNAUTHORIZED,
+                    format!("GitHub authorization could not be refreshed; sign in again: {error}"),
+                )
+            })?;
+        if token.refresh_token.is_none() {
+            token.refresh_token = previous_refresh;
+        }
+        stored["obtained_at"] = OffsetDateTime::now_utc().unix_timestamp().into();
+        stored["token"] = serde_json::to_value(&token)
+            .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+        keys.set(credential, &stored.to_string())
+            .map_err(provider_transfer_error)?;
+    }
+    Ok(token.access_token)
+}
+
 async fn create_provider_connection(
     State(state): State<AppState>,
     Json(connection): Json<ProviderConnection>,
@@ -1496,14 +1804,11 @@ fn hosted_provider_registry(state: &AppState) -> Result<ProviderRegistry, ApiErr
             ))
             .map_err(provider_transfer_error)?;
     }
-    let keys = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain);
     for connection in connections {
         if connection.provider == "git" {
             continue;
         }
-        let credential =
-            hotsheet_extsync::credential_reference(&connection).map_err(provider_transfer_error)?;
-        let token = keys.get(credential).map_err(provider_transfer_error)?;
+        let token = connection_token(&connection)?;
         registry
             .register(
                 hotsheet_extsync::live_provider(&connection, token)
@@ -1540,11 +1845,7 @@ fn provider_for(
         .into_iter()
         .find(|connection| connection.id == connection_id)
         .ok_or_else(|| ApiError::not_found(connection_id))?;
-    let credential =
-        hotsheet_extsync::credential_reference(&connection).map_err(provider_transfer_error)?;
-    let token = KeyRegistry::new(hotsheet_plugins::hotsheet_home(), OsKeychain)
-        .get(credential)
-        .map_err(provider_transfer_error)?;
+    let token = connection_token(&connection)?;
     hotsheet_extsync::live_provider(&connection, token).map_err(provider_transfer_error)
 }
 

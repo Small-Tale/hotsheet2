@@ -208,9 +208,19 @@ impl GitHubProvider {
                     .map(String::as_str)
                     != Some("0") =>
             {
+                let message = github_message(&response.body);
+                let message = if response.headers.contains_key("x-github-sso") {
+                    format!(
+                        "{message}; authorize Hot Sheet for your SAML organization and try again"
+                    )
+                } else if response.status == 401 {
+                    format!("{message}; sign in with GitHub again")
+                } else {
+                    message
+                };
                 Err(ProviderError::Authentication {
                     connection_id: self.config.connection_id.clone(),
-                    message: github_message(&response.body),
+                    message,
                 })
             }
             403 | 429 => Err(ProviderError::RateLimited {

@@ -45,6 +45,10 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path==='/__hotsheet/folders/choose'&&request.method()==='POST')return route.fulfill({json:{path:['/picked/project','/picked/tickets.hs2'][folderChoice++]}});
     if(path.endsWith('/provider-connections')&&request.method()==='GET')return route.fulfill({json:providerConnectionRecords});
     if(path.endsWith('/provider-connections')&&request.method()==='POST'){const created=request.postDataJSON();providerConnectionRecords=[...providerConnectionRecords,created];return route.fulfill({status:201,json:created})}
+    if(path.endsWith('/github-auth/device')&&request.method()==='POST')return route.fulfill({status:202,json:{session_id:'auth-1',user_code:'ABCD-EFGH',verification_uri:'https://github.test/login/device',expires_in:900}});
+    if(path.endsWith('/github-auth/device/auth-1')&&request.method()==='GET'){await new Promise(resolve=>setTimeout(resolve,100));return route.fulfill({json:{state:'authorized',credential_reference:'github-app-auth-1'}})}
+    if(path.endsWith('/github-auth/device/auth-1/repositories')&&request.method()==='GET')return route.fulfill({json:{repositories:['small-tale/hotsheet2','small-tale/secondary']}});
+    if(path.endsWith('/github-auth/device/auth-1')&&request.method()==='DELETE')return route.fulfill({status:204});
     const providerConnection=path.match(/\/provider-connections\/([^/]+)$/);if(providerConnection&&request.method()==='PATCH'){const id=decodeURIComponent(providerConnection[1]),updated={...request.postDataJSON(),id};providerConnectionRecords=providerConnectionRecords.map(item=>item.id===id?updated:item);return route.fulfill({json:updated})}
     if(path.includes('/sources/')&&request.method()==='PUT'){const body=request.postDataJSON();ticketSourceConfigured=true;if(body.provider==='git'&&!gitStores.includes(body.locator))gitStores=[...gitStores,body.locator];return route.fulfill({json:{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:gitStores,sources:[...gitStores.map((locator,index)=>({connection_id:`git-${index+1}`,provider:'git',locator})),...providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,locator:connection.locator}))],default_source:body.make_default?path.split('/').pop():undefined}})}
     if(path.endsWith('/default-source')&&request.method()==='PUT')return route.fulfill({json:{id:'demo-checkout',root:'/work/demo',alias:'demo',stores:[],sources:providerConnectionRecords.map(connection=>({connection_id:connection.id,provider:connection.provider,locator:connection.locator})),default_source:request.postDataJSON().connection_id}})
@@ -182,9 +186,10 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await providerForm.getByRole('button',{name:'Ticket source types'}).click();
   await expect(setup).toHaveAttribute('data-navigation','pop');await expect(transition).toHaveAttribute('data-active-side','a');await expect(sourceOptions).toHaveCount(5);await expect.poll(()=>transition.locator('[data-side="a"]').evaluate(node=>getComputedStyle(node).animationName)).toBe('content-transition-push-in-start');await expect.poll(()=>transition.locator('[data-side="b"]').evaluate(node=>getComputedStyle(node).animationName)).toBe('content-transition-push-out-end');
   await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
+  await providerForm.getByRole('button',{name:'Sign in with GitHub'}).click();
+  await expect(providerForm.getByRole('status')).toContainText('Signed in securely');
   await providerForm.getByLabel('Connection ID').fill('GitHub Main');
-  await providerForm.getByLabel('Repository').fill('small-tale/hotsheet2');
-  await providerForm.getByLabel('Credential reference').fill('github-small-tale');
+  await providerForm.getByLabel('Repository').selectOption('small-tale/hotsheet2');
   await setup.getByRole('button',{name:'Connect provider'}).click();
   await expect(setup.getByRole('alert')).toContainText('lowercase letters');
   await providerForm.getByLabel('Connection ID').fill('github-main');
@@ -203,10 +208,11 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await page.screenshot({path:'/private/tmp/hs2-y4zpqq-provider-settings-list-after.png',fullPage:true});
   await page.getByRole('button',{name:'Add data source'}).click();
   await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
+  await providerForm.getByRole('button',{name:'Sign in with GitHub'}).click();
+  await expect(providerForm.getByRole('status')).toContainText('Signed in securely');
   await providerForm.getByLabel('Connection ID').fill('github-secondary');
   await providerForm.getByLabel('Display name').fill('GitHub Secondary');
-  await providerForm.getByLabel('Repository').fill('small-tale/secondary');
-  await providerForm.getByLabel('Credential reference').fill('github-small-tale');
+  await providerForm.getByLabel('Repository').selectOption('small-tale/secondary');
   await providerForm.getByLabel('Use as the default ticket source').uncheck();
   await setup.getByRole('button',{name:'Connect provider'}).click();
   await expect(setup).toHaveJSProperty('open',false);

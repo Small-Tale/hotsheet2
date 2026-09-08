@@ -245,6 +245,18 @@ resolve it, while the host coordinator serializes same-process attempts.
 The opt-in live contract was validated against `Small-Tale/hotsheet2` with a
 repository-scoped OS-keychain credential: create, read, comment, and close all passed.
 
+GitHub App device authorization is the default interactive setup path. The browser starts
+an authorization session and performs one blocking wait; only the user code, verification
+URL, installed repository names, and an opaque credential reference cross the browser
+boundary. The server owns protocol pacing (`authorization_pending` and `slow_down`), stores
+access/refresh bundles in the OS credential store, refreshes expiring access tokens, and
+reports expiry, denial, cancellation, revoked credentials, and SAML reauthorization
+requirements. GitHub Enterprise derives its web origin from the configured `/api/v3` API
+base. Manual credential references remain an advanced fallback. The first-party app must be
+configured with device flow and only Metadata read plus Issues write permissions; its public
+client ID is supplied as `HOTSHEET_GITHUB_APP_CLIENT_ID` until release provisioning is
+completed by HS2-MZ66GC. Windows credential storage is tracked by HS2-N3R18X.
+
 Built in the GitLab/Jira increment: both adapters use the same provider-neutral
 routes and qualified identity contract without creating git-store mirrors. GitLab
 maps project issue IIDs, URLs, labels, usernames, and notes; uses project-issue

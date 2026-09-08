@@ -52,6 +52,26 @@ describe('provider onboarding transport',()=>{
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder%20with%20spaces/sources/github-main',expect.objectContaining({method:'PUT',body:'{"provider":"github","locator":"small-tale/hotsheet2","make_default":true}'}));
     fetchMock.mockRestore();
   });
+  it('keeps GitHub device credentials on the server while starting, waiting, and cancelling',async()=>{
+    const started={session_id:'auth-1',user_code:'ABCD-EFGH',verification_uri:'https://github.test/login/device',expires_in:900};
+    const authorized={state:'authorized',credential_reference:'github-app-auth-1'};
+    const fetchMock=vi.spyOn(globalThis,'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(started),{status:202}))
+      .mockResolvedValueOnce(new Response(JSON.stringify(authorized),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({repositories:['small-tale/hotsheet2']}),{status:200}))
+      .mockResolvedValueOnce(new Response(null,{status:204}));
+    const api=new Api('/api');
+    await expect(api.startGitHubAuth('https://github.test')).resolves.toEqual(started);
+    await expect(api.waitGitHubAuth('auth-1')).resolves.toEqual(authorized);
+    await expect(api.githubAuthRepositories('auth-1')).resolves.toEqual({repositories:['small-tale/hotsheet2']});
+    await expect(api.cancelGitHubAuth('auth-1')).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/github-auth/device',expect.objectContaining({method:'POST',body:'{"web_base":"https://github.test"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/github-auth/device/auth-1',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/github-auth/device/auth-1/repositories',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/github-auth/device/auth-1',expect.objectContaining({method:'DELETE'}));
+    expect(JSON.stringify(fetchMock.mock.calls)).not.toContain('access_token');
+    fetchMock.mockRestore();
+  });
 });
 
 describe('terminal dashboard transport',()=>{

@@ -4,6 +4,8 @@ import { prioritiesToWire } from './priority-wire';
 export type Capabilities = Record<'create'|'update'|'close'|'notes'|'note_edit'|'note_delete'|'attachments'|'assignment'|'review_requests'|'dependencies'|'up_next'|'close_reasons'|'claims'|'atomic_batch'|'not_working_report'|'offline_mutation'|'history'|'watch'|'provider_idempotency', boolean> & {query_fields:string[]};
 export interface ProviderDescriptor {connection_id:string;provider:string;display_name:string;locator:string;default:boolean;capabilities:Capabilities}
 export interface ProviderConnection {id:string;provider:string;locator:string;name:string|null;default:boolean;settings:Record<string,unknown>}
+export interface GitHubAuthStart {session_id:string;user_code:string;verification_uri:string;expires_in:number}
+export type GitHubAuthStatus={state:'pending'}|{state:'authorized';credential_reference:string}|{state:'denied'|'expired'|'cancelled'}|{state:'error';message:string}
 export interface Note {id:string;kind:'regular'|'activity'|'feedback_needed'|'feedback_draft'|'status';created_at:string;edited_at:string;summary?:string;text:string}
 export interface Attachment {id:string;filename:string;created_at:string}
 export interface Ticket {qualified_id:string;native_id:string;native_url?:string;title:string;status:string;connection_id:string;notes?:Note[];attachments?:Attachment[]}
@@ -44,6 +46,10 @@ export class Api {
   createConnection=(value:ProviderConnection)=>this.request<ProviderConnection>('/provider-connections',{method:'POST',body:JSON.stringify(value)});
   updateConnection=(id:string,value:ProviderConnection)=>this.request<ProviderConnection>(`/provider-connections/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(value)});
   deleteConnection=(id:string)=>this.request<void>(`/provider-connections/${encodeURIComponent(id)}`,{method:'DELETE'});
+  startGitHubAuth=(web_base='https://github.com')=>this.request<GitHubAuthStart>('/github-auth/device',{method:'POST',body:JSON.stringify({web_base})});
+  waitGitHubAuth=(session:string)=>this.request<GitHubAuthStatus>(`/github-auth/device/${encodeURIComponent(session)}`);
+  githubAuthRepositories=(session:string)=>this.request<{repositories:string[]}>(`/github-auth/device/${encodeURIComponent(session)}/repositories`);
+  cancelGitHubAuth=(session:string)=>this.request<void>(`/github-auth/device/${encodeURIComponent(session)}`,{method:'DELETE'});
   addCheckoutSource=(checkout:string,connection:ProviderConnection,makeDefault=false)=>this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/sources/${encodeURIComponent(connection.id)}`,{method:'PUT',body:JSON.stringify({provider:connection.provider,locator:connection.locator,make_default:makeDefault})});
   setCheckoutDefaultSource=(checkout:string,connectionId:string|null)=>this.request<Checkout>(`/checkouts/${encodeURIComponent(checkout)}/default-source`,{method:'PUT',body:JSON.stringify({connection_id:connectionId})});
   transfer=(kind:'copy'|'move',source:Ticket,destination_connection:string)=>this.request(`/provider-transfers/${kind}`,{method:'POST',body:JSON.stringify({source:{connection_id:source.connection_id,native_id:source.native_id},destination_connection,operation_id:crypto.randomUUID(),confirm:kind==='move'})});

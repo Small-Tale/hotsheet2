@@ -3,12 +3,16 @@
 //! boundary and never mirror them into the default git store.
 
 pub mod github;
+pub mod github_device;
 pub mod gitlab;
 pub mod jira;
 
 pub use github::{
     GitHubConfig, GitHubProvider, GitHubTransport, GitHubWebhook, HttpResponse,
     UreqGitHubTransport, parse_webhook,
+};
+pub use github_device::{
+    DeviceAuthorization, DevicePoll, GitHubDeviceClient, GitHubDeviceError, GitHubTokenBundle,
 };
 pub use gitlab::{GitLabConfig, GitLabProvider};
 pub use jira::{JiraConfig, JiraProvider};
