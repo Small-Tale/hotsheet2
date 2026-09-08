@@ -721,6 +721,16 @@ mod tests {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
             filename: "proof.png".into(),
             created_at: "2026-08-20T06:00:00Z".into(),
+            annotations: vec![crate::ticket::MediaAnnotation {
+                id: "region-1".into(),
+                x: 1000,
+                y: 2000,
+                width: 3000,
+                height: 2500,
+                start_ms: Some(1000),
+                end_ms: Some(2000),
+                text: "Review **this**".into(),
+            }],
         }];
 
         let text = to_file_string(&t);

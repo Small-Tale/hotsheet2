@@ -187,6 +187,8 @@ import {
   attachmentDemoMenu,
   AttachmentGalleryDemo,
   closeAttachmentDemoMenu,
+  galleryDemoDrawMode,
+  galleryDemoMarkup,
   setGalleryDemo,
   shiftGalleryDemo,
   showAttachmentDemoMenu,
@@ -2027,6 +2029,13 @@ delegate(root, 'click', '[data-action="next-gallery-image"]', () => {
 });
 delegate(root, 'click', '[data-action="zoom-gallery-image"]', (_event, target) => {
   zoomGalleryDemo(target.getAttribute('data-zoom-direction') === 'out' ? 'out' : 'in');
+});
+delegate(root, 'click', '[data-action="toggle-gallery-markup"]', () => {
+  galleryDemoMarkup.value = !galleryDemoMarkup.value;
+  galleryDemoDrawMode.value = false;
+});
+delegate(root, 'click', '[data-action="toggle-gallery-draw"]', () => {
+  galleryDemoDrawMode.value = !galleryDemoDrawMode.value;
 });
 delegate(root, 'click', '[data-action="open-attachment-menu"]', (event, target) => {
   event.stopPropagation();

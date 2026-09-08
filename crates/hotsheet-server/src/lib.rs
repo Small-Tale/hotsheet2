@@ -958,7 +958,9 @@ pub fn app(state: AppState) -> Router {
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}",
-            get(get_checkout_ticket_attachment).delete(delete_checkout_ticket_attachment),
+            get(get_checkout_ticket_attachment)
+                .put(update_checkout_ticket_attachment_annotations)
+                .delete(delete_checkout_ticket_attachment),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/action",
@@ -1892,6 +1894,7 @@ async fn copy_provider_attachment(
                 id: Ulid::new().to_string(),
                 filename: metadata.filename,
                 created_at: now().to_string(),
+                annotations: metadata.annotations,
             },
             bytes,
         )
@@ -3333,6 +3336,49 @@ async fn delete_checkout_ticket_attachment(
             }
         })?;
     state.changed_in(&entry, "attachment_removed", &updated);
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket(&entry, &updated)?,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateAttachmentAnnotationsBody {
+    annotations: Vec<hotsheet_model::MediaAnnotation>,
+}
+
+async fn update_checkout_ticket_attachment_annotations(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+    Json(body): Json<UpdateAttachmentAnnotationsBody>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let mut seen = std::collections::HashSet::new();
+    for annotation in &body.annotations {
+        let valid_rectangle = annotation.width > 0
+            && annotation.height > 0
+            && annotation.x.saturating_add(annotation.width) <= 10_000
+            && annotation.y.saturating_add(annotation.height) <= 10_000;
+        let valid_time = match (annotation.start_ms, annotation.end_ms) {
+            (Some(start), Some(end)) => start <= end,
+            (None, None) => true,
+            _ => false,
+        };
+        if !seen.insert(annotation.id.clone()) || !valid_rectangle || !valid_time {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "annotations require unique ids, bounded non-empty rectangles, and complete ordered time ranges",
+            ));
+        }
+    }
+    let updated = entry
+        .store
+        .set_attachment_annotations(&ticket.id, &attachment_id, body.annotations, now())
+        .map_err(ApiError::from)?;
+    state.changed_in(&entry, "attachment_annotations_updated", &updated);
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
         ticket: api_ticket(&entry, &updated)?,

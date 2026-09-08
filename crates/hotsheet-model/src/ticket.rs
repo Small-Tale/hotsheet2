@@ -51,10 +51,29 @@ impl Note {
 
 /// Durable metadata for one attachment payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MediaAnnotation {
+    pub id: String,
+    /// Rectangle coordinates normalized to 0…10,000 relative to the media itself.
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+    /// Video/SVG timeline range. Equal endpoints represent one point in time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attachment {
     pub id: Ulid,
     pub filename: String,
     pub created_at: Timestamp,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<MediaAnnotation>,
 }
 
 /// A request for a specific person's involvement (`docs/10` §10.2).

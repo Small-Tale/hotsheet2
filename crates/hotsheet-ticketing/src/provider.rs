@@ -761,6 +761,7 @@ impl TicketProvider for GitProvider {
                 id: item.id,
                 filename: item.sanitized_filename(),
                 created_at: item.created_at.clone(),
+                annotations: Vec::new(),
             });
         }
         ticket.attachments.sort_by(|a, b| {

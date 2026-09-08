@@ -91,6 +91,7 @@ pub struct ApiAttachment {
     pub id: String,
     pub filename: String,
     pub created_at: String,
+    pub annotations: Vec<hotsheet_model::MediaAnnotation>,
 }
 
 impl From<&Ticket> for ApiTicket {
@@ -163,6 +164,7 @@ impl ApiTicket {
                     id: attachment.id.to_string(),
                     filename: attachment.filename.clone(),
                     created_at: attachment.created_at.as_str().to_string(),
+                    annotations: attachment.annotations.clone(),
                 })
                 .collect(),
             warnings: Vec::new(),

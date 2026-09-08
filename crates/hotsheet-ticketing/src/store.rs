@@ -591,6 +591,7 @@ impl FsStore {
                 id: attachment_id,
                 filename: name.to_string(),
                 created_at: created_at.clone(),
+                annotations: Vec::new(),
             });
             ticket.attachments.sort_by(|a, b| {
                 a.created_at
@@ -786,6 +787,31 @@ impl FsStore {
         Ok(ticket)
     }
 
+    /// Replace an attachment's normalized media annotations and commit the ticket update.
+    pub fn set_attachment_annotations(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: &Ulid,
+        annotations: Vec<hotsheet_model::MediaAnnotation>,
+        now: Timestamp,
+    ) -> Result<Ticket, StoreError> {
+        let mut ticket = self.read_ticket(ticket_id)?;
+        let attachment = ticket
+            .attachments
+            .iter_mut()
+            .find(|item| &item.id == attachment_id)
+            .ok_or_else(|| {
+                StoreError::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("attachment {attachment_id}"),
+                ))
+            })?;
+        attachment.annotations = annotations;
+        ticket.updated_at = now;
+        self.write_ticket_committing(&ticket)?;
+        Ok(ticket)
+    }
+
     fn add_legacy_attachment_metadata(&self, ticket: &mut Ticket) -> Result<(), StoreError> {
         let dir = self.attachment_dir(&ticket.id);
         let entries = match fs::read_dir(dir) {
@@ -808,6 +834,7 @@ impl FsStore {
                     id,
                     filename,
                     created_at: ticket.created_at.clone(),
+                    annotations: Vec::new(),
                 });
             }
         }
@@ -1485,6 +1512,7 @@ mod tests {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
             filename: FINDER_METADATA_FILE.into(),
             created_at: ticket.created_at.clone(),
+            annotations: Vec::new(),
         });
         store.write_ticket(&ticket).unwrap();
         let attachment_dir = store.attachment_dir(&ticket.id);

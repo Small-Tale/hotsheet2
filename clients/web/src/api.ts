@@ -7,7 +7,8 @@ export interface ProviderConnection {id:string;provider:string;locator:string;na
 export interface GitHubAuthStart {session_id:string;user_code:string;verification_uri:string;expires_in:number}
 export type GitHubAuthStatus={state:'pending'}|{state:'authorized';credential_reference:string}|{state:'denied'|'expired'|'cancelled'}|{state:'error';message:string}
 export interface Note {id:string;kind:'regular'|'activity'|'feedback_needed'|'feedback_draft'|'status';created_at:string;edited_at:string;summary?:string;text:string}
-export interface Attachment {id:string;filename:string;created_at:string}
+export interface MediaAnnotation {id:string;x:number;y:number;width:number;height:number;start_ms?:number;end_ms?:number;text:string}
+export interface Attachment {id:string;filename:string;created_at:string;annotations?:MediaAnnotation[]}
 export interface Ticket {qualified_id:string;native_id:string;native_url?:string;title:string;status:string;connection_id:string;notes?:Note[];attachments?:Attachment[]}
 export interface CheckoutSource {connection_id:string;provider:string;locator:string}
 export interface Checkout {id:string;root:string;alias:string;repository?:string;stores:string[];sources?:CheckoutSource[];default_source?:string}
@@ -69,6 +70,7 @@ export class Api {
   checkoutAttachmentAction=(checkout:string,id:string,attachmentId:string,action:'open'|'reveal'|'path')=>this.request<{path:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachmentId)}/action`,{method:'POST',body:JSON.stringify({action})});
   checkoutAttachmentByNameAction=(checkout:string,id:string,filename:string,action:'open'|'reveal'|'path')=>this.request<{path:string}>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/attachments/by-name/${encodeURIComponent(filename)}/action`,{method:'POST',body:JSON.stringify({action})});
   deleteCheckoutAttachment=(checkout:string,id:string,attachmentId:string)=>this.request<FullTicket&{store:string}>(this.checkoutAttachmentUrl(checkout,id,attachmentId).slice(this.origin.length),{method:'DELETE'}).then(ticket=>({store:ticket.store,ticket}));
+  updateCheckoutAttachmentAnnotations=(checkout:string,id:string,attachmentId:string,annotations:MediaAnnotation[])=>this.request<FullTicket&{store:string}>(this.checkoutAttachmentUrl(checkout,id,attachmentId).slice(this.origin.length),{method:'PUT',body:JSON.stringify({annotations})}).then(ticket=>({store:ticket.store,ticket}));
   repositoryStatus=(checkout:string)=>this.request<RepositoryStatus>(`/checkouts/${encodeURIComponent(checkout)}/repository/status`);
   repositoryFiles=(checkout:string,view:'staged'|'unstaged'|'untracked'|'conflicted',cursor=0,limit=50)=>this.request<RepositoryPage<RepositoryFile>>(`/checkouts/${encodeURIComponent(checkout)}/repository/files?view=${view}&cursor=${cursor}&limit=${limit}`);
   repositoryCommits=(checkout:string,cursor=0,limit=50)=>this.request<RepositoryPage<CodeReviewCommit>>(`/checkouts/${encodeURIComponent(checkout)}/repository/commits?cursor=${cursor}&limit=${limit}`);

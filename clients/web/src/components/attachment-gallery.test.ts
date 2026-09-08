@@ -23,6 +23,23 @@ describe('AttachmentGallery',()=>{
     expect(markup).toContain(' controls');
     expect(markup).not.toContain('autoplay');
     expect(markup).toContain('data-gallery-media="true"');
+    expect(markup).toContain('name="gallery-playhead"');
+    expect(markup).toContain('data-action="toggle-gallery-playback"');
+  });
+  it('renders selected normalized rectangles, resize handles, and video range controls in markup mode',()=>{
+    const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4',markup:true,drawMode:true,selectedAnnotation:'annotation-1',playheadMs:1_500,durationMs:10_000,annotations:[{id:'annotation-1',x:1000,y:2000,width:3000,height:2500,start_ms:1000,end_ms:2000,text:'Check **this**'}]}));
+    expect(markup).toContain('data-action="toggle-gallery-draw"');
+    expect(markup).toContain('data-action="delete-gallery-annotation"');
+    expect(markup).toContain('data-action="set-gallery-range-start"');
+    expect(markup).toContain('left:10%;top:20%;width:30%;height:25%');
+    expect(markup).toContain('data-annotation-handle="se"');
+    expect(markup).toContain('Check **this**');
+  });
+  it('uses the same point/range controls for animated SVG annotations',()=>{
+    const markup=String(AttachmentGallery({images:[{id:'svg',name:'animated.svg',url:'/animated.svg'}],activeUrl:'/animated.svg',markup:true,playheadMs:500,durationMs:2000,annotations:[{id:'point',x:100,y:100,width:1000,height:1000,start_ms:500,end_ms:500,text:''}],selectedAnnotation:'point'}));
+    expect(markup).toContain('name="gallery-playhead"');
+    expect(markup).toContain('data-action="set-gallery-range-start"');
+    expect(markup).toContain('aria-label="Annotation 1"');
   });
   it.each([
     [{naturalWidth:2000,naturalHeight:1000,availableWidth:1000,availableHeight:800},[.5,.8,1]],

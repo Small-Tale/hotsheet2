@@ -897,6 +897,32 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     let video_attached = body_json(video_response).await;
     assert_eq!(video_attached["attachments"][0]["filename"], "choppy.mov");
     let video_attachment_id = video_attached["attachments"][0]["id"].as_str().unwrap();
+    let annotated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+                Some(r#"{"annotations":[{"id":"region-1","x":1000,"y":2000,"width":3000,"height":2500,"start_ms":1000,"end_ms":2000,"text":"Review this frame"}]}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(annotated["attachments"][0]["annotations"][0]["x"], 1000);
+    assert_eq!(
+        annotated["attachments"][0]["annotations"][0]["text"],
+        "Review this frame"
+    );
+    let invalid = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+            Some(r#"{"annotations":[{"id":"bad","x":9900,"y":0,"width":200,"height":1,"text":"outside"}]}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     let video_removed = body_json(
         app.clone()
             .oneshot(authed(

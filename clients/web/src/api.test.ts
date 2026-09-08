@@ -16,6 +16,13 @@ describe('attachment filename transport',()=>{
     expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20one/tickets/HS2-ONE/attachments/by-name/screen%20shot.svg/action',expect.objectContaining({method:'POST',body:'{"action":"reveal"}'}));
     fetchMock.mockRestore();
   });
+  it('stores normalized media annotations on the attachment route',async()=>{
+    const annotation={id:'annotation-1',x:1000,y:2000,width:3000,height:2500,start_ms:1000,end_ms:2000,text:'Check this'};
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({store:'git-local',ticket:{attachments:[]}}),{status:200}));
+    await new Api('/api').updateCheckoutAttachmentAnnotations('folder','ticket','attachment',[annotation]);
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder/tickets/ticket/attachments/attachment',expect.objectContaining({method:'PUT',body:JSON.stringify({annotations:[annotation]})}));
+    fetchMock.mockRestore();
+  });
 });
 
 describe('corrupt ticket transport',()=>{

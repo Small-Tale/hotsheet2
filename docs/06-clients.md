@@ -384,6 +384,13 @@ prompt can be dismissed and returns on a later open until a source is configured
   Note-referenced images resolve to the same gallery identity as their attached-file
   thumbnail even though Markdown uses a by-name URL, so button, keyboard-arrow, and
   horizontal-swipe navigation continue from the media item the user actually selected.
+  Full-screen markup mode follows the exported image/video gallery wireframes: normalized
+  rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
+  and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
+  time ranges; only ranges at the current playhead appear over the media, while persistent
+  markers remain over the scrubber and bracket controls set the selected range endpoints.
+  Annotation geometry and time are stored on attachment metadata, so zooming, resizing,
+  reopening, and git synchronization do not change their meaning.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher or anywhere on the expanded
   composer, inspect and remove the staged filenames, and cancel to discard the entire

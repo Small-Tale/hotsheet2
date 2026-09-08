@@ -440,6 +440,7 @@ mod tests {
             id: shared_id,
             filename: "ours.png".into(),
             created_at: ts("2026-08-19T01:00:00Z"),
+            annotations: Vec::new(),
         }];
         let mut theirs = base.clone();
         theirs.updated_at = ts("2026-08-19T03:00:00Z");
@@ -448,11 +449,13 @@ mod tests {
                 id: shared_id,
                 filename: "renamed.png".into(),
                 created_at: ts("2026-08-19T01:00:00Z"),
+                annotations: Vec::new(),
             },
             Attachment {
                 id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
                 filename: "theirs.txt".into(),
                 created_at: ts("2026-08-19T02:00:00Z"),
+                annotations: Vec::new(),
             },
         ];
         let merged = merge_tickets(&base, &ours, &theirs).ticket;

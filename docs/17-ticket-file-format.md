@@ -143,6 +143,12 @@ copy/move/sync/Git preserve all three metadata values. For legacy direct-child p
 the store deterministically derives the id from ticket id + filename and uses the
 ticket's own `created_at`; filesystem modification time is never authoritative.
 
+Media attachments may also carry an `annotations` sequence. Each annotation has a stable
+string `id`, a rectangle (`x`, `y`, `width`, `height`) normalized to the integer range
+0–10,000, and optional `text`. Timed media additionally stores an inclusive
+`start_ms`/`end_ms` pair; equal endpoints represent a point annotation. Missing
+`annotations` remains equivalent to an empty sequence, preserving older HS2 files.
+
 ## 17.4 Rules the parser/serializer enforce
 
 - **Round-trip stable:** parse → serialize is byte-idempotent for a canonical file
