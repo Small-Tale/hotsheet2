@@ -31,15 +31,19 @@ describe('stable dev snapshot', () => {
   });
 
   it('preserves the original repository root for every snapshot-side bridge', () => {
-    const environment = stableDevEnvironment('/work/hotsheet2/clients/web', {});
+    const environment = stableDevEnvironment('/work/hotsheet2/clients/web', '/tmp/stable-snapshot', {});
     expect(environment.HOTSHEET_REPO_ROOT).toBe('/work/hotsheet2');
     expect(environment.HOTSHEET_DEV_REVIEW_REPO_ROOT).toBe('/work/hotsheet2');
+    expect(environment.HOTSHEET_WEB_STABLE_DEV).toBe('1');
+    expect(environment.HOTSHEET_VITE_CACHE_DIR).toBe('/tmp/stable-snapshot/.vite-cache');
 
-    const overridden = stableDevEnvironment('/snapshot/web', {
+    const overridden = stableDevEnvironment('/snapshot/web', '/tmp/other-snapshot', {
       HOTSHEET_REPO_ROOT: '/real/repository',
       HOTSHEET_DEV_REVIEW_REPO_ROOT: '/review/repository',
+      HOTSHEET_VITE_CACHE_DIR: '/shared/cache-that-must-not-be-used',
     });
     expect(overridden.HOTSHEET_REPO_ROOT).toBe('/real/repository');
     expect(overridden.HOTSHEET_DEV_REVIEW_REPO_ROOT).toBe('/review/repository');
+    expect(overridden.HOTSHEET_VITE_CACHE_DIR).toBe('/tmp/other-snapshot/.vite-cache');
   });
 });

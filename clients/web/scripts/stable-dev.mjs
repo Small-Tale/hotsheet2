@@ -33,12 +33,14 @@ export async function removeStableSnapshot(snapshotRoot) {
   await rm(snapshotRoot, { recursive: true, force: true });
 }
 
-export function stableDevEnvironment(sourceRoot, environment = process.env) {
+export function stableDevEnvironment(sourceRoot, snapshotRoot, environment = process.env) {
   const repoRoot = environment.HOTSHEET_REPO_ROOT ?? resolve(sourceRoot, '../..');
   return {
     ...environment,
     HOTSHEET_REPO_ROOT: repoRoot,
     HOTSHEET_DEV_REVIEW_REPO_ROOT: environment.HOTSHEET_DEV_REVIEW_REPO_ROOT ?? repoRoot,
+    HOTSHEET_WEB_STABLE_DEV: '1',
+    HOTSHEET_VITE_CACHE_DIR: resolve(snapshotRoot, '.vite-cache'),
   };
 }
 
@@ -49,7 +51,7 @@ async function main() {
   const viteEntry = resolve(sourceRoot, 'node_modules/vite/bin/vite.js');
   const child = spawn(process.execPath, [viteEntry, '--host', '127.0.0.1', ...process.argv.slice(2)], {
     cwd: snapshotRoot,
-    env: stableDevEnvironment(sourceRoot),
+    env: stableDevEnvironment(sourceRoot, snapshotRoot),
     stdio: 'inherit',
   });
 

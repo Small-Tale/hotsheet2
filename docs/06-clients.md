@@ -109,7 +109,12 @@ prompt can be dismissed and returns on a later open until a source is configured
   package into a temporary snapshot and starts Vite there. The running app retains the
   development bridge and `/ux-demo`, but concurrent edits in the checkout cannot trigger
   HMR or expose a partially edited multi-file state; restart the command to load a new
-  snapshot. The launcher passes the original repository root into the snapshot so the
+  snapshot. Each stable process also owns a private Vite dependency cache inside its
+  snapshot and disables runtime dependency discovery. A later route may therefore load a
+  previously unseen ESM dependency without Vite optimizing it and forcing a document
+  reload. Playwright and Vitest use separate disposable Vite caches, so a test run cannot
+  mutate the cache of a maintainer's running stable client. The launcher
+  passes the original repository root into the snapshot so the
   project bridge still resolves the real `target/debug/hotsheet-server` rather than a
   nonexistent temporary `target` directory. Use `npm run dev:hot` only when actively developing the web UI and immediate
   HMR is desired. Browser tests use `dev:hot` on a separate default port and never reuse

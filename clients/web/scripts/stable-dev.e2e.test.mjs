@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { chromium } from '@playwright/test';
 import { expect, it } from 'vitest';
 
 const webRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,6 +31,14 @@ async function waitForSource(url) {
     await new Promise(resolveWait => setTimeout(resolveWait, 50));
   }
   throw lastError ?? new Error(`Timed out waiting for ${url}`);
+}
+
+async function waitForEmptyDirectory(path) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if ((await readdir(path)).length === 0) return;
+    await new Promise(resolveWait => setTimeout(resolveWait, 20));
+  }
+  expect(await readdir(path)).toEqual([]);
 }
 
 it('serves the startup snapshot until the stable dev process restarts', async () => {
@@ -64,3 +73,42 @@ it('serves the startup snapshot until the stable dev process restarts', async ()
     expect(remainingSnapshots).toEqual([]);
   }
 }, 15_000);
+
+it('does not reload when a later route first imports another dependency', async () => {
+  const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
+  const port = await availablePort();
+  let output = '';
+  const child = spawn(process.execPath, [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'], {
+    env: {
+      ...process.env,
+      HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
+      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', chunk => { output += chunk; });
+  child.stderr.on('data', chunk => { output += chunk; });
+  const browser = await chromium.launch();
+  try {
+    await waitForSource(`http://127.0.0.1:${port}/`);
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      const key = 'hotsheet-stable-document-loads';
+      sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
+    });
+    await page.goto(`http://127.0.0.1:${port}/`);
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+    await page.goto(`http://127.0.0.1:${port}/ux-demo`);
+    await page.waitForTimeout(1_000);
+    expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('2');
+    expect(output).not.toContain('new dependencies optimized');
+    expect(output).not.toContain('optimized dependencies changed. reloading');
+  } finally {
+    await browser.close();
+    child.kill('SIGTERM');
+    await new Promise(resolveExit => child.once('exit', resolveExit));
+    await waitForEmptyDirectory(runtimeTemp);
+    await rm(runtimeTemp, { recursive: true, force: true });
+  }
+}, 30_000);
