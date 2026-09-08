@@ -1021,6 +1021,15 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   Rich native tool events and distilled background/subtask milestones remain tracked by
   HS2-SW655F and HS2-3GRNZW respectively.
 
+AI-authored artifacts use the shared `AIContentLabel`; attribution is persistent rather
+than hover-only and is repeated in the containing response, narration item, or note's
+accessible name. Narration and distilled summaries explicitly say that they may contain
+errors. Thumbs feedback appears only when the composition has a selected ticket whose
+provider accepts notes. The optional explanation and consequence-oriented rating are
+then appended as an ordinary ticket note, so feedback is syncable and auditable rather
+than trapped in browser state. Legacy notes without durable AI provenance are not
+guessed from their prose or author-like display text.
+
 **Feedback needed is needs review.** These are one user-facing concept, not competing
 ticket states. A `feedback_needed` note, a description containing the case-sensitive
 `FEEDBACK NEEDED` marker, and an explicit review request all project to

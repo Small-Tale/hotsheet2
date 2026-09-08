@@ -7,12 +7,14 @@ const permission:PermissionItem={id:1,connection:'connection-1',tool:'Bash',acti
 
 describe('AIConversation',()=>{
   it('renders ordered Markdown turns, progress, and an inline permission request',()=>{
-    const markup=String(AIConversation({open:true,tool:'Codex',sessionId:'session-1',messages:[{id:'one',role:'user',content:'Please **check** this.'},{id:'two',role:'assistant',content:'Checking `main.tsx`.',status:'streaming',usage:{tokensIn:12_000,tokensOut:840,costUsd:.0423,model:'codex-5.6'}}],draft:'Follow up',busy:true,progress:'Waiting for permission…',interruptible:true,permissions:[permission],activity:[{id:'activity-1',tool:'Codex',kind:'edit',summary:'Edited main.tsx',importance:'normal'}],totalUsage:{tokensIn:12_000,tokensOut:840,costUsd:.0423}}));
+    const markup=String(AIConversation({open:true,tool:'Codex',sessionId:'session-1',messages:[{id:'one',role:'user',content:'Please **check** this.'},{id:'two',role:'assistant',content:'Checking `main.tsx`.',status:'streaming',usage:{tokensIn:12_000,tokensOut:840,costUsd:.0423,model:'codex-5.6'}}],draft:'Follow up',busy:true,progress:'Waiting for permission…',interruptible:true,permissions:[permission],activity:[{id:'activity-1',tool:'Codex',kind:'edit',summary:'Edited main.tsx',importance:'normal'}],totalUsage:{tokensIn:12_000,tokensOut:840,costUsd:.0423},feedbackAvailable:true}));
     expect(markup.indexOf('Please <strong>check</strong> this.')).toBeLessThan(markup.indexOf('Checking <code>main.tsx</code>.'));
     expect(markup).toContain('data-action="stop-conversation"');
     expect(markup).toContain('data-component="permission-request-card"');
     expect(markup).toContain('Waiting for permission');
-    expect(markup).toContain('12.8K tokens');expect(markup).toContain('≈$0.04');expect(markup).toContain('Edited main.tsx');expect(markup).toContain('AI-generated · may contain errors');
+    expect(markup).toContain('12.8K tokens');expect(markup).toContain('≈$0.04');expect(markup).toContain('Edited main.tsx');expect(markup).toContain('AI-generated');expect(markup).toContain('may contain errors');
+    expect(markup).toContain('aria-label="AI-generated response by Codex"');
+    expect(markup).toContain('data-ai-feedback-target="activity:activity-1"');
   });
 
   it('hides stop when interruption is unavailable and exposes terminal failures',()=>{
@@ -20,5 +22,11 @@ describe('AIConversation',()=>{
     expect(markup).not.toContain('data-action="stop-conversation"');
     expect(markup).toContain('data-status="failed"');
     expect(markup).toContain('The tool turn failed.');
+  });
+
+  it('only offers persisted ticket feedback when the composition has a ticket note target',()=>{
+    const message={id:'answer',role:'assistant' as const,content:'Done.',status:'completed' as const};
+    expect(String(AIConversation({open:true,tool:'Codex',messages:[message],draft:'',busy:false,interruptible:false}))).not.toContain('rate-ai-content');
+    expect(String(AIConversation({open:true,tool:'Codex',messages:[message],draft:'',busy:false,interruptible:false,feedbackAvailable:true}))).toContain('data-ai-feedback-target="conversation:answer"');
   });
 });

@@ -1,18 +1,18 @@
 import { signal } from 'kerfjs';
 
 import { MarkdownEditor, type MarkdownEditorMode } from '../components/markdown-editor';
-import { NoteCard, type NoteKind } from '../components/note-card';
+import { NoteCard, type NoteCardProps, type NoteKind } from '../components/note-card';
 import { NoteComposer } from '../components/note-composer';
 import type { InspectorTab } from '../components/ticket-inspector';
 import { TicketReader } from '../components/ticket-reader';
 
 export const NOTE_DEMO_KINDS: readonly NoteKind[] = ['regular', 'status', 'feedback_needed', 'feedback_draft', 'activity'];
-export const noteDemoNotes = signal([
-  { id: 'regular', kind: 'regular' as const, author: 'Claude', time: '12 minutes ago', body: 'The shared row now keeps metadata readable at narrow widths.' },
+export const noteDemoNotes = signal<NoteCardProps[]>([
+  { id: 'regular', kind: 'regular' as const, author: 'Claude', time: '12 minutes ago', body: 'The shared row now keeps metadata readable at narrow widths.', aiAuthored: true, aiTool: 'Claude', aiMayContainErrors: false },
   { id: 'status', kind: 'status' as const, author: 'Hot Sheet', time: '9 minutes ago', body: 'Status changed from Started to Needs Review.' },
   { id: 'feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '4 minutes ago', title: 'Feedback needed', body: 'Which behavior should we preserve?\n\n1. Keep the current filter\n2. Reset to the queue\n3. Remember per project' },
   { id: 'draft', kind: 'feedback_draft' as const, author: 'You', time: '2 minutes ago', body: 'Preserve the current filter when switching between related worktrees.' },
-  { id: 'activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Finished the responsive layout pass and browser verification.' },
+  { id: 'activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Finished the responsive layout pass and browser verification.', aiAuthored: true, aiTool: 'Codex' },
 ]);
 
 export function NoteCardDemo() {
@@ -22,12 +22,12 @@ export function NoteCardDemo() {
 export const noteComposerValue = signal('Summarize the design decision and link the verification evidence.');
 export function NoteComposerDemo() { return <section class="note-card-demo" aria-label="NoteComposer demo"><NoteComposer value={noteComposerValue.value} /></section>; }
 
-export const READER_NOTES = [
+export const READER_NOTES:NoteCardProps[] = [
   { id: 'reader-status', kind: 'status' as const, author: 'Hot Sheet', time: '1 hour ago', body: 'Status changed from Not started to Started.' },
-  { id: 'reader-note', kind: 'regular' as const, author: 'Claude', time: '24 minutes ago', body: 'The reader should preserve a comfortable line length while the [note history](/ux-demo?component=note-card) remains easy to scan.' },
+  { id: 'reader-note', kind: 'regular' as const, author: 'Claude', time: '24 minutes ago', body: 'The reader should preserve a comfortable line length while the [note history](/ux-demo?component=note-card) remains easy to scan.', aiAuthored: true, aiTool: 'Claude', aiMayContainErrors: false },
   { id: 'reader-feedback', kind: 'feedback_needed' as const, author: 'Codex', time: '12 minutes ago', body: 'How should the reader preserve this response?\n\nCHOICE:\n- Keep it beside the **larger editor**\n- Move it below the editor\n- `attachment:reader-wireframe.png`' },
   { id: 'reader-draft', kind: 'feedback_draft' as const, author: 'You', time: '8 minutes ago', body: 'Yes, keep the response beside the larger editor.' },
-  { id: 'reader-activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Completed the first browser review of the reading surface.' },
+  { id: 'reader-activity', kind: 'activity' as const, author: 'Codex', time: 'Now', body: 'Completed the first browser review of the reading surface.', aiAuthored: true, aiTool: 'Codex' },
 ];
 export const readerNotes = signal(READER_NOTES);
 export const readerFeedbackChoiceSelections = signal<Record<string, string[]>>({'reader-feedback':['choice-1']});

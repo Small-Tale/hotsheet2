@@ -674,6 +674,12 @@ icons; structural separators do not require icons.
   Shift-range selection, and coexist with inline and freeform replies. Hover/focus
   reveals an explicit Edit action in both inspector and reader, while
   the inspector toolbar provides the single Reader entry point from every inspector tab.
+- `AIContentLabel` — **built** as the shared persistent attribution and limitations cue
+  for AI-authored notes, conversation responses, and narration. The factual tool name
+  and “may contain errors” text are included in the containing artifact's accessible
+  name. Its optional thumbs feedback uses consequence language and is only exposed by
+  production compositions that have a selected ticket where feedback can be persisted
+  as an ordinary note; it is never a browser-only rating counter.
 - `RegularNote`
 - `StatusNote`
 - `FeedbackNeededNote`

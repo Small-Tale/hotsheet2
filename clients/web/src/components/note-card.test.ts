@@ -127,4 +127,12 @@ describe('NoteCard', () => {
   });
 
   it('marks the exact regular acknowledgement for subtle presentation',()=>{const acknowledgement=String(NoteCard({id:'ack',kind:'regular',author:'You',time:'Now',body:'No response needed'}));expect(acknowledgement).toContain('data-acknowledgement="true"');expect(String(NoteCard({id:'other',kind:'regular',author:'You',time:'Now',body:'No response needed here'}))).not.toContain('data-acknowledgement="true"')});
+
+  it('keeps AI attribution, limitations, and feedback in the note accessible name',()=>{
+    const markup=String(NoteCard({id:'distilled',kind:'activity',author:'Hot Sheet AI',aiAuthored:true,aiTool:'Codex',time:'Now',body:'Summarized the test run.'}));
+    expect(markup).toContain('data-ai-authored="true"');
+    expect(markup).toContain('aria-label="AI-generated activity by Codex; may contain errors"');
+    expect(markup).toContain('data-component="ai-content-label"');
+    expect(markup).toContain('data-ai-feedback-target="note:distilled"');
+  });
 });

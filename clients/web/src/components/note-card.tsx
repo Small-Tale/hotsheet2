@@ -6,11 +6,12 @@ import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, RefreshCw
 import type {AttachmentReferenceContext} from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
 import { type InlineFeedbackReply,splitFeedbackPrompt } from '../feedback-replies';
+import {AIContentLabel} from './ai-content-label';
 import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
 
 export type NoteKind = 'regular' | 'status' | 'feedback_needed' | 'feedback_draft' | 'activity';
-export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editable?: boolean; deletable?: boolean; editing?: boolean; draft?: string; readerMode?: boolean; respondToFeedback?: boolean; inlineReplies?: readonly InlineFeedbackReply[]; selectedChoices?: readonly string[];attachmentContext?:AttachmentReferenceContext }
+export interface NoteCardProps { id: string; kind: NoteKind; author: string; time: string; body: string; title?: string; editable?: boolean; deletable?: boolean; editing?: boolean; draft?: string; readerMode?: boolean; respondToFeedback?: boolean; inlineReplies?: readonly InlineFeedbackReply[]; selectedChoices?: readonly string[];attachmentContext?:AttachmentReferenceContext;aiAuthored?:boolean;aiTool?:string;aiMayContainErrors?:boolean }
 
 const presentations = {
   regular: { label: 'Note', icon: MessageSquareText, iconName: 'message-square-text' },
@@ -31,7 +32,7 @@ export function FeedbackPrompt({source,id,inlineReplies=[],selectedChoices=[],at
   return <div class="note-card__feedback-prompt">{choiceGroup ? <><FeedbackBlocks source={choiceGroup.before} sourceStart={0} noteId={id} replies={inlineReplies} attachmentContext={attachmentContext} /><div class="note-card__choices" role="group" aria-label="Feedback choices">{choiceGroup.choices.map(choice => <div class="note-card__choice" data-action="toggle-feedback-choice" data-note-id={id} data-choice-id={choice.id} role="button" tabIndex={0} aria-pressed={selected.has(choice.id) ? 'true' : 'false'}><span class="note-card__choice-check" aria-hidden="true"><LucideIcon icon={Check} name="check" /></span><span><MarkdownPreview source={choice.markdown} attachmentContext={attachmentContext} /></span></div>)}</div><FeedbackBlocks source={choiceGroup.after} sourceStart={choiceGroup.afterStart} noteId={id} replies={inlineReplies} attachmentContext={attachmentContext} /></> : <FeedbackBlocks source={source} sourceStart={0} noteId={id} replies={inlineReplies} attachmentContext={attachmentContext} />}</div>;
 }
 
-export function NoteCard({ id, kind, author, time, body, title, editable = true, deletable = true, editing = false, draft, readerMode = false, respondToFeedback = false, inlineReplies = [], selectedChoices = [],attachmentContext }: NoteCardProps) {
+export function NoteCard({ id, kind, author, time, body, title, editable = true, deletable = true, editing = false, draft, readerMode = false, respondToFeedback = false, inlineReplies = [], selectedChoices = [],attachmentContext,aiAuthored=false,aiTool,aiMayContainErrors=kind==='activity' }: NoteCardProps) {
   const presentation = presentations[kind];
   const feedbackEditor = readerMode && (kind === 'feedback_needed' || kind === 'feedback_draft');
   const feedbackResponse = readerMode && kind === 'feedback_needed';
@@ -40,7 +41,7 @@ export function NoteCard({ id, kind, author, time, body, title, editable = true,
   const choiceGroup = feedbackResponse ? parseFeedbackChoices(body) : undefined;
   const editAttributes=editable&&!editorOpen?{'data-edit-on-double-click':'true',role:'button',tabIndex:0,'aria-label':'Edit note',title:'Double-click to edit'}:{};
   const acknowledgement=kind==='regular'&&body.trim()==='No response needed';
-  return <article class={`note-card${editorOpen ? ' note-card--editing' : ''}`} data-component="note-card" data-note-id={id} data-kind={kind} data-acknowledgement={acknowledgement?'true':undefined} data-edit-on-double-click={editable&&!editorOpen?'true':undefined} title={editable&&!editorOpen?'Double-click to edit':undefined}>
+  return <article class={`note-card${editorOpen ? ' note-card--editing' : ''}`} data-component="note-card" data-note-id={id} data-kind={kind} data-ai-authored={aiAuthored?'true':undefined} aria-label={aiAuthored?`AI-generated ${presentation.label.toLowerCase()} by ${aiTool??author}${aiMayContainErrors?'; may contain errors':''}`:undefined} data-acknowledgement={acknowledgement?'true':undefined} data-edit-on-double-click={editable&&!editorOpen?'true':undefined} title={editable&&!editorOpen?'Double-click to edit':undefined}>
     <header class="note-card__header">
       <span class="note-card__kind"><LucideIcon icon={presentation.icon} name={presentation.iconName} />{title ?? presentation.label}</span>
       <span class="note-card__header-end">{!editorOpen && deletable && <span class="note-card__actions"><button type="button" data-action="delete-note" data-note-id={id} aria-label="Delete note"><LucideIcon icon={Trash2} name="trash-2" /></button></span>}<time>{time}</time></span>
@@ -48,6 +49,6 @@ export function NoteCard({ id, kind, author, time, body, title, editable = true,
     {feedbackResponse && <FeedbackPrompt source={body} id={id} inlineReplies={inlineReplies} selectedChoices={selectedChoices} attachmentContext={attachmentContext}/>}
     {editorOpen ? <div class="note-card__editor"><textarea name="note-body" data-note-id={id} data-note-response={feedbackResponse ? 'true' : undefined} aria-label={feedbackResponse ? 'Feedback response' : 'Note body'} placeholder={feedbackResponse && choiceGroup ? 'Additional response (optional)' : feedbackResponse && inlineReplies.length ? 'General response (optional)' : undefined}>{source}</textarea>{feedbackEditor && <div>{feedbackResponse&&<wa-button size="small" appearance="outlined" data-action="dismiss-feedback" data-note-id={id} title="Clear this feedback request without replying">No response needed</wa-button>}<wa-button size="small" appearance="accent" data-action="save-note-edit" data-note-id={id} data-note-response={feedbackResponse ? 'true' : undefined}>{feedbackResponse ? 'Respond' : 'Submit'}</wa-button></div>}</div> : <div class="note-card__body" {...editAttributes}><MarkdownPreview source={body} attachmentContext={attachmentContext} /></div>}
     {respondToFeedback && !readerMode && <wa-button class="note-card__respond" appearance="outlined" data-action="respond-to-feedback" data-note-id={id}>Respond to Feedback</wa-button>}
-    <footer>{author}</footer>
+    <footer>{aiAuthored?<AIContentLabel tool={aiTool??author} mayContainErrors={aiMayContainErrors} feedbackTarget={`note:${id}`}/>:author}</footer>
   </article>;
 }

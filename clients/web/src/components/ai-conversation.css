@@ -17,6 +17,7 @@
 .ai-conversation__message { width: fit-content; max-width: min(85%, 36rem); padding: .7rem .85rem; border-radius: .8rem; background: var(--wa-color-neutral-fill-quiet); }
 .ai-conversation__message--user { margin-left: auto; color: var(--wa-color-brand-on-loud); background: var(--wa-color-brand-fill-loud); }
 .ai-conversation__message>strong { display: block; margin-bottom: .2rem; font-size: var(--wa-font-size-xs); }
+.ai-conversation__message>strong .ai-content-label { color: inherit; }
 .ai-conversation__message>.markdown-preview { color: inherit; }
 .ai-conversation__message>.markdown-preview :is(p,ul,ol,blockquote,pre,table) { margin-block: var(--wa-space-2xs); }
 .ai-conversation__message>p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -25,10 +26,9 @@
 .ai-conversation__usage>span+span::before { margin-right: .35rem; content: '·'; }
 .ai-conversation__header .ai-conversation__usage { margin: 0 .25rem 0 0; }
 .ai-conversation__activity { display: grid; padding: .7rem .8rem; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: .7rem; background: var(--wa-color-neutral-fill-quiet); gap: .5rem; }
-.ai-conversation__activity>header,.ai-conversation__activity>header>span,.ai-conversation__activity small,.ai-conversation__activity-label { display: flex; align-items: center; }
+.ai-conversation__activity>header,.ai-conversation__activity>header>span { display: flex; align-items: center; }
 .ai-conversation__activity>header { justify-content: space-between; gap: .5rem; }
-.ai-conversation__activity>header>span,.ai-conversation__activity small,.ai-conversation__activity-label { gap: .3rem; }
-.ai-conversation__activity small,.ai-conversation__activity-label { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.ai-conversation__activity>header>span { gap: .3rem; }
 .ai-conversation__activity svg { width: .9rem; height: .9rem; }
 .ai-conversation__activity ol { display: grid; padding: 0; margin: 0; list-style: none; gap: .45rem; }
 .ai-conversation__activity li { display: grid; padding-top: .45rem; border-top: 1px solid var(--wa-color-neutral-border-quiet); gap: .15rem; }
