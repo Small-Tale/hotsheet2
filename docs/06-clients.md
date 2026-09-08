@@ -405,7 +405,16 @@ prompt can be dismissed and returns on a later open until a source is configured
   attachment panel.
 
   The inspector includes a Code Review segment for ticket-associated code history. It
-  lists each matching commit subject, up to two lines of its Markdown-formatted message
+  begins with a server-derived change-evidence summary: unique documentation, test,
+  source, and other file counts plus separate counts for newly added and modified existing
+  test files. Classification runs against each associated commit (not the browser's
+  working tree) and is configurable through the effective project setting
+  `code_review_file_classes`, whose JSON object contains `docs`, `tests`, and `source`
+  glob arrays. The defaults recognize `docs/**`, Markdown, conventional test/spec paths,
+  and the common `src`, `crates`, `clients`, and `apps` source roots. For example,
+  `hotsheet-cli settings set code_review_file_classes '{"docs":["docs/**"],"tests":["**/*.test.*"],"source":["src/**"]}'`
+  commits a shared project override; local overrides use `--scope local`.
+  The segment lists each matching commit subject, up to two lines of its Markdown-formatted message
   body, abbreviated SHA, and date even when no review tool is configured. Clicking the
   commit summary toggles its complete Markdown body. When the checkout has a Git
   `diff.tool`, each commit has an Open action

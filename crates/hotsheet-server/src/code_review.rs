@@ -43,6 +43,60 @@ pub struct CodeReview {
     pub ranges: Vec<CodeReviewRange>,
     pub difftool: Option<String>,
     pub truncated: bool,
+    pub summary: CodeReviewSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Default, PartialEq, Eq)]
+pub struct CodeReviewSummary {
+    pub files: CodeReviewFileCounts,
+    pub tests_added: usize,
+    pub tests_modified: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Default, PartialEq, Eq)]
+pub struct CodeReviewFileCounts {
+    pub total: usize,
+    pub docs: usize,
+    pub tests: usize,
+    pub source: usize,
+    pub other: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct CodeReviewClassification {
+    pub docs: Vec<String>,
+    pub tests: Vec<String>,
+    pub source: Vec<String>,
+}
+
+impl Default for CodeReviewClassification {
+    fn default() -> Self {
+        Self {
+            docs: vec![
+                "docs/**".into(),
+                "*.md".into(),
+                "*.mdx".into(),
+                "**/*.md".into(),
+                "**/*.mdx".into(),
+            ],
+            tests: vec![
+                "tests/**".into(),
+                "*.test.*".into(),
+                "*.spec.*".into(),
+                "*_test.rs".into(),
+                "**/*.test.*".into(),
+                "**/*.spec.*".into(),
+                "**/*_test.rs".into(),
+            ],
+            source: vec![
+                "src/**".into(),
+                "crates/**".into(),
+                "clients/**".into(),
+                "apps/**".into(),
+            ],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -76,6 +130,14 @@ pub enum CodeReviewError {
 }
 
 pub fn discover(root: &Path, ticket_slug: &str) -> Result<CodeReview, CodeReviewError> {
+    discover_with_classification(root, ticket_slug, &CodeReviewClassification::default())
+}
+
+pub fn discover_with_classification(
+    root: &Path,
+    ticket_slug: &str,
+    classification: &CodeReviewClassification,
+) -> Result<CodeReview, CodeReviewError> {
     let (all, difftool, truncated) = discover_commits(root)?;
     let commits = all
         .iter()
@@ -84,6 +146,7 @@ pub fn discover(root: &Path, ticket_slug: &str) -> Result<CodeReview, CodeReview
         .collect::<Vec<_>>();
     let ranges = contiguous_ranges(&all, &commits);
     Ok(CodeReview {
+        summary: summarize_changes(root, &commits, classification),
         commits,
         ranges,
         difftool,
@@ -98,11 +161,104 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     let (commits, difftool, truncated) = discover_commits(root)?;
     let ranges = repository_range(&commits, ahead).into_iter().collect();
     Ok(CodeReview {
+        summary: CodeReviewSummary::default(),
         commits,
         ranges,
         difftool,
         truncated,
     })
+}
+
+fn summarize_changes(
+    root: &Path,
+    commits: &[CodeReviewCommit],
+    classification: &CodeReviewClassification,
+) -> CodeReviewSummary {
+    let mut changed = std::collections::BTreeMap::<String, char>::new();
+    for commit in commits {
+        let Ok(output) = git_output(
+            root,
+            &[
+                "diff-tree",
+                "--root",
+                "--no-commit-id",
+                "--name-status",
+                "--no-renames",
+                "-r",
+                "-z",
+                &commit.sha,
+            ],
+        ) else {
+            continue;
+        };
+        let mut fields = output.split('\0').filter(|field| !field.is_empty());
+        while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
+            let state = status.chars().next().unwrap_or('M');
+            changed
+                .entry(path.replace('\\', "/"))
+                .and_modify(|existing| {
+                    if state == 'A' {
+                        *existing = 'A'
+                    }
+                })
+                .or_insert(state);
+        }
+    }
+    let mut summary = CodeReviewSummary::default();
+    for (path, status) in changed {
+        summary.files.total += 1;
+        if matches_any(&classification.docs, &path) {
+            summary.files.docs += 1
+        } else if matches_any(&classification.tests, &path) {
+            summary.files.tests += 1;
+            if status == 'A' {
+                summary.tests_added += 1
+            } else {
+                summary.tests_modified += 1
+            }
+        } else if matches_any(&classification.source, &path) {
+            summary.files.source += 1
+        } else {
+            summary.files.other += 1
+        }
+    }
+    summary
+}
+
+fn matches_any(patterns: &[String], path: &str) -> bool {
+    patterns.iter().any(|pattern| glob_matches(pattern, path))
+}
+
+fn glob_matches(pattern: &str, path: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let path = path.as_bytes();
+    let (mut p, mut s, mut star, mut retry) = (0, 0, None, 0);
+    while s < path.len() {
+        if p < pattern.len() && pattern[p] == b'*' {
+            while p < pattern.len() && pattern[p] == b'*' {
+                p += 1
+            }
+            star = Some(p);
+            retry = s;
+            continue;
+        }
+        if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == path[s]) {
+            p += 1;
+            s += 1;
+            continue;
+        }
+        if let Some(after) = star {
+            retry += 1;
+            s = retry;
+            p = after;
+            continue;
+        }
+        return false;
+    }
+    while p < pattern.len() && pattern[p] == b'*' {
+        p += 1
+    }
+    p == pattern.len()
 }
 
 pub fn discover_repository_metadata(
@@ -561,6 +717,7 @@ mod tests {
     #[test]
     fn arbitrary_commits_and_ranges_are_rejected_before_launch() {
         let review = CodeReview {
+            summary: CodeReviewSummary::default(),
             commits: vec![commit("bbbbbbbb", "HS2-X", "aaaaaaaa")],
             ranges: vec![],
             difftool: Some("configured".into()),
@@ -625,6 +782,7 @@ mod tests {
     #[test]
     fn compare_uses_the_two_exact_discovered_commits() {
         let review = CodeReview {
+            summary: CodeReviewSummary::default(),
             commits: vec![
                 commit("bbbbbbbb", "new", "aaaaaaaa"),
                 commit("aaaaaaaa", "old", "rootroot"),
@@ -662,5 +820,16 @@ mod tests {
                 count: 2,
             })
         );
+    }
+
+    #[test]
+    fn configurable_file_patterns_cover_nested_paths() {
+        assert!(glob_matches("docs/**", "docs/guide/setup.md"));
+        assert!(glob_matches("**/*.test.*", "clients/web/src/api.test.ts"));
+        assert!(glob_matches(
+            "**/*_test.rs",
+            "crates/core/src/store_test.rs"
+        ));
+        assert!(!glob_matches("src/**", "tests/src/example.rs"));
     }
 }

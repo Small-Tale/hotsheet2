@@ -2272,16 +2272,30 @@ async fn get_checkout_code_review(
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let root: std::path::PathBuf = checkout.root.into();
     let slug = ticket.slug;
-    tokio::task::spawn_blocking(move || code_review::discover(&root, &slug))
-        .await
+    let classification = Settings::new(entry.store.root())
+        .get_effective("code_review_file_classes")
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
+        .map(serde_json::from_value::<code_review::CodeReviewClassification>)
+        .transpose()
         .map_err(|error| {
             ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("code review discovery task failed: {error}"),
+                StatusCode::BAD_REQUEST,
+                format!("invalid code_review_file_classes setting: {error}"),
             )
         })?
-        .map(Json)
-        .map_err(code_review_api_error)
+        .unwrap_or_default();
+    tokio::task::spawn_blocking(move || {
+        code_review::discover_with_classification(&root, &slug, &classification)
+    })
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("code review discovery task failed: {error}"),
+        )
+    })?
+    .map(Json)
+    .map_err(code_review_api_error)
 }
 
 async fn open_checkout_code_review(

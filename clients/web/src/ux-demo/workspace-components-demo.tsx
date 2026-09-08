@@ -34,6 +34,7 @@ export const inspectorTitleDraft = signal(inspectorTitle.value);
 export const inspectorTitleEditing = signal(false);
 export const inspectorTags = signal(['client', 'ux']);
 export const inspectorCodeReview: CodeReview = {
+  summary:{files:{total:9,docs:2,tests:3,source:3,other:1},tests_added:2,tests_modified:1},
   difftool: 'Glassbox',
   truncated: false,
   ranges: [{ from: '92ed71a', to: 'c4a38be', count: 2 }],

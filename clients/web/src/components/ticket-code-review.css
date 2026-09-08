@@ -2,6 +2,14 @@
 .ticket-code-review__heading { display: flex; min-width: 0; align-items: baseline; gap: var(--wa-space-xs); }
 .ticket-code-review__heading h2 { margin: 0; }
 .ticket-code-review__heading span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); white-space: nowrap; }
+.ticket-code-review__evidence { margin-bottom: var(--wa-space-m); padding: var(--wa-space-s); border-radius: var(--wa-border-radius-m); background: var(--wa-color-neutral-fill-quiet); }
+.ticket-code-review__evidence h3 { margin: 0 0 var(--wa-space-xs); font-size: var(--wa-font-size-s); }
+.ticket-code-review__evidence-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--wa-space-xs); }
+.ticket-code-review__evidence-grid span { display: flex; min-width: 0; align-items: center; gap: var(--wa-space-xs); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.ticket-code-review__evidence-grid svg { width: 1rem; height: 1rem; flex: none; }
+.ticket-code-review__evidence-grid strong { color: var(--wa-color-text-normal); }
+.ticket-code-review__evidence p { margin: var(--wa-space-xs) 0 0; color: var(--wa-color-success-on-quiet); font-size: var(--wa-font-size-xs); }
+.ticket-code-review__evidence p[data-tests-modified="true"] { color: var(--wa-color-warning-on-quiet); }
 .ticket-code-review__compare-banner { display: grid; min-width: 0; margin-bottom: var(--wa-space-m); padding: var(--wa-space-s); border: 1px solid color-mix(in srgb, var(--hs-ticket-state-needs-review) 42%, transparent); border-radius: var(--wa-border-radius-m); color: var(--wa-color-text-normal); background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 10%, var(--wa-color-surface-default)); grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: var(--wa-space-s); font-size: var(--wa-font-size-xs); }
 .ticket-code-review__compare-banner > div:first-child { display: flex; min-width: 0; grid-column: 1 / -1; align-items: center; gap: var(--wa-space-xs); }
 .ticket-code-review__compare-banner > div:first-child svg { width: 1rem; height: 1rem; flex: none; color: var(--hs-ticket-state-needs-review); }

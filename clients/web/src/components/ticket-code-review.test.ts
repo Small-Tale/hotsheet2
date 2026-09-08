@@ -44,6 +44,15 @@ describe('TicketCodeReview', () => {
     expect(earlierRange).toBeLessThan(earlierCommit);
   });
 
+  it('summarizes classified changes and calls out modified existing tests',()=>{
+    const markup=String(TicketCodeReview({review:{...review,summary:{files:{total:8,docs:2,tests:3,source:2,other:1},tests_added:2,tests_modified:1}}}));
+    expect(markup).toContain('aria-label="Code review evidence"');
+    expect(markup).toContain('<strong>2</strong> docs');
+    expect(markup).toContain('<strong>3</strong> tests');
+    expect(markup).toContain('2 new test files · 1 existing test file modified');
+    expect(markup).toContain('data-tests-modified="true"');
+  });
+
   it('keeps history readable but disables launching without a configured tool', () => {
     const markup = String(TicketCodeReview({ review: { ...review, difftool: undefined } }));
     expect(markup).toContain('No Git diff tool is configured');

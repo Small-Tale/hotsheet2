@@ -20,7 +20,8 @@ export interface RepositoryStatus {branch?:string;upstream?:string;ahead:number;
 export interface RepositoryPage<T> {items:T[];next_cursor?:number|null}
 export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;body?:string;committed_at:string}
 export interface CodeReviewRange {from:string;to:string;count:number}
-export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean}
+export interface CodeReviewSummary {files:{total:number;docs:number;tests:number;source:number;other:number};tests_added:number;tests_modified:number}
+export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean;summary?:CodeReviewSummary}
 export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:string;to:string}|{mode:'compare';from:string;to:string};
 export interface PermissionRequest {id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean}
 export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean}

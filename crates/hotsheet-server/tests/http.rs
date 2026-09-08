@@ -1504,6 +1504,13 @@ async fn repository_status_endpoint_reports_real_git_state() {
 #[tokio::test]
 async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets() {
     let (store, st) = state();
+    hotsheet_ticketing::Settings::new(store.path())
+        .set(
+            "code_review_file_classes",
+            serde_json::json!({"docs":["docs/**"],"tests":["**/*.test.*"],"source":["code.txt"]}),
+            hotsheet_ticketing::Scope::Shared,
+        )
+        .unwrap();
     let checkout = tempfile::tempdir().unwrap();
     let run = |args: &[&str]| {
         let output = Command::new("git")
@@ -1592,6 +1599,9 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
     assert_eq!(review["ranges"][1]["from"], first);
     assert_eq!(review["ranges"][1]["to"], second);
     assert_eq!(review["ranges"][1]["count"], 2);
+    assert_eq!(review["summary"]["files"]["total"], 1);
+    assert_eq!(review["summary"]["files"]["source"], 1);
+    assert_eq!(review["summary"]["tests_added"], 0);
 
     let invalid = app
         .clone()

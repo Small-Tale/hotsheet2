@@ -1,6 +1,6 @@
 import './ticket-code-review.css';
 
-import { ExternalLink, GitCommitHorizontal, GitCompare, GitCompareArrows } from 'lucide';
+import { CircleHelp, ExternalLink, FileCode2, FileText, FlaskConical, GitCommitHorizontal, GitCompare, GitCompareArrows } from 'lucide';
 
 import type { CodeReview, CodeReviewTarget } from '../api';
 import { LucideIcon } from './lucide-icon';
@@ -38,6 +38,12 @@ export function TicketCodeReview({ review, loading = false, message = '', title 
       {loading && <p role="status">{loadingMessage}</p>}
       {!loading && review && review.commits.length === 0 && <div class="ticket-code-review__empty"><LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" /><p>{emptyMessage}</p></div>}
       {!loading && review && review.commits.length > 0 && <>
+        {review.summary&&<section class="ticket-code-review__evidence" aria-label="Code review evidence"><h3>Change evidence</h3><div class="ticket-code-review__evidence-grid">
+          <span><LucideIcon icon={FileText} name="file-text"/><strong>{review.summary.files.docs}</strong> docs</span>
+          <span><LucideIcon icon={FlaskConical} name="flask-conical"/><strong>{review.summary.files.tests}</strong> tests</span>
+          <span><LucideIcon icon={FileCode2} name="file-code-2"/><strong>{review.summary.files.source}</strong> source</span>
+          {review.summary.files.other>0&&<span><LucideIcon icon={CircleHelp} name="circle-help"/><strong>{review.summary.files.other}</strong> other</span>}
+        </div><p data-tests-modified={review.summary.tests_modified>0?'true':'false'}>{review.summary.tests_added} new test file{review.summary.tests_added===1?'':'s'} · {review.summary.tests_modified} existing test file{review.summary.tests_modified===1?'':'s'} modified</p></section>}
         {!enabled && <p class="ticket-code-review__notice" role="status">No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.</p>}
         {comparison?.active && <div class="ticket-code-review__compare-banner" role="status">
           <div><LucideIcon icon={GitCompare} name="git-compare"/><span>Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.</span></div>
