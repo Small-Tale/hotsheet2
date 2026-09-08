@@ -1,13 +1,13 @@
 import './attachment-context-menu.css';
 
-import { Clipboard, Copy, Download, ExternalLink, FolderOpen, Trash2 } from 'lucide';
+import { Clipboard, Copy, Download, ExternalLink, FolderOpen, Pencil, Trash2 } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { MenuItem } from './menu-item';
 
 export type AttachmentContextMenuKind = 'item' | 'host';
 
-export const ATTACHMENT_CONTEXT_MENU_HEIGHT = 240;
+export const ATTACHMENT_CONTEXT_MENU_HEIGHT = 274;
 
 export interface AttachmentContextMenuProps {
   x: number;
@@ -25,6 +25,7 @@ export function AttachmentContextMenu({x,y,kind='item',revealLabel='Show in file
     {action('open','Open',ExternalLink,'external-link')}
     {action('download','Download',Download,'download')}
     {action('copy-reference','Copy reference',Clipboard,'clipboard')}
+    {kind==='item'&&action('rename','Rename',Pencil,'pencil')}
     {kind==='host'&&action('copy-path','Copy path',Copy,'copy')}
     <hr/>
     {action('reveal',revealLabel,FolderOpen,'folder-open')}

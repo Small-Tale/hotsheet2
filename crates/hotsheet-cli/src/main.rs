@@ -153,8 +153,24 @@ enum Cmd {
     },
     /// Print a ticket's file by slug or ULID.
     Show { id: String },
-    /// Attach a file to a ticket with durable identity and creation time.
-    Attach { id: String, file: PathBuf },
+    /// Attach one or more files as a single durable batch.
+    Attach {
+        id: String,
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        #[arg(long)]
+        batch_id: Option<String>,
+        #[arg(long)]
+        batch_label: Option<String>,
+        #[arg(long)]
+        actor_role: Option<String>,
+        #[arg(long)]
+        actor_id: Option<String>,
+        #[arg(long)]
+        actor_name: Option<String>,
+        #[arg(long)]
+        purpose: Option<String>,
+    },
     /// Edit a ticket's fields (by slug or ULID).
     Edit {
         id: String,
@@ -855,7 +871,26 @@ fn main() -> Result<()> {
             reason,
         } => cmd_provider_close(&cli.path, &connection, &id, &reason),
         Cmd::Show { id } => cmd_show(&cli.path, &id),
-        Cmd::Attach { id, file } => cmd_attach(&cli.path, &id, &file),
+        Cmd::Attach {
+            id,
+            files,
+            batch_id,
+            batch_label,
+            actor_role,
+            actor_id,
+            actor_name,
+            purpose,
+        } => cmd_attach(
+            &cli.path,
+            &id,
+            &files,
+            batch_id,
+            batch_label,
+            actor_role,
+            actor_id,
+            actor_name,
+            purpose,
+        ),
         Cmd::Edit {
             id,
             title,
@@ -2637,18 +2672,69 @@ fn cmd_show(path: &PathBuf, needle: &str) -> Result<()> {
     Ok(())
 }
 
-fn cmd_attach(path: &PathBuf, needle: &str, file: &Path) -> Result<()> {
+#[allow(clippy::too_many_arguments)]
+fn cmd_attach(
+    path: &PathBuf,
+    needle: &str,
+    files: &[PathBuf],
+    batch_id: Option<String>,
+    batch_label: Option<String>,
+    actor_role: Option<String>,
+    actor_id: Option<String>,
+    actor_name: Option<String>,
+    purpose: Option<String>,
+) -> Result<()> {
     let store = FsStore::open(path)?;
     let ticket = resolve(&store, needle)?;
-    let filename = file
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| anyhow::anyhow!("attachment path has no UTF-8 filename"))?;
-    let bytes = std::fs::read(file)?;
-    let attachment_id = Ulid::new();
-    let (_, written) =
-        store.write_attachment(&ticket.id, attachment_id, now_ts(), filename, &bytes)?;
-    println!("Attached {attachment_id} ({})", written.display());
+    let batch_id = Some(batch_id.unwrap_or_else(|| format!("batch-{}", Ulid::new())));
+    let role = actor_role
+        .or_else(|| std::env::var("HOTSHEET_ACTOR_ROLE").ok())
+        .unwrap_or_else(|| "unknown".into());
+    let role = match role.as_str() {
+        "human" => hotsheet_model::AttachmentActorRole::Human,
+        "ai" => hotsheet_model::AttachmentActorRole::Ai,
+        "unknown" => hotsheet_model::AttachmentActorRole::Unknown,
+        _ => anyhow::bail!("--actor-role must be human, ai, or unknown"),
+    };
+    let purpose = purpose
+        .as_deref()
+        .map(|value| match value {
+            "problem_evidence" => Ok(hotsheet_model::AttachmentPurpose::ProblemEvidence),
+            "correctness_evidence" => Ok(hotsheet_model::AttachmentPurpose::CorrectnessEvidence),
+            "reference" => Ok(hotsheet_model::AttachmentPurpose::Reference),
+            "other" => Ok(hotsheet_model::AttachmentPurpose::Other),
+            _ => anyhow::bail!(
+                "--purpose must be problem_evidence, correctness_evidence, reference, or other"
+            ),
+        })
+        .transpose()?;
+    let actor = Some(hotsheet_model::AttachmentActor {
+        identity: actor_id.or_else(|| std::env::var("HOTSHEET_ACTOR_ID").ok()),
+        display_name: actor_name,
+        role,
+    });
+    for file in files {
+        let filename = file
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| anyhow::anyhow!("attachment path has no UTF-8 filename"))?;
+        let bytes = std::fs::read(file)?;
+        let attachment_id = Ulid::new();
+        let (_, written) = store.write_attachment_with_metadata(
+            &ticket.id,
+            attachment_id,
+            now_ts(),
+            filename,
+            &bytes,
+            hotsheet_model::AttachmentMetadata {
+                batch_id: batch_id.clone(),
+                batch_label: batch_label.clone(),
+                actor: actor.clone(),
+                purpose,
+            },
+        )?;
+        println!("Attached {attachment_id} ({})", written.display());
+    }
     Ok(())
 }
 

@@ -1691,13 +1691,24 @@ fn edit_accepts_notes_but_warns_about_unresolved_attachment_references() {
 fn attach_adds_stable_metadata_and_nested_payload() {
     let dir = tempfile::tempdir().unwrap();
     let source = tempfile::NamedTempFile::new().unwrap();
+    let source_two = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(source.path(), b"proof").unwrap();
+    std::fs::write(source_two.path(), b"proof two").unwrap();
     hs(dir.path()).args(["init"]).assert().success();
     let slug = new_ticket(dir.path(), "Attachment metadata");
     hs(dir.path())
         .arg("attach")
         .arg(&slug)
+        .args([
+            "--batch-label",
+            "Verification",
+            "--purpose",
+            "correctness_evidence",
+        ])
+        .env("HOTSHEET_ACTOR_ROLE", "ai")
+        .env("HOTSHEET_ACTOR_ID", "codex")
         .arg(source.path())
+        .arg(source_two.path())
         .assert()
         .success()
         .stdout(predicate::str::contains("Attached "));
@@ -1705,8 +1716,24 @@ fn attach_adds_stable_metadata_and_nested_payload() {
     let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
         .unwrap()
         .unwrap();
-    assert_eq!(ticket.attachments.len(), 1);
+    assert_eq!(ticket.attachments.len(), 2);
     assert!(ticket.attachments[0].created_at.is_valid());
+    assert_eq!(
+        ticket.attachments[0].batch_id,
+        ticket.attachments[1].batch_id
+    );
+    assert_eq!(
+        ticket.attachments[0].batch_label.as_deref(),
+        Some("Verification")
+    );
+    assert_eq!(
+        ticket.attachments[0].actor.as_ref().map(|actor| actor.role),
+        Some(hotsheet_model::AttachmentActorRole::Ai)
+    );
+    assert_eq!(
+        ticket.attachments[0].purpose,
+        Some(hotsheet_model::AttachmentPurpose::CorrectnessEvidence)
+    );
     let payload = store
         .attachment_dir(&ticket.id)
         .join(ticket.attachments[0].id.to_string())

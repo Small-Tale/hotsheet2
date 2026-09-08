@@ -1403,13 +1403,53 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
         .header("x-hotsheet-secret", SECRET)
         .header("x-hotsheet-filename", "choppy.mov")
+        .header("x-hotsheet-attachment-batch", "gesture-1")
+        .header("x-hotsheet-metadata-encoding", "percent")
+        .header("x-hotsheet-actor-role", "human")
+        .header("x-hotsheet-actor-name", "Brian%20Westphal")
+        .header("x-hotsheet-attachment-purpose", "problem_evidence")
         .body(Body::from(video_bytes))
         .unwrap();
     let video_response = app.clone().oneshot(video_request).await.unwrap();
     assert_eq!(video_response.status(), StatusCode::CREATED);
     let video_attached = body_json(video_response).await;
     assert_eq!(video_attached["attachments"][0]["filename"], "choppy.mov");
+    assert_eq!(video_attached["attachments"][0]["batch_id"], "gesture-1");
+    assert_eq!(video_attached["attachments"][0]["actor"]["role"], "human");
+    assert_eq!(
+        video_attached["attachments"][0]["actor"]["display_name"],
+        "Brian Westphal"
+    );
+    assert_eq!(
+        video_attached["attachments"][0]["purpose"],
+        "problem_evidence"
+    );
     let video_attachment_id = video_attached["attachments"][0]["id"].as_str().unwrap();
+    let regrouped = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/combo/tickets/{slug}/attachments"),
+                Some(&format!(r#"{{"attachment_ids":["{video_attachment_id}"],"batch_id":"fix-2","batch_label":"Corrected fix","actor":{{"identity":"codex","role":"ai"}},"purpose":"correctness_evidence"}}"#)),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(regrouped["attachments"][0]["batch_label"], "Corrected fix");
+    assert_eq!(regrouped["attachments"][0]["actor"]["identity"], "codex");
+    let renamed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"),
+                Some(r#"{"filename":"fixed.mov"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(renamed["attachments"][0]["filename"], "fixed.mov");
     let annotated = body_json(
         app.clone()
             .oneshot(authed(
@@ -3516,6 +3556,8 @@ async fn attachment_upload_returns_and_persists_durable_metadata() {
         .uri(format!("/tickets/{id}/attachments"))
         .header("x-hotsheet-secret", SECRET)
         .header("x-hotsheet-filename", "../choppy.mov")
+        .header("x-hotsheet-attachment-batch", "browser-gesture")
+        .header("x-hotsheet-actor-role", "human")
         .body(Body::from(video_bytes))
         .unwrap();
     let response = app.clone().oneshot(request).await.unwrap();
@@ -3524,6 +3566,7 @@ async fn attachment_upload_returns_and_persists_durable_metadata() {
     assert_eq!(attached["attachments"][0]["filename"], "choppy.mov");
     assert!(attached["attachments"][0]["id"].is_string());
     assert!(attached["attachments"][0]["created_at"].is_string());
+    assert_eq!(attached["attachments"][0]["batch_id"], "browser-gesture");
 
     let reread = body_json(
         app.clone()
@@ -3533,6 +3576,19 @@ async fn attachment_upload_returns_and_persists_durable_metadata() {
     )
     .await;
     assert_eq!(reread["attachments"], attached["attachments"]);
+
+    let invalid_actor = Request::builder()
+        .method("POST")
+        .uri(format!("/tickets/{id}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "invalid.txt")
+        .header("x-hotsheet-actor-name", "No role")
+        .body(Body::from("x"))
+        .unwrap();
+    assert_eq!(
+        app.clone().oneshot(invalid_actor).await.unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
 
     // Stream repeated shared chunks so the boundary is exercised without allocating a
     // second 100 MiB buffer in the test process.
@@ -3574,6 +3630,8 @@ async fn provider_attachment_copy_preserves_bytes_across_hosted_stores() {
         .uri(format!("/tickets/{source_id}/attachments"))
         .header("x-hotsheet-secret", SECRET)
         .header("x-hotsheet-filename", "evidence.txt")
+        .header("x-hotsheet-attachment-batch", "source-batch")
+        .header("x-hotsheet-actor-role", "human")
         .body(Body::from("preserved bytes"))
         .unwrap();
     let attached = body_json(app.clone().oneshot(upload).await.unwrap()).await;
@@ -3630,6 +3688,8 @@ async fn provider_attachment_copy_preserves_bytes_across_hosted_stores() {
     assert_eq!(response.status(), StatusCode::CREATED);
     let copied = body_json(response).await;
     assert_eq!(copied["attachments"][0]["filename"], "evidence.txt");
+    assert!(copied["attachments"][0].get("batch_id").is_none());
+    assert!(copied["attachments"][0].get("actor").is_none());
     let copied_attachment_id = copied["attachments"][0]["id"].as_str().unwrap();
     let stored = std::fs::read(
         destination_dir

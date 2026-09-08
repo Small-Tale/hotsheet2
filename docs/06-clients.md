@@ -351,6 +351,13 @@ prompt can be dismissed and returns on a later open until a source is configured
   are not rejected by the framework's smaller default body limit; the larger allowance is
   route-specific and does not loosen JSON request limits.
 
+  Files selected in one browse/drop gesture share a durable attachment batch id and human
+  actor role. The tab groups both its compact rows and gallery previews by that id, derives
+  friendly human/AI round labels without persisting round numbers, and labels missing
+  provider/legacy metadata as Legacy / Uncategorized. Batch headers allow label and purpose
+  changes; checked files can be merged into one batch or split into a fresh batch. The item
+  menu also exposes rename. All controls collapse to one column at narrow widths.
+
   Notes resolve `attachment:filename` and cross-ticket
   `attachment:[TICKET-SLUG]filename` references. Inline-code references preserve spaces;
   ordinary no-space references and standard Markdown link/image destinations are also

@@ -143,6 +143,14 @@ copy/move/sync/Git preserve all three metadata values. For legacy direct-child p
 the store deterministically derives the id from ticket id + filename and uses the
 ticket's own `created_at`; filesystem modification time is never authoritative.
 
+HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
+human-authored `batch_label`, `actor` (`identity`, `display_name`, and
+`role: human|ai|unknown`), and `purpose: problem_evidence|correctness_evidence|reference|other`.
+One upload gesture or AI attach operation shares one batch id. Merge reuses an existing
+id; split assigns a fresh one. A round number is derived UI presentation and is never
+stored. Missing metadata—including legacy and external-provider attachments—is presented
+deterministically as Legacy / Uncategorized; readers never infer authorship from time.
+
 Media attachments may also carry an `annotations` sequence. Each annotation has a stable
 string `id`, a rectangle (`x`, `y`, `width`, `height`) normalized to the integer range
 0–10,000, and optional `text`. Timed media additionally stores an inclusive

@@ -558,6 +558,25 @@ impl FsStore {
         filename: &str,
         bytes: &[u8],
     ) -> Result<(Ticket, PathBuf), StoreError> {
+        self.write_attachment_with_metadata(
+            ticket_id,
+            attachment_id,
+            created_at,
+            filename,
+            bytes,
+            hotsheet_model::AttachmentMetadata::default(),
+        )
+    }
+
+    pub fn write_attachment_with_metadata(
+        &self,
+        ticket_id: &Ulid,
+        attachment_id: Ulid,
+        created_at: Timestamp,
+        filename: &str,
+        bytes: &[u8],
+        metadata: hotsheet_model::AttachmentMetadata,
+    ) -> Result<(Ticket, PathBuf), StoreError> {
         let mut ticket = self.read_ticket(ticket_id)?;
         let name = Path::new(filename)
             .file_name()
@@ -569,7 +588,13 @@ impl FsStore {
             .iter()
             .find(|item| item.id == attachment_id)
         {
-            if existing.filename != name || existing.created_at != created_at {
+            if existing.filename != name
+                || existing.created_at != created_at
+                || existing.batch_id != metadata.batch_id
+                || existing.batch_label != metadata.batch_label
+                || existing.actor != metadata.actor
+                || existing.purpose != metadata.purpose
+            {
                 return Err(StoreError::Io(std::io::Error::new(
                     std::io::ErrorKind::AlreadyExists,
                     format!("attachment id {attachment_id} has different metadata"),
@@ -591,6 +616,10 @@ impl FsStore {
                 id: attachment_id,
                 filename: name.to_string(),
                 created_at: created_at.clone(),
+                batch_id: metadata.batch_id,
+                batch_label: metadata.batch_label,
+                actor: metadata.actor,
+                purpose: metadata.purpose,
                 annotations: Vec::new(),
             });
             ticket.attachments.sort_by(|a, b| {
@@ -603,6 +632,37 @@ impl FsStore {
         ticket.updated_at = created_at;
         self.write_ticket_committing(&ticket)?;
         Ok((ticket, path))
+    }
+
+    /// Apply one durable grouping/provenance value set to a selected attachment subset.
+    /// Supplying a fresh `batch_id` splits the selection; reusing one merges it.
+    pub fn set_attachment_metadata(
+        &self,
+        ticket_id: &Ulid,
+        attachment_ids: &[Ulid],
+        metadata: hotsheet_model::AttachmentMetadata,
+        now: Timestamp,
+    ) -> Result<Ticket, StoreError> {
+        let mut ticket = self.read_ticket(ticket_id)?;
+        for id in attachment_ids {
+            let attachment = ticket
+                .attachments
+                .iter_mut()
+                .find(|attachment| &attachment.id == id)
+                .ok_or_else(|| {
+                    StoreError::Io(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("attachment {id}"),
+                    ))
+                })?;
+            attachment.batch_id.clone_from(&metadata.batch_id);
+            attachment.batch_label.clone_from(&metadata.batch_label);
+            attachment.actor.clone_from(&metadata.actor);
+            attachment.purpose = metadata.purpose;
+        }
+        ticket.updated_at = now;
+        self.write_ticket_committing(&ticket)?;
+        Ok(ticket)
     }
 
     /// Publish evidence payloads and their ticket metadata as one observable mutation.
@@ -834,6 +894,10 @@ impl FsStore {
                     id,
                     filename,
                     created_at: ticket.created_at.clone(),
+                    batch_id: None,
+                    batch_label: None,
+                    actor: None,
+                    purpose: None,
                     annotations: Vec::new(),
                 });
             }
@@ -1485,6 +1549,73 @@ mod tests {
     }
 
     #[test]
+    fn attachment_batch_metadata_persists_and_can_merge_or_split() {
+        let (_dir, store) = temp_store();
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        store
+            .write_ticket(&Ticket::new(id, "HS-TEST", "test", "task", "t0", "t0"))
+            .unwrap();
+        let first = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+        let second = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
+        let metadata = hotsheet_model::AttachmentMetadata {
+            batch_id: Some("gesture-1".into()),
+            batch_label: Some("Initial report".into()),
+            actor: Some(hotsheet_model::AttachmentActor {
+                identity: Some("person@example.com".into()),
+                display_name: Some("Person".into()),
+                role: hotsheet_model::AttachmentActorRole::Human,
+            }),
+            purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
+        };
+        for (attachment, filename) in [(first, "one.png"), (second, "two.png")] {
+            store
+                .write_attachment_with_metadata(
+                    &id,
+                    attachment,
+                    Timestamp::new("2026-08-26T00:00:00Z"),
+                    filename,
+                    b"image",
+                    metadata.clone(),
+                )
+                .unwrap();
+        }
+        let reread = store.read_ticket(&id).unwrap();
+        assert!(
+            reread
+                .attachments
+                .iter()
+                .all(|attachment| attachment.batch_id.as_deref() == Some("gesture-1"))
+        );
+
+        let split = hotsheet_model::AttachmentMetadata {
+            batch_id: Some("gesture-2".into()),
+            batch_label: None,
+            purpose: Some(hotsheet_model::AttachmentPurpose::CorrectnessEvidence),
+            ..metadata
+        };
+        let changed = store
+            .set_attachment_metadata(
+                &id,
+                &[second],
+                split,
+                Timestamp::new("2026-08-26T00:01:00Z"),
+            )
+            .unwrap();
+        assert_eq!(
+            changed.attachments[0].batch_id.as_deref(),
+            Some("gesture-1")
+        );
+        assert_eq!(
+            changed.attachments[1].batch_id.as_deref(),
+            Some("gesture-2")
+        );
+        assert_eq!(
+            changed.attachments[1].purpose,
+            Some(hotsheet_model::AttachmentPurpose::CorrectnessEvidence)
+        );
+    }
+
+    #[test]
     fn legacy_attachment_gets_deterministic_metadata_without_using_mtime() {
         let (_dir, store) = temp_store();
         let ticket = sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
@@ -1512,6 +1643,10 @@ mod tests {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"),
             filename: FINDER_METADATA_FILE.into(),
             created_at: ticket.created_at.clone(),
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
             annotations: Vec::new(),
         });
         store.write_ticket(&ticket).unwrap();

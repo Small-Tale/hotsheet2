@@ -91,6 +91,14 @@ pub struct ApiAttachment {
     pub id: String,
     pub filename: String,
     pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub batch_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub batch_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actor: Option<hotsheet_model::AttachmentActor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<hotsheet_model::AttachmentPurpose>,
     pub annotations: Vec<hotsheet_model::MediaAnnotation>,
 }
 
@@ -164,6 +172,10 @@ impl ApiTicket {
                     id: attachment.id.to_string(),
                     filename: attachment.filename.clone(),
                     created_at: attachment.created_at.as_str().to_string(),
+                    batch_id: attachment.batch_id.clone(),
+                    batch_label: attachment.batch_label.clone(),
+                    actor: attachment.actor.clone(),
+                    purpose: attachment.purpose,
                     annotations: attachment.annotations.clone(),
                 })
                 .collect(),

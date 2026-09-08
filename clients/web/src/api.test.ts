@@ -23,6 +23,21 @@ describe('attachment filename transport',()=>{
     expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder/tickets/ticket/attachments/attachment',expect.objectContaining({method:'PUT',body:JSON.stringify({annotations:[annotation]})}));
     fetchMock.mockRestore();
   });
+  it('sends one batch identity and actor across uploads and supports regrouping and rename',async()=>{
+    const response={store:'git',ticket:{attachments:[]}};
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response(JSON.stringify(response),{status:200}));
+    const api=new Api('/api'),file=new File(['x'],'evidence one.png',{type:'image/png'});
+    await api.addCheckoutAttachment('folder','ticket',file,{batch_id:'gesture 1',actor:{identity:'codex tool',role:'ai'},purpose:'correctness_evidence'});
+    const upload=fetchMock.mock.calls[0];
+    expect(upload[0]).toBe('/api/checkouts/folder/tickets/ticket/attachments');
+    expect(new Headers((upload[1] as RequestInit).headers).get('X-Hotsheet-Attachment-Batch')).toBe('gesture%201');
+    expect(new Headers((upload[1] as RequestInit).headers).get('X-Hotsheet-Actor-Role')).toBe('ai');
+    await api.updateCheckoutAttachmentMetadata('folder','ticket',['one','two'],{batch_id:'merged',purpose:'reference'});
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder/tickets/ticket/attachments',expect.objectContaining({method:'PATCH',body:'{"attachment_ids":["one","two"],"batch_id":"merged","purpose":"reference"}'}));
+    await api.renameCheckoutAttachment('folder','ticket','one','renamed.png');
+    expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/checkouts/folder/tickets/ticket/attachments/one',expect.objectContaining({method:'PATCH',body:'{"filename":"renamed.png"}'}));
+    fetchMock.mockRestore();
+  });
 });
 
 describe('corrupt ticket transport',()=>{

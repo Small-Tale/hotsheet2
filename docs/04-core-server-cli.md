@@ -320,10 +320,14 @@ filename.
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
 an `x-hotsheet-filename` header. Browser clients percent-encode Unicode filenames and
 declare `x-hotsheet-filename-encoding: percent`; the server decodes them before normal
-filename sanitization. The returned `ApiTicket.attachments` carries the
-stable id, sanitized filename, and creation timestamp. Checkout-scoped clients use
+filename sanitization. Optional `x-hotsheet-attachment-batch`, batch-label, actor, and
+purpose headers add durable provenance; percent-encoded metadata declares
+`x-hotsheet-metadata-encoding: percent`. The returned `ApiTicket.attachments` carries the
+stable id, sanitized filename, creation timestamp, and optional provenance. Checkout-scoped clients use
 `POST /checkouts/{reference}/tickets/{id}/attachments`, which resolves the ticket's
-linked store and returns the same ticket plus its store identity.
+linked store and returns the same ticket plus its store identity. `PATCH` on that
+collection atomically applies batch/actor/purpose metadata to a selected id set (reuse an
+id to merge; generate one to split), while `PATCH` on an individual attachment renames it.
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
 `--blocked-by` **replaces** the set and `--clear-blocked-by` empties it. The same edge

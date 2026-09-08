@@ -154,6 +154,11 @@ pub fn prepare_trigger_with_home(
     launch_safety::assert_hotsheet_resolves(&child_path, shim.path())?;
     env.retain(|(k, _)| k != "PATH");
     env.push(("PATH".to_string(), child_path));
+    // Commands invoked by the driven tool can attribute durable artifacts without
+    // guessing from timestamps or ticket status.
+    env.retain(|(key, _)| key != "HOTSHEET_ACTOR_ROLE" && key != "HOTSHEET_ACTOR_ID");
+    env.push(("HOTSHEET_ACTOR_ROLE".into(), "ai".into()));
+    env.push(("HOTSHEET_ACTOR_ID".into(), tool.to_owned()));
 
     // MCP isolation: restrict the tool to only the Hot Sheet shim by defaulting
     // `--mcp-config` to the tool's project config (Claude gets `--strict-mcp-config`).

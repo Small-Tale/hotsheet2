@@ -35,11 +35,18 @@
 .ticket-inspector__attachment[data-action="open-attachment-row"] { cursor: pointer; }
 .ticket-inspector__attachment[data-action="open-attachment-row"]:hover { background: var(--wa-color-neutral-fill-quiet); }
 .ticket-inspector__attachment > svg { width: .9rem; height: .9rem; flex: none; }
-.ticket-inspector__attachment > span:nth-child(2) { min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-inspector__attachment > span { min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
 .ticket-inspector__attachment-menu { display: inline-grid; width: 1.75rem; height: 1.75rem; margin-left: auto; padding: 0; flex: none; border: 0; border-radius: .35rem; background: transparent; color: var(--wa-color-neutral-on-quiet); cursor: pointer; transition: color 120ms ease, background-color 120ms ease, box-shadow 120ms ease; place-items: center; }
 .ticket-inspector__attachment-menu svg { display: block; width: .9rem; height: .9rem; }
 .ticket-inspector__attachment-menu:hover, .ticket-inspector__attachment-menu:focus-visible { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); outline: var(--wa-focus-ring); outline-offset: 1px; }
 .ticket-attachments__status, .ticket-attachments__unsupported { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.ticket-attachments__selection-actions { display: flex; flex-wrap: wrap; gap: var(--wa-space-2xs); margin-bottom: var(--wa-space-xs); }
+.ticket-attachments__selection-actions button { min-height: 1.75rem; padding: 0 var(--wa-space-xs); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-s); background: var(--wa-color-surface-default); color: var(--wa-color-neutral-on-normal); font: inherit; cursor: pointer; }
+.ticket-attachments__batches { display: grid; container-type: inline-size; gap: var(--wa-space-s); }
+.ticket-attachments__batch { min-width: 0; padding: var(--wa-space-xs); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
+.ticket-attachments__batch > header { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(7rem, auto); gap: var(--wa-space-xs); margin-bottom: var(--wa-space-2xs); }
+.ticket-attachments__batch > header :is(input,select) { min-width: 0; height: 1.8rem; padding: 0 var(--wa-space-2xs); border: 0; border-bottom: 1px solid var(--wa-color-neutral-border-normal); background: transparent; color: inherit; font: inherit; }
+.ticket-inspector__attachment [data-attachment-selection] { width: 1rem; height: 1rem; flex: none; }
 .ticket-attachments__browse { display: inline-flex; min-height: 2rem; padding: 0 .5rem; border-radius: .4rem; color: var(--wa-color-text-link); cursor: pointer; align-items: center; gap: .3rem; font-size: var(--wa-font-size-xs); font-weight: 650; }
 .ticket-attachments__browse:hover { background: var(--wa-color-brand-fill-quiet); }
 .ticket-attachments__browse svg { width: .85rem; height: .85rem; }
@@ -51,3 +58,5 @@
 .ticket-attachments__image-grid button { display: grid; width: 10rem; height: 10rem; flex: none; padding: var(--wa-space-2xs); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); cursor: zoom-in; place-items: center; }
 .ticket-attachments__image-grid button:hover, .ticket-attachments__image-grid button:focus-visible { border-color: var(--wa-color-focus); outline: var(--wa-focus-ring); outline-offset: 1px; }
 .ticket-attachments__image-grid :is(img,video) { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; }
+@container (max-width: 28rem) { .ticket-attachments__batch > header { grid-template-columns: 1fr; } }
+@media (max-width: 40rem) { .ticket-attachments__image-grid button { width: min(10rem, 44vw); height: min(10rem, 44vw); } }

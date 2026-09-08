@@ -229,7 +229,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   ULIDs, five kinds, and `created_at`/`edited_at`; legacy one-sided note files remain
   readable and migrate deterministically. Schema: [17](17-ticket-file-format.md).
 - **Attachment payload:** `attachments/<ticket-ULID>/<attachment-ULID>/<filename>`;
-  `{id, filename, created_at}` lives in ticket frontmatter. Legacy direct children use
+  `{id, filename, created_at}` plus optional batch/actor/purpose provenance lives in ticket frontmatter. Legacy direct children use
   deterministic metadata based on ticket identity, never filesystem mtime.
 - **Store metadata:** `hotsheet-store.json` (camelCase: guarded `schemaVersion`,
   `ticketPrefix`, `idStrategy`, `shard`). The schema-3 string marker protects the

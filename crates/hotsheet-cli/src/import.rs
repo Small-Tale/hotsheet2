@@ -438,6 +438,9 @@ mod tests {
         let ticket = &store.list_tickets().unwrap()[0];
         assert_eq!(ticket.attachments.len(), 1);
         assert_eq!(ticket.attachments[0].created_at, ticket.created_at);
+        assert_eq!(ticket.attachments[0].batch_id, None);
+        assert_eq!(ticket.attachments[0].actor, None);
+        assert_eq!(ticket.attachments[0].purpose, None);
         let file = store
             .attachment_dir(&ticket.id)
             .join(ticket.attachments[0].id.to_string())

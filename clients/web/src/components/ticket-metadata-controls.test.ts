@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { TicketAttachments } from './ticket-attachments';
+import { groupAttachments,TicketAttachments } from './ticket-attachments';
 import { TicketCategorySelect } from './ticket-category-select';
 import { TicketInfoPanel } from './ticket-info-panel';
 import { TicketPrioritySelect } from './ticket-priority-select';
@@ -82,6 +82,24 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('preload="metadata"');
     expect(attachments).not.toContain('autoplay');
     expect(attachments).toContain('Open walkthrough.webm in media gallery');
+  });
+
+  it('groups stable batches and keeps old/provider attachments explicitly legacy',()=>{
+    const groups=groupAttachments([
+      {id:'old',name:'old.png'},
+      {id:'a',name:'a.png',batch_id:'fix',actor:{identity:'codex',role:'ai'},purpose:'correctness_evidence'},
+      {id:'b',name:'b.png',batch_id:'fix',actor:{identity:'codex',role:'ai'},purpose:'correctness_evidence'},
+      {id:'c',name:'c.png',batch_id:'human',batch_label:'More feedback',actor:{display_name:'Brian',role:'human'},purpose:'problem_evidence'},
+    ]);
+    expect(groups.map(group=>[group.label,group.items.length])).toEqual([
+      ['Legacy / Uncategorized',1],
+      ['AI · Round 1 · Correctness evidence',2],
+      ['More feedback',1],
+    ]);
+    const markup=String(TicketAttachments({attachments:groups.flatMap(group=>group.items)}));
+    expect(markup).toContain('data-action="merge-selected-attachments"');
+    expect(markup).toContain('data-action="split-selected-attachments"');
+    expect(markup).toContain('name="attachment-batch-purpose"');
   });
 
   it('gives the attachment menu trigger visible hover and keyboard-focus feedback', () => {

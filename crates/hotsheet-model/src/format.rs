@@ -721,6 +721,14 @@ mod tests {
             id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC4"),
             filename: "proof.png".into(),
             created_at: "2026-08-20T06:00:00Z".into(),
+            batch_id: Some("batch-stable-1".into()),
+            batch_label: Some("Reviewed fix".into()),
+            actor: Some(crate::ticket::AttachmentActor {
+                identity: Some("codex".into()),
+                display_name: Some("AI".into()),
+                role: crate::ticket::AttachmentActorRole::Ai,
+            }),
+            purpose: Some(crate::ticket::AttachmentPurpose::CorrectnessEvidence),
             annotations: vec![crate::ticket::MediaAnnotation {
                 id: "region-1".into(),
                 x: 1000,

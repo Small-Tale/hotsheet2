@@ -739,6 +739,7 @@ impl TicketProvider for GitProvider {
             });
         }
         let reporter = crate::current_user_name(self.store.root());
+        let evidence_batch = format!("batch-{}", hotsheet_model::Ulid::new());
         ops::prepare_not_working(
             &mut ticket,
             now,
@@ -761,6 +762,14 @@ impl TicketProvider for GitProvider {
                 id: item.id,
                 filename: item.sanitized_filename(),
                 created_at: item.created_at.clone(),
+                batch_id: Some(evidence_batch.clone()),
+                batch_label: None,
+                actor: Some(hotsheet_model::AttachmentActor {
+                    identity: None,
+                    display_name: reporter.clone(),
+                    role: hotsheet_model::AttachmentActorRole::Human,
+                }),
+                purpose: Some(hotsheet_model::AttachmentPurpose::ProblemEvidence),
                 annotations: Vec::new(),
             });
         }
@@ -844,12 +853,18 @@ impl TicketProvider for GitProvider {
         let ticket = self.ticket(native_id)?;
         let attachment_id = Ulid::from_string(&attachment.id)
             .map_err(|_| ProviderError::InvalidNativeId(attachment.id))?;
-        let (updated, _) = self.store.write_attachment(
+        let (updated, _) = self.store.write_attachment_with_metadata(
             &ticket.id,
             attachment_id,
             Timestamp::new(attachment.created_at),
             &attachment.filename,
             &bytes,
+            hotsheet_model::AttachmentMetadata {
+                batch_id: attachment.batch_id,
+                batch_label: attachment.batch_label,
+                actor: attachment.actor,
+                purpose: attachment.purpose,
+            },
         )?;
         Ok(ApiTicket::from_provider(
             &updated,

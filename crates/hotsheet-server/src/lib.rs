@@ -1056,7 +1056,8 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments",
             post(add_checkout_ticket_attachment)
-                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES)),
+                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_BODY_BYTES))
+                .patch(update_checkout_ticket_attachment_metadata),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments/by-name/{filename}",
@@ -1070,6 +1071,7 @@ pub fn app(state: AppState) -> Router {
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}",
             get(get_checkout_ticket_attachment)
                 .put(update_checkout_ticket_attachment_annotations)
+                .patch(rename_checkout_ticket_attachment)
                 .delete(delete_checkout_ticket_attachment),
         )
         .route(
@@ -2011,6 +2013,12 @@ async fn copy_provider_attachment(
                 id: Ulid::new().to_string(),
                 filename: metadata.filename,
                 created_at: now().to_string(),
+                // A copied standalone file is intentionally Uncategorized: retaining its
+                // source batch id could falsely merge it with an unrelated destination batch.
+                batch_id: None,
+                batch_label: None,
+                actor: None,
+                purpose: None,
                 annotations: metadata.annotations,
             },
             bytes,
@@ -3243,10 +3251,15 @@ async fn add_checkout_ticket_attachment(
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let filename = attachment_filename(&headers)?;
-    let (updated, _) =
-        entry
-            .store
-            .write_attachment(&ticket.id, Ulid::new(), now(), &filename, &body)?;
+    let metadata = attachment_metadata(&headers)?;
+    let (updated, _) = entry.store.write_attachment_with_metadata(
+        &ticket.id,
+        Ulid::new(),
+        now(),
+        &filename,
+        &body,
+        metadata,
+    )?;
     state.changed_in(&entry, "attachment_added", &updated);
     Ok((
         StatusCode::CREATED,
@@ -3453,6 +3466,85 @@ async fn delete_checkout_ticket_attachment(
             }
         })?;
     state.changed_in(&entry, "attachment_removed", &updated);
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket(&entry, &updated)?,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct UpdateAttachmentMetadataBody {
+    attachment_ids: Vec<String>,
+    #[serde(flatten)]
+    metadata: hotsheet_model::AttachmentMetadata,
+}
+
+async fn update_checkout_ticket_attachment_metadata(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Json(body): Json<UpdateAttachmentMetadataBody>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    if body.attachment_ids.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "attachment_ids must not be empty",
+        ));
+    }
+    validate_attachment_metadata(&body.metadata)?;
+    let mut seen = std::collections::HashSet::new();
+    let attachment_ids = body
+        .attachment_ids
+        .iter()
+        .map(|id| {
+            let parsed = Ulid::from_string(id)
+                .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid attachment ULID"))?;
+            if !seen.insert(parsed) {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "attachment_ids must be unique",
+                ));
+            }
+            Ok(parsed)
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let updated =
+        entry
+            .store
+            .set_attachment_metadata(&ticket.id, &attachment_ids, body.metadata, now())?;
+    state.changed_in(&entry, "attachment_metadata_updated", &updated);
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: api_ticket(&entry, &updated)?,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct RenameAttachmentBody {
+    filename: String,
+}
+
+async fn rename_checkout_ticket_attachment(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+    Json(body): Json<RenameAttachmentBody>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    if body.filename.trim().is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "filename is required",
+        ));
+    }
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id = Ulid::from_string(&attachment_id)
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid attachment ULID"))?;
+    let updated =
+        entry
+            .store
+            .rename_attachment(&ticket.id, &attachment_id, now(), &body.filename)?;
+    state.changed_in(&entry, "attachment_renamed", &updated);
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
         ticket: api_ticket(&entry, &updated)?,
@@ -3985,10 +4077,15 @@ async fn add_ticket_attachment(
     let entry = state.default_entry();
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let filename = attachment_filename(&headers)?;
-    let (updated, _) =
-        entry
-            .store
-            .write_attachment(&ticket.id, Ulid::new(), now(), &filename, &body)?;
+    let metadata = attachment_metadata(&headers)?;
+    let (updated, _) = entry.store.write_attachment_with_metadata(
+        &ticket.id,
+        Ulid::new(),
+        now(),
+        &filename,
+        &body,
+        metadata,
+    )?;
     state.changed_in(&entry, "attachment_added", &updated);
     Ok((StatusCode::CREATED, Json(api_ticket(&entry, &updated)?)))
 }
@@ -4006,6 +4103,117 @@ fn attachment_filename(headers: &HeaderMap) -> Result<String, ApiError> {
     {
         return Ok(raw.to_owned());
     }
+    decode_attachment_header(raw, "filename")
+}
+
+fn attachment_metadata(
+    headers: &HeaderMap,
+) -> Result<hotsheet_model::AttachmentMetadata, ApiError> {
+    use hotsheet_model::{
+        AttachmentActor, AttachmentActorRole, AttachmentMetadata, AttachmentPurpose,
+    };
+    let encoded = headers
+        .get("x-hotsheet-metadata-encoding")
+        .and_then(|value| value.to_str().ok())
+        == Some("percent");
+    let text = |name: &'static str| -> Result<Option<String>, ApiError> {
+        let Some(raw) = headers.get(name).and_then(|value| value.to_str().ok()) else {
+            return Ok(None);
+        };
+        let value = if encoded {
+            decode_attachment_header(raw, name)?
+        } else {
+            raw.to_owned()
+        };
+        Ok((!value.trim().is_empty()).then_some(value))
+    };
+    let role = match text("x-hotsheet-actor-role")?.as_deref() {
+        None => None,
+        Some("human") => Some(AttachmentActorRole::Human),
+        Some("ai") => Some(AttachmentActorRole::Ai),
+        Some("unknown") => Some(AttachmentActorRole::Unknown),
+        Some(_) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "attachment actor role must be human, ai, or unknown",
+            ));
+        }
+    };
+    let identity = text("x-hotsheet-actor-identity")?;
+    let display_name = text("x-hotsheet-actor-name")?;
+    if role.is_none() && (identity.is_some() || display_name.is_some()) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "attachment actor identity/name requires actor role",
+        ));
+    }
+    let purpose = match text("x-hotsheet-attachment-purpose")?.as_deref() {
+        None => None,
+        Some("problem_evidence") => Some(AttachmentPurpose::ProblemEvidence),
+        Some("correctness_evidence") => Some(AttachmentPurpose::CorrectnessEvidence),
+        Some("reference") => Some(AttachmentPurpose::Reference),
+        Some("other") => Some(AttachmentPurpose::Other),
+        Some(_) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "attachment purpose is invalid",
+            ));
+        }
+    };
+    let metadata = AttachmentMetadata {
+        batch_id: text("x-hotsheet-attachment-batch")?,
+        batch_label: text("x-hotsheet-attachment-batch-label")?,
+        actor: role.map(|role| AttachmentActor {
+            identity,
+            display_name,
+            role,
+        }),
+        purpose,
+    };
+    validate_attachment_metadata(&metadata)?;
+    Ok(metadata)
+}
+
+fn validate_attachment_metadata(
+    metadata: &hotsheet_model::AttachmentMetadata,
+) -> Result<(), ApiError> {
+    if metadata.batch_label.is_some() && metadata.batch_id.is_none() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "attachment batch_label requires batch_id",
+        ));
+    }
+    for (label, value, limit) in [
+        ("batch_id", metadata.batch_id.as_deref(), 200usize),
+        ("batch_label", metadata.batch_label.as_deref(), 200usize),
+        (
+            "actor.identity",
+            metadata
+                .actor
+                .as_ref()
+                .and_then(|actor| actor.identity.as_deref()),
+            200usize,
+        ),
+        (
+            "actor.display_name",
+            metadata
+                .actor
+                .as_ref()
+                .and_then(|actor| actor.display_name.as_deref()),
+            200usize,
+        ),
+    ] {
+        if value.is_some_and(|value| value.trim().is_empty() || value.len() > limit) {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                format!("attachment {label} must contain 1–{limit} bytes"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn decode_attachment_header(raw: &str, field: &str) -> Result<String, ApiError> {
     let bytes = raw.as_bytes();
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -4020,7 +4228,7 @@ fn attachment_filename(headers: &HeaderMap) -> Result<String, ApiError> {
             let (Some(high), Some(low)) = (high, low) else {
                 return Err(ApiError::new(
                     StatusCode::BAD_REQUEST,
-                    "invalid encoded attachment filename",
+                    format!("invalid encoded attachment {field}"),
                 ));
             };
             decoded.push(((high << 4) | low) as u8);
@@ -4033,7 +4241,7 @@ fn attachment_filename(headers: &HeaderMap) -> Result<String, ApiError> {
     String::from_utf8(decoded).map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
-            "invalid encoded attachment filename",
+            format!("invalid encoded attachment {field}"),
         )
     })
 }
