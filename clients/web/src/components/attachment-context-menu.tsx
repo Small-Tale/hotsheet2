@@ -7,6 +7,8 @@ import { MenuItem } from './menu-item';
 
 export type AttachmentContextMenuKind = 'item' | 'host';
 
+export const ATTACHMENT_CONTEXT_MENU_HEIGHT = 240;
+
 export interface AttachmentContextMenuProps {
   x: number;
   y: number;
@@ -23,6 +25,9 @@ export function AttachmentContextMenu({x,y,kind='item',revealLabel='Show in file
     {action('open','Open',ExternalLink,'external-link')}
     {action('download','Download',Download,'download')}
     {action('copy-reference','Copy reference',Clipboard,'clipboard')}
-    {kind==='host'?<>{action('copy-path','Copy path',Copy,'copy')}<hr/>{action('reveal',revealLabel,FolderOpen,'folder-open')}</>:action('remove','Remove',Trash2,'trash-2','attachment-context-menu__danger')}
+    {kind==='host'&&action('copy-path','Copy path',Copy,'copy')}
+    <hr/>
+    {action('reveal',revealLabel,FolderOpen,'folder-open')}
+    {kind==='item'&&action('remove','Remove',Trash2,'trash-2','attachment-context-menu__danger')}
   </div>;
 }

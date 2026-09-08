@@ -380,11 +380,11 @@ prompt can be dismissed and returns on a later open until a source is configured
   keeping Git and external-provider creation behavior identical (HS2-CHZKR5).
   When the selected provider advertises attachment support, each attachment exposes one
   accessible Lucide ellipsis button. Activating it or right-clicking anywhere on the row
-  opens the same shared MenuItem-based menu for Open, Download, Copy reference, and
-  Remove. Double-clicking the attachment row remains a direct Open shortcut, while
+  opens the same shared MenuItem-based menu for Open, Download, Copy reference,
+  host-normalized reveal (Finder, File Explorer, or file manager), and Remove.
+  Double-clicking the attachment row remains a direct Open shortcut, while
   activating the ellipsis never opens the file. Upload/removal progress and failures remain visible in the
-  attachment panel. Browser clients use download where a native Tauri host can later
-  offer Reveal in Finder.
+  attachment panel.
 
   The inspector includes a Code Review segment for ticket-associated code history. It
   lists each matching commit subject, up to two lines of its Markdown-formatted message
