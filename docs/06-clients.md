@@ -319,8 +319,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   searching, and a settled empty search repeats the query and suggests changing it.
   When every board column is empty, the board renders one board-wide message beneath
   the retained column headings. Individual empty columns remain blank rather than
-  repeating per-column placeholders. No empty-state copy is projected while the
-  initial ticket collection is unresolved or another loading operation is active.
+  repeating per-column placeholders. While the initial ticket collection is unresolved,
+  the same list/board content area instead shows a centered animated **Loading tickets**
+  state beneath the retained column headings; it never flashes premature empty-project
+  copy or duplicates the corner activity indicator.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries
