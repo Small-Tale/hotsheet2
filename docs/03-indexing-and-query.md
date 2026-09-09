@@ -34,7 +34,10 @@ field tokens without opening a separate advanced-search dialog. Typing `tag:` of
 matching project tags, including quoted tags with spaces, and selecting or completing one
 turns it into a removable, double-click-to-edit chip. Complete filters take effect before
 the trailing space is typed; space or blur commits them as chips, and chips wrap below the
-input without truncating their values. The same surface accepts `has:attachment`,
+input without truncating their values. The empty/single-line search keeps its compact pill
+shape. When chips make it taller, the toolbar grows downward while the other controls keep
+their original top alignment and the project tabs and work area move down intact. The same
+surface accepts `has:attachment`,
 `has:media-annotation`, `has:commit`, `attachment:<name-or-*-wildcard>`, and inclusive
 lifecycle bounds such as `created-after:<local-date>` or
 `completed-before:<local-date-and-time>`. Attachment and media-annotation presence are
