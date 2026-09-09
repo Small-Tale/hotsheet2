@@ -889,9 +889,11 @@ and representative preview-versus-magnified sizing. `TerminalDashboard` lists it
 component so the production composition is explicit rather than only inferable from source.
 
 `TerminalTicketRail` is the dashboard's compact right-side companion. It composes the shared
-project selector, list/notification workspace controls, ticket list, quick-ticket launcher,
-ticket inspector, and forward/backward `ContentTransition`. It remains independently resizable
-beside the terminal grid and is represented directly in the UX catalog.
+content-sized project and view selectors, a full-row list/notification switch, animated search,
+ticket list, quick-ticket launcher, ticket inspector, and forward/backward `ContentTransition`.
+Its inspector route keeps the Back affordance visually independent from the centered ticket slug.
+The rail remains independently resizable and hideable beside the terminal grid and is represented
+directly in the UX catalog.
 
 ## 7. Overlays and shared interaction components
 

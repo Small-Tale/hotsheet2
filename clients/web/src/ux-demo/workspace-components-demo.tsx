@@ -53,7 +53,7 @@ export function focusWorkspaceSearch(root: ParentNode): boolean {
 }
 
 export function TerminalTicketRailDemo(){
-  return <section class="terminal-ticket-rail-demo"><TerminalTicketRail projects={[{id:'demo',name:'Demo project'},{id:'docs',name:'Documentation'}]} selectedProjectId="demo" controls={<WorkspaceControls mode="list" sort="updated" notificationCount={2}/>} content={<TicketList tickets={collectionTickets.value.slice(0,7)} label="Demo project tickets"/>} inspector={<TicketInspectorDemo/>} active="root" action={<QuickTicketLauncher/>}/></section>;
+  return <section class="terminal-ticket-rail-demo"><TerminalTicketRail projects={[{id:'demo',name:'Demo project'},{id:'docs',name:'Documentation'}]} selectedProjectId="demo" views={[{id:'all',label:'Queue'},{id:'backlog',label:'Backlog'},{id:'archive',label:'Archive'}]} selectedViewId="all" controls={<WorkspaceControls mode="list" sort="updated" notificationCount={2}/>} content={<TicketList tickets={collectionTickets.value.slice(0,7)} label="Demo project tickets"/>} inspector={<TicketInspectorDemo/>} active="root" action={<QuickTicketLauncher/>}/></section>;
 }
 
 export function filteredWorkspaceTickets(): TicketRowProps[] {

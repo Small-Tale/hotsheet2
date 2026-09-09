@@ -43,7 +43,7 @@ export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, wor
       <Toolbar
         divider={false}
         leading={<>{mode === 'project' && !sidebarVisible && <ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Show project sidebar" title="Show project sidebar"><LucideIcon icon={PanelLeftOpen} name="panel-left-open" /></button></ToolbarControlGroup>}{header}</>}
-        trailing={<>{headerActions}{mode === 'project' && inspector && !inspectorVisible && <ToolbarControlGroup appearance="borderless" single><button type="button" data-action="open-ticket-inspector" aria-label="Show ticket inspector" title="Show ticket inspector"><LucideIcon icon={PanelRightOpen} name="panel-right-open" /></button></ToolbarControlGroup>}</>}
+        trailing={<>{headerActions}{mode !== 'stats' && inspector && !inspectorVisible && <ToolbarControlGroup appearance="borderless" single><button type="button" data-action="open-ticket-inspector" aria-label={mode==='terminals'?'Show ticket rail':'Show ticket inspector'} title={mode==='terminals'?'Show ticket rail':'Show ticket inspector'}><LucideIcon icon={PanelRightOpen} name="panel-right-open" /></button></ToolbarControlGroup>}</>}
       />
       <ProjectTabBar tabs={tabs} mode={mode} />
       {overlay}

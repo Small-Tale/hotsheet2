@@ -98,6 +98,9 @@ describe('application shell components', () => {
     expect(markup).not.toContain('data-region-id="app-sidebar"');
     expect(markup).toContain('data-region-id="app-inspector"');
     expect(markup).toContain('aria-label="Ticket rail"');
+    const hidden=String(AppShell({tabs:[],mode:'terminals',sidebar:'side' as never,header:'Terminals' as never,workspace:'dashboard' as never,inspector:'ticket rail' as never,inspectorVisible:false}));
+    expect(hidden).toContain('aria-label="Show ticket rail"');
+    expect(hidden).toContain('data-collapsed="true"');
   });
 
   it('renders all connection semantics and only valid actions', () => {
