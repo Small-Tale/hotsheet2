@@ -7,6 +7,7 @@ import { LucideIcon } from '../components/lucide-icon';
 import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectSummary } from '../components/project-summary';
 import { RepositorySummary } from '../components/repository-summary';
+import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { ViewNavigation, type ViewNavigationItem } from '../components/view-navigation';
 
 export const selectedViewId = signal('all');
@@ -42,4 +43,10 @@ export function CommandNavigationDemo() { return <DemoFrame><CommandNavigation l
 export function DriveControlDemo() { return <DemoFrame><DriveControl running={driveRunning.value} tool="Codex" /></DemoFrame>; }
 export function ProjectSidebarDemo() {
   return <section class="project-sidebar-demo"><div class="project-sidebar-demo__resizer" style={`--project-sidebar-demo-height:${projectSidebarHeight.value}px`}><ProjectSidebar completedToday={6} inProgress={3} completionTrend={completionTrend} branch="feature/client-sidebar" unpushed={6} uncommitted={2} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="Codex" openCount={17} upNextCount={4} activeCount={2} /><div class="project-sidebar-demo__resize-handle" data-action="resize-project-sidebar" role="separator" aria-label="Resize project sidebar" aria-orientation="horizontal" aria-valuemin={PROJECT_SIDEBAR_MIN_HEIGHT} aria-valuemax={PROJECT_SIDEBAR_MAX_HEIGHT} aria-valuenow={projectSidebarHeight.value} tabindex="0"><LucideIcon icon={GripHorizontal} name="grip-horizontal" /></div></div><p class="component-stage__event" aria-live="polite">{sidebarEvent.value}</p></section>;
+}
+export function TerminalOperationsSidebarDemo() {
+  return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail"><TerminalOperationsSidebar projects={[
+    { id: 'hotsheet', name: 'Hot Sheet', completedToday: 6, inProgress: 3, trend: [3, 0, 2, 5, 4, 7, 6] },
+    { id: 'docs', name: 'Documentation', completedToday: 2, inProgress: 1, trend: [0, 1, 0, 2, 1, 0, 2] },
+  ]}/></div></section>;
 }

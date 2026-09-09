@@ -76,9 +76,9 @@ category navigator for Ticket sources, Commands, Permissions, and Column view; t
 selected category alone occupies the workspace and names the shared page header without
 a duplicate workspace title. Settings shows the standard empty inspector placeholder and
 disables ticket-view actions.
-Global Terminal Dashboard and Cross-project Stats modes hide
-both project-scoped regions, replace the project identity, and temporarily suppress
-header controls pending their dedicated wireframes. It owns the top-level arrangement
+Cross-project Stats hides both project-scoped regions. Global Terminal Dashboard replaces
+the project sidebar with a resizable operations sidebar and keeps the ticket rail at the
+right; both regions remain explicitly hideable and restorable. It owns the top-level arrangement.
 The project-scoped list/column workspace also composes the real `QuickTicketComposer`
 immediately above its ticket collection, matching the wireframe; settings and global
 dashboard modes omit it.
@@ -151,6 +151,12 @@ does not introduce polling or another network request.
   statistics surface; HS2-38RJMK owns the full charts behind the current placeholder.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
+- `TerminalOperationsSidebar` — **demo built**: the Terminal Dashboard's left rail
+  reuses `MenuHeader` and `ProjectSummary` for each open project. When two or more
+  projects are open, an `All projects` group precedes them and sums aligned trend days,
+  completed-today counts, and in-progress counts. Each summary opens statistics for
+  that project; the aggregate opens cross-project statistics. The component consumes
+  the already-loaded ticket rows and does not introduce polling or network requests.
 - `RepositorySummary` — **production built**: one accessible branch/status action with
   unpushed and uncommitted counts. The uncommitted count remains text-only to avoid
   crowding the already icon-rich row.

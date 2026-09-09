@@ -33,13 +33,14 @@ describe('ProjectSidebar component slice', () => {
     expect(disabled).toContain('title="Not available yet."');
   });
   it('derives project progress bars and accessible summary text from props', () => {
-    const markup = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4] }));
+    const markup = String(ProjectSummary({ completedToday: 8, inProgress: 2, trend: [1, 4], projectId: 'demo' }));
     expect(markup).not.toContain('coverage');
     expect(markup).not.toContain('project-summary__coverage');
     expect(markup).toContain('Tickets completed over the last 2 days: 1, 4');
     expect(markup).toContain('8 completed today');
     expect(markup).toContain('2 in progress');
     expect(markup).toContain('data-action="open-project-stats"');
+    expect(markup).toContain('data-project-id="demo"');
     expect(markup).toContain('aria-label="Open project statistics: 8 completed today, 2 in progress"');
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
   });

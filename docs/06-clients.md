@@ -727,6 +727,14 @@ global dashboard; the project drawer
 always shows its project's terminals and has no visibility controls. Newly created terminals
 appear in Default and start hidden in existing named groups. The dashboard always uses one
 ungrouped flow, so there is no redundant project/none grouping selector.
+The dashboard keeps a resizable left operations sidebar open by default. It presents one
+`MenuHeader` and the shared seven-day `ProjectSummary` for every open project. With multiple
+projects, a leading `All projects` group sums each aligned trend day plus the completed-today
+and in-progress counts. The project summaries open project statistics and the aggregate opens
+cross-project statistics. These values derive from ticket collections already loaded for the
+open project tabs, so the sidebar adds no polling or network traffic. It remains usable beside
+the grid and ticket rail at the supported 1024×600 floor, and can be hidden and restored from
+the leading edge of the dashboard toolbar.
 The dashboard keeps a resizable right ticket rail open by default and allows it to be hidden
 and restored from the dashboard toolbar. That rail reuses the selected project's list and
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
