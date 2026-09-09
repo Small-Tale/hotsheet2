@@ -76,10 +76,12 @@ describe('ticket metadata controls and inspector panels', () => {
   });
 
   it('shows videos in the media grid without starting playback', () => {
-    const attachments = String(TicketAttachments({ attachments: [{ id: 'clip', name: 'walkthrough.webm',url:'/attachment/clip' }] }));
+    const attachments = String(TicketAttachments({ attachments: [{ id: 'clip', name: 'walkthrough.webm',url:'/attachment/clip',thumbnailUrl:'/attachment/clip/thumbnail' }] }));
     expect(attachments).toContain('aria-label="Attached media"');
     expect(attachments).toContain('<video');
     expect(attachments).toContain('preload="metadata"');
+    expect(attachments).toContain('src="/attachment/clip#t=0.1"');
+    expect(attachments).toContain('poster="/attachment/clip/thumbnail"');
     expect(attachments).not.toContain('autoplay');
     expect(attachments).toContain('Open walkthrough.webm in media gallery');
   });

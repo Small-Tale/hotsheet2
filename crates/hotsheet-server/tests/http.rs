@@ -1482,7 +1482,7 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .header("x-hotsheet-actor-role", "human")
         .header("x-hotsheet-actor-name", "Brian%20Westphal")
         .header("x-hotsheet-attachment-purpose", "problem_evidence")
-        .body(Body::from(video_bytes))
+        .body(Body::from(video_bytes.clone()))
         .unwrap();
     let video_response = app.clone().oneshot(video_request).await.unwrap();
     assert_eq!(video_response.status(), StatusCode::CREATED);
@@ -1499,6 +1499,32 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         "problem_evidence"
     );
     let video_attachment_id = video_attached["attachments"][0]["id"].as_str().unwrap();
+    let ranged_video = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"
+                ))
+                .header("x-hotsheet-secret", SECRET)
+                .header("range", "bytes=10-19")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ranged_video.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(ranged_video.headers()["content-type"], "video/quicktime");
+    assert_eq!(ranged_video.headers()["accept-ranges"], "bytes");
+    assert_eq!(
+        ranged_video.headers()["content-range"],
+        format!("bytes 10-19/{}", video_bytes.len())
+    );
+    assert_eq!(
+        ranged_video.into_body().collect().await.unwrap().to_bytes(),
+        Bytes::from_static(&[0x5a; 10])
+    );
     let regrouped = body_json(
         app.clone()
             .oneshot(authed(

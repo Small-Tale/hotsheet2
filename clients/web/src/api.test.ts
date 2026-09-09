@@ -12,6 +12,7 @@ describe('attachment filename transport',()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({path:'/store/screen shot.svg'}),{status:200}));
     const api=new Api('/api');
     expect(api.checkoutAttachmentByNameUrl('folder one','HS2-ONE','screen shot.svg')).toBe('/api/checkouts/folder%20one/tickets/HS2-ONE/attachments/by-name/screen%20shot.svg');
+    expect(api.checkoutAttachmentThumbnailUrl('folder one','HS2-ONE','clip id')).toBe('/api/checkouts/folder%20one/tickets/HS2-ONE/attachments/clip%20id/thumbnail');
     await expect(api.checkoutAttachmentByNameAction('folder one','HS2-ONE','screen shot.svg','reveal')).resolves.toEqual({path:'/store/screen shot.svg'});
     expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20one/tickets/HS2-ONE/attachments/by-name/screen%20shot.svg/action',expect.objectContaining({method:'POST',body:'{"action":"reveal"}'}));
     fetchMock.mockRestore();

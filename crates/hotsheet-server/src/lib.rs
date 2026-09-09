@@ -10,6 +10,7 @@ pub mod code_review;
 pub mod commands;
 pub mod dist_work_loop;
 pub mod lifecycle;
+pub mod media;
 pub mod multistore;
 pub mod notifications;
 pub mod repository_browser;
@@ -1073,6 +1074,10 @@ pub fn app(state: AppState) -> Router {
                 .put(update_checkout_ticket_attachment_annotations)
                 .patch(rename_checkout_ticket_attachment)
                 .delete(delete_checkout_ticket_attachment),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/thumbnail",
+            get(get_checkout_ticket_attachment_thumbnail),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/action",
@@ -3260,6 +3265,14 @@ async fn add_checkout_ticket_attachment(
         &body,
         metadata,
     )?;
+    if media::is_video(&filename) {
+        let thumbnail_filename = filename.clone();
+        let thumbnail_bytes = body.to_vec();
+        let _ = tokio::task::spawn_blocking(move || {
+            media::video_thumbnail(&thumbnail_filename, &thumbnail_bytes)
+        })
+        .await;
+    }
     state.changed_in(&entry, "attachment_added", &updated);
     Ok((
         StatusCode::CREATED,
@@ -3273,6 +3286,7 @@ async fn add_checkout_ticket_attachment(
 async fn get_checkout_ticket_attachment(
     State(state): State<AppState>,
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
@@ -3288,48 +3302,48 @@ async fn get_checkout_ticket_attachment(
                 error.into()
             }
         })?;
-    Ok(attachment_payload_response(&attachment.filename, bytes))
+    Ok(media::attachment_response(
+        &attachment.filename,
+        bytes,
+        headers.get("range").and_then(|value| value.to_str().ok()),
+    ))
 }
 
 async fn get_checkout_ticket_attachment_by_name(
     State(state): State<AppState>,
     Path((reference, id, filename)): Path<(String, String, String)>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let (entry, ticket, attachment_id) =
         checkout_attachment_by_name(&state, &reference, &id, &filename)?;
     let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
-    Ok(attachment_payload_response(&attachment.filename, bytes))
+    Ok(media::attachment_response(
+        &attachment.filename,
+        bytes,
+        headers.get("range").and_then(|value| value.to_str().ok()),
+    ))
 }
 
-fn attachment_payload_response(filename: &str, bytes: Vec<u8>) -> Response {
-    let mut headers = HeaderMap::new();
-    let content_type = match FsPath::new(filename)
-        .extension()
-        .and_then(|value| value.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("png") => "image/png",
-        Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
-        Some("avif") => "image/avif",
-        Some("bmp") => "image/bmp",
-        Some("ico") => "image/x-icon",
-        Some("svg") => "image/svg+xml",
-        Some("pdf") => "application/pdf",
-        Some("txt" | "md") => "text/plain; charset=utf-8",
-        Some("json") => "application/json",
-        _ => "application/octet-stream",
-    };
-    headers.insert(
-        "content-type",
-        content_type.parse().expect("static content type"),
-    );
-    if let Ok(filename) = filename.parse() {
-        headers.insert("x-hotsheet-filename", filename);
-    }
-    (headers, Bytes::from(bytes)).into_response()
+async fn get_checkout_ticket_attachment_thumbnail(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+) -> Result<Response, ApiError> {
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
+    let filename = attachment.filename;
+    let thumbnail = tokio::task::spawn_blocking(move || media::video_thumbnail(&filename, &bytes))
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("video thumbnail task failed: {error}"),
+            )
+        })?
+        .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
+    Ok(media::attachment_response("thumbnail.jpg", thumbnail, None))
 }
 
 #[derive(Debug, Deserialize)]
