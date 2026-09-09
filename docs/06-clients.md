@@ -724,7 +724,9 @@ idempotent and settles geometry without replaying the drawer's show animation.
 The UX catalog mounts the same xterm frontend over deterministic ANSI fixtures rather than
 substituting a text placeholder. Its preview is constrained to a realistic grid-card width,
 the magnified variant receives the remaining stage width, and both demonstrate the canonical
-code font and complete Nano screen.
+code font and a populated 80×24 Nano screen. Its initial terminal focus is one-shot: later
+xterm paints, including cursor blinking, never steal focus from catalog controls or close an
+open Web Awesome popup.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.
