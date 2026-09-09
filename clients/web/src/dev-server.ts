@@ -4,9 +4,9 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, openLocalProject, proxyProjectRequest, revealCorruptTicket } from './project-bridge';
+import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, migrateHs1Project, openLocalProject, proxyProjectRequest, removeImportedHs1Data, revealCorruptTicket } from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote): Hono {
+export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote,migrate:(root:string,location?:string)=>Promise<unknown>=migrateHs1Project,removeHs1:(project:string)=>Promise<string[]>=removeImportedHs1Data): Hono {
   const app = new Hono();
   app.post('/__hotsheet/projects/open', async context => {
     if (!dev) return context.notFound();
@@ -28,6 +28,14 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
   app.post('/__hotsheet/projects/setup-git-remote',async context=>{
     if(!dev)return context.notFound();
     try{const body=await context.req.json<{store:string;remote:string}>();await connectRemote(body.store,body.remote);return context.json({connected:true})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not connect the Git remote.'},400)}
+  });
+  app.post('/__hotsheet/projects/migrate-hs1',async context=>{
+    if(!dev)return context.notFound();
+    try{const body=await context.req.json<{root:string;location?:string}>();return context.json(await migrate(body.root,body.location),201)}catch(error){return context.json({error:error instanceof Error?error.message:'Could not import the Hot Sheet 1 project.'},400)}
+  });
+  app.delete('/__hotsheet/projects/:project/hs1-data',async context=>{
+    if(!dev)return context.notFound();
+    try{return context.json({removed:await removeHs1(context.req.param('project'))})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not remove the old Hot Sheet 1 data.'},400)}
   });
   app.all('/__hotsheet/project-api/:project/*', async context => {
     if (!dev) return context.notFound();

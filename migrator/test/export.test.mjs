@@ -73,6 +73,12 @@ describe('exportFromDb', () => {
     expect(out.tickets).toHaveLength(3);
   });
 
+  it('preserves the complete HS1 settings object for the importer', async () => {
+    const settings = { appName: 'Hot Sheet 2', ticketPrefix: 'HS2', categories: ['bug', 'chore'] };
+    const out = await exportFromDb(db, { name: 'Hot Sheet 2', ticketPrefix: 'HS2' }, settings);
+    expect(out.settings).toEqual(settings);
+  });
+
   it('maps fields, notes, tags, and timestamps', async () => {
     const out = await exportFromDb(db, { ticketPrefix: 'HS2' });
     const root = out.tickets.find((t) => t.ticket_number === 'HS2-1');

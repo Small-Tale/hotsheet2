@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, readFile, realpath } from 'node:fs/promises';
+import { access, readFile, readdir, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
@@ -14,10 +14,13 @@ export interface ProjectSession {
   apiPath: string;
   compatibility: CompatibilityAssessment;
   needsTicketSetup: boolean;
+  needsHs1Migration: boolean;
+  hs1ImportCompleted: boolean;
+  hs1CleanupEligible: boolean;
 }
 
 interface InstanceInfo { pid:number; url:string; secret:string }
-interface SessionTarget { url:string; secret:string }
+interface SessionTarget { url:string; secret:string; root?:string }
 interface CorruptDiagnostic { path:string }
 
 export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
@@ -86,6 +89,59 @@ async function exists(path: string) {
 
 function toolBinary() {
   return process.env.HOTSHEET_CLI_BIN || resolve(developmentRepositoryRoot(), 'target/debug/hotsheet-cli');
+}
+
+function migrateBinary() {
+  return process.env.HOTSHEET_MIGRATE_BIN || resolve(developmentRepositoryRoot(), 'target/debug/hotsheet-migrate');
+}
+
+function migratorScript() {
+  return process.env.HOTSHEET_MIGRATOR || resolve(developmentRepositoryRoot(), 'migrator/src/export.mjs');
+}
+
+const HS1_MARKER='.hotsheet/db/PG_VERSION',HS1_RECEIPT='hotsheet-hs1-import.json';
+export function hs1MigrationArgs(root:string,ticketStore:string,exporter:string):string[]{return[resolve(root,'.hotsheet'),'-C',ticketStore,'--migrator',exporter]}
+export function preserveHs1Entry(name:string):boolean{return name==='store'||/backup/i.test(name)}
+
+async function receiptMatchesProject(store:string|undefined,root:string):Promise<boolean>{
+  if(!store)return false;
+  try{const receipt=JSON.parse(await readFile(resolve(store,HS1_RECEIPT),'utf8')) as {sourceProject?:string};return receipt.sourceProject===root}catch{return false}
+}
+
+async function hasGitRemote(store:string|undefined):Promise<boolean>{
+  if(!store)return false;
+  return new Promise(resolveResult=>{const child=spawn('git',['-C',store,'remote','get-url','origin'],{stdio:'ignore'});child.once('error',()=>resolveResult(false));child.once('close',code=>resolveResult(code===0))})
+}
+
+export interface Hs1MigrationResult {ticketStore:string;connectionId:string;tickets:number;attachments:number;toolsConfigured:boolean}
+export type ProcessRunner=(command:string,args:string[],cwd:string)=>Promise<string>;
+const runProcess:ProcessRunner=(command,args,cwd)=>new Promise((resolveRun,reject)=>{const child=spawn(command,args,{cwd,stdio:['ignore','pipe','pipe']}),stdout:Buffer[]=[],stderr:Buffer[]=[];child.stdout.on('data',(chunk:Buffer)=>stdout.push(chunk));child.stderr.on('data',(chunk:Buffer)=>stderr.push(chunk));child.once('error',reject);child.once('close',code=>{const output=Buffer.concat(stdout).toString('utf8'),error=Buffer.concat(stderr).toString('utf8').trim();code===0?resolveRun(output):reject(new Error(error||`${command} exited with status ${code??'unknown'}.`))})});
+
+export async function migrateHs1Project(rootInput:string,locationInput?:string,runner:ProcessRunner=runProcess):Promise<Hs1MigrationResult>{
+  const root=await realpath(rootInput.trim());
+  if(!await exists(resolve(root,HS1_MARKER)))throw new Error('Hot Sheet 1 data is no longer present in this project.');
+  const ticketStore=locationInput?.trim()?resolve(locationInput.trim()):`${root}.hs2`,binary=migrateBinary(),exporter=migratorScript();
+  if(!await exists(binary))throw new Error(`Hot Sheet migrator is not built at ${binary}. Run cargo build -p hotsheet-cli --bin hotsheet-migrate.`);
+  if(!await exists(exporter))throw new Error(`Hot Sheet 1 exporter is not available at ${exporter}.`);
+  const output=await runner(binary,hs1MigrationArgs(root,ticketStore,exporter),developmentRepositoryRoot());
+  const match=output.match(/Imported (\d+) ticket\(s\) \((\d+) attachment file\(s\)\), skipped (\d+)/),tickets=match?Number(match[1])+Number(match[3]):0,attachments=match?Number(match[2]):0;
+  let toolsConfigured=true;
+  try{await runner(toolBinary(),['-C',ticketStore,'setup','--detect','--project',root],developmentRepositoryRoot())}catch{toolsConfigured=false}
+  const canonicalStore=await realpath(ticketStore);
+  return{ticketStore:canonicalStore,connectionId:gitTicketStoreConnectionId(canonicalStore),tickets,attachments,toolsConfigured};
+}
+
+export async function removeImportedHs1Data(projectId:string):Promise<string[]>{
+  const root=sessions.get(projectId)?.root;
+  if(!root)throw new Error('Project session is not open.');
+  const directory=resolve(root,'.hotsheet');
+  if(!await exists(resolve(directory,'db/PG_VERSION')))throw new Error('Hot Sheet 1 data is no longer present in this project.');
+  const removed:string[]=[];
+  for(const entry of await readdir(directory,{withFileTypes:true})){
+    if(preserveHs1Entry(entry.name))continue;
+    await rm(resolve(directory,entry.name),{recursive:true,force:true});removed.push(entry.name);
+  }
+  return removed;
 }
 
 export function localStoreInitArgs(path:string,standalone=false):string[]{
@@ -170,7 +226,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const root = await realpath(rootInput.trim());
   const ticketStore = ticketStoreInput?.trim() ? await realpath(ticketStoreInput.trim()) : await suggestedTicketStore(root);
   const instance = await ensureServer(ticketStore??await bootstrapStore());
-  const target = { url: instance.url, secret: instance.secret };
+  const target = { url: instance.url, secret: instance.secret, root };
   const metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
   const compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
   requireCompatibleServer(compatibility);
@@ -179,7 +235,8 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
     body: JSON.stringify({ root, ...(ticketStoreInput?.trim() ? { stores: [ticketStore] } : {}) }),
   });
   sessions.set(opened.checkout.id, target);
-  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility, needsTicketSetup: opened.checkout.sources.length===0 };
+  const activeStore=ticketStore??opened.checkout.stores[0],hs1DataPresent=await exists(resolve(root,HS1_MARKER)),imported=await receiptMatchesProject(activeStore,root);
+  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility, needsTicketSetup: opened.checkout.sources.length===0,needsHs1Migration:hs1DataPresent&&!imported,hs1ImportCompleted:imported,hs1CleanupEligible:hs1DataPresent&&imported&&await hasGitRemote(activeStore) };
 }
 
 export async function proxyProjectRequest(projectId: string, path: string, request: Request): Promise<Response> {

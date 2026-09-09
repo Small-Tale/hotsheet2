@@ -37,7 +37,7 @@ const TICKET_COLUMNS = [
  * @param {{query: (sql: string, params?: unknown[]) => Promise<{rows: any[]}>}} db
  * @param {{name?: string|null, ticketPrefix?: string|null}} project
  */
-export async function exportFromDb(db, project = {}) {
+export async function exportFromDb(db, project = {}, settings = {}) {
   const present = new Set(
     (
       await db.query(
@@ -135,6 +135,7 @@ export async function exportFromDb(db, project = {}) {
       name: project.name ?? null,
       ticketPrefix: project.ticketPrefix ?? 'HS',
     },
+    settings,
     tickets,
   };
 }
@@ -152,11 +153,12 @@ export async function exportDatadir(hotsheetDir, outPath) {
   const { join } = path;
 
   let project = {};
+  let settings = {};
   const settingsPath = join(hotsheetDir, 'settings.json');
   if (fs.existsSync(settingsPath)) {
     try {
-      const s = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-      project = { name: s.appName ?? null, ticketPrefix: s.ticketPrefix ?? null };
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      project = { name: settings.appName ?? null, ticketPrefix: settings.ticketPrefix ?? null };
     } catch (err) {
       console.warn(`warning: could not read settings.json (${err.message})`);
     }
@@ -170,7 +172,7 @@ export async function exportDatadir(hotsheetDir, outPath) {
       console.log(`(reading from the '${database}' database — cluster predates PGLite 0.4.0)`);
     }
     try {
-      const exportObj = await exportFromDb(db, project);
+      const exportObj = await exportFromDb(db, project, settings);
       if (outPath) {
         stageAttachments(fs, path, hotsheetDir, outPath, exportObj);
         fs.writeFileSync(outPath, `${JSON.stringify(exportObj, null, 2)}\n`);

@@ -12,8 +12,9 @@ use anyhow::{Context, Result};
 use hotsheet_model::{
     CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, derive_slug,
 };
-use hotsheet_ticketing::FsStore;
+use hotsheet_ticketing::{FsStore, Scope, Settings};
 use serde::Deserialize;
+use serde_json::{Map, Value};
 
 /// The export-file `exportVersion` this importer understands (`docs/07` §7.2.1).
 pub const SUPPORTED_EXPORT_VERSION: u32 = 1;
@@ -26,6 +27,8 @@ pub struct ExportFile {
     pub export_version: u32,
     #[serde(default)]
     pub project: ProjectInfo,
+    #[serde(default)]
+    pub settings: Map<String, Value>,
     #[serde(default)]
     pub tickets: Vec<ExportTicket>,
 }
@@ -133,7 +136,22 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
         summary.written += 1;
         summary.attachments += copy_attachments(store, base_dir, id, &src.attachments)?;
     }
+    import_settings(store, export)?;
     Ok(summary)
+}
+
+/// Carry forward HS1's project settings that are still meaningful as shared HS2
+/// settings. Identity fields initialize the store itself and are not duplicated;
+/// every other JSON value is preserved under its original key so custom categories,
+/// views, and future-compatible settings survive the one-time conversion.
+fn import_settings(store: &FsStore, export: &ExportFile) -> Result<()> {
+    let settings = Settings::new(store.root());
+    for (key, value) in &export.settings {
+        if key != "appName" && key != "ticketPrefix" {
+            settings.set(key, value.clone(), Scope::Shared)?;
+        }
+    }
+    Ok(())
 }
 
 /// Stable, time-sortable import identity: the timestamp comes from the HS1 creation
@@ -409,6 +427,39 @@ mod tests {
             }
         );
         assert_eq!(store.list_tickets().unwrap().len(), 2, "no duplicates");
+    }
+
+    #[test]
+    fn imports_non_identity_hs1_settings_as_shared_project_settings() {
+        let (_dir, store) = temp_store();
+        let mut export = export_json();
+        export
+            .settings
+            .insert("appName".into(), serde_json::json!("Old name"));
+        export
+            .settings
+            .insert("ticketPrefix".into(), serde_json::json!("OLD"));
+        export
+            .settings
+            .insert("categories".into(), serde_json::json!(["bug", "chore"]));
+        export.settings.insert(
+            "customViews".into(),
+            serde_json::json!({"mine": {"tag": "me"}}),
+        );
+
+        import(&store, &export, Path::new(".")).unwrap();
+
+        let migrated = Settings::new(store.root()).map(Scope::Shared).unwrap();
+        assert_eq!(
+            migrated.get("categories"),
+            Some(&serde_json::json!(["bug", "chore"]))
+        );
+        assert_eq!(
+            migrated.get("customViews"),
+            Some(&serde_json::json!({"mine": {"tag": "me"}}))
+        );
+        assert!(!migrated.contains_key("appName"));
+        assert!(!migrated.contains_key("ticketPrefix"));
     }
 
     #[test]

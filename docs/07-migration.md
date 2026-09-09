@@ -41,9 +41,14 @@
 > (basename-sanitized). Source files resolve by basename under
 > `<.hotsheet>/attachments/` so a moved project still works.
 >
-> **Not yet:** the UI-prompted per-project flow (§7.3). (The `pglite-migrate` fetch for
-> a newer-than-bundle datadir is validated against a real PG18 cluster; it just isn't
-> in the offline CI suite because it downloads an engine — HS2-82.)
+> **Built (HS2-PWYTS8):** selecting an HS1 project in the local client detects the
+> exact database marker and opens a destination-only import prompt. The bridge runs
+> the bundled one-shot migrator, links the resulting source, carries applicable
+> settings forward, and idempotently configures detected AI tools. Once the imported
+> repository has a remote, a banner offers explicit removal of live HS1 artifacts
+> while preserving every backup and the HS2 store link. (The `pglite-migrate` fetch
+> for a newer-than-bundle datadir remains outside offline CI because it downloads an
+> engine — HS2-82.)
 
 ## 7.1 The problem
 
@@ -142,9 +147,12 @@ may not have open at once):
 2. On confirm, Hot Sheet **runs the bundled migrator against this one project**,
    streaming progress to the UI. (The migrator is a separate bundled executable —
    §7.2 — the server just spawns it; it does not live in the core.)
-3. On success it shows a summary (N tickets, M attachments) and leaves the old
-   `.hotsheet/db/` **in place** (renamed to `.hotsheet/db.hs1-backup/`) so nothing
-   is destroyed — the user deletes it when satisfied.
+3. On success it shows a summary (N tickets, M attachments), links the new source,
+   and leaves the old `.hotsheet/` data in place. A durable receipt in the new store
+   distinguishes a completed import from an unrelated HS2 repository.
+4. Only after an `origin` remote exists does the project show its cleanup banner.
+   Cleanup requires confirmation, removes the live HS1 artifacts, and preserves
+   backup-named entries plus the HS2 `.hotsheet/store` link.
 
 The same migration is runnable **by hand** in one command, independent of the UI
 prompt: **`hotsheet-migrate <old-project>/.hotsheet -C <new-store>`** spawns the Node
@@ -157,7 +165,8 @@ migrator/src/export.mjs …` + `hotsheet import …`, which remain available sep
 ## 7.4 What is and isn't migrated
 
 - **Migrated:** tickets (all fields), notes, tags, attachments, blocked-by edges,
-  category/priority/status, up_next, timestamps, project settings that still apply.
+  category/priority/status, up_next, timestamps, project settings that still apply,
+  and detected AI-tool instructions/MCP setup.
 - **Not migrated (runtime/derived):** claim/lease state (transient), the index
   (rebuilt), generated `worklist.md`/`open-tickets.md` (regenerated), telemetry
   rollups and the Announcer history (HS1-specific; a later, optional export if

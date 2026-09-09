@@ -34,6 +34,7 @@ use crate::import::{ExportFile, ImportSummary, SUPPORTED_EXPORT_VERSION, import}
 /// The per-machine link file a code repo drops to point at its **standalone** ticket store
 /// (`docs/02` §2.8, HS2-5CXKZ0). Gitignored — the store path is absolute + machine-local.
 pub const STORE_LINK: &str = ".hotsheet/store";
+pub const HS1_IMPORT_RECEIPT: &str = "hotsheet-hs1-import.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchSourceDiscovery {
@@ -248,6 +249,24 @@ pub fn run_migrate(
     }
 
     let result = run_import(store_path, &export_json, prefix);
+    if let Ok(summary) = &result {
+        let source = hotsheet_dir
+            .parent()
+            .unwrap_or(hotsheet_dir)
+            .canonicalize()
+            .unwrap_or_else(|_| hotsheet_dir.to_path_buf());
+        let receipt = serde_json::json!({
+            "$hotsheetSchema": 1,
+            "sourceProject": source,
+            "tickets": summary.written + summary.skipped,
+            "attachments": summary.attachments,
+        });
+        std::fs::write(
+            store_path.join(HS1_IMPORT_RECEIPT),
+            serde_json::to_string_pretty(&receipt)? + "\n",
+        )?;
+        git_commit_all(store_path, "Record completed Hot Sheet 1 import");
+    }
     let _ = std::fs::remove_dir_all(&staging);
     result
 }

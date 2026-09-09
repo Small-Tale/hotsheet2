@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote, developmentRepositoryRoot,folderChooserCommand,localStoreInitArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -89,6 +89,21 @@ describe('native folder chooser',()=>{
     expect(response.status).toBe(201);expect(await response.json()).toEqual({ticketStore:'/work/demo.hs2',connectionId:'719abfebc935ba14'});expect(setup).toHaveBeenCalledWith('/work/demo',undefined);
     const custom=await app.request('/__hotsheet/projects/setup-git',{method:'POST',headers:{'content-type':'application/json'},body:'{"root":"/work/demo","location":"/chosen/tickets"}'});expect(custom.status).toBe(201);expect(setup).toHaveBeenLastCalledWith('/work/demo','/chosen/tickets');expect(await custom.json()).toMatchObject({ticketStore:'/chosen/tickets',connectionId:expect.stringMatching(/^[a-f0-9]{16}$/)});
     expect((await createDevApp(false,undefined,undefined,undefined,setup).request('/__hotsheet/projects/setup-git',{method:'POST'})).status).toBe(404);
+  });
+});
+
+describe('Hot Sheet 1 project import bridge',()=>{
+  it('uses argument arrays for the standalone migrator and preserves backups plus the HS2 link',()=>{
+    expect(hs1MigrationArgs('/work/demo','/tickets/demo.hs2','/app/migrator/export.mjs')).toEqual(['/work/demo/.hotsheet','-C','/tickets/demo.hs2','--migrator','/app/migrator/export.mjs']);
+    expect(['db','attachments','settings.json'].filter(preserveHs1Entry)).toEqual([]);
+    expect(['store','db.hs1-backup','Backup-2026'].filter(preserveHs1Entry)).toEqual(['store','db.hs1-backup','Backup-2026']);
+  });
+  it('exposes explicit import and cleanup actions only through the local bridge',async()=>{
+    const migrate=vi.fn().mockResolvedValue({ticketStore:'/tickets/demo.hs2',connectionId:'source',tickets:12,attachments:3,toolsConfigured:true}),remove=vi.fn().mockResolvedValue(['db','settings.json']),app=createDevApp(true,undefined,undefined,undefined,undefined,undefined,migrate,remove);
+    const imported=await app.request('/__hotsheet/projects/migrate-hs1',{method:'POST',headers:{'content-type':'application/json'},body:'{"root":"/work/demo","location":"/tickets/demo.hs2"}'});
+    expect(imported.status).toBe(201);expect(await imported.json()).toMatchObject({tickets:12,attachments:3});expect(migrate).toHaveBeenCalledWith('/work/demo','/tickets/demo.hs2');
+    const cleaned=await app.request('/__hotsheet/projects/demo/hs1-data',{method:'DELETE'});expect(await cleaned.json()).toEqual({removed:['db','settings.json']});expect(remove).toHaveBeenCalledWith('demo');
+    const disabled=createDevApp(false,undefined,undefined,undefined,undefined,undefined,migrate,remove);expect((await disabled.request('/__hotsheet/projects/migrate-hs1',{method:'POST'})).status).toBe(404);expect((await disabled.request('/__hotsheet/projects/demo/hs1-data',{method:'DELETE'})).status).toBe(404);
   });
 });
 
