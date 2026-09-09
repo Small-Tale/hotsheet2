@@ -17,6 +17,9 @@ export interface ProjectSession {
   needsHs1Migration: boolean;
   hs1ImportCompleted: boolean;
   hs1CleanupEligible: boolean;
+  hs1SourcePath?: string;
+  hs1DatabasePath?: string;
+  hs1PostgresVersion?: string;
 }
 
 interface InstanceInfo { pid:number; url:string; secret:string }
@@ -235,8 +238,8 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
     body: JSON.stringify({ root, ...(ticketStoreInput?.trim() ? { stores: [ticketStore] } : {}) }),
   });
   sessions.set(opened.checkout.id, target);
-  const activeStore=ticketStore??opened.checkout.stores[0],hs1DataPresent=await exists(resolve(root,HS1_MARKER)),imported=await receiptMatchesProject(activeStore,root);
-  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility, needsTicketSetup: opened.checkout.sources.length===0,needsHs1Migration:hs1DataPresent&&!imported,hs1ImportCompleted:imported,hs1CleanupEligible:hs1DataPresent&&imported&&await hasGitRemote(activeStore) };
+  const activeStore=ticketStore??opened.checkout.stores[0],hs1SourcePath=resolve(root,'.hotsheet'),hs1DatabasePath=resolve(root,'.hotsheet/db'),hs1MarkerPath=resolve(root,HS1_MARKER),hs1DataPresent=await exists(hs1MarkerPath),imported=await receiptMatchesProject(activeStore,root),hs1PostgresVersion=hs1DataPresent?(await readFile(hs1MarkerPath,'utf8').catch(()=>'' )).trim():'';
+  return { id: opened.checkout.id, root: opened.checkout.root, name: opened.checkout.alias, stores: opened.checkout.stores, apiPath: `/__hotsheet/project-api/${encodeURIComponent(opened.checkout.id)}`, compatibility, needsTicketSetup: opened.checkout.sources.length===0,needsHs1Migration:hs1DataPresent&&!imported,hs1ImportCompleted:imported,hs1CleanupEligible:hs1DataPresent&&imported&&await hasGitRemote(activeStore),...(hs1DataPresent?{hs1SourcePath,hs1DatabasePath,hs1PostgresVersion}: {}) };
 }
 
 export async function proxyProjectRequest(projectId: string, path: string, request: Request): Promise<Response> {

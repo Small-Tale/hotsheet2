@@ -110,6 +110,8 @@ export const demoCatalog: DemoCategory[] = [
     demo('provider-capability', 'ProviderCapabilityNotice', 'Explains unavailable provider operations.'),
   ]},
   { id: 'setup', name: 'Setup and settings', demos: [
+    demo('hs1-migration-dialog', 'Hs1MigrationDialog', 'Detected Hot Sheet 1 source details and destination-only import flow.', 'feature-floor', true, ['value-table']),
+    demo('hs1-migration-banner', 'Hs1MigrationBanner', 'Non-blocking access to a dismissed Hot Sheet 1 import.', 'feature-floor', true),
     demo('welcome-screen', 'WelcomeScreen', 'First useful entry into a server connection.'),
     demo('add-project-flow', 'AddProjectFlow', 'Discover or connect a local or remote project.'),
     demo('settings-window', 'SettingsWindow', 'Effective-first scoped settings.', 'later'),

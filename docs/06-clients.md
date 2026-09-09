@@ -97,7 +97,11 @@ project. Once the empty checkout is visible, the client asks whether to create a
 standalone `<project>.hs2` git repository or configure another provider in Sources. The
 prompt can be dismissed and returns on a later open until a source is configured.
 When that folder contains an HS1 PGLite marker, the ordinary empty-source prompt is
-replaced by a one-time import prompt that asks only for the destination ticket repository.
+replaced by a one-time import prompt that identifies the exact detected `.hotsheet`
+source folder, database path, and PostgreSQL version, then asks only for the destination
+ticket repository. Choosing Not now is persisted for that checkout and detected source,
+so the modal does not return on every launch; a non-blocking project banner retains the
+source path and an Import action. A changed source identity may prompt again.
 After a successful import and remote backup, a non-blocking project banner offers explicit
 cleanup of the old live HS1 data; backups are never removed.
 

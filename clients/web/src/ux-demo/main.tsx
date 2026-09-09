@@ -122,7 +122,7 @@ import {
   TicketReaderDemo,
 } from './content-components-demo';
 import { ContentTransitionDemo, ContentTransitionSettings, transitionDirection, transitionSide, transitionStyle } from './content-transition-demo';
-import { DialogHeaderDemo, ValueTableDemo } from './dialog-layout-demo';
+import { DialogHeaderDemo, Hs1MigrationBannerDemo, Hs1MigrationDialogDemo, ValueTableDemo } from './dialog-layout-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import {
@@ -469,6 +469,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'toolbar') return <ToolbarDemo />;
   if (item.id === 'dialog-header') return <DialogHeaderDemo />;
   if (item.id === 'value-table') return <ValueTableDemo />;
+  if (item.id === 'hs1-migration-dialog') return <Hs1MigrationDialogDemo />;
+  if (item.id === 'hs1-migration-banner') return <Hs1MigrationBannerDemo />;
   if (item.id === 'content-transition') return <ContentTransitionDemo />;
   if (item.id === 'select') return <SelectDemo />;
   if (item.id === 'menu-item') return <MenuItemDemo />;

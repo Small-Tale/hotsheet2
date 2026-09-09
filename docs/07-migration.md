@@ -42,7 +42,10 @@
 > `<.hotsheet>/attachments/` so a moved project still works.
 >
 > **Built (HS2-PWYTS8):** selecting an HS1 project in the local client detects the
-> exact database marker and opens a destination-only import prompt. The bridge runs
+> exact database marker and opens a destination-only import prompt that identifies
+> the source folder, database path, and PostgreSQL version. Dismissing that modal is
+> remembered for the detected source, with a non-blocking banner left available to
+> reopen it. The bridge runs
 > the bundled one-shot migrator, links the resulting source, carries applicable
 > settings forward, and idempotently configures detected AI tools. Once the imported
 > repository has a remote, a banner offers explicit removal of live HS1 artifacts
@@ -141,9 +144,13 @@ duplicates); the source cluster is opened **read-only** and never modified.
 Per the ticket, migration is offered automatically with a confirmation — **per
 project**, when that project is opened (not a batch over all projects, which a user
 may not have open at once):
-1. On opening a directory that has a `.hotsheet/db/` cluster but no HS2 store, Hot
+1. On opening a directory that has a `.hotsheet/db/` cluster without a matching
+   import receipt in its active HS2 store, Hot
    Sheet detects a **migratable HS1 project** and prompts: *"This project has Hot
-   Sheet 1 data (N tickets). Convert it to the new git-based format?"*
+   Sheet 1 data. Convert it to the new git-based format?"* The prompt names the exact
+   source and database paths plus the detected PostgreSQL version. Choosing Not now
+   suppresses later automatic modal presentation for that checkout/source identity;
+   a project banner keeps an explicit Import action available.
 2. On confirm, Hot Sheet **runs the bundled migrator against this one project**,
    streaming progress to the UI. (The migrator is a separate bundled executable —
    §7.2 — the server just spawns it; it does not live in the core.)

@@ -19,7 +19,7 @@ const full = { ...row, details:'The real ticket body. [Project guide](/docs/proj
 
 function normalizedCreatedTicket(body:Record<string,unknown>){const original=(typeof body.title==='string'?body.title:'').trim();let title=original,tags=Array.isArray(body.tags)?body.tags.filter((tag):tag is string=>typeof tag==='string'):[];if(original.startsWith('\\['))title=original.slice(1);else{let rest=original;const found:string[]=[];while(rest.startsWith('[')){const close=rest.indexOf(']'),content=close<0?'':rest.slice(1,close);if(close<0||!content.trim()||content.includes('['))break;found.push(content.trim().replaceAll(/\s+/g,'-'));rest=rest.slice(close+1).trimStart()}if(found.length&&rest){title=rest.trim();tags=[...new Set([...tags,...found])]}}return{title,tags}}
 
-async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded: boolean | 'choices' | 'details' = false, ticketLoadDelay = 0, batchResponseDelay = 0, patchResponseDelay = 0, emptyAtFirst = false, terminalCount = 2, eventDuringBatch = false) {
+async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded: boolean | 'choices' | 'details' = false, ticketLoadDelay = 0, batchResponseDelay = 0, patchResponseDelay = 0, emptyAtFirst = false, terminalCount = 2, eventDuringBatch = false, hs1Migration = false) {
   let rows = [{...row,feedback_needed:Boolean(primaryFeedbackNeeded)},backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
   let selectedFull = primaryFeedbackNeeded==='details'
     ? {...full,details:'FEEDBACK NEEDED: Which implementation?\n\nCHOICE:\n- Keep the **current behavior**\n- Use `attachment:proof.png`\n\nExplain another direction if needed.',notes:[full.notes[0]]}
@@ -45,7 +45,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   let providerConnectionRecords:Array<{id:string;provider:string;locator:string;name:string|null;default:boolean;settings:Record<string,unknown>}>=[];
   await page.route('**/*', async route => {
     const request=route.request(), url=new URL(request.url()), path=url.pathname;
-    if(path==='/__hotsheet/projects/open') return route.fulfill({status:201,json:ticketSourceConfigured?project:{...project,stores:[],needsTicketSetup:true}});
+    if(path==='/__hotsheet/projects/open'){const opened=hs1Migration?{...project,needsHs1Migration:true,needsTicketSetup:true,hs1SourcePath:'/work/demo/.hotsheet',hs1DatabasePath:'/work/demo/.hotsheet/db',hs1PostgresVersion:'17'}:project;return route.fulfill({status:201,json:ticketSourceConfigured?opened:{...opened,stores:[],needsTicketSetup:true}})}
     if(path==='/__hotsheet/projects/setup-git'&&request.method()==='POST'){const body=request.postDataJSON(),ticketStore=body.location??'/work/demo.hs2';ticketSourceConfigured=true;return route.fulfill({status:201,json:{ticketStore,connectionId:`git-${gitStores.length+1}`}})}
     if(path==='/__hotsheet/projects/setup-git-remote'&&request.method()==='POST')return route.fulfill({json:{connected:true}});
     if(path==='/__hotsheet/folders/choose'&&request.method()==='POST')return route.fulfill({json:{path:['/picked/project','/picked/tickets.hs2'][folderChoice++]}});
@@ -258,6 +258,12 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
 
 test('keeps a dismissed ticket-source setup dialog closed across later project renders (HS2-4Y37T9)',async({page})=>{
   await mockProject(page,true,false,0,0,0,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const setup=page.locator('[data-ticket-source-setup-dialog]');await expect(setup).toHaveJSProperty('open',true);await setup.getByRole('button',{name:'Close'}).click();await expect(setup).toBeHidden();await page.getByRole('tab',{name:/demo/}).click();await page.getByLabel('Columns view').click();await page.waitForTimeout(350);await expect(setup).toBeHidden();await expect(setup).toHaveJSProperty('open',false);
+});
+
+test('identifies detected HS1 data and keeps a dismissed import modal closed across launches',async({page})=>{
+  await page.setViewportSize({width:1100,height:840});await mockProject(page,true,false,0,0,0,false,2,false,true);
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const dialog=page.locator('[data-component="hs1-migration-dialog"]'),dialogOpacity=()=>dialog.evaluate(node=>getComputedStyle(node.shadowRoot!.querySelector('dialog')!).opacity);await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.getByText('/work/demo/.hotsheet/db',{exact:true})).toBeVisible();await expect(dialog.getByText('17',{exact:true})).toBeVisible();await expect.poll(dialogOpacity).toBe('1');await page.screenshot({path:'/private/tmp/hs2-k4306s-hs1-source-dialog-wide.png',fullPage:true});
+  await dialog.getByRole('button',{name:'Not now'}).click();const banner=page.locator('[data-component="hs1-migration-banner"]');await expect(dialog).toBeHidden();await expect(banner).toContainText('/work/demo/.hotsheet/db');await page.reload();await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();await expect(dialog).toBeHidden();await expect(banner).toBeVisible();await banner.getByRole('button',{name:'Import…'}).click();await expect(dialog.getByText('/work/demo/.hotsheet/db',{exact:true})).toBeVisible();await expect.poll(dialogOpacity).toBe('1');await page.setViewportSize({width:560,height:720});await expect.poll(dialogOpacity).toBe('1');await page.screenshot({path:'/private/tmp/hs2-k4306s-hs1-source-dialog-narrow.png',fullPage:true});
 });
 
 test('adds a second git ticket store and connects its remote from one guided form',async({page})=>{

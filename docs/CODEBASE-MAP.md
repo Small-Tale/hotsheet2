@@ -51,7 +51,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
-    src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding HTTP/terminal-WS target resolution; authenticated corrupt-path validation, shell-free platform reveal, and argument-array Git remote/first-push setup
+    src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding HTTP/terminal-WS target resolution; exact HS1 source/database/version discovery; authenticated corrupt-path validation, shell-free platform reveal, and argument-array Git remote/first-push setup
     src/terminal-ws-bridge.ts #  Vite WebSocket upgrade bridge; keeps server credentials out of browser URLs and frames
     src/terminal-names.ts   #   Human-readable generated-id fallback plus validated device-local terminal-name storage
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
