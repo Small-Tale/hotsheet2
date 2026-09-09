@@ -1525,6 +1525,65 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         ranged_video.into_body().collect().await.unwrap().to_bytes(),
         Bytes::from_static(&[0x5a; 10])
     );
+    let poster_cache = tempfile::tempdir().unwrap();
+    unsafe { std::env::set_var("HOTSHEET_CACHE_DIR", poster_cache.path()) };
+    let poster_uri =
+        format!("/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}/thumbnail");
+    let missing_poster = app
+        .clone()
+        .oneshot(authed("GET", &poster_uri, None))
+        .await
+        .unwrap();
+    assert_eq!(missing_poster.status(), StatusCode::NOT_FOUND);
+    for poster in [
+        Bytes::from_static(b"first jpeg"),
+        Bytes::from_static(b"second jpeg"),
+    ] {
+        let uploaded = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("PUT")
+                    .uri(&poster_uri)
+                    .header("x-hotsheet-secret", SECRET)
+                    .header(header::CONTENT_TYPE, "image/jpeg")
+                    .body(Body::from(poster))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(uploaded.status(), StatusCode::NO_CONTENT);
+    }
+    let poster = app
+        .clone()
+        .oneshot(authed("GET", &poster_uri, None))
+        .await
+        .unwrap();
+    assert_eq!(poster.status(), StatusCode::OK);
+    assert_eq!(poster.headers()[header::CONTENT_TYPE], "image/jpeg");
+    assert_eq!(
+        poster.headers()[header::CACHE_CONTROL],
+        "public, max-age=31536000, immutable"
+    );
+    assert_eq!(
+        poster.into_body().collect().await.unwrap().to_bytes(),
+        Bytes::from_static(b"second jpeg")
+    );
+    let wrong_type = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri(&poster_uri)
+                .header("x-hotsheet-secret", SECRET)
+                .header(header::CONTENT_TYPE, "image/png")
+                .body(Body::from("png"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(wrong_type.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    unsafe { std::env::remove_var("HOTSHEET_CACHE_DIR") };
     let regrouped = body_json(
         app.clone()
             .oneshot(authed(

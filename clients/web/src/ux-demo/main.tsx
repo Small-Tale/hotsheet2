@@ -192,6 +192,7 @@ import {
   galleryDemoDrawMode,
   galleryDemoMarkup,
   regroupAttachmentDemo,
+  renameAttachmentDemoBatch,
   setGalleryDemo,
   shiftGalleryDemo,
   showAttachmentDemoMenu,
@@ -2126,6 +2127,37 @@ delegate(root, 'contextmenu', '[data-component="ticket-attachment-item"]', (even
   event.preventDefault();
   const pointer = event as MouseEvent;
   showAttachmentDemoMenu(pointer.clientX, pointer.clientY);
+});
+delegate(root, 'dblclick', '[data-action="edit-attachment-batch-label"]', (_event, target) => {
+  const batch = target.closest<HTMLElement>('[data-attachment-ids]');
+  const input = batch?.querySelector<HTMLInputElement>('[name="attachment-batch-label"]');
+  if (!batch || !input || input.disabled) return;
+  batch.dataset.editingLabel = 'true';
+  input.dataset.originalValue = input.value;
+  queueMicrotask(() => {
+    input.focus();
+    input.select();
+  });
+});
+delegate(root, 'keydown', '[name="attachment-batch-label"]', (event, target) => {
+  const input = target as HTMLInputElement;
+  const key = (event as KeyboardEvent).key;
+  if (key !== 'Escape' && key !== 'Enter') return;
+  const surface = input.closest<HTMLElement>('[data-component="ticket-attachments"]');
+  const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
+  if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
+  input.blur();
+  requestAnimationFrame(() => {
+    if (ids) surface?.querySelector<HTMLElement>(`[data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`)?.focus();
+  });
+});
+delegate(root, 'change', '[name="attachment-batch-label"]', (_event, target) => {
+  const batch = target.closest<HTMLElement>('[data-attachment-ids]');
+  if (batch) renameAttachmentDemoBatch(batch.dataset.attachmentBatch ?? '', (target as HTMLInputElement).value);
+});
+delegateCapture(root, 'blur', '[name="attachment-batch-label"]', (_event, target) => {
+  delete target.closest<HTMLElement>('[data-attachment-ids]')?.dataset.editingLabel;
+  delete (target as HTMLInputElement).dataset.originalValue;
 });
 let draggedDemoAttachment:string | undefined;
 const clearDemoAttachmentDrag = () => {

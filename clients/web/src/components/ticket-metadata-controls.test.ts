@@ -76,6 +76,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(unsupported).not.toContain('name="ticket-attachments"');
     expect(unsupported).not.toContain('data-action="open-attachment-menu"');
     expect(unsupported).not.toContain('data-action="open-attachment-row"');
+    expect(unsupported).not.toContain('data-action="edit-attachment-batch-label"');
+    expect(unsupported).toContain('<h3 class="ticket-attachments__batch-title">Legacy / Uncategorized</h3>');
   });
 
   it('shows videos in the media grid without starting playback', () => {
@@ -109,7 +111,10 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(markup).toContain('data-attachment-group-drop-target="true"');
     expect(markup).toContain('data-attachment-new-group-drop-target="true"');
     expect(markup).toContain('New group');
-    expect(markup).toContain('data-lucide="grip-vertical"');
+    expect(markup).not.toContain('data-lucide="grip-vertical"');
+    expect(markup).toContain('data-action="edit-attachment-batch-label"');
+    expect(markup).toContain('Double-click to edit batch label');
+    expect(markup).toContain('ticket-attachments__batch-title-editor');
     expect(markup).toContain('name="attachment-batch-purpose"');
   });
 
@@ -130,5 +135,15 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(css).toContain('.ticket-inspector__attachment[data-action="open-attachment-row"]:hover');
     expect(css).toContain('.ticket-inspector__attachment-menu:hover, .ticket-inspector__attachment-menu:focus-visible');
     expect(css).toContain('outline: var(--wa-focus-ring)');
+  });
+
+  it('presents attachment groups as transparent titled sections with compact purpose tags', () => {
+    const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
+    expect(css).toContain('.ticket-attachments__batch {');
+    expect(css).toContain('background: transparent');
+    expect(css).toContain('.ticket-attachments__batch[data-drag-over="true"] { outline: var(--wa-focus-ring)');
+    expect(css).toContain('.ticket-attachments__batch-title {');
+    expect(css).toContain('font-size: var(--wa-font-size-m)');
+    expect(css).toContain('.ticket-attachments__batch > header select { width: auto');
   });
 });

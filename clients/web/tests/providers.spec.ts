@@ -1080,6 +1080,30 @@ test('stages safe attachment drops from the collapsed and expanded new-ticket co
   await form.getByRole('button',{name:'Cancel'}).click();await launcher.click();await expect(form.getByText('second-proof.txt')).toHaveCount(0);await form.getByLabel('Browse attachments for new ticket',{exact:true}).setInputFiles({name:'final-proof.txt',mimeType:'text/plain',buffer:Buffer.from('final proof')});await expect(form.getByText('final-proof.txt')).toBeVisible();await form.locator('wa-input[name="new-ticket-title"]').evaluate((node:HTMLElement&{value:string})=>{node.value='Created with dropped evidence';node.dispatchEvent(new Event('input',{bubbles:true}))});await form.getByRole('button',{name:'Create ticket'}).click();await expect.poll(()=>uploads).toEqual(['final-proof.txt']);await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('HS2-NEW001');await page.getByRole('button',{name:'Attachments, 1'}).click();await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('final-proof.txt');
 });
 
+test('generates video posters in the browser for uploads and lazy backfills without blocking unsupported codecs',async({page})=>{
+  await mockProject(page);
+  let attachments=[
+    {id:'VIDEO1',filename:'legacy.webm',created_at:'2026-08-30T00:40:00Z'},
+    {id:'VIDEO2',filename:'unsupported.mov',created_at:'2026-08-30T00:41:00Z'},
+  ];
+  const posters=new Map<string,Buffer>(),videoBodies=new Map<string,Buffer>();
+  await page.route('**/*',async route=>{const request=route.request(),path=new URL(request.url()).pathname,attachment=path.match(/\/tickets\/01\/attachments\/([^/]+)$/),thumbnail=path.match(/\/tickets\/01\/attachments\/([^/]+)\/thumbnail$/);
+    if(path.endsWith('/tickets/01')&&request.method()==='GET')return route.fulfill({json:{store:'git-local',...full,attachments}});
+    if(path.endsWith('/tickets/01/attachments')&&request.method()==='POST'){const filename=decodeURIComponent(request.headers()['x-hotsheet-filename']??'video.webm'),id=`VIDEO${attachments.length+1}`;attachments=[...attachments,{id,filename,created_at:'2026-08-30T01:10:00Z'}];videoBodies.set(id,request.postDataBuffer()??Buffer.alloc(0));return route.fulfill({status:201,json:{store:'git-local',...full,attachments}})}
+    if(thumbnail){const id=thumbnail[1];if(request.method()==='GET'){const poster=posters.get(id);return poster?route.fulfill({contentType:'image/jpeg',body:poster}):route.fulfill({status:404,json:{error:'missing'}})}if(request.method()==='PUT'){expect(request.headers()['content-type']).toBe('image/jpeg');posters.set(id,request.postDataBuffer()??Buffer.alloc(0));return route.fulfill({status:204})}}
+    if(attachment&&request.method()==='GET'){const id=attachment[1],body=videoBodies.get(id)??Buffer.from('unsupported codec');return route.fulfill({contentType:id==='VIDEO2'?'video/quicktime':'video/webm',body})}
+    return route.fallback();
+  });
+  await page.goto('/');
+  const portableVideo=await page.evaluate(async()=>{const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;const context=canvas.getContext('2d')!;context.fillStyle='#7857a4';context.fillRect(0,0,320,180);context.fillStyle='white';context.font='24px sans-serif';context.fillText('Portable poster',70,98);const recorder=new MediaRecorder(canvas.captureStream(8),{mimeType:'video/webm'}),chunks:Blob[]=[];recorder.ondataavailable=event=>chunks.push(event.data);recorder.start();await new Promise(resolve=>setTimeout(resolve,180));const stopped=new Promise(resolve=>{recorder.onstop=resolve});recorder.stop();await stopped;return Array.from(new Uint8Array(await new Blob(chunks,{type:'video/webm'}).arrayBuffer()))});
+  videoBodies.set('VIDEO1',Buffer.from(portableVideo));
+  await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Attachments, 2'}).click();
+  await expect.poll(()=>posters.has('VIDEO1')).toBe(true);expect(posters.get('VIDEO1')!.subarray(0,2)).toEqual(Buffer.from([0xff,0xd8]));
+  const legacy=page.getByRole('button',{name:'Open legacy.webm in media gallery'}).locator('video');await expect.poll(()=>legacy.getAttribute('poster')).toMatch(/^blob:/);
+  await page.getByRole('button',{name:'Open unsupported.mov in media gallery'}).click();const unsupportedGallery=page.getByRole('dialog',{name:/Video 2 of 3: unsupported.mov/});await expect(unsupportedGallery.locator('video')).toHaveAttribute('controls','');await expect(page.locator('.app-error')).toHaveCount(0);await page.keyboard.press('Escape');await expect(unsupportedGallery).toHaveCount(0);
+  await page.getByLabel('Browse and add attachments').setInputFiles({name:'uploaded.webm',mimeType:'video/webm',buffer:Buffer.from(portableVideo)});await expect.poll(()=>posters.has('VIDEO3')).toBe(true);expect(posters.get('VIDEO3')!.subarray(0,2)).toEqual(Buffer.from([0xff,0xd8]));await expect(page.getByRole('button',{name:'Open uploaded.webm in media gallery'}).locator('video')).toHaveAttribute('poster',/VIDEO3\/thumbnail$/);
+});
+
 test('restores project-scoped ticket creation and staged files after reload',async({page})=>{
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await page.getByRole('button',{name:'New ticket…'}).click();const dialog=page.getByRole('dialog',{name:'Create ticket'});await dialog.getByRole('textbox',{name:'Ticket title'}).fill('A ticket draft that survives refresh');await dialog.getByRole('textbox',{name:'Details'}).fill('Draft **Markdown** details');await dialog.getByLabel('Browse attachments for new ticket',{exact:true}).setInputFiles({name:'restored-proof.txt',mimeType:'text/plain',buffer:Buffer.from('persisted evidence')});await expect(dialog.getByText('restored-proof.txt')).toBeVisible();await page.waitForTimeout(900);

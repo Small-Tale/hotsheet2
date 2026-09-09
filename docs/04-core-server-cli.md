@@ -328,6 +328,14 @@ stable id, sanitized filename, creation timestamp, and optional provenance. Chec
 linked store and returns the same ticket plus its store identity. `PATCH` on that
 collection atomically applies batch/actor/purpose metadata to a selected id set (reuse an
 id to merge; generate one to split), while `PATCH` on an individual attachment renames it.
+For a video attachment, `GET
+/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/thumbnail` returns its
+content-addressed cached JPEG or `404` when none exists. A capable client publishes that
+same path with `PUT`, `Content-Type: image/jpeg`, and a body of at most 5 MiB. Writes are
+idempotent last-write-wins, so concurrent browser backfills are harmless; the cache key is
+the SHA-256 digest of the source video rather than a platform path. A server may fill a
+miss with an available `ffmpeg`, but missing or unsuccessful `ffmpeg` is still `404`, not
+a dependency/setup error.
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
 `--blocked-by` **replaces** the set and `--clear-blocked-by` empties it. The same edge

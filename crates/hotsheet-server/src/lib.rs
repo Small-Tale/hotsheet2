@@ -57,6 +57,8 @@ use tokio::sync::broadcast;
 /// Attachment uploads may contain screenshots, recordings, and other binary evidence.
 /// Keep this route-specific so ordinary JSON endpoints retain Axum's conservative default.
 pub const MAX_ATTACHMENT_BODY_BYTES: usize = 100 * 1024 * 1024;
+/// Browser-generated JPEG posters are small even for large source videos.
+pub const MAX_VIDEO_POSTER_BODY_BYTES: usize = 5 * 1024 * 1024;
 
 /// Shared server state (cheaply cloned into each handler).
 #[derive(Clone)]
@@ -1078,7 +1080,9 @@ pub fn app(state: AppState) -> Router {
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/thumbnail",
-            get(get_checkout_ticket_attachment_thumbnail),
+            get(get_checkout_ticket_attachment_thumbnail)
+                .put(put_checkout_ticket_attachment_thumbnail)
+                .layer(DefaultBodyLimit::max(MAX_VIDEO_POSTER_BODY_BYTES)),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/attachments/{attachment_id}/action",
@@ -3267,14 +3271,6 @@ async fn add_checkout_ticket_attachment(
         &body,
         metadata,
     )?;
-    if media::is_video(&filename) {
-        let thumbnail_filename = filename.clone();
-        let thumbnail_bytes = body.to_vec();
-        let _ = tokio::task::spawn_blocking(move || {
-            media::video_thumbnail(&thumbnail_filename, &thumbnail_bytes)
-        })
-        .await;
-    }
     state.changed_in(&entry, "attachment_added", &updated);
     Ok((
         StatusCode::CREATED,
@@ -3336,16 +3332,71 @@ async fn get_checkout_ticket_attachment_thumbnail(
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
     let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
     let filename = attachment.filename;
-    let thumbnail = tokio::task::spawn_blocking(move || media::video_thumbnail(&filename, &bytes))
+    let thumbnail =
+        tokio::task::spawn_blocking(move || media::optional_video_poster(&filename, &bytes))
+            .await
+            .map_err(|error| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("video thumbnail task failed: {error}"),
+                )
+            })?
+            .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?
+            .ok_or_else(|| {
+                ApiError::new(StatusCode::NOT_FOUND, "video poster has not been generated")
+            })?;
+    let mut response = media::attachment_response("thumbnail.jpg", thumbnail, None);
+    response.headers_mut().insert(
+        "cache-control",
+        axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
+    );
+    Ok(response)
+}
+
+async fn put_checkout_ticket_attachment_thumbnail(
+    State(state): State<AppState>,
+    Path((reference, id, attachment_id)): Path<(String, String, String)>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    if headers
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.split(';').next().unwrap_or_default().trim())
+        != Some("image/jpeg")
+    {
+        return Err(ApiError::new(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "video posters must be JPEG images",
+        ));
+    }
+    if body.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "video poster cannot be empty",
+        ));
+    }
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let attachment_id =
+        Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
+    let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
+    if !media::is_video(&attachment.filename) {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "attachment is not a supported video",
+        ));
+    }
+    tokio::task::spawn_blocking(move || media::cache_video_poster(&bytes, &body))
         .await
         .map_err(|error| {
             ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("video thumbnail task failed: {error}"),
+                format!("video poster task failed: {error}"),
             )
         })?
-        .map_err(|error| ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, error.to_string()))?;
-    Ok(media::attachment_response("thumbnail.jpg", thumbnail, None))
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Deserialize)]

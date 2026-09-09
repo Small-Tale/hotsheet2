@@ -92,7 +92,7 @@ test('represents the production terminal dashboard and its shared context menu i
 });
 
 test('represents the compact terminal ticket rail in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-ticket-rail');const rail=page.locator('[data-component="terminal-ticket-rail"]');await expect(rail).toBeVisible();await expect(rail.locator('wa-select[name="terminal-rail-project"]')).toHaveAttribute('value','demo');await expect(rail.getByRole('heading',{name:'Queue'})).toBeVisible();await expect(rail.locator('[data-component="ticket-list-row"]')).toHaveCount(7);await expect(rail.locator('[data-component="content-transition"]')).toHaveAttribute('data-transition-style','push');await page.screenshot({path:'/private/tmp/hs2-nsbb5a-terminal-ticket-rail-ux-demo-after.png',fullPage:true});
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-ticket-rail');const rail=page.locator('[data-component="terminal-ticket-rail"]'),project=rail.locator('wa-select[name="terminal-rail-project"]'),view=rail.locator('wa-select[name="terminal-rail-view"]');await expect(rail).toBeVisible();await expect(project).toHaveAttribute('value','demo');await expect(view).toHaveAttribute('value','all');await expect(rail.getByRole('button',{name:'Hide ticket rail'})).toBeVisible();await expect(rail.locator('[data-component="ticket-list-row"]')).toHaveCount(7);await expect(rail.locator('[data-component="content-transition"]')).toHaveAttribute('data-transition-style','push');const geometry=await rail.evaluate(node=>{const mode=node.querySelector('.view-mode-switcher')!.getBoundingClientRect(),sort=node.querySelector('.workspace-header__sort-group')!.getBoundingClientRect(),search=node.querySelector('.workspace-header__search-group')!.getBoundingClientRect(),utility=node.querySelector('.workspace-header__utility-group')!.getBoundingClientRect(),project=node.querySelector('wa-select[name="terminal-rail-project"]')!.getBoundingClientRect();return{mode:{top:mode.top,bottom:mode.bottom,width:mode.width},sortTop:sort.top,searchTop:search.top,utilityTop:utility.top,projectWidth:project.width,railWidth:node.getBoundingClientRect().width}});expect(geometry.mode.bottom).toBeLessThanOrEqual(geometry.sortTop);expect(geometry.searchTop).toBeCloseTo(geometry.sortTop,0);expect(geometry.utilityTop).toBeCloseTo(geometry.sortTop,0);expect(geometry.mode.width).toBeGreaterThan(geometry.railWidth*.8);expect(geometry.projectWidth).toBeLessThan(geometry.railWidth*.8);await page.screenshot({path:'/private/tmp/hs2-egekzg-terminal-ticket-rail-ux-demo-wide.png',fullPage:true});
 });
 
 test('catalogs both FixedAspectTerminalCard variants and their dashboard relationship',async({page})=>{
@@ -1120,15 +1120,53 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
     await page.goto(`/ux-demo?component=${id}`);
     await expect(page.locator(`[data-component="${component}"]`).or(page.locator(`.${component}`)).first()).toBeVisible();
   }
-  await expect(page.getByPlaceholder('Brian · Round 1 · Problem evidence')).toBeVisible();await expect(page.locator('input[value="Corrected implementation"]')).toBeVisible();await expect(page.getByPlaceholder('Legacy / Uncategorized')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Edit batch label Brian · Round 1 · Problem evidence'})).toBeVisible();await expect(page.getByRole('button',{name:'Edit batch label Corrected implementation'})).toBeVisible();await expect(page.getByRole('button',{name:'Edit batch label Legacy / Uncategorized'})).toBeVisible();
   const annotatedCard=page.getByRole('button',{name:'Open wide-layout.svg in media gallery, 2 annotations'});await expect(annotatedCard.locator('.ticket-attachments__annotation-marker [data-lucide="pencil"]')).toBeVisible();
   await page.locator('.demo-detail').screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-wide.png' });
-  const surface=page.locator('[data-component="ticket-attachments"]'),dragged=page.locator('[data-drag-attachment-id="wide"]');await dragged.evaluate(node=>node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:new DataTransfer()})));await surface.evaluate(node=>(node as HTMLElement).dataset.draggingGroupAttachment='true');const newGroup=page.locator('[data-attachment-new-group-drop-target]');await expect(newGroup).toBeVisible();await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-drag-new-group.png'});await newGroup.evaluate(node=>node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()})));await expect(page.locator('[data-attachment-group-drop-target]')).toHaveCount(4);await expect(page.getByRole('textbox',{name:'Batch label for New group'})).toHaveValue('New group');await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-regrouped-final.png'});
+  const surface=page.locator('[data-component="ticket-attachments"]'),dragged=page.locator('[data-drag-attachment-id="wide"]');await dragged.evaluate(node=>node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:new DataTransfer()})));await surface.evaluate(node=>(node as HTMLElement).dataset.draggingGroupAttachment='true');const newGroup=page.locator('[data-attachment-new-group-drop-target]');await expect(newGroup).toBeVisible();await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-drag-new-group.png'});await newGroup.evaluate(node=>node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()})));await expect(page.locator('[data-attachment-group-drop-target]')).toHaveCount(4);await expect(page.getByRole('button',{name:'Edit batch label New group'})).toBeVisible();await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-regrouped-final.png'});
   const item=page.locator('[data-attachment-id="demo-video"]'),trigger=item.getByRole('button',{name:'More actions for choppy.mov'});await expect(item.getByRole('button')).toHaveCount(1);await expect(trigger).toHaveAttribute('title','More actions for choppy.mov');await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();await trigger.click();let menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu.locator('[data-component="menu-item"]')).toHaveCount(6);await expect(menu.getByRole('menuitem').allTextContents()).resolves.toEqual(['Open','Download','Copy reference','Rename','Show in file manager','Remove']);
   const gridVideo=page.locator('.ticket-attachments__image-grid video').first();await expect(gridVideo).toBeVisible();await expect(gridVideo).toHaveAttribute('poster','/ux-gallery-preview.svg?variant=video');expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).autoplay)).toBe(false);
   await menu.getByRole('menuitem',{name:'Copy reference'}).click();await expect(menu).toHaveCount(0);await page.locator('[data-component="ticket-attachments"]').screenshot({path:'/private/tmp/hs2-j978e9-annotation-grid-marker.png'});
   await page.setViewportSize({ width: 390, height: 844 });
-  const batchHeader=page.locator('.ticket-attachments__batch > header').first(),batchControls=batchHeader.locator('input,select');expect((await batchControls.nth(1).boundingBox())!.y).toBeGreaterThan((await batchControls.nth(0).boundingBox())!.y);await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.locator('[data-component="menu-item"]')).toHaveCount(6);await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png',fullPage:true });
+  const batchHeader=page.locator('.ticket-attachments__batch > header').first(),batchTitle=batchHeader.locator('.ticket-attachments__batch-title'),batchPurpose=batchHeader.locator('select');expect((await batchPurpose.boundingBox())!.y).toBeGreaterThan((await batchTitle.boundingBox())!.y);await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.locator('[data-component="menu-item"]')).toHaveCount(6);await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png',fullPage:true });
+});
+
+test('styles and edits attachment group labels while preserving drag regrouping', async ({page}) => {
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto('/ux-demo?component=ticket-attachments');
+  const surface=page.locator('[data-component="ticket-attachments"]'),groups=surface.locator('[data-attachment-group-drop-target]'),first=groups.first();
+  await expect(first).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+  await expect(surface.locator('[data-lucide="grip-vertical"]')).toHaveCount(0);
+  const title=first.getByRole('button',{name:/Edit batch label/}),purpose=first.locator('select');
+  await expect(title).toHaveCSS('font-size','16px');
+  expect((await purpose.boundingBox())!.width).toBeLessThan((await first.locator('header').boundingBox())!.width);
+  await title.dblclick();
+  const editor=first.getByRole('textbox',{name:/Batch label/});
+  await expect(editor).toBeFocused();
+  await editor.fill('Discarded label');
+  await editor.press('Escape');
+  await expect(first.getByRole('button',{name:/Brian · Round 1 · Problem evidence/})).toBeVisible();
+  await expect(first.getByRole('button',{name:/Brian · Round 1 · Problem evidence/})).toBeFocused();
+  await first.getByRole('button',{name:/Edit batch label/}).dblclick();
+  await editor.fill('Human review evidence');
+  await editor.press('Enter');
+  await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeVisible();
+  await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeFocused();
+  await page.locator('h2').first().click();
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => { resolve(); })));
+  await surface.evaluate(node=>(node as HTMLElement).dataset.draggingGroupAttachment='true');
+  const activeTarget=groups.nth(1);
+  await activeTarget.evaluate(node=>(node as HTMLElement).dataset.dragOver='true');
+  await expect(activeTarget).toHaveAttribute('data-drag-over','true');
+  await expect(activeTarget).not.toHaveCSS('outline-style','none');
+  await expect(surface.locator('[data-attachment-new-group-drop-target]')).toBeVisible();
+  await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-feedback-wide.png'});
+  await page.setViewportSize({width:390,height:844});
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.mouse.move(2,2);
+  await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeVisible();
+  expect((await purpose.boundingBox())!.width).toBeLessThan((await first.locator('header').boundingBox())!.width);
+  await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-feedback-narrow.png'});
 });
 
 test('navigates and zooms the standalone attachment gallery demo',async({page})=>{
