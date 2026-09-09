@@ -371,6 +371,14 @@ cleanup of the old live HS1 data; backups are never removed.
   additionally requires the Up Next flag. Mutations and long-poll-driven collection refreshes
   update the summary reactively; the summary itself performs no polling or network request.
 
+  Switching to an already-open project is a local projection change, not a loading gate. The
+  tab click atomically restores that project's most recent ticket rows, repository summary,
+  corrupt-ticket diagnostics, and command state from memory within the next frame, without
+  showing the global loading indicator. An authoritative refresh follows in the background.
+  Project-activation and request generations reject late A→B→A responses, including delayed
+  workspace-session draft restoration, so cached immediacy cannot introduce cross-project
+  state or stale network writes. A first visit with no cache retains the normal loading state.
+
   Drive is a production control, not demo-only state. The adjacent selector chooses Codex or
   Claude and is remembered locally for each project. Drive prepares a stable connection scoped
   to that checkout and tool, then sends the `$hotsheet` workflow turn; later activations reuse
