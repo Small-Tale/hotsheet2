@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand, runGitCommand } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -131,10 +131,19 @@ describe('Hot Sheet 1 project import bridge',()=>{
 });
 
 describe('Git ticket-store remote setup',()=>{
+  it('captures the exact stderr from a failed Git subprocess',async()=>{await expect(runGitCommand(process.execPath,['-e','process.stderr.write("fatal: preserved details\\n");process.exit(1)'])).rejects.toThrow('fatal: preserved details')});
   it('adds origin and performs the first push with argument arrays',async()=>{const calls:Array<[string,string[]]>=[],runner=async(command:string,args:string[])=>{calls.push([command,args])};await connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','git@github.com:Small-Tale/tickets.git',runner);expect(calls).toEqual([['git',['-C','/Users/westphal/Documents/hotsheet2.hs2','remote','add','origin','git@github.com:Small-Tale/tickets.git']],['git',['-C','/Users/westphal/Documents/hotsheet2.hs2','push','-u','origin','HEAD']]])});
-  it('removes the just-added origin when the first push fails so setup can be retried',async()=>{const calls:Array<[string,string[]]>=[],runner=async(command:string,args:string[])=>{calls.push([command,args]);if(args.includes('push'))throw new Error('push failed')};await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','git@example.com:team/tickets.git',runner)).rejects.toThrow('push failed');expect(calls.at(-1)).toEqual(['git',['-C','/Users/westphal/Documents/hotsheet2.hs2','remote','remove','origin']])});
+  it('removes the just-added origin and preserves unknown push diagnostics for a retry',async()=>{const calls:Array<[string,string[]]>=[],runner=async(command:string,args:string[])=>{calls.push([command,args]);if(args.includes('push'))throw new Error('remote helper reported an unfamiliar failure')};await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','git@example.com:team/tickets.git',runner)).rejects.toThrow(/could not push.*Git details: remote helper reported an unfamiliar failure/i);expect(calls.at(-1)).toEqual(['git',['-C','/Users/westphal/Documents/hotsheet2.hs2','remote','remove','origin']])});
+  it('turns common remote failures into next steps without hiding Git stderr',()=>{
+    expect(describeGitRemoteFailure(new Error('error: remote origin already exists.'),'add').message).toMatch(/already has an origin.*Git details: error: remote origin already exists/i);
+    expect(describeGitRemoteFailure(new Error('ERROR: Repository not found.\nfatal: Could not read from remote repository.'),'push').message).toMatch(/not found.*verify the clone URL.*Git details: ERROR: Repository not found/i);
+    expect(describeGitRemoteFailure(new Error('git@github.com: Permission denied (publickey).'),'push').message).toMatch(/authenticate.*SSH key.*Permission denied \(publickey\)/i);
+    expect(describeGitRemoteFailure(new Error('fatal: unable to access: Could not resolve host: github.com'),'push').message).toMatch(/could not reach.*network.*Could not resolve host/i);
+    expect(describeGitRemoteFailure(new Error('! [rejected] HEAD -> main (fetch first)'),'push').message).toMatch(/already contains commits.*empty remote.*fetch first/i);
+  });
   it('rejects option-like and multiline remote values before running Git',async()=>{const runner=vi.fn();await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','--upload-pack=bad',runner)).rejects.toThrow(/valid Git remote URL/);await expect(connectGitTicketStoreRemote('/Users/westphal/Documents/hotsheet2.hs2','good\nbad',runner)).rejects.toThrow(/valid Git remote URL/);expect(runner).not.toHaveBeenCalled()});
   it('exposes remote connection only through the local bridge',async()=>{const connect=vi.fn().mockResolvedValue(undefined),app=createDevApp(true,undefined,undefined,undefined,undefined,connect),request={method:'POST',headers:{'content-type':'application/json'},body:'{"store":"/tickets","remote":"git@example.com:team/tickets.git"}'};const response=await app.request('/__hotsheet/projects/setup-git-remote',request);expect(response.status).toBe(200);expect(connect).toHaveBeenCalledWith('/tickets','git@example.com:team/tickets.git');expect((await createDevApp(false,undefined,undefined,undefined,undefined,connect).request('/__hotsheet/projects/setup-git-remote',request)).status).toBe(404)});
+  it('returns the complete actionable Git diagnostic through the local bridge',async()=>{const message='The remote repository was not found. Git details: ERROR: Repository not found.',connect=vi.fn().mockRejectedValue(new Error(message)),app=createDevApp(true,undefined,undefined,undefined,undefined,connect),response=await app.request('/__hotsheet/projects/setup-git-remote',{method:'POST',headers:{'content-type':'application/json'},body:'{"store":"/tickets","remote":"git@example.com:missing.git"}'});expect(response.status).toBe(400);expect(await response.json()).toEqual({error:message})});
 });
 
 describe('requireCompatibleServer', () => {

@@ -174,19 +174,49 @@ export async function createLocalGitTicketStore(rootInput:string,locationInput?:
   return realpath(path);
 }
 
-const runGit:GitRunner=(command,args)=>new Promise((resolveRun,reject)=>{const child=spawn(command,args,{stdio:'ignore'});child.once('error',reject);child.once('close',code=>{if(code===0)resolveRun();else reject(new Error(`Git exited with status ${code??'unknown'}.`))})});
+export const runGitCommand:GitRunner=(command,args)=>new Promise((resolveRun,reject)=>{
+  const child=spawn(command,args,{stdio:['ignore','pipe','pipe']}),stdout:Buffer[]=[],stderr:Buffer[]=[];
+  child.stdout.on('data',(chunk:Buffer)=>stdout.push(chunk));
+  child.stderr.on('data',(chunk:Buffer)=>stderr.push(chunk));
+  child.once('error',reject);
+  child.once('close',code=>{
+    if(code===0){resolveRun();return}
+    const detail=Buffer.concat(stderr).toString('utf8').trim()||Buffer.concat(stdout).toString('utf8').trim();
+    reject(new Error(detail||`Git exited with status ${code??'unknown'}.`));
+  });
+});
 
-export async function connectGitTicketStoreRemote(storeInput:string,remoteInput:string,runner:GitRunner=runGit):Promise<void>{
+export type GitRemoteOperation='add'|'push';
+
+/** Add actionable guidance for common Git-host failures while retaining Git's exact
+ * diagnostic text. Unknown failures still keep both operation context and stderr. */
+export function describeGitRemoteFailure(error:unknown,operation:GitRemoteOperation):Error{
+  const detail=(error instanceof Error?error.message:String(error)).trim()||'Git did not report any details.';
+  const lower=detail.toLowerCase();
+  let guidance:string;
+  if(/remote .* already exists/.test(lower))guidance='This ticket repository already has an origin remote. Use that remote, or remove or rename it before connecting a different one.';
+  else if(/repository not found|does not appear to be a git repository/.test(lower))guidance='The remote repository was not found, or your account cannot access it. Verify the clone URL and your access on the Git host, then try again.';
+  else if(/permission denied|authentication failed|authentication required|could not read username|invalid username or (?:password|token)|access denied/.test(lower))guidance='Git could not authenticate. Verify the clone URL and configure the required SSH key, access token, or credential manager for this account, then try again.';
+  else if(/host key verification failed/.test(lower))guidance='Git could not verify the SSH host key. Connect to the Git host once from a terminal to review and trust its host key, then try again.';
+  else if(/could not resolve (?:host|hostname)|network is unreachable|connection (?:timed out|refused)/.test(lower))guidance='Git could not reach the remote host. Check the hostname, network connection, VPN, or proxy, then try again.';
+  else if(/non-fast-forward|fetch first|failed to push some refs/.test(lower))guidance='The remote already contains commits that this new ticket repository does not have. Use an empty remote, or reconcile the two histories from a terminal before retrying.';
+  else if(/src refspec .* does not match any|no commits yet/.test(lower))guidance='The ticket repository has no commit to push yet. Create its initial commit, then try again.';
+  else guidance=operation==='add'?'Git could not add the remote. Review Git’s diagnostic below and correct the repository or remote configuration before retrying.':'Git could not push the ticket repository. Review Git’s diagnostic below and correct the remote or authentication configuration before retrying.';
+  return new Error(`${guidance} Git details: ${detail}`);
+}
+
+export async function connectGitTicketStoreRemote(storeInput:string,remoteInput:string,runner:GitRunner=runGitCommand):Promise<void>{
   const store=await realpath(storeInput.trim()),remote=remoteInput.trim();
   if(!remote||remote.startsWith('-')||/[\r\n]/.test(remote))throw new Error('Enter a valid Git remote URL.');
   if(!await exists(resolve(store,'hotsheet-store.json')))throw new Error('The ticket repository is no longer available.');
-  await runner('git',['-C',store,'remote','add','origin',remote]);
+  try{await runner('git',['-C',store,'remote','add','origin',remote])}
+  catch(error){throw describeGitRemoteFailure(error,'add')}
   try{await runner('git',['-C',store,'push','-u','origin','HEAD'])}
   catch(error){
     // A failed first push must remain retryable from the setup screen. Roll back only
     // the origin this operation just added; never leave a half-configured repository.
     await runner('git',['-C',store,'remote','remove','origin']).catch(()=>undefined);
-    throw error;
+    throw describeGitRemoteFailure(error,'push');
   }
 }
 

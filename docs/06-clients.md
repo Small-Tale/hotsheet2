@@ -317,6 +317,10 @@ cleanup of the old live HS1 data; backups are never removed.
   push rolls back that newly added origin so the same form remains retryable. Inline help
   links to [host-specific remote setup guidance](ticket-repository-remotes.md), including
   the distinction between Git hosts and issue-only providers such as Jira.
+  Remote failures keep Git's diagnostic text and add specific recovery guidance for an
+  existing origin, missing/inaccessible repository, authentication, SSH host trust,
+  network/DNS failure, non-empty remote, or missing initial commit. Unknown failures
+  retain their operation context and original stderr rather than showing only an exit code.
   The local bridge creates or reopens that store through the same idempotent headless
   `hotsheet bootstrap` workflow available in an ordinary terminal, so checkout linking,
   detected AI-tool skills/MCP setup, and preservation of existing config cannot drift.
