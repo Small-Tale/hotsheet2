@@ -182,6 +182,15 @@ describe('checkout bulk update transport',()=>{
   });
 });
 
+describe('structured ticket close transport',()=>{
+  it('sends duplicate outcomes and canonical target identity through the checkout route',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('{"store":"git","ticket":{}}',{status:200}));
+    await new Api('/api').closeCheckoutTicket('folder with spaces','source/1','duplicate','target-1');
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/tickets/source%2F1/close',expect.objectContaining({method:'POST',body:'{"reason":"duplicate","duplicate_of":"target-1"}'}));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('ticket code review transport',()=>{
   it('reads review targets and accepts an empty successful launch response',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch')

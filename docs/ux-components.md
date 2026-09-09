@@ -517,6 +517,14 @@ The zero-selection placeholder omits the otherwise-shared Toolbar divider so the
 navbar does not leave a stray rule above its centered guidance. Loading and
 multi-selection placeholders keep the divider to preserve their intentional state boundary.
 
+Structured close outcomes are available from the single-ticket context menu when the
+owning provider advertises both close and close-reason support. `TicketCloseDialog`
+offers Completed, Not planned, Duplicate, and Obsolete; Duplicate requires searching for
+and selecting a distinct canonical ticket before submission. Search results reuse
+`MenuItem`, the reason control reuses `Select`, and validation prevents self-reference.
+Closed tickets retain a visible outcome in the inspector, and duplicate outcomes link to
+the canonical ticket instead of relying on a freeform explanatory note.
+
 - `InspectorHeader`
   - ticket identifier
   - full multi-line title with no line-count cap in the inspector sidebar

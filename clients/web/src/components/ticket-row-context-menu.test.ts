@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { COMPLETED_TICKET_CONTEXT_ACTIONS, eventTargetsContextMenu, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
+import { CLOSE_TICKET_CONTEXT_ACTION, COMPLETED_TICKET_CONTEXT_ACTIONS, eventTargetsContextMenu, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
 
 describe('TicketRowContextMenu', () => {
   it('uses the composed path so shadow-menu interactions are inside and rows are outside', () => {
@@ -82,5 +82,12 @@ describe('TicketRowContextMenu', () => {
     const verifyOnly = String(TicketRowContextMenu({ x: 0, y: 0, verifyAction: true }));
     expect(verifyOnly).toContain('data-context-action="Verify ticket"');
     expect(verifyOnly).not.toContain('data-context-action="Report not working"');
+  });
+
+  it('exposes structured close only when the owning provider supports it', () => {
+    const available = String(TicketRowContextMenu({ x: 0, y: 0, closeAction: true }));
+    expect(available).toContain(`data-context-action="${CLOSE_TICKET_CONTEXT_ACTION.action}"`);
+    expect(available).toContain(`data-lucide="${CLOSE_TICKET_CONTEXT_ACTION.iconName}"`);
+    expect(String(TicketRowContextMenu({ x: 0, y: 0 }))).not.toContain('data-context-action="Close ticket"');
   });
 });

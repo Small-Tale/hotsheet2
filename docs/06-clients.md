@@ -552,6 +552,14 @@ prompt can be dismissed and returns on a later open until a source is configured
   larger reader therefore cannot fall back to an empty, separately implemented panel.
   All discovery, target validation, and process launch remain server-owned.
 
+  The ticket context menu also exposes the server's structured close operation when the
+  provider advertises `close` and `close_reasons`. The close dialog records Completed,
+  Not planned, Duplicate, or Obsolete rather than approximating those outcomes with a
+  status patch or note. Duplicate closure searches checkout-wide tickets, excludes and
+  rejects the source ticket, requires an explicit canonical target, and sends its durable
+  identity as `duplicate_of`. The inspector renders the saved outcome and lets users open
+  the canonical duplicate target even when it is outside the current list filter.
+
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. Live diagnostics supersede any stale indexed row with the same recovered
   slug, so selecting that visible ticket always opens recovery instead of retrying a doomed

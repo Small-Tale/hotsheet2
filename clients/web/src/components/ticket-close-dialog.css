@@ -1,0 +1,18 @@
+.ticket-close-dialog::part(panel) { width: min(34rem, calc(100vw - 2 * var(--wa-space-m))); }
+.ticket-close-dialog__form { display: grid; gap: var(--wa-space-m); }
+.ticket-close-dialog__form > p { margin: 0; color: var(--wa-color-neutral-on-quiet); }
+.ticket-close-dialog__duplicate { display: grid; gap: var(--wa-space-xs); }
+.ticket-close-dialog__duplicate wa-input [slot="start"] { display: inline-flex; color: var(--wa-color-neutral-on-quiet); }
+.ticket-close-dialog__duplicate wa-input svg { width: 1rem; height: 1rem; }
+.ticket-close-dialog__results { min-height: 4.25rem; max-height: 14rem; overflow-y: auto; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); padding: var(--wa-space-3xs); }
+.ticket-close-dialog__results .menu-item { width: 100%; padding-block: var(--wa-space-xs); align-items: start; }
+.ticket-close-dialog__results .menu-item__label { display: grid; min-width: 0; line-height: 1.35; text-align: left; }
+.ticket-close-dialog__results .menu-item__label span { overflow: hidden; color: var(--wa-color-neutral-on-quiet); text-overflow: ellipsis; white-space: nowrap; }
+.ticket-close-dialog__results > p { margin: 0; padding: var(--wa-space-m); color: var(--wa-color-neutral-on-quiet); text-align: center; }
+.ticket-close-dialog__selected { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--wa-space-xs); padding: var(--wa-space-xs); border-radius: var(--wa-border-radius-m); color: var(--wa-color-success-on-quiet); background: var(--wa-color-success-fill-quiet); }
+.ticket-close-dialog__selected > span { display: grid; min-width: 0; }
+.ticket-close-dialog__selected > span :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-close-dialog__hint, .ticket-close-dialog__error { min-height: 1.2em; font-size: var(--wa-font-size-xs); }
+.ticket-close-dialog__error { color: var(--wa-color-danger-on-quiet) !important; }
+.ticket-close-dialog__error:empty { visibility: hidden; }
+.ticket-close-dialog__actions { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }

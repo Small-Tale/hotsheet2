@@ -74,6 +74,14 @@ describe('TicketInspector', () => {
     expect(css).toMatch(/data-presentation="reader"\]\[data-needs-review="true"[^}]*var\(--hs-ticket-state-needs-review\)/);
   });
 
+  it('renders the structured duplicate outcome and canonical ticket action', () => {
+    const markup = String(TicketInspector({ ...base, status: 'completed', closeReason: 'duplicate', duplicateTarget: { id: 'target-id', label: 'HS2-TARGET' } }));
+    expect(markup).toContain('data-close-reason="duplicate"');
+    expect(markup).toContain('Duplicate of');
+    expect(markup).toContain('data-action="open-duplicate-target" data-target-id="target-id"');
+    expect(markup).toContain('data-lucide="copy-x"');
+  });
+
   it('renders marked description choices as the reader feedback surface',()=>{
     const details='FEEDBACK NEEDED: Which direction?\n\nCHOICE:\n- Keep **A**\n- Use `B`';
     const sidebar=String(TicketInspector({...base,details,feedbackNeeded:true}));

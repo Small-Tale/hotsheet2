@@ -60,6 +60,7 @@ import {
 import { Select } from '../components/select';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
+import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
@@ -480,6 +481,12 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-code-review') return <TicketCodeReviewDemo />;
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
   if (item.id === 'attachment-gallery') return <AttachmentGalleryDemo />;
+  if (item.id === 'ticket-close-dialog') return <TicketCloseDialog state={{
+    source: { id: 'source', slug: 'HS2-29MDFH', title: 'Repeated UI stability diagnostics' },
+    reason: 'duplicate',
+    query: 'UI stability',
+    candidates: [{ id: 'target', slug: 'HS2-8WG3W9', title: 'UI stability diagnostics detected render thrashing' }],
+  }}/>;
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
   if (item.id === 'repository-summary') return <RepositorySummaryDemo />;

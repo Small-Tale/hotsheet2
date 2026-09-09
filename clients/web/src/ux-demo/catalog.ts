@@ -64,6 +64,7 @@ export const demoCatalog: DemoCategory[] = [
       demo('ticket-reader', 'TicketReader', 'Large dialog presentation of the complete ticket inspector.', 'feature-floor', true, ['ticket-inspector']),
       demo('markdown-editor', 'MarkdownEditor', 'Inline and expanded Markdown editing.', 'feature-floor', true),
       demo('attachment-gallery', 'AttachmentGallery', 'Full-screen keyboard, arrow, and swipe image viewer.', 'feature-floor', true),
+      demo('ticket-close-dialog', 'TicketCloseDialog', 'Structured close outcomes with duplicate-target search and validation.', 'feature-floor', true, ['select', 'menu-item']),
       demo('not-working-dialog', 'NotWorkingDialog', 'Completed-ticket verification failure report with notes and evidence.', 'feature-floor', true, ['pending-attachment-picker']),
     ]},
     { id: 'notes', name: 'Notes and activity', demos: [
