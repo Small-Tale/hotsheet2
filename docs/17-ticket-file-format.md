@@ -146,10 +146,14 @@ ticket's own `created_at`; filesystem modification time is never authoritative.
 HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
 human-authored `batch_label`, `actor` (`identity`, `display_name`, and
 `role: human|ai|unknown`), and `purpose: problem_evidence|correctness_evidence|reference|other`.
-One upload gesture or AI attach operation shares one batch id. Merge reuses an existing
-id; split assigns a fresh one. A round number is derived UI presentation and is never
-stored. Missing metadata—including legacy and external-provider attachments—is presented
-deterministically as Legacy / Uncategorized; readers never infer authorship from time.
+One AI attach operation shares one batch id. Human clients may reuse the latest compatible
+batch across separate upload gestures until a durable status-change activity starts a new
+workflow round. Batch ids remain operation/provenance metadata: readers may coalesce
+compatible implicit batches into one displayed round, and drag/drop regrouping can assign an
+existing id or a fresh explicitly labeled group. A round number is derived UI presentation
+and is never stored. Missing metadata—including legacy and external-provider attachments—is
+presented deterministically as Legacy / Uncategorized; readers never infer authorship from
+filesystem time.
 
 Media attachments may also carry an `annotations` sequence. Each annotation has a stable
 string `id`, a rectangle (`x`, `y`, `width`, `height`) normalized to the integer range

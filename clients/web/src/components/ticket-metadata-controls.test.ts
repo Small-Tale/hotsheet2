@@ -102,9 +102,27 @@ describe('ticket metadata controls and inspector panels', () => {
       ['More feedback',1],
     ]);
     const markup=String(TicketAttachments({attachments:groups.flatMap(group=>group.items)}));
-    expect(markup).toContain('data-action="merge-selected-attachments"');
-    expect(markup).toContain('data-action="split-selected-attachments"');
+    expect(markup).not.toContain('type="checkbox"');
+    expect(markup).not.toContain('Merge selected');
+    expect(markup).toContain('draggable="true"');
+    expect(markup).toContain('data-drag-attachment-id="a"');
+    expect(markup).toContain('data-attachment-group-drop-target="true"');
+    expect(markup).toContain('data-attachment-new-group-drop-target="true"');
+    expect(markup).toContain('New group');
+    expect(markup).toContain('data-lucide="grip-vertical"');
     expect(markup).toContain('name="attachment-batch-purpose"');
+  });
+
+  it('coalesces separate upload batches into one round until workflow state changes',()=>{
+    const groups=groupAttachments([
+      {id:'first',name:'first.png',batch_id:'upload-one',actor:{role:'human'},round:1},
+      {id:'second',name:'second.png',batch_id:'upload-two',actor:{role:'human'},round:1},
+      {id:'third',name:'third.png',batch_id:'upload-three',actor:{role:'human'},round:2},
+    ]);
+    expect(groups.map(group=>[group.label,group.items.map(item=>item.id)])).toEqual([
+      ['Human · Round 1',['first','second']],
+      ['Human · Round 2',['third']],
+    ]);
   });
 
   it('gives the attachment menu trigger visible hover and keyboard-focus feedback', () => {

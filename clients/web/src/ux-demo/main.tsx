@@ -191,6 +191,7 @@ import {
   closeAttachmentDemoMenu,
   galleryDemoDrawMode,
   galleryDemoMarkup,
+  regroupAttachmentDemo,
   setGalleryDemo,
   shiftGalleryDemo,
   showAttachmentDemoMenu,
@@ -2093,6 +2094,36 @@ delegate(root, 'contextmenu', '[data-component="ticket-attachment-item"]', (even
   event.preventDefault();
   const pointer = event as MouseEvent;
   showAttachmentDemoMenu(pointer.clientX, pointer.clientY);
+});
+let draggedDemoAttachment:string | undefined;
+const clearDemoAttachmentDrag = () => {
+  draggedDemoAttachment = undefined;
+  const surface = root.querySelector<HTMLElement>('[data-component="ticket-attachments"]');
+  if (surface) delete surface.dataset.draggingGroupAttachment;
+  for (const target of root.querySelectorAll<HTMLElement>('[data-drag-over]')) delete target.dataset.dragOver;
+};
+delegate(root, 'dragstart', '[data-drag-attachment-id]', (event, target) => {
+  draggedDemoAttachment = (target as HTMLElement).dataset.dragAttachmentId;
+  const surface = target.closest<HTMLElement>('[data-component="ticket-attachments"]');
+  if (surface) surface.dataset.draggingGroupAttachment = 'true';
+  const transfer = (event as DragEvent).dataTransfer;
+  if (transfer && draggedDemoAttachment) transfer.setData('application/x-hotsheet-attachment', draggedDemoAttachment);
+});
+delegate(root, 'dragend', '[data-drag-attachment-id]', clearDemoAttachmentDrag);
+delegate(root, 'dragover', '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]', (event, target) => {
+  if (!draggedDemoAttachment) return;
+  event.preventDefault();
+  (target as HTMLElement).dataset.dragOver = 'true';
+});
+delegate(root, 'drop', '[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]', (event, target) => {
+  if (!draggedDemoAttachment) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const id = draggedDemoAttachment;
+  const newGroup = target.matches('[data-attachment-new-group-drop-target]');
+  const batch = target.closest<HTMLElement>('[data-attachment-group-drop-target]')?.dataset.attachmentBatch;
+  clearDemoAttachmentDrag();
+  regroupAttachmentDemo(id, newGroup ? undefined : batch);
 });
 delegate(root, 'click', '[data-action="attachment-menu-action"]', (_event, target) => {
   recordCollectionEvent(`${target.textContent?.trim() ?? 'Attachment action'} selected`);

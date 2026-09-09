@@ -377,11 +377,14 @@ prompt can be dismissed and returns on a later open until a source is configured
   route-specific and does not loosen JSON request limits.
 
   Files selected in one browse/drop gesture share a durable attachment batch id and human
-  actor role. The tab groups both its compact rows and gallery previews by that id, derives
-  friendly human/AI round labels without persisting round numbers, and labels missing
-  provider/legacy metadata as Legacy / Uncategorized. Batch headers allow label and purpose
-  changes; checked files can be merged into one batch or split into a fresh batch. The item
-  menu also exposes rename. All controls collapse to one column at narrow widths.
+  actor role. Later human upload gestures reuse that batch until a durable ticket-status
+  activity begins the next workflow round; an upload gesture alone never advances the round.
+  The tab groups both its compact rows and gallery previews into friendly human/AI rounds
+  without persisting round numbers, and labels missing provider/legacy metadata as Legacy /
+  Uncategorized. Batch labels and purpose controls are visually distinct editable fields.
+  Files move between groups by drag and drop; a New group target appears only while a file is
+  being dragged. The item menu also exposes rename. All controls collapse to one column at
+  narrow widths.
 
   Notes resolve `attachment:filename` and cross-ticket
   `attachment:[TICKET-SLUG]filename` references. Inline-code references preserve spaces;

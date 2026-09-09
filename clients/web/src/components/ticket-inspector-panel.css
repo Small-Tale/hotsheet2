@@ -40,13 +40,20 @@
 .ticket-inspector__attachment-menu svg { display: block; width: .9rem; height: .9rem; }
 .ticket-inspector__attachment-menu:hover, .ticket-inspector__attachment-menu:focus-visible { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); outline: var(--wa-focus-ring); outline-offset: 1px; }
 .ticket-attachments__status, .ticket-attachments__unsupported { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
-.ticket-attachments__selection-actions { display: flex; flex-wrap: wrap; gap: var(--wa-space-2xs); margin-bottom: var(--wa-space-xs); }
-.ticket-attachments__selection-actions button { min-height: 1.75rem; padding: 0 var(--wa-space-xs); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-s); background: var(--wa-color-surface-default); color: var(--wa-color-neutral-on-normal); font: inherit; cursor: pointer; }
 .ticket-attachments__batches { display: grid; container-type: inline-size; gap: var(--wa-space-s); }
-.ticket-attachments__batch { min-width: 0; padding: var(--wa-space-xs); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
+.ticket-attachments__batch { min-width: 0; padding: var(--wa-space-xs); border:1px solid transparent; border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
+.ticket-attachments__batch[data-drag-over="true"] { border-color:var(--wa-color-focus); background:var(--wa-color-brand-fill-quiet); }
 .ticket-attachments__batch > header { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(7rem, auto); gap: var(--wa-space-xs); margin-bottom: var(--wa-space-2xs); }
-.ticket-attachments__batch > header :is(input,select) { min-width: 0; height: 1.8rem; padding: 0 var(--wa-space-2xs); border: 0; border-bottom: 1px solid var(--wa-color-neutral-border-normal); background: transparent; color: inherit; font: inherit; }
-.ticket-inspector__attachment [data-attachment-selection] { width: 1rem; height: 1rem; flex: none; }
+.ticket-attachments__batch > header :is(input,select) { min-width: 0; height: 2rem; padding: 0 var(--wa-space-xs); border: 1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-pill); color: inherit; font: inherit; }
+.ticket-attachments__batch > header input { background:var(--wa-color-surface-default); font-weight:var(--wa-font-weight-semibold); }
+.ticket-attachments__batch > header select { color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-quiet); }
+.ticket-inspector__attachment > .ticket-attachments__drag-handle { display:grid; width:var(--wa-space-l); height:var(--wa-space-l); color:var(--wa-color-neutral-on-quiet); cursor:grab; place-items:center; flex:none; overflow:visible; }
+.ticket-attachments__drag-handle svg { width:.9rem; height:.9rem; }
+.ticket-inspector__attachment:active .ticket-attachments__drag-handle { cursor:grabbing; }
+.ticket-attachments__new-group { display:none; min-height:3.5rem; margin-top:var(--wa-space-s); border:1px dashed var(--wa-color-brand-border-loud); border-radius:var(--wa-border-radius-m); color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-quiet); align-items:center; justify-content:center; gap:var(--wa-space-xs); font-weight:var(--wa-font-weight-semibold); }
+.ticket-attachments[data-dragging-group-attachment="true"] .ticket-attachments__new-group { display:flex; }
+.ticket-attachments__new-group[data-drag-over="true"] { color:var(--wa-color-brand-on-loud); background:var(--wa-color-brand-fill-loud); }
+.ticket-attachments__new-group svg { width:var(--wa-space-m); height:var(--wa-space-m); }
 .ticket-attachments__browse { display: inline-flex; min-height: 2rem; padding: 0 .5rem; border-radius: .4rem; color: var(--wa-color-text-link); cursor: pointer; align-items: center; gap: .3rem; font-size: var(--wa-font-size-xs); font-weight: 650; }
 .ticket-attachments__browse:hover { background: var(--wa-color-brand-fill-quiet); }
 .ticket-attachments__browse svg { width: .85rem; height: .85rem; }
