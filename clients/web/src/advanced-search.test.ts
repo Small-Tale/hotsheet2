@@ -27,4 +27,9 @@ describe('advanced search semantics',()=>{
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'parser is:completed'))).toEqual([rows[1]]);
     expect(usesAdvancedSearchExpression('ordinary words')).toBe(false);expect(usesAdvancedSearchExpression('NOT (is:archived OR is:backlog)')).toBe(true);
   });
+  it('safely rejects incomplete groups and unknown lifecycle aliases',()=>{
+    const ticket=row('HS2-ONE','started',{title:'Parser repair'});
+    expect(matchesSearchExpression(ticket,'(parser')).toBe(false);
+    expect(matchesSearchExpression(ticket,'is:unknown')).toBe(false);
+  });
 });

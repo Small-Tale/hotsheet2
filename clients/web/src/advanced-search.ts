@@ -1,5 +1,5 @@
-import type { TicketRow } from './api';
 import {isTicketActivelyWorkedOn} from './active-ticket-work';
+import type { TicketRow } from './api';
 
 export type SearchScope='working'|'current'|'all';
 export type SearchFilter='status:backlog'|'status:archive'|'status:deleted'|'up-next'|'needs-review'|'blocked';
@@ -21,7 +21,7 @@ const hiddenStatuses=new Set(['backlog','archive','deleted','moved']);
 const normalized=(value:string)=>value.trim().toLowerCase();
 type SearchExpression={kind:'term';value:string}|{kind:'not';value:SearchExpression}|{kind:'and'|'or';left:SearchExpression;right:SearchExpression};
 type Lexeme={kind:'term'|'and'|'or'|'not'|'left'|'right';value:string};
-const lifecycleAliases:Record<string,string[]>= {
+const lifecycleAliases:Partial<Record<string,string[]>>= {
   'not-started':['not_started'],started:['started'],completed:['completed'],verified:['verified'],backlog:['backlog'],backlogged:['backlog'],archived:['archive'],open:['not_started','started','completed','verified'],
 };
 
@@ -37,14 +37,14 @@ function lexSearchExpression(query:string):Lexeme[]{
       result.push({kind:'term',value:closed?value:`"${value}`});continue;
     }
     const start=index;while(index<query.length&&!/[\s()]/.test(query[index]))index+=1;
-    const value=query.slice(start,index),keyword=value.toLowerCase();result.push({kind:keyword==='and'||keyword==='or'||keyword==='not'?keyword:'term',value} as Lexeme);
+    const value=query.slice(start,index),keyword=value.toLowerCase();result.push({kind:keyword==='and'||keyword==='or'||keyword==='not'?keyword:'term',value});
   }
   return result;
 }
 
 function parseSearchExpression(query:string):SearchExpression|undefined{
   const lexemes=lexSearchExpression(query);if(!lexemes.length)return undefined;let cursor=0;
-  const primary=():SearchExpression|undefined=>{const token=lexemes[cursor];if(!token)return undefined;if(token.kind==='term'){cursor+=1;return{kind:'term',value:token.value}}if(token.kind==='left'){cursor+=1;const value=or();if(!value||lexemes[cursor]?.kind!=='right')return undefined;cursor+=1;return value}return undefined};
+  const primary=():SearchExpression|undefined=>{const token=lexemes.at(cursor);if(!token)return undefined;if(token.kind==='term'){cursor+=1;return{kind:'term',value:token.value}}if(token.kind==='left'){cursor+=1;const value=or();if(!value||lexemes.at(cursor)?.kind!=='right')return undefined;cursor+=1;return value}return undefined};
   const not=():SearchExpression|undefined=>{if(lexemes[cursor]?.kind==='not'){cursor+=1;const value=not();return value?{kind:'not',value}:undefined}return primary()};
   const and=():SearchExpression|undefined=>{let left=not();if(!left)return undefined;while(cursor<lexemes.length&&lexemes[cursor].kind!=='right'&&lexemes[cursor].kind!=='or'){if(lexemes[cursor].kind==='and')cursor+=1;const right=not();if(!right)return undefined;left={kind:'and',left,right}}return left};
   const or=():SearchExpression|undefined=>{let left=and();if(!left)return undefined;while(lexemes[cursor]?.kind==='or'){cursor+=1;const right=and();if(!right)return undefined;left={kind:'or',left,right}}return left};
@@ -52,7 +52,7 @@ function parseSearchExpression(query:string):SearchExpression|undefined{
 }
 
 function ticketContains(ticket:TicketRow,value:string){const needle=normalized(value);return Boolean(needle)&&[ticket.slug,ticket.native_id,ticket.qualified_id,ticket.title,ticket.details??'',...ticket.tags,...(ticket.notes??[]).map(note=>note.text)].some(field=>normalized(field).includes(needle))}
-function matchesTerm(ticket:TicketRow,value:string,now:number){const state=value.match(/^is:(.+)$/i)?.[1].toLowerCase();if(!state)return ticketContains(ticket,value);if(state==='up-next')return ticket.up_next;if(state==='active')return isTicketActivelyWorkedOn(ticket,now);const statuses=lifecycleAliases[state];return Boolean(statuses?.includes(ticket.status??''))}
+function matchesTerm(ticket:TicketRow,value:string,now:number){const match=value.match(/^is:(.+)$/i),state=match?.[1].toLowerCase();if(!state)return ticketContains(ticket,value);if(state==='up-next')return ticket.up_next;if(state==='active')return isTicketActivelyWorkedOn(ticket,now);const statuses=lifecycleAliases[state];return statuses ? statuses.includes(ticket.status??'') : false}
 function evaluateSearchExpression(ticket:TicketRow,expression:SearchExpression,now:number):boolean{switch(expression.kind){case'term':return matchesTerm(ticket,expression.value,now);case'not':return!evaluateSearchExpression(ticket,expression.value,now);case'and':return evaluateSearchExpression(ticket,expression.left,now)&&evaluateSearchExpression(ticket,expression.right,now);case'or':return evaluateSearchExpression(ticket,expression.left,now)||evaluateSearchExpression(ticket,expression.right,now)}}
 export function usesAdvancedSearchExpression(query:string){return /(?:^|[\s(])(?:AND|OR|NOT)(?=$|[\s)])|[()]|(?:^|\s)is:(?:up-next|active|open|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(query)}
 export function matchesSearchExpression(ticket:TicketRow,query:string,now=Date.now()){const expression=parseSearchExpression(query);return expression?evaluateSearchExpression(ticket,expression,now):ticketContains(ticket,query)}
