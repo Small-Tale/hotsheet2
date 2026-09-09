@@ -46,6 +46,11 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   Review-tool UI is excluded from every capture.
 - `New Ticket` opens its modal immediately, prepares any uncached PNGs asynchronously,
   then presents every capture as a selectable thumbnail and large preview.
+- The modal uses the application's shared dialog surface and header anatomy: semantic
+  surface/border/shadow tokens, title plus concise summary, a top-right icon-only Close
+  control, a scroll-owning body, and a separated footer containing plain Cancel and
+  primary Create Ticket actions. Its field spacing, focus treatment, typography, corner
+  radii, and button sizing follow the same shared scale as ordinary Hot Sheet dialogs.
 - The dialog accepts additional files through both drag/drop and a native browse
   control. Captures and uploaded attachments each expose a hover/focus removal control;
   removing a capture also removes its source rectangle from the active session.
@@ -57,8 +62,8 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   root renders within two seconds trigger an automatic diagnostic ticket. Reports are
   rate-limited to one per minute so a genuine thrash cannot create its own request
   storm.
-- The dialog has one Cancel action in its top-right. Canceling it returns to the
-  still-active annotation session. Successful submission clears and exits the session.
+- Either Close or Cancel returns to the still-active annotation session. Successful
+  submission clears and exits the session.
 
 ## Embedding API
 
@@ -88,11 +93,10 @@ server. Use `/?dev-review=false` only when the main-app overlay must be disabled
 development entry points post to
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.
-The overlay and its ticket dialog consume the shared client theme for generic surface,
-border, text, brand, focus, overlay, shadow, and typography semantics—including
-`--hs-shell-divider` for the stronger dialog boundary. Translucent capture effects are
-local compositions made with semantic tokens and `color-mix()`, not a separate literal
-palette.
+The overlay and its ticket dialog consume the shared client theme and shared dialog-layout
+stylesheet for generic surface, border, text, brand, focus, overlay, shadow, typography,
+header, and footer semantics. Translucent capture effects are local compositions made with
+semantic tokens and `color-mix()`, not a separate literal palette.
 The catalog sidebar also exposes a development-only `Dev Review On/Off` toggle that
 updates the same query-backed state, so reviewers do not need to edit the URL.
 
