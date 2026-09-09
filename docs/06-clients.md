@@ -428,8 +428,14 @@ prompt can be dismissed and returns on a later open until a source is configured
   and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
   time ranges; only ranges at the current playhead appear over the media, while persistent
   markers remain over the scrubber and bracket controls set the selected range endpoints.
+  The gallery annotation action carries the current annotation-count badge, and media-grid
+  cards with annotations carry a lower-right annotation marker so review work is visible
+  before opening the media.
   Annotation geometry and time are stored on attachment metadata, so zooming, resizing,
-  reopening, and git synchronization do not change their meaning.
+  reopening, and git synchronization do not change their meaning. Full-ticket REST, MCP,
+  CLI, and AI worklist reads all use the canonical ticket attachment shape, including the
+  complete annotation ids, rectangles, time ranges, and text; annotations are therefore
+  part of the ticket context presented to an AI rather than client-only state.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher or anywhere on the expanded
   composer, inspect and remove the staged filenames, and cancel to discard the entire

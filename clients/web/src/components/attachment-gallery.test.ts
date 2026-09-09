@@ -34,6 +34,8 @@ describe('AttachmentGallery',()=>{
     expect(markup).toContain('left:10%;top:20%;width:30%;height:25%');
     expect(markup).toContain('data-annotation-handle="se"');
     expect(markup).toContain('Check **this**');
+    expect(markup).toContain('aria-label="Finish markup, 1 annotation"');
+    expect(markup).toContain('attachment-gallery__annotation-count');
   });
   it('uses the same point/range controls for animated SVG annotations',()=>{
     const markup=String(AttachmentGallery({images:[{id:'svg',name:'animated.svg',url:'/animated.svg'}],activeUrl:'/animated.svg',markup:true,playheadMs:500,durationMs:2000,annotations:[{id:'point',x:100,y:100,width:1000,height:1000,start_ms:500,end_ms:500,text:''}],selectedAnnotation:'point'}));

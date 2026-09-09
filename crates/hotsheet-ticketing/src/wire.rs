@@ -347,7 +347,7 @@ fn enum_str<T: Serialize>(v: &T) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hotsheet_model::{Ticket, Ulid, derive_slug};
+    use hotsheet_model::{Attachment, MediaAnnotation, Ticket, Ulid, derive_slug};
 
     fn ticket() -> Ticket {
         let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
@@ -525,5 +525,35 @@ mod tests {
             api.claim_lease_expires_at.as_deref(),
             Some("2026-08-20T00:30:00Z")
         );
+    }
+
+    #[test]
+    fn api_ticket_carries_attachment_annotations_for_ai_facing_gets() {
+        let mut ticket = ticket();
+        ticket.attachments.push(Attachment {
+            id: Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap(),
+            filename: "evidence.png".into(),
+            created_at: Timestamp::new("2026-08-20T00:05:00Z"),
+            batch_id: None,
+            batch_label: None,
+            actor: None,
+            purpose: None,
+            annotations: vec![MediaAnnotation {
+                id: "region-1".into(),
+                x: 100,
+                y: 200,
+                width: 300,
+                height: 400,
+                start_ms: None,
+                end_ms: None,
+                text: "Inspect this edge".into(),
+            }],
+        });
+
+        let api = ApiTicket::from(&ticket);
+        assert_eq!(api.attachments[0].annotations[0].text, "Inspect this edge");
+        let json = serde_json::to_value(api).unwrap();
+        assert_eq!(json["attachments"][0]["annotations"][0]["id"], "region-1");
+        assert_eq!(json["attachments"][0]["annotations"][0]["x"], 100);
     }
 }
