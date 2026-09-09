@@ -399,10 +399,12 @@ prompt can be dismissed and returns on a later open until a source is configured
   activity begins the next workflow round; an upload gesture alone never advances the round.
   The tab groups both its compact rows and gallery previews into friendly human/AI rounds
   without persisting round numbers, and labels missing provider/legacy metadata as Legacy /
-  Uncategorized. Batch labels and purpose controls are visually distinct editable fields.
-  Files move between groups by drag and drop; a New group target appears only while a file is
-  being dragged. The item menu also exposes rename. All controls collapse to one column at
-  narrow widths.
+  Uncategorized. Each transparent group reads as a titled section: its label switches to an
+  inline editor on double-click, while its purpose remains a compact tag-sized control. Files
+  move between groups by dragging the file row itself (without a separate handle glyph); only
+  the current group target receives a focus outline, and a New group target appears while a
+  file is being dragged. The item menu also exposes rename. The presentation remains usable at
+  narrow widths without turning purpose tags into full-width fields.
 
   Notes resolve `attachment:filename` and cross-ticket
   `attachment:[TICKET-SLUG]filename` references. Inline-code references preserve spaces;
