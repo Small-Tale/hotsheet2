@@ -126,10 +126,11 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
   },{followClaims});
 }
 
-test('activates Dev Review from the main app query only in explicit development review mode',async({page})=>{
-  await page.goto('/?dev-review=1');await expect(page.locator('.hs-dev-review')).toBeVisible();await expect(page.getByRole('button',{name:'Feedback'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-wide.png',fullPage:true});
+test('activates Dev Review by default in development and honors the explicit false opt-out',async({page})=>{
+  let submission:{attachments:Array<{filename:string;mimeType:string}>}|undefined;await page.route('**/__hotsheet/dev-review/tickets',async route=>{submission=route.request().postDataJSON();await route.fulfill({status:201,json:{slug:'HS2-DIAG01'}})});
+  await page.goto('/');await expect(page.locator('.hs-dev-review')).toBeVisible();await page.getByRole('button',{name:'Feedback'}).click();await page.getByRole('button',{name:'New Ticket'}).click();const dialog=page.getByRole('dialog',{name:'New Hot Sheet ticket'});await expect(dialog.getByText('Attach diagnostic logs')).toBeVisible();await expect(dialog.locator('.hs-dev-review__diagnostics input')).toBeChecked();await page.screenshot({path:'/private/tmp/hs2-48w3ys-main-dev-review-default-wide.png',fullPage:true});await dialog.getByRole('textbox',{name:'Feedback notes'}).fill('Select menus close unexpectedly.');await dialog.getByRole('button',{name:'Create Ticket'}).click();await expect.poll(()=>submission).toBeTruthy();expect(submission!.attachments).toHaveLength(1);expect(submission!.attachments[0]).toMatchObject({mimeType:'application/json'});expect(submission!.attachments[0].filename).toMatch(/^hotsheet-ui-diagnostics-/);
   await page.setViewportSize({width:390,height:844});await expect(page.locator('.hs-dev-review')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-sv3f5g-main-dev-review-narrow.png',fullPage:true});
-  await page.goto('/?dev-review=0');await expect(page.locator('.hs-dev-review')).toHaveCount(0);
+  await page.goto('/?dev-review=false');await expect(page.locator('.hs-dev-review')).toHaveCount(0);
 });
 
 test('opens a roomy project dialog with native browse controls and working cancel',async({page})=>{
@@ -628,11 +629,14 @@ test('defers ticket refresh without hiding an open select popup',async({page})=>
   await mockProject(page);let rows=[row,notStartedRow],cursor=0;const polls:Array<import('@playwright/test').Route>=[];
   await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:rows}):route.fallback());
   await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
-  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const select=page.locator('wa-select[name="inspector-status"]');await select.click();await expect.poll(()=>select.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(true);await resetRenderMetrics(page);
   const incoming={...startedRow2,slug:'HS2-INCOMING',title:'Incoming while choosing'};rows=[...rows,incoming];await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'created',id:incoming.id,slug:incoming.slug}],overflow:false}});
   await page.waitForTimeout(300);await expect.poll(()=>select.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(true);await expect(page.locator('[data-ticket-slug="HS2-INCOMING"]')).toHaveCount(0);expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
   await page.keyboard.press('Escape');await expect.poll(()=>select.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(false);await expect(page.locator('[data-ticket-slug="HS2-INCOMING"]')).toBeVisible();
+  await expect.poll(()=>polls.length).toBeGreaterThan(0);await page.getByRole('button',{name:'New ticket…'}).click();const composer=page.getByRole('dialog',{name:'Create ticket'}),category=composer.locator('wa-select[name="new-ticket-category"]');await category.click();await expect.poll(()=>category.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(true);await resetRenderMetrics(page);
+  rows=rows.map(item=>item.slug===notStartedRow.slug?{...item,status:'started'}:item);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'git-local',kind:'updated',id:notStartedRow.id,slug:notStartedRow.slug}],overflow:false}});await page.waitForTimeout(300);await expect.poll(()=>category.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(true);await expect(page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
+  await composer.getByRole('textbox',{name:'Ticket title'}).click();await expect.poll(()=>category.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(false);await expect(page.locator('[data-column-id="started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();await expect(composer).toBeVisible();
 });
 
 test('animates ticket moves, arrivals, and departures in sequence',async({page})=>{

@@ -150,7 +150,15 @@ prompt can be dismissed and returns on a later open until a source is configured
   lifecycle, preserving focus plus draft state. This makes broad Kerf render
   dependencies fail loudly instead of becoming
   focus, scroll, or animation regressions. Development builds enable Kerf's
-  value-only-render and list-rebind warnings plus throwing list invariants.
+  value-only-render and list-rebind warnings plus throwing list invariants. They also
+  keep a bounded, value-free UI-stability event log. Three unexpected quick select
+  dismissals within ten seconds or twelve root renders within two seconds after startup
+  create a rate-limited diagnostic ticket automatically. Dev Review is enabled by
+  default in development (`?dev-review=false` is the sole opt-out), and its ticket
+  dialog offers a checked diagnostic-log attachment so a manually reported transient
+  failure carries the same context. Project refreshes remain deferred while any
+  Web Awesome select is open, including the new-ticket composer, so a background
+  ticket column move cannot replace the control or dismiss its popup.
 
 - **Ticket collection motion.** A status change lifts the moving ticket into a
   fixed, workspace-level overlay so it can cross column scroll and clipping

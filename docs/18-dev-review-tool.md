@@ -12,8 +12,9 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 
 ## Interaction contract
 
-- An explicit development-review mode adds a very small fixed `Feedback` launcher in
-  the top-right stacking layer.
+- The main application enables a very small fixed `Feedback` launcher in the top-right
+  stacking layer for every development build. `?dev-review=false` is the sole explicit
+  opt-out; production builds never include the tool.
 - Activating it shows `New Ticket` plus a concise Option/Alt-drag hint that fades
   after a few seconds.
 - `Feedback` is also the mode toggle. It exits immediately when there are no captures
@@ -48,6 +49,14 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 - The dialog accepts additional files through both drag/drop and a native browse
   control. Captures and uploaded attachments each expose a hover/focus removal control;
   removing a capture also removes its source rectangle from the active session.
+- Main-app submissions offer a checked **Attach diagnostic logs** control. The JSON
+  attachment records bounded, value-free UI events, root render metrics, errors,
+  viewport metadata, and unexpected Web Awesome select dismissal without capturing
+  field contents.
+- After startup, three unexpected quick select dismissals within ten seconds or twelve
+  root renders within two seconds trigger an automatic diagnostic ticket. Reports are
+  rate-limited to one per minute so a genuine thrash cannot create its own request
+  storm.
 - The dialog has one Cancel action in its top-right. Canceling it returns to the
   still-active annotation session. Successful submission clears and exits the session.
 
@@ -58,6 +67,7 @@ import { installDevReview } from './dev-review';
 
 const review = installDevReview({
   submit: submission => ticketService.createFromReview(submission),
+  diagnostics: () => stabilityRecorder.attachment(),
 });
 
 // On app teardown:
@@ -72,9 +82,10 @@ server, Tauri command, test fake, or another ticket-provider-aware bridge.
 
 ## UX demo and security boundary
 
-Open either `/?dev-review=1` for the main application or
-`/ux-demo?dev-review=1` for the component catalog (additional query parameters are
-fine) while running the Vite development server. Both development entry points post to
+Open the main application normally, or use `/ux-demo?dev-review=1` for the component
+catalog (additional query parameters are fine), while running the Vite development
+server. Use `/?dev-review=false` only when the main-app overlay must be disabled. Both
+development entry points post to
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.
 The overlay and its ticket dialog consume the shared client theme for generic surface,
@@ -86,7 +97,8 @@ The catalog sidebar also exposes a development-only `Dev Review On/Off` toggle t
 updates the same query-backed state, so reviewers do not need to edit the URL.
 
 Each browser entry point is guarded by Vite's compile-time `import.meta.env.DEV` value
-and loads the tool through a dynamic import only after the exact query flag is present.
+and loads the tool through a dynamic import only when its development-mode activation
+rule permits it.
 `html2canvas` is therefore a development dependency and is not linked into normal
 Hot Sheet clients. Every production web build runs
 `scripts/check-production-bundle.mjs` and fails if emitted JS or CSS contains a Dev

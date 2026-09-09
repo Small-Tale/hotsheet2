@@ -12,6 +12,7 @@ export interface DevReviewSubmission { notes: string; captures: ReviewCapture[];
 export interface DevReviewResult { slug: string; url?: string }
 export interface DevReviewOptions {
   submit: (submission: DevReviewSubmission) => Promise<DevReviewResult>;
+  diagnostics?: () => ReviewAttachment;
   /** @deprecated Captures are lazy so they cannot contend with pointer input. */
   captureDebounceMs?: number;
   hintDurationMs?: number;
@@ -171,7 +172,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     dialog.setAttribute('aria-labelledby', 'hs-dev-review-dialog-title');
     let captures: ReviewCapture[] = [];
     const attachments: ReviewAttachment[] = [];
-    dialog.innerHTML = `<form method="dialog" class="hs-dev-review__form"><header><h2 id="hs-dev-review-dialog-title">New Hot Sheet ticket</h2><button type="button" data-action="close-dialog">Cancel</button></header><div class="hs-dev-review__dialog-body"><div class="hs-dev-review__thumbnails" aria-label="Captured regions"></div><div class="hs-dev-review__preview" aria-label="Selected capture preview"></div><label class="hs-dev-review__dropzone">Drop attachments here or <span>browse</span><input type="file" multiple aria-label="Add attachments"></label><div class="hs-dev-review__attachments" aria-label="Added attachments"></div><label>Feedback notes<textarea name="notes" required placeholder="Describe the issue or requested change…"></textarea></label><p class="hs-dev-review__status" role="status"></p></div><footer><button type="submit">Create Ticket</button></footer></form>`;
+    dialog.innerHTML = `<form method="dialog" class="hs-dev-review__form"><header><h2 id="hs-dev-review-dialog-title">New Hot Sheet ticket</h2><button type="button" data-action="close-dialog">Cancel</button></header><div class="hs-dev-review__dialog-body"><div class="hs-dev-review__thumbnails" aria-label="Captured regions"></div><div class="hs-dev-review__preview" aria-label="Selected capture preview"></div><label class="hs-dev-review__dropzone">Drop attachments here or <span>browse</span><input type="file" multiple aria-label="Add attachments"></label><div class="hs-dev-review__attachments" aria-label="Added attachments"></div><label>Feedback notes<textarea name="notes" required placeholder="Describe the issue or requested change…"></textarea></label>${options.diagnostics ? '<label class="hs-dev-review__diagnostics"><input type="checkbox" checked> Attach diagnostic logs</label>' : ''}<p class="hs-dev-review__status" role="status"></p></div><footer><button type="submit">Create Ticket</button></footer></form>`;
     doc.body.append(dialog);
     const thumbnails = dialog.querySelector<HTMLElement>('.hs-dev-review__thumbnails')!;
     const preview = dialog.querySelector<HTMLElement>('.hs-dev-review__preview')!;
@@ -226,7 +227,10 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
       submitting = true;
       submit.disabled = true; status.textContent = 'Creating ticket and attaching captures…';
       try {
-        const result = await options.submit({ notes: textarea.value.trim(), captures, attachments, pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
+        const submissionAttachments = [...attachments];
+        const diagnosticToggle = dialog.querySelector<HTMLInputElement>('.hs-dev-review__diagnostics input');
+        if (diagnosticToggle?.checked && options.diagnostics && submissionAttachments.length < 20) submissionAttachments.push(options.diagnostics());
+        const result = await options.submit({ notes: textarea.value.trim(), captures, attachments: submissionAttachments, pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
         status.textContent = `${result.slug} created.`;
         leaveFeedback();
         view.setTimeout(() => { dialog.close(); }, 500);

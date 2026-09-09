@@ -55,6 +55,8 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
 .hs-dev-review__attachment > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hs-dev-review__attachment .hs-dev-review__remove { top: -5px; right: -5px; }
 .hs-dev-review__dialog label { display: grid; font-weight: 650; gap: 5px; }
+.hs-dev-review__dialog .hs-dev-review__diagnostics { display: flex; align-items: center; gap: 7px; font-size: var(--wa-font-size-xs); font-weight: 500; }
+.hs-dev-review__diagnostics input { width: 1rem; height: 1rem; margin: 0; }
 .hs-dev-review__dialog textarea { min-height: 110px; padding: 9px; resize: vertical; border: 1px solid var(--wa-color-neutral-border-loud); border-radius: 7px; font: inherit; font-weight: 400; }
 .hs-dev-review__status { min-height: 18px; margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 @media (max-width: 520px) { .hs-dev-review__hint { display: none; } .hs-dev-review__toolbar { top: 4px; right: 4px; } }
