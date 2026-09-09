@@ -767,9 +767,11 @@ the leading edge of the dashboard toolbar.
 The dashboard keeps a resizable right ticket rail open by default and allows it to be hidden
 and restored from the dashboard toolbar. That rail reuses the selected project's list and
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
-launcher; board and settings modes are deliberately absent. The list/notification segmented
-control owns its full first row, while sort, animated search, and selection actions share the
-second row. Queue, Backlog, and Archive switch from a content-sized view selector in the page
+launcher; board and settings modes are deliberately absent. The rectangular list/notification
+segmented control owns its full first row, while sort, selection actions, and the final animated
+search control share the second row. This is the same advanced search surface and state as the
+main workspace, including chips, tag completion, attachment/presence filters, relative or local
+dates, and syntax help. Queue, Backlog, and Archive switch from a content-sized view selector in the page
 heading without a redundant separator above it. Selecting one ticket pushes the shared inspector
 into the rail. Its larger blue Back action is vertically centered with the independently centered
 ticket slug and pops to the stable list through the shared `ContentTransition`. Terminal sessions
@@ -911,6 +913,9 @@ sends `{viewer_id, cols, rows, focus, visible}` claims on connection, geometry/f
 visibility changes, and a five-second lease heartbeat. The heartbeat renews server state;
 it is not request polling. Disconnects retry with bounded exponential backoff, while
 dispose closes the socket so the server removes that viewer and self-heals its chosen size.
+Client claims normalize transient non-finite geometry to bounded integer dimensions. The server
+drops any JSON frame carrying a malformed `resize` member instead of forwarding that protocol
+text to the PTY, so a hidden or transitioning viewport cannot echo control JSON into the shell.
 
 Renderer choice follows the proven HS1 split rather than forcing one backend everywhere.
 Full-size dedicated drawer terminals use xterm's WebGL addon (with DOM fallback after load

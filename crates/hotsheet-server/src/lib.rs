@@ -5501,8 +5501,8 @@ fn default_true() -> bool {
 }
 
 /// An inbound control message on the terminal WS (a Text frame). Today: a **size claim**
-/// (HS2-BD7Q74). A Text frame that doesn't parse as control is treated as raw PTY input, so a
-/// simple client can type over the same socket (Binary is always input).
+/// (HS2-BD7Q74). Ordinary Text is raw PTY input so a simple client can type over the same
+/// socket; malformed JSON carrying the reserved `resize` member is dropped (Binary is input).
 #[derive(Deserialize)]
 struct TermControl {
     #[serde(default)]
@@ -5519,6 +5519,50 @@ struct ResizeClaim {
     focus: bool,
     #[serde(default = "default_true")]
     visible: bool,
+}
+
+enum TerminalText<'a> {
+    Resize(ResizeClaim),
+    InvalidControl,
+    Input(&'a str),
+}
+
+fn classify_terminal_text(value: &str) -> TerminalText<'_> {
+    if let Ok(TermControl {
+        resize: Some(resize),
+    }) = serde_json::from_str(value)
+    {
+        return TerminalText::Resize(resize);
+    }
+    if serde_json::from_str::<serde_json::Value>(value)
+        .ok()
+        .and_then(|json| json.get("resize").cloned())
+        .is_some()
+    {
+        return TerminalText::InvalidControl;
+    }
+    TerminalText::Input(value)
+}
+
+#[cfg(test)]
+mod terminal_text_tests {
+    use super::{TerminalText, classify_terminal_text};
+
+    #[test]
+    fn malformed_resize_controls_are_dropped_instead_of_becoming_pty_input() {
+        assert!(matches!(
+            classify_terminal_text(r#"{"resize":{"viewer_id":"viewer","cols":null,"rows":null}}"#),
+            TerminalText::InvalidControl
+        ));
+        assert!(matches!(
+            classify_terminal_text(r#"{"resize":{"viewer_id":"viewer","cols":80,"rows":24}}"#),
+            TerminalText::Resize(_)
+        ));
+        assert!(matches!(
+            classify_terminal_text("echo hello\n"),
+            TerminalText::Input("echo hello\n")
+        ));
+    }
 }
 
 /// The size the server chose, pushed to every viewer when it changes.
@@ -5597,9 +5641,9 @@ async fn terminal_attach_loop(
             inbound = socket.recv() => match inbound {
                 Some(Ok(Message::Binary(b))) => { let _ = term.write(&b); }
                 Some(Ok(Message::Text(t))) => {
-                    match serde_json::from_str::<TermControl>(&t) {
+                    match classify_terminal_text(&t) {
                         // A size claim: feed the arbiter (it resizes + broadcasts if the size changed).
-                        Ok(TermControl { resize: Some(r) }) => {
+                        TerminalText::Resize(r) => {
                             my_viewer = Some(r.viewer_id.clone());
                             let now = term_now_ms();
                             term.claim_size(
@@ -5614,8 +5658,10 @@ async fn terminal_attach_loop(
                                 now,
                             );
                         }
-                        // Not a control message → raw PTY input.
-                        _ => { let _ = term.write(t.as_bytes()); }
+                        // A malformed control frame is never terminal input: dropping it avoids
+                        // echoing protocol JSON into the user's shell during transient layout.
+                        TerminalText::InvalidControl => {}
+                        TerminalText::Input(input) => { let _ = term.write(input.as_bytes()); }
                     }
                 }
                 Some(Ok(Message::Close(_))) | None => break,
@@ -5682,9 +5728,9 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                     }
                 }
                 Some(Ok(Message::Text(t))) => {
-                    let sent = match serde_json::from_str::<TermControl>(&t) {
+                    let sent = match classify_terminal_text(&t) {
                         // A size claim forwards as a Resize frame the broker feeds to its arbiter.
-                        Ok(TermControl { resize: Some(r) }) => {
+                        TerminalText::Resize(r) => {
                             stream
                                 .send(&hotsheet_terminals::StreamIn::Resize {
                                     viewer_id: r.viewer_id,
@@ -5695,11 +5741,11 @@ async fn broker_attach_loop(mut socket: WebSocket, broker_socket: std::path::Pat
                                 })
                                 .await
                         }
-                        // Not a control message → raw PTY input.
-                        _ => {
+                        TerminalText::InvalidControl => continue,
+                        TerminalText::Input(input) => {
                             stream
                                 .send(&hotsheet_terminals::StreamIn::Input {
-                                    data: t.as_bytes().to_vec(),
+                                    data: input.as_bytes().to_vec(),
                                 })
                                 .await
                         }

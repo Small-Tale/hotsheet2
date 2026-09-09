@@ -909,12 +909,14 @@ must reclaim its fitted dimensions after leaving the dashboard. Focus, resize cl
 attention, and selection survive layout and scale changes.
 
 `FixedAspectTerminalCard` is also a first-class UX catalog entry. Its catalog page renders
-both supported public variants with the real xterm frontend, a deterministic ANSI fixture,
+both supported public variants with the real xterm frontend, a deterministic ANSI fixture whose
+reverse-video Nano bars explicitly paint all 80 terminal cells,
 and representative preview-versus-magnified sizing. `TerminalDashboard` lists it as a related
 component so the production composition is explicit rather than only inferable from source.
 
 `TerminalTicketRail` is the dashboard's compact right-side companion. It composes the shared
-content-sized project and view selectors, a full-row list/notification switch, animated search,
+content-sized project and view selectors, a rectangular full-row list/notification switch, the
+same chip-based advanced search control used by the main workspace (placed last on its action row),
 ticket list, quick-ticket launcher, ticket inspector, and forward/backward `ContentTransition`.
 Its inspector route keeps the Back affordance visually independent from the centered ticket slug.
 The rail remains independently resizable and hideable beside the terminal grid and is represented

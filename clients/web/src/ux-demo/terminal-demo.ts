@@ -1,8 +1,9 @@
 import { mountStaticTerminalViewport } from '../terminal-viewport';
 
-// Nano paints through the final column without moving the cursor into a wrapped row.
-// Erasing under reverse video reproduces that fill without scrolling the 80x24 viewport.
-const bar=(value:string)=>`\u001b[7m${value.slice(0,79)}\u001b[K\u001b[0m`;
+// Fill all 80 cells explicitly: xterm's erase-to-end uses the default cell attributes,
+// so CSI K leaves the right side black even while reverse video is active. The following
+// absolute cursor move cancels delayed wrapping for every row except the final one.
+const bar=(value:string)=>`\u001b[7m${value.padEnd(80).slice(0,80)}\u001b[0m`;
 const line=(row:number,value:string)=>`\u001b[${row};1H${value}`;
 
 const nanoSource = [
