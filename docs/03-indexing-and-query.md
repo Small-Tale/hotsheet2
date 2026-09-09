@@ -45,7 +45,10 @@ and date-times (for example `2026-09-01` and `2026-09-01T11:05`) are always acce
 Relative minute, hour, day, and week values such as `updated-after:4h ago` are resolved at
 search time.
 A native date/optional-time helper appears for lifecycle prefixes, and an adjacent help control
-opens the complete syntax guide without overloading the ordinary search placeholder.
+opens the complete syntax guide without overloading the ordinary search placeholder. The guide
+groups compact, wrapping examples under Tags, Content, Workflow, and Dates, with boolean and
+date rules summarized separately so the full syntax remains scannable instead of becoming one
+long vertical list.
 Created, updated, completed, and verified use their persisted timestamps. Because the v2
 ticket format has no separate started/archived timestamp, those two tokens constrain the
 current status and compare its `updated_at` transition time.

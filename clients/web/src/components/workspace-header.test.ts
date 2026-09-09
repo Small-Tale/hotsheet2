@@ -28,7 +28,12 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('aria-label="Search syntax help"');
     expect(markup).toContain('aria-label="Date and time helper"');
     expect(markup).toContain('aria-label="Search syntax"');
-    expect(markup).toContain('ISO 8601 dates and date-times are always accepted');
+    expect(markup).toContain('<dt>Tags</dt>');
+    expect(markup).toContain('<dt>Content</dt>');
+    expect(markup).toContain('<dt>Workflow</dt>');
+    expect(markup).toContain('<dt>Dates</dt>');
+    expect(markup).toContain('<strong>Combine filters</strong>');
+    expect(markup).toContain('local, relative, and ISO 8601 dates work');
     expect(markup).toContain('updated-after:2026-09-01T11:05');
     expect(markup).not.toContain('data-action="open-workspace-search"');
     expect(markup).not.toContain('data-action="open-global-search"');

@@ -17,6 +17,7 @@ import { collectionEvent, collectionTickets } from './ticket-collections-demo';
 export const workspaceMode = signal<WorkspaceViewMode>('list');
 export const workspaceSearchOpen = signal(false);
 export const workspaceSearchQuery = signal('');
+export const workspaceSearchHelpOpen = signal(false);
 export const workspaceSort = signal<WorkspaceSort>('updated');
 export const workspaceSortDirection = signal<WorkspaceSortDirection>(defaultWorkspaceSortDirection(workspaceSort.value));
 export const composerExpanded = signal(false);
@@ -94,7 +95,7 @@ function WorkspaceContent() {
 
 export function WorkspaceHeaderDemo() {
   return <section class="workspace-component-demo" aria-label="WorkspaceHeader demo">
-    <WorkspaceHeader projectName="Hot Sheet 2" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} sortDirection={workspaceSortDirection.value} notificationCount={7} />
+    <WorkspaceHeader projectName="Hot Sheet 2" mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} searchHelpOpen={workspaceSearchHelpOpen.value} sort={workspaceSort.value} sortDirection={workspaceSortDirection.value} notificationCount={7} />
     <PageHeader title={workspaceMode.value === 'settings' ? 'Project Settings' : 'Queue'} />
     <div class="workspace-component-demo__content"><WorkspaceContent /></div>
     <p class="component-stage__event" aria-live="polite">{collectionEvent.value}</p>

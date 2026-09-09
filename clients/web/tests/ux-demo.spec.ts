@@ -817,6 +817,24 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.screenshot({ path: '/private/tmp/hs2-rza0h3-semantic-tokens-narrow.png', fullPage: true });
 });
 
+test('organizes search syntax help in the WorkspaceHeader demo',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/ux-demo?component=workspace-header');
+  const header=page.locator('[data-component="workspace-header"]');
+  await header.getByRole('button',{name:'Search tickets'}).click();
+  await header.getByRole('textbox',{name:'Search tickets'}).fill('client');
+  await header.getByRole('button',{name:'Search syntax help'}).click();
+  const help=header.getByRole('dialog',{name:'Search syntax'});
+  await expect(help.locator('dt')).toHaveText(['Tags','Content','Workflow','Dates']);
+  await expect(help).toContainText('Combine filters');
+  await page.screenshot({path:'/private/tmp/hs2-7efj3e-search-help-demo-wide.png',fullPage:true});
+  await page.setViewportSize({width:760,height:640});
+  await page.screenshot({path:'/private/tmp/hs2-7efj3e-search-help-demo-narrow.png',fullPage:true});
+  await expect.poll(()=>help.evaluate(node=>{const box=node.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth&&box.bottom<=innerHeight})).toBe(true);
+  await header.getByRole('button',{name:'Search syntax help'}).click();
+  await expect(help).toHaveCount(0);
+});
+
 test('shows the ToolbarControlGroup variants with shared geometry', async ({ page }) => {
   await page.goto('/ux-demo?component=toolbar-control-group');
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });

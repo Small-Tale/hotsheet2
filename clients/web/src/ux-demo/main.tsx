@@ -248,6 +248,7 @@ import {
   TicketInspectorDemo,
   WorkspaceHeaderDemo,
   workspaceMode,
+  workspaceSearchHelpOpen,
   workspaceSearchOpen,
   workspaceSearchQuery,
   workspaceSort,
@@ -1017,6 +1018,7 @@ delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
   shellMode.value = (target as HTMLElement).dataset
     .shellMode as typeof shellMode.value;
   workspaceSearchOpen.value = false;
+  workspaceSearchHelpOpen.value = false;
   workspaceSearchQuery.value = '';
   shellEvent.value =
     shellMode.value === 'terminals'
@@ -1028,6 +1030,7 @@ delegate(root, 'click', '[data-action="open-project-stats"]', () => {
   shellStatsProjectName.value = name;
   shellMode.value = 'stats';
   workspaceSearchOpen.value = false;
+  workspaceSearchHelpOpen.value = false;
   workspaceSearchQuery.value = '';
   sidebarEvent.value = `${name} project statistics requested.`;
   shellEvent.value = `${name} project statistics selected.`;
@@ -1347,6 +1350,7 @@ delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
     .viewMode as typeof workspaceMode.value;
   if (workspaceMode.value === 'settings') {
     workspaceSearchOpen.value = false;
+    workspaceSearchHelpOpen.value = false;
     workspaceSearchQuery.value = '';
   }
   recordCollectionEvent(
@@ -1358,6 +1362,9 @@ delegate(root, 'click', '[data-action="open-workspace-search"]', () => {
   queueMicrotask(() => {
     focusWorkspaceSearch(root);
   });
+});
+delegate(root, 'click', '[data-action="toggle-workspace-search-help"]', () => {
+  workspaceSearchHelpOpen.value = !workspaceSearchHelpOpen.value;
 });
 delegate(root, 'input', '[name="workspace-search"]', (_event, target) => {
   workspaceSearchQuery.value = (target as FormControl).value;
@@ -1372,6 +1379,7 @@ delegate(
 );
 delegate(root, 'click', '[data-action="clear-workspace-search"]', () => {
   workspaceSearchQuery.value = '';
+  workspaceSearchHelpOpen.value = false;
   const input = root.querySelector<FormControl>('[name="workspace-search"]');
   if (input) input.value = '';
   queueMicrotask(() => {
@@ -1380,7 +1388,9 @@ delegate(root, 'click', '[data-action="clear-workspace-search"]', () => {
 });
 delegate(root, 'focusout', '[name="workspace-search"]', () => {
   queueMicrotask(() => {
-    if (workspaceSearchQuery.value === '') workspaceSearchOpen.value = false;
+    if (root.querySelector('.workspace-header__search-group:focus-within')) return;
+    if (workspaceSearchQuery.value === '' && !workspaceSearchHelpOpen.value)
+      workspaceSearchOpen.value = false;
   });
 });
 delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, target) => {
