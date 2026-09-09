@@ -164,8 +164,9 @@ cleanup of the old live HS1 data; backups are never removed.
   default in development (`?dev-review=false` is the sole opt-out), and its ticket
   dialog offers a checked diagnostic-log attachment so a manually reported transient
   failure carries the same context. Automatic render-storm reporting remains suppressed while
-  remembered projects are restoring or a foreground operation owns the app's loading
-  state; those intentional renders stay in the bounded diagnostic log with their
+  remembered projects are restoring, a foreground operation owns the app's loading
+  state, or the ticket collection is appending a scheduled progressive chunk; those
+  intentional renders stay in the bounded diagnostic log with their
   suppression reason and cannot seed a later background storm. This uses lifecycle state
   rather than a fixed startup duration, so slow project opens do not become false-positive
   tickets. Project refreshes remain deferred while any

@@ -130,6 +130,7 @@ const devReviewTestTitles=new Set([
   'activates Dev Review by default in development and honors the explicit false opt-out',
   'does not report intentional render bursts during remembered-project startup',
   'keeps feedback rectangle input within its frame budget in the populated main app',
+  'switches large ticket views without cloning every row into motion ghosts',
 ]);
 
 test.beforeEach(async({page},testInfo)=>{
@@ -1335,21 +1336,24 @@ test('derives board columns from the selected view and merges Verified by projec
 });
 
 test('switches large ticket views without cloning every row into motion ghosts',async({page})=>{
-  const statuses:Array<'not_started'|'backlog'|'archive'>=[...Array.from({length:60},()=> 'not_started' as const),...Array.from({length:18},()=> 'backlog' as const),...Array.from({length:675},()=> 'archive' as const)];
+  const submissions:unknown[]=[];
+  const statuses:Array<'not_started'|'backlog'|'archive'>=[...Array.from({length:60},()=> 'not_started' as const),...Array.from({length:18},()=> 'backlog' as const),...Array.from({length:2_075},()=> 'archive' as const)];
   const largeRows=statuses.map((status,index)=>({...row,id:`large-${index}`,native_id:`large-${index}`,qualified_id:`git-local:large-${index}`,slug:`HS2-LARGE${index}`,title:`Large collection ticket ${index}`,status,up_next:false}));
   await mockProject(page);
+  await page.route('**/__hotsheet/dev-review/tickets',async route=>{submissions.push(route.request().postDataJSON());await route.fulfill({status:201,json:{slug:'HS2-SHOULD-NOT-EXIST'}})});
   await page.route('**/checkouts/demo-checkout/tickets*',route=>route.request().method()==='GET'?route.fulfill({json:largeRows}):route.fallback());
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(60);
-  for(const [view,count] of [['Backlog',18],['Archive',675],['Queue',60]] as const){
+  for(const [view,count] of [['Backlog',18],['Archive',2_075],['Queue',60]] as const){
     const button=page.getByRole('button',{name:new RegExp(view)}),initial=await button.evaluate((element,itemId)=>{const started=performance.now();(element as HTMLElement).click();const list=document.querySelector<HTMLElement>('[data-component="ticket-list"]'),selected=document.querySelector<HTMLElement>(`[data-action="select-view"][data-item-id="${itemId}"]`);return{elapsed:performance.now()-started,selected:selected?.getAttribute('aria-current'),rendered:list?.dataset.renderedCount,total:list?.dataset.totalCount,loading:Boolean(list?.querySelector('[data-ticket-progressive-loading="true"]'))}},view==='Queue'?'all':view.toLowerCase());await expect(page.getByRole('heading',{name:view})).toBeVisible();
     expect(initial.elapsed).toBeLessThan(250);expect(initial.selected).toBe('page');await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
     if(view==='Archive'){
-      expect(initial).toMatchObject({rendered:'80',total:'675',loading:true});
+      expect(initial).toMatchObject({rendered:'80',total:'2075',loading:true});
       await page.screenshot({path:'/private/tmp/hs2-w52rer-progressive-archive.png'});
     }
     await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count);await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
   }
+  await page.waitForTimeout(300);expect(submissions).toEqual([]);
 });
 
 test('matches HS1 multi-selection semantics and selected outlines in list and column views',async({page})=>{
