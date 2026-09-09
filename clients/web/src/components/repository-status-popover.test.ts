@@ -32,7 +32,8 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-component="menu-header"');
     expect(markup.match(/data-component="menu-item"/g)).toHaveLength(7);
-    expect(markup).toContain('data-action="open-repository-file-menu" data-item-id="src/staged.ts"');
+    expect(markup).toContain('data-action="select-repository-file" data-item-id="src/staged.ts"');
+    expect(markup).toContain('data-action="open-repository-file-menu-trigger" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-lucide="ellipsis"');
     expect(markup).toContain('data-state="renamed"');
     expect(markup).toContain('aria-label="src/old name.ts"');
@@ -58,7 +59,8 @@ describe('RepositoryStatusPopover',()=>{
     const markup=String(ChangeEvidenceDialog({view:'tests',review:{difftool:'Glassbox',truncated:false,ranges:[],commits:[],summary:{files:{total:3,docs:1,tests:1,source:1,other:0},tests_added:1,tests_modified:0},files:[{path:'docs/design.md',change:'modified',category:'docs'},{path:'clients/web/src/dialog.test.ts',change:'added',category:'tests'},{path:'clients/web/src/dialog.ts',change:'modified',category:'source'}]}}));
     expect(markup).toContain('data-component="change-evidence-dialog"');
     expect(markup).toContain('aria-label="Change evidence views"');
-    expect(markup).toContain('data-action="open-ticket-file-menu" data-item-id="clients/web/src/dialog.test.ts"');
+    expect(markup).toContain('data-action="select-repository-file" data-item-id="clients/web/src/dialog.test.ts"');
+    expect(markup).toContain('data-file-menu-source="ticket"');
     expect(markup).toContain('class="repository-status-popover__file-status" aria-hidden="true">A</span>');
     expect(markup).not.toContain('data-item-id="docs/design.md" class="repository-status-popover__file"');
   });
@@ -115,6 +117,10 @@ describe('RepositoryStatusPopover',()=>{
     expect(menu).toContain('data-repository-file-action="show-diff"');
     expect(String(RepositoryStatusPopover({status:status({platform:'windows'}),fileMenu:{path:'src/changed.ts',x:10,y:20}}))).toContain('Show in File Explorer');
     expect(String(ChangeEvidenceDialog({review:{commits:[],ranges:[],difftool:'Glassbox',truncated:false,files:[]},fileMenu:{path:'src/file.ts',x:10,y:20,diff:'ticket'},platform:'macos'}))).toContain('data-component="repository-file-context-menu"');
+    const multiple=String(RepositoryStatusPopover({status:status(),fileMenu:{path:'src/changed.ts',paths:['src/changed.ts','src/staged.ts'],x:10,y:20,diff:'unstaged'}}));
+    expect(multiple).toMatch(/data-repository-file-action="show-diff"[^>]*><svg/);
+    expect(multiple).toMatch(/data-repository-file-action="open"[^>]*disabled/);
+    expect(multiple).toMatch(/data-repository-file-action="reveal"[^>]*disabled/);
   });
 
   it('renders an actionable error without inventing repository values',()=>{

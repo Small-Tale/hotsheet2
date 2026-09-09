@@ -523,9 +523,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   test files. The summary is an action that opens a repository-browser-style master/detail
   dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. The summary
   card grows to contain every count and test-change line even in the narrow inspector.
-  Selecting a file row or its visible ellipsis opens the same action menu as right-click:
-  Show Diff, Open, host-native reveal, and relative/absolute path copying. Show Diff opens
-  that file in the configured difftool across the complete span from the parent of the
+  Clicking a file row selects it; only its visible ellipsis or a right-click opens the
+  action menu. Platform-additive and range selection permit batch Show Diff and path-copy
+  operations, while single-file-only Open and host-native reveal actions are disabled for
+  a multi-selection. Show Diff opens the selected file or files in the configured difftool across the complete span from the parent of the
   oldest associated commit through the newest associated commit. The server derives
   and revalidates the exact path and range; arbitrary browser-supplied files are rejected.
   Classification runs against that committed range (not the browser's working tree) and is configurable through the effective project setting
@@ -1243,10 +1244,13 @@ counted Staged, Unstaged, Untracked, Conflicted, and Commits views. The detail c
 scrolls independently. File views preserve porcelain-v2 change kinds (including rename
 origins) as compact rounded Git-letter badges (`M`, `A`, `R`, `?`, and so on), and
 middle-truncate long paths while keeping their beginning and filename-visible ending.
-Every file row has a visible ellipsis. Single-click, Enter, the ellipsis, and right-click
-all open the same menu without launching a diff. Its Show Diff action opens an exact staged,
+Every file row has a visible ellipsis. Single-click and keyboard activation select a row;
+platform-additive and Shift range gestures build a multi-selection without opening a menu.
+Only the ellipsis and right-click open the shared action menu. Its Show Diff action opens exact staged,
 unstaged, or conflicted working-tree file diff in the configured difftool after fresh
-server-side status validation (and is disabled where no meaningful diff exists). Double-click
+server-side status validation (and is disabled where no meaningful diff exists). A batch
+selection opens each selected diff and copies relative or absolute paths as newline-delimited
+text; Open and reveal are disabled because they are single-file operations. Double-click
 remains a direct shortcut asking the host to open a currently reported file. The menu also
 copies relative or absolute paths, opens the file, or reveals it with host-specific
 Finder/File Explorer/file-manager wording. The server re-reads status and validates repository containment before any host

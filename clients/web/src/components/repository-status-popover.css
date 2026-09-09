@@ -10,9 +10,12 @@
 .repository-status-popover__detail { min-width: 0; min-height: 0; padding: var(--wa-space-l); overflow: auto; }
 .repository-status-popover__files { display: grid; min-width: 0; align-content: start; }
 .repository-status-popover__file { min-height: 2.75rem; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); border-radius: 0; }
+.repository-status-popover__file[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .repository-status-popover__file-status { display: grid; width: 1.25rem; height: 1.25rem; border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-2xs); font-weight: var(--wa-font-weight-semibold); line-height: 1; place-items: center; }
 .repository-status-popover__file > span:nth-child(2) { min-width: 0; }
-.repository-status-popover__file .menu-item__trailing svg { width: 1rem; height: 1rem; color: var(--wa-color-text-quiet); }
+.repository-status-popover__file-menu-trigger { display: grid; width: 1.75rem; height: 1.75rem; margin: -.25rem; border-radius: var(--wa-border-radius-circle); color: var(--wa-color-text-quiet); place-items: center; }
+.repository-status-popover__file-menu-trigger:hover, .repository-status-popover__file-menu-trigger:focus-visible { color: var(--wa-color-text-normal); background: var(--wa-color-neutral-fill-normal); outline: none; }
+.repository-status-popover__file-menu-trigger svg { width: 1rem; height: 1rem; }
 .repository-status-popover__path { display: flex; min-width: 0; font-size: var(--wa-font-size-s); font-weight: var(--wa-font-weight-normal); white-space: nowrap; }
 .repository-status-popover__path > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .repository-status-popover__path > span:last-child { max-width: 55%; overflow: hidden; flex: none; }
