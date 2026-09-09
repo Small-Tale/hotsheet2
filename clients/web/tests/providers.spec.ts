@@ -1246,8 +1246,8 @@ test('switches large ticket views without cloning every row into motion ghosts',
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(60);
   for(const [view,count] of [['Backlog',18],['Archive',675],['Queue',60]] as const){
-    const button=page.getByRole('button',{name:new RegExp(view)}),initial=await button.evaluate(element=>{const started=performance.now();(element as HTMLElement).click();const list=document.querySelector<HTMLElement>('[data-component="ticket-list"]');return{elapsed:performance.now()-started,rendered:list?.dataset.renderedCount,total:list?.dataset.totalCount,loading:Boolean(list?.querySelector('[data-ticket-progressive-loading="true"]'))}});await expect(page.getByRole('heading',{name:view})).toBeVisible();
-    expect(initial.elapsed).toBeLessThan(250);await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
+    const button=page.getByRole('button',{name:new RegExp(view)}),initial=await button.evaluate((element,itemId)=>{const started=performance.now();(element as HTMLElement).click();const list=document.querySelector<HTMLElement>('[data-component="ticket-list"]'),selected=document.querySelector<HTMLElement>(`[data-action="select-view"][data-item-id="${itemId}"]`);return{elapsed:performance.now()-started,selected:selected?.getAttribute('aria-current'),rendered:list?.dataset.renderedCount,total:list?.dataset.totalCount,loading:Boolean(list?.querySelector('[data-ticket-progressive-loading="true"]'))}},view==='Queue'?'all':view.toLowerCase());await expect(page.getByRole('heading',{name:view})).toBeVisible();
+    expect(initial.elapsed).toBeLessThan(250);expect(initial.selected).toBe('page');await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
     if(view==='Archive'){
       expect(initial).toMatchObject({rendered:'80',total:'675',loading:true});
       await page.screenshot({path:'/private/tmp/hs2-w52rer-progressive-archive.png'});
