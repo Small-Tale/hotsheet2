@@ -57,6 +57,8 @@ describe('AttachmentGallery',()=>{
     expect(markup).toContain('data-gallery-range-handle="end"');
     expect(markup).toContain('Annotation range start at 0:01');
     expect(markup).toContain('Annotation range end at 0:02');
+    expect(markup).toContain('--annotation-start:10%;--annotation-end:20%');
+    expect(markup).toContain('data-selected="true" data-has-range="true"');
     expect(markup).toContain('left:10%;top:20%;width:30%;height:25%');
     expect(markup).toContain('data-annotation-handle="se"');
     expect(markup).toContain('Check **this**');
@@ -73,7 +75,7 @@ describe('AttachmentGallery',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4',durationMs:10_000,annotations:[{id:'point',x:0,y:0,width:100,height:100,start_ms:2500,end_ms:2500,text:'Point'},{id:'range',x:0,y:0,width:100,height:100,start_ms:5000,end_ms:7000,text:'Range'}]}));
     expect(markup.match(/data-action="seek-gallery-annotation"/g)).toHaveLength(2);
     expect(markup).toContain('--annotation-start:25%');
-    expect(markup).toContain('--annotation-start:60%');
+    expect(markup).toContain('--annotation-start:50%;--annotation-end:70%');
   });
   it('lays playback and zoom actions in a real footer so fit and cover measurement exclude it',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4'}));

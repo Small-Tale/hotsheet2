@@ -26,9 +26,10 @@
 .attachment-gallery__playback { display:grid; width:2.5rem; height:2.5rem; padding:0; border:0; border-radius:50%; place-items:center; color:inherit; background:transparent; }
 .attachment-gallery__timeline-track { position:relative; display:grid; align-items:center; min-width:0; }
 .attachment-gallery__timeline-annotation { position:absolute; z-index:1; top:calc(-1 * var(--wa-space-s)); left:var(--annotation-start); width:var(--wa-space-l); height:var(--wa-space-3xs); padding:0; border:0; border-radius:var(--wa-border-radius-pill); background:var(--wa-color-neutral-on-loud); opacity:.78; transform:translateX(-50%); cursor:pointer; }
-.attachment-gallery__timeline-annotation[data-selected="true"] { background:var(--wa-color-brand-fill-loud); opacity:1; }
+.attachment-gallery__timeline-annotation[data-selected="true"] { opacity:1; box-shadow:0 0 0 1px color-mix(in srgb,var(--wa-color-neutral-fill-loud) 45%,transparent); }
+.attachment-gallery__timeline-annotation[data-selected="true"][data-has-range="true"] { width:max(var(--wa-space-l),calc(var(--annotation-end) - var(--annotation-start))); transform:none; }
 .attachment-gallery__timeline input { width:100%; margin:0; accent-color:var(--wa-color-brand-fill-loud); }
-.attachment-gallery__range-handle { position:absolute; z-index:3; top:50%; width:var(--wa-space-m); height:var(--wa-space-xl); padding:0; border:0; border-radius:0; color:var(--wa-color-brand-on-normal); background:transparent; font-family:var(--wa-font-family-mono); font-size:var(--wa-font-size-l); font-weight:var(--wa-font-weight-bold); line-height:1; transform:translate(-50%,-50%); cursor:ew-resize; touch-action:none; }
+.attachment-gallery__range-handle { position:absolute; z-index:3; top:50%; width:var(--wa-space-m); height:var(--wa-space-xl); padding:0; border:0; border-radius:0; color:var(--wa-color-neutral-on-loud); background:transparent; font-family:var(--wa-font-family-mono); font-size:var(--wa-font-size-l); font-weight:var(--wa-font-weight-bold); line-height:1; text-shadow:0 1px 2px var(--wa-color-neutral-fill-loud); transform:translate(-50%,-50%); cursor:ew-resize; touch-action:none; }
 .attachment-gallery__range-handle--start { text-align:right; }
 .attachment-gallery__range-handle--end { text-align:left; }
 .attachment-gallery__volume { position:relative; }

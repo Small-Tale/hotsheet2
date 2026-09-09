@@ -481,9 +481,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
   and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
   time ranges; only ranges at the current playhead appear over the media, while persistent
-  wireframe-style ticks remain over the scrubber. Selecting a visible annotation rectangle
-  adds direct square-bracket range handles to the timeline; those endpoints can be dragged
-  or adjusted with the arrow keys, replacing ambiguous toolbar chevrons.
+  white wireframe-style ticks remain over the scrubber. The selected annotation's presence
+  indicator spans at least its complete time range. Selecting a visible annotation rectangle
+  adds high-contrast white square-bracket range handles to the timeline; those endpoints can
+  be dragged or adjusted with the arrow keys, replacing ambiguous toolbar chevrons.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible
   before opening the media.
