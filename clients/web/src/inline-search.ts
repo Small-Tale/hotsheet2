@@ -1,11 +1,13 @@
 export type SearchDateField='created'|'completed'|'started'|'verified'|'archived'|'updated';
 export type SearchDateDirection='before'|'after';
 export type SearchPresence='attachment'|'media-annotation'|'commit';
+export type SearchLifecycle='up-next'|'active'|'open'|'not-started'|'started'|'completed'|'verified'|'backlog'|'backlogged'|'archived';
 
 export type InlineSearchToken=
   |{kind:'tag';value:string;raw:string;label:string}
   |{kind:'has';value:SearchPresence;raw:string;label:string}
   |{kind:'attachment';value:string;raw:string;label:string}
+  |{kind:'is';value:SearchLifecycle;raw:string;label:string}
   |{kind:'date';value:string;field:SearchDateField;direction:SearchDateDirection;raw:string;label:string};
 
 const dateFields:readonly SearchDateField[]=['created','completed','started','verified','archived','updated'];
@@ -29,6 +31,8 @@ export function parseSearchDate(value:string,locale?:string,now=new Date()):stri
     if(iso[6]){if(!validLocalDate(Number(iso[1]),Number(iso[2]),Number(iso[3]),12,0)||Number(iso[4])>23||Number(iso[5])>59)return undefined;const timestamp=Date.parse(source);return Number.isNaN(timestamp)?undefined:new Date(timestamp).toISOString()}
     return validLocalDate(Number(iso[1]),Number(iso[2]),Number(iso[3]),Number(iso[4]||0),Number(iso[5]||0))?.toISOString();
   }
+  const slashYmd=source.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?$/);
+  if(slashYmd)return validLocalDate(Number(slashYmd[1]),Number(slashYmd[2]),Number(slashYmd[3]),Number(slashYmd[4]||0),Number(slashYmd[5]||0))?.toISOString();
   const relative=source.match(/^(\d+(?:\.\d+)?)\s*(m|h|d|w)\s+ago$/i);
   if(relative){const units:{[key:string]:number}={m:60_000,h:3_600_000,d:86_400_000,w:604_800_000};return new Date(now.getTime()-Number(relative[1])*units[relative[2].toLowerCase()]).toISOString()}
   const numbers=[...source.matchAll(/\p{Number}+/gu)];
@@ -51,6 +55,8 @@ export function dateTokenFromInput(prefix:`${SearchDateField}-${SearchDateDirect
 
 export function tokenFromRaw(raw:string):InlineSearchToken|undefined{
   const source=raw.trim();
+  const lifecycle=source.match(/^is:(up-next|active|open|not-started|started|completed|verified|backlog|backlogged|archived)$/i);
+  if(lifecycle){const value=lifecycle[1].toLowerCase() as SearchLifecycle;return{kind:'is',value,raw:`is:${value}`,label:`is:${value}`}}
   const presence=source.match(/^has:(attachment|media-annotation|commit)$/i);
   if(presence){const value=presence[1].toLowerCase() as SearchPresence;return{kind:'has',value,raw:`has:${value}`,label:`has ${value.replace('-',' ')}`}}
   const tag=source.match(/^tag:("(?:\\.|[^"])*"|\S+)$/i);
@@ -66,7 +72,7 @@ export function tokenFromRaw(raw:string):InlineSearchToken|undefined{
 export function consumeSearchToken(input:string,force=false):{text:string;token?:InlineSearchToken}{
   const complete=force||/\s$/.test(input);
   const trimmed=input.trimEnd();
-  const starts=[...trimmed.matchAll(/(?:^|\s)(tag:|has:|attachment:|(?:created|completed|started|verified|archived|updated)-(?:before|after):)/gi)];
+  const starts=[...trimmed.matchAll(/(?:^|\s)(is:|tag:|has:|attachment:|(?:created|completed|started|verified|archived|updated)-(?:before|after):)/gi)];
   const start=starts.at(-1)?.index;
   if(start===undefined)return{text:input};
   const raw=trimmed.slice(start).trimStart();
@@ -90,7 +96,8 @@ export function activeDatePrefix(input:string):`${SearchDateField}-${SearchDateD
 /** Treat a complete token still in the editor as structured search without changing the UI. */
 export function effectiveSearch(input:string,tokens:readonly InlineSearchToken[]){
   const parsed=consumeSearchToken(input,true),next=parsed.token&&!tokens.some(token=>token.kind===parsed.token!.kind&&token.value===parsed.token!.value)?[...tokens,parsed.token]:[...tokens];
-  return{text:(parsed.token?parsed.text:input).trim(),tokens:next};
+  const text=(parsed.token?parsed.text:input).trim(),lifecycle=next.filter((token):token is Extract<InlineSearchToken,{kind:'is'}>=>token.kind==='is').map(token=>token.raw);
+  return{text:[text,...lifecycle].filter(Boolean).join(' '),tokens:next};
 }
 
 export function tokenQuery(tokens:readonly InlineSearchToken[]){

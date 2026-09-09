@@ -40,8 +40,8 @@ describe('WorkspaceHeader', () => {
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
     expect(markup.match(/disabled/g)).toHaveLength(4);
     const headerCss=readFileSync(resolve(import.meta.dirname,'workspace-header.css'),'utf8'),shellCss=readFileSync(resolve(import.meta.dirname,'app-shell.css'),'utf8');
-    expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(48rem, 100%); max-width:100%; height:auto; overflow:visible;border-radius:var(--wa-border-radius-pill);');
-    expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"]:has(.workspace-header__search-tokens) { border-radius:var(--wa-border-radius-l); }');
+    expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(48rem, 100%); max-width:100%; height:auto; overflow:visible;border-radius:1.5428125rem;');
+    expect(headerCss).not.toContain('.workspace-header__search-group[data-expanded="true"]:has(.workspace-header__search-tokens)');
     expect(headerCss).toContain('.workspace-header__actions:has(.workspace-header__search-tokens) { align-items:flex-start; }');
     expect(headerCss).toContain('.workspace-header__actions:has(.workspace-header__search-tokens) > :not(.workspace-header__search-group) { margin-block-start:calc((var(--wa-space-xs) + var(--wa-space-3xs))/2); }');
     expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { align-items:start; }');

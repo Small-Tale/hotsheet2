@@ -13,13 +13,21 @@ describe('inline advanced-search tokens',()=>{
     expect(consumeSearchToken('tag:client')).toEqual({text:'tag:client'});
     expect(consumeSearchToken('tag:client',true)).toMatchObject({text:'',token:{kind:'tag'}});
     expect(consumeSearchToken('has:attachment ')).toMatchObject({text:'',token:{kind:'has',value:'attachment'}});
+    expect(consumeSearchToken('is:up-next ')).toMatchObject({text:'',token:{kind:'is',value:'up-next'}});
+    expect(consumeSearchToken('is:active')).toEqual({text:'is:active'});
+    expect(consumeSearchToken('is:active',true)).toMatchObject({text:'',token:{kind:'is',value:'active'}});
+    expect(consumeSearchToken('updated-after:4h ')).toEqual({text:'updated-after:4h '});
+    expect(consumeSearchToken('updated-after:4h ago ')).toMatchObject({text:'',token:{kind:'date',raw:'updated-after:4h ago'}});
+    expect(consumeSearchToken('updated-after:2026/09/07',true)).toMatchObject({text:'',token:{kind:'date',raw:'updated-after:2026/09/07'}});
     expect(effectiveSearch('parser has:commit',[])).toMatchObject({text:'parser',tokens:[{kind:'has',value:'commit'}]});
+    expect(effectiveSearch('',[tokenFromRaw('is:active')!])).toMatchObject({text:'is:active',tokens:[{kind:'is',value:'active'}]});
   });
   it('normalizes machine-local and ISO dates and rejects impossible dates',()=>{
     expect(parseSearchDate('09/01/2026 11:05 AM','en-US')).toMatch(/^2026-09-01T/);
     expect(parseSearchDate('01/09/2026 23:05','en-GB')).toMatch(/^2026-09-01T/);
     expect(parseSearchDate('2026-09-01T11:05')).toMatch(/^2026-09-01T/);
     expect(parseSearchDate('2026-09-01T11:05:00Z')).toBe('2026-09-01T11:05:00.000Z');
+    expect(parseSearchDate('2026/09/07')).toBe(new Date(2026,8,7).toISOString());
     expect(parseSearchDate('4h ago','en-US',new Date('2026-09-01T12:00:00Z'))).toBe('2026-09-01T08:00:00.000Z');
     expect(parseSearchDate('31/02/2026','en-GB')).toBeUndefined();
   });
