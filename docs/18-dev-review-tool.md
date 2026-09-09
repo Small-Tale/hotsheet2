@@ -12,8 +12,9 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 
 ## Interaction contract
 
-- The main application enables a very small fixed `Feedback` launcher in the top-right
-  stacking layer for every development build. `?dev-review=false` is the sole explicit
+- The main application and UX Demo enable a very small fixed `Feedback` launcher in the
+  top-right top layer for every development build. It stays above application dialogs so
+  those surfaces can be selected and reported. `?dev-review=false` is the sole explicit
   opt-out; production builds never include the tool.
 - Activating it shows `New Ticket` plus a concise Option/Alt-drag hint that fades
   after a few seconds.
@@ -88,9 +89,9 @@ server, Tauri command, test fake, or another ticket-provider-aware bridge.
 
 ## UX demo and security boundary
 
-Open the main application normally, or use `/ux-demo?dev-review=1` for the component
-catalog (additional query parameters are fine), while running the Vite development
-server. Use `/?dev-review=false` only when the main-app overlay must be disabled. Both
+Open the main application or `/ux-demo` normally while running the Vite development
+server. Use `?dev-review=false` when either development entry point's overlay must be
+disabled; the UX Demo preserves that opt-out while navigating components. Both
 development entry points post to
 `POST /__hotsheet/dev-review/tickets`, which exists only in the development Hono app,
 requires the `x-hotsheet-dev-review: 1` header, and is absent from production builds.
@@ -99,7 +100,8 @@ stylesheet for generic surface, border, text, brand, focus, overlay, shadow, typ
 header, and footer semantics. Translucent capture effects are local compositions made with
 semantic tokens and `color-mix()`, not a separate literal palette.
 The catalog sidebar also exposes a development-only `Dev Review On/Off` toggle that
-updates the same query-backed state, so reviewers do not need to edit the URL.
+updates the same query-backed state, so reviewers do not need to edit the URL. Modal
+component demos retain an explicit reopen action after their dialog is dismissed.
 
 Each browser entry point is guarded by Vite's compile-time `import.meta.env.DEV` value
 and loads the tool through a dynamic import only when its development-mode activation

@@ -10,11 +10,11 @@ test('represents every advanced-search component with the real responsive overla
 test('navigates the catalog and preserves URL-addressable selection', async ({ page }) => {
   await page.goto('/ux-demo');
   await expect(page.getByRole('heading', { name: 'UX components' })).toBeVisible();
-  const reviewToggle = page.getByRole('button', { name: 'Dev Review Off' });
-  await reviewToggle.click();
-  await expect(page.getByRole('button', { name: 'Dev Review On' })).toBeVisible();
+  const reviewToggle = page.getByRole('button', { name: 'Dev Review On' });
   await expect(page.locator('.hs-dev-review')).toBeVisible();
-  await page.getByRole('button', { name: 'Dev Review On' }).click();
+  await reviewToggle.click();
+  await expect(page).toHaveURL('/ux-demo?dev-review=false');
+  await expect(page.getByRole('button', { name: 'Dev Review Off' })).toBeVisible();
   await expect(page.locator('.hs-dev-review')).toHaveCount(0);
   const catalog = page.getByRole('navigation');
   await expect(catalog.locator('[data-item-id="global-search"]')).not.toHaveCSS('color', 'rgb(174, 174, 178)');
@@ -28,7 +28,7 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   expect(itemBox!.x).toBeCloseTo(listBox!.x, 0);
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
   await page.getByRole('navigation').getByRole('button', { name: /TicketRow/ }).click();
-  await expect(page).toHaveURL('/ux-demo?component=ticket-row');
+  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=ticket-row');
   await expect(page.getByRole('heading', { name: 'TicketRow', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'TicketRow demo' })).toBeVisible();
   const catalogTop = await page.getByRole('complementary', { name: 'Component catalog' }).evaluate(node => node.getBoundingClientRect().top);
@@ -42,12 +42,32 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(relationships.locator('.select__group').nth(1)).toHaveClass(/select__group--separated/);
   await expect(relationships.locator('wa-option', { hasText: 'TagChip' })).toHaveCount(1);
   await relationships.evaluate((node: HTMLElement & { value: string }) => { node.value = 'tag-chip'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(page).toHaveURL('/ux-demo?component=tag-chip');
+  await expect(page).toHaveURL('/ux-demo?dev-review=false&component=tag-chip');
   await expect(page.locator('.demo-relationships .select__group').nth(0)).toHaveAttribute('aria-label', 'Used by');
   await expect(page.locator('.demo-relationships wa-option', { hasText: 'TicketRow' })).toHaveCount(1);
   await page.locator('.demo-relationships').evaluate((node: HTMLElement & { value: string }) => { node.value = 'ticket-row'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'TagChip', exact: true })).toBeVisible();
+});
+
+test('reopens dialog demos and keeps Feedback above the modal top layer',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto('/ux-demo?component=hs1-migration-dialog');
+  const migration=page.locator('[data-component="hs1-migration-dialog"]');
+  await expect(migration).toHaveJSProperty('open',true);
+  const feedback=page.locator('.hs-dev-review__feedback');
+  await expect(feedback).toBeVisible();
+  expect(await feedback.evaluate(node=>{const box=node.getBoundingClientRect(),top=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);return top===node||Boolean(top?.closest('.hs-dev-review__feedback'))})).toBe(true);
+  await migration.getByRole('button',{name:'Not now'}).click();
+  await expect(migration).toHaveJSProperty('open',false);
+  await page.getByRole('button',{name:'Open import dialog'}).click();
+  await expect(migration).toHaveJSProperty('open',true);
+  await page.mouse.move(1000,700);
+  await page.waitForTimeout(200);
+  await page.screenshot({path:'/private/tmp/hs2-9a6ssk-dialog-reopened-wide.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await expect(feedback).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-9a6ssk-dialog-feedback-narrow.png',fullPage:true});
 });
 
 test('represents the shared repository-status composition in the UX catalog',async({page})=>{

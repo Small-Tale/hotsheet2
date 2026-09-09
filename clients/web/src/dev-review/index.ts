@@ -5,6 +5,7 @@ import html2canvas from 'html2canvas';
 import { normalizeCaptureColors } from './capture-colors';
 import { createFrameBatcher } from './frame-batcher';
 import { clampRectToViewport, intersectRectWithViewport, normalizeRect, type ResizeHandle, resizeRect, type ReviewRect,translateAnchoredRect } from './geometry';
+import { promoteDevReviewPopover } from './request';
 
 export interface ReviewCapture { id: string; filename: string; dataUrl: string; width: number; height: number }
 export interface ReviewAttachment { id: string; filename: string; dataUrl: string; mimeType: string; size: number }
@@ -47,6 +48,32 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   root.innerHTML = '<div class="hs-dev-review__toolbar"><button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button></div>';
   doc.body.append(root);
   const toolbar = root.querySelector<HTMLElement>('.hs-dev-review__toolbar')!;
+  toolbar.setAttribute('popover', 'manual');
+  const promoteToolbar = () => { promoteDevReviewPopover(toolbar); };
+  let toolbarFrame:number|undefined;
+  const placeToolbar = () => {
+    toolbarFrame=undefined;
+    const nativeDialogs=[...doc.querySelectorAll<HTMLElement>('dialog[open]')];
+    const componentDialogs=[...doc.querySelectorAll<HTMLElement>('wa-dialog[open]')];
+    const host=nativeDialogs.at(-1)??componentDialogs.at(-1)??root;
+    if(toolbar.parentElement!==host)host.append(toolbar);
+    promoteToolbar();
+  };
+  const promoteToolbarAfterDialog = () => {
+    if(toolbarFrame!==undefined)view.cancelAnimationFrame(toolbarFrame);
+    toolbarFrame=view.requestAnimationFrame(placeToolbar);
+  };
+  placeToolbar();
+  doc.addEventListener('wa-show', promoteToolbarAfterDialog, true);
+  doc.addEventListener('wa-hide', promoteToolbarAfterDialog, true);
+  const dialogObserver=new view.MutationObserver(records=>{
+    const dialogTreeChanged=records.some(record=>record.type==='attributes'||[...record.addedNodes,...record.removedNodes].some(node=>{
+      const element=node as Element;
+      return typeof element.matches==='function'&&(element.matches('dialog,wa-dialog')||Boolean(element.querySelector('dialog,wa-dialog')));
+    }));
+    if(!toolbar.isConnected||dialogTreeChanged)promoteToolbarAfterDialog();
+  });
+  dialogObserver.observe(doc.documentElement,{attributes:true,attributeFilter:['open'],childList:true,subtree:true});
 
   const setModifiers = (alt: boolean, shift = false) => {
     deleteModifierHeld = enabled && alt && shift;
@@ -258,7 +285,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     }
     if (target.closest('[data-action="new-ticket"]')) void openDialog();
   };
-  root.addEventListener('click', onRootClick);
+  toolbar.addEventListener('click', onRootClick);
 
   const onPointerDown = (event: PointerEvent) => {
     if (!enabled || event.button !== 0) return;
@@ -327,5 +354,5 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   view.addEventListener('resize', onScroll);
   render();
 
-  return { destroy() { if (hintTimer) view.clearTimeout(hintTimer); if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame); geometryBatch.cancel(); setModifiers(false); root.removeEventListener('click', onRootClick); doc.removeEventListener('pointerdown', onPointerDown, true); doc.removeEventListener('keydown', onKeyChange, true); doc.removeEventListener('keyup', onKeyChange, true); doc.removeEventListener('scroll', onScroll, true); view.removeEventListener('resize', onScroll); view.removeEventListener('blur', onWindowBlur); view.removeEventListener('pointermove', onPointerMove, true); view.removeEventListener('pointerup', onPointerUp, true); root.remove(); } };
+  return { destroy() { if (hintTimer) view.clearTimeout(hintTimer); if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame); if(toolbarFrame!==undefined)view.cancelAnimationFrame(toolbarFrame); dialogObserver.disconnect(); geometryBatch.cancel(); setModifiers(false); toolbar.removeEventListener('click', onRootClick); doc.removeEventListener('wa-show', promoteToolbarAfterDialog, true); doc.removeEventListener('wa-hide', promoteToolbarAfterDialog, true); doc.removeEventListener('pointerdown', onPointerDown, true); doc.removeEventListener('keydown', onKeyChange, true); doc.removeEventListener('keyup', onKeyChange, true); doc.removeEventListener('scroll', onScroll, true); view.removeEventListener('resize', onScroll); view.removeEventListener('blur', onWindowBlur); view.removeEventListener('pointermove', onPointerMove, true); view.removeEventListener('pointerup', onPointerUp, true); toolbar.remove(); root.remove(); } };
 }

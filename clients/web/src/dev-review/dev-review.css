@@ -1,12 +1,12 @@
 @import '../components/dialog-layout.css';
 
 .hs-dev-review { position: fixed; z-index: 2147483647; inset: 0; pointer-events: none; font: var(--wa-font-size-xs)/1.35 system-ui, sans-serif; color: var(--wa-color-text-normal); }
-.hs-dev-review__toolbar { position: absolute; top: 6px; right: 6px; display: flex; padding: 3px; border: 1px solid color-mix(in srgb, var(--wa-color-neutral-on-quiet) 35%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--wa-color-surface-default) 94%, transparent); box-shadow: var(--wa-shadow-s); gap: 3px; pointer-events: auto; backdrop-filter: blur(12px); }
-.hs-dev-review button { height: 22px; min-height: 22px; padding: 0 6px; box-sizing: border-box; border: 0; border-radius: 5px; color: var(--wa-color-neutral-on-normal); background: transparent; font: inherit; font-size: var(--wa-font-size-xs); line-height: 22px; cursor: pointer; }
+.hs-dev-review__toolbar { position: fixed; top: 6px; right: 6px; bottom: auto; left: auto; display: flex; width: max-content; margin: 0; padding: 3px; border: 1px solid color-mix(in srgb, var(--wa-color-neutral-on-quiet) 35%, transparent); border-radius: 8px; color: var(--wa-color-text-normal); background: color-mix(in srgb, var(--wa-color-surface-default) 94%, transparent); box-shadow: var(--wa-shadow-s); font: var(--wa-font-size-xs)/1.35 system-ui, sans-serif; gap: 3px; pointer-events: auto; backdrop-filter: blur(12px); }
+.hs-dev-review button, .hs-dev-review__toolbar button { height: 22px; min-height: 22px; padding: 0 6px; box-sizing: border-box; border: 0; border-radius: 5px; color: var(--wa-color-neutral-on-normal); background: transparent; font: inherit; font-size: var(--wa-font-size-xs); line-height: 22px; cursor: pointer; }
 .hs-dev-review__dialog button { min-height: 2.25rem; padding: 0 var(--wa-space-m); box-sizing: border-box; border: 0; border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-normal); background: transparent; font: inherit; font-weight: var(--wa-font-weight-semibold); cursor: pointer; }
-.hs-dev-review button:hover, .hs-dev-review__dialog button:hover { background: var(--wa-color-brand-fill-quiet); }
+.hs-dev-review button:hover, .hs-dev-review__toolbar button:hover, .hs-dev-review__dialog button:hover { background: var(--wa-color-brand-fill-quiet); }
 .hs-dev-review button:focus-visible, .hs-dev-review__dialog button:focus-visible, .hs-dev-review__dialog textarea:focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 1px; }
-.hs-dev-review button:disabled, .hs-dev-review__dialog button:disabled { color: var(--wa-color-neutral-on-quiet); cursor: wait; }
+.hs-dev-review button:disabled, .hs-dev-review__toolbar button:disabled, .hs-dev-review__dialog button:disabled { color: var(--wa-color-neutral-on-quiet); cursor: wait; }
 .hs-dev-review__feedback[aria-pressed="true"] { color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); }
 .hs-dev-review__hint { position: absolute; top: 36px; right: 6px; padding: 4px 7px; border-radius: 5px; color: var(--wa-color-neutral-on-loud); background: color-mix(in srgb, var(--wa-color-neutral-on-normal) 82%, transparent); font-size: var(--wa-font-size-2xs); pointer-events: none; }
 .hs-dev-review__hint { transition: opacity .35s ease, transform .35s ease; }

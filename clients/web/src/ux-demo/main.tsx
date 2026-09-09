@@ -66,6 +66,7 @@ import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
+import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { AIConversationDemo, aiConversationDemoOpen, aiConversationDraft, aiConversationScenario, AIConversationSettings } from './ai-conversation-demo';
 import {
@@ -122,7 +123,7 @@ import {
   TicketReaderDemo,
 } from './content-components-demo';
 import { ContentTransitionDemo, ContentTransitionSettings, transitionDirection, transitionSide, transitionStyle } from './content-transition-demo';
-import { DialogHeaderDemo, Hs1MigrationBannerDemo, Hs1MigrationDialogDemo, ValueTableDemo } from './dialog-layout-demo';
+import { closeHs1MigrationDialogDemo, DialogHeaderDemo, Hs1MigrationBannerDemo, Hs1MigrationDialogDemo, openHs1MigrationDialogDemo, ValueTableDemo } from './dialog-layout-demo';
 import { MenuHeaderDemo } from './menu-header-demo';
 import { MenuItemDemo } from './menu-item-demo';
 import {
@@ -263,8 +264,7 @@ const fromUrl = () =>
 const selectedId = signal(findDemo(fromUrl())?.id ?? defaultDemo);
 const settingsOpen = signal(false);
 const devReviewOn = signal(
-  import.meta.env.DEV &&
-    new URL(location.href).searchParams.get('dev-review') === '1',
+  devReviewRequested(location.href, import.meta.env.DEV),
 );
 const demoModified = signal<Record<string, string>>({});
 function updateDemoModifiedWhenSelectsClose(value: Record<string, string>): void {
@@ -733,8 +733,8 @@ const setDevReview = async (active: boolean) => {
   devReviewController = undefined;
   devReviewOn.value = active;
   const url = new URL(location.href);
-  if (active) url.searchParams.set('dev-review', '1');
-  else url.searchParams.delete('dev-review');
+  if (active) url.searchParams.delete('dev-review');
+  else url.searchParams.set('dev-review', 'false');
   history.replaceState(null, '', url);
   if (active)
     devReviewController = await import('../dev-review').then(
@@ -768,8 +768,12 @@ function selectDemo(id: string, push = true): void {
   settingsOpen.value = false;
   contextMenu.value = undefined;
   terminalDashboardContextMenu.value = undefined;
-  if (push)
-    history.pushState(null, '', `/ux-demo?component=${encodeURIComponent(id)}`);
+  if (push) {
+    const url = new URL(location.href);
+    url.pathname = '/ux-demo';
+    url.searchParams.set('component', id);
+    history.pushState(null, '', url);
+  }
 }
 
 delegate(root, 'click', '[data-demo-id]', (event, target) => {
@@ -788,6 +792,9 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
 });
+delegate(root, 'click', '[data-action="open-hs1-migration-demo"]', openHs1MigrationDialogDemo);
+delegate(root, 'click', '[data-action="dismiss-hs1-migration"]', closeHs1MigrationDialogDemo);
+delegate(root, 'wa-hide', '[data-component="hs1-migration-dialog"]', closeHs1MigrationDialogDemo);
 function showTerminalDashboardContextMenu(target: HTMLElement, x: number, y: number): void {
   terminalDashboardContextMenu.value = {
     key: target.dataset.terminalKey ?? target.dataset.itemId ?? '',
