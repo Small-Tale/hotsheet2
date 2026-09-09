@@ -7,13 +7,15 @@ import { applyWorkspaceSortDirection, nextWorkspaceSort, WorkspaceHeader, type W
 
 describe('WorkspaceHeader', () => {
   it('exposes an accessible selected view mode and optional search field', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'client', sort: 'priority', sortDirection: 'descending' }));
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'tag:cl', searchTags:['server'],searchTagSuggestions:['client'], sort: 'priority', sortDirection: 'descending' }));
     expect(markup).not.toContain('All Tickets');
     expect(markup).toContain('data-component="toolbar-text" data-size="large">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
     expect(markup).toContain('name="workspace-search"');
-    expect(markup).toContain('value="client"');
+    expect(markup).toContain('value="tag:cl"');
+    expect(markup).toContain('>tag:server</span>');
+    expect(markup).toContain('data-action="select-workspace-search-tag" data-tag="client"');
     expect(markup).toContain('name="workspace-sort"');
     expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
     expect(markup).toContain('<wa-option value="priority"');
@@ -23,9 +25,9 @@ describe('WorkspaceHeader', () => {
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
     expect(markup).toContain('slot="start"');
     expect(markup).not.toContain('data-action="open-workspace-search"');
-    expect(markup).toContain('data-action="open-global-search"');
+    expect(markup).not.toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
-    expect(markup.match(/disabled/g)).toHaveLength(5);
+    expect(markup.match(/disabled/g)).toHaveLength(4);
   });
 
   it.each([

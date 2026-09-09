@@ -3,7 +3,7 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
-import { ArrowDown, ArrowDownAZ, ArrowDownWideNarrow, ArrowUp, ArrowUpAZ, ArrowUpNarrowWide, Bell, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, SlidersHorizontal, Star, X } from 'lucide';
+import { ArrowDown, ArrowDownAZ, ArrowDownWideNarrow, ArrowUp, ArrowUpAZ, ArrowUpNarrowWide, Bell, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { Select, type SelectChoice } from './select';
@@ -19,6 +19,8 @@ export interface WorkspaceHeaderProps {
   mode: WorkspaceViewMode;
   searchOpen?: boolean;
   searchQuery?: string;
+  searchTags?: readonly string[];
+  searchTagSuggestions?: readonly string[];
   sort?: WorkspaceSort;
   sortDirection?: WorkspaceSortDirection;
   controlsVisible?: boolean;
@@ -68,7 +70,7 @@ export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSo
   return sortTriggerIcons[sort][direction];
 }
 
-export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
+export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', searchTags=[],searchTagSuggestions=[],sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   const ticketActionsDisabled=projectActionsDisabled||selectedTicketCount===0||!selectedTicketsMutable;
   const directionIcon=sortDirection==='ascending'?ArrowUp:ArrowDown,directionName=sortDirection==='ascending'?'arrow-up':'arrow-down';
@@ -90,18 +92,15 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
       </ToolbarControlGroup>
       <ToolbarControlGroup className="workspace-header__search-group" expanded={searchOpen} single>
         {searchOpen
-          ? <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder="Search tickets" value={searchQuery} disabled={projectActionsDisabled} autofocus><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span>{searchQuery && <button type="button" slot="end" class="workspace-header__search-clear" data-action="clear-workspace-search" aria-label="Clear search" title="Clear search"><LucideIcon icon={X} name="x" /></button>}</wa-input>
+          ? <>{searchTags.map(tag=><span class="workspace-header__search-token" data-component="filter-chip"><span>tag:{tag}</span><button type="button" data-action="remove-workspace-search-tag" data-tag={tag} aria-label={`Remove tag ${tag}`}><LucideIcon icon={X} name="x"/></button></span>)}<wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder={searchTags.length?'Add search…':'Search tickets or type tag:'} value={searchQuery} disabled={projectActionsDisabled} autofocus><span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span>{(searchQuery||searchTags.length>0) && <button type="button" slot="end" class="workspace-header__search-clear" data-action="clear-workspace-search" aria-label="Clear search" title="Clear search"><LucideIcon icon={X} name="x" /></button>}</wa-input>{searchTagSuggestions.length>0&&<div class="workspace-header__search-suggestions" role="listbox" aria-label="Matching tags">{searchTagSuggestions.map(tag=><button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>tag:{tag}</button>)}</div>}</>
           : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
-      </ToolbarControlGroup>
-      <ToolbarControlGroup className="workspace-header__advanced-search-group" single>
-        <wa-button appearance="plain" disabled={projectActionsDisabled} data-action="open-global-search" aria-label="Advanced search" title="Advanced search (⌘K)"><LucideIcon icon={SlidersHorizontal} name="sliders-horizontal" /></wa-button>
       </ToolbarControlGroup>
     </div>;
 }
 
-export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '', sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({ projectName, mode, searchOpen = false, searchQuery = '',searchTags=[],searchTagSuggestions=[], sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort), controlsVisible = true, notificationCount = 0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: WorkspaceHeaderProps) {
   return <header class="workspace-header" data-component="workspace-header" data-controls-visible={String(controlsVisible)}>
     <WorkspaceIdentity projectName={projectName} />
-    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} selectedTicketCount={selectedTicketCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} selectedTicketsMutable={selectedTicketsMutable} />}
+    {controlsVisible && <WorkspaceControls mode={mode} searchOpen={searchOpen} searchQuery={searchQuery} searchTags={searchTags} searchTagSuggestions={searchTagSuggestions} sort={sort} sortDirection={sortDirection} notificationCount={notificationCount} selectedTicketCount={selectedTicketCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible} selectedTicketsMutable={selectedTicketsMutable} />}
   </header>;
 }

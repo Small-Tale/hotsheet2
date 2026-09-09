@@ -362,6 +362,33 @@ fn fts_matches_prefixes_across_identity_and_content() {
 }
 
 #[test]
+fn fts_matches_attachment_filenames() {
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    let mut ticket = store.read_ticket(&id).unwrap();
+    ticket.attachments.push(hotsheet_model::Attachment {
+        id: ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1"),
+        filename: "server-details-narrow.png".into(),
+        created_at: Timestamp::new("2026-08-19T00:02:00Z"),
+        batch_id: None,
+        batch_label: None,
+        actor: None,
+        purpose: None,
+        annotations: vec![],
+    });
+    ix.upsert(&ticket, "first.md", "with-attachment").unwrap();
+
+    let rows = ix
+        .query(&TicketQuery {
+            text: Some("server-details".into()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].slug, ticket.slug);
+}
+
+#[test]
 fn upsert_updates_the_hash_and_delete_removes() {
     let (_d, store, ix) = seeded();
     let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");

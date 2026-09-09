@@ -29,11 +29,12 @@ queries the host.
 Search scope is independent of the currently selected sidebar view. An ordinary query
 searches the normal working lifecycle set even when the user opened it from a narrower
 view. Exact-slug lookup can surface a matching Backlog, Archive, or Deleted ticket so a
-known identity is never hidden by view scope. Advanced search exposes explicit scope and
-filter chips for including normally excluded lifecycle states rather than HS1's special
-inline “Include N …” result rows. Ticket-reference mentions may participate in results
-only when the client labels why the ticket matched. The shipped client surface and its
-saved-view handoff are covered by HS2-383D6K.
+known identity is never hidden by view scope. The ordinary toolbar search accepts inline
+field tokens: typing `tag:` offers matching project tags, and selecting or completing one
+turns it into a removable chip without opening a separate advanced-search dialog.
+Ticket-reference mentions may participate in results only when the client labels why the
+ticket matched. Full-text indexing includes attachment filenames alongside slug, title,
+tags, details, and notes.
 
 **The invariant (repeated because it's load-bearing): the index is a disposable
 cache.** It can be deleted and rebuilt from configured providers. For the git

@@ -453,17 +453,14 @@ coverage.
 
 ### 3.4 Search and filtering — feature floor
 
-The advanced search and active-filter surface is built under HS2-383D6K; the later
-custom query-builder/editor is tracked separately by HS2-G7FWSS. The basic surface
-dispatches `hotsheet:open-query-builder` with its query, scope, and filters as the
-stable handoff contract.
+The inline search and active-filter surface is built under HS2-383D6K; the later custom
+query-builder/editor is tracked separately by HS2-G7FWSS. Advanced constraints belong in
+the ordinary toolbar search rather than a separate launcher and dialog.
 
-- `GlobalSearchOverlay` — **built**: responsive global dialog over provider-indexed results.
-- `SearchQueryInput` — **built**: full-text input with an in-place loading affordance.
-- `SearchScopePicker` — **built**: working tickets, current view, or every lifecycle state.
-- `SearchSuggestionList` — **built**: discoverable state and lifecycle constraints.
+- `SearchQueryInput` — **built**: full-text toolbar input with inline `field:value` parsing.
+- `SearchSuggestionList` — **built**: typing `tag:` offers matching project tags in place.
 - `SearchResultRow` — **built**: provider-qualified result with explicit match reason.
-- `ActiveFilterBar` and removable `FilterChip` — **built**.
+- `ActiveFilterBar` and removable `FilterChip` — **built** into the toolbar search.
 - `SavedViewAction` — **built**: hands the active query to the later view editor.
 
 Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and

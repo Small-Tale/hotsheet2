@@ -216,6 +216,9 @@ fn matches_text(t: &Ticket, needle_lower: &str) -> bool {
         || t.notes
             .iter()
             .any(|n| n.text.to_lowercase().contains(needle_lower))
+        || t.attachments
+            .iter()
+            .any(|attachment| attachment.filename.to_lowercase().contains(needle_lower))
 }
 
 fn sort_tickets(tickets: &mut [Ticket], key: SortKey) {
