@@ -16,6 +16,25 @@ export interface RenderStormState {
   reported: boolean;
 }
 
+export interface RenderStormContext {
+  initialProjectRestoreComplete: boolean;
+  foregroundLoading: boolean;
+  progressiveTicketRendering: boolean;
+  backgroundProjectRefresh: boolean;
+  activeToolTurn: boolean;
+}
+
+/** Classifies render-heavy work that is expected and therefore must stay in the
+ * diagnostic log without creating an automatic stability ticket. */
+export function renderStormSuppressionReason(context: RenderStormContext): string | undefined {
+  if (!context.initialProjectRestoreComplete) return 'initial-project-restore';
+  if (context.foregroundLoading) return 'foreground-loading';
+  if (context.progressiveTicketRendering) return 'progressive-ticket-rendering';
+  if (context.backgroundProjectRefresh) return 'background-project-refresh';
+  if (context.activeToolTurn) return 'active-tool-turn';
+  return undefined;
+}
+
 export interface DismissalThrashState {
   dismissals: number[];
   reported: boolean;
@@ -55,12 +74,13 @@ export function advanceDismissalThrash(state: DismissalThrashState, now: number)
   return { dismissals, reported: thrashing, shouldReport: thrashing && !state.reported };
 }
 
-/** Tracks one continuous root-render storm and rearms only after a quiet window. */
+/** Tracks root-render storms once per page lifecycle. A quiet interval clears stale
+ * passes, but it must not create another ticket for an already-reported signature. */
 export function advanceRenderStorm(state: RenderStormState, now: number, suppressed = false): RenderStormState & { shouldReport: boolean } {
-  if (suppressed) return { passes: [], reported: false, shouldReport: false };
+  if (suppressed) return { passes: [], reported: state.reported, shouldReport: false };
   const passes = [...state.passes.filter(value => now - value <= RENDER_STORM_WINDOW_MS), now];
   const storming = passes.length >= RENDER_STORM_COUNT;
-  return { passes, reported: storming, shouldReport: storming && !state.reported };
+  return { passes, reported: state.reported || storming, shouldReport: storming && !state.reported };
 }
 
 function encodeJson(value: unknown): string {
