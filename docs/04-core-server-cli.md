@@ -336,6 +336,10 @@ idempotent last-write-wins, so concurrent browser backfills are harmless; the ca
 the SHA-256 digest of the source video rather than a platform path. A server may fill a
 miss with an available `ffmpeg`, but missing or unsuccessful `ffmpeg` is still `404`, not
 a dependency/setup error.
+CLI uploads accept `--actor-role human|ai|system|unknown` plus optional `--actor-id` and
+`--actor-name`. Automated evidence must declare its actual role instead of relying on the
+legacy-safe `unknown` default. `hotsheet attachment-actor <ticket> <attachment-id>…`
+repairs provenance on existing attachments without changing their batch, label, or purpose.
 `--blocked-by` (repeatable, on `new` and `edit`) takes a slug **or** ULID and is
 resolved to a ULID, rejecting unknown tickets and self-references; on `edit` a present
 `--blocked-by` **replaces** the set and `--clear-blocked-by` empties it. The same edge

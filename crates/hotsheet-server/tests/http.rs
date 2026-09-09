@@ -1601,14 +1601,21 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
             .oneshot(authed(
                 "PATCH",
                 &format!("/checkouts/combo/tickets/{slug}/attachments"),
-                Some(&format!(r#"{{"attachment_ids":["{video_attachment_id}"],"batch_id":"fix-2","batch_label":"Corrected fix","actor":{{"identity":"codex","role":"ai"}},"purpose":"correctness_evidence"}}"#)),
+                Some(&format!(r#"{{"attachment_ids":["{video_attachment_id}"],"batch_id":"fix-2","batch_label":"Automated diagnostics","actor":{{"identity":"ui-stability-diagnostics","role":"system"}},"purpose":"correctness_evidence"}}"#)),
             ))
             .await
             .unwrap(),
     )
     .await;
-    assert_eq!(regrouped["attachments"][0]["batch_label"], "Corrected fix");
-    assert_eq!(regrouped["attachments"][0]["actor"]["identity"], "codex");
+    assert_eq!(
+        regrouped["attachments"][0]["batch_label"],
+        "Automated diagnostics"
+    );
+    assert_eq!(
+        regrouped["attachments"][0]["actor"]["identity"],
+        "ui-stability-diagnostics"
+    );
+    assert_eq!(regrouped["attachments"][0]["actor"]["role"], "system");
     let renamed = body_json(
         app.clone()
             .oneshot(authed(

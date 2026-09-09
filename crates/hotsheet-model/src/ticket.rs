@@ -101,6 +101,7 @@ pub struct AttachmentActor {
 pub enum AttachmentActorRole {
     Human,
     Ai,
+    System,
     Unknown,
 }
 

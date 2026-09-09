@@ -8,7 +8,8 @@ import { clampRectToViewport, intersectRectWithViewport, normalizeRect, type Res
 
 export interface ReviewCapture { id: string; filename: string; dataUrl: string; width: number; height: number }
 export interface ReviewAttachment { id: string; filename: string; dataUrl: string; mimeType: string; size: number }
-export interface DevReviewSubmission { notes: string; captures: ReviewCapture[]; attachments: ReviewAttachment[]; pageUrl: string; viewport: { width: number; height: number } }
+export type DevReviewActorRole = 'human' | 'ai' | 'system';
+export interface DevReviewSubmission { notes: string; captures: ReviewCapture[]; attachments: ReviewAttachment[]; actorRole: DevReviewActorRole; pageUrl: string; viewport: { width: number; height: number } }
 export interface DevReviewResult { slug: string; url?: string }
 export interface DevReviewOptions {
   submit: (submission: DevReviewSubmission) => Promise<DevReviewResult>;
@@ -230,7 +231,7 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
         const submissionAttachments = [...attachments];
         const diagnosticToggle = dialog.querySelector<HTMLInputElement>('.hs-dev-review__diagnostics input');
         if (diagnosticToggle?.checked && options.diagnostics && submissionAttachments.length < 20) submissionAttachments.push(options.diagnostics());
-        const result = await options.submit({ notes: textarea.value.trim(), captures, attachments: submissionAttachments, pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
+        const result = await options.submit({ notes: textarea.value.trim(), captures, attachments: submissionAttachments, actorRole: 'human', pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
         status.textContent = `${result.slug} created.`;
         leaveFeedback();
         view.setTimeout(() => { dialog.close(); }, 500);

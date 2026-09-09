@@ -11,7 +11,7 @@ import { createCliDevReviewSubmitter, validateDevReviewSubmission } from './serv
 
 const capture = { id: '1', filename: '../review.png', dataUrl: `data:image/png;base64,${Buffer.from('png').toString('base64')}`, width: 10, height: 10 };
 const attachment = { id: 'file-1', filename: '../notes.txt', dataUrl: `data:text/plain;base64,${Buffer.from('notes').toString('base64')}`, mimeType: 'text/plain', size: 5 };
-const submission = { notes: 'Button overlaps heading', captures: [capture], attachments: [attachment], pageUrl: 'http://localhost/ux-demo', viewport: { width: 1200, height: 800 } };
+const submission = { notes: 'Button overlaps heading', captures: [capture], attachments: [attachment], actorRole: 'human' as const, pageUrl: 'http://localhost/ux-demo', viewport: { width: 1200, height: 800 } };
 
 describe('dev review tool', () => {
   it('coalesces bursty pointer geometry work into one animation-frame update', () => {
@@ -47,7 +47,9 @@ describe('dev review tool', () => {
     const validated = validateDevReviewSubmission(submission);
     expect(validated.captures[0].filename).toBe('review.png');
     expect(validated.attachments[0].filename).toBe('notes.txt');
+    expect(validateDevReviewSubmission({...submission,actorRole:'system'}).actorRole).toBe('system');
     expect(() => validateDevReviewSubmission({ ...submission, notes: ' ' })).toThrow(/notes/);
+    expect(() => validateDevReviewSubmission({ ...submission, actorRole: 'unknown' as never })).toThrow(/actor role/);
     expect(() => validateDevReviewSubmission({ ...submission, captures: [{ ...capture, dataUrl: 'data:image/jpeg;base64,x' }] })).toThrow(/PNG/);
     expect(() => validateDevReviewSubmission({ ...submission, attachments: [{ ...attachment, dataUrl: 'not-data' }] })).toThrow(/Attachment/);
   });
@@ -67,7 +69,7 @@ describe('dev review tool', () => {
     const temp = await mkdtemp(resolve(tmpdir(), 'dev-review-test-'));
     const cli = resolve(temp, 'fake-hotsheet');
     const log = resolve(temp, 'calls.log');
-    await writeFile(cli, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nif [ "$3" = "new" ]; then printf 'Created HS2-REVIEW (ticket.md)\\n'; fi\nif [ "$3" = "attach" ] && [ ! -f "$5" ]; then exit 9; fi\n`);
+    await writeFile(cli, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nif [ "$3" = "new" ]; then printf 'Created HS2-REVIEW (ticket.md)\\n'; fi\nif [ "$3" = "attach" ] && [ ! -f "$7" ]; then exit 9; fi\n`);
     await chmod(cli, 0o755);
     try {
       const finalize = vi.fn(async () => undefined);
@@ -78,6 +80,7 @@ describe('dev review tool', () => {
       expect(calls).toContain('new --title=UX feedback: - Cancel is too close to the countdown.');
       expect(calls).toContain('--details=- Cancel is too close to the countdown.');
       expect(calls).toContain('attach HS2-REVIEW');
+      expect(calls.match(/--actor-role human/g)).toHaveLength(2);
       expect(calls.match(/attach HS2-REVIEW/g)).toHaveLength(2);
       expect(finalize).toHaveBeenCalledWith(resolve(temp, 'store'), 'HS2-REVIEW');
     } finally { await rm(temp, { recursive: true, force: true }); }

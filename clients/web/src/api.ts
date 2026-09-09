@@ -8,7 +8,7 @@ export interface GitHubAuthStart {session_id:string;user_code:string;verificatio
 export type GitHubAuthStatus={state:'pending'}|{state:'authorized';credential_reference:string}|{state:'denied'|'expired'|'cancelled'}|{state:'error';message:string}
 export interface Note {id:string;kind:'regular'|'activity'|'feedback_needed'|'feedback_draft'|'status';created_at:string;edited_at:string;summary?:string;text:string}
 export interface MediaAnnotation {id:string;x:number;y:number;width:number;height:number;start_ms?:number;end_ms?:number;text:string}
-export type AttachmentActorRole='human'|'ai'|'unknown';
+export type AttachmentActorRole='human'|'ai'|'system'|'unknown';
 export type AttachmentPurpose='problem_evidence'|'correctness_evidence'|'reference'|'other';
 export interface AttachmentActor {identity?:string;display_name?:string;role:AttachmentActorRole}
 export interface AttachmentMetadata {batch_id?:string;batch_label?:string;actor?:AttachmentActor;purpose?:AttachmentPurpose}

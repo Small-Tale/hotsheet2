@@ -171,6 +171,18 @@ enum Cmd {
         #[arg(long)]
         purpose: Option<String>,
     },
+    /// Correct the actor provenance of one or more existing attachments.
+    AttachmentActor {
+        id: String,
+        #[arg(required = true)]
+        attachment_ids: Vec<String>,
+        #[arg(long)]
+        actor_role: String,
+        #[arg(long)]
+        actor_id: Option<String>,
+        #[arg(long)]
+        actor_name: Option<String>,
+    },
     /// Edit a ticket's fields (by slug or ULID).
     Edit {
         id: String,
@@ -890,6 +902,20 @@ fn main() -> Result<()> {
             actor_id,
             actor_name,
             purpose,
+        ),
+        Cmd::AttachmentActor {
+            id,
+            attachment_ids,
+            actor_role,
+            actor_id,
+            actor_name,
+        } => cmd_attachment_actor(
+            &cli.path,
+            &id,
+            &attachment_ids,
+            &actor_role,
+            actor_id,
+            actor_name,
         ),
         Cmd::Edit {
             id,
@@ -2690,12 +2716,7 @@ fn cmd_attach(
     let role = actor_role
         .or_else(|| std::env::var("HOTSHEET_ACTOR_ROLE").ok())
         .unwrap_or_else(|| "unknown".into());
-    let role = match role.as_str() {
-        "human" => hotsheet_model::AttachmentActorRole::Human,
-        "ai" => hotsheet_model::AttachmentActorRole::Ai,
-        "unknown" => hotsheet_model::AttachmentActorRole::Unknown,
-        _ => anyhow::bail!("--actor-role must be human, ai, or unknown"),
-    };
+    let role = parse_attachment_actor_role(&role)?;
     let purpose = purpose
         .as_deref()
         .map(|value| match value {
@@ -2734,6 +2755,69 @@ fn cmd_attach(
             },
         )?;
         println!("Attached {attachment_id} ({})", written.display());
+    }
+    Ok(())
+}
+
+fn parse_attachment_actor_role(value: &str) -> Result<hotsheet_model::AttachmentActorRole> {
+    match value {
+        "human" => Ok(hotsheet_model::AttachmentActorRole::Human),
+        "ai" => Ok(hotsheet_model::AttachmentActorRole::Ai),
+        "system" => Ok(hotsheet_model::AttachmentActorRole::System),
+        "unknown" => Ok(hotsheet_model::AttachmentActorRole::Unknown),
+        _ => anyhow::bail!("--actor-role must be human, ai, system, or unknown"),
+    }
+}
+
+fn cmd_attachment_actor(
+    path: &PathBuf,
+    needle: &str,
+    attachment_ids: &[String],
+    actor_role: &str,
+    actor_id: Option<String>,
+    actor_name: Option<String>,
+) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, needle)?;
+    let role = parse_attachment_actor_role(actor_role)?;
+    let actor = Some(hotsheet_model::AttachmentActor {
+        identity: actor_id.or_else(|| std::env::var("HOTSHEET_ACTOR_ID").ok()),
+        display_name: actor_name,
+        role,
+    });
+    let attachment_ids = attachment_ids
+        .iter()
+        .map(|id| Ulid::from_string(id).with_context(|| format!("invalid attachment id {id}")))
+        .collect::<Result<Vec<_>>>()?;
+    for id in &attachment_ids {
+        if !ticket
+            .attachments
+            .iter()
+            .any(|attachment| &attachment.id == id)
+        {
+            bail!("attachment {id} does not belong to {}", ticket.slug);
+        }
+    }
+    // Preserve grouping and purpose while correcting provenance. The store method applies
+    // one metadata value set, so update attachments individually when their metadata differs.
+    for id in &attachment_ids {
+        let attachment = ticket
+            .attachments
+            .iter()
+            .find(|attachment| &attachment.id == id)
+            .unwrap();
+        store.set_attachment_metadata(
+            &ticket.id,
+            &[*id],
+            hotsheet_model::AttachmentMetadata {
+                batch_id: attachment.batch_id.clone(),
+                batch_label: attachment.batch_label.clone(),
+                actor: actor.clone(),
+                purpose: attachment.purpose,
+            },
+            now_ts(),
+        )?;
+        println!("Updated attachment {id} actor to {actor_role}");
     }
     Ok(())
 }

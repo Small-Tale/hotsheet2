@@ -61,7 +61,8 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
 - After startup, three unexpected quick select dismissals within ten seconds or twelve
   root renders within two seconds trigger an automatic diagnostic ticket. Reports are
   rate-limited to one per minute so a genuine thrash cannot create its own request
-  storm.
+  storm. Those unattended uploads carry `actor.role: system`; captures and files submitted
+  through the person-operated feedback dialog carry `actor.role: human`.
 - Either Close or Cancel returns to the still-active annotation session. Successful
   submission clears and exits the session.
 

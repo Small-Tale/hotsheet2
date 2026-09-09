@@ -145,7 +145,9 @@ ticket's own `created_at`; filesystem modification time is never authoritative.
 
 HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
 human-authored `batch_label`, `actor` (`identity`, `display_name`, and
-`role: human|ai|unknown`), and `purpose: problem_evidence|correctness_evidence|reference|other`.
+`role: human|ai|system|unknown`), and `purpose: problem_evidence|correctness_evidence|reference|other`.
+`system` identifies unattended Hot Sheet automation, while `unknown` remains reserved for
+legacy/provider data whose provenance is genuinely unavailable.
 One AI attach operation shares one batch id. Human clients may reuse the latest compatible
 batch across separate upload gestures until a durable status-change activity starts a new
 workflow round. Batch ids remain operation/provenance metadata: readers may coalesce

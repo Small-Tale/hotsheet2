@@ -726,7 +726,7 @@ mod tests {
             actor: Some(crate::ticket::AttachmentActor {
                 identity: Some("codex".into()),
                 display_name: Some("AI".into()),
-                role: crate::ticket::AttachmentActorRole::Ai,
+                role: crate::ticket::AttachmentActorRole::System,
             }),
             purpose: Some(crate::ticket::AttachmentPurpose::CorrectnessEvidence),
             annotations: vec![crate::ticket::MediaAnnotation {

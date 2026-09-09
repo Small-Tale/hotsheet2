@@ -4221,11 +4221,12 @@ fn attachment_metadata(
         None => None,
         Some("human") => Some(AttachmentActorRole::Human),
         Some("ai") => Some(AttachmentActorRole::Ai),
+        Some("system") => Some(AttachmentActorRole::System),
         Some("unknown") => Some(AttachmentActorRole::Unknown),
         Some(_) => {
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
-                "attachment actor role must be human, ai, or unknown",
+                "attachment actor role must be human, ai, system, or unknown",
             ));
         }
     };

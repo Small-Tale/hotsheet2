@@ -66,8 +66,8 @@ for a ticket attachment. If capture or attachment is genuinely impossible after 
 safe alternatives, state the specific reason in the completion note. Screenshots supplement
 behavioral assertions; they do not replace them.
 
-When attaching several AI-generated evidence files from one verification operation, pass
-them in one command (`hotsheet-cli attach <ticket> --purpose correctness_evidence <files…>`)
+When attaching AI-generated evidence files from one verification operation, pass
+them in one command (`hotsheet-cli attach <ticket> --actor-role ai --actor-id <worker-id> --purpose correctness_evidence <files…>`)
 so they receive one durable batch identity and AI attribution. Use `problem_evidence` for
 captures demonstrating a defect, `reference` for supporting material, and `other` only
 when none of the semantic purposes fit. Do not run one attach command per file in a set.

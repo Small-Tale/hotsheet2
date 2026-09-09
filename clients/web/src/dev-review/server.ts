@@ -13,6 +13,7 @@ export function validateDevReviewSubmission(value: unknown): DevReviewSubmission
   const input = value as Partial<DevReviewSubmission>;
   const notes = input.notes?.trim();
   if (!notes || notes.length > 10_000) throw new Error('Feedback notes must contain 1–10,000 characters.');
+  if (input.actorRole !== 'human' && input.actorRole !== 'ai' && input.actorRole !== 'system') throw new Error('Feedback actor role must be human, ai, or system.');
   if (!Array.isArray(input.captures) || input.captures.length > 10) throw new Error('Feedback supports at most 10 captures.');
   const captures = input.captures.map((capture, index) => {
     if (!capture || typeof capture.dataUrl !== 'string' || !capture.dataUrl.startsWith('data:image/png;base64,')) throw new Error(`Capture ${index + 1} is not a PNG.`);
@@ -25,7 +26,7 @@ export function validateDevReviewSubmission(value: unknown): DevReviewSubmission
     if (attachment.dataUrl.length > 28_000_000) throw new Error(`Attachment ${index + 1} is too large.`);
     return { ...attachment, filename: basename(attachment.filename || `feedback-attachment-${index + 1}`), mimeType: String(attachment.mimeType || 'application/octet-stream'), size: Number(attachment.size || 0) };
   });
-  return { notes, captures, attachments, pageUrl: String(input.pageUrl ?? ''), viewport: { width: Number(input.viewport?.width ?? 0), height: Number(input.viewport?.height ?? 0) } };
+  return { notes, captures, attachments, actorRole: input.actorRole, pageUrl: String(input.pageUrl ?? ''), viewport: { width: Number(input.viewport?.width ?? 0), height: Number(input.viewport?.height ?? 0) } };
 }
 
 export function createCliDevReviewSubmitter(options: { repoRoot: string; storePath?: string; cliPath?: string; finalize?: (storePath: string, slug: string) => Promise<void> }): DevReviewSubmitter {
@@ -53,12 +54,12 @@ export function createCliDevReviewSubmitter(options: { repoRoot: string; storePa
       for (const [index, capture] of submission.captures.entries()) {
         const file = resolve(temp, capture.filename || `ux-feedback-${index + 1}.png`);
         await writeFile(file, Buffer.from(capture.dataUrl.slice('data:image/png;base64,'.length), 'base64'));
-        await runCli(['-C', storePath, 'attach', slug, file]);
+        await runCli(['-C', storePath, 'attach', slug, '--actor-role', submission.actorRole, file]);
       }
       for (const [index, attachment] of submission.attachments.entries()) {
         const file = resolve(temp, attachment.filename || `feedback-attachment-${index + 1}`);
         await writeFile(file, Buffer.from(attachment.dataUrl.slice(attachment.dataUrl.indexOf(',') + 1), 'base64'));
-        await runCli(['-C', storePath, 'attach', slug, file]);
+        await runCli(['-C', storePath, 'attach', slug, '--actor-role', submission.actorRole, file]);
       }
     } finally { await rm(temp, { recursive: true, force: true }); }
     await finalize(storePath, slug);

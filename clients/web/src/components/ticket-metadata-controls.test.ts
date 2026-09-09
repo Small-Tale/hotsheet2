@@ -97,11 +97,13 @@ describe('ticket metadata controls and inspector panels', () => {
       {id:'a',name:'a.png',batch_id:'fix',actor:{identity:'codex',role:'ai'},purpose:'correctness_evidence'},
       {id:'b',name:'b.png',batch_id:'fix',actor:{identity:'codex',role:'ai'},purpose:'correctness_evidence'},
       {id:'c',name:'c.png',batch_id:'human',batch_label:'More feedback',actor:{display_name:'Brian',role:'human'},purpose:'problem_evidence'},
+      {id:'d',name:'diagnostics.json',batch_id:'automatic',actor:{role:'system'},purpose:'problem_evidence'},
     ]);
     expect(groups.map(group=>[group.label,group.items.length])).toEqual([
       ['Legacy / Uncategorized',1],
       ['AI · Round 1 · Correctness evidence',2],
       ['More feedback',1],
+      ['System · Batch 1 · Problem evidence',1],
     ]);
     const markup=String(TicketAttachments({attachments:groups.flatMap(group=>group.items)}));
     expect(markup).not.toContain('type="checkbox"');

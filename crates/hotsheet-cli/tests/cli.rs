@@ -1742,6 +1742,67 @@ fn attach_adds_stable_metadata_and_nested_payload() {
 }
 
 #[test]
+fn attachment_actor_corrects_existing_provenance_without_losing_other_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(source.path(), b"diagnostics").unwrap();
+    hs(dir.path()).args(["init"]).assert().success();
+    let slug = new_ticket(dir.path(), "System diagnostics");
+    hs(dir.path())
+        .arg("attach")
+        .arg(&slug)
+        .args([
+            "--batch-id",
+            "diagnostic-run",
+            "--purpose",
+            "problem_evidence",
+        ])
+        .arg(source.path())
+        .assert()
+        .success();
+    let store = hotsheet_ticketing::FsStore::open(dir.path()).unwrap();
+    let original = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let attachment_id = original.attachments[0].id.to_string();
+
+    hs(dir.path())
+        .arg("attachment-actor")
+        .arg(&slug)
+        .arg(&attachment_id)
+        .args([
+            "--actor-role",
+            "system",
+            "--actor-id",
+            "ui-stability-diagnostics",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("actor to system"));
+
+    let corrected = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let attachment = &corrected.attachments[0];
+    assert_eq!(attachment.batch_id.as_deref(), Some("diagnostic-run"));
+    assert_eq!(
+        attachment.purpose,
+        Some(hotsheet_model::AttachmentPurpose::ProblemEvidence)
+    );
+    assert_eq!(
+        attachment.actor.as_ref().map(|actor| actor.role),
+        Some(hotsheet_model::AttachmentActorRole::System)
+    );
+    assert_eq!(
+        attachment
+            .actor
+            .as_ref()
+            .and_then(|actor| actor.identity.as_deref()),
+        Some("ui-stability-diagnostics")
+    );
+}
+
+#[test]
 fn settings_shared_and_local_scopes() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
