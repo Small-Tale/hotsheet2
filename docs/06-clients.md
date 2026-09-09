@@ -1067,8 +1067,9 @@ guessed from their prose or author-like display text.
 ticket states. A `feedback_needed` note, a description containing the case-sensitive
 `FEEDBACK NEEDED` marker, and an explicit review request all project to
 the same "Needs review" badge and purple leading rail in list and column presentations.
-The inspector/reader uses that same rail and "Needs review" banner; the underlying note
-still carries the specific question and feedback editor. The unified needs-review rail
+The sidebar inspector uses the "Needs review" banner without adding a redundant full-height
+purple rail; the modal reader retains the rail and banner. The underlying note still carries
+the specific question and feedback editor. The unified needs-review row/reader rail
 takes precedence over blocked and Up Next rails so the outstanding decision is never
 hidden. The server's compact row continues to expose the source `feedback_needed`
 boolean (mirrored in the index), while the client normalizes it at presentation time.
@@ -1078,6 +1079,8 @@ superseded asks and from reader mode itself. Activating it opens reader mode on 
 scrolls the active source into view, and focuses its response editor. Reader descriptions
 reuse the same Markdown choice selection, inline reply, optional general response, and
 No response needed controls as feedback notes; submitting adds a regular response note.
+Large reader text applies to active feedback prompts and choices as well as ordinary,
+activity, and status notes, including their Markdown paragraphs, lists, code, and headings.
 An active feedback description uses the same warning border/fill and content insets as a
 feedback note in both inspector and reader. Reader mode also gives it the standard
 circle-alert icon and "Feedback needed" heading so its meaning is explicit in context.

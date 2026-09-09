@@ -3,12 +3,12 @@
 .ticket-reader .ticket-inspector--reader .ticket-inspector__header h1 { max-width: 54rem; font-size: var(--wa-font-size-l); }
 .ticket-reader .ticket-inspector--reader .ticket-inspector__tabs { width: auto; }
 .ticket-reader .ticket-inspector--reader .ticket-inspector__content { width: 100%; margin: 0; padding: 1.25rem 2rem 2rem; }
-.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface .markdown-preview, .note-card__body, textarea[name="markdown-source"], textarea[name="note-body"]) { font-size: var(--hs-reader-font-size-s); }
-.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body) .markdown-preview :is(p, li, th, td) { font-size: var(--hs-reader-font-size-s); }
+.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface .markdown-preview, .note-card__body, .note-card__feedback-prompt, textarea[name="markdown-source"], textarea[name="note-body"]) { font-size: var(--hs-reader-font-size-s); }
+.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview :is(p, li, th, td) { font-size: var(--hs-reader-font-size-s); }
 .ticket-reader[data-large-text="true"] .ticket-inspector--reader .note-card .note-card__body { font-size: var(--hs-reader-font-size-s); line-height: 1.5; }
 .ticket-reader[data-large-text="true"] .ticket-inspector--reader .note-card[data-kind="activity"] .note-card__body, .ticket-reader[data-large-text="true"] .ticket-inspector--reader .note-card[data-kind="activity"] .markdown-preview :is(p, li, th, td) { font-size: var(--hs-reader-font-size-s); }
-.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body) .markdown-preview h1 { font-size: var(--hs-reader-font-size-l); }
-.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body) .markdown-preview :is(h2, h3, h4, h5, h6) { font-size: var(--hs-reader-font-size-m); }
-.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body) .markdown-preview code { font-size: var(--hs-reader-font-size-s); }
-.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body) .markdown-preview blockquote, .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body) .markdown-preview blockquote :is(p, li, h1, h2, h3, h4, h5, h6, th, td) { font-size: var(--hs-reader-font-size-s); }
+.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview h1 { font-size: var(--hs-reader-font-size-l); }
+.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview :is(h2, h3, h4, h5, h6) { font-size: var(--hs-reader-font-size-m); }
+.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview code { font-size: var(--hs-reader-font-size-s); }
+.ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview blockquote, .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview blockquote :is(p, li, h1, h2, h3, h4, h5, h6, th, td) { font-size: var(--hs-reader-font-size-s); }
 @media (max-width: 48rem) { .ticket-reader .ticket-inspector--reader .ticket-inspector__content { padding-inline: 1rem; } }

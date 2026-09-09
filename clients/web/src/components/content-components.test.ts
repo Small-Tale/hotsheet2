@@ -123,6 +123,7 @@ describe('content components', () => {
     const readerCss = readFileSync(resolve(import.meta.dirname, 'ticket-reader.css'), 'utf8');
     expect(readerCss).toMatch(/\.ticket-reader \{[^}]*height: calc\(100vh - 3rem\);/);
     expect(readerCss).toMatch(/\.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
+    expect(readerCss).toMatch(/\.note-card__feedback-prompt\) \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     expect(readerCss).toMatch(/\.note-card\[data-kind="activity"\] \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     expect(readerCss).toMatch(/\.markdown-preview blockquote :is\(p, li, h1, h2, h3, h4, h5, h6, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     const shellCss = readFileSync(resolve(import.meta.dirname, '..', 'style.css'), 'utf8');

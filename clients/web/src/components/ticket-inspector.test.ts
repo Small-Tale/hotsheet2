@@ -71,7 +71,7 @@ describe('TicketInspector', () => {
     expect(waiting).toContain('Needs review');
     expect(waiting).toContain('circle-alert');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
-    expect(css).toMatch(/data-needs-review="true"[^}]*var\(--hs-ticket-state-needs-review\)/);
+    expect(css).toMatch(/data-presentation="reader"\]\[data-needs-review="true"[^}]*var\(--hs-ticket-state-needs-review\)/);
   });
 
   it('renders marked description choices as the reader feedback surface',()=>{
