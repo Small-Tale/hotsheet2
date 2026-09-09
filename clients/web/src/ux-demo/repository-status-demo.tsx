@@ -1,7 +1,7 @@
 import { signal } from 'kerfjs';
 
-import type { RepositoryStatus } from '../api';
-import { RepositoryStatusPopover, type RepositoryStatusView } from '../components/repository-status-popover';
+import type { CodeReview, RepositoryStatus } from '../api';
+import { ChangeEvidenceDialog, type ChangeEvidenceView, RepositoryStatusPopover, type RepositoryStatusView } from '../components/repository-status-popover';
 import type { CodeReviewComparison } from '../components/ticket-code-review';
 import { syncSettingsControls } from './settings-controls';
 
@@ -12,6 +12,7 @@ export const repositoryDemoEvent=signal('Choose a view or open a file or commit.
 export const repositoryDemoComparison=signal<CodeReviewComparison>({active:false,side:'a'});
 export const repositoryDemoExpandedCommits=signal<string[]>([]);
 export const repositoryDemoScenario=signal<RepositoryDemoScenario>('conflicted');
+export const changeEvidenceDemoView=signal<ChangeEvidenceView>('tests');
 
 const status:RepositoryStatus={
   branch:'feature/repository-dialog',upstream:'origin/main',ahead:2,behind:1,staged:2,unstaged:2,untracked:1,conflicted:1,clean:false,root:'/work/hotsheet2',platform:'macos',commit_count:24,difftool:'Glassbox',truncated:false,
@@ -47,6 +48,9 @@ export function resetRepositoryStatusDemo(root?:ParentNode):void {
 }
 
 export function RepositoryStatusPopoverDemo(){const scenario=repositoryDemoScenario.value;return <section aria-label="RepositoryStatusPopover demo"><RepositoryStatusPopover embedded status={repositoryStatusForScenario(scenario)} error={scenario==='error'?'git status failed: repository is unavailable':''} view={repositoryDemoView.value} comparison={repositoryDemoComparison.value} expandedCommits={repositoryDemoExpandedCommits.value}/><p class="component-stage__event" aria-live="polite">{repositoryDemoEvent.value}</p></section>}
+
+const evidence:CodeReview={difftool:'Glassbox',truncated:false,ranges:[],commits:[],summary:{files:{total:4,docs:1,tests:1,source:1,other:1},tests_added:1,tests_modified:0},files:[{path:'docs/06-clients.md',change:'modified',category:'docs'},{path:'clients/web/src/change-evidence.test.ts',change:'added',category:'tests'},{path:'clients/web/src/components/change-evidence.tsx',change:'modified',category:'source'},{path:'Cargo.toml',change:'modified',category:'other'}]};
+export function ChangeEvidenceDialogDemo(){return <section aria-label="ChangeEvidenceDialog demo"><ChangeEvidenceDialog embedded review={evidence} view={changeEvidenceDemoView.value}/><p class="component-stage__event" aria-live="polite">{repositoryDemoEvent.value}</p></section>}
 
 export function RepositoryStatusPopoverSettings(){return <form class="settings-form" data-settings="repository-status-popover">
   <wa-select name="scenario" label="Repository scenario" value={repositoryDemoScenario.value}>{(['clean','dirty','ahead','behind','diverged','conflicted','error'] as const).map(value=><wa-option value={value}>{value[0].toUpperCase()+value.slice(1)}</wa-option>)}</wa-select>

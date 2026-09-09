@@ -46,7 +46,8 @@ describe('TicketCodeReview', () => {
 
   it('summarizes classified changes and calls out modified existing tests',()=>{
     const markup=String(TicketCodeReview({review:{...review,summary:{files:{total:8,docs:2,tests:3,source:2,other:1},tests_added:2,tests_modified:1}}}));
-    expect(markup).toContain('aria-label="Code review evidence"');
+    expect(markup).toContain('aria-label="Open change evidence"');
+    expect(markup).toContain('data-action="open-change-evidence"');
     expect(markup).toContain('<strong>2</strong> docs');
     expect(markup).toContain('<strong>3</strong> tests');
     expect(markup).toContain('2 new test files · 1 existing test file modified');
@@ -92,6 +93,8 @@ describe('TicketCodeReview', () => {
     expect(codeReviewTarget({ reviewMode: 'range', reviewFrom: 'abc', reviewTo: 'def' })).toEqual({ mode: 'range', from: 'abc', to: 'def' });
     expect(codeReviewTarget({ reviewMode: 'compare', reviewFrom: 'abc', reviewTo: 'def' })).toEqual({ mode: 'compare', from: 'abc', to: 'def' });
     expect(codeReviewTarget({ reviewMode: 'compare', reviewFrom: 'abc', reviewTo: 'abc' })).toBeUndefined();
+    expect(codeReviewTarget({ reviewMode: 'ticket_file', reviewPath: 'src/main.ts' })).toEqual({ mode: 'ticket_file', path: 'src/main.ts' });
+    expect(codeReviewTarget({ reviewMode: 'worktree_file', reviewPath: 'src/main.ts', reviewArea: 'staged' })).toEqual({ mode: 'worktree_file', path: 'src/main.ts', area: 'staged' });
     expect(codeReviewTarget({ reviewMode: 'range', reviewFrom: 'abc' })).toBeUndefined();
   });
 });

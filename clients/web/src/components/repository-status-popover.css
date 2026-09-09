@@ -32,4 +32,6 @@
 .repository-status-popover__context-menu hr { width: 100%; margin: var(--wa-space-2xs) 0; border: 0; border-top: 1px solid var(--wa-color-surface-border); }
 .repository-status-popover .ticket-code-review__header { margin-bottom: var(--wa-space-m); }
 .repository-status-popover[data-embedded="true"] { position: relative; inset: auto; display: block; max-width: 100%; margin: 0; }
+.change-evidence-dialog { width: min(52rem, calc(100vw - 2 * var(--wa-space-l))); height: min(32rem, calc(100vh - 2 * var(--wa-space-l))); }
+.change-evidence-dialog__layout { grid-template-columns: 15rem minmax(0,1fr); }
 @media (max-width: 48rem) { .repository-status-popover { width: calc(100vw - 2 * var(--wa-space-s)); height: calc(100vh - 2 * var(--wa-space-s)); } .repository-status-popover__layout { grid-template-columns: minmax(15rem,40%) minmax(0,1fr); } .repository-status-popover__layout > aside, .repository-status-popover__detail { padding: var(--wa-space-m); } }

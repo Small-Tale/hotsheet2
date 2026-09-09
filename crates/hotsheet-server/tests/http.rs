@@ -2255,6 +2255,10 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
     assert_eq!(review["summary"]["files"]["total"], 1);
     assert_eq!(review["summary"]["files"]["source"], 1);
     assert_eq!(review["summary"]["tests_added"], 0);
+    assert_eq!(review["files"].as_array().unwrap().len(), 1);
+    assert_eq!(review["files"][0]["path"], "code.txt");
+    assert_eq!(review["files"][0]["change"], "modified");
+    assert_eq!(review["files"][0]["category"], "source");
 
     let invalid = app
         .clone()
@@ -2266,6 +2270,28 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    let invalid_file = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/review/tickets/{id}/code-review"),
+            Some(r#"{"mode":"ticket_file","path":"--no-index"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid_file.status(), StatusCode::BAD_REQUEST);
+
+    let file_launched = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/review/tickets/{id}/code-review"),
+            Some(r#"{"mode":"ticket_file","path":"code.txt"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(file_launched.status(), StatusCode::NO_CONTENT);
 
     let later_launched = app
         .clone()
@@ -2279,6 +2305,7 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
     assert_eq!(later_launched.status(), StatusCode::NO_CONTENT);
 
     let launched = app
+        .clone()
         .oneshot(authed(
             "POST",
             &format!("/checkouts/review/tickets/{id}/code-review"),
@@ -2287,6 +2314,28 @@ async fn code_review_discovers_ticket_commits_and_only_launches_returned_targets
         .await
         .unwrap();
     assert_eq!(launched.status(), StatusCode::NO_CONTENT);
+
+    std::fs::write(checkout.path().join("code.txt"), "working tree\n").unwrap();
+    let unstaged = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/review/repository/review",
+            Some(r#"{"mode":"worktree_file","path":"code.txt","area":"unstaged"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unstaged.status(), StatusCode::NO_CONTENT);
+    run(&["add", "code.txt"]);
+    let staged = app
+        .oneshot(authed(
+            "POST",
+            "/checkouts/review/repository/review",
+            Some(r#"{"mode":"worktree_file","path":"code.txt","area":"staged"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(staged.status(), StatusCode::NO_CONTENT);
 }
 
 #[tokio::test]

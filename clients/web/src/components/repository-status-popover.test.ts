@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe,expect,it } from 'vitest';
 
 import type { RepositoryFile,RepositoryFileChange,RepositoryStatus } from '../api';
-import { repositoryAbsolutePath,repositoryFilesForView,repositoryFileStatusLetter,RepositoryStatusPopover,repositoryStatusState } from './repository-status-popover';
+import { ChangeEvidenceDialog,repositoryAbsolutePath,repositoryFilesForView,repositoryFileStatusLetter,RepositoryStatusPopover,repositoryStatusState } from './repository-status-popover';
 
 const files:RepositoryFile[]=[
   {path:'src/staged.ts',staged:'added',untracked:false,conflicted:false},
@@ -32,7 +32,7 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-component="menu-header"');
     expect(markup.match(/data-component="menu-item"/g)).toHaveLength(7);
-    expect(markup).toContain('data-action="open-repository-file" data-item-id="src/staged.ts"');
+    expect(markup).toContain('data-action="open-staged-repository-file-diff" data-item-id="src/staged.ts"');
     expect(markup).toContain('data-state="renamed"');
     expect(markup).toContain('aria-label="src/old name.ts"');
     expect(markup).toContain('data-lucide="square-pen"');
@@ -51,6 +51,15 @@ describe('RepositoryStatusPopover',()=>{
 
   it('uses the canonical Git status letter for every file change kind',()=>{
     expect(['added','copied','deleted','modified','renamed','type_changed','unmerged','untracked'].map(change=>repositoryFileStatusLetter(change as RepositoryFileChange))).toEqual(['A','C','D','M','R','T','U','?']);
+  });
+
+  it('reuses the master-detail and Git-letter rows for ticket change evidence',()=>{
+    const markup=String(ChangeEvidenceDialog({view:'tests',review:{difftool:'Glassbox',truncated:false,ranges:[],commits:[],summary:{files:{total:3,docs:1,tests:1,source:1,other:0},tests_added:1,tests_modified:0},files:[{path:'docs/design.md',change:'modified',category:'docs'},{path:'clients/web/src/dialog.test.ts',change:'added',category:'tests'},{path:'clients/web/src/dialog.ts',change:'modified',category:'source'}]}}));
+    expect(markup).toContain('data-component="change-evidence-dialog"');
+    expect(markup).toContain('aria-label="Change evidence views"');
+    expect(markup).toContain('data-action="open-ticket-file-diff" data-item-id="clients/web/src/dialog.test.ts"');
+    expect(markup).toContain('class="repository-status-popover__file-status" aria-hidden="true">A</span>');
+    expect(markup).not.toContain('data-item-id="docs/design.md" class="repository-status-popover__file"');
   });
 
   it('filters files into non-overlapping working-tree views',()=>{

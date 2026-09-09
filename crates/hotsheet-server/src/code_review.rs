@@ -44,6 +44,36 @@ pub struct CodeReview {
     pub difftool: Option<String>,
     pub truncated: bool,
     pub summary: CodeReviewSummary,
+    pub files: Vec<CodeReviewFile>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeReviewFileChange {
+    Added,
+    Copied,
+    Deleted,
+    Modified,
+    Renamed,
+    TypeChanged,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeReviewFileCategory {
+    Docs,
+    Tests,
+    Source,
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CodeReviewFile {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_path: Option<String>,
+    pub change: CodeReviewFileChange,
+    pub category: CodeReviewFileCategory,
 }
 
 #[derive(Debug, Clone, Serialize, Default, PartialEq, Eq)]
@@ -111,6 +141,15 @@ pub enum ReviewTarget {
     Commit { commit: String },
     Range { from: String, to: String },
     Compare { from: String, to: String },
+    TicketFile { path: String },
+    WorktreeFile { path: String, area: WorktreeArea },
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WorktreeArea {
+    Staged,
+    Unstaged,
 }
 
 #[derive(Debug, Error)]
@@ -145,8 +184,10 @@ pub fn discover_with_classification(
         .cloned()
         .collect::<Vec<_>>();
     let ranges = contiguous_ranges(&all, &commits);
+    let files = discover_ticket_files(root, &commits, classification);
     Ok(CodeReview {
-        summary: summarize_changes(root, &commits, classification),
+        summary: summarize_changes(&files),
+        files,
         commits,
         ranges,
         difftool,
@@ -162,6 +203,7 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     let ranges = repository_range(&commits, ahead).into_iter().collect();
     Ok(CodeReview {
         summary: CodeReviewSummary::default(),
+        files: Vec::new(),
         commits,
         ranges,
         difftool,
@@ -169,57 +211,90 @@ pub fn discover_repository(root: &Path, ahead: usize) -> Result<CodeReview, Code
     })
 }
 
-fn summarize_changes(
+fn discover_ticket_files(
     root: &Path,
     commits: &[CodeReviewCommit],
     classification: &CodeReviewClassification,
-) -> CodeReviewSummary {
-    let mut changed = std::collections::BTreeMap::<String, char>::new();
-    for commit in commits {
-        let Ok(output) = git_output(
-            root,
-            &[
-                "diff-tree",
-                "--root",
-                "--no-commit-id",
-                "--name-status",
-                "--no-renames",
-                "-r",
-                "-z",
-                &commit.sha,
-            ],
-        ) else {
-            continue;
-        };
-        let mut fields = output.split('\0').filter(|field| !field.is_empty());
-        while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
-            let state = status.chars().next().unwrap_or('M');
-            changed
-                .entry(path.replace('\\', "/"))
-                .and_modify(|existing| {
-                    if state == 'A' {
-                        *existing = 'A'
-                    }
-                })
-                .or_insert(state);
-        }
-    }
-    let mut summary = CodeReviewSummary::default();
-    for (path, status) in changed {
-        summary.files.total += 1;
-        if matches_any(&classification.docs, &path) {
-            summary.files.docs += 1
-        } else if matches_any(&classification.tests, &path) {
-            summary.files.tests += 1;
-            if status == 'A' {
-                summary.tests_added += 1
-            } else {
-                summary.tests_modified += 1
-            }
-        } else if matches_any(&classification.source, &path) {
-            summary.files.source += 1
+) -> Vec<CodeReviewFile> {
+    let (Some(newest), Some(oldest)) = (commits.first(), commits.last()) else {
+        return Vec::new();
+    };
+    let old = oldest.parents.first().cloned().or_else(|| {
+        git_output(root, &["hash-object", "-t", "tree", "--stdin"])
+            .ok()
+            .map(|value| value.trim().to_owned())
+    });
+    let Some(old) = old else { return Vec::new() };
+    let Ok(output) = git_output(
+        root,
+        &["diff", "--name-status", "-M", "-C", "-z", &old, &newest.sha],
+    ) else {
+        return Vec::new();
+    };
+    parse_changed_files(&output, classification)
+}
+
+fn parse_changed_files(
+    output: &str,
+    classification: &CodeReviewClassification,
+) -> Vec<CodeReviewFile> {
+    let mut fields = output.split('\0').filter(|field| !field.is_empty());
+    let mut files = Vec::new();
+    while let Some(status) = fields.next() {
+        let code = status.chars().next().unwrap_or('M');
+        let (original_path, path) = if matches!(code, 'R' | 'C') {
+            let (Some(original), Some(path)) = (fields.next(), fields.next()) else {
+                break;
+            };
+            (Some(original.replace('\\', "/")), path)
         } else {
-            summary.files.other += 1
+            let Some(path) = fields.next() else { break };
+            (None, path)
+        };
+        let path = path.replace('\\', "/");
+        let category = if matches_any(&classification.docs, &path) {
+            CodeReviewFileCategory::Docs
+        } else if matches_any(&classification.tests, &path) {
+            CodeReviewFileCategory::Tests
+        } else if matches_any(&classification.source, &path) {
+            CodeReviewFileCategory::Source
+        } else {
+            CodeReviewFileCategory::Other
+        };
+        let change = match code {
+            'A' => CodeReviewFileChange::Added,
+            'C' => CodeReviewFileChange::Copied,
+            'D' => CodeReviewFileChange::Deleted,
+            'R' => CodeReviewFileChange::Renamed,
+            'T' => CodeReviewFileChange::TypeChanged,
+            _ => CodeReviewFileChange::Modified,
+        };
+        files.push(CodeReviewFile {
+            path,
+            original_path,
+            change,
+            category,
+        });
+    }
+    files
+}
+
+fn summarize_changes(files: &[CodeReviewFile]) -> CodeReviewSummary {
+    let mut summary = CodeReviewSummary::default();
+    for file in files {
+        summary.files.total += 1;
+        match file.category {
+            CodeReviewFileCategory::Docs => summary.files.docs += 1,
+            CodeReviewFileCategory::Tests => {
+                summary.files.tests += 1;
+                if file.change == CodeReviewFileChange::Added {
+                    summary.tests_added += 1
+                } else {
+                    summary.tests_modified += 1
+                }
+            }
+            CodeReviewFileCategory::Source => summary.files.source += 1,
+            CodeReviewFileCategory::Other => summary.files.other += 1,
         }
     }
     summary
@@ -368,16 +443,10 @@ pub fn launch(
         return Err(CodeReviewError::DifftoolNotConfigured);
     }
     let (old, new) = launch_revisions(root, review, target)?;
-    Command::new("git")
-        .arg("-C")
-        .arg(root)
-        .args(["difftool", "--no-prompt", &old, &new])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|error| CodeReviewError::Launch(error.to_string()))
+    match target {
+        ReviewTarget::TicketFile { path } => spawn_difftool_file(root, (&old, &new), path),
+        _ => spawn_difftool(root, (old, new)),
+    }
 }
 
 pub fn launch_repository(
@@ -412,8 +481,44 @@ pub fn launch_repository(
             validate_reachable_commit(root, to)?;
             (from.clone(), to.clone())
         }
+        ReviewTarget::WorktreeFile { path, area } => {
+            return launch_worktree_file(root, path, *area);
+        }
+        ReviewTarget::TicketFile { .. } => return Err(CodeReviewError::InvalidTarget),
     };
     spawn_difftool(root, revisions)
+}
+
+fn launch_worktree_file(
+    root: &Path,
+    path: &str,
+    area: WorktreeArea,
+) -> Result<(), CodeReviewError> {
+    let args = match area {
+        WorktreeArea::Staged => ["diff", "--name-only", "-z", "--cached"].as_slice(),
+        WorktreeArea::Unstaged => ["diff", "--name-only", "-z"].as_slice(),
+    };
+    let changed = git_output(root, args)?;
+    if !changed.split('\0').any(|candidate| candidate == path) {
+        return Err(CodeReviewError::InvalidTarget);
+    }
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(root)
+        .args(["difftool", "--no-prompt"]);
+    if area == WorktreeArea::Staged {
+        command.arg("--cached");
+    }
+    command
+        .arg("--")
+        .arg(path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| CodeReviewError::Launch(error.to_string()))
 }
 
 fn validate_reachable_commit(root: &Path, commit: &str) -> Result<(), CodeReviewError> {
@@ -440,6 +545,23 @@ fn spawn_difftool(root: &Path, (old, new): (String, String)) -> Result<(), CodeR
         .arg("-C")
         .arg(root)
         .args(["difftool", "--no-prompt", &old, &new])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| CodeReviewError::Launch(error.to_string()))
+}
+
+fn spawn_difftool_file(
+    root: &Path,
+    (old, new): (&str, &str),
+    path: &str,
+) -> Result<(), CodeReviewError> {
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["difftool", "--no-prompt", old, new, "--", path])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -505,6 +627,23 @@ fn launch_revisions(
                 .ok_or(CodeReviewError::InvalidTarget)?;
             Ok((from.sha.clone(), to.sha.clone()))
         }
+        ReviewTarget::TicketFile { path } => {
+            if !review.files.iter().any(|file| file.path == *path) {
+                return Err(CodeReviewError::InvalidTarget);
+            }
+            let (Some(newest), Some(oldest)) = (review.commits.first(), review.commits.last())
+            else {
+                return Err(CodeReviewError::InvalidTarget);
+            };
+            let old = match oldest.parents.first() {
+                Some(parent) => parent.clone(),
+                None => git_output(root, &["hash-object", "-t", "tree", "--stdin"])?
+                    .trim()
+                    .to_owned(),
+            };
+            Ok((old, newest.sha.clone()))
+        }
+        ReviewTarget::WorktreeFile { .. } => Err(CodeReviewError::InvalidTarget),
     }
 }
 
@@ -718,6 +857,7 @@ mod tests {
     fn arbitrary_commits_and_ranges_are_rejected_before_launch() {
         let review = CodeReview {
             summary: CodeReviewSummary::default(),
+            files: Vec::new(),
             commits: vec![commit("bbbbbbbb", "HS2-X", "aaaaaaaa")],
             ranges: vec![],
             difftool: Some("configured".into()),
@@ -783,6 +923,7 @@ mod tests {
     fn compare_uses_the_two_exact_discovered_commits() {
         let review = CodeReview {
             summary: CodeReviewSummary::default(),
+            files: Vec::new(),
             commits: vec![
                 commit("bbbbbbbb", "new", "aaaaaaaa"),
                 commit("aaaaaaaa", "old", "rootroot"),
@@ -831,5 +972,61 @@ mod tests {
             "crates/core/src/store_test.rs"
         ));
         assert!(!glob_matches("src/**", "tests/src/example.rs"));
+    }
+
+    #[test]
+    fn parses_changed_files_with_categories_and_rename_origins() {
+        let files = parse_changed_files(
+            "A\0tests/new.spec.ts\0R100\0docs/old.md\0docs/new.md\0M\0clients/web/src/main.tsx\0",
+            &CodeReviewClassification::default(),
+        );
+        assert_eq!(files.len(), 3);
+        assert_eq!(files[0].category, CodeReviewFileCategory::Tests);
+        assert_eq!(files[0].change, CodeReviewFileChange::Added);
+        assert_eq!(files[1].category, CodeReviewFileCategory::Docs);
+        assert_eq!(files[1].change, CodeReviewFileChange::Renamed);
+        assert_eq!(files[1].original_path.as_deref(), Some("docs/old.md"));
+        assert_eq!(files[2].category, CodeReviewFileCategory::Source);
+        let summary = summarize_changes(&files);
+        assert_eq!(summary.files.total, 3);
+        assert_eq!(summary.tests_added, 1);
+    }
+
+    #[test]
+    fn ticket_file_targets_must_match_discovered_evidence() {
+        let review = CodeReview {
+            summary: CodeReviewSummary::default(),
+            files: vec![CodeReviewFile {
+                path: "src/known.rs".into(),
+                original_path: None,
+                change: CodeReviewFileChange::Modified,
+                category: CodeReviewFileCategory::Source,
+            }],
+            commits: vec![commit("bbbbbbbb", "new", "aaaaaaaa")],
+            ranges: vec![],
+            difftool: Some("configured".into()),
+            truncated: false,
+        };
+        assert_eq!(
+            launch_revisions(
+                Path::new("."),
+                &review,
+                &ReviewTarget::TicketFile {
+                    path: "src/known.rs".into()
+                },
+            )
+            .unwrap(),
+            ("aaaaaaaa".into(), "bbbbbbbb".into())
+        );
+        assert!(matches!(
+            launch_revisions(
+                Path::new("."),
+                &review,
+                &ReviewTarget::TicketFile {
+                    path: "--no-index".into()
+                },
+            ),
+            Err(CodeReviewError::InvalidTarget)
+        ));
     }
 }

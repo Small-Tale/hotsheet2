@@ -179,12 +179,15 @@ describe('ticket code review transport',()=>{
   it('reads review targets and accepts an empty successful launch response',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({commits:[],ranges:[],truncated:false}),{status:200}))
+      .mockResolvedValueOnce(new Response(null,{status:204}))
       .mockResolvedValueOnce(new Response(null,{status:204}));
     const api=new Api('/api');
     await api.codeReview('folder with spaces','ticket/1');
     await expect(api.openCodeReview('folder with spaces','ticket/1',{mode:'commit',commit:'abc'})).resolves.toBeUndefined();
+    await expect(api.openCodeReview('folder with spaces','ticket/1',{mode:'ticket_file',path:'src/a b.ts'})).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/checkouts/folder%20with%20spaces/tickets/ticket%2F1/code-review',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder%20with%20spaces/tickets/ticket%2F1/code-review',expect.objectContaining({method:'POST',body:'{"mode":"commit","commit":"abc"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/checkouts/folder%20with%20spaces/tickets/ticket%2F1/code-review',expect.objectContaining({method:'POST',body:'{"mode":"ticket_file","path":"src/a b.ts"}'}));
     fetchMock.mockRestore();
   });
 });
@@ -195,8 +198,10 @@ describe('repository browser transport',()=>{
     const api=new Api('/api');
     await api.repositoryFileAction('folder with spaces','src/a b.ts','reveal');
     await api.openRepositoryReview('folder with spaces',{mode:'range',from:'aaa',to:'bbb'});
+    await api.openRepositoryReview('folder with spaces',{mode:'worktree_file',path:'src/a b.ts',area:'staged'});
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/checkouts/folder%20with%20spaces/repository/files/action',expect.objectContaining({method:'POST',body:'{"path":"src/a b.ts","action":"reveal"}'}));
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder%20with%20spaces/repository/review',expect.objectContaining({method:'POST',body:'{"mode":"range","from":"aaa","to":"bbb"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/checkouts/folder%20with%20spaces/repository/review',expect.objectContaining({method:'POST',body:'{"mode":"worktree_file","path":"src/a b.ts","area":"staged"}'}));
     fetchMock.mockRestore();
   });
 });

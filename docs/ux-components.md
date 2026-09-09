@@ -164,6 +164,11 @@ does not introduce polling or another network request.
     files compose the shared `MenuHeader` and `MenuItem` primitives, and the complete
     dialog is represented as an embedded production component in `/ux-demo`
     (HS2-RPVFA4, HS2-323XHG, HS2-Z0TSX4).
+- `ChangeEvidenceDialog` — **production built**: the actionable Code Review evidence
+  summary opens a repository-style master/detail dialog whose Docs, Tests, Source, and
+  Other views reuse `MenuHeader`, `MenuItem`, middle-truncated paths, and Git-letter
+  badges. Selecting a file opens its diff across the server-validated complete ticket
+  commit span. The dialog has a standalone interactive `/ux-demo` route (HS2-S7X4SB).
 - `MenuItem` — **demo built**: the shared icon, label, trailing-value, and full-row
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.

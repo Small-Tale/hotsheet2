@@ -38,12 +38,12 @@ export function TicketCodeReview({ review, loading = false, message = '', title 
       {loading && <p role="status">{loadingMessage}</p>}
       {!loading && review && review.commits.length === 0 && <div class="ticket-code-review__empty"><LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" /><p>{emptyMessage}</p></div>}
       {!loading && review && review.commits.length > 0 && <>
-        {review.summary&&<section class="ticket-code-review__evidence" aria-label="Code review evidence"><h3>Change evidence</h3><div class="ticket-code-review__evidence-grid">
+        {review.summary&&<button type="button" class="ticket-code-review__evidence" data-action="open-change-evidence" aria-label="Open change evidence"><h3>Change evidence</h3><div class="ticket-code-review__evidence-grid">
           <span><LucideIcon icon={FileText} name="file-text"/><strong>{review.summary.files.docs}</strong> docs</span>
           <span><LucideIcon icon={FlaskConical} name="flask-conical"/><strong>{review.summary.files.tests}</strong> tests</span>
           <span><LucideIcon icon={FileCode2} name="file-code-2"/><strong>{review.summary.files.source}</strong> source</span>
           {review.summary.files.other>0&&<span><LucideIcon icon={CircleHelp} name="circle-help"/><strong>{review.summary.files.other}</strong> other</span>}
-        </div><p data-tests-modified={review.summary.tests_modified>0?'true':'false'}>{review.summary.tests_added} new test file{review.summary.tests_added===1?'':'s'} · {review.summary.tests_modified} existing test file{review.summary.tests_modified===1?'':'s'} modified</p></section>}
+        </div><p data-tests-modified={review.summary.tests_modified>0?'true':'false'}>{review.summary.tests_added} new test file{review.summary.tests_added===1?'':'s'} · {review.summary.tests_modified} existing test file{review.summary.tests_modified===1?'':'s'} modified</p></button>}
         {!enabled && <p class="ticket-code-review__notice" role="status">No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.</p>}
         {comparison?.active && <div class="ticket-code-review__compare-banner" role="status">
           <div><LucideIcon icon={GitCompare} name="git-compare"/><span>Select the <strong>{comparison.side.toUpperCase()}</strong> side of the comparison.</span></div>
@@ -66,6 +66,8 @@ export function codeReviewTarget(data: DOMStringMap): CodeReviewTarget | undefin
   if (data.reviewMode === 'commit' && data.reviewCommit) return { mode: 'commit', commit: data.reviewCommit };
   if (data.reviewMode === 'range' && data.reviewFrom && data.reviewTo) return { mode: 'range', from: data.reviewFrom, to: data.reviewTo };
   if (data.reviewMode === 'compare' && data.reviewFrom && data.reviewTo && data.reviewFrom !== data.reviewTo) return { mode: 'compare', from: data.reviewFrom, to: data.reviewTo };
+  if (data.reviewMode === 'ticket_file' && data.reviewPath) return { mode: 'ticket_file', path: data.reviewPath };
+  if (data.reviewMode === 'worktree_file' && data.reviewPath && (data.reviewArea === 'staged' || data.reviewArea === 'unstaged')) return { mode: 'worktree_file', path: data.reviewPath, area: data.reviewArea };
   return undefined;
 }
 

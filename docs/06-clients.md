@@ -446,8 +446,12 @@ prompt can be dismissed and returns on a later open until a source is configured
   The inspector includes a Code Review segment for ticket-associated code history. It
   begins with a server-derived change-evidence summary: unique documentation, test,
   source, and other file counts plus separate counts for newly added and modified existing
-  test files. Classification runs against each associated commit (not the browser's
-  working tree) and is configurable through the effective project setting
+  test files. The summary is an action that opens a repository-browser-style master/detail
+  dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. Selecting a
+  row opens that file in the configured difftool across the complete span from the parent
+  of the oldest associated commit through the newest associated commit. The server derives
+  and revalidates the exact path and range; arbitrary browser-supplied files are rejected.
+  Classification runs against that committed range (not the browser's working tree) and is configurable through the effective project setting
   `code_review_file_classes`, whose JSON object contains `docs`, `tests`, and `source`
   glob arrays. The defaults recognize `docs/**`, Markdown, conventional test/spec paths,
   and the common `src`, `crates`, `clients`, and `apps` source roots. For example,
@@ -1135,7 +1139,8 @@ counted Staged, Unstaged, Untracked, Conflicted, and Commits views. The detail c
 scrolls independently. File views preserve porcelain-v2 change kinds (including rename
 origins) as compact rounded Git-letter badges (`M`, `A`, `R`, `?`, and so on), and
 middle-truncate long paths while keeping their beginning and filename-visible ending.
-Double-click/Enter asks the
+Single-click or Enter on Staged and Unstaged files opens that exact working-tree file diff
+in the configured difftool after fresh server-side status validation. Double-click asks the
 host to open a currently reported file; the context menu can copy relative or absolute
 paths, open the file, or reveal it with host-specific Finder/File Explorer/file-manager
 wording. The server re-reads status and validates repository containment before any host
@@ -1145,7 +1150,8 @@ Value groups have no outer border and use text-aligned inset row separators.
 The status snapshot contains counts and repository metadata rather than every detail
 row. Each file view and the commit view request an initial 50-row cursor page, then an
 intersection sentinel fetches further pages as the independently scrolling detail pane
-approaches its end. Server page sizes are capped at 100, and switching views or
+approaches its end. The observer is rebound to the current rendered detail pane after
+reactive updates, so replacing a view cannot strand a visible Load more sentinel. Server page sizes are capped at 100, and switching views or
 explicitly refreshing resets the active cursor, so very large histories and working
 trees do not create an unbounded response or DOM.
 

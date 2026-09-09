@@ -23,6 +23,7 @@ import {
   FolderGit2,
   GitBranch,
   GitCommitHorizontal,
+  GitCompare,
   type IconNode,
   Info,
   Kanban,
@@ -157,7 +158,7 @@ import {
   sidebarViews,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
-import { repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
+import { changeEvidenceDemoView, ChangeEvidenceDialogDemo, repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { GlobalSearchDemo } from './search-demo';
 import { SelectDemo } from './select-demo';
 import {
@@ -373,6 +374,7 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     },
     'repository-summary': { icon: GitBranch, name: 'git-branch' },
     'repository-status-popover': { icon: FolderGit2, name: 'folder-git-2' },
+    'change-evidence-dialog': { icon: GitCompare, name: 'git-compare' },
     'connection-details-dialog': { icon: Wrench, name: 'wrench' },
     'view-navigation': { icon: ListTree, name: 'list-tree' },
     'command-navigation': { icon: Command, name: 'command' },
@@ -467,6 +469,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;
   if (item.id === 'repository-summary') return <RepositorySummaryDemo />;
   if (item.id === 'repository-status-popover') return <RepositoryStatusPopoverDemo />;
+  if (item.id === 'change-evidence-dialog') return <ChangeEvidenceDialogDemo />;
   if (item.id === 'connection-details-dialog') return <ConnectionDetailsDialogDemo />;
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
@@ -837,8 +840,17 @@ delegate(root, 'click', '[data-action="toggle-code-review-commit"]', (_event, ta
 delegate(root, 'click', '[data-action="refresh-repository-status"]', () => {
   repositoryDemoEvent.value = 'Repository status refreshed.';
 });
-delegate(root, 'dblclick', '[data-action="open-repository-file"]', (_event, target) => {
+delegate(root, 'dblclick', '[data-action="open-repository-file"],[data-action="open-staged-repository-file-diff"],[data-action="open-unstaged-repository-file-diff"]', (_event, target) => {
   repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.itemId}.`;
+});
+delegate(root, 'click', '[data-action="open-staged-repository-file-diff"],[data-action="open-unstaged-repository-file-diff"]', (_event, target) => {
+  repositoryDemoEvent.value = `Would review ${(target as HTMLElement).dataset.itemId} in Glassbox.`;
+});
+delegate(root, 'click', '[data-action="select-change-evidence-view"]', (_event, target) => {
+  changeEvidenceDemoView.value = (target as HTMLElement).dataset.itemId as typeof changeEvidenceDemoView.value;
+});
+delegate(root, 'click', '[data-action="open-ticket-file-diff"]', (_event, target) => {
+  repositoryDemoEvent.value = `Would review ${(target as HTMLElement).dataset.itemId} across the ticket commit range.`;
 });
 delegate(root, 'click', '[data-action="open-repository-review"]', (_event, target) => {
   repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.reviewMode} review in Glassbox.`;
