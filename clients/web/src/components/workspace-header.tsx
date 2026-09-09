@@ -72,6 +72,9 @@ export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSo
   return sortTriggerIcons[sort][direction];
 }
 
+const localSearchDateExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short'}).format(new Date(2026,8,1));
+const localSearchDateTimeExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'}).format(new Date(2026,8,1,11,5));
+
 export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false,sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   const ticketActionsDisabled=projectActionsDisabled||selectedTicketCount===0||!selectedTicketsMutable;
@@ -102,7 +105,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
             </wa-input>
             {searchTagSuggestions.length>0&&<div class="workspace-header__search-suggestions" role="listbox" aria-label="Matching tags">{searchTagSuggestions.map(tag=><button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>tag:{tag.includes(' ')?`"${tag}"`:tag}</button>)}</div>}
             {searchDatePrefix&&<div class="workspace-header__search-date" role="group" aria-label="Date and time helper"><label>Date<input name="workspace-search-date" type="date"/></label><label>Time (optional)<input name="workspace-search-time" type="time"/></label><button type="button" data-action="apply-workspace-search-date" data-date-prefix={searchDatePrefix}>Apply</button></div>}
-            {searchHelpOpen&&<aside class="workspace-header__search-help" role="dialog" aria-label="Search syntax"><strong>Search syntax</strong><p>Mix ordinary words with any filters below:</p><code>tag:client</code><code>tag:&quot;needs design&quot;</code><code>has-attachment</code><code>attachment:*.png</code><code>attachment:filename.svg</code><code>created-after:09-01-2026</code><code>completed-before:09-01-2026 11:05 AM</code><p>Dates use MM-DD-YYYY with an optional 12-hour time. Date fields: created, completed, started, verified, archived, and updated. Use <code>-before</code> or <code>-after</code>.</p></aside>}
+            {searchHelpOpen&&<aside class="workspace-header__search-help" role="dialog" aria-label="Search syntax"><strong>Search syntax</strong><p>Mix ordinary words with any filters below:</p><code>tag:client</code><code>tag:&quot;needs design&quot;</code><code>has-attachment</code><code>attachment:*.png</code><code>attachment:filename.svg</code><code>{`created-after:${localSearchDateExample}`}</code><code>{`completed-before:${localSearchDateTimeExample}`}</code><code>updated-after:2026-09-01T11:05</code><p>Dates and times use this device's locale. ISO 8601 dates and date-times are always accepted. Date fields: created, completed, started, verified, archived, and updated. Use <code>-before</code> or <code>-after</code>.</p></aside>}
           </>
           : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
       </ToolbarControlGroup>

@@ -34,8 +34,10 @@ field tokens without opening a separate advanced-search dialog. Typing `tag:` of
 matching project tags, including quoted tags with spaces, and selecting or completing one
 turns it into a removable, double-click-to-edit chip. The same surface accepts
 `has-attachment`, `attachment:<name-or-*-wildcard>`, and inclusive lifecycle bounds such
-as `created-after:09-01-2026` or `completed-before:09-01-2026 11:05 AM`. A native
-date/optional-time helper appears for lifecycle prefixes, and an adjacent help control
+as `created-after:<local-date>` or `completed-before:<local-date-and-time>`. Manual input
+uses the client machine's date/time order, punctuation, clock, and numerals; ISO 8601 dates
+and date-times (for example `2026-09-01` and `2026-09-01T11:05`) are always accepted.
+A native date/optional-time helper appears for lifecycle prefixes, and an adjacent help control
 opens the complete syntax guide without overloading the ordinary search placeholder.
 Created, updated, completed, and verified use their persisted timestamps. Because the v2
 ticket format has no separate started/archived timestamp, those two tokens constrain the
