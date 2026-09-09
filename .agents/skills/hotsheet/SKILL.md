@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 43 -->
+<!-- hotsheet-skill-version: 44 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -64,6 +64,14 @@ communicates the change more clearly. Do not silently substitute a local-only sc
 for a ticket attachment. If capture or attachment is genuinely impossible after exhausting
 safe alternatives, state the specific reason in the completion note. Screenshots supplement
 behavioral assertions; they do not replace them.
+
+Before attaching correctness evidence, apply `CLAUDE.md`'s visual-QA policy to the actual
+capture, not just its assertions: critically inspect readability, usability, contextual
+aesthetic fit and flow/order, clipping or truncation, icon-label alignment, spacing,
+responsive behavior, and any other obvious defect. Fix every defect found, rerun affected
+checks, and recapture; attach only evidence fit to hand off. An imperfect screenshot may be
+attached only as explicit `problem_evidence` in a `FEEDBACK NEEDED` blocker that names the
+real tradeoff or question—never as completion proof.
 
 When attaching several AI-generated evidence files from one verification operation, pass
 them in one command (`hotsheet-cli attach <ticket> --purpose correctness_evidence <files…>`)
