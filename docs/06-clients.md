@@ -788,7 +788,13 @@ launcher; board and settings modes are deliberately absent. The rectangular list
 segmented control owns its full first row, while sort, selection actions, and the final animated
 search control share the second row. This is the same advanced search surface and state as the
 main workspace, including chips, tag completion, attachment/presence filters, relative or local
-dates, and syntax help. Queue, Backlog, and Archive switch from a content-sized view selector in the page
+dates, and syntax help. Both workspace and global ticket search also accept case-insensitive
+`AND`, `OR`, and `NOT`, with parentheses and the conventional `NOT` → `AND` → `OR`
+precedence. `is:` predicates cover Up Next, an unexpired active claim, open lifecycle states,
+and each named lifecycle state (including `backlogged`/`backlog` and `archived`). Expressions
+are evaluated against the complete checkout rather than only the currently visible queue, so
+an explicit archived or backlogged predicate can find those rows. Queue, Backlog, and Archive
+switch from a content-sized view selector in the page
 heading without a redundant separator above it. Selecting one ticket pushes the shared inspector
 into the rail. Its larger blue Back action is vertically centered with the independently centered
 ticket slug and pops to the stable list through the shared `ContentTransition`. Terminal sessions
