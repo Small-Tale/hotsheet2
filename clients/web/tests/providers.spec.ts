@@ -173,6 +173,7 @@ test('keeps the project dialog dismissed after an inline error',async({page})=>{
 test('uses one provider dialog for onboarding, repeated connection creation, and editing',async({page})=>{
   await page.setViewportSize({width:1100,height:760});
   await mockProject(page,true,false,0,0,0,true);
+  await page.route('**/__hotsheet/projects/open',route=>route.fulfill({status:201,json:{...project,root:'/Users/westphal/Documents/spotlight-cities/best-in-manila',stores:[],needsTicketSetup:true}}));
   await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
@@ -195,13 +196,14 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
     const box=(await option.boundingBox())!,label=(await option.locator('.menu-item__label').boundingBox())!,icon=(await option.locator('.menu-item__icon').boundingBox())!,trailing=(await option.locator('.menu-item__trailing').boundingBox())!;
     expect(label.y).toBeGreaterThanOrEqual(box.y);
     expect(label.y+label.height,(await option.textContent())??undefined).toBeLessThanOrEqual(box.y+box.height);
+    expect(box.y+box.height-(label.y+label.height),(await option.textContent())??undefined).toBeGreaterThanOrEqual(10);
     expect(Math.abs(icon.y+icon.height/2-(box.y+box.height/2))).toBeLessThanOrEqual(6);
     expect(Math.abs(trailing.y+trailing.height/2-(box.y+box.height/2))).toBeLessThanOrEqual(6);
   }
-  await page.screenshot({path:'/private/tmp/hs2-b2kpnw-source-setup-after.png',fullPage:true});
+  await page.screenshot({path:'/private/tmp/hs2-4fw7wm-source-setup-wide.png',fullPage:true});
   await page.setViewportSize({width:620,height:680});
-  await expect.poll(async()=>sourceOptions.evaluateAll(options=>options.every(option=>{const box=option.getBoundingClientRect(),label=option.querySelector('.menu-item__label')!.getBoundingClientRect();return label.right<=box.right&&label.bottom<=box.bottom}))).toBe(true);
-  await page.screenshot({path:'/private/tmp/hs2-b2kpnw-source-setup-compact-after.png',fullPage:true});
+  await expect.poll(async()=>sourceOptions.evaluateAll(options=>options.every(option=>{const box=option.getBoundingClientRect(),label=option.querySelector('.menu-item__label')!.getBoundingClientRect();return label.right<=box.right&&label.bottom<=box.bottom-10}))).toBe(true);
+  await page.screenshot({path:'/private/tmp/hs2-4fw7wm-source-setup-narrow.png',fullPage:true});
   await page.setViewportSize({width:1100,height:760});
   await setup.getByRole('button',{name:'Connect GitHub Issues'}).click();
   await expect(setup).toHaveJSProperty('open',true);

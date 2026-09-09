@@ -306,7 +306,10 @@ cleanup of the old live HS1 data; backups are never removed.
   without embedding setup forms. Its Add data source action opens the same dialog used by
   source-less project onboarding: the first screen selects GitHub, GitLab, or Jira (and,
   during initial setup, a standalone Hot Sheet git store), then pushes the provider-specific
-  configuration screen within that dialog. Multiple connections of one provider type are
+  configuration screen within that dialog. Its shared multiline menu rows use intrinsic
+  height, so wrapped paths and descriptions retain vertical padding and cannot cross the
+  inset separators; shared value-table rows likewise reserve block padding when values wrap.
+  Multiple connections of one provider type are
   allowed because connection identity is independent from provider kind. Clicking an
   existing connection row opens that same dialog with its editable non-secret values.
   After creating a standalone git ticket store, the dialog asks for a clone URL and can

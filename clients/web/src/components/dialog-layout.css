@@ -10,7 +10,7 @@
 .dialog-header p { margin-top: var(--wa-space-2xs); color: var(--wa-color-text-quiet); }
 .dialog-header__actions { display: flex; align-items: center; gap: var(--wa-space-xs); }
 .value-table { display: grid; margin: 0; overflow: hidden; border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-lowered); }
-.value-table > div { position: relative; display: grid; min-height: 2.55rem; padding: 0 var(--wa-space-m); box-sizing: border-box; grid-template-columns: minmax(6rem,auto) minmax(0,1fr); align-items: center; gap: var(--wa-space-m); }
+.value-table > div { position: relative; display: grid; min-height: 2.55rem; padding: var(--wa-space-xs) var(--wa-space-m); box-sizing: border-box; grid-template-columns: minmax(6rem,auto) minmax(0,1fr); align-items: center; gap: var(--wa-space-m); }
 .value-table > div + div::before { position: absolute; top: 0; right: var(--wa-space-m); left: var(--wa-space-m); border-top: 1px solid var(--wa-color-surface-border); content: ''; }
 .value-table dt { color: var(--wa-color-text-quiet); }
 .value-table dd { display: flex; min-width: 0; margin: 0; overflow-wrap: anywhere; align-items: center; justify-content: flex-end; gap: var(--wa-space-2xs); font-weight: var(--wa-font-weight-semibold); text-align: right; }

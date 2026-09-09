@@ -20,6 +20,7 @@ describe('dialog layout primitives',()=>{
     expect(css).toMatch(/\.dialog-header \{[^}]*border-bottom:/);
     expect(css).toMatch(/\.value-table \{[^}]*background:/);
     expect(css).not.toMatch(/\.value-table \{[^}]*border:/);
+    expect(css).toMatch(/\.value-table > div \{[^}]*padding: var\(--wa-space-xs\) var\(--wa-space-m\);/);
     expect(css).toMatch(/\.value-table > div \+ div::before \{[^}]*right: var\(--wa-space-m\);[^}]*left: var\(--wa-space-m\);/);
   });
 });
