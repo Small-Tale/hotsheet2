@@ -142,6 +142,12 @@ Shared frontmatter contains an `attachments` sequence. Each item has a stable UL
 copy/move/sync/Git preserve all three metadata values. For legacy direct-child payloads,
 the store deterministically derives the id from ticket id + filename and uses the
 ticket's own `created_at`; filesystem modification time is never authoritative.
+Local attachment writes and renames keep filenames unique within one ticket using a
+case-insensitive comparison. A collision preserves the requested stem and extension and
+adds the first available numeric suffix (`proof.png`, `proof (2).png`, …), including
+when several files with the same name arrive in one atomic evidence batch. This keeps
+human-authored `attachment:filename` references unambiguous while the ULID remains the
+durable storage identity.
 
 HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
 human-authored `batch_label`, `actor` (`identity`, `display_name`, and

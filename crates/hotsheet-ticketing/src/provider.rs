@@ -779,7 +779,8 @@ impl TicketProvider for GitProvider {
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then(a.id.cmp(&b.id))
         });
-        self.store
+        ticket = self
+            .store
             .write_ticket_with_attachments_atomic(&ticket, &evidence)?;
         Ok(ApiTicket::from_provider(&ticket, &self.connection_id, None))
     }
@@ -1807,6 +1808,7 @@ mod tests {
             )
             .unwrap();
         let evidence_id = Ulid::new();
+        let duplicate_evidence_id = Ulid::new();
         let result = provider
             .report_not_working(
                 &id.to_string(),
@@ -1814,12 +1816,20 @@ mod tests {
                 NotWorkingReport {
                     expected_token: Some("2026-08-26T04:01:00Z".into()),
                     note: Some((Ulid::new(), "regressed after restart".into())),
-                    evidence: vec![ProviderEvidence {
-                        id: evidence_id,
-                        filename: "../proof.txt".into(),
-                        created_at: Timestamp::new("2026-08-26T04:02:00Z"),
-                        bytes: b"proof".to_vec(),
-                    }],
+                    evidence: vec![
+                        ProviderEvidence {
+                            id: evidence_id,
+                            filename: "../proof.txt".into(),
+                            created_at: Timestamp::new("2026-08-26T04:02:00Z"),
+                            bytes: b"proof".to_vec(),
+                        },
+                        ProviderEvidence {
+                            id: duplicate_evidence_id,
+                            filename: "proof.txt".into(),
+                            created_at: Timestamp::new("2026-08-26T04:02:01Z"),
+                            bytes: b"second proof".to_vec(),
+                        },
+                    ],
                 },
             )
             .unwrap();
@@ -1841,11 +1851,18 @@ mod tests {
                 .any(|note| note.text == "Status changed from Completed to Not Started")
         );
         assert_eq!(result.attachments[0].filename, "proof.txt");
+        assert_eq!(result.attachments[1].filename, "proof (2).txt");
         assert_eq!(
             provider
                 .attachment_bytes(&id.to_string(), &evidence_id.to_string())
                 .unwrap(),
             b"proof"
+        );
+        assert_eq!(
+            provider
+                .attachment_bytes(&id.to_string(), &duplicate_evidence_id.to_string())
+                .unwrap(),
+            b"second proof"
         );
     }
 

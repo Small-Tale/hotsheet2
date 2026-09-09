@@ -1702,6 +1702,24 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         .unwrap();
     let attached = body_json(app.clone().oneshot(attachment_request).await.unwrap()).await;
     assert_eq!(attached["attachments"][0]["filename"], "proof.txt");
+    let duplicate_attachment_request = Request::builder()
+        .method("POST")
+        .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
+        .header("x-hotsheet-secret", SECRET)
+        .header("x-hotsheet-filename", "proof.txt")
+        .body(Body::from("second checkout evidence"))
+        .unwrap();
+    let duplicate_attached = body_json(
+        app.clone()
+            .oneshot(duplicate_attachment_request)
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        duplicate_attached["attachments"][1]["filename"],
+        "proof (2).txt"
+    );
     let unicode_request = Request::builder()
         .method("POST")
         .uri(format!("/checkouts/combo/tickets/{slug}/attachments"))
@@ -1751,6 +1769,25 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
     assert_eq!(
         by_name.into_body().collect().await.unwrap().to_bytes(),
         "checkout evidence"
+    );
+    let duplicate_by_name = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/combo/tickets/{slug}/attachments/by-name/proof%20(2).txt"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(duplicate_by_name.status(), StatusCode::OK);
+    assert_eq!(
+        duplicate_by_name
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes(),
+        "second checkout evidence"
     );
     let by_name_with_sentence_period = app
         .clone()
@@ -1823,7 +1860,26 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
             .unwrap(),
     )
     .await;
-    assert_eq!(removed["attachments"].as_array().unwrap().len(), 1);
+    assert_eq!(removed["attachments"].as_array().unwrap().len(), 2);
+    let duplicate_attachment_id = removed["attachments"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|attachment| attachment["filename"] == "proof (2).txt")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap();
+    let removed = body_json(
+        app.clone()
+            .oneshot(authed(
+                "DELETE",
+                &format!("/checkouts/combo/tickets/{slug}/attachments/{duplicate_attachment_id}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
     let unicode_attachment_id = removed["attachments"][0]["id"].as_str().unwrap();
     let removed = body_json(
         app.clone()

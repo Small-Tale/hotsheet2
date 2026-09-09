@@ -182,6 +182,45 @@ impl AtomicAttachment {
     }
 }
 
+fn attachment_filename(filename: &str) -> String {
+    Path::new(filename)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .unwrap_or("attachment")
+        .to_string()
+}
+
+fn unique_attachment_filename<'a>(
+    filename: &str,
+    existing: impl IntoIterator<Item = &'a str>,
+) -> String {
+    let filename = attachment_filename(filename);
+    let used = existing
+        .into_iter()
+        .map(|name| name.to_lowercase())
+        .collect::<std::collections::HashSet<_>>();
+    if !used.contains(&filename.to_lowercase()) {
+        return filename;
+    }
+    let path = Path::new(&filename);
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("attachment");
+    let extension = path.extension().and_then(|value| value.to_str());
+    for sequence in 2_u64.. {
+        let candidate = match extension {
+            Some(extension) => format!("{stem} ({sequence}).{extension}"),
+            None => format!("{stem} ({sequence})"),
+        };
+        if !used.contains(&candidate.to_lowercase()) {
+            return candidate;
+        }
+    }
+    unreachable!()
+}
+
 /// A filesystem-backed store rooted at a directory.
 #[derive(Debug, Clone)]
 pub struct FsStore {
@@ -579,11 +618,14 @@ impl FsStore {
         metadata: hotsheet_model::AttachmentMetadata,
     ) -> Result<(Ticket, PathBuf), StoreError> {
         let mut ticket = self.read_ticket(ticket_id)?;
-        let name = Path::new(filename)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .filter(|n| !n.is_empty())
-            .unwrap_or("attachment");
+        let name = unique_attachment_filename(
+            filename,
+            ticket
+                .attachments
+                .iter()
+                .filter(|item| item.id != attachment_id)
+                .map(|item| item.filename.as_str()),
+        );
         if let Some(existing) = ticket
             .attachments
             .iter()
@@ -606,7 +648,7 @@ impl FsStore {
             .attachment_dir(ticket_id)
             .join(attachment_id.to_string());
         fs::create_dir_all(&dir)?;
-        let path = dir.join(name);
+        let path = dir.join(&name);
         fs::write(&path, bytes)?;
         if !ticket
             .attachments
@@ -615,7 +657,7 @@ impl FsStore {
         {
             ticket.attachments.push(Attachment {
                 id: attachment_id,
-                filename: name.to_string(),
+                filename: name,
                 created_at: created_at.clone(),
                 batch_id: metadata.batch_id,
                 batch_label: metadata.batch_label,
@@ -674,7 +716,7 @@ impl FsStore {
         &self,
         ticket: &Ticket,
         attachments: &[AtomicAttachment],
-    ) -> Result<(), StoreError> {
+    ) -> Result<Ticket, StoreError> {
         self.ensure_current_writer_format()?;
         let ticket_path = self.ticket_path(&ticket.id);
         let ticket_parent = ticket_path
@@ -709,13 +751,41 @@ impl FsStore {
         }
         fs::create_dir(&stage_root)?;
         let mut published = Vec::new();
+        let incoming_ids = attachments
+            .iter()
+            .map(|item| item.id)
+            .collect::<std::collections::HashSet<_>>();
+        let mut normalized = ticket.clone();
+        let mut used_names = normalized
+            .attachments
+            .iter()
+            .filter(|item| !incoming_ids.contains(&item.id))
+            .map(|item| item.filename.clone())
+            .collect::<Vec<_>>();
+        let normalized_names = attachments
+            .iter()
+            .map(|item| {
+                let name = unique_attachment_filename(
+                    &item.filename,
+                    used_names.iter().map(String::as_str),
+                );
+                used_names.push(name.clone());
+                if let Some(metadata) = normalized
+                    .attachments
+                    .iter_mut()
+                    .find(|attachment| attachment.id == item.id)
+                {
+                    metadata.filename.clone_from(&name);
+                }
+                name
+            })
+            .collect::<Vec<_>>();
         let result = (|| {
-            for item in attachments {
+            for (item, name) in attachments.iter().zip(&normalized_names) {
                 let dir = stage_root.join(item.id.to_string());
                 fs::create_dir(&dir)?;
-                fs::write(dir.join(item.sanitized_filename()), &item.bytes)?;
+                fs::write(dir.join(name), &item.bytes)?;
             }
-            let mut normalized = ticket.clone();
             normalized.schema = SCHEMA_VERSION;
             fs::write(&staged_ticket, to_file_string(&normalized))?;
             for item in attachments {
@@ -743,7 +813,7 @@ impl FsStore {
         {
             eprintln!("warning: hotsheet autocommit failed: {error}");
         }
-        Ok(())
+        Ok(normalized)
     }
 
     pub fn rename_attachment(
@@ -754,21 +824,28 @@ impl FsStore {
         filename: &str,
     ) -> Result<Ticket, StoreError> {
         let mut ticket = self.read_ticket(ticket_id)?;
-        let attachment = ticket
+        let attachment_index = ticket
             .attachments
-            .iter_mut()
-            .find(|item| &item.id == attachment_id)
+            .iter()
+            .position(|item| &item.id == attachment_id)
             .ok_or_else(|| {
                 StoreError::Io(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("attachment {attachment_id}"),
                 ))
             })?;
-        let name = Path::new(filename)
-            .file_name()
-            .and_then(|value| value.to_str())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("attachment");
+        let name = unique_attachment_filename(
+            filename,
+            ticket
+                .attachments
+                .iter()
+                .filter(|item| &item.id != attachment_id)
+                .map(|item| item.filename.as_str()),
+        );
+        let attachment = ticket
+            .attachments
+            .get_mut(attachment_index)
+            .expect("attachment index came from this collection");
         let dir = self
             .attachment_dir(ticket_id)
             .join(attachment_id.to_string());
@@ -779,8 +856,8 @@ impl FsStore {
         } else {
             self.attachment_dir(ticket_id).join(&attachment.filename)
         };
-        fs::rename(source, dir.join(name))?;
-        attachment.filename = name.into();
+        fs::rename(source, dir.join(&name))?;
+        attachment.filename = name;
         ticket.updated_at = now;
         self.write_ticket_committing(&ticket)?;
         Ok(ticket)
@@ -1564,6 +1641,80 @@ mod tests {
                 .join(attachment_id.to_string())
                 .exists()
         );
+    }
+
+    #[test]
+    fn attachment_filenames_are_unique_within_a_ticket() {
+        let (_dir, store) = temp_store();
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        store
+            .write_ticket(&Ticket::new(id, "HS-TEST", "test", "task", "t0", "t0"))
+            .unwrap();
+        let first = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+        let second = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB1");
+        let third = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2");
+
+        let (_, first_path) = store
+            .write_attachment(
+                &id,
+                first,
+                Timestamp::new("2026-08-26T00:00:00Z"),
+                "proof.png",
+                b"first",
+            )
+            .unwrap();
+        let (_, second_path) = store
+            .write_attachment(
+                &id,
+                second,
+                Timestamp::new("2026-08-26T00:01:00Z"),
+                "proof.png",
+                b"second",
+            )
+            .unwrap();
+        let (retried, retried_path) = store
+            .write_attachment(
+                &id,
+                second,
+                Timestamp::new("2026-08-26T00:01:00Z"),
+                "proof.png",
+                b"second",
+            )
+            .unwrap();
+        assert_eq!(retried.attachments[1].filename, "proof (2).png");
+        assert_eq!(retried_path, second_path);
+        let (ticket, third_path) = store
+            .write_attachment(
+                &id,
+                third,
+                Timestamp::new("2026-08-26T00:02:00Z"),
+                "PROOF.png",
+                b"third",
+            )
+            .unwrap();
+
+        assert_eq!(first_path.file_name().unwrap(), "proof.png");
+        assert_eq!(second_path.file_name().unwrap(), "proof (2).png");
+        assert_eq!(third_path.file_name().unwrap(), "PROOF (3).png");
+        assert_eq!(
+            ticket
+                .attachments
+                .iter()
+                .map(|attachment| attachment.filename.as_str())
+                .collect::<Vec<_>>(),
+            ["proof.png", "proof (2).png", "PROOF (3).png"]
+        );
+        assert_eq!(fs::read(second_path).unwrap(), b"second");
+
+        let renamed = store
+            .rename_attachment(
+                &id,
+                &third,
+                Timestamp::new("2026-08-26T00:03:00Z"),
+                "proof.png",
+            )
+            .unwrap();
+        assert_eq!(renamed.attachments[2].filename, "proof (3).png");
     }
 
     #[test]
