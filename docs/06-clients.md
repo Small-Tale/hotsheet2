@@ -544,7 +544,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   project-command group expansion, and independently clamped sidebar/inspector widths
   across reloads. Missing, partial, malformed, or unknown enum values fall back per
   field to safe defaults rather than preventing project open. Selecting a ticket still
-  reopens the inspector and persists that explicit state transition.
+  reopens the inspector and persists that explicit state transition. List or column mode
+  remains selected while visiting the cross-project terminal dashboard and when following
+  ticket references in details or notes; if navigation begins from a non-ticket workspace,
+  it restores the last explicitly selected list-or-column mode.
 
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it

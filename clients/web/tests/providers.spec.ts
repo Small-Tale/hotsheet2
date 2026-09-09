@@ -259,6 +259,13 @@ test('uses independent width and height terminal dashboard zoom scales',async({p
   await page.getByRole('button',{name:'Terminal dashboard'}).click();await expect(dashboard).toBeVisible();await dashboard.locator('[data-terminal-key="demo-checkout:tests"]').dblclick();await expect(drawer.locator('.xterm-helper-textarea')).toBeFocused();await expect.poll(()=>latestClaim('tests')).toMatchObject({cols:expect.any(Number),rows:expect.any(Number),focus:true});await expect(drawer.locator('[data-display-mode="interactive"]')).toHaveAttribute('data-driving','true');await page.screenshot({path:'/private/tmp/hs2-terminal-dashboard-drawer-refit.png',fullPage:true});
 });
 
+test('preserves column view after visiting the terminal dashboard (HS2-BH8ZVD)',async({page})=>{
+  await installFakeTerminalSockets(page,true);await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByLabel('Columns view').click();await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();
+  await page.getByRole('button',{name:'Terminal dashboard'}).click();await expect(page.getByRole('region',{name:'Terminal dashboard'})).toBeVisible();
+  await page.getByRole('tab',{name:/demo/}).click();await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed','true');
+});
+
 test('keeps a compact ticket rail beside the terminal dashboard and pushes into the inspector',async({page})=>{
   await page.setViewportSize({width:1440,height:900});await installFakeTerminalSockets(page,true);await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Terminal dashboard'}).click();
   const rail=page.locator('[data-component="terminal-ticket-rail"]');await expect(rail).toBeVisible();await expect(rail.locator('wa-select[name="terminal-rail-project"]')).toHaveAttribute('value','demo-checkout');await expect(rail.getByRole('button',{name:/List view/})).toBeVisible();await expect(rail.getByRole('button',{name:/Notifications view/})).toBeVisible();await expect(rail.getByRole('button',{name:/Columns view/})).toBeHidden();await expect(rail.getByRole('button',{name:/Settings view/})).toBeHidden();await expect(rail.getByRole('heading',{name:'Queue'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-nsbb5a-terminal-ticket-rail-wide-after.png',fullPage:true});
@@ -1305,6 +1312,12 @@ test('opens shared Markdown links safely in new tabs across the real inspector a
   const inspector=page.locator('[data-component="ticket-inspector"]'),projectGuide=inspector.getByRole('link',{name:'Project guide'});await expect(projectGuide).toHaveAttribute('target','_blank');await expect(projectGuide).toHaveAttribute('rel','noopener noreferrer');
   const runbook=inspector.getByRole('link',{name:'runbook'});await expect(runbook).toHaveAttribute('target','_blank');await expect(runbook).toHaveAttribute('rel','noopener noreferrer');
   await page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]').dblclick();const reader=page.getByRole('dialog',{name:'Read and edit HS2-DEMO01'});await expect(reader.getByRole('link',{name:'Project guide'})).toHaveAttribute('target','_blank');await expect(reader.getByRole('link',{name:'runbook'})).toHaveAttribute('rel','noopener noreferrer');
+});
+
+test('opens ticket references without leaving column view (HS2-230NY7)',async({page})=>{
+  await mockProject(page);await page.route('**/tickets/01',route=>route.request().method()==='GET'?route.fulfill({json:{store:'git-local',...full,details:'Continue with HS2-START02.'}}):route.fallback());await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByLabel('Columns view').click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.locator('[data-component="ticket-inspector"]').getByRole('link',{name:'HS2-START02'}).click();
+  await expect(page.locator('[data-component="ticket-board"]')).toBeVisible();await expect(page.getByLabel('Columns view')).toHaveAttribute('aria-pressed','true');await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]')).toHaveAttribute('data-selected','true');
 });
 
 test('ships TicketRow context-menu behavior through real list and board compositions',async({page})=>{
