@@ -847,6 +847,151 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
 }
 
 #[test]
+fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("code project");
+    let store = root.path().join("tickets project.hs2");
+    let remote = root.path().join("tickets-remote.git");
+    let home = root.path().join("hotsheet-home");
+    std::fs::create_dir(&project).unwrap();
+    std::fs::write(
+        project.join("CLAUDE.md"),
+        "# User instructions\n\nKeep this text.\n",
+    )
+    .unwrap();
+    std::fs::write(
+        project.join(".mcp.json"),
+        r#"{"mcpServers":{"user-server":{"command":"user-command"}}}"#,
+    )
+    .unwrap();
+    Command::new("git")
+        .args(["init", "--bare", remote.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let args = [
+        "bootstrap",
+        "--project",
+        project.to_str().unwrap(),
+        "--store",
+        store.to_str().unwrap(),
+        "--prefix",
+        "ACME",
+        "--tool",
+        "claude",
+        "--remote",
+        remote.to_str().unwrap(),
+    ];
+    for expected in ["Initialized standalone", "Reused standalone"] {
+        Command::cargo_bin("hotsheet-cli")
+            .unwrap()
+            .env("HOTSHEET_HOME", &home)
+            .args(args)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(expected))
+            .stdout(predicate::str::contains("Set up Claude Code"))
+            .stdout(predicate::str::contains("origin is configured"));
+    }
+
+    assert_eq!(
+        hotsheet_ticketing::FsStore::open(&store)
+            .unwrap()
+            .metadata()
+            .unwrap()
+            .ticket_prefix,
+        "ACME"
+    );
+    assert_eq!(
+        std::fs::read_to_string(project.join(hotsheet_cli::STORE_LINK))
+            .unwrap()
+            .trim(),
+        store.canonicalize().unwrap().to_str().unwrap()
+    );
+    let instructions = std::fs::read_to_string(project.join("CLAUDE.md")).unwrap();
+    assert!(instructions.contains("Keep this text."));
+    assert_eq!(
+        instructions
+            .matches("<!-- BEGIN hotsheet:claude -->")
+            .count(),
+        1
+    );
+    assert!(project.join(".claude/skills/hotsheet/SKILL.md").is_file());
+    let mcp: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(project.join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(mcp["mcpServers"]["user-server"]["command"], "user-command");
+    assert_eq!(mcp["mcpServers"]["hotsheet"]["args"][0], "--path");
+    assert_eq!(
+        mcp["mcpServers"]["hotsheet"]["args"][1],
+        store.canonicalize().unwrap().to_string_lossy().as_ref()
+    );
+
+    let origin = Command::new("git")
+        .args(["-C", store.to_str().unwrap(), "remote", "get-url", "origin"])
+        .output()
+        .unwrap();
+    assert!(origin.status.success());
+    assert_eq!(
+        String::from_utf8(origin.stdout).unwrap().trim(),
+        remote.to_str().unwrap()
+    );
+
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", &home)
+        .args([
+            "bootstrap",
+            "--project",
+            project.to_str().unwrap(),
+            "--store",
+            store.to_str().unwrap(),
+            "--tool",
+            "claude",
+            "--remote",
+            "git@example.com:other/tickets.git",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "refusing to replace existing user configuration",
+        ));
+}
+
+#[test]
+fn bootstrap_prints_exact_remote_instructions_when_origin_is_absent() {
+    let root = tempfile::tempdir().unwrap();
+    let project = root.path().join("project with spaces");
+    let store = root.path().join("store with spaces.hs2");
+    std::fs::create_dir(&project).unwrap();
+    Command::cargo_bin("hotsheet-cli")
+        .unwrap()
+        .env("HOTSHEET_HOME", root.path().join("home"))
+        .args([
+            "bootstrap",
+            "--project",
+            project.to_str().unwrap(),
+            "--store",
+            store.to_str().unwrap(),
+            "--tool",
+            "claude",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Ticket-store remote: not configured",
+        ))
+        .stdout(predicate::str::contains(format!(
+            "--project '{}' --store '{}' --remote <url>",
+            project.canonicalize().unwrap().display(),
+            store.canonicalize().unwrap().display()
+        )))
+        .stdout(predicate::str::contains(format!(
+            "git -C '{}' push -u origin HEAD",
+            store.canonicalize().unwrap().display()
+        )));
+}
+
+#[test]
 fn init_standalone_defaults_under_hs2_home_not_hs1_home() {
     let root = tempfile::tempdir().unwrap();
     let project = root.path().join("named-project");

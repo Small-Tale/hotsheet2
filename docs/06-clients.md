@@ -314,6 +314,9 @@ cleanup of the old live HS1 data; backups are never removed.
   push rolls back that newly added origin so the same form remains retryable. Inline help
   links to [host-specific remote setup guidance](ticket-repository-remotes.md), including
   the distinction between Git hosts and issue-only providers such as Jira.
+  The local bridge creates or reopens that store through the same idempotent headless
+  `hotsheet bootstrap` workflow available in an ordinary terminal, so checkout linking,
+  detected AI-tool skills/MCP setup, and preservation of existing config cannot drift.
   Creation and editing validate identifiers and locators, persist the connection record,
   update its checkout link, and can select it as the default creation target. Credential
   fields accept only an existing keychain reference; secret values are never returned to

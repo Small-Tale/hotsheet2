@@ -49,6 +49,24 @@ enum Cmd {
         #[arg(long, value_name = "URL", requires = "standalone")]
         remote: Option<String>,
     },
+    /// Idempotently prepare a code project and standalone HS2 store for headless AI work.
+    Bootstrap {
+        /// Code project to prepare (defaults to the current directory).
+        #[arg(long, default_value = ".")]
+        project: PathBuf,
+        /// Standalone ticket store (defaults to a sibling `<project>.hs2` directory).
+        #[arg(long, value_name = "PATH")]
+        store: Option<PathBuf>,
+        /// Display prefix for newly created ticket slugs.
+        #[arg(long, default_value = "HS2")]
+        prefix: String,
+        /// Configure this existing Git remote as `origin` without replacing another URL.
+        #[arg(long, value_name = "URL")]
+        remote: Option<String>,
+        /// Set up this AI tool even when it is not detected (repeatable).
+        #[arg(long = "tool")]
+        tools: Vec<String>,
+    },
     /// Link this directory (a code repo) to its **standalone** ticket store, so later
     /// `hotsheet-cli` calls here find it without `-C` (docs/02 §2.8, HS2-5CXKZ0). Writes a
     /// gitignored `.hotsheet/store` pointing at the store's absolute path.
@@ -759,13 +777,21 @@ fn main() -> Result<()> {
     // (HS2-5CXKZ0). `init`/`link` operate on the literal path, not a resolved one.
     if !matches!(
         cli.command,
-        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. } | Cmd::Launch { .. }
+        Cmd::Init { .. }
+            | Cmd::Bootstrap { .. }
+            | Cmd::Link { .. }
+            | Cmd::Checkout { .. }
+            | Cmd::Launch { .. }
     ) {
         cli.path = hotsheet_cli::resolve_store_path(cli.path, &cwd);
     }
     let refresh = !matches!(
         cli.command,
-        Cmd::Init { .. } | Cmd::Link { .. } | Cmd::Checkout { .. } | Cmd::Launch { .. }
+        Cmd::Init { .. }
+            | Cmd::Bootstrap { .. }
+            | Cmd::Link { .. }
+            | Cmd::Checkout { .. }
+            | Cmd::Launch { .. }
     );
     let result = match cli.command {
         Cmd::Init {
@@ -779,6 +805,19 @@ fn main() -> Result<()> {
             standalone,
             at.as_deref(),
             remote.as_deref(),
+        ),
+        Cmd::Bootstrap {
+            project,
+            store,
+            prefix,
+            remote,
+            tools,
+        } => cmd_bootstrap(
+            &project,
+            store.as_deref(),
+            &prefix,
+            remote.as_deref(),
+            &tools,
         ),
         Cmd::Link { store } => cmd_link(&store),
         Cmd::ActivateFormat {
@@ -1275,6 +1314,176 @@ const DEFAULT_TRIGGER_PROMPT_LOOP: &str = "Read the Hot Sheet Up Next queue (hot
 or `hotsheet-cli ls --up-next`) and take ONLY the single highest-priority ticket: set it \
 started, implement it, and mark it completed with a note on what you did. Do just that one \
 ticket this turn, then stop. If nothing is Up Next, say so and stop.";
+
+fn cmd_bootstrap(
+    project_input: &Path,
+    store_input: Option<&Path>,
+    prefix: &str,
+    remote: Option<&str>,
+    tools: &[String],
+) -> Result<()> {
+    let project = project_input
+        .canonicalize()
+        .with_context(|| format!("project path does not exist: {}", project_input.display()))?;
+    let store_candidate = store_input.map_or_else(
+        || PathBuf::from(format!("{}.hs2", project.display())),
+        |path| {
+            if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| PathBuf::from("."))
+                    .join(path)
+            }
+        },
+    );
+    let created = !store_candidate.exists();
+    if created {
+        FsStore::init(&store_candidate, &StoreMetadata::new(prefix)).with_context(|| {
+            format!(
+                "initializing standalone store at {}",
+                store_candidate.display()
+            )
+        })?;
+        git_init(&store_candidate);
+    } else {
+        FsStore::open(&store_candidate).with_context(|| {
+            format!(
+                "existing bootstrap destination is not a Hot Sheet store: {}",
+                store_candidate.display()
+            )
+        })?;
+    }
+    hotsheet_cli::register_merge_driver(&store_candidate);
+    let store = hotsheet_cli::link_store(&store_candidate, &project)?;
+
+    let repository = std::process::Command::new("git")
+        .args([
+            "-C",
+            project.to_str().unwrap_or("."),
+            "config",
+            "--get",
+            "remote.origin.url",
+        ])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let checkout = registry.register(&project, None, repository, vec![store.clone()])?;
+    hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
+
+    let existing_remote = std::process::Command::new("git")
+        .args([
+            "-C",
+            store.to_str().unwrap_or("."),
+            "remote",
+            "get-url",
+            "origin",
+        ])
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty());
+    if let Some(url) = remote {
+        if url.is_empty() || url.starts_with('-') || url.contains(['\r', '\n']) {
+            bail!("enter a valid existing Git remote URL");
+        }
+        match existing_remote.as_deref() {
+            Some(current) if current != url => bail!(
+                "origin is already configured as {current}; refusing to replace existing user configuration"
+            ),
+            Some(_) => {}
+            None => {
+                let status = std::process::Command::new("git")
+                    .args([
+                        "-C",
+                        store.to_str().unwrap_or("."),
+                        "remote",
+                        "add",
+                        "origin",
+                        url,
+                    ])
+                    .status()
+                    .context("running git remote add origin")?;
+                if !status.success() {
+                    bail!("git remote add origin exited with {status}");
+                }
+            }
+        }
+    }
+
+    let mut setup_reports = Vec::new();
+    if tools.is_empty() {
+        match hotsheet_cli::run_setup(&store, &project, None, true) {
+            Ok(reports) => setup_reports = reports,
+            Err(error)
+                if error
+                    .downcast_ref::<hotsheet_plugins::SetupError>()
+                    .is_some_and(|error| {
+                        matches!(error, hotsheet_plugins::SetupError::NoneDetected)
+                    }) =>
+            {
+                println!("No supported AI tools were detected; project/store setup is complete.");
+                println!(
+                    "Run `hotsheet-cli bootstrap --project {} --store {} --tool <tool>` after installing Claude, Codex, OpenCode, or another registered tool.",
+                    shell_quote_path(&project),
+                    shell_quote_path(&store)
+                );
+            }
+            Err(error) => return Err(error),
+        }
+    } else {
+        let mut seen = HashSet::new();
+        for tool in tools.iter().filter(|tool| seen.insert((*tool).clone())) {
+            setup_reports.extend(hotsheet_cli::run_setup(
+                &store,
+                &project,
+                Some(tool),
+                false,
+            )?);
+        }
+    }
+    for report in &setup_reports {
+        println!("Set up {}:", report.tool);
+        for path in &report.wrote {
+            println!("  wrote {path}");
+        }
+    }
+
+    println!(
+        "{} standalone Hot Sheet store at {} and linked {} via {}.",
+        if created { "Initialized" } else { "Reused" },
+        store.display(),
+        project.display(),
+        hotsheet_cli::STORE_LINK
+    );
+    if remote.is_some() || existing_remote.is_some() {
+        println!("Ticket-store remote: origin is configured.");
+    } else {
+        println!("Ticket-store remote: not configured.");
+        println!("Connect an existing provider-neutral Git remote with:");
+        println!(
+            "  hotsheet-cli bootstrap --project {} --store {} --remote <url>",
+            shell_quote_path(&project),
+            shell_quote_path(&store)
+        );
+        println!("Then publish the first commit with:");
+        println!("  git -C {} push -u origin HEAD", shell_quote_path(&store));
+    }
+    Ok(())
+}
+
+fn shell_quote_path(path: &Path) -> String {
+    let value = path.to_string_lossy();
+    format!("'{}'", value.replace('\'', "'\\''"))
+}
 
 fn cmd_init(
     path: &PathBuf,

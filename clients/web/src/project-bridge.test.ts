@@ -1,7 +1,11 @@
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -82,6 +86,25 @@ describe('native folder chooser',()=>{
   it('creates bootstrap and standalone stores through explicit CLI argument arrays',()=>{
     expect(localStoreInitArgs('/tmp/bootstrap')).toEqual(['init','-C','/tmp/bootstrap','--prefix','HS2']);
     expect(localStoreInitArgs('/work/demo.hs2',true)).toEqual(['init','--standalone','--at','/work/demo.hs2','--prefix','HS2']);
+    expect(projectBootstrapArgs('/work/demo','/work/demo.hs2')).toEqual(['bootstrap','--project','/work/demo','--store','/work/demo.hs2','--prefix','HS2']);
+    expect(projectBootstrapArgs('/work/demo','/work/demo.hs2','git@example.com:tickets.git')).toEqual(['bootstrap','--project','/work/demo','--store','/work/demo.hs2','--prefix','HS2','--remote','git@example.com:tickets.git']);
+  });
+
+  it('has the graphical bridge invoke the same headless bootstrap workflow on every setup',async()=>{
+    const directory=await mkdtemp(resolve(tmpdir(),'hotsheet-client-bootstrap-')),project=resolve(directory,'project'),store=resolve(directory,'tickets.hs2'),calls:Array<{command:string;args:string[];cwd:string}>=[];
+    await mkdir(project);
+    const runner=async(command:string,args:string[],cwd:string)=>{calls.push({command,args,cwd});await mkdir(store,{recursive:true});return''};
+    try {
+      const canonicalProject=await realpath(project);
+      const first=await createLocalGitTicketStore(project,store,runner),canonicalStore=await realpath(store);
+      expect(first).toBe(canonicalStore);
+      await expect(createLocalGitTicketStore(project,store,runner)).resolves.toBe(canonicalStore);
+      expect(calls).toHaveLength(2);
+      expect(calls[0].args).toEqual(projectBootstrapArgs(canonicalProject,store));
+      expect(calls[1]).toEqual(calls[0]);
+    } finally {
+      await rm(directory,{recursive:true,force:true});
+    }
   });
   it('exposes git ticket-store setup only through the local development bridge',async()=>{
     const setup=vi.fn().mockResolvedValueOnce('/work/demo.hs2').mockResolvedValueOnce('/chosen/tickets'),app=createDevApp(true,undefined,undefined,undefined,setup);

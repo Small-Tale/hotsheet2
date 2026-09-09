@@ -151,6 +151,10 @@ export function localStoreInitArgs(path:string,standalone=false):string[]{
   return standalone?['init','--standalone','--at',path,'--prefix','HS2']:['init','-C',path,'--prefix','HS2'];
 }
 
+export function projectBootstrapArgs(root:string,store:string,remote?:string):string[]{
+  return['bootstrap','--project',root,'--store',store,'--prefix','HS2',...(remote?['--remote',remote]:[])];
+}
+
 async function initializeStore(path:string,standaloneRoot?:string):Promise<void>{
   const binary=toolBinary();
   if(!await exists(binary))throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
@@ -163,9 +167,10 @@ async function bootstrapStore():Promise<string>{
   return realpath(path);
 }
 
-export async function createLocalGitTicketStore(rootInput:string,locationInput?:string):Promise<string>{
-  const root=await realpath(rootInput.trim()),path=locationInput?.trim()?await realpath(locationInput.trim()):`${root}.hs2`;
-  if(!await exists(resolve(path,'hotsheet-store.json')))await initializeStore(path,root);
+export async function createLocalGitTicketStore(rootInput:string,locationInput?:string,runner:ProcessRunner=runProcess):Promise<string>{
+  const root=await realpath(rootInput.trim()),path=locationInput?.trim()?resolve(locationInput.trim()):`${root}.hs2`,binary=toolBinary();
+  if(!await exists(binary))throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
+  await runner(binary,projectBootstrapArgs(root,path),developmentRepositoryRoot());
   return realpath(path);
 }
 

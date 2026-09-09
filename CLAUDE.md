@@ -18,6 +18,17 @@ A checkout id is a readable Hot Sheet path identity (`folder-shortpathhash`), no
 id, ticket-store id, or secret. Keep checkout↔store links many-to-many. Only server
 instance data carries bearer credentials.
 
+## Headless setup parity
+
+No project-bootstrap or recovery capability may exist only in a graphical client.
+Every workflow that initializes or links an HS2 ticket source, installs or updates the
+shared Hot Sheet skills, configures MCP integrations, or prepares supported AI tools
+must be available through an idempotent headless CLI path. Graphical clients should
+invoke the same underlying application workflow rather than reimplementing setup.
+When remote creation cannot be automated safely, the CLI must prompt for an existing
+remote or print exact provider-neutral next steps; a checkout prepared from a terminal
+must be as usable as one prepared through the client.
+
 ## Ticket-provider architecture
 
 Ticketing is provider-neutral. The existing Markdown/git implementation is the

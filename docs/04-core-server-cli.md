@@ -383,8 +383,9 @@ recreates it — so the CLI needs no SQLite dependency of its own.
 **Ops / lifecycle:**
 ```
 hotsheet init          # create/register a project + default store (+ install the merge driver)
-hotsheet init --standalone [--at <path>] [--remote <url>]
-                       # create a separate git store + link this code repo in one shot
+hotsheet init --standalone [--at <path>] [--remote <url>]  # create/link a standalone store
+hotsheet bootstrap [--project <path>] [--store <path>] [--remote <url>] [--tool <id> ...]
+                       # idempotently prepare store, link, tools/MCP, and remote
 hotsheet serve         # run the server
 hotsheet reindex       # drop + rebuild the index from disk
 hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
@@ -409,6 +410,14 @@ entry registering the serverless `hotsheet-mcp --path <store>` (an **absolute**
 `hotsheet-mcp` path when one sits next to the CLI, so it works without PATH munging —
 HS2-117); re-running refreshes the managed pieces in place. The permission-bridge
 install + the `hotsheet plugin` management commands are still to come.
+
+**Headless bootstrap (HS2-J90FXF):** `bootstrap` is the idempotent composition for a
+new or existing code project. It initializes or reuses a standalone HS2 store, links
+and registers the checkout, installs or refreshes every detected AI-tool integration
+(or each repeated `--tool`), and optionally configures an existing Git remote without
+replacing a different `origin`. With no remote it prints exact provider-neutral rerun
+and first-push commands. It preserves user-authored instruction and MCP configuration,
+and the graphical project's Git-source flow invokes this same CLI workflow.
 
 **Headless first run (HS2-MNHGT3):** `init` prints the same read-only onboarding
 report available from `doctor --project <code-repo>`. It detects installed plugin

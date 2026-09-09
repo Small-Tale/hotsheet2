@@ -41,6 +41,11 @@ setup/settings machinery live in the core** ([04-core-server-cli.md](04-core-ser
   MCP config for whatever tools are present.
 - **Server** — the same core code runs when a client asks it to (`POST …/setup/<tool>`).
 
+For a completely clean checkout, `hotsheet bootstrap` composes store initialization,
+checkout linking, detected (or explicit) tool setup, and optional existing-remote
+configuration into one idempotent headless workflow. Graphical project setup invokes
+that workflow instead of maintaining a client-only implementation (HS2-J90FXF).
+
 The **client never implements setup**; consistent with "clients never embed the
 core" ([04](04-core-server-cli.md) §4.1), it *requests* setup through the server API
 and renders the plugin's declared `preferences`. What moved is *authorship of the

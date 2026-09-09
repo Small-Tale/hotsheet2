@@ -51,7 +51,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
       src/ticket-bulk-operations.ts # Capability-aware category/status/priority, tag, and soft-delete patch planning
     src/ticket-mutation.ts   #   Optimistic field projection, targeted response reconciliation, stale guards, and phase telemetry
-    src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding HTTP/terminal-WS target resolution; exact HS1 source/database/version discovery; authenticated corrupt-path validation, shell-free platform reveal, and argument-array Git remote/first-push setup
+    src/project-bridge.ts    #   Vite-only local server discovery/detached start + credential-hiding HTTP/terminal-WS target resolution; exact HS1 source/database/version discovery; authenticated corrupt-path validation, shell-free platform reveal, and shared CLI-bootstrap/Git remote/first-push setup
     src/terminal-ws-bridge.ts #  Vite WebSocket upgrade bridge; keeps server credentials out of browser URLs and frames
     src/terminal-names.ts   #   Human-readable generated-id fallback plus validated device-local terminal-name storage
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
@@ -104,7 +104,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary, ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: default git commands plus exact `claim <slug|ULID>`/claim-next/renew/release, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
+      src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, exact `claim <slug|ULID>`/claim-next/renew/release, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
       src/external_launch.rs #   capability-aware external-terminal launch preparation: per-store server-instance discovery + permission route-back data; Claude hook supported, native Codex rejected until adapted (HS2-C46G58)
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
