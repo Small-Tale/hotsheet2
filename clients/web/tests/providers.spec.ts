@@ -507,9 +507,9 @@ test('clears needs review when a regular response follows the feedback-needed no
   await inspector.locator('[data-component="note-card"][data-note-id="N2"]').screenshot({path:'/private/tmp/hs2-98q45q-answered-feedback.png'});
 });
 
-test('shows Blocked only while a dependency remains unresolved',async({page})=>{
-  await mockProject(page);const target={...row,blocked_by:[completedRow.id]};await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:[target,completedRow]}):route.fallback());await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveCount(0);await ticket.screenshot({path:'/private/tmp/hs2-he87en-resolved-blocker.png'});
-  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:[{...target,blocked_by:[notStartedRow.id]},notStartedRow]}):route.fallback());await page.reload();await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');await ticket.screenshot({path:'/private/tmp/hs2-he87en-unresolved-blocker.png'});
+test('shows Blocked only when the ticket has a visible blocked reason',async({page})=>{
+  await mockProject(page);const target={...row,blocked_by:[notStartedRow.id]};await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:[target,notStartedRow]}):route.fallback());await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();const ticket=page.locator('[data-ticket-slug="HS2-DEMO01"]');await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveCount(0);await ticket.screenshot({path:'/private/tmp/hs2-e3c530-edge-without-reason.png'});
+  await page.route('**/tickets',route=>route.request().method()==='GET'?route.fulfill({json:[{...target,blocked_reason:'Waiting for access'},notStartedRow]}):route.fallback());await page.reload();await expect(ticket.locator('[data-component="blocked-badge"]')).toHaveText('Blocked');await ticket.screenshot({path:'/private/tmp/hs2-e3c530-visible-blocked-reason.png'});
 });
 
 test('lists associated commits and opens a validated commit or range in the configured diff tool',async({page})=>{

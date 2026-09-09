@@ -336,11 +336,13 @@ is settable over the API and MCP: `blocked_by` (an array of slug/ULID strings) o
 update a present `blocked_by` replaces the set (`[]` clears), absent leaves it. All
 surfaces share one resolver (`ops::resolve_blockers`), mirroring how `duplicate_of` is
 resolved on close.
-`blocked_reason` is an independently presence-aware nullable update field: omission
+`blocked_reason` is an independently presence-aware nullable update field and the single
+source of truth for whether a ticket is blocked: omission
 leaves the current reason unchanged, a string sets its trimmed value, and JSON `null`
 (or an empty/whitespace string) clears it. Checkout, local git-provider, and serverless
 MCP paths preserve that distinction instead of treating null as an omitted patch;
-external-provider capability handling is tracked separately.
+external-provider capability handling is tracked separately. `blocked_by` remains structured
+dependency context, but an edge without a non-empty reason never creates an invisible block.
 Create requests may also carry an initial `status` of `not_started`, `started`, or
 `backlog`; omitting it remains backward-compatible and defaults to `not_started`.
 Backlog creation clears `up_next`, and terminal/archive statuses must be reached through

@@ -173,8 +173,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   the fresh token instead of presenting a false conflict. Background refresh also leaves
   an in-flight or queued autosave draft alone; the write response and token retry path
   distinguish this client's earlier partial save from a genuinely competing edit.
-  The freeform blocked reason uses the same silent blur-flush path: a non-empty reason
-  persists, an empty edit sends `null` to clear it, and the authoritative response exits
+  The freeform blocked reason uses the same silent blur-flush path and is the single source
+  of truth for blocked presentation: a non-empty reason persists and shows the badge/rail,
+  an empty edit sends `null` to clear it, and the authoritative response exits
   editing without making the text disappear. An existing blocked-reason surface enters
   that editor on double-click, matching details and ordinary notes. Existing blocked
   reasons and ordinary notes do not add redundant per-item Edit buttons; their content

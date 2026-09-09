@@ -4,8 +4,8 @@
 //! full-text search so the UI never walks the store to draw a list.
 //!
 //! Indexes the queryable ticket fields + `tags`/`assignees`/`reviews` facet tables + an
-//! FTS5 table over slug/title/tags/details/notes/attachment filenames, plus blocked/unblocked (via `json_each` over
-//! `blocked_by_json` against the done set), created/updated date-range filters, and keyset
+//! FTS5 table over slug/title/tags/details/notes/attachment filenames, plus blocked/unblocked
+//! from the user-facing blocked reason, created/updated date-range filters, and keyset
 //! pagination through `TicketQuery::page_after` (HS2-89/HS2-T84F9F/HS2-TCDTCH).
 
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 9;
+const SCHEMA_VERSION: i64 = 10;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -38,6 +38,7 @@ CREATE TABLE tickets (
   feedback_needed INTEGER NOT NULL DEFAULT 0,
   tags_json       TEXT NOT NULL DEFAULT '[]',
   blocked_by_json TEXT NOT NULL DEFAULT '[]',
+  blocked_reason  TEXT,
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
   claimed_by      TEXT, claim_lease_expires_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
   file_path       TEXT NOT NULL,
@@ -219,16 +220,16 @@ impl Index {
 
         self.conn.execute(
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
-             status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,\
+             status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
              worker_label,claim_count,file_path,content_hash,feedback_needed) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
              status_rank=excluded.status_rank,close_reason=excluded.close_reason,duplicate_of=excluded.duplicate_of,\
              closed_at=excluded.closed_at,up_next=excluded.up_next,tags_json=excluded.tags_json,\
-             blocked_by_json=excluded.blocked_by_json,created_at=excluded.created_at,updated_at=excluded.updated_at,\
+             blocked_by_json=excluded.blocked_by_json,blocked_reason=excluded.blocked_reason,created_at=excluded.created_at,updated_at=excluded.updated_at,\
              completed_at=excluded.completed_at,verified_at=excluded.verified_at,claimed_by=excluded.claimed_by,\
              claim_lease_expires_at=excluded.claim_lease_expires_at,worker_label=excluded.worker_label,\
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
@@ -238,7 +239,7 @@ impl Index {
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
                 enum_str(&t.status), t.status as i64,
                 t.close_reason.as_ref().map(enum_str), t.duplicate_of.map(|u| u.to_string()),
-                ts(&t.closed_at), t.up_next as i64, tags_json, blocked_json,
+                ts(&t.closed_at), t.up_next as i64, tags_json, blocked_json, t.blocked_reason,
                 t.created_at.as_str(), t.updated_at.as_str(), ts(&t.completed_at), ts(&t.verified_at),
                 t.claimed_by, ts(&t.claim_lease_expires_at), t.worker_label, t.claim_count,
                 file_path, content_hash, feedback_needed,
@@ -579,14 +580,10 @@ impl Index {
                 "t.claimed_by IS NULL".into()
             });
         }
-        // Blocked / unblocked (HS2-T84F9F): a ticket is blocked if any of its blocked_by ids
-        // (expanded from the JSON array) references a ticket that is NOT done — i.e. not in
-        // the completed/verified/deleted/archive/moved set (matching ops::is_blocked; a
-        // blocker that doesn't exist in the index also counts as still-blocking).
+        // Blocked / unblocked: a non-empty user-facing reason is the source of truth.
+        // Structured dependency edges are context and never create an invisible blocked state.
         if let Some(want) = q.blocked {
-            let is_blocked = "EXISTS (SELECT 1 FROM json_each(t.blocked_by_json) b \
-                 WHERE b.value NOT IN (SELECT id FROM tickets d WHERE d.store_id = t.store_id \
-                 AND d.status IN ('completed','verified','deleted','archive','moved')))";
+            let is_blocked = "(t.blocked_reason IS NOT NULL AND trim(t.blocked_reason) <> '')";
             wheres.push(if want {
                 is_blocked.into()
             } else {
@@ -652,7 +649,7 @@ impl Index {
         };
         let sql = format!(
             "SELECT t.id,t.slug,t.title,t.details,t.category,t.priority,t.status,t.up_next,\
-             t.tags_json,t.blocked_by_json,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
+             t.tags_json,t.blocked_by_json,t.blocked_reason,t.created_at,t.updated_at,t.completed_at,t.verified_at,\
              t.closed_at,t.close_reason,t.duplicate_of,t.claimed_by,t.claim_lease_expires_at,t.worker_label,t.claim_count,\
              t.feedback_needed \
              FROM {from} WHERE {} ORDER BY {order}, t.id{limit}",
@@ -675,20 +672,21 @@ impl Index {
                     priority: r.get(5)?,
                     status: r.get(6)?,
                     up_next: r.get::<_, i64>(7)? != 0,
-                    feedback_needed: r.get::<_, i64>(21)? != 0,
+                    feedback_needed: r.get::<_, i64>(22)? != 0,
                     tags: json_vec(r.get::<_, String>(8)?),
                     blocked_by: json_vec(r.get::<_, String>(9)?),
-                    created_at: r.get(10)?,
-                    updated_at: r.get(11)?,
-                    completed_at: r.get(12)?,
-                    verified_at: r.get(13)?,
-                    closed_at: r.get(14)?,
-                    close_reason: r.get(15)?,
-                    duplicate_of: r.get(16)?,
-                    claimed_by: r.get(17)?,
-                    claim_lease_expires_at: r.get(18)?,
-                    worker_label: r.get(19)?,
-                    claim_count: r.get::<_, i64>(20)? as u32,
+                    blocked_reason: r.get(10)?,
+                    created_at: r.get(11)?,
+                    updated_at: r.get(12)?,
+                    completed_at: r.get(13)?,
+                    verified_at: r.get(14)?,
+                    closed_at: r.get(15)?,
+                    close_reason: r.get(16)?,
+                    duplicate_of: r.get(17)?,
+                    claimed_by: r.get(18)?,
+                    claim_lease_expires_at: r.get(19)?,
+                    worker_label: r.get(20)?,
+                    claim_count: r.get::<_, i64>(21)? as u32,
                     auto_context: Vec::new(),
                 })
             })?

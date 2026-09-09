@@ -49,7 +49,7 @@ machine per project (not committed — it's a cache).
 Why SQLite:
 - **Embedded, zero-config, transactional** — no server, single file, mature.
 - **Both query shapes in one store.** Structured filtering/sorting (status,
-  priority, category, tags, up_next, claim state, blocked_by) *and* full-text
+  priority, category, tags, up_next, claim state, blocked reason) *and* full-text
   search (FTS5 over slug + title + tags + body + notes) in the same database,
   joined in one query. No second system to keep in sync.
 - **Excellent bindings in both candidate core languages** (`rusqlite` for Rust,
@@ -151,6 +151,9 @@ query(filter, sort, text?, paging) -> TicketRow[]
   review-requested (by person, incl. "me")** (§10.2), date ranges. These are the
   same dimensions the **custom-view query builder** exposes (HS2-29) — so views can
   filter on the new fields (store / close_reason / assignment).
+  Blocked/unblocked uses the normalized, non-empty `blocked_reason` as its single source
+  of truth. `blocked_by` edges remain indexed dependency context, but never create a
+  blocked state without visible explanatory text.
 - **sort:** priority-then-recency (the worklist order), created, updated, title;
   ULID gives a free chronological default.
 - **text:** an FTS5 `MATCH` over slug/title/tags/details/notes, joined with the structured

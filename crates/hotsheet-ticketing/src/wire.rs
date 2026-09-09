@@ -231,6 +231,8 @@ pub struct TicketRow {
     pub feedback_needed: bool,
     pub tags: Vec<String>,
     pub blocked_by: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_reason: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
     pub completed_at: Option<String>,
@@ -264,6 +266,7 @@ impl From<&Ticket> for TicketRow {
             feedback_needed: t.feedback_needed(),
             tags: t.tags.clone(),
             blocked_by: t.blocked_by.iter().map(|u| u.to_string()).collect(),
+            blocked_reason: t.blocked_reason.clone(),
             created_at: Some(t.created_at.as_str().to_string()),
             updated_at: Some(t.updated_at.as_str().to_string()),
             completed_at: ts(&t.completed_at),

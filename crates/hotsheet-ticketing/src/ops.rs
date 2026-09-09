@@ -1005,9 +1005,12 @@ pub fn assign(
 
 // ---- claim / lease ---------------------------------------------------------------
 
-/// Blocked while any `blocked_by` dependency isn't done.
-pub fn is_blocked(t: &Ticket, done: &HashSet<Ulid>) -> bool {
-    t.blocked_by.iter().any(|b| !done.contains(b))
+/// A non-empty user-facing reason is the single source of truth for blocked state.
+/// Dependency edges remain structured context, but cannot create an invisible block.
+pub fn is_blocked(t: &Ticket, _done: &HashSet<Ulid>) -> bool {
+    t.blocked_reason
+        .as_deref()
+        .is_some_and(|reason| !reason.trim().is_empty())
 }
 
 /// A claim is available if unclaimed, lease-less (stale), or the lease is at/before `now`.
@@ -1442,6 +1445,7 @@ mod tests {
         .unwrap();
         assert_eq!(set.blocked_by, vec![a.id]);
         assert_eq!(set.blocked_reason.as_deref(), Some("Waiting for review"));
+        assert!(is_blocked(&set, &HashSet::new()));
         assert_eq!(store.read_ticket(&b.id).unwrap().blocked_by, vec![a.id]);
 
         // Some(vec![]) clears; None leaves unchanged
@@ -1460,6 +1464,7 @@ mod tests {
             cleared.blocked_reason.as_deref(),
             Some("Waiting for review")
         );
+        assert!(is_blocked(&cleared, &HashSet::from([a.id])));
 
         let reason_cleared = update(
             &store,
@@ -1472,6 +1477,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(reason_cleared.blocked_reason, None);
+        assert!(!is_blocked(&reason_cleared, &HashSet::new()));
         assert_eq!(store.read_ticket(&b.id).unwrap().blocked_reason, None);
 
         // unknown ticket + self-reference are rejected
@@ -2706,6 +2712,16 @@ mod tests {
                 title: "blocked".into(),
                 category: "task".into(),
                 blocked_by: vec![blocker.id],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let blocked = update(
+            &store,
+            &blocked.id,
+            ts("2026-08-19T00:01:00Z"),
+            TicketPatch {
+                blocked_reason: Some(Some("Waiting for blocker".into())),
                 ..Default::default()
             },
         )

@@ -220,13 +220,24 @@ fn blocked_review_moved_and_date_filters_match_the_file_scan() {
         .unwrap()
     };
     let a = mk("01ARZ3NDEKTSV4RRFFQ69G5FB0", &early, vec![]); // open blocker
-    let _b = mk("01ARZ3NDEKTSV4RRFFQ69G5FB1", &early, vec![a.id]); // blocked (A open)
+    let b = mk("01ARZ3NDEKTSV4RRFFQ69G5FB1", &early, vec![a.id]);
     let c = mk("01ARZ3NDEKTSV4RRFFQ69G5FB2", &late, vec![]);
-    let _d = mk("01ARZ3NDEKTSV4RRFFQ69G5FB3", &late, vec![c.id]); // becomes unblocked once C done
+    let _d = mk("01ARZ3NDEKTSV4RRFFQ69G5FB3", &late, vec![c.id]);
     let m = mk("01ARZ3NDEKTSV4RRFFQ69G5FB4", &late, vec![]);
     let r = mk("01ARZ3NDEKTSV4RRFFQ69G5FB5", &late, vec![]);
 
-    // C is done (satisfies D's blocker); M is a moved tombstone.
+    // B has an explanatory reason and is blocked. D has only a dependency edge and is not.
+    ops::update(
+        &store,
+        &b.id,
+        early.clone(),
+        TicketPatch {
+            blocked_reason: Some(Some("Waiting for A".into())),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    // C is done; M is a moved tombstone.
     ops::update(
         &store,
         &c.id,
@@ -306,7 +317,7 @@ fn blocked_review_moved_and_date_filters_match_the_file_scan() {
         );
     }
 
-    // Spot-check the semantics (not just parity): B is blocked, D is unblocked, M is hidden.
+    // Spot-check the semantics (not just parity): B's reason blocks, D's bare edge does not.
     let blocked = ops_ids(
         &store,
         &TicketQuery {
@@ -316,11 +327,11 @@ fn blocked_review_moved_and_date_filters_match_the_file_scan() {
     );
     assert!(
         blocked.contains("01ARZ3NDEKTSV4RRFFQ69G5FB1"),
-        "B blocked by open A"
+        "B blocked by its visible reason"
     );
     assert!(
         !blocked.contains("01ARZ3NDEKTSV4RRFFQ69G5FB3"),
-        "D unblocked (C done)"
+        "D's dependency edge alone does not create a hidden block"
     );
     let all = index_ids(&ix.query(&TicketQuery::default()).unwrap());
     assert!(

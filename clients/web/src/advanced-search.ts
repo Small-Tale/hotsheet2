@@ -27,7 +27,7 @@ export function filterAdvancedSearchResults(rows:TicketRow[],query:string,scope:
     if(scope==='current'&&!currentIds?.has(ticket.qualified_id))return false;
     if(filters.includes('up-next')&&!ticket.up_next)return false;
     if(filters.includes('needs-review')&&!ticket.feedback_needed)return false;
-    if(filters.includes('blocked')&&!ticket.blocked_by.length)return false;
+    if(filters.includes('blocked')&&!ticket.blocked_reason?.trim())return false;
     return true;
   });
 }
