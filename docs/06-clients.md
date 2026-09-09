@@ -105,6 +105,15 @@ prompt can be dismissed and returns on a later open until a source is configured
   Keep the platform-neutral component responsibilities close to the planned macOS
   SwiftUI architecture; share concepts and API contracts, not rendering primitives.
 
+- **Installable web identity.** Every web route publishes a web app manifest, the
+  exported Hot Sheet flame favicon, square installed-app icons at 192 and 512 pixels,
+  a maskable 512-pixel icon, and a 180-pixel Apple touch icon. Browser chrome and the
+  installed launch surface use the same lowered-surface `#f2f2f7` color as the client
+  shell. The manifest launches at the application root in standalone display mode.
+  These static identity assets are bundled into production; Hot Sheet does not use a
+  service worker to cache live project/API responses or introduce a second client
+  version lifecycle.
+
 - **Stable local development by default.** `npm run dev` in `clients/web` copies the
   package into a temporary snapshot and starts Vite there. The running app retains the
   development bridge and `/ux-demo`, but concurrent edits in the checkout cannot trigger
