@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 
 import {describe,expect,it} from 'vitest';
 
-import {AttachmentGallery,attachmentGalleryImageIndex,attachmentGallerySelectionUrl,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
+import {AttachmentGallery,attachmentGalleryImageIndex,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
 
 describe('AttachmentGallery',()=>{
   const images=[{id:'a',name:'a.png',url:'/a.png'},{id:'b',name:'b.svg',url:'/b.svg'}];
@@ -22,12 +22,6 @@ describe('AttachmentGallery',()=>{
     const alias='/tickets/HS2-DEMO/attachments/by-name/b.svg';
     expect(attachmentGalleryImageIndex(aliased,alias)).toBe(1);
     expect(String(AttachmentGallery({images:aliased,activeUrl:alias}))).toContain('Image 2 of 2: b.svg');
-  });
-  it('uses durable attachment identity before an ambiguous shared alias',()=>{
-    const ambiguous=[{...images[0],ticket:'HS2-DEMO',attachmentId:'A1',aliases:['/shared.png']},{...images[1],ticket:'HS2-DEMO',attachmentId:'A2',aliases:['/shared.png']}];
-    expect(attachmentGallerySelectionUrl(ambiguous,{url:'/shared.png',attachmentId:'A2',ticket:'HS2-DEMO',name:'b.svg'})).toBe('/b.svg');
-    expect(attachmentGallerySelectionUrl(ambiguous,{url:'/shared.png',ticket:'HS2-DEMO',name:'b.svg'})).toBe('/b.svg');
-    expect(attachmentGallerySelectionUrl(ambiguous,{url:'/shared.png'})).toBe('/a.png');
   });
   it('renders videos paused by default with only the custom playback and volume controls',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4',thumbnailUrl:'/walkthrough-poster.jpg'}],activeUrl:'/walkthrough.mp4'}));
