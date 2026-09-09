@@ -3652,7 +3652,13 @@ async fn update_checkout_ticket_attachment_annotations(
     }
     let updated = entry
         .store
-        .set_attachment_annotations(&ticket.id, &attachment_id, body.annotations, now())
+        .set_attachment_annotations_with_activity(
+            &ticket.id,
+            &attachment_id,
+            body.annotations,
+            Ulid::new(),
+            now(),
+        )
         .map_err(ApiError::from)?;
     state.changed_in(&entry, "attachment_annotations_updated", &updated);
     Ok(Json(ResolvedTicket {

@@ -43,17 +43,17 @@ function resolveKnownAttachment(context:AttachmentReferenceContext,reference:Att
 
 export function expandAttachmentReferences(source:string,context?:AttachmentReferenceContext):string {
   if(!context)return source;
-  const resolve=(raw:string,label?:string,image=false)=>{
+  const resolve=(raw:string,label?:string,image=false,autoPreview=true)=>{
     const parsed=parseAttachmentReference(raw),reference=parsed&&resolveKnownAttachment(context,parsed);
     if(!reference)return undefined;
     const url=attachmentReferenceUrl(context,reference),text=label||reference.filename,suffix=parsed.filename.slice(reference.filename.length),canonical=`attachment:${reference.ticket?`[${reference.ticket}]`:''}${reference.filename}`;
-    const link=image||isImageAttachment(reference.filename)?`![${text}](${url} "${canonical}")`:`[${text}](${url} "${canonical}")`;
+    const link=image||(autoPreview&&isImageAttachment(reference.filename))?`![${text}](${url} "${canonical}")`:`[${text}](${url} "${canonical}")`;
     return `${link}${suffix}`;
   };
   return source
     .replace(/(^|\s)(attachment:(?:\[[^\]]+\])?[A-Za-z0-9_.@+()-]+)/gm,(whole,prefix:string,raw:string)=>`${prefix}${resolve(raw)??raw}`)
     .replace(/`(attachment:(?:\[[^\]]+\])?[^`\n]+)`/g,(whole,raw:string)=>resolve(raw)??whole)
-    .replace(/(!?)\[([^\]]*)\]\((attachment:(?:\[[^\]]+\])?[^)]+)\)/g,(whole,bang:string,label:string,raw:string)=>resolve(raw,label,bang==='!')??whole);
+    .replace(/(!?)\[([^\]]*)\]\((attachment:(?:\[[^\]]+\])?[^)]+)\)/g,(whole,bang:string,label:string,raw:string)=>resolve(raw,label,bang==='!',false)??whole);
 }
 
 export function attachmentReferences(source:string,context?:AttachmentReferenceContext):AttachmentReference[] {

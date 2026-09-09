@@ -15,7 +15,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use hotsheet_model::{
-    Attachment, ParseError, SCHEMA_VERSION, Ticket, Timestamp, Ulid, parse_file, to_file_string,
+    Attachment, Note, NoteKind, ParseError, SCHEMA_VERSION, Ticket, Timestamp, Ulid, parse_file,
+    to_file_string,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use sha2::{Digest, Sha256};
@@ -847,12 +848,14 @@ impl FsStore {
         Ok(ticket)
     }
 
-    /// Replace an attachment's normalized media annotations and commit the ticket update.
-    pub fn set_attachment_annotations(
+    /// Replace an attachment's annotations and append one activity note in the same commit.
+    /// No-op batches neither rewrite the ticket nor add a note.
+    pub fn set_attachment_annotations_with_activity(
         &self,
         ticket_id: &Ulid,
         attachment_id: &Ulid,
         annotations: Vec<hotsheet_model::MediaAnnotation>,
+        note_id: Ulid,
         now: Timestamp,
     ) -> Result<Ticket, StoreError> {
         let mut ticket = self.read_ticket(ticket_id)?;
@@ -866,7 +869,22 @@ impl FsStore {
                     format!("attachment {attachment_id}"),
                 ))
             })?;
+        let Some((summary, text)) = crate::annotation_activity::annotation_change_activity(
+            &attachment.filename,
+            &attachment.annotations,
+            &annotations,
+        ) else {
+            return Ok(ticket);
+        };
         attachment.annotations = annotations;
+        ticket.notes.push(Note {
+            id: note_id,
+            kind: NoteKind::Activity,
+            created_at: now.clone(),
+            edited_at: now.clone(),
+            summary: Some(summary),
+            text,
+        });
         ticket.updated_at = now;
         self.write_ticket_committing(&ticket)?;
         Ok(ticket)

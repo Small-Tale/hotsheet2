@@ -414,7 +414,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   accepted. Matching prefers the longest real attachment filename and leaves any trailing
   sentence punctuation in the prose, so `attachment:proof.png.` resolves `proof.png`.
   Missing ticket or filename targets do not reject a note (attachments may be uploaded next),
-  but mutation callers receive prominent actionable warning feedback. Browser-compatible image references render inline, while other references
+  but mutation callers receive prominent actionable warning feedback. Browser-compatible
+  bare references and explicit image destinations render inline; explicit Markdown links
+  remain compact links even when their target is an image, while other references
   ask the host to open the file with its default application. Right-click actions can
   download, copy the durable reference or host path, and reveal the file using the host
   platform's file manager. Inline image controls remain intrinsic-height block content,
@@ -469,6 +471,11 @@ prompt can be dismissed and returns on a later open until a source is configured
   CLI, and AI worklist reads all use the canonical ticket attachment shape, including the
   complete annotation ids, rectangles, time ranges, and text; annotations are therefore
   part of the ticket context presented to an AI rather than client-only state.
+  Markup edits remain local while the annotation mode is open. Finishing markup or closing
+  or navigating away from the gallery persists the complete batch once. A changed batch
+  atomically adds one activity note that links the attachment and lists each added, updated,
+  or removed annotation with normalized percentage bounds, optional time range, and caption;
+  an unchanged session performs no write and adds no note.
   New-ticket attachment evidence follows the same safety policy before a ticket exists:
   users can drop files on the collapsed New ticket launcher or anywhere on the expanded
   composer, inspect and remove the staged filenames, and cancel to discard the entire

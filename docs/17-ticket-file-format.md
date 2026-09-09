@@ -160,6 +160,10 @@ string `id`, a rectangle (`x`, `y`, `width`, `height`) normalized to the integer
 0–10,000, and optional `text`. Timed media additionally stores an inclusive
 `start_ms`/`end_ms` pair; equal endpoints represent a point annotation. Missing
 `annotations` remains equivalent to an empty sequence, preserving older HS2 files.
+Each persisted annotation batch also appends an `activity` note whose summary identifies
+the attachment and whose Markdown body records added, updated, and removed rectangles.
+The annotation replacement and its activity note are one store commit, so readers never
+observe metadata without the corresponding history entry.
 
 ## 17.4 Rules the parser/serializer enforce
 

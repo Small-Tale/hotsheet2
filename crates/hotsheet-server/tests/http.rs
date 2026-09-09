@@ -1625,6 +1625,33 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
         annotated["attachments"][0]["annotations"][0]["text"],
         "Review this frame"
     );
+    let annotation_note = annotated["notes"].as_array().unwrap().last().unwrap();
+    assert_eq!(annotation_note["kind"], "activity");
+    assert_eq!(
+        annotation_note["summary"],
+        "Updated annotations for fixed.mov"
+    );
+    assert_eq!(
+        annotation_note["text"],
+        "Annotations changed for [attachment:fixed.mov](attachment:fixed.mov)\n- Added `(x 10.0%, y 20.0%, w 30.0%, h 25.0%) from 00:01.000 to 00:02.000` — Review this frame"
+    );
+    let repeated = body_json(
+        app.clone()
+            .oneshot(authed(
+                "PUT",
+                &format!(
+                    "/checkouts/combo/tickets/{slug}/attachments/{video_attachment_id}"
+                ),
+                Some(r#"{"annotations":[{"id":"region-1","x":1000,"y":2000,"width":3000,"height":2500,"start_ms":1000,"end_ms":2000,"text":"Review this frame"}]}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        repeated["notes"].as_array().unwrap().len(),
+        annotated["notes"].as_array().unwrap().len()
+    );
     let invalid = app
         .clone()
         .oneshot(authed(
