@@ -1522,6 +1522,11 @@ test('exercises the application-shell component slice and responsive composition
   expect(closeGeometry.nameLeft).toBeGreaterThan(closeGeometry.selectLeft);
   expect(closeGeometry.closeBackground).toBe('rgba(0, 0, 0, 0)');
   expect(closeGeometry.selectPaddingRight).toBe('12px');
+  const firstTab=tabBar.locator('[data-component="project-tab"]').first(),firstSelect=firstTab.getByRole('tab');
+  await firstSelect.focus();await expect(firstSelect).toBeFocused();
+  const focusPresentation=await firstTab.evaluate(node=>{const root=getComputedStyle(node),select=getComputedStyle(node.querySelector('.app-tab__select')!);return{rootOutlineStyle:root.outlineStyle,rootOutlineWidth:root.outlineWidth,rootOutlineOffset:root.outlineOffset,selectOutlineStyle:select.outlineStyle}});
+  expect(focusPresentation).toMatchObject({rootOutlineStyle:'solid',rootOutlineWidth:'3px',rootOutlineOffset:'-2px',selectOutlineStyle:'none'});
+  await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-wide.png',fullPage:true});
   const tabActionCenters = await tabBar.evaluate(node => {
     const tab = node.querySelector('[data-component="project-tab"]')!.getBoundingClientRect();
     const add = node.querySelector('[data-action="add-project"] svg')!.getBoundingClientRect();
@@ -1561,6 +1566,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(overflowState.scrollLeft).toBeGreaterThan(0);
   expect(overflowState.overflowX).toBe('auto');
   expect(overflowState.shadowClearance).toBeGreaterThanOrEqual(3);
+  await tabBar.locator('.project-tab-bar__tabs').evaluate(node=>{node.scrollLeft=0});await firstSelect.focus();await expect(firstSelect).toBeFocused();await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-narrow.png',fullPage:true});
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
