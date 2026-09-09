@@ -3785,6 +3785,33 @@ async fn attachment_upload_returns_and_persists_durable_metadata() {
     .await;
     assert_eq!(reread["attachments"], attached["attachments"]);
 
+    for query in [
+        "has_attachment=true",
+        "attachment=*.mov",
+        "attachment=choppy",
+    ] {
+        let matches = body_json(
+            app.clone()
+                .oneshot(authed("GET", &format!("/tickets?{query}"), None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            matches.as_array().unwrap().len(),
+            1,
+            "structured query {query}"
+        );
+    }
+    let no_match = body_json(
+        app.clone()
+            .oneshot(authed("GET", "/tickets?attachment=*.png", None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(no_match.as_array().unwrap().is_empty());
+
     let invalid_actor = Request::builder()
         .method("POST")
         .uri(format!("/tickets/{id}/attachments"))

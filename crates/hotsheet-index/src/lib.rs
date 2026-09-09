@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_VERSION: i64 = 11;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -39,6 +39,7 @@ CREATE TABLE tickets (
   tags_json       TEXT NOT NULL DEFAULT '[]',
   blocked_by_json TEXT NOT NULL DEFAULT '[]',
   blocked_reason  TEXT,
+  attachment_names_json TEXT NOT NULL DEFAULT '[]',
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
   claimed_by      TEXT, claim_lease_expires_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
   file_path       TEXT NOT NULL,
@@ -217,19 +218,26 @@ impl Index {
                 .collect::<Vec<_>>(),
         )
         .unwrap_or_else(|_| "[]".into());
+        let attachment_names_json = serde_json::to_string(
+            &t.attachments
+                .iter()
+                .map(|attachment| attachment.filename.as_str())
+                .collect::<Vec<_>>(),
+        )
+        .unwrap_or_else(|_| "[]".into());
 
         self.conn.execute(
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
-             created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
+             attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
              worker_label,claim_count,file_path,content_hash,feedback_needed) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
              status_rank=excluded.status_rank,close_reason=excluded.close_reason,duplicate_of=excluded.duplicate_of,\
              closed_at=excluded.closed_at,up_next=excluded.up_next,tags_json=excluded.tags_json,\
-             blocked_by_json=excluded.blocked_by_json,blocked_reason=excluded.blocked_reason,created_at=excluded.created_at,updated_at=excluded.updated_at,\
+             blocked_by_json=excluded.blocked_by_json,blocked_reason=excluded.blocked_reason,attachment_names_json=excluded.attachment_names_json,created_at=excluded.created_at,updated_at=excluded.updated_at,\
              completed_at=excluded.completed_at,verified_at=excluded.verified_at,claimed_by=excluded.claimed_by,\
              claim_lease_expires_at=excluded.claim_lease_expires_at,worker_label=excluded.worker_label,\
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
@@ -239,7 +247,7 @@ impl Index {
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
                 enum_str(&t.status), t.status as i64,
                 t.close_reason.as_ref().map(enum_str), t.duplicate_of.map(|u| u.to_string()),
-                ts(&t.closed_at), t.up_next as i64, tags_json, blocked_json, t.blocked_reason,
+                ts(&t.closed_at), t.up_next as i64, tags_json, blocked_json, t.blocked_reason, attachment_names_json,
                 t.created_at.as_str(), t.updated_at.as_str(), ts(&t.completed_at), ts(&t.verified_at),
                 t.claimed_by, ts(&t.claim_lease_expires_at), t.worker_label, t.claim_count,
                 file_path, content_hash, feedback_needed,
@@ -596,11 +604,35 @@ impl Index {
             ("created_at", &q.created_before, "<="),
             ("updated_at", &q.updated_after, ">="),
             ("updated_at", &q.updated_before, "<="),
+            ("completed_at", &q.completed_after, ">="),
+            ("completed_at", &q.completed_before, "<="),
+            ("verified_at", &q.verified_after, ">="),
+            ("verified_at", &q.verified_before, "<="),
         ] {
             if let Some(v) = val {
                 wheres.push(format!("t.{col} {op} ?"));
                 args.push(Box::new(v.clone()));
             }
+        }
+        if let Some(want) = q.has_attachment {
+            wheres.push(if want {
+                "t.attachment_names_json <> '[]'".into()
+            } else {
+                "t.attachment_names_json = '[]'".into()
+            });
+        }
+        for pattern in &q.attachment_patterns {
+            let sql_pattern = pattern
+                .replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
+                .replace('*', "%");
+            wheres.push("EXISTS (SELECT 1 FROM json_each(t.attachment_names_json) WHERE lower(value) LIKE lower(?) ESCAPE '\\')".into());
+            args.push(Box::new(if pattern.contains('*') {
+                sql_pattern
+            } else {
+                format!("%{sql_pattern}%")
+            }));
         }
         if !q.tags.is_empty() {
             let placeholders = vec!["?"; q.tags.len()].join(",");

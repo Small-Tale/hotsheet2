@@ -6135,6 +6135,13 @@ struct ListParams {
     created_before: Option<String>,
     updated_after: Option<String>,
     updated_before: Option<String>,
+    completed_after: Option<String>,
+    completed_before: Option<String>,
+    verified_after: Option<String>,
+    verified_before: Option<String>,
+    has_attachment: Option<bool>,
+    /// Comma-separated attachment filename patterns; `*` is a wildcard.
+    attachment: Option<String>,
     sort: Option<String>,
     limit: Option<usize>,
     /// Keyset cursor (a ULID): return rows strictly after this one in `sort` order (HS2-TCDTCH).
@@ -6233,6 +6240,21 @@ impl ListParams {
             created_before: self.created_before,
             updated_after: self.updated_after,
             updated_before: self.updated_before,
+            completed_after: self.completed_after,
+            completed_before: self.completed_before,
+            verified_after: self.verified_after,
+            verified_before: self.verified_before,
+            has_attachment: self.has_attachment,
+            attachment_patterns: self
+                .attachment
+                .map(|values| {
+                    values
+                        .split(',')
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default(),
             sort,
             limit: self.limit,
             page_after,

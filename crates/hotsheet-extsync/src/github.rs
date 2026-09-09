@@ -409,6 +409,12 @@ impl TicketProvider for GitHubProvider {
             || query.blocked.is_some()
             || query.page_after.is_some()
             || query.up_next_only
+            || query.completed_after.is_some()
+            || query.completed_before.is_some()
+            || query.verified_after.is_some()
+            || query.verified_before.is_some()
+            || query.has_attachment.is_some()
+            || !query.attachment_patterns.is_empty()
         {
             return Err(ProviderError::Unsupported {
                 connection_id: self.config.connection_id.clone(),

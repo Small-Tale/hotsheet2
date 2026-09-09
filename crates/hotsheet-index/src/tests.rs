@@ -387,6 +387,8 @@ fn fts_matches_attachment_filenames() {
         purpose: None,
         annotations: vec![],
     });
+    ticket.completed_at = Some(Timestamp::new("2026-09-01T03:00:00Z"));
+    ticket.verified_at = Some(Timestamp::new("2026-09-01T04:00:00Z"));
     ix.upsert(&ticket, "first.md", "with-attachment").unwrap();
 
     let rows = ix
@@ -397,6 +399,44 @@ fn fts_matches_attachment_filenames() {
         .unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].slug, ticket.slug);
+    for query in [
+        TicketQuery {
+            has_attachment: Some(true),
+            ..Default::default()
+        },
+        TicketQuery {
+            attachment_patterns: vec!["*.png".into()],
+            ..Default::default()
+        },
+        TicketQuery {
+            attachment_patterns: vec!["details-narrow".into()],
+            ..Default::default()
+        },
+        TicketQuery {
+            completed_after: Some("2026-09-01T02:59:00Z".into()),
+            completed_before: Some("2026-09-01T03:01:00Z".into()),
+            ..Default::default()
+        },
+        TicketQuery {
+            verified_after: Some("2026-09-01T03:59:00Z".into()),
+            verified_before: Some("2026-09-01T04:01:00Z".into()),
+            ..Default::default()
+        },
+    ] {
+        assert_eq!(
+            ix.query(&query).unwrap().len(),
+            1,
+            "structured attachment query: {query:?}"
+        );
+    }
+    assert!(
+        ix.query(&TicketQuery {
+            attachment_patterns: vec!["*.svg".into()],
+            ..Default::default()
+        })
+        .unwrap()
+        .is_empty()
+    );
 }
 
 #[test]

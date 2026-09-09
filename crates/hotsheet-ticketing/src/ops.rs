@@ -112,6 +112,14 @@ pub struct TicketQuery {
     pub created_before: Option<String>,
     pub updated_after: Option<String>,
     pub updated_before: Option<String>,
+    pub completed_after: Option<String>,
+    pub completed_before: Option<String>,
+    pub verified_after: Option<String>,
+    pub verified_before: Option<String>,
+    /// `Some(true)` matches tickets with at least one attachment; `Some(false)` matches none.
+    pub has_attachment: Option<bool>,
+    /// Case-insensitive filename glob patterns. `*` matches any run of characters.
+    pub attachment_patterns: Vec<String>,
     pub sort: SortKey,
     /// Cap the number of rows returned (after sort). `None` = no cap.
     pub limit: Option<usize>,
@@ -170,6 +178,22 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && q.updated_before
                 .as_deref()
                 .is_none_or(|b| t.updated_at.as_str() <= b)
+            && q.completed_after.as_deref().is_none_or(|a| {
+                t.completed_at.as_ref().is_some_and(|value| value.as_str() >= a)
+            })
+            && q.completed_before.as_deref().is_none_or(|b| {
+                t.completed_at.as_ref().is_some_and(|value| value.as_str() <= b)
+            })
+            && q.verified_after.as_deref().is_none_or(|a| {
+                t.verified_at.as_ref().is_some_and(|value| value.as_str() >= a)
+            })
+            && q.verified_before.as_deref().is_none_or(|b| {
+                t.verified_at.as_ref().is_some_and(|value| value.as_str() <= b)
+            })
+            && q.has_attachment.is_none_or(|want| t.attachments.is_empty() != want)
+            && q.attachment_patterns.iter().all(|pattern| {
+                t.attachments.iter().any(|attachment| filename_glob_matches(pattern, &attachment.filename))
+            })
             && q.tags.iter().all(|tag| t.tags.iter().any(|x| x == tag))
             && text.as_deref().is_none_or(|needle| matches_text(t, needle))
     });
@@ -188,6 +212,27 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
         tickets.truncate(n);
     }
     Ok(tickets)
+}
+
+fn filename_glob_matches(pattern: &str, filename: &str) -> bool {
+    let pattern = pattern.to_lowercase();
+    let filename = filename.to_lowercase();
+    if !pattern.contains('*') {
+        return filename.contains(&pattern);
+    }
+    let mut remainder = filename.as_str();
+    let mut first = true;
+    for part in pattern.split('*').filter(|part| !part.is_empty()) {
+        let Some(index) = remainder.find(part) else {
+            return false;
+        };
+        if first && !pattern.starts_with('*') && index != 0 {
+            return false;
+        }
+        remainder = &remainder[index + part.len()..];
+        first = false;
+    }
+    pattern.ends_with('*') || remainder.is_empty()
 }
 
 /// Resolve a ticket by ULID (exact) or by slug (case-insensitive).
@@ -1294,6 +1339,24 @@ mod tests {
         let persisted = store.read_ticket(&created.id).unwrap();
         assert_eq!(persisted.title, created.title);
         assert_eq!(persisted.tags, created.tags);
+    }
+
+    #[test]
+    fn attachment_filename_globs_are_case_insensitive_and_anchor_when_requested() {
+        assert!(filename_glob_matches("*.PNG", "server-details-narrow.png"));
+        assert!(filename_glob_matches(
+            "details",
+            "server-details-narrow.png"
+        ));
+        assert!(filename_glob_matches(
+            "server*png",
+            "server-details-narrow.png"
+        ));
+        assert!(!filename_glob_matches(
+            "details*",
+            "server-details-narrow.png"
+        ));
+        assert!(!filename_glob_matches("*.svg", "server-details-narrow.png"));
     }
 
     #[test]
