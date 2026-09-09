@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { advanceRenderStorm, hasDismissalThrash, isUnexpectedQuickDismiss } from './ui-stability-diagnostics';
+import { advanceDismissalThrash, advanceRenderStorm, hasDismissalThrash, isUnexpectedQuickDismiss } from './ui-stability-diagnostics';
 
 describe('UI stability diagnostics', () => {
   it('distinguishes an unexpected fast dismissal from a direct user action', () => {
@@ -13,6 +13,23 @@ describe('UI stability diagnostics', () => {
     expect(hasDismissalThrash([1_000, 5_000], 9_000)).toBe(false);
     expect(hasDismissalThrash([1_000, 5_000, 9_000], 9_000)).toBe(true);
     expect(hasDismissalThrash([1_000, 5_000, 16_000], 16_000)).toBe(false);
+  });
+
+  it('reports one continuous dismissal episode and rearms after its window clears', () => {
+    let state = { dismissals: [] as number[], reported: false };
+    const reports: number[] = [];
+    for (const at of [1_000, 2_000, 3_000, 4_000, 5_000]) {
+      const next = advanceDismissalThrash(state, at);
+      state = next;
+      if (next.shouldReport) reports.push(at);
+    }
+    state = advanceDismissalThrash(state, 16_000);
+    for (const at of [17_000, 18_000]) {
+      const next = advanceDismissalThrash(state, at);
+      state = next;
+      if (next.shouldReport) reports.push(at);
+    }
+    expect(reports).toEqual([3_000, 18_000]);
   });
 
   it('reports a continuous render storm once and rearms after a quiet window', () => {

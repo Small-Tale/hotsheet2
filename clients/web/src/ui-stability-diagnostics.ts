@@ -16,6 +16,11 @@ export interface RenderStormState {
   reported: boolean;
 }
 
+export interface DismissalThrashState {
+  dismissals: number[];
+  reported: boolean;
+}
+
 export interface UiStabilityEvent {
   at: string;
   kind: string;
@@ -41,6 +46,13 @@ export function isUnexpectedQuickDismiss(openedAt: number, dismissedAt: number, 
 
 export function hasDismissalThrash(dismissals: readonly number[], now: number): boolean {
   return dismissals.filter(value => now - value <= THRASH_WINDOW_MS).length >= THRASH_COUNT;
+}
+
+/** Tracks one continuous dismissal episode and rearms after its bounded window clears. */
+export function advanceDismissalThrash(state: DismissalThrashState, now: number): DismissalThrashState & { shouldReport: boolean } {
+  const dismissals = [...state.dismissals.filter(value => now - value <= THRASH_WINDOW_MS), now];
+  const thrashing = dismissals.length >= THRASH_COUNT;
+  return { dismissals, reported: thrashing, shouldReport: thrashing && !state.reported };
 }
 
 /** Tracks one continuous root-render storm and rearms only after a quiet window. */
@@ -73,7 +85,7 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
   const events: UiStabilityEvent[] = [];
   const openedSelects = new WeakMap<Element, number>();
   let lastUserIntentAt = Number.NEGATIVE_INFINITY;
-  let dismissals: number[] = [];
+  let dismissalThrash: DismissalThrashState = { dismissals: [], reported: false };
   let renderStorm: RenderStormState = { passes: [], reported: false };
   let previousRenderMetrics: RenderMetricsSnapshot = { passes: 0, mutations: 0 };
   let lastReportAt = Number.NEGATIVE_INFINITY;
@@ -121,8 +133,9 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
     const unexpected = isUnexpectedQuickDismiss(openedAt, dismissedAt, lastUserIntentAt);
     record('select-closed', target, { open_ms: dismissedAt - openedAt, unexpected });
     if (!unexpected) return;
-    dismissals = [...dismissals.filter(value => dismissedAt - value <= THRASH_WINDOW_MS), dismissedAt];
-    if (hasDismissalThrash(dismissals, dismissedAt)) report('repeated-unexpected-select-dismissal');
+    const nextDismissalThrash = advanceDismissalThrash(dismissalThrash, dismissedAt);
+    dismissalThrash = nextDismissalThrash;
+    if (nextDismissalThrash.shouldReport) report('repeated-unexpected-select-dismissal');
   };
   const observer = new MutationObserver(records => {
     let removedTrackedSelects = 0;
@@ -136,8 +149,9 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
         removedTrackedSelects += 1;
         const timestamp = now();
         record('open-select-removed', select, { open_ms: timestamp - openedAt });
-        dismissals = [...dismissals.filter(value => timestamp - value <= THRASH_WINDOW_MS), timestamp];
-        if (hasDismissalThrash(dismissals, timestamp)) report('open-select-dom-removal');
+        const nextDismissalThrash = advanceDismissalThrash(dismissalThrash, timestamp);
+        dismissalThrash = nextDismissalThrash;
+        if (nextDismissalThrash.shouldReport) report('open-select-dom-removal');
       }
     }
     if (records.length >= 25) record('large-mutation-batch', undefined, { records: records.length, removed_open_selects: removedTrackedSelects });
