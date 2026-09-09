@@ -158,7 +158,7 @@ import {
   sidebarViews,
   ViewNavigationDemo,
 } from './project-sidebar-demo';
-import { changeEvidenceDemoView, ChangeEvidenceDialogDemo, repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
+import { changeEvidenceDemoView, ChangeEvidenceDialogDemo, repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoFileMenu, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
 import { GlobalSearchDemo } from './search-demo';
 import { SelectDemo } from './select-demo';
 import {
@@ -841,17 +841,49 @@ delegate(root, 'click', '[data-action="toggle-code-review-commit"]', (_event, ta
 delegate(root, 'click', '[data-action="refresh-repository-status"]', () => {
   repositoryDemoEvent.value = 'Repository status refreshed.';
 });
-delegate(root, 'dblclick', '[data-action="open-repository-file"],[data-action="open-staged-repository-file-diff"],[data-action="open-unstaged-repository-file-diff"]', (_event, target) => {
+const repositoryDemoFileSelector = '[data-action="open-repository-file-menu"],[data-action="open-ticket-file-menu"]';
+function openRepositoryDemoFileMenu(target: Element, x: number, y: number) {
+  const element = target as HTMLElement;
+  const path = element.dataset.itemId!;
+  const ticket = element.dataset.action === 'open-ticket-file-menu';
+  const view = repositoryDemoView.value;
+  const diff = ticket ? 'ticket' : view === 'staged' || view === 'unstaged' ? view : view === 'conflicted' ? 'unstaged' : undefined;
+  const width = 232;
+  const height = 226;
+  const bounds = target.closest('.dialog-surface')?.getBoundingClientRect();
+  const minimumX = bounds ? bounds.left + 8 : 8;
+  const maximumX = Math.min(window.innerWidth - width - 8, bounds ? bounds.right - width - 8 : Number.POSITIVE_INFINITY);
+  const minimumY = bounds ? bounds.top + 8 : 8;
+  const maximumY = Math.min(window.innerHeight - height - 8, bounds ? bounds.bottom - height - 8 : Number.POSITIVE_INFINITY);
+  repositoryDemoFileMenu.value = {
+    path,
+    absolutePath: `/work/hotsheet2/${path}`,
+    diff,
+    x: Math.max(minimumX, Math.min(x, maximumX)),
+    y: Math.max(minimumY, Math.min(y, maximumY)),
+  };
+}
+delegate(root, 'dblclick', repositoryDemoFileSelector, (_event, target) => {
+  repositoryDemoFileMenu.value = undefined;
   repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.itemId}.`;
 });
-delegate(root, 'click', '[data-action="open-staged-repository-file-diff"],[data-action="open-unstaged-repository-file-diff"]', (_event, target) => {
-  repositoryDemoEvent.value = `Would review ${(target as HTMLElement).dataset.itemId} in Glassbox.`;
+delegate(root, 'click', repositoryDemoFileSelector, (_event, target) => {
+  const box = target.getBoundingClientRect();
+  openRepositoryDemoFileMenu(target, box.right, box.bottom);
+});
+delegate(root, 'contextmenu', repositoryDemoFileSelector, (event, target) => {
+  event.preventDefault();
+  const pointer = event as MouseEvent;
+  openRepositoryDemoFileMenu(target, pointer.clientX, pointer.clientY);
+});
+delegate(root, 'click', '[data-repository-file-action]', (_event, target) => {
+  const action = (target as HTMLElement).dataset.repositoryFileAction;
+  const path = (target as HTMLElement).dataset.repositoryFilePath;
+  repositoryDemoFileMenu.value = undefined;
+  repositoryDemoEvent.value = action === 'show-diff' ? `Would review ${path} in Glassbox.` : `Would ${action} ${path}.`;
 });
 delegate(root, 'click', '[data-action="select-change-evidence-view"]', (_event, target) => {
   changeEvidenceDemoView.value = (target as HTMLElement).dataset.itemId as typeof changeEvidenceDemoView.value;
-});
-delegate(root, 'click', '[data-action="open-ticket-file-diff"]', (_event, target) => {
-  repositoryDemoEvent.value = `Would review ${(target as HTMLElement).dataset.itemId} across the ticket commit range.`;
 });
 delegate(root, 'click', '[data-action="open-repository-review"]', (_event, target) => {
   repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.reviewMode} review in Glassbox.`;

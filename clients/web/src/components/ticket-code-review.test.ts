@@ -52,6 +52,9 @@ describe('TicketCodeReview', () => {
     expect(markup).toContain('<strong>3</strong> tests');
     expect(markup).toContain('2 new test files · 1 existing test file modified');
     expect(markup).toContain('data-tests-modified="true"');
+    const css=readFileSync(resolve(import.meta.dirname,'ticket-code-review.css'),'utf8');
+    expect(css).toMatch(/__evidence \{[^}]*height: auto;[^}]*overflow: hidden;[^}]*box-sizing: border-box;/);
+    expect(css).toContain('.ticket-code-review__evidence-grid { grid-template-columns: 1fr; }');
   });
 
   it('keeps history readable but disables launching without a configured tool', () => {

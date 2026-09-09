@@ -4,6 +4,7 @@
 .repository-status-popover__refresh:disabled { opacity: .5; cursor: wait; }
 .repository-status-popover__layout { display: grid; min-width: 0; min-height: 0; height: calc(100% - 4.9rem); grid-template-columns: 27rem minmax(0,1fr); }
 .repository-status-popover__layout > aside { min-width: 0; padding: var(--wa-space-l); overflow: auto; border-right: 1px solid var(--wa-color-surface-border); }
+.repository-status-popover__values + .repository-status-popover__values { margin-top: var(--wa-space-s); }
 .repository-status-popover__values dd svg { width: .9rem; height: .9rem; color: var(--wa-color-text-quiet); }
 .repository-status-popover nav { display: grid; gap: var(--wa-space-2xs); }
 .repository-status-popover__detail { min-width: 0; min-height: 0; padding: var(--wa-space-l); overflow: auto; }
@@ -11,6 +12,7 @@
 .repository-status-popover__file { min-height: 2.75rem; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); border-radius: 0; }
 .repository-status-popover__file-status { display: grid; width: 1.25rem; height: 1.25rem; border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-2xs); font-weight: var(--wa-font-weight-semibold); line-height: 1; place-items: center; }
 .repository-status-popover__file > span:nth-child(2) { min-width: 0; }
+.repository-status-popover__file .menu-item__trailing svg { width: 1rem; height: 1rem; color: var(--wa-color-text-quiet); }
 .repository-status-popover__path { display: flex; min-width: 0; font-size: var(--wa-font-size-s); font-weight: var(--wa-font-weight-normal); white-space: nowrap; }
 .repository-status-popover__path > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .repository-status-popover__path > span:last-child { max-width: 55%; overflow: hidden; flex: none; }
@@ -28,6 +30,7 @@
 .repository-status-popover__context-menu { position: fixed; z-index: 2; display: grid; min-width: 13rem; padding: var(--wa-space-2xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
 .repository-status-popover__context-menu button { display: grid; min-height: 2.2rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-s); color: var(--wa-color-text-normal); background: transparent; cursor: pointer; grid-template-columns: 1rem minmax(0,1fr); align-items: center; gap: var(--wa-space-s); font: inherit; text-align: left; }
 .repository-status-popover__context-menu button:hover { background: var(--wa-color-neutral-fill-quiet); }
+.repository-status-popover__context-menu button:disabled { opacity: .45; cursor: not-allowed; }
 .repository-status-popover__context-menu svg { width: 1rem; height: 1rem; }
 .repository-status-popover__context-menu hr { width: 100%; margin: var(--wa-space-2xs) 0; border: 0; border-top: 1px solid var(--wa-color-surface-border); }
 .repository-status-popover .ticket-code-review__header { margin-bottom: var(--wa-space-m); }

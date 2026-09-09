@@ -464,9 +464,12 @@ prompt can be dismissed and returns on a later open until a source is configured
   begins with a server-derived change-evidence summary: unique documentation, test,
   source, and other file counts plus separate counts for newly added and modified existing
   test files. The summary is an action that opens a repository-browser-style master/detail
-  dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. Selecting a
-  row opens that file in the configured difftool across the complete span from the parent
-  of the oldest associated commit through the newest associated commit. The server derives
+  dialog, with Docs, Tests, Source, and Other views and Git-letter file rows. The summary
+  card grows to contain every count and test-change line even in the narrow inspector.
+  Selecting a file row or its visible ellipsis opens the same action menu as right-click:
+  Show Diff, Open, host-native reveal, and relative/absolute path copying. Show Diff opens
+  that file in the configured difftool across the complete span from the parent of the
+  oldest associated commit through the newest associated commit. The server derives
   and revalidates the exact path and range; arbitrary browser-supplied files are rejected.
   Classification runs against that committed range (not the browser's working tree) and is configurable through the effective project setting
   `code_review_file_classes`, whose JSON object contains `docs`, `tests`, and `source`
@@ -1161,14 +1164,17 @@ counted Staged, Unstaged, Untracked, Conflicted, and Commits views. The detail c
 scrolls independently. File views preserve porcelain-v2 change kinds (including rename
 origins) as compact rounded Git-letter badges (`M`, `A`, `R`, `?`, and so on), and
 middle-truncate long paths while keeping their beginning and filename-visible ending.
-Single-click or Enter on Staged and Unstaged files opens that exact working-tree file diff
-in the configured difftool after fresh server-side status validation. Double-click asks the
-host to open a currently reported file; the context menu can copy relative or absolute
-paths, open the file, or reveal it with host-specific Finder/File Explorer/file-manager
-wording. The server re-reads status and validates repository containment before any host
+Every file row has a visible ellipsis. Single-click, Enter, the ellipsis, and right-click
+all open the same menu without launching a diff. Its Show Diff action opens an exact staged,
+unstaged, or conflicted working-tree file diff in the configured difftool after fresh
+server-side status validation (and is disabled where no meaningful diff exists). Double-click
+remains a direct shortcut asking the host to open a currently reported file. The menu also
+copies relative or absolute paths, opens the file, or reveals it with host-specific
+Finder/File Explorer/file-manager wording. The server re-reads status and validates repository containment before any host
 launch. At roomy viewport heights the dialog is exactly tall enough for the complete
 master column; at constrained heights it caps to the viewport and scrolls that column.
-Value groups have no outer border and use text-aligned inset row separators.
+Value groups have no outer border, use text-aligned inset row separators, and retain a
+visible gap between repository identity and synchronization groups.
 The status snapshot contains counts and repository metadata rather than every detail
 row. Each file view and the commit view request an initial 50-row cursor page, then an
 intersection sentinel fetches further pages as the independently scrolling detail pane

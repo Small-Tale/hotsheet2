@@ -1,6 +1,6 @@
 import './repository-status-popover.css';
 
-import { ArrowDown, ArrowUp, CircleCheck, CircleHelp, Clipboard, Copy, ExternalLink, FileCode2, FileText, FlaskConical, FolderOpen, GitBranch, GitCommitHorizontal, GitCompare, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
+import { ArrowDown, ArrowUp, CircleCheck, CircleHelp, Clipboard, Copy, Ellipsis, ExternalLink, FileCode2, FileText, FlaskConical, FolderOpen, GitBranch, GitCommitHorizontal, GitCompare, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
 
 import type { CodeReview, CodeReviewFile, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
 import { DialogHeader, ValueTable } from './dialog-layout';
@@ -13,7 +13,7 @@ import { ToolbarControlGroup } from './toolbar-control-group';
 export type RepositoryStatusState='clean'|'dirty'|'ahead'|'behind'|'diverged'|'conflicted'|'error';
 export type RepositoryStatusView='staged'|'unstaged'|'untracked'|'conflicted'|'commits';
 export type ChangeEvidenceView='docs'|'tests'|'source'|'other';
-export interface RepositoryFileMenu {path:string;absolutePath?:string;x:number;y:number}
+export interface RepositoryFileMenu {path:string;absolutePath?:string;x:number;y:number;diff?:'ticket'|'staged'|'unstaged'}
 
 export function repositoryStatusState(status:RepositoryStatus|null,error=''):RepositoryStatusState {
   if(error||!status)return 'error';
@@ -64,8 +64,7 @@ function RepositoryFileList({files,view,loading=false}:{files:RepositoryFile[];v
   if(files.length===0)return <div class="repository-status-popover__empty"><LucideIcon icon={CircleCheck} name="circle-check"/><p>No {view} files.</p></div>;
   return <div class="repository-status-popover__files" role="list" aria-label={`${view} files`}>{files.map(file=>{
     const change=repositoryFileChange(file,view);
-    const action=view==='staged'||view==='unstaged'?`open-${view}-repository-file-diff`:'open-repository-file';
-    return <MenuItem action={action} itemId={file.path} className="repository-status-popover__file" state={change} multiline title={`${file.path} — ${fileChangeLabel(change)}. ${view==='staged'||view==='unstaged'?'Click to review the diff; d':'D'}ouble-click to open; right-click for more actions`} accessibleLabel={`${file.path}, ${fileChangeLabel(change)}`} icon={<span class="repository-status-popover__file-status" aria-hidden="true">{repositoryFileStatusLetter(change)}</span>} label={<>{middleEllipsisPath(file.path)}{file.original_path&&<small>from {middleEllipsisPath(file.original_path)}</small>}</>}/>;
+    return <MenuItem action="open-repository-file-menu" itemId={file.path} className="repository-status-popover__file" state={change} multiline title={`${file.path} — ${fileChangeLabel(change)}. Click or right-click for actions; double-click to open`} accessibleLabel={`${file.path}, ${fileChangeLabel(change)}. Open actions`} icon={<span class="repository-status-popover__file-status" aria-hidden="true">{repositoryFileStatusLetter(change)}</span>} label={<>{middleEllipsisPath(file.path)}{file.original_path&&<small>from {middleEllipsisPath(file.original_path)}</small>}</>} trailing={<LucideIcon icon={Ellipsis} name="ellipsis"/>}/>;
   })}</div>;
 }
 
@@ -76,29 +75,31 @@ const evidenceViews=[
   {id:'other',label:'Other',icon:CircleHelp},
 ] as const;
 
-export function ChangeEvidenceDialog({review,view='docs',embedded=false}:{review?:CodeReview;view?:ChangeEvidenceView;embedded?:boolean}){
+export function ChangeEvidenceDialog({review,view='docs',embedded=false,fileMenu,platform}:{review?:CodeReview;view?:ChangeEvidenceView;embedded?:boolean;fileMenu?:RepositoryFileMenu;platform?:RepositoryStatus['platform']}){
   const files=review?.files??[],visible=files.filter(file=>file.category===view);
   return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'change-evidence-dialog'} class="dialog-surface repository-status-popover change-evidence-dialog" data-component="change-evidence-dialog" data-view={view} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="change-evidence-title">
     <DialogHeader title="Change evidence" titleId="change-evidence-title" summary="Files changed across the ticket's complete commit range" iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={GitCompare} name="git-compare"/>}/>
     <div class="repository-status-popover__layout change-evidence-dialog__layout"><aside><nav aria-label="Change evidence views"><MenuHeader label="Views"/>{evidenceViews.map(item=><MenuItem action="select-change-evidence-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id}/>} label={item.label} trailing={<small class="menu-item__count">{files.filter(file=>file.category===item.id).length}</small>}/>)}</nav></aside>
-      <main class="repository-status-popover__detail" aria-live="polite">{review&&!review.difftool&&<p class="ticket-code-review__notice" role="status">No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.</p>}<CodeReviewFileList files={visible} view={view} enabled={Boolean(review?.difftool)}/></main>
+      <main class="repository-status-popover__detail" aria-live="polite">{review&&!review.difftool&&<p class="ticket-code-review__notice" role="status">No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.</p>}<CodeReviewFileList files={visible} view={view}/></main>
     </div>
+    {fileMenu&&<RepositoryFileContextMenu menu={fileMenu} platform={platform}/>}
   </section>;
 }
 
-function CodeReviewFileList({files,view,enabled}:{files:CodeReviewFile[];view:ChangeEvidenceView;enabled:boolean}){
+function CodeReviewFileList({files,view}:{files:CodeReviewFile[];view:ChangeEvidenceView}){
   if(files.length===0)return <div class="repository-status-popover__empty"><LucideIcon icon={CircleCheck} name="circle-check"/><p>No {view} files.</p></div>;
-  return <div class="repository-status-popover__files" role="list" aria-label={`${view} change evidence`}>{files.map(file=><MenuItem action="open-ticket-file-diff" itemId={file.path} className="repository-status-popover__file" state={file.change} multiline disabled={!enabled} title={`${file.path} — ${fileChangeLabel(file.change)}. Click to review the full ticket diff`} accessibleLabel={`${file.path}, ${fileChangeLabel(file.change)}`} icon={<span class="repository-status-popover__file-status" aria-hidden="true">{repositoryFileStatusLetter(file.change)}</span>} label={<>{middleEllipsisPath(file.path)}{file.original_path&&<small>from {middleEllipsisPath(file.original_path)}</small>}</>}/>)}</div>;
+  return <div class="repository-status-popover__files" role="list" aria-label={`${view} change evidence`}>{files.map(file=><MenuItem action="open-ticket-file-menu" itemId={file.path} className="repository-status-popover__file" state={file.change} multiline title={`${file.path} — ${fileChangeLabel(file.change)}. Click or right-click for actions; double-click to open`} accessibleLabel={`${file.path}, ${fileChangeLabel(file.change)}. Open actions`} icon={<span class="repository-status-popover__file-status" aria-hidden="true">{repositoryFileStatusLetter(file.change)}</span>} label={<>{middleEllipsisPath(file.path)}{file.original_path&&<small>from {middleEllipsisPath(file.original_path)}</small>}</>} trailing={<LucideIcon icon={Ellipsis} name="ellipsis"/>}/>)}</div>;
 }
 
 function RepositoryFileContextMenu({menu,platform}:{menu:RepositoryFileMenu;platform?:RepositoryStatus['platform']}){
   const reveal=platform==='macos'?'Show in Finder':platform==='windows'?'Show in File Explorer':'Show in file manager';
   return <div class="repository-status-popover__context-menu" data-component="repository-file-context-menu" role="menu" style={`left:${menu.x}px;top:${menu.y}px`}>
+    <button type="button" role="menuitem" data-repository-file-action="show-diff" data-repository-file-path={menu.path} disabled={!menu.diff}><LucideIcon icon={GitCompare} name="git-compare"/>Show Diff</button>
     <button type="button" role="menuitem" data-repository-file-action="open" data-repository-file-path={menu.path}><LucideIcon icon={ExternalLink} name="external-link"/>Open</button>
-    <button type="button" role="menuitem" data-repository-file-action="copy-path" data-repository-file-path={menu.path}><LucideIcon icon={Clipboard} name="clipboard"/>Copy path</button>
-    {menu.absolutePath&&<button type="button" role="menuitem" data-repository-file-action="copy-absolute-path" data-repository-file-path={menu.absolutePath}><LucideIcon icon={Copy} name="copy"/>Copy absolute path</button>}
-    <hr/>
     <button type="button" role="menuitem" data-repository-file-action="reveal" data-repository-file-path={menu.path}><LucideIcon icon={FolderOpen} name="folder-open"/>{reveal}</button>
+    <hr/>
+    <button type="button" role="menuitem" data-repository-file-action="copy-path" data-repository-file-path={menu.path}><LucideIcon icon={Clipboard} name="clipboard"/>Copy Relative Path</button>
+    {menu.absolutePath&&<button type="button" role="menuitem" data-repository-file-action="copy-absolute-path" data-repository-file-path={menu.absolutePath}><LucideIcon icon={Copy} name="copy"/>Copy Absolute Path</button>}
   </div>;
 }
 

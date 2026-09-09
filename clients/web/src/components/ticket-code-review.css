@@ -2,12 +2,12 @@
 .ticket-code-review__heading { display: flex; min-width: 0; align-items: baseline; gap: var(--wa-space-xs); }
 .ticket-code-review__heading h2 { margin: 0; }
 .ticket-code-review__heading span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); white-space: nowrap; }
-.ticket-code-review__evidence { display: block; width: 100%; margin-bottom: var(--wa-space-m); padding: var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-m); color: inherit; background: var(--wa-color-neutral-fill-quiet); cursor: pointer; font: inherit; text-align: left; }
+.ticket-code-review__evidence { display: block; width: 100%; height: auto; min-height: max-content; margin-bottom: var(--wa-space-m); padding: var(--wa-space-s); overflow: hidden; border: 0; border-radius: var(--wa-border-radius-m); box-sizing: border-box; color: inherit; background: var(--wa-color-neutral-fill-quiet); cursor: pointer; font: inherit; text-align: left; }
 .ticket-code-review__evidence:hover { background: var(--wa-color-neutral-fill-normal); }
 .ticket-code-review__evidence:focus-visible { outline: var(--wa-focus-ring); outline-offset: 2px; }
 .ticket-code-review__evidence h3 { margin: 0 0 var(--wa-space-xs); font-size: var(--wa-font-size-s); }
 .ticket-code-review__evidence-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--wa-space-xs); }
-.ticket-code-review__evidence-grid span { display: flex; min-width: 0; align-items: center; gap: var(--wa-space-xs); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.ticket-code-review__evidence-grid span { display: flex; min-width: 0; overflow-wrap: anywhere; align-items: center; flex-wrap: wrap; gap: var(--wa-space-xs); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 .ticket-code-review__evidence-grid svg { width: 1rem; height: 1rem; flex: none; }
 .ticket-code-review__evidence-grid strong { color: var(--wa-color-text-normal); }
 .ticket-code-review__evidence p { margin: var(--wa-space-xs) 0 0; color: var(--wa-color-success-on-quiet); font-size: var(--wa-font-size-xs); }
@@ -49,4 +49,4 @@
 .ticket-code-review__empty svg { width: 1.2rem; height: 1.2rem; }
 .ticket-code-review__message { color: var(--wa-color-neutral-on-quiet) !important; font-size: var(--wa-font-size-xs) !important; }
 @container (max-width: 22rem) { .ticket-code-review__compare-banner { grid-template-columns: minmax(0,1fr) auto; } .ticket-code-review__compare-open { grid-column: 1 / -1; } }
-@container (max-width: 22rem) { .ticket-code-review__heading { align-items: flex-start; flex-direction: column; } .ticket-code-review__heading span { white-space: normal; } }
+@container (max-width: 22rem) { .ticket-code-review__heading { align-items: flex-start; flex-direction: column; } .ticket-code-review__heading span { white-space: normal; } .ticket-code-review__evidence-grid { grid-template-columns: 1fr; } }
