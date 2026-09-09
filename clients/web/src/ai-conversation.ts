@@ -11,7 +11,7 @@ export const EMPTY_CONVERSATION:ConversationState={messages:[]};
 
 export function beginConversationTurn(state:ConversationState,id:string,content:string):ConversationState{
   const assistantId=`${id}-assistant`;
-  return{messages:[...state.messages,{id,role:'user',content},{id:assistantId,role:'assistant',content:'',status:'streaming'}],activeAssistantId:assistantId,progress:'Reviewing the project and planning the next steps…'};
+  return{...state,messages:[...state.messages,{id,role:'user',content},{id:assistantId,role:'assistant',content:'',status:'streaming'}],activeAssistantId:assistantId,progress:'Reviewing the project and planning the next steps…',error:undefined};
 }
 
 function nativeProgress(payload:unknown):string|undefined{

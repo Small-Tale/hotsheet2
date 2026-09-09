@@ -282,8 +282,25 @@ fn persistent_runtime_path(storage: &Path, needs_short_socket_path: bool) -> Res
     }
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     storage.hash(&mut hasher);
-    let runtime = PathBuf::from(format!("/tmp/hs2d-{:016x}", hasher.finish()));
-    if runtime.exists() {
+    let state_root = storage
+        .ancestors()
+        .find(|candidate| candidate.file_name().is_some_and(|name| name == "drive"))
+        .and_then(Path::parent)
+        .or_else(|| storage.parent())
+        .context("persistent CODEX_HOME has no state root")?;
+    let runtime_root = state_root.join("d");
+    std::fs::create_dir_all(&runtime_root).with_context(|| {
+        format!(
+            "creating short persistent CODEX_HOME root {}",
+            runtime_root.display()
+        )
+    })?;
+    let runtime = runtime_root.join(format!("{:016x}", hasher.finish()));
+    if std::fs::symlink_metadata(storage).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        if !runtime.exists() {
+            std::fs::create_dir(&runtime)
+                .with_context(|| format!("creating CODEX_HOME {}", runtime.display()))?;
+        }
         let actual = runtime.canonicalize()?;
         let expected = storage.canonicalize()?;
         if actual != expected {
@@ -294,12 +311,39 @@ fn persistent_runtime_path(storage: &Path, needs_short_socket_path: bool) -> Res
                 expected.display()
             );
         }
-    } else {
-        std::os::unix::fs::symlink(storage, &runtime).with_context(|| {
+    } else if runtime.exists() {
+        let storage_empty = std::fs::read_dir(storage)
+            .with_context(|| format!("reading persistent CODEX_HOME {}", storage.display()))?
+            .next()
+            .is_none();
+        if !storage_empty {
+            bail!(
+                "both persistent CODEX_HOME locations contain data: {} and {}",
+                storage.display(),
+                runtime.display()
+            );
+        }
+        std::fs::remove_dir(storage)?;
+        symlink_dir(&runtime, storage).with_context(|| {
             format!(
-                "linking short CODEX_HOME {} to {}",
-                runtime.display(),
-                storage.display()
+                "linking persistent CODEX_HOME {} to {}",
+                storage.display(),
+                runtime.display()
+            )
+        })?;
+    } else {
+        std::fs::rename(storage, &runtime).with_context(|| {
+            format!(
+                "moving persistent CODEX_HOME {} to short path {}",
+                storage.display(),
+                runtime.display()
+            )
+        })?;
+        symlink_dir(&runtime, storage).with_context(|| {
+            format!(
+                "linking persistent CODEX_HOME {} to {}",
+                storage.display(),
+                runtime.display()
             )
         })?;
     }
@@ -729,15 +773,28 @@ mod tests {
     #[test]
     fn persistent_daemon_home_uses_a_short_alias_to_durable_storage() {
         let root = tempfile::tempdir().unwrap();
-        let storage = root.path().join("a-very-long-machine-local-drive-home");
-        std::fs::create_dir(&storage).unwrap();
+        let storage = root
+            .path()
+            .join("drive/store/homes/a-very-long-machine-local-drive-home");
+        std::fs::create_dir_all(&storage).unwrap();
+        std::fs::write(storage.join("thread-state.json"), "state").unwrap();
         let runtime = persistent_runtime_path(&storage, true).unwrap();
-        assert!(runtime.to_string_lossy().len() < 40);
+        assert!(runtime.to_string_lossy().len() < storage.to_string_lossy().len());
         assert_eq!(
             runtime.canonicalize().unwrap(),
             storage.canonicalize().unwrap()
         );
-        std::fs::remove_file(runtime).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(runtime.join("thread-state.json")).unwrap(),
+            "state"
+        );
+        assert!(
+            std::fs::symlink_metadata(&storage)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "the historical long home remains as a compatibility alias"
+        );
     }
     // `mcp_command` now lives in `hotsheet-plugins` (its resolver is tested there, HS2-91).
 }

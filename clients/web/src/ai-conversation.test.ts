@@ -17,6 +17,14 @@ describe('AI conversation transcript',()=>{
     expect(conversationUsage(state)).toEqual({tokensIn:12_000,tokensOut:800,costUsd:.0412});
   });
 
+  it('preserves prior transcript activity and clears a stale error when retrying',()=>{
+    const prior={messages:[{id:'old',role:'assistant' as const,content:'Earlier answer.',status:'failed' as const}],activity:[{id:'activity-1',tool:'Codex',kind:'command',summary:'Inspected the project',importance:'normal' as const}],error:'The prior turn failed.'};
+    const retried=beginConversationTurn(prior,'turn-retry','Try again.');
+    expect(retried.messages.map(message=>message.id)).toEqual(['old','turn-retry','turn-retry-assistant']);
+    expect(retried.activity).toBe(prior.activity);
+    expect(retried.error).toBeUndefined();
+  });
+
   it('retains unknown events and gives interrupted empty turns a useful result',()=>{
     const started=beginConversationTurn(EMPTY_CONVERSATION,'turn-2','Stop soon.');
     expect(applyConversationEvent(started,{type:'future',value:1})).toBe(started);

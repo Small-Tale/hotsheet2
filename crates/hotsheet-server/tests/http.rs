@@ -656,7 +656,19 @@ async fn client_drive_route_runs_a_real_codex_turn() {
         return;
     }
     let (_dir, state) = state();
-    let router = app(state);
+    #[cfg(unix)]
+    let drive_dir = tempfile::Builder::new()
+        .prefix("hs2-live-")
+        .tempdir_in("/tmp")
+        .expect("short live client-drive root");
+    #[cfg(not(unix))]
+    let drive_dir = tempfile::tempdir().expect("live client-drive root");
+    let router = app(state
+        .with_client_drive_persistence(
+            drive_dir.path().join("drive/sessions.json"),
+            drive_dir.path().join("drive/store/homes"),
+        )
+        .expect("persistent client-drive state"));
     let created = router
         .clone()
         .oneshot(authed(

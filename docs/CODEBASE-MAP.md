@@ -32,6 +32,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission/drive updates, and global terminal dashboard state
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
     src/ai-conversation.ts   #   Per-connection multi-turn transcript transitions for streamed output, activity, permissions, and terminal outcomes
+    src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/terminal-grid-layout.ts # Pure terminal tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
@@ -159,7 +160,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/claude.rs          #   ClaudeChannelDrive + ClaudeChannel: persistent stream-json turns with hook lifecycle capture enabled, assistant tool_use → verified PreToolUse native activity, result usage mapping, and scripted tests
       src/procio.rs          #   StreamChild: shared piped-stdio plumbing (spawn -> RpcWriter/RpcReader) for the stream transports
       src/live.rs            #   run_trigger/run_trigger_controlled → TurnDone{reason, session_id}: drive a REAL tool per its [drive] transport, pump events/busy state, and marshal thread-safe client interrupt requests onto the turn-owner thread (HS2-5DGFG2)
-      src/launch_safety.rs   #   HS2-103 safety: cross-platform hotsheet->real sibling hotsheet-cli PATH shim, executable resolution, absolute hotsheet-mcp path, and transient or persistent MCP-isolated Codex homes (durable client/thread state uses a short Unix daemon alias) — shared by CLI + server
+      src/launch_safety.rs   #   HS2-103 safety: cross-platform hotsheet->real sibling hotsheet-cli PATH shim, executable resolution, absolute hotsheet-mcp path, and transient or persistent MCP-isolated Codex homes (durable client/thread state migrates to a canonical short Unix daemon home) — shared by CLI + server
       tests/fixtures/       #   sanitized, version-pinned real Codex/Claude protocol cassettes replayed in fast CI (live drift oracle remains ignored/creds-gated)
       src/safe_trigger.rs    #   SafeTrigger + prepare_trigger: resolve a tool + assemble launch safety once, run ordinary or externally controlled turns; shared by CLI, autonomous server work, and client-owned connections
       src/spawn.rs           #   SpawnDrive (spawn-per-run, Codex `exec` shape) + SpawnDrive::codex()

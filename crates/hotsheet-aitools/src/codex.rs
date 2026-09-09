@@ -881,19 +881,31 @@ fn run_daemon_start(program: &str, codex_home: Option<&Path>) -> std::io::Result
     let mut cmd = Command::new(program);
     cmd.args(["app-server", "daemon", "start"])
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     if let Some(home) = codex_home {
         cmd.env("CODEX_HOME", home);
     }
-    let status = cmd.status()?;
-    if status.success() {
+    let output = cmd.output()?;
+    if output.status.success() {
         Ok(())
     } else {
+        let detail = daemon_failure_detail(&output.stdout, &output.stderr);
         Err(std::io::Error::other(format!(
-            "`{program} app-server daemon start` exited with {status}"
+            "`{program} app-server daemon start` exited with {}{}",
+            output.status,
+            detail.map_or_else(String::new, |value| format!(": {value}"))
         )))
     }
+}
+
+fn daemon_failure_detail(stdout: &[u8], stderr: &[u8]) -> Option<String> {
+    let stderr = String::from_utf8_lossy(stderr).trim().to_owned();
+    if !stderr.is_empty() {
+        return Some(stderr);
+    }
+    let stdout = String::from_utf8_lossy(stdout).trim().to_owned();
+    (!stdout.is_empty()).then_some(stdout)
 }
 
 /// The Codex `app-server daemon` as a [`BackingService`] (`docs/13` §13.5): the concrete
@@ -1323,5 +1335,24 @@ mod usage_tests {
 
         assert!(token_usage_updated(&notification, "other-thread", Some("turn-1")).is_none());
         assert!(token_usage_updated(&notification, "thread-1", Some("other-turn")).is_none());
+    }
+}
+
+#[cfg(test)]
+mod daemon_tests {
+    use super::daemon_failure_detail;
+
+    #[test]
+    fn failure_detail_prefers_stderr_and_falls_back_to_stdout() {
+        assert_eq!(
+            daemon_failure_detail(b"status payload\n", b"control socket path is too long\n")
+                .as_deref(),
+            Some("control socket path is too long")
+        );
+        assert_eq!(
+            daemon_failure_detail(b"status payload\n", b" ").as_deref(),
+            Some("status payload")
+        );
+        assert_eq!(daemon_failure_detail(b"", b""), None);
     }
 }

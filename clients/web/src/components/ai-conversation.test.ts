@@ -15,12 +15,18 @@ describe('AIConversation',()=>{
     expect(markup).toContain('12.8K tokens');expect(markup).toContain('≈$0.04');expect(markup).toContain('Edited main.tsx');expect(markup).toContain('AI-generated');expect(markup).toContain('may contain errors');
     expect(markup).toContain('aria-label="AI-generated response by Codex"');
     expect(markup).toContain('data-ai-feedback-target="activity:activity-1"');
+    expect(markup).toContain('without-header');
+    expect(markup).toContain('data-component="dialog-header"');
+    expect(markup).toContain('Enter to send · Shift+Enter for a new line');
+    expect(markup).toContain('appearance="accent"');
   });
 
   it('hides stop when interruption is unavailable and exposes terminal failures',()=>{
     const markup=String(AIConversation({open:true,tool:'Codex',messages:[{id:'one',role:'assistant',content:'The turn ended.',status:'failed'}],draft:'',busy:true,progress:'Working…',interruptible:false,error:'The tool turn failed.'}));
     expect(markup).not.toContain('data-action="stop-conversation"');
     expect(markup).toContain('data-status="failed"');
+    expect(markup).toContain('Conversation unavailable');
+    expect(markup).toContain('circle-alert');
     expect(markup).toContain('The tool turn failed.');
   });
 

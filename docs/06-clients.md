@@ -368,7 +368,15 @@ prompt can be dismissed and returns on a later open until a source is configured
   Usage events attach token/cost metadata to the active assistant turn and derive a
   conversation total without a second counter; unknown cost is labeled unavailable. The same
   stream's normalized activity events are session/connection matched into a bounded activity
-  sequence with persistent AI/tool attribution and an accessible may-contain-errors cue.
+  sequence with persistent AI/tool attribution and an accessible may-contain-errors cue. The
+  dialog uses the shared compact dialog header instead of stacking a second application header
+  beneath the platform dialog title, and its full-width composer keeps the send action attached
+  to the input at wide and narrow sizes. Retrying preserves the earlier transcript and activity
+  while clearing the stale failure. A launch failure is presented as a contained alert and keeps
+  the underlying Codex daemon diagnostic, so failures such as an invalid control-socket path are
+  actionable instead of collapsing to an unexplained exit status. Opening a populated transcript
+  starts at its latest message; streamed growth remains pinned while the reader is already at the
+  bottom, but never pulls them away from older messages they intentionally scrolled back to read.
 
   The repository row is also the checkout's compact status chip. It distinguishes clean,
   dirty, ahead, behind, conflicted, and unavailable states from the checkout-scoped status

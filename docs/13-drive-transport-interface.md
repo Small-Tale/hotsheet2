@@ -287,12 +287,15 @@ that project's most-recent-first choices. Recreating a connection with an explic
 targets Claude `--resume` or Codex `thread/resume`. Client-owned Codex records the opaque
 home identity with each session and reuses that durable, MCP-isolated home even when a
 different client connection resumes it after server restart. On Unix,
-the persistent directory is reached through a stable short `/tmp/hs2d-*` symlink solely to
-keep the daemon control socket within `sun_path`; Windows uses the durable directory
-directly with app-server. Two connections may attach to one session, but a manager-level
-session gate permits only one simultaneous turn; interrupt releases the gate for a later
-resume. Autonomous ticket driving similarly retains a per-ticket session id across
-Continued passes and uses a stable isolated home for each ticket.
+the persistent directory itself uses a stable short `${HOTSHEET_HOME}/d/<hash>` path so
+Codex cannot canonicalize a symlink back into a control-socket path beyond `sun_path`.
+Existing data migrates atomically from the historical
+`${HOTSHEET_HOME}/drive/<project>/homes/<home>` location, which remains as a compatibility
+symlink. Windows uses the durable directory directly with app-server. Two connections may
+attach to one session, but a manager-level session gate permits only one simultaneous turn;
+interrupt releases the gate for a later resume. Autonomous ticket driving similarly retains
+a per-ticket session id across Continued passes and uses a stable isolated home for each
+ticket.
 
 ## 13.10 Build plan (follow-ups)
 - HS2-67 (this) = the spec. Implementation lands in **HS2-9** (plugin host + Claude
