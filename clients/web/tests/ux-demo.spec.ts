@@ -1764,6 +1764,8 @@ test('exercises the application-shell component slice and responsive composition
   await shell.getByRole('button', { name: 'Terminal dashboard' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
   await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCount(0);
+  await expect(shell.getByRole('complementary', { name: 'Terminal operations sidebar' })).toBeVisible();
+  await expect(shell.getByRole('button', { name: 'Hide operations sidebar' })).toBeVisible();
   await expect(shell.getByRole('region', { name: 'Ticket rail' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);

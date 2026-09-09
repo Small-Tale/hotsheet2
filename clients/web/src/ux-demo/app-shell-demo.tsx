@@ -14,6 +14,7 @@ import { TicketBoard } from '../components/ticket-board';
 import { TicketInspector } from '../components/ticket-inspector';
 import { TicketInspectorPlaceholder } from '../components/ticket-inspector-placeholder';
 import { TicketList } from '../components/ticket-list';
+import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
 import { editingNoteId, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
 import { commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
@@ -152,6 +153,13 @@ function ShellSidebar() {
   return <ProjectSidebar completedToday={6} inProgress={3} completionTrend={[3, 0, 2, 5, 4, 7, 6]} branch="feature/client-shell" unpushed={2} uncommitted={1} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="Codex" openCount={17} upNextCount={4} activeCount={2} collapseControl />;
 }
 
+function ShellTerminalOperations() {
+  return <TerminalOperationsSidebar projects={[
+    { id: 'hotsheet', name: 'Hot Sheet 2', completedToday: 6, inProgress: 3, trend: [3, 0, 2, 5, 4, 7, 6] },
+    { id: 'website', name: 'Small Tale Website', completedToday: 2, inProgress: 1, trend: [0, 1, 0, 2, 1, 0, 2] },
+  ]} />;
+}
+
 export function AppShellDemo() {
   const ticket = collectionTickets.value.find(item => item.selected) ?? collectionTickets.value[0];
   const banner = shellConnectionState.value ? <ConnectionStateBanner state={shellConnectionState.value} detail="Showing the latest cached project state." /> : undefined;
@@ -168,7 +176,7 @@ export function AppShellDemo() {
   const projectName = shellMode.value === 'terminals' ? 'Terminals' : shellMode.value === 'stats' ? 'Stats' : 'Hot Sheet 2';
   const viewName = shellMode.value === 'terminals' ? 'Terminal Dashboard' : shellMode.value === 'stats' ? 'Cross-project Stats' : 'Queue';
   return <section class="app-shell-demo" aria-label="AppShell demo">
-    <AppShell mode={shellMode.value} tabs={projectTabs.value} sidebar={<ShellSidebar />} sidebarVisible={shellSidebarVisible.value} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceIdentity projectName={projectName} />} headerActions={!globalMode ? <WorkspaceControls mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} /> : undefined} pageHeader={<PageHeader title={projectSettings ? 'Project Settings' : viewName} action={!globalMode&&!projectSettings?<QuickTicketLauncher/>:undefined} />} workspace={workspace} workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'} inspectorSize={shellInspectorSize.value} inspector={projectSettings ? <TicketInspectorPlaceholder selectionCount={0} /> : <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} providerName="Hot Sheet git" updatedLabel={ticket.updatedLabel} activeTab={inspectorTab.value} upNext={ticket.upNext} codeReview={inspectorCodeReview} />} inspectorVisible={inspectorOpen.value} />
+    <AppShell mode={shellMode.value} tabs={projectTabs.value} sidebar={shellMode.value === 'terminals' ? <ShellTerminalOperations /> : <ShellSidebar />} sidebarVisible={shellSidebarVisible.value} banner={banner} sidebarSize={shellSidebarSize.value} header={<WorkspaceIdentity projectName={projectName} />} headerActions={!globalMode ? <WorkspaceControls mode={workspaceMode.value} searchOpen={workspaceSearchOpen.value} searchQuery={workspaceSearchQuery.value} sort={workspaceSort.value} /> : undefined} pageHeader={<PageHeader title={projectSettings ? 'Project Settings' : viewName} action={!globalMode&&!projectSettings?<QuickTicketLauncher/>:undefined} />} workspace={workspace} workspacePresentation={workspaceMode.value === 'board' && !globalMode ? 'edge-to-edge' : 'inset'} inspectorSize={shellInspectorSize.value} inspector={projectSettings ? <TicketInspectorPlaceholder selectionCount={0} /> : <TicketInspector slug={ticket.slug} title={ticket.title} status={ticket.status} priority={ticket.priority} category={ticket.category} tags={ticket.tags} details={markdownValue.value} detailsMode={markdownMode.value} detailsDirty={markdownValue.value !== markdownSavedValue.value} notes={readerNotes.value} editingNoteId={editingNoteId.value} noteDraft={noteDraft.value} providerName="Hot Sheet git" updatedLabel={ticket.updatedLabel} activeTab={inspectorTab.value} upNext={ticket.upNext} codeReview={inspectorCodeReview} />} inspectorVisible={inspectorOpen.value} />
     <QuickTicketComposer expanded={composerExpanded.value} title={composerTitle.value} details={composerDetails.value} category={composerCategory.value} upNext={composerUpNext.value} providerName="Hot Sheet git" />
     <p class="component-stage__event" aria-live="polite">{shellEvent.value}</p>
   </section>;
