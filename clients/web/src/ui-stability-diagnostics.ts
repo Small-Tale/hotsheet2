@@ -11,6 +11,11 @@ const RENDER_STORM_COUNT = 12;
 const STARTUP_GRACE_MS = 5_000;
 const EVENT_LIMIT = 120;
 
+export interface RenderStormState {
+  passes: number[];
+  reported: boolean;
+}
+
 export interface UiStabilityEvent {
   at: string;
   kind: string;
@@ -38,6 +43,13 @@ export function hasDismissalThrash(dismissals: readonly number[], now: number): 
   return dismissals.filter(value => now - value <= THRASH_WINDOW_MS).length >= THRASH_COUNT;
 }
 
+/** Tracks one continuous root-render storm and rearms only after a quiet window. */
+export function advanceRenderStorm(state: RenderStormState, now: number): RenderStormState & { shouldReport: boolean } {
+  const passes = [...state.passes.filter(value => now - value <= RENDER_STORM_WINDOW_MS), now];
+  const storming = passes.length >= RENDER_STORM_COUNT;
+  return { passes, reported: storming, shouldReport: storming && !state.reported };
+}
+
 function encodeJson(value: unknown): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value, null, 2));
   let binary = '';
@@ -62,7 +74,8 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
   const openedSelects = new WeakMap<Element, number>();
   let lastUserIntentAt = Number.NEGATIVE_INFINITY;
   let dismissals: number[] = [];
-  let renderPasses: number[] = [];
+  let renderStorm: RenderStormState = { passes: [], reported: false };
+  let previousRenderMetrics: RenderMetricsSnapshot = { passes: 0, mutations: 0 };
   let lastReportAt = Number.NEGATIVE_INFINITY;
   let reporting = false;
 
@@ -143,9 +156,15 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
     attachment,
     recordRender(metrics) {
       const timestamp = now();
-      renderPasses = [...renderPasses.filter(value => timestamp - value <= RENDER_STORM_WINDOW_MS), timestamp];
-      record('render-pass', undefined, { ...metrics });
-      if (timestamp - installedAt > STARTUP_GRACE_MS && timestamp - lastUserIntentAt > USER_INTENT_GRACE_MS && renderPasses.length >= RENDER_STORM_COUNT) report('render-storm');
+      const nextRenderStorm = advanceRenderStorm(renderStorm, timestamp);
+      renderStorm = nextRenderStorm;
+      record('render-pass', undefined, {
+        ...metrics,
+        pass_delta: metrics.passes - previousRenderMetrics.passes,
+        mutation_delta: metrics.mutations - previousRenderMetrics.mutations,
+      });
+      previousRenderMetrics = metrics;
+      if (timestamp - installedAt > STARTUP_GRACE_MS && timestamp - lastUserIntentAt > USER_INTENT_GRACE_MS && nextRenderStorm.shouldReport) report('render-storm');
     },
     destroy() {
       observer.disconnect();
