@@ -25,7 +25,7 @@ import {activeProjectRoot,deleteDraftFiles,loadDraftFiles,loadProjectWorkspaceSe
 import { describeUnreadableAttachments, screenAttachmentFiles } from './attachment-files';
 import { AppShell } from './components/app-shell';
 import {ATTACHMENT_CONTEXT_MENU_HEIGHT,AttachmentContextMenu,type AttachmentContextMenuKind} from './components/attachment-context-menu';
-import {AttachmentGallery,attachmentGalleryImageIndex,attachmentGalleryZoomModel,type AttachmentGalleryGeometry,type AttachmentGalleryImage} from './components/attachment-gallery';
+import {AttachmentGallery,attachmentGalleryImageIndex,attachmentGallerySelectionUrl,attachmentGalleryZoomModel,type AttachmentGalleryGeometry,type AttachmentGalleryImage} from './components/attachment-gallery';
 import { BulkTicketDialog, type BulkTicketDialogState } from './components/bulk-ticket-dialog';
 import {AIConversation} from './components/ai-conversation';
 import { ConnectionDetailsDialog } from './components/connection-details-dialog';
@@ -945,7 +945,7 @@ delegate(document.body,'dragleave','[data-attachment-group-drop-target], [data-a
 delegate(document.body,'drop','[data-attachment-group-drop-target], [data-attachment-new-group-drop-target]',(event,target)=>{if(!draggedGroupedAttachmentId)return;event.preventDefault();event.stopPropagation();const id=draggedGroupedAttachmentId,surface=target.closest<HTMLElement>('[data-component="ticket-attachments"]'),source=surface?.querySelector<HTMLElement>(`[data-drag-attachment-id="${CSS.escape(id)}"]`)?.closest<HTMLElement>('[data-attachment-ids]'),destination=target.closest<HTMLElement>('[data-attachment-group-drop-target]'),newGroup=target.matches('[data-attachment-new-group-drop-target]');clearGroupedAttachmentDrag(surface??undefined);if(!source)return;if(newGroup){const role=source.dataset.attachmentActorRole as 'human'|'ai'|'system'|'unknown'|undefined;void persistAttachmentMetadata([id],{batch_id:crypto.randomUUID(),batch_label:'New group',actor:role?{role,identity:source.dataset.attachmentActorIdentity||undefined,display_name:source.dataset.attachmentActorName||undefined}:undefined});return}if(destination&&destination!==source)void persistAttachmentMetadata([id],metadataForBatch(destination))});
 delegate(document.body,'dblclick','[data-action="open-attachment-row"]',(event,target)=>{if((event.target as Element).closest('button, input, a'))return;void openSelectedAttachment(data(target).attachmentActionId!)});
 function shiftGallery(delta:number){const images=galleryImages(),active=attachmentGalleryUrl.value,index=active?attachmentGalleryImageIndex(images,active):-1;if(index>=0&&images.length)resetAttachmentGallery(images[(index+delta+images.length)%images.length].url)}
-delegate(document.body,'click','[data-action="open-attachment-gallery"]',(_event,target)=>{const url=data(target).attachmentUrl;if(url)resetAttachmentGallery(url)});
+delegate(document.body,'click','[data-action="open-attachment-gallery"]',(_event,target)=>{const selection=data(target),url=attachmentGallerySelectionUrl(galleryImages(),{url:selection.attachmentUrl,ticket:selection.attachmentTicket,name:selection.attachmentName,attachmentId:selection.galleryAttachmentId});if(url)resetAttachmentGallery(url)});
 delegate(document.body,'click','[data-action="close-attachment-gallery"]',()=>{resetAttachmentGallery()});
 delegate(document.body,'click','[data-action="previous-gallery-image"]',()=>{shiftGallery(-1)});
 delegate(document.body,'click','[data-action="next-gallery-image"]',()=>{shiftGallery(1)});

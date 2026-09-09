@@ -116,6 +116,7 @@ describe('content components', () => {
     const markup=String(MarkdownPreview({source:'Evidence: attachment:proof.png.',attachmentContext:context}));
     expect(markup).toContain('src="/project-api/demo/checkouts/checkout/tickets/HS2-LOCAL/attachments/01M22Q0ZGMJ0M0FE24ZSCGXRSS"');
     expect(markup).toContain('data-attachment-name="proof.png"');
+    expect(markup).toContain('data-gallery-attachment-id="01M22Q0ZGMJ0M0FE24ZSCGXRSS"');
     expect(markup).toContain('</button>.');
   });
 

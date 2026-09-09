@@ -372,6 +372,10 @@ cleanup of the old live HS1 data; backups are never removed.
   turn. Stop appears only for a busy connection advertising `interrupt`; Enter sends and
   Shift+Enter adds a line. Connection refresh and transcript updates share the existing
   replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
+  While the dialog is closed, streamed transcript/activity state remains retained but the
+  conversation surface is not mounted and does not subscribe the application root to those
+  high-frequency signals. Opening it projects the accumulated transcript in one pass; background
+  tool output cannot cause a root-render storm or disturb unrelated controls.
   Usage events attach token/cost metadata to the active assistant turn and derive a
   conversation total without a second counter; unknown cost is labeled unavailable. The same
   stream's normalized activity events are session/connection matched into a bounded activity
@@ -483,8 +487,11 @@ cleanup of the old live HS1 data; backups are never removed.
   controls all use the shared dark ToolbarControlGroup tone so translucent backgrounds,
   borders, icons, and hover states retain contrast over arbitrary images.
   Note-referenced images resolve to the same gallery identity as their attached-file
-  thumbnail even though Markdown uses a by-name URL, so button, keyboard-arrow, and
-  horizontal-swipe navigation continue from the media item the user actually selected.
+  thumbnail. Known Markdown images carry their immutable attachment id, and the gallery
+  resolves that id (then ticket plus filename) before consulting potentially shared
+  by-name URL aliases. Each image in a multi-image note therefore opens the media item
+  the user actually selected; button, keyboard-arrow, and horizontal-swipe navigation
+  continue from that item.
   Full-screen markup mode follows the exported image/video gallery wireframes: normalized
   rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
   and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
