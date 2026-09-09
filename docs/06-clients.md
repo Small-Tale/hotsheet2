@@ -421,6 +421,8 @@ prompt can be dismissed and returns on a later open until a source is configured
   must provide the same ffmpeg capability on macOS, Linux, and Windows.
   A preview or inline image opens the same full-screen
   media gallery; videos have native playback controls and also remain paused initially.
+  Full-screen media preserves the source image or video's square outer geometry: the
+  gallery does not add corner rounding to either the media or its sizing wrapper.
   Its filename uses inverse toolbar text, while navigation, action, close, and zoom
   controls all use the shared dark ToolbarControlGroup tone so translucent backgrounds,
   borders, icons, and hover states retain contrast over arbitrary images.

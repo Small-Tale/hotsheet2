@@ -1,9 +1,16 @@
+import {readFileSync} from 'node:fs';
+
 import {describe,expect,it} from 'vitest';
 
 import {AttachmentGallery,attachmentGalleryImageIndex,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
 
 describe('AttachmentGallery',()=>{
   const images=[{id:'a',name:'a.png',url:'/a.png'},{id:'b',name:'b.svg',url:'/b.svg'}];
+  it('keeps full-screen media and its sizing wrapper square-cornered',()=>{
+    const css=readFileSync(new URL('./attachment-gallery.css',import.meta.url),'utf8');
+    expect(css).toMatch(/\.attachment-gallery__media-wrap \{[^}]*border-radius:0/);
+    expect(css).toMatch(/\.attachment-gallery__media-wrap :is\(img,video\) \{[^}]*border-radius:0/);
+  });
   it('shows the active image with accessible cyclic navigation controls',()=>{
     const markup=String(AttachmentGallery({images,activeUrl:'/b.svg'}));
     expect(markup).toContain('role="dialog"');expect(markup).toContain('Image 2 of 2: b.svg');
