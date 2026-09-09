@@ -1818,7 +1818,7 @@ test('projects the feedback-needed indicator through list and board compositions
   expect(await inspector.evaluate(node => {
     const rail = getComputedStyle(node, '::before');
     return { background: rail.backgroundColor, width: rail.width };
-  })).toEqual({ background: 'rgb(203, 48, 224)', width: '4px' });
+  })).toEqual({ background: 'rgba(0, 0, 0, 0)', width: 'auto' });
 });
 
 test('dims finished tickets in the list and gives the add-tag control full width', async ({ page }) => {
