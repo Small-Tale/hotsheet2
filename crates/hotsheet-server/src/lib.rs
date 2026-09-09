@@ -75,9 +75,9 @@ pub struct AppState {
     /// Keeps the fs-watchers of `POST /stores`-registered stores alive (the default
     /// store's watcher is held by the server binary). Never read — just not dropped.
     watchers: Arc<Mutex<Vec<WatchHandle>>>,
-    /// One native recursive watcher per open code checkout. It emits only invalidation
-    /// events; clients obtain the authoritative status through the existing endpoint.
-    repository_watchers: Arc<Mutex<std::collections::HashMap<String, WatchHandle>>>,
+    /// One bounded monitor per open code checkout. It emits only invalidation events;
+    /// clients obtain the authoritative status through the existing endpoint.
+    repository_watchers: Arc<Mutex<std::collections::HashMap<String, RepositoryWatchHandle>>>,
     /// Server-owned GitHub device flows. Browser clients see only user codes and terminal
     /// states; OAuth device/access/refresh tokens never cross this boundary.
     github_auth_sessions: Arc<Mutex<std::collections::HashMap<String, Arc<GitHubAuthSession>>>>,
@@ -6385,6 +6385,18 @@ pub struct WatchHandle {
     _watcher: HeldWatcher,
 }
 
+/// Keeps one checkout monitor alive. Initialization and repository inspection happen on
+/// its background thread, so opening a project never waits for a recursive traversal.
+struct RepositoryWatchHandle {
+    stop: std::sync::mpsc::Sender<()>,
+}
+
+impl Drop for RepositoryWatchHandle {
+    fn drop(&mut self) {
+        let _ = self.stop.send(());
+    }
+}
+
 enum HeldWatcher {
     Recommended(notify::RecommendedWatcher),
     Poll(notify::PollWatcher),
@@ -6394,6 +6406,12 @@ enum HeldWatcher {
 enum WatcherBackend {
     Recommended,
     Poll,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RepositoryWatcherBackend {
+    Native,
+    GitStatus,
 }
 
 /// Watch the store's `tickets/` dir and keep the index + WS bus in sync with changes
@@ -6432,6 +6450,17 @@ fn registered_watcher_backend() -> WatcherBackend {
         WatcherBackend::Poll
     } else {
         WatcherBackend::Recommended
+    }
+}
+
+/// A second FSEvents watcher is unreliable in the server process, while notify's polling
+/// watcher recursively walks every checkout (including ignored build output) on both
+/// startup and every interval. On macOS, fingerprint Git's own bounded view instead.
+fn repository_watcher_backend() -> RepositoryWatcherBackend {
+    if cfg!(target_os = "macos") {
+        RepositoryWatcherBackend::GitStatus
+    } else {
+        RepositoryWatcherBackend::Native
     }
 }
 
@@ -6488,47 +6517,142 @@ fn repository_change_event(checkout_id: &str) -> ChangeEvent {
     }
 }
 
-/// Watch a checkout recursively through the filesystem watcher backend. Bursts from an
-/// editor save, index update, commit, or push collapse to one lightweight invalidation;
-/// no status command runs on the watcher thread and clients never poll repository status.
+/// Monitor a checkout for working-tree, index, commit, and upstream changes. Setup always
+/// happens off the request path. Native backends coalesce filesystem bursts; macOS uses a
+/// Git status fingerprint because notify's polling backend recursively traverses ignored
+/// trees. Clients receive invalidations through WebSocket/long-poll and never simple-poll.
 fn spawn_repository_watcher(
     root: std::path::PathBuf,
     checkout_id: String,
     events: broadcast::Sender<ChangeEvent>,
     event_log: Arc<Mutex<EventLog>>,
-) -> anyhow::Result<WatchHandle> {
+) -> anyhow::Result<RepositoryWatchHandle> {
+    spawn_repository_watcher_with_backend(
+        root,
+        checkout_id,
+        events,
+        event_log,
+        repository_watcher_backend(),
+    )
+}
+
+fn spawn_repository_watcher_with_backend(
+    root: std::path::PathBuf,
+    checkout_id: String,
+    events: broadcast::Sender<ChangeEvent>,
+    event_log: Arc<Mutex<EventLog>>,
+    backend: RepositoryWatcherBackend,
+) -> anyhow::Result<RepositoryWatchHandle> {
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name(format!("hotsheet-repository-{checkout_id}"))
+        .spawn(move || match backend {
+            RepositoryWatcherBackend::Native => {
+                run_native_repository_monitor(root, checkout_id, events, event_log, stop_rx)
+            }
+            RepositoryWatcherBackend::GitStatus => {
+                run_git_repository_monitor(root, checkout_id, events, event_log, stop_rx)
+            }
+        })?;
+    Ok(RepositoryWatchHandle { stop: stop_tx })
+}
+
+fn run_native_repository_monitor(
+    root: std::path::PathBuf,
+    checkout_id: String,
+    events: broadcast::Sender<ChangeEvent>,
+    event_log: Arc<Mutex<EventLog>>,
+    stop: std::sync::mpsc::Receiver<()>,
+) {
     use notify::{RecursiveMode, Watcher};
 
     let (tx, rx) = std::sync::mpsc::channel();
-    let mut watcher = match registered_watcher_backend() {
-        WatcherBackend::Recommended => {
-            HeldWatcher::Recommended(notify::recommended_watcher(move |result| {
-                let _ = tx.send(result);
-            })?)
-        }
-        WatcherBackend::Poll => HeldWatcher::Poll(notify::PollWatcher::new(
-            move |result| {
-                let _ = tx.send(result);
-            },
-            notify::Config::default().with_poll_interval(Duration::from_millis(250)),
-        )?),
+    let Ok(mut watcher) = notify::recommended_watcher(move |result| {
+        let _ = tx.send(result);
+    }) else {
+        eprintln!(
+            "native repository watcher for {} failed to start; falling back to Git status",
+            root.display()
+        );
+        run_git_repository_monitor(root, checkout_id, events, event_log, stop);
+        return;
     };
-    match &mut watcher {
-        HeldWatcher::Recommended(watcher) => watcher.watch(&root, RecursiveMode::Recursive)?,
-        HeldWatcher::Poll(watcher) => watcher.watch(&root, RecursiveMode::Recursive)?,
+    if let Err(error) = watcher.watch(&root, RecursiveMode::Recursive) {
+        eprintln!(
+            "native repository watcher for {} failed to watch ({error}); falling back to Git status",
+            root.display()
+        );
+        run_git_repository_monitor(root, checkout_id, events, event_log, stop);
+        return;
     }
-    std::thread::spawn(move || {
-        while let Ok(first) = rx.recv() {
-            let mut changed = first.is_ok();
-            while let Ok(next) = rx.recv_timeout(Duration::from_millis(175)) {
-                changed |= next.is_ok();
-            }
-            if changed {
-                emit_change(&event_log, &events, repository_change_event(&checkout_id));
-            }
+
+    loop {
+        if stop.try_recv().is_ok() {
+            return;
         }
-    });
-    Ok(WatchHandle { _watcher: watcher })
+        let Ok(first) = rx.recv_timeout(Duration::from_millis(250)) else {
+            continue;
+        };
+        let mut changed = first.is_ok();
+        while let Ok(next) = rx.recv_timeout(Duration::from_millis(175)) {
+            changed |= next.is_ok();
+        }
+        if changed {
+            emit_change(&event_log, &events, repository_change_event(&checkout_id));
+        }
+    }
+}
+
+fn git_repository_fingerprint(root: &FsPath) -> Option<Vec<u8>> {
+    let output = std::process::Command::new("git")
+        .arg("--no-optional-locks")
+        .arg("-C")
+        .arg(root)
+        .args(["-c", "core.quotepath=false"])
+        .args([
+            "status",
+            "--porcelain=v2",
+            "--branch",
+            "--untracked-files=normal",
+            "-z",
+        ])
+        .output()
+        .ok()?;
+    output.status.success().then_some(output.stdout)
+}
+
+fn run_git_repository_monitor(
+    root: std::path::PathBuf,
+    checkout_id: String,
+    events: broadcast::Sender<ChangeEvent>,
+    event_log: Arc<Mutex<EventLog>>,
+    stop: std::sync::mpsc::Receiver<()>,
+) {
+    // Git applies ignore rules before enumerating untracked paths, so target/, node_modules/,
+    // and similar ignored trees do not participate in either startup or steady-state work.
+    let mut previous = git_repository_fingerprint(&root);
+    let mut unchanged_rounds = 0_u8;
+    loop {
+        let interval = if unchanged_rounds < 12 {
+            Duration::from_millis(750)
+        } else {
+            Duration::from_secs(2)
+        };
+        if stop.recv_timeout(interval).is_ok() {
+            return;
+        }
+        let Some(next) = git_repository_fingerprint(&root) else {
+            continue;
+        };
+        let changed = previous.as_ref().is_some_and(|prior| prior != &next);
+        previous = Some(next);
+        if changed {
+            unchanged_rounds = 0;
+            emit_change(&event_log, &events, repository_change_event(&checkout_id));
+        } else {
+            unchanged_rounds = unchanged_rounds.saturating_add(1);
+        }
+    }
 }
 
 fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, target: WatchTarget) {
@@ -6666,8 +6790,12 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
 #[cfg(test)]
 mod watcher_tests {
     use super::{
-        WatcherBackend, expand_ticket_files, registered_watcher_backend, repository_change_event,
+        EventLog, RepositoryWatcherBackend, WatcherBackend, expand_ticket_files,
+        git_repository_fingerprint, registered_watcher_backend, repository_change_event,
+        repository_watcher_backend, spawn_repository_watcher_with_backend,
     };
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     #[test]
     fn registered_store_watcher_avoids_a_second_fsevents_stream() {
@@ -6677,6 +6805,80 @@ mod watcher_tests {
             WatcherBackend::Recommended
         };
         assert_eq!(registered_watcher_backend(), expected);
+    }
+
+    #[test]
+    fn macos_repository_monitor_uses_git_instead_of_recursive_polling() {
+        let expected = if cfg!(target_os = "macos") {
+            RepositoryWatcherBackend::GitStatus
+        } else {
+            RepositoryWatcherBackend::Native
+        };
+        assert_eq!(repository_watcher_backend(), expected);
+    }
+
+    fn git(root: &std::path::Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn git_repository_fingerprint_excludes_ignored_trees() {
+        let dir = tempfile::tempdir().unwrap();
+        git(dir.path(), &["init", "--quiet"]);
+        std::fs::write(dir.path().join(".gitignore"), "target/\nnode_modules/\n").unwrap();
+        let before = git_repository_fingerprint(dir.path()).unwrap();
+
+        std::fs::create_dir_all(dir.path().join("target/deep/build")).unwrap();
+        std::fs::write(
+            dir.path().join("target/deep/build/artifact"),
+            "large output",
+        )
+        .unwrap();
+        std::fs::create_dir_all(dir.path().join("node_modules/package")).unwrap();
+        std::fs::write(dir.path().join("node_modules/package/index.js"), "ignored").unwrap();
+        assert_eq!(git_repository_fingerprint(dir.path()).unwrap(), before);
+
+        std::fs::write(dir.path().join("visible.txt"), "working tree").unwrap();
+        assert_ne!(git_repository_fingerprint(dir.path()).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn git_repository_monitor_emits_once_for_a_stable_change() {
+        let dir = tempfile::tempdir().unwrap();
+        git(dir.path(), &["init", "--quiet"]);
+        let (events, _) = tokio::sync::broadcast::channel(8);
+        let mut receiver = events.subscribe();
+        let handle = spawn_repository_watcher_with_backend(
+            dir.path().to_path_buf(),
+            "checkout-42".into(),
+            events,
+            Arc::new(Mutex::new(EventLog::default())),
+            RepositoryWatcherBackend::GitStatus,
+        )
+        .unwrap();
+
+        // Let the monitor establish its baseline before changing the working tree.
+        tokio::time::sleep(Duration::from_millis(850)).await;
+        std::fs::write(dir.path().join("changed.txt"), "changed").unwrap();
+        let event = tokio::time::timeout(Duration::from_secs(2), receiver.recv())
+            .await
+            .expect("repository invalidation arrived promptly")
+            .unwrap();
+        assert_eq!(event.kind, "repository_changed");
+        assert_eq!(event.store, "checkout-42");
+        assert!(
+            tokio::time::timeout(Duration::from_millis(900), receiver.recv())
+                .await
+                .is_err(),
+            "an idle repository must not emit repeated invalidations"
+        );
+        drop(handle);
     }
 
     #[test]

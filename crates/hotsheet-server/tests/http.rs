@@ -1194,6 +1194,45 @@ async fn opening_project_without_ticket_sources_keeps_the_checkout_usable() {
     assert!(body_json(tickets).await.as_array().unwrap().is_empty());
 }
 
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn opening_project_does_not_wait_for_ignored_checkout_traversal() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(&checkout)
+            .args(["init", "--quiet"])
+            .status()
+            .unwrap()
+            .success()
+    );
+    std::fs::write(checkout.join(".gitignore"), "target/\nnode_modules/\n").unwrap();
+    for index in 0..4_000 {
+        let path = checkout.join(format!("target/cache/{index:04}/artifact"));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, "ignored build output").unwrap();
+    }
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        app.oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout}).to_string()),
+        )),
+    )
+    .await
+    .expect("project open must not wait for repository monitor initialization")
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+}
+
 #[tokio::test]
 async fn checkout_search_matches_slug_details_and_notes() {
     let (_primary, st) = state();
