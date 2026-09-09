@@ -32,11 +32,18 @@ view. Exact-slug lookup can surface a matching Backlog, Archive, or Deleted tick
 known identity is never hidden by view scope. The ordinary toolbar search accepts inline
 field tokens without opening a separate advanced-search dialog. Typing `tag:` offers
 matching project tags, including quoted tags with spaces, and selecting or completing one
-turns it into a removable, double-click-to-edit chip. The same surface accepts
-`has-attachment`, `attachment:<name-or-*-wildcard>`, and inclusive lifecycle bounds such
-as `created-after:<local-date>` or `completed-before:<local-date-and-time>`. Manual input
+turns it into a removable, double-click-to-edit chip. Complete filters take effect before
+the trailing space is typed; space or blur commits them as chips, and chips wrap below the
+input without truncating their values. The same surface accepts `has:attachment`,
+`has:media-annotation`, `has:commit`, `attachment:<name-or-*-wildcard>`, and inclusive
+lifecycle bounds such as `created-after:<local-date>` or
+`completed-before:<local-date-and-time>`. Attachment and media-annotation presence are
+indexed fields; commit presence is evaluated against the selected checkout's git history.
+Manual input
 uses the client machine's date/time order, punctuation, clock, and numerals; ISO 8601 dates
 and date-times (for example `2026-09-01` and `2026-09-01T11:05`) are always accepted.
+Relative minute, hour, day, and week values such as `updated-after:4h ago` are resolved at
+search time.
 A native date/optional-time helper appears for lifecycle prefixes, and an adjacent help control
 opens the complete syntax guide without overloading the ordinary search placeholder.
 Created, updated, completed, and verified use their persisted timestamps. Because the v2

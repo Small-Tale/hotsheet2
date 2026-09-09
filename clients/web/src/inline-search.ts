@@ -1,9 +1,10 @@
 export type SearchDateField='created'|'completed'|'started'|'verified'|'archived'|'updated';
 export type SearchDateDirection='before'|'after';
+export type SearchPresence='attachment'|'media-annotation'|'commit';
 
 export type InlineSearchToken=
   |{kind:'tag';value:string;raw:string;label:string}
-  |{kind:'has-attachment';value:'true';raw:string;label:string}
+  |{kind:'has';value:SearchPresence;raw:string;label:string}
   |{kind:'attachment';value:string;raw:string;label:string}
   |{kind:'date';value:string;field:SearchDateField;direction:SearchDateDirection;raw:string;label:string};
 
@@ -22,12 +23,14 @@ function validLocalDate(year:number,month:number,day:number,hour:number,minute:n
   return date.getFullYear()===year&&date.getMonth()===month-1&&date.getDate()===day?date:undefined;
 }
 
-export function parseSearchDate(value:string,locale?:string):string|undefined{
+export function parseSearchDate(value:string,locale?:string,now=new Date()):string|undefined{
   const source=value.trim(),iso=source.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/i);
   if(iso){
     if(iso[6]){if(!validLocalDate(Number(iso[1]),Number(iso[2]),Number(iso[3]),12,0)||Number(iso[4])>23||Number(iso[5])>59)return undefined;const timestamp=Date.parse(source);return Number.isNaN(timestamp)?undefined:new Date(timestamp).toISOString()}
     return validLocalDate(Number(iso[1]),Number(iso[2]),Number(iso[3]),Number(iso[4]||0),Number(iso[5]||0))?.toISOString();
   }
+  const relative=source.match(/^(\d+(?:\.\d+)?)\s*(m|h|d|w)\s+ago$/i);
+  if(relative){const units:{[key:string]:number}={m:60_000,h:3_600_000,d:86_400_000,w:604_800_000};return new Date(now.getTime()-Number(relative[1])*units[relative[2].toLowerCase()]).toISOString()}
   const numbers=[...source.matchAll(/\p{Number}+/gu)];
   if(numbers.length<3||numbers.length>5)return undefined;
   const order=localDateOrder(locale),parts=Object.fromEntries(order.map((key,index)=>[key,latinNumber(numbers[index][0],locale)])) as Record<'year'|'month'|'day',number>;
@@ -48,7 +51,8 @@ export function dateTokenFromInput(prefix:`${SearchDateField}-${SearchDateDirect
 
 export function tokenFromRaw(raw:string):InlineSearchToken|undefined{
   const source=raw.trim();
-  if(source.toLowerCase()==='has-attachment')return{kind:'has-attachment',value:'true',raw:'has-attachment',label:'has attachment'};
+  const presence=source.match(/^has:(attachment|media-annotation|commit)$/i);
+  if(presence){const value=presence[1].toLowerCase() as SearchPresence;return{kind:'has',value,raw:`has:${value}`,label:`has ${value.replace('-',' ')}`}}
   const tag=source.match(/^tag:("(?:\\.|[^"])*"|\S+)$/i);
   if(tag){const value=unquote(tag[1]);return value?{kind:'tag',value,raw:`tag:${quoteIfNeeded(value)}`,label:`tag:${value}`}:undefined}
   const attachment=source.match(/^attachment:("(?:\\.|[^"])*"|\S+)$/i);
@@ -62,7 +66,7 @@ export function tokenFromRaw(raw:string):InlineSearchToken|undefined{
 export function consumeSearchToken(input:string,force=false):{text:string;token?:InlineSearchToken}{
   const complete=force||/\s$/.test(input);
   const trimmed=input.trimEnd();
-  const starts=[...trimmed.matchAll(/(?:^|\s)(tag:|has-attachment|attachment:|(?:created|completed|started|verified|archived|updated)-(?:before|after):)/gi)];
+  const starts=[...trimmed.matchAll(/(?:^|\s)(tag:|has:|attachment:|(?:created|completed|started|verified|archived|updated)-(?:before|after):)/gi)];
   const start=starts.at(-1)?.index;
   if(start===undefined)return{text:input};
   const raw=trimmed.slice(start).trimStart();
@@ -78,16 +82,24 @@ export function activeTagPrefix(input:string):string|undefined{
 }
 
 export function activeDatePrefix(input:string):`${SearchDateField}-${SearchDateDirection}`|undefined{
-  const match=input.match(/(?:^|\s)((?:created|completed|started|verified|archived|updated)-(?:before|after)):[^\s]*$/i);
+  const match=input.match(/(?:^|\s)((?:created|completed|started|verified|archived|updated)-(?:before|after)):.*$/i);
   if(!match)return undefined;
   return match[1].toLowerCase() as `${SearchDateField}-${SearchDateDirection}`;
+}
+
+/** Treat a complete token still in the editor as structured search without changing the UI. */
+export function effectiveSearch(input:string,tokens:readonly InlineSearchToken[]){
+  const parsed=consumeSearchToken(input,true),next=parsed.token&&!tokens.some(token=>token.kind===parsed.token!.kind&&token.value===parsed.token!.value)?[...tokens,parsed.token]:[...tokens];
+  return{text:(parsed.token?parsed.text:input).trim(),tokens:next};
 }
 
 export function tokenQuery(tokens:readonly InlineSearchToken[]){
   const query:Record<string,string|boolean>={};
   const tags=tokens.filter((token):token is Extract<InlineSearchToken,{kind:'tag'}>=>token.kind==='tag').map(token=>token.value);
   if(tags.length)query.tags=tags.join(',');
-  if(tokens.some(token=>token.kind==='has-attachment'))query.has_attachment=true;
+  if(tokens.some(token=>token.kind==='has'&&token.value==='attachment'))query.has_attachment=true;
+  if(tokens.some(token=>token.kind==='has'&&token.value==='media-annotation'))query.has_media_annotation=true;
+  if(tokens.some(token=>token.kind==='has'&&token.value==='commit'))query.has_commit=true;
   const attachment=[...tokens].reverse().find((token):token is Extract<InlineSearchToken,{kind:'attachment'}>=>token.kind==='attachment');
   if(attachment)query.attachment=attachment.value;
   for(const token of tokens){if(token.kind!=='date')continue;const field=token.field==='started'||token.field==='archived'?'updated':token.field;query[`${field}_${token.direction}`]=token.value;if(token.field==='started')query.status='started';if(token.field==='archived')query.status='archive'}

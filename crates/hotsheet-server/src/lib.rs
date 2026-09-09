@@ -2819,6 +2819,10 @@ async fn list_checkout_tickets(
     Path(reference): Path<String>,
     Query(params): Query<ListParams>,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     let mut result = Vec::new();
     for (store_id, entry) in checkout_entries(&state, &reference)? {
         let compact = params.compact.unwrap_or(true);
@@ -2853,10 +2857,6 @@ async fn list_checkout_tickets(
             result.push(value);
         }
     }
-    let checkout = state
-        .checkout_registry
-        .resolve(&reference)
-        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     for source in checkout
         .sources
         .iter()
@@ -2873,6 +2873,23 @@ async fn list_checkout_tickets(
             }
             result.push(value);
         }
+    }
+    if let Some(want) = params.has_commit {
+        let slugs = result
+            .iter()
+            .filter_map(|value| value.get("slug")?.as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        let matches = match code_review::slugs_with_commits(FsPath::new(&checkout.root), &slugs) {
+            Ok(matches) => matches,
+            Err(code_review::CodeReviewError::NotRepository) => Default::default(),
+            Err(error) => return Err(code_review_api_error(error)),
+        };
+        result.retain(|value| {
+            value
+                .get("slug")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|slug| matches.contains(slug) == want)
+        });
     }
     Ok(Json(result))
 }
@@ -6146,6 +6163,9 @@ struct ListParams {
     verified_after: Option<String>,
     verified_before: Option<String>,
     has_attachment: Option<bool>,
+    has_media_annotation: Option<bool>,
+    /// Checkout-only filter: whether repository commits reference the ticket slug.
+    has_commit: Option<bool>,
     /// Comma-separated attachment filename patterns; `*` is a wildcard.
     attachment: Option<String>,
     sort: Option<String>,
@@ -6251,6 +6271,7 @@ impl ListParams {
             verified_after: self.verified_after,
             verified_before: self.verified_before,
             has_attachment: self.has_attachment,
+            has_media_annotation: self.has_media_annotation,
             attachment_patterns: self
                 .attachment
                 .map(|values| {

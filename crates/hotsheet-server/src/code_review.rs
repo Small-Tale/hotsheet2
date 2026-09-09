@@ -6,6 +6,7 @@
 //! requests are checked against a fresh discovery result, then passed to `git difftool`
 //! as an argument array (never a shell).
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -170,6 +171,23 @@ pub enum CodeReviewError {
 
 pub fn discover(root: &Path, ticket_slug: &str) -> Result<CodeReview, CodeReviewError> {
     discover_with_classification(root, ticket_slug, &CodeReviewClassification::default())
+}
+
+/// Match many ticket slugs against one bounded repository-history scan.
+pub fn slugs_with_commits(
+    root: &Path,
+    ticket_slugs: &[String],
+) -> Result<HashSet<String>, CodeReviewError> {
+    let (commits, _, _) = discover_commits(root)?;
+    Ok(ticket_slugs
+        .iter()
+        .filter(|slug| {
+            commits
+                .iter()
+                .any(|commit| commit_mentions_ticket(commit, slug))
+        })
+        .cloned()
+        .collect())
 }
 
 pub fn discover_with_classification(

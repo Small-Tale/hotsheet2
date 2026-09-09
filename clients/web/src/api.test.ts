@@ -160,8 +160,8 @@ describe('ticket search transport',()=>{
   });
   it('encodes inline attachment and lifecycle filters as structured query fields',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('[]',{status:200}));
-    await new Api('/api').checkoutTickets('demo',{tags:'client,needs design',has_attachment:true,attachment:'*.png',completed_after:'2026-09-01T03:05:00.000Z'});
-    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/demo/tickets?tags=client%2Cneeds+design&has_attachment=true&attachment=*.png&completed_after=2026-09-01T03%3A05%3A00.000Z',expect.any(Object));
+    await new Api('/api').checkoutTickets('demo',{tags:'client,needs design',has_attachment:true,has_media_annotation:true,has_commit:true,attachment:'*.png',completed_after:'2026-09-01T03:05:00.000Z'});
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/demo/tickets?tags=client%2Cneeds+design&has_attachment=true&has_media_annotation=true&has_commit=true&attachment=*.png&completed_after=2026-09-01T03%3A05%3A00.000Z',expect.any(Object));
     fetchMock.mockRestore();
   });
 });

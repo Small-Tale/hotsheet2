@@ -399,10 +399,11 @@ when a patch only tries to set Up Next, and queries/projectors defensively ignor
 legacy flags. Thus backlog, completed, verified, archive, deleted, and moved tickets can
 never participate in the Up Next queue.
 
-Up Next is queue-position metadata rather than substantive ticket content. A patch whose
-only effective change is `up_next` preserves `updated_at`, so starring or unstarring a
-ticket cannot reorder a recently-updated view. A mixed patch that changes any other field
-still advances `updated_at`. Status transitions remain substantive even when they also
+Up Next and priority are ordering metadata rather than substantive ticket content. A patch
+whose only effective changes are `up_next` and/or `priority` preserves `updated_at`, so
+starring, unstarring, or reprioritizing a ticket cannot reorder a recently-updated view. A
+mixed patch that changes any other field still advances `updated_at`. Status transitions
+remain substantive even when they also
 clear `up_next`; an attempted requeue of an already-inactive ticket is normalized away
 without changing its timestamp.
 

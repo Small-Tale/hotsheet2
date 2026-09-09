@@ -16,7 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
 /// Bump to force a full rebuild on open when the on-disk schema is stale.
-const SCHEMA_VERSION: i64 = 11;
+const SCHEMA_VERSION: i64 = 12;
 
 const SCHEMA: &str = r#"
 CREATE TABLE tickets (
@@ -40,6 +40,7 @@ CREATE TABLE tickets (
   blocked_by_json TEXT NOT NULL DEFAULT '[]',
   blocked_reason  TEXT,
   attachment_names_json TEXT NOT NULL DEFAULT '[]',
+  has_media_annotation INTEGER NOT NULL DEFAULT 0,
   created_at      TEXT, updated_at TEXT, completed_at TEXT, verified_at TEXT,
   claimed_by      TEXT, claim_lease_expires_at TEXT, worker_label TEXT, claim_count INTEGER DEFAULT 0,
   file_path       TEXT NOT NULL,
@@ -230,8 +231,8 @@ impl Index {
             "INSERT INTO tickets(store_id,id,slug,title,details,category,priority,priority_rank,\
              status,status_rank,close_reason,duplicate_of,closed_at,up_next,tags_json,blocked_by_json,blocked_reason,\
              attachment_names_json,created_at,updated_at,completed_at,verified_at,claimed_by,claim_lease_expires_at,\
-             worker_label,claim_count,file_path,content_hash,feedback_needed) \
-             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29) \
+             worker_label,claim_count,file_path,content_hash,feedback_needed,has_media_annotation) \
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30) \
              ON CONFLICT(store_id,id) DO UPDATE SET \
              slug=excluded.slug,title=excluded.title,details=excluded.details,category=excluded.category,\
              priority=excluded.priority,priority_rank=excluded.priority_rank,status=excluded.status,\
@@ -241,7 +242,7 @@ impl Index {
              completed_at=excluded.completed_at,verified_at=excluded.verified_at,claimed_by=excluded.claimed_by,\
              claim_lease_expires_at=excluded.claim_lease_expires_at,worker_label=excluded.worker_label,\
              claim_count=excluded.claim_count,file_path=excluded.file_path,\
-             content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed",
+             content_hash=excluded.content_hash,feedback_needed=excluded.feedback_needed,has_media_annotation=excluded.has_media_annotation",
             params![
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
@@ -251,6 +252,7 @@ impl Index {
                 t.created_at.as_str(), t.updated_at.as_str(), ts(&t.completed_at), ts(&t.verified_at),
                 t.claimed_by, ts(&t.claim_lease_expires_at), t.worker_label, t.claim_count,
                 file_path, content_hash, feedback_needed,
+                t.attachments.iter().any(|attachment| !attachment.annotations.is_empty()) as i64,
             ],
         )?;
 
@@ -620,6 +622,9 @@ impl Index {
             } else {
                 "t.attachment_names_json = '[]'".into()
             });
+        }
+        if let Some(want) = q.has_media_annotation {
+            wheres.push(format!("t.has_media_annotation = {}", i64::from(want)));
         }
         for pattern in &q.attachment_patterns {
             let sql_pattern = pattern

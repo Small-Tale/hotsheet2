@@ -385,7 +385,16 @@ fn fts_matches_attachment_filenames() {
         batch_label: None,
         actor: None,
         purpose: None,
-        annotations: vec![],
+        annotations: vec![hotsheet_model::MediaAnnotation {
+            id: "region-1".into(),
+            x: 10,
+            y: 20,
+            width: 30,
+            height: 40,
+            start_ms: None,
+            end_ms: None,
+            text: "Inspect this edge".into(),
+        }],
     });
     ticket.completed_at = Some(Timestamp::new("2026-09-01T03:00:00Z"));
     ticket.verified_at = Some(Timestamp::new("2026-09-01T04:00:00Z"));
@@ -402,6 +411,10 @@ fn fts_matches_attachment_filenames() {
     for query in [
         TicketQuery {
             has_attachment: Some(true),
+            ..Default::default()
+        },
+        TicketQuery {
+            has_media_annotation: Some(true),
             ..Default::default()
         },
         TicketQuery {

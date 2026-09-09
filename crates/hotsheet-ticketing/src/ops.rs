@@ -118,6 +118,8 @@ pub struct TicketQuery {
     pub verified_before: Option<String>,
     /// `Some(true)` matches tickets with at least one attachment; `Some(false)` matches none.
     pub has_attachment: Option<bool>,
+    /// `Some(true)` matches tickets with at least one media annotation on an attachment.
+    pub has_media_annotation: Option<bool>,
     /// Case-insensitive filename glob patterns. `*` matches any run of characters.
     pub attachment_patterns: Vec<String>,
     pub sort: SortKey,
@@ -191,6 +193,9 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
                 t.verified_at.as_ref().is_some_and(|value| value.as_str() <= b)
             })
             && q.has_attachment.is_none_or(|want| t.attachments.is_empty() != want)
+            && q.has_media_annotation.is_none_or(|want| {
+                t.attachments.iter().any(|attachment| !attachment.annotations.is_empty()) == want
+            })
             && q.attachment_patterns.iter().all(|pattern| {
                 t.attachments.iter().any(|attachment| filename_glob_matches(pattern, &attachment.filename))
             })
@@ -463,7 +468,8 @@ pub struct TicketPatch {
 
 /// Apply a patch to an existing ticket and write it. A move to a terminal status
 /// stamps `completed_at`/`verified_at`. Bumps `updated_at` to `now` when any
-/// substantive state changes; changing only `up_next` preserves it.
+/// substantive state changes; queue and priority-only changes preserve it so visual
+/// organization does not masquerade as recent ticket content/activity.
 pub fn update(
     store: &FsStore,
     id: &Ulid,
@@ -550,6 +556,7 @@ fn has_substantive_change(before: &Ticket, after: &Ticket) -> bool {
     let mut before = before.clone();
     let after = after.clone();
     before.up_next = after.up_next;
+    before.priority = after.priority;
     before.updated_at = after.updated_at.clone();
     before != after
 }
@@ -2169,6 +2176,19 @@ mod tests {
         .unwrap();
         assert!(!unqueued.up_next);
         assert_eq!(unqueued.updated_at, queued.updated_at);
+
+        let reprioritized = update(
+            &store,
+            &id,
+            ts("2026-08-19T02:30:00Z"),
+            TicketPatch {
+                priority: Some(Priority::High),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(reprioritized.priority, Priority::High);
+        assert_eq!(reprioritized.updated_at, unqueued.updated_at);
 
         let mixed = update(
             &store,
