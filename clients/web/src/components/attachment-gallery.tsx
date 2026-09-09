@@ -10,6 +10,7 @@ import {ToolbarControlGroup} from './toolbar-control-group';
 import {ToolbarText} from './toolbar-text';
 
 export interface AttachmentGalleryImage {id:string;name:string;url:string;thumbnailUrl?:string;aliases?:readonly string[];ticket?:string;attachmentId?:string}
+export interface AttachmentGallerySelection {url?:string;ticket?:string;name?:string;attachmentId?:string}
 export interface AttachmentGalleryGeometry {naturalWidth:number;naturalHeight:number;availableWidth:number;availableHeight:number}
 export interface AttachmentGalleryZoomModel {stops:number[];index:number;fitIndex:number;scale:number;canZoomOut:boolean;canZoomIn:boolean}
 
@@ -18,6 +19,18 @@ const sameScale=(left:number,right:number)=>Math.abs(left-right)<.0001;
 
 export function attachmentGalleryImageIndex(images:readonly AttachmentGalleryImage[],activeUrl:string):number {
   return images.findIndex(image=>image.url===activeUrl||image.aliases?.includes(activeUrl));
+}
+
+/** Resolves an opened thumbnail by durable identity before consulting potentially shared URL aliases. */
+export function attachmentGallerySelectionUrl(images:readonly AttachmentGalleryImage[],selection:AttachmentGallerySelection):string|undefined {
+  const byId=selection.attachmentId?images.find(image=>image.attachmentId===selection.attachmentId):undefined;
+  if(byId)return byId.url;
+  const byIdentity=selection.ticket&&selection.name?images.find(image=>image.ticket===selection.ticket&&image.name===selection.name):undefined;
+  if(byIdentity)return byIdentity.url;
+  const byUrl=selection.url?images.find(image=>image.url===selection.url):undefined;
+  if(byUrl)return byUrl.url;
+  const byAlias=selection.url?images.find(image=>image.aliases?.includes(selection.url!)):undefined;
+  return byAlias?.url??selection.url;
 }
 
 export function attachmentGalleryZoomStops(geometry:AttachmentGalleryGeometry):{stops:number[];fit:number} {
