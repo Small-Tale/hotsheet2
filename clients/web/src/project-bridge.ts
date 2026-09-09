@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, readFile, readdir, realpath, rm } from 'node:fs/promises';
+import { access, readdir, readFile, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
@@ -110,12 +110,12 @@ async function receiptMatchesProject(store:string|undefined,root:string):Promise
 
 async function hasGitRemote(store:string|undefined):Promise<boolean>{
   if(!store)return false;
-  return new Promise(resolveResult=>{const child=spawn('git',['-C',store,'remote','get-url','origin'],{stdio:'ignore'});child.once('error',()=>resolveResult(false));child.once('close',code=>resolveResult(code===0))})
+  return new Promise(resolveResult=>{const child=spawn('git',['-C',store,'remote','get-url','origin'],{stdio:'ignore'});child.once('error',()=> { resolveResult(false); });child.once('close',code=> { resolveResult(code===0); })})
 }
 
 export interface Hs1MigrationResult {ticketStore:string;connectionId:string;tickets:number;attachments:number;toolsConfigured:boolean}
 export type ProcessRunner=(command:string,args:string[],cwd:string)=>Promise<string>;
-const runProcess:ProcessRunner=(command,args,cwd)=>new Promise((resolveRun,reject)=>{const child=spawn(command,args,{cwd,stdio:['ignore','pipe','pipe']}),stdout:Buffer[]=[],stderr:Buffer[]=[];child.stdout.on('data',(chunk:Buffer)=>stdout.push(chunk));child.stderr.on('data',(chunk:Buffer)=>stderr.push(chunk));child.once('error',reject);child.once('close',code=>{const output=Buffer.concat(stdout).toString('utf8'),error=Buffer.concat(stderr).toString('utf8').trim();code===0?resolveRun(output):reject(new Error(error||`${command} exited with status ${code??'unknown'}.`))})});
+const runProcess:ProcessRunner=(command,args,cwd)=>new Promise((resolveRun,reject)=>{const child=spawn(command,args,{cwd,stdio:['ignore','pipe','pipe']}),stdout:Buffer[]=[],stderr:Buffer[]=[];child.stdout.on('data',(chunk:Buffer)=>stdout.push(chunk));child.stderr.on('data',(chunk:Buffer)=>stderr.push(chunk));child.once('error',reject);child.once('close',code=>{const output=Buffer.concat(stdout).toString('utf8'),error=Buffer.concat(stderr).toString('utf8').trim();if(code===0)resolveRun(output);else reject(new Error(error||`${command} exited with status ${code??'unknown'}.`))})});
 
 export async function migrateHs1Project(rootInput:string,locationInput?:string,runner:ProcessRunner=runProcess):Promise<Hs1MigrationResult>{
   const root=await realpath(rootInput.trim());

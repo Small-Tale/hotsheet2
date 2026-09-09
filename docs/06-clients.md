@@ -96,6 +96,10 @@ bootstrap store only to reach the standalone server; that store is never linked 
 project. Once the empty checkout is visible, the client asks whether to create and link a
 standalone `<project>.hs2` git repository or configure another provider in Sources. The
 prompt can be dismissed and returns on a later open until a source is configured.
+When that folder contains an HS1 PGLite marker, the ordinary empty-source prompt is
+replaced by a one-time import prompt that asks only for the destination ticket repository.
+After a successful import and remote backup, a non-blocking project banner offers explicit
+cleanup of the old live HS1 data; backups are never removed.
 
 ## 6.3 Web client and Tauri desktop host
 
@@ -1234,6 +1238,10 @@ ticket, or repository status. Responses carry a per-ticket generation: late resp
 are ignored, while the current failed request restores its captured projection and
 shows the error. The client emits `hotsheet:mutation-timing` with optimistic and request
 phase durations for local profiling.
+
+Atomic bulk mutations hold event-driven collection refreshes until their authoritative
+batch response settles. Their optimistic rows therefore cannot disappear, reappear from
+an intermediate refresh, and disappear again while a multi-ticket status move is in flight.
 
 Ticket creation follows the same immediate-authority rule: as soon as the create
 response returns, the new ticket is inserted, selected, and opened for Details editing.
