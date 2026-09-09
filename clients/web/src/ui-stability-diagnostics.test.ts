@@ -51,4 +51,18 @@ describe('UI stability diagnostics', () => {
     }
     expect(reports).toEqual([1_100, 34_100]);
   });
+
+  it('does not carry intentional foreground rendering into a later storm', () => {
+    let state = { passes: [] as number[], reported: false };
+    for (let at = 0; at < 8_000; at += 100) state = advanceRenderStorm(state, at, true);
+    expect(state).toMatchObject({ passes: [], reported: false, shouldReport: false });
+
+    const reports: number[] = [];
+    for (let at = 8_000; at < 9_200; at += 100) {
+      const next = advanceRenderStorm(state, at);
+      state = next;
+      if (next.shouldReport) reports.push(at);
+    }
+    expect(reports).toEqual([9_100]);
+  });
 });

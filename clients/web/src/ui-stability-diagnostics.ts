@@ -30,7 +30,7 @@ export interface UiStabilityEvent {
 
 export interface UiStabilityDiagnostics {
   attachment(): ReviewAttachment;
-  recordRender(metrics: RenderMetricsSnapshot): void;
+  recordRender(metrics: RenderMetricsSnapshot, automaticReportSuppressed?: string): void;
   destroy(): void;
 }
 
@@ -56,7 +56,8 @@ export function advanceDismissalThrash(state: DismissalThrashState, now: number)
 }
 
 /** Tracks one continuous root-render storm and rearms only after a quiet window. */
-export function advanceRenderStorm(state: RenderStormState, now: number): RenderStormState & { shouldReport: boolean } {
+export function advanceRenderStorm(state: RenderStormState, now: number, suppressed = false): RenderStormState & { shouldReport: boolean } {
+  if (suppressed) return { passes: [], reported: false, shouldReport: false };
   const passes = [...state.passes.filter(value => now - value <= RENDER_STORM_WINDOW_MS), now];
   const storming = passes.length >= RENDER_STORM_COUNT;
   return { passes, reported: storming, shouldReport: storming && !state.reported };
@@ -168,14 +169,15 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
 
   return {
     attachment,
-    recordRender(metrics) {
+    recordRender(metrics, automaticReportSuppressed) {
       const timestamp = now();
-      const nextRenderStorm = advanceRenderStorm(renderStorm, timestamp);
+      const nextRenderStorm = advanceRenderStorm(renderStorm, timestamp, Boolean(automaticReportSuppressed));
       renderStorm = nextRenderStorm;
       record('render-pass', undefined, {
         ...metrics,
         pass_delta: metrics.passes - previousRenderMetrics.passes,
         mutation_delta: metrics.mutations - previousRenderMetrics.mutations,
+        ...(automaticReportSuppressed ? { automatic_report_suppressed: automaticReportSuppressed } : {}),
       });
       previousRenderMetrics = metrics;
       if (timestamp - installedAt > STARTUP_GRACE_MS && timestamp - lastUserIntentAt > USER_INTENT_GRACE_MS && nextRenderStorm.shouldReport) report('render-storm');

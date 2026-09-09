@@ -128,6 +128,7 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
 
 const devReviewTestTitles=new Set([
   'activates Dev Review by default in development and honors the explicit false opt-out',
+  'does not report intentional render bursts during remembered-project startup',
   'keeps feedback rectangle input within its frame budget in the populated main app',
 ]);
 
@@ -645,6 +646,26 @@ test('makes no repeated permission requests or renders while an open project is 
   await page.waitForTimeout(1_000);permissionRequests.length=0;await resetRenderMetrics(page);await page.waitForTimeout(1_700);
   expect(permissionRequests).toEqual([]);
   expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
+});
+
+test('does not report intentional render bursts during remembered-project startup',async({page})=>{
+  const submissions:unknown[]=[];
+  await mockProject(page);
+  await page.route('**/__hotsheet/dev-review/tickets',async route=>{submissions.push(route.request().postDataJSON());await route.fulfill({status:201,json:{slug:'HS2-SHOULD-NOT-EXIST'}})});
+  await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/tickets*',async route=>{
+    const url=new URL(route.request().url());
+    if(route.request().method()==='GET'&&url.pathname.endsWith('/tickets')){await new Promise(resolve=>setTimeout(resolve,6_500));return route.fulfill({json:[row,backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow]})}
+    await route.fallback();
+  });
+  await page.addInitScript(root=>{localStorage.setItem('hotsheet.open-projects',JSON.stringify([root]))},project.root);
+  await page.goto('/');
+  await page.waitForTimeout(5_200);
+  await resetRenderMetrics(page);
+  for(let index=0;index<14;index+=1){await page.setViewportSize({width:1280,height:760+index});await page.waitForTimeout(20)}
+  expect((await renderMetrics(page))!.passes).toBeGreaterThanOrEqual(12);
+  await expect(page.getByRole('tab',{name:/demo/})).toBeVisible({timeout:10_000});
+  await page.waitForTimeout(500);
+  expect(submissions).toEqual([]);
 });
 
 test('projects background AI activity without rerendering the closed conversation surface',async({page})=>{
