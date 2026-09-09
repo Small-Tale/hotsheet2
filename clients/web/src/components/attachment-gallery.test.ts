@@ -23,21 +23,27 @@ describe('AttachmentGallery',()=>{
     expect(attachmentGalleryImageIndex(aliased,alias)).toBe(1);
     expect(String(AttachmentGallery({images:aliased,activeUrl:alias}))).toContain('Image 2 of 2: b.svg');
   });
-  it('renders videos paused by default with standard playback controls',()=>{
+  it('renders videos paused by default with only the custom playback and volume controls',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4'}));
     expect(markup).toContain('Video 1 of 1: walkthrough.mp4');
     expect(markup).toContain('<video');
-    expect(markup).toContain(' controls');
+    expect(markup).not.toContain(' controls');
     expect(markup).not.toContain('autoplay');
     expect(markup).toContain('data-gallery-media="true"');
     expect(markup).toContain('name="gallery-playhead"');
     expect(markup).toContain('data-action="toggle-gallery-playback"');
+    expect(markup).toContain('data-action="toggle-gallery-muted"');
+    expect(markup).toContain('name="gallery-volume"');
   });
-  it('renders selected normalized rectangles, resize handles, and video range controls in markup mode',()=>{
+  it('renders selected normalized rectangles, resize handles, and draggable video range brackets in markup mode',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4',markup:true,drawMode:true,selectedAnnotation:'annotation-1',playheadMs:1_500,durationMs:10_000,annotations:[{id:'annotation-1',x:1000,y:2000,width:3000,height:2500,start_ms:1000,end_ms:2000,text:'Check **this**'}]}));
     expect(markup).toContain('data-action="toggle-gallery-draw"');
     expect(markup).toContain('data-action="delete-gallery-annotation"');
-    expect(markup).toContain('data-action="set-gallery-range-start"');
+    expect(markup).not.toContain('data-action="set-gallery-range-start"');
+    expect(markup).toContain('data-gallery-range-handle="start"');
+    expect(markup).toContain('data-gallery-range-handle="end"');
+    expect(markup).toContain('Annotation range start at 0:01');
+    expect(markup).toContain('Annotation range end at 0:02');
     expect(markup).toContain('left:10%;top:20%;width:30%;height:25%');
     expect(markup).toContain('data-annotation-handle="se"');
     expect(markup).toContain('Check **this**');
@@ -47,8 +53,23 @@ describe('AttachmentGallery',()=>{
   it('uses the same point/range controls for animated SVG annotations',()=>{
     const markup=String(AttachmentGallery({images:[{id:'svg',name:'animated.svg',url:'/animated.svg'}],activeUrl:'/animated.svg',markup:true,playheadMs:500,durationMs:2000,annotations:[{id:'point',x:100,y:100,width:1000,height:1000,start_ms:500,end_ms:500,text:''}],selectedAnnotation:'point'}));
     expect(markup).toContain('name="gallery-playhead"');
-    expect(markup).toContain('data-action="set-gallery-range-start"');
+    expect(markup).toContain('data-gallery-range-handle="start"');
     expect(markup).toContain('aria-label="Annotation 1"');
+  });
+  it('renders wireframe-like annotation ticks that seek to their times',()=>{
+    const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4',durationMs:10_000,annotations:[{id:'point',x:0,y:0,width:100,height:100,start_ms:2500,end_ms:2500,text:'Point'},{id:'range',x:0,y:0,width:100,height:100,start_ms:5000,end_ms:7000,text:'Range'}]}));
+    expect(markup.match(/data-action="seek-gallery-annotation"/g)).toHaveLength(2);
+    expect(markup).toContain('--annotation-start:25%');
+    expect(markup).toContain('--annotation-start:60%');
+  });
+  it('lays playback and zoom actions in a real footer so fit and cover measurement exclude it',()=>{
+    const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4'}));
+    const stageEnd=markup.indexOf('</div><footer class="attachment-gallery__footer">');
+    expect(stageEnd).toBeGreaterThan(markup.indexOf('data-gallery-zoom-stage="true"'));
+    expect(markup.indexOf('name="gallery-playhead"')).toBeGreaterThan(stageEnd);
+    const css=readFileSync(new URL('./attachment-gallery.css',import.meta.url),'utf8');
+    expect(css).toContain('grid-template-rows: auto minmax(0,1fr) auto');
+    expect(css).not.toContain('position:fixed; z-index:2; right:20%');
   });
   it.each([
     [{naturalWidth:2000,naturalHeight:1000,availableWidth:1000,availableHeight:800},[.5,.8,1]],

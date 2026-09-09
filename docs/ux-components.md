@@ -580,6 +580,11 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   reference, and Remove context menu, plus a
   responsive, wrapping 160px square contained image-preview grid feeding the shared full-screen
   arrow/keyboard/swipe gallery
+- `AttachmentGallery` — **built**: square-cornered contained/covered image and video media,
+  with a layout-owning playback footer, custom play/scrub/time/volume controls, clickable
+  wireframe-style annotation ticks, and draggable plus keyboard-adjustable bracket endpoints
+  for the selected timed annotation. Native video controls stay disabled so the component has
+  one consistent cross-browser control surface.
 - `TicketNotesSection`
 
 ### 4.2 Details and reader surfaces — feature floor

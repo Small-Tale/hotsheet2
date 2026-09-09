@@ -192,9 +192,16 @@ import {
   closeAttachmentDemoMenu,
   galleryDemoDrawMode,
   galleryDemoMarkup,
+  galleryDemoMuted,
+  galleryDemoPlayhead,
+  galleryDemoPlaying,
+  galleryDemoSelectedAnnotation,
+  galleryDemoVideoAnnotations,
+  galleryDemoVolume,
   regroupAttachmentDemo,
   renameAttachmentDemoBatch,
   setGalleryDemo,
+  setGalleryDemoAnnotationEndpoint,
   shiftGalleryDemo,
   showAttachmentDemoMenu,
   TicketAttachmentsDemo,
@@ -2119,6 +2126,50 @@ delegate(root, 'click', '[data-action="toggle-gallery-markup"]', () => {
 });
 delegate(root, 'click', '[data-action="toggle-gallery-draw"]', () => {
   galleryDemoDrawMode.value = !galleryDemoDrawMode.value;
+});
+delegate(root, 'click', '[data-action="toggle-gallery-playback"]', () => {
+  galleryDemoPlaying.value = !galleryDemoPlaying.value;
+});
+delegate(root, 'input', 'input[name="gallery-playhead"]', (_event, target) => {
+  galleryDemoPlayhead.value = Number((target as HTMLInputElement).value);
+});
+delegate(root, 'click', '[data-action="seek-gallery-annotation"]', (_event, target) => {
+  const element = target as HTMLElement;
+  galleryDemoPlayhead.value = Number(element.dataset.annotationTime ?? 0);
+  if (galleryDemoMarkup.value && element.dataset.annotationId) galleryDemoSelectedAnnotation.value = element.dataset.annotationId;
+});
+delegate(root, 'input', 'input[name="gallery-volume"]', (_event, target) => {
+  galleryDemoVolume.value = Number((target as HTMLInputElement).value);
+  galleryDemoMuted.value = false;
+});
+delegate(root, 'click', '[data-action="toggle-gallery-muted"]', () => {
+  galleryDemoMuted.value = !galleryDemoMuted.value;
+});
+delegate(root, 'keydown', '[data-gallery-range-handle]', (event, target) => {
+  const keyboard = event as KeyboardEvent;
+  if (keyboard.key !== 'ArrowLeft' && keyboard.key !== 'ArrowRight') return;
+  event.preventDefault();
+  const endpoint = (target as HTMLElement).dataset.galleryRangeHandle;
+  const annotation = galleryDemoVideoAnnotations.value[0];
+  if (endpoint !== 'start' && endpoint !== 'end') return;
+  setGalleryDemoAnnotationEndpoint(endpoint, (endpoint === 'start' ? annotation.start_ms : annotation.end_ms) + (keyboard.key === 'ArrowLeft' ? -100 : 100));
+});
+let galleryDemoRangeGesture:{ pointerId: number; endpoint: 'start' | 'end'; track: DOMRect } | undefined;
+delegateCapture(root, 'pointerdown', '[data-gallery-range-handle]', (event, target) => {
+  const pointer = event as PointerEvent, element = target as HTMLElement, endpoint = element.dataset.galleryRangeHandle, track = element.closest<HTMLElement>('.attachment-gallery__timeline-track')?.getBoundingClientRect();
+  if ((endpoint !== 'start' && endpoint !== 'end') || !track) return;
+  event.preventDefault();
+  galleryDemoRangeGesture = { pointerId: pointer.pointerId, endpoint, track };
+});
+document.addEventListener('pointermove', event => {
+  const gesture = galleryDemoRangeGesture;
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  event.preventDefault();
+  setGalleryDemoAnnotationEndpoint(gesture.endpoint, (event.clientX - gesture.track.left) * 6000 / gesture.track.width);
+});
+document.addEventListener('pointerup', event => {
+  if (!galleryDemoRangeGesture || event.pointerId !== galleryDemoRangeGesture.pointerId) return;
+  galleryDemoRangeGesture = undefined;
 });
 delegate(root, 'click', '[data-action="open-attachment-menu"]', (event, target) => {
   event.stopPropagation();

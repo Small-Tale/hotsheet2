@@ -457,7 +457,10 @@ prompt can be dismissed and returns on a later open until a source is configured
   Safari and other media engines can discover duration and seek normally. The browser-native
   flow and server cache contract are identical on macOS, Linux, and Windows.
   A preview or inline image opens the same full-screen
-  media gallery; videos have native playback controls and also remain paused initially.
+  media gallery; videos remain paused initially and expose only Hot Sheet's custom
+  play/pause, scrubber, time, mute, and popup-volume controls, never a second native
+  browser control strip. The playback footer occupies layout space below the media
+  stage, so both contain and cover scales are calculated from the space that remains.
   Full-screen media preserves the source image or video's square outer geometry: the
   gallery does not add corner rounding to either the media or its sizing wrapper.
   Its filename uses inverse toolbar text, while navigation, action, close, and zoom
@@ -470,7 +473,9 @@ prompt can be dismissed and returns on a later open until a source is configured
   rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
   and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
   time ranges; only ranges at the current playhead appear over the media, while persistent
-  markers remain over the scrubber and bracket controls set the selected range endpoints.
+  wireframe-style ticks remain over the scrubber. Selecting a visible annotation rectangle
+  adds direct square-bracket range handles to the timeline; those endpoints can be dragged
+  or adjusted with the arrow keys, replacing ambiguous toolbar chevrons.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible
   before opening the media.
