@@ -82,7 +82,7 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'terminal', name: 'Drawer and terminals', demos: [
     demo('terminal-drawer', 'TerminalDrawer', 'Project terminal rail and dedicated terminal surface.', 'feature-floor', true, ['app-tab']),
-    demo('terminal-dashboard', 'TerminalDashboard', 'Responsive live grid, preview, and viewport controls.', 'feature-floor', true, ['fixed-aspect-terminal-card','menu-item']),
+    demo('terminal-dashboard', 'TerminalDashboard', 'Responsive live grid with progressive visible-preview mounting and viewport controls.', 'feature-floor', true, ['fixed-aspect-terminal-card','menu-item']),
     demo('terminal-operations-sidebar', 'TerminalOperationsSidebar', 'Per-project and aggregate completion and in-progress summaries beside the terminal dashboard.', 'feature-floor', true, ['project-summary','menu-header','toolbar']),
     demo('terminal-ticket-rail', 'TerminalTicketRail', 'Compact list and notifications rail with push navigation into ticket detail.', 'feature-floor', true, ['ticket-list','ticket-inspector','content-transition','workspace-header']),
     demo('fixed-aspect-terminal-card', 'FixedAspectTerminalCard', 'Shared 5:3 terminal viewport card in preview and magnified variants.', 'feature-floor', true),

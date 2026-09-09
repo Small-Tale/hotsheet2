@@ -761,7 +761,14 @@ into the rail. Its larger blue Back action is vertically centered with the indep
 ticket slug and pops to the stable list through the shared `ContentTransition`. Terminal sessions
 and the dashboard grid remain mounted throughout rail navigation, visibility changes, and project
 switching.
-Every dashboard tile mounts a read-only xterm with an exact 80×24 character grid at a
+Every dashboard tile presents a read-only terminal card, while only visible and near-visible
+cards progressively mount xterm runtimes in bounded batches. Offscreen cards keep their
+lightweight text placeholder until intersection observation reaches them. Entering the dashboard
+therefore paints the complete card layout before terminal initialization, and leaving it queues
+detached runtime disposal in bounded post-paint batches rather than blocking project navigation.
+This progressive boundary supports dozens of sessions without creating dozens of xterms or
+WebSockets at once; dedicated and magnified interactive terminals still mount immediately.
+Each mounted dashboard xterm uses an exact 80×24 character grid at a
 stable 1280×768 natural geometry. The resulting 5:3 invariant belongs only to the black PTY
 viewport: the surrounding card adds the measured spacing-token inset and footer height outside
 that viewport, without another outer border. One canonical font geometry is established when the 80×24 xterm
@@ -899,12 +906,12 @@ the terminal blurry and can produce misleading intermediate canvas geometry. Ret
 coverage therefore checks the dedicated WebGL canvas backing-store size separately from the
 scaled DOM surfaces instead of treating `.xterm-screen` bounds as proof of a completed paint.
 
-A visible fixed 80×24 surface is an active sizing claimant even though its grid preview is
+A visible mounted fixed 80×24 surface is an active sizing claimant even though its grid preview is
 read-only and never accepts keyboard input. This ensures entering the dashboard actually
 resizes the PTY to the promised 80×24 contract rather than merely drawing an 80×24 xterm over
-output that the TUI emitted for the drawer's previous size. Conversely, viewports start with
-`visible: false` until intersection observation proves them on-screen, so an unpainted or
-hidden fixed-grid mount cannot take sizing control. Finishing a drawer drag or maximize
+output that the TUI emitted for the drawer's previous size. Conversely, offscreen dashboard
+cards do not mount a viewport or open a socket until intersection observation reaches them, so
+an unpainted or hidden fixed-grid card cannot take sizing control. Finishing a drawer drag or maximize
 returns input focus to the selected dedicated terminal before its final claim; clicking the
 drawer rail must not leave the server holding the old PTY size while only the WebGL canvas
 grows around stale TUI output.

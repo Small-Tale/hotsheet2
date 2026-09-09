@@ -100,6 +100,7 @@ import { createTicketWithAttachments, describeNewTicketAttachmentFailures } from
 import type { CompatibilityAssessment } from './compatibility';
 import { isTicketConcurrencyConflict, reconcileActiveDraft, reconcileTicketPatch, type TicketFieldConflict } from './ticket-field-reconciliation';
 import { adjustTerminalFit, TERMINAL_GRID_DEFAULT_ACROSS, TERMINAL_GRID_DEFAULT_HIGH, terminalGridBasis } from './terminal-grid-layout';
+import { ProgressiveTerminalWorkQueue } from './terminal-progressive-work';
 import { mountTerminalViewport,terminalBrowserWebSocketUrl, type TerminalFocusRequest,terminalViewportShouldAutoFocus } from './terminal-viewport';
 import {defaultTerminalName,parseTerminalNames,terminalNameKey} from './terminal-names';
 import type { ProjectTabBarMode } from './components/project-tab-bar';
@@ -147,6 +148,17 @@ let terminalDrawerTransitionTimer:number|undefined,terminalPreviewClickTimer:num
 let repositoryFileClickTimer:number|undefined;
 let pendingTerminalFocus:TerminalFocusRequest|undefined;
 const terminalViewportMounts=new Map<HTMLElement,()=>void>();
+const terminalViewportCandidates=new Set<HTMLElement>();
+const terminalViewportObservationTargets=new Map<HTMLElement,HTMLElement>();
+const terminalViewportCandidatesByTarget=new Map<HTMLElement,HTMLElement>();
+let terminalViewportObserver:IntersectionObserver|undefined;
+const terminalViewportWork=new ProgressiveTerminalWorkQueue<HTMLElement>({
+  mountsPerTurn:2,
+  disposalsPerTurn:2,
+  schedule:work=>requestAnimationFrame(()=>window.setTimeout(work,0)),
+  mount:element=>{mountTerminalViewportElement(element)},
+  dispose:work=>{work()},
+});
 const corruptRecovery = signal<Record<string,CorruptTicketRecoveryState>>({});
 const selectedCorruptKey = signal<string|undefined>(undefined);
 const selectedTicketSlugs = signal<string[]>([]);
@@ -288,7 +300,30 @@ async function createProjectTerminal(){const current=project();if(!current||term
 function closeProjectIds(ids:readonly string[]){const closing=new Set(ids),before=projects.value,selectedIndex=before.findIndex(item=>item.id===selectedProjectId.value);projects.value=before.filter(item=>!closing.has(item.id));ticketRowsByProject.value=Object.fromEntries(Object.entries(ticketRowsByProject.value).filter(([id])=>!closing.has(id)));if(statsProjectId.value&&closing.has(statsProjectId.value))statsProjectId.value=undefined;if(closing.has(selectedProjectId.value)){resetTicketComposer();selectedProjectId.value=projects.value.find(item=>before.indexOf(item)>selectedIndex)?.id??[...projects.value].reverse().find(item=>before.indexOf(item)<selectedIndex)?.id??projects.value[0]?.id??''}defaultProviders.value=Object.fromEntries(Object.entries(defaultProviders.value).filter(([id])=>!closing.has(id)));driveConnectionsByProject.value=Object.fromEntries(Object.entries(driveConnectionsByProject.value).filter(([id])=>!closing.has(id)));drivePendingByProject.value=Object.fromEntries(Object.entries(drivePendingByProject.value).filter(([id])=>!closing.has(id)));localStorage.setItem('hotsheet.open-projects',JSON.stringify(projects.value.map(item=>item.root)));syncProjectChangePolls();commandDialogId.value=undefined;if(project())void Promise.all([refreshProject(),refreshCommands(),refreshDriveConnections()]);else{commandDefinitions.value=[];commandRuns.value=[]}}
 async function closeTerminalIds(ids:readonly string[]){const current=project(),group=current&&terminalGroups.value.find(item=>item.projectId===current.id);if(!current||!group||ids.length===0)return;const closing=new Set(ids),before=group.sessions,selectedIndex=before.findIndex(item=>item.id===terminalDrawerSelected.value);if(closing.has(terminalDrawerSelected.value)){const next=before.find((item,index)=>index>selectedIndex&&!closing.has(item.id))??[...before].reverse().find((item,index)=>before.length-1-index<selectedIndex&&!closing.has(item.id));selectDrawerTerminal(next?.id??'grid')}appTabContextMenu.value=undefined;terminalDashboardLoading.value=true;try{await Promise.all(ids.map(id=>new Api(current.apiPath).deleteTerminal(id)));await refreshTerminalDashboard()}catch(reason){terminalDashboardMessage.value=reason instanceof Error?reason.message:String(reason);terminalDashboardLoading.value=false}}
 function AppTabMenuSurface(){const menu=appTabContextMenu.value;return menu?<AppTabContextMenu {...menu}/>:<></>}
-function syncTerminalViewportMounts(){const elements=new Set(document.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]'));for(const[element,dispose]of terminalViewportMounts)if(!elements.has(element)){dispose();terminalViewportMounts.delete(element)}for(const element of elements){if(terminalViewportMounts.has(element))continue;const projectId=element.dataset.projectId,terminalId=element.dataset.terminalId,current=projects.value.find(item=>item.id===projectId);if(!current||!terminalId)continue;const interactive=element.dataset.displayMode==='interactive',autoFocus=interactive&&(element.closest('.terminal-dashboard__magnified')!==null||terminalViewportShouldAutoFocus(pendingTerminalFocus,current.id,terminalId));terminalViewportMounts.set(element,mountTerminalViewport(element,{url:terminalBrowserWebSocketUrl(current.apiPath,terminalId),autoFocus}));if(autoFocus)pendingTerminalFocus=undefined}}
+function mountTerminalViewportElement(element:HTMLElement){
+  if(!element.isConnected||terminalViewportMounts.has(element))return;
+  stopObservingTerminalViewport(element);
+  const projectId=element.dataset.projectId,terminalId=element.dataset.terminalId,current=projects.value.find(item=>item.id===projectId);
+  if(!current||!terminalId)return;
+  const interactive=element.dataset.displayMode==='interactive',autoFocus=interactive&&(element.closest('.terminal-dashboard__magnified')!==null||terminalViewportShouldAutoFocus(pendingTerminalFocus,current.id,terminalId));
+  terminalViewportMounts.set(element,mountTerminalViewport(element,{url:terminalBrowserWebSocketUrl(current.apiPath,terminalId),autoFocus}));if(autoFocus)pendingTerminalFocus=undefined;
+}
+function stopObservingTerminalViewport(element:HTMLElement){const target=terminalViewportObservationTargets.get(element);if(target){terminalViewportObserver?.unobserve(target);terminalViewportCandidatesByTarget.delete(target)}terminalViewportObservationTargets.delete(element);terminalViewportCandidates.delete(element)}
+function ensureTerminalViewportObserver(){
+  if(terminalViewportObserver||typeof IntersectionObserver==='undefined')return terminalViewportObserver;
+  terminalViewportObserver=new IntersectionObserver(entries=>{for(const entry of entries){const element=terminalViewportCandidatesByTarget.get(entry.target as HTMLElement);if(!element)continue;if(entry.isIntersecting)terminalViewportWork.enqueueMount(element);else terminalViewportWork.cancelMount(element)}},{rootMargin:'160px'});
+  return terminalViewportObserver;
+}
+function syncTerminalViewportMounts(){
+  const elements=new Set(document.querySelectorAll<HTMLElement>('[data-component="terminal-viewport"]'));
+  for(const[element,dispose]of terminalViewportMounts)if(!elements.has(element)){terminalViewportMounts.delete(element);terminalViewportWork.enqueueDisposal(dispose)}
+  for(const element of terminalViewportCandidates)if(!elements.has(element)){terminalViewportWork.cancelMount(element);stopObservingTerminalViewport(element)}
+  for(const element of elements){
+    if(terminalViewportMounts.has(element)||terminalViewportCandidates.has(element))continue;
+    if(element.dataset.mountPolicy!=='visible-progressive'){mountTerminalViewportElement(element);continue}
+    terminalViewportCandidates.add(element);const observer=ensureTerminalViewportObserver(),target=element.closest<HTMLElement>('[data-component="terminal-tile"]')??element;if(observer){terminalViewportObservationTargets.set(element,target);terminalViewportCandidatesByTarget.set(target,element);observer.observe(target)}else terminalViewportWork.enqueueMount(element);
+  }
+}
 function setShellMode(mode:ProjectTabBarMode){if(terminalPreviewClickTimer!==undefined){window.clearTimeout(terminalPreviewClickTimer);terminalPreviewClickTimer=undefined}if(mode!=='stats')statsProjectId.value=undefined;if(mode==='terminals'&&shellMode.value!=='terminals'){terminalRailScreen.value='root';terminalRailDirection.value='forward'}shellMode.value=mode;magnifiedTerminalKey.value=undefined;terminalContextMenu.value=undefined;if(mode==='terminals'){void refreshTerminalDashboard();observeTerminalDashboard()}else terminalDashboardObserver?.disconnect()}
 function selectTerminalRailProject(next:string){if(next===selectedProjectId.value||!projects.value.some(item=>item.id===next))return;persistProjectSessionNow();resetTicketComposer(false);selectedProjectId.value=next;const current=project();if(current)saveActiveProjectRoot(localStorage,current.root);selectedCorruptKey.value=undefined;selectedTicket.value=null;selectedTicketSlugs.value=[];ticketSelectionAnchor=undefined;terminalRailScreen.value='root';terminalRailDirection.value='backward';void Promise.all([refreshProject(),refreshCommands()]).then(()=>{const restored=project();if(restored)void restoreProjectSession(restored)})}
 const status = (value?:string):TicketStatus => ['not_started','started','completed','verified','backlog','archive'].includes(value ?? '') ? value as TicketStatus : 'not_started';

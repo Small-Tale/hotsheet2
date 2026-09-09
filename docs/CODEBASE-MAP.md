@@ -38,6 +38,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, and terminal inclusion rules
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader
+    src/terminal-progressive-work.ts # Bounded visible-preview mounting and detached-runtime teardown queue
     src/terminal-viewport-runtime.ts # Lazy live/static xterm rendering, input, leased claims, server-size scaling, and reconnect lifecycle
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
