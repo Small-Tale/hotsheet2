@@ -111,6 +111,14 @@ describe('content components', () => {
     expect(markup).toContain('/tickets/HS2-OTHER/attachments/by-name/screen%20shot.svg');
   });
 
+  it('uses a known attachment id for inline evidence while keeping prose punctuation outside the image',()=>{
+    const context={baseUrl:'/project-api/demo',checkout:'checkout',ticket:'HS2-LOCAL',attachments:[{id:'01M22Q0ZGMJ0M0FE24ZSCGXRSS',filename:'proof.png'}]};
+    const markup=String(MarkdownPreview({source:'Evidence: attachment:proof.png.',attachmentContext:context}));
+    expect(markup).toContain('src="/project-api/demo/checkouts/checkout/tickets/HS2-LOCAL/attachments/01M22Q0ZGMJ0M0FE24ZSCGXRSS"');
+    expect(markup).toContain('data-attachment-name="proof.png"');
+    expect(markup).toContain('</button>.');
+  });
+
   it('derives the TicketReader note count and reuses NoteCard', () => {
     const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'high', category: 'feature', tags: ['client'], details: 'Details', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
     expect(markup).toContain('HS2-TEST');

@@ -31,13 +31,20 @@ describe('attachment references',()=>{
   });
 
   it('uses the longest matching real filename and leaves trailing sentence punctuation alone',()=>{
-    const known={...context,attachments:[{filename:'server-details.png'},{filename:'server-details-narrow.png'}]};
+    const known={...context,attachments:[{id:'short-id',filename:'server-details.png'},{id:'narrow-id',filename:'server-details-narrow.png'}]};
     const source='See attachment:server-details-narrow.png.';
     const expanded=expandAttachmentReferences(source,known);
-    expect(expanded).toContain('/attachments/by-name/server-details-narrow.png');
+    expect(expanded).toContain('/attachments/narrow-id');
     expect(expanded).toContain('"attachment:server-details-narrow.png")');
     expect(expanded.endsWith(').')).toBe(true);
     expect(attachmentReferences(source,known)).toEqual([{filename:'server-details-narrow.png'}]);
     expect(expandAttachmentReferences('Cross attachment:[HS2-OTHER]capture.svg.',known)).toContain('/tickets/HS2-OTHER/attachments/by-name/capture.svg');
+  });
+
+  it('renders known local evidence by immutable attachment id',()=>{
+    const known={...context,attachments:[{id:'01M22Q0ZGMJ0M0FE24ZSCGXRSS',filename:'hs2-83qqg3-system-provenance-wide.png'}]};
+    const expanded=expandAttachmentReferences('Evidence: attachment:hs2-83qqg3-system-provenance-wide.png.',known);
+    expect(expanded).toContain('/tickets/HS2-LOCAL/attachments/01M22Q0ZGMJ0M0FE24ZSCGXRSS');
+    expect(expanded.endsWith(').')).toBe(true);
   });
 });

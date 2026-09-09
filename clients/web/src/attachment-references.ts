@@ -1,5 +1,5 @@
-export interface AttachmentReference { ticket?: string; filename: string }
-export interface AttachmentReferenceContext { baseUrl?: string; checkout: string; ticket: string; attachments?:readonly {ticket?:string;filename:string}[] }
+export interface AttachmentReference { ticket?: string; filename: string; id?: string }
+export interface AttachmentReferenceContext { baseUrl?: string; checkout: string; ticket: string; attachments?:readonly {ticket?:string;filename:string;id?:string}[] }
 
 const IMAGE_EXTENSIONS = new Set(['avif','bmp','gif','ico','jpeg','jpg','png','svg','webp']);
 const VIDEO_EXTENSIONS = new Set(['m4v','mov','mp4','ogv','webm']);
@@ -27,16 +27,16 @@ export function parseAttachmentReference(value:string):AttachmentReference|undef
 
 export function attachmentReferenceUrl(context:AttachmentReferenceContext,reference:AttachmentReference):string {
   const base=context.baseUrl??'';
-  return `${base}/checkouts/${encodeURIComponent(context.checkout)}/tickets/${encodeURIComponent(reference.ticket||context.ticket)}/attachments/by-name/${encodeURIComponent(reference.filename)}`;
+  const ticket=reference.ticket||context.ticket,attachment=reference.id?encodeURIComponent(reference.id):`by-name/${encodeURIComponent(reference.filename)}`;
+  return `${base}/checkouts/${encodeURIComponent(context.checkout)}/tickets/${encodeURIComponent(ticket)}/attachments/${attachment}`;
 }
 
 function resolveKnownAttachment(context:AttachmentReferenceContext,reference:AttachmentReference):AttachmentReference {
   const ticket=reference.ticket??context.ticket;
-  const filename=context.attachments
+  const matched=context.attachments
     ?.filter(item=>(item.ticket??context.ticket)===ticket&&reference.filename.startsWith(item.filename))
-    .map(item=>item.filename)
-    .sort((a,b)=>b.length-a.length)[0];
-  if(filename)return{ticket:reference.ticket,filename};
+    .sort((a,b)=>b.filename.length-a.filename.length)[0];
+  if(matched)return{ticket:reference.ticket,filename:matched.filename,id:matched.id};
   const proseFallback=reference.filename.replace(/[.,;:!?]+$/,'');
   return proseFallback?{ticket:reference.ticket,filename:proseFallback}:reference;
 }
@@ -59,7 +59,7 @@ export function expandAttachmentReferences(source:string,context?:AttachmentRefe
 export function attachmentReferences(source:string,context?:AttachmentReferenceContext):AttachmentReference[] {
   const references:AttachmentReference[]=[];
   const seen=new Set<string>();
-  const add=(raw:string)=>{const parsed=parseAttachmentReference(raw),reference=parsed&&context?resolveKnownAttachment(context,parsed):parsed;if(!reference)return;const key=`${reference.ticket??''}\0${reference.filename}`;if(!seen.has(key)){seen.add(key);references.push(reference)}};
+  const add=(raw:string)=>{const parsed=parseAttachmentReference(raw),resolved=parsed&&context?resolveKnownAttachment(context,parsed):parsed;if(!resolved)return;const reference:AttachmentReference=resolved.ticket?{ticket:resolved.ticket,filename:resolved.filename}:{filename:resolved.filename},key=`${reference.ticket??''}\0${reference.filename}`;if(!seen.has(key)){seen.add(key);references.push(reference)}};
   for(const match of source.matchAll(/(?:^|\s)(attachment:(?:\[[^\]]+\])?[A-Za-z0-9_.@+()-]+)/gm))add(match[1]);
   for(const match of source.matchAll(/`(attachment:(?:\[[^\]]+\])?[^`\n]+)`/g))add(match[1]);
   for(const match of source.matchAll(/!?\[[^\]]*\]\((attachment:(?:\[[^\]]+\])?[^)]+)\)/g))add(match[1]);

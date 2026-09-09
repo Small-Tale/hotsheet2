@@ -428,6 +428,10 @@ cleanup of the old live HS1 data; backups are never removed.
   ordinary no-space references and standard Markdown link/image destinations are also
   accepted. Matching prefers the longest real attachment filename and leaves any trailing
   sentence punctuation in the prose, so `attachment:proof.png.` resolves `proof.png`.
+  When that filename is already present on the loaded ticket, previews use the attachment's
+  immutable id route; the by-name route remains the fallback for references whose target
+  metadata has not been loaded. This keeps an inline preview and its gallery action on the
+  same concrete attachment even when filenames or trailing prose are ambiguous.
   Missing ticket or filename targets do not reject a note (attachments may be uploaded next),
   but mutation callers receive prominent actionable warning feedback. Browser-compatible
   bare references and explicit image destinations render inline; explicit Markdown links
