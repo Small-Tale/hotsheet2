@@ -588,10 +588,13 @@ multi-selection placeholders keep the divider to preserve their intentional stat
   responsive, wrapping 160px square contained image-preview grid feeding the shared full-screen
   arrow/keyboard/swipe gallery
 - `AttachmentGallery` — **built**: square-cornered contained/covered image and video media,
-  with a layout-owning playback footer, custom play/scrub/time/volume controls, clickable
-  wireframe-style annotation ticks, and draggable plus keyboard-adjustable bracket endpoints
-  for the selected timed annotation. Native video controls stay disabled so the component has
-  one consistent cross-browser control surface.
+  with a layout-owning playback footer, an initial video poster, custom play/scrub/time controls,
+  and a click-persistent volume popup containing its slider and mute action. Clickable wireframe-style
+  annotation ticks and draggable plus keyboard-adjustable bracket endpoints cover selected timed
+  annotations. High-frequency playback and scrub updates stay inside the gallery DOM, and gallery
+  teardown releases the video decoder/resource. Native video controls stay disabled so the component
+  has one consistent cross-browser control surface. The `/ux-demo` state exercises popup open,
+  mute, volume, click-away dismissal, timed annotations, and close/reopen transitions.
 - `TicketNotesSection`
 
 ### 4.2 Details and reader surfaces — feature floor

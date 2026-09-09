@@ -460,9 +460,14 @@ prompt can be dismissed and returns on a later open until a source is configured
   Safari and other media engines can discover duration and seek normally. The browser-native
   flow and server cache contract are identical on macOS, Linux, and Windows.
   A preview or inline image opens the same full-screen
-  media gallery; videos remain paused initially and expose only Hot Sheet's custom
-  play/pause, scrubber, time, mute, and popup-volume controls, never a second native
-  browser control strip. The playback footer occupies layout space below the media
+  media gallery; videos remain paused initially and show their cached/generated poster
+  before playback. They expose only Hot Sheet's custom play/pause, scrubber, time, and
+  volume controls, never a second native browser control strip. The volume icon opens
+  a click-persistent popup containing both the slider and mute action; only clicking
+  outside that popup dismisses it. Playback ticks and scrub input update the live gallery
+  imperatively and commit state only at interaction boundaries, avoiding application-wide
+  Kerf renders for every media event. Closing or changing gallery media explicitly pauses
+  and releases the prior video resource. The playback footer occupies layout space below the media
   stage, so both contain and cover scales are calculated from the space that remains.
   Full-screen media preserves the source image or video's square outer geometry: the
   gallery does not add corner rounding to either the media or its sizing wrapper.

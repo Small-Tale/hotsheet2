@@ -199,6 +199,7 @@ import {
   galleryDemoSelectedAnnotation,
   galleryDemoVideoAnnotations,
   galleryDemoVolume,
+  galleryDemoVolumeOpen,
   regroupAttachmentDemo,
   renameAttachmentDemoBatch,
   setGalleryDemo,
@@ -2164,8 +2165,14 @@ delegate(root, 'input', 'input[name="gallery-volume"]', (_event, target) => {
   galleryDemoVolume.value = Number((target as HTMLInputElement).value);
   galleryDemoMuted.value = false;
 });
+delegate(root, 'click', '[data-action="toggle-gallery-volume"]', () => {
+  galleryDemoVolumeOpen.value = !galleryDemoVolumeOpen.value;
+});
 delegate(root, 'click', '[data-action="toggle-gallery-muted"]', () => {
   galleryDemoMuted.value = !galleryDemoMuted.value;
+});
+root.addEventListener('click', event => {
+  if (galleryDemoVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume')) galleryDemoVolumeOpen.value = false;
 });
 delegate(root, 'keydown', '[data-gallery-range-handle]', (event, target) => {
   const keyboard = event as KeyboardEvent;

@@ -24,16 +24,29 @@ describe('AttachmentGallery',()=>{
     expect(String(AttachmentGallery({images:aliased,activeUrl:alias}))).toContain('Image 2 of 2: b.svg');
   });
   it('renders videos paused by default with only the custom playback and volume controls',()=>{
-    const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4'}));
+    const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4',thumbnailUrl:'/walkthrough-poster.jpg'}],activeUrl:'/walkthrough.mp4'}));
     expect(markup).toContain('Video 1 of 1: walkthrough.mp4');
     expect(markup).toContain('<video');
-    expect(markup).not.toContain(' controls');
+    expect(markup).not.toMatch(/<video[^>]*\scontrols(?:[=\s>])/);
     expect(markup).not.toContain('autoplay');
     expect(markup).toContain('data-gallery-media="true"');
     expect(markup).toContain('name="gallery-playhead"');
     expect(markup).toContain('data-action="toggle-gallery-playback"');
+    expect(markup).toContain('poster="/walkthrough-poster.jpg"');
+    expect(markup).toContain('data-action="toggle-gallery-volume"');
     expect(markup).toContain('data-action="toggle-gallery-muted"');
     expect(markup).toContain('name="gallery-volume"');
+    expect(markup).toContain('class="attachment-gallery__volume-popup"');
+    expect(markup).toContain(' hidden');
+  });
+  it('keeps the click-open volume popup rendered until an outside interaction closes it',()=>{
+    const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4',volumeOpen:true,muted:true}));
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).not.toContain('class="attachment-gallery__volume-popup" role="group" aria-label="Volume controls" hidden');
+    expect(markup).toContain('aria-label="Unmute video"');
+    const css=readFileSync(new URL('./attachment-gallery.css',import.meta.url),'utf8');
+    expect(css).not.toContain(':focus-within');
+    expect(css).not.toContain(':hover,:focus-within');
   });
   it('renders selected normalized rectangles, resize handles, and draggable video range brackets in markup mode',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4',markup:true,drawMode:true,selectedAnnotation:'annotation-1',playheadMs:1_500,durationMs:10_000,annotations:[{id:'annotation-1',x:1000,y:2000,width:3000,height:2500,start_ms:1000,end_ms:2000,text:'Check **this**'}]}));
