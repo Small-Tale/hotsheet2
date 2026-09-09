@@ -9,6 +9,7 @@ pub mod client_drive;
 pub mod code_review;
 pub mod commands;
 pub mod dist_work_loop;
+pub mod github_app_config;
 pub mod lifecycle;
 pub mod media;
 pub mod multistore;
@@ -1499,8 +1500,9 @@ async fn start_github_device_auth(
     State(state): State<AppState>,
     Json(body): Json<StartGitHubAuthBody>,
 ) -> Result<(StatusCode, Json<StartGitHubAuthResponse>), ApiError> {
-    let client_id = std::env::var("HOTSHEET_GITHUB_APP_CLIENT_ID").unwrap_or_default();
     let web_base = body.web_base.trim_end_matches('/').to_owned();
+    let client_id = github_app_config::client_id_for_web_base(&web_base)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
     let client = hotsheet_extsync::GitHubDeviceClient::live(client_id.clone(), web_base.clone());
     let authorization = tokio::task::spawn_blocking(move || client.start())
         .await

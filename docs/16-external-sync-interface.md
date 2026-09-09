@@ -252,10 +252,20 @@ boundary. The server owns protocol pacing (`authorization_pending` and `slow_dow
 access/refresh bundles in the OS credential store, refreshes expiring access tokens, and
 reports expiry, denial, cancellation, revoked credentials, and SAML reauthorization
 requirements. GitHub Enterprise derives its web origin from the configured `/api/v3` API
-base. Manual credential references remain an advanced fallback. The first-party app must be
-configured with device flow and only Metadata read plus Issues write permissions; its public
-client ID is supplied as `HOTSHEET_GITHUB_APP_CLIENT_ID` until release provisioning is
-completed by HS2-MZ66GC. Windows credential storage is tracked by HS2-N3R18X.
+base. Manual credential references remain an advanced fallback. The first-party public
+GitHub.com Client ID (`Iv23lialgSTESydkTreA`) is bundled into development and release server
+builds; it is an identifier, not a secret. `HOTSHEET_GITHUB_APP_CLIENT_ID` may override it
+for development builds. The server build fails clearly if neither the override nor the
+tracked `crates/hotsheet-server/github-app-client-id.txt` contains a valid GitHub App Client
+ID, so an unconfigured release cannot silently ship.
+
+The first-party app is registered for any-account installation with Device Flow enabled,
+webhooks disabled, Metadata read-only, Issues read/write, and all other permissions disabled.
+GitHub Enterprise Server installations require a separately registered app and Client ID on
+each host. Operators configure those public IDs on the server as a JSON origin map, for
+example `HOTSHEET_GITHUB_ENTERPRISE_APP_CLIENT_IDS='{"https://github.example.com":"Iv…"}'`.
+An attempted Enterprise sign-in without an exact host entry fails before contacting GitHub
+and explains how to provision it. Windows credential storage is tracked by HS2-N3R18X.
 
 Built in the GitLab/Jira increment: both adapters use the same provider-neutral
 routes and qualified identity contract without creating git-store mirrors. GitLab
