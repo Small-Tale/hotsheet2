@@ -75,11 +75,11 @@ describe('client-owned AI drive transport',()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response(JSON.stringify(connection),{status:202}));
     const api=new Api('/api');
     await api.toolSessions();
-    await api.createToolConnection({tool:'codex',connection_id:'main/1'});
+    await api.createToolConnection({tool:'codex',checkout:'checkout-1',connection_id:'main/1'});
     await api.sendToolTurn('main/1','Continue this work','thread/1');
     await api.interruptToolTurn('main/1');
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/drive/sessions',expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/drive/connections',expect.objectContaining({method:'POST',body:'{"tool":"codex","connection_id":"main/1"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/drive/connections',expect.objectContaining({method:'POST',body:'{"tool":"codex","checkout":"checkout-1","connection_id":"main/1"}'}));
     expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/drive/connections/main%2F1/turns',expect.objectContaining({method:'POST',body:'{"content":"Continue this work","session_id":"thread/1"}'}));
     expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/drive/connections/main%2F1/interrupt',expect.objectContaining({method:'POST'}));
     fetchMock.mockRestore();

@@ -110,24 +110,25 @@ describe('ProjectSidebar component slice', () => {
   });
 
   it('composes the five sidebar boundaries without duplicating their markup', () => {
-    const markup = String(ProjectSidebar({ completedToday: 1, inProgress: 2, completionTrend: [0, 1], branch: 'main', unpushed: 0, uncommitted: 1, views: [{ id: 'all', label: 'All Tickets', icon: 'all' }], selectedViewId: 'all', commandGroupLabel: 'Commands', commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test' }], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex', openCount: 7, upNextCount: 3, activeCount: 2 }));
+    const markup = String(ProjectSidebar({ completedToday: 1, inProgress: 2, completionTrend: [0, 1], branch: 'main', unpushed: 0, uncommitted: 1, views: [{ id: 'all', label: 'All Tickets', icon: 'all' }], selectedViewId: 'all', commandGroupLabel: 'Commands', commands: [{ id: 'test', label: 'Test', color: '#3b82f6', icon: 'test' }], commandGroupExpanded: true, driveRunning: false, driveTool: 'codex', openCount: 7, upNextCount: 3, activeCount: 2 }));
     for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) expect(markup).toContain(`data-component="${component}"`);
     expect(markup).toContain('data-component="project-work-summary">7 open, 3 up next, 2 active');
     expect(markup.indexOf('project-work-summary')).toBeLessThan(markup.indexOf('data-component="drive-control"'));
   });
 
   it('omits the command section when the project has no commands', () => {
-    const markup = String(ProjectSidebar({ completedToday: 0, inProgress: 0, completionTrend: [], branch: 'main', unpushed: 0, uncommitted: 0, views: [], selectedViewId: 'all', commandGroupLabel: 'Project commands', commands: [], commandGroupExpanded: true, driveRunning: false, driveTool: 'Codex', openCount: 0, upNextCount: 0, activeCount: 0 }));
+    const markup = String(ProjectSidebar({ completedToday: 0, inProgress: 0, completionTrend: [], branch: 'main', unpushed: 0, uncommitted: 0, views: [], selectedViewId: 'all', commandGroupLabel: 'Project commands', commands: [], commandGroupExpanded: true, driveRunning: false, driveTool: 'codex', openCount: 0, upNextCount: 0, activeCount: 0 }));
     expect(markup).not.toContain('data-component="command-navigation"');
     expect(markup).not.toContain('Project commands');
   });
 
-  it('gates the conversation action until a live connection can accept turns',()=>{
-    const base={completedToday:0,inProgress:0,completionTrend:[],branch:'main',unpushed:0,uncommitted:0,views:[],selectedViewId:'all',commandGroupLabel:'Commands',commands:[],commandGroupExpanded:true,driveRunning:false,driveTool:'Codex',openCount:0,upNextCount:0,activeCount:0};
-    expect(String(ProjectSidebar(base))).toContain('data-action="open-conversation" aria-label="Open Codex conversation" title="Start Codex to open a conversation" aria-pressed="false" disabled');
-    const available=String(ProjectSidebar({...base,conversationAvailable:true,conversationOpen:true}));
-    expect(available).toContain('data-action="open-conversation" aria-label="Open Codex conversation" title="Open conversation" aria-pressed="true"');
-    expect(available).not.toContain('aria-pressed="true" disabled');
+  it('offers explicit tool selection and chat before the workflow starts',()=>{
+    const base={completedToday:0,inProgress:0,completionTrend:[],branch:'main',unpushed:0,uncommitted:0,views:[],selectedViewId:'all',commandGroupLabel:'Commands',commands:[],commandGroupExpanded:true,driveRunning:false,driveTool:'codex' as const,openCount:0,upNextCount:0,activeCount:0};
+    const markup=String(ProjectSidebar(base));
+    expect(markup).toContain('name="drive-tool"');expect(markup).toContain('AI tool for Drive and Chat');expect(markup).toContain('>Codex<');expect(markup).toContain('>Claude<');
+    expect(markup).toContain('data-action="open-conversation" aria-label="Open Codex conversation" title="Open chat without starting the Hot Sheet workflow" aria-pressed="false"');
+    expect(markup).not.toContain('aria-pressed="false" disabled');
+    expect(String(ProjectSidebar({...base,driveTool:'claude',conversationOpen:true}))).toContain('aria-label="Open Claude conversation"');
   });
 
 });

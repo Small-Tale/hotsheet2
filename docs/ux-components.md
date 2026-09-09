@@ -196,13 +196,15 @@ does not introduce polling or another network request.
   - running, stopping, last-run, success, and failure states
 - `DriveControl` — **production + demo built**: primary start/stop action with explicit
   tool and running semantics, preceded by the centered open/Up Next project summary
+  and paired with a persisted per-project Codex/Claude selector
   - primary launch/resume action
   - active tool/connection state from the shared long-poll event stream and stop confirmation
   - explicit disabled reason when the active connection cannot be interrupted
 
 - `AIConversation` — **production + demo built**: a project-scoped
-  dialog opened from a compact MessageSquare action beside Drive once a client-owned
-  connection exists. It keeps the ticket workspace visible behind a bounded, vertically
+  dialog opened from a compact MessageSquare action beside Drive. Chat prepares the selected
+  tool and opens an empty conversation without running `$hotsheet`; Drive explicitly starts
+  that workflow on the same checkout-and-tool-scoped connection. It keeps the ticket workspace visible behind a bounded, vertically
   scrollable transcript rather than replacing the project route.
   - header: tool identity, persistent connection/session context, close action, and a Stop
     action only while the active connection advertises `interrupt`; absence hides Stop
@@ -297,6 +299,9 @@ does not introduce polling or another network request.
   when composed in the bar. Fine-pointer devices reveal close affordances on hover or
   keyboard focus; touch-oriented devices retain the visible close control. Local tabs
   omit the redundant folder/branch icon, while remote tabs retain their cloud marker.
+  Keyboard focus on the tab-selection action outlines the complete compound pill,
+  including its leading close affordance, rather than bisecting the pill at that action's edge;
+  focusing Close retains a separate compact focus indicator for that independent action.
   The close affordance is a compact, highlight-free leading control with balanced
   trailing space
   so the tab identity remains visually centered; transient trailing indicators such as

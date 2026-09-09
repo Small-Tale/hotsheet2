@@ -255,11 +255,17 @@ Every plugin with a `drive` passes:
 ## 13.9 Client-owned drive lifecycle (HS2-5DGFG2)
 
 The server retains a prepared drive and its isolated tool home across sequential client
-turns. A client creates/attaches it with `POST /drive/connections`, sends arbitrary text
+turns. A client creates/attaches it with `POST /drive/connections`, supplying the checkout
+id along with the tool and stable connection id, then sends arbitrary text
 with `POST /drive/connections/{id}/turns`, and resumes from either the retained session id
 or an explicit one. Only one turn may run per connection. A thread-safe `TurnControl`
 delivers interruption back to the concrete turn on its owner thread; the wire advertises
 `interrupt` in `actions` only when that drive actually implements it.
+
+The server resolves that checkout through its project registry and prepares the tool with
+the checkout's code root as both its process directory and `HOTSHEET_PROJECT`. The ticket
+store is deliberately not a substitute for the checkout: UI connections are scoped by
+checkout plus tool so Codex and Claude conversations cannot leak across either boundary.
 
 Connection changes emit replayable `drive_updated` events. Clients refresh from that
 signal over the existing WebSocket or long-poll fallback; simple periodic polling is not

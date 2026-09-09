@@ -163,8 +163,9 @@ cleanup of the old live HS1 data; backups are never removed.
   counters plus per-pass deltas so a captured storm distinguishes reactive rerenders
   from unrelated DOM activity. Three unexpected quick select dismissals within ten
   seconds or twelve root renders within two seconds after startup create a rate-limited
-  diagnostic ticket automatically. One uninterrupted render storm creates only one
-  ticket; detection rearms after a quiet two-second render window. Dev Review is enabled by
+  diagnostic ticket automatically. A root render-storm signature creates at most one
+  ticket per page lifecycle; quiet intervals clear stale pass history without rearming
+  an already-reported signature. Dev Review is enabled by
   default in development (`?dev-review=false` is the sole opt-out), and its ticket
   dialog offers a checked diagnostic-log attachment so a manually reported transient
   failure carries the same context. Automatic render-storm reporting remains suppressed while
@@ -364,17 +365,22 @@ cleanup of the old live HS1 data; backups are never removed.
   additionally requires the Up Next flag. Mutations and long-poll-driven collection refreshes
   update the summary reactively; the summary itself performs no polling or network request.
 
-  Drive is a production control, not demo-only state. On first activation it prepares the
-  stable project-scoped Codex connection and sends the `$hotsheet` workflow turn; later
-  activations reuse that connection and its retained session. The sidebar derives running
+  Drive is a production control, not demo-only state. The adjacent selector chooses Codex or
+  Claude and is remembered locally for each project. Drive prepares a stable connection scoped
+  to that checkout and tool, then sends the `$hotsheet` workflow turn; later activations reuse
+  that connection and its retained session. The server resolves the checkout id to its code
+  root before preparing the tool—ticket-store paths are never used as the working directory.
+  The sidebar derives running
   state from `GET /connections`, refreshes it only from replayable `drive_updated` events,
   and confirms before interrupting an active turn. A busy connection that does not advertise
   `interrupt` remains visible but is disabled with the reason. The Views add action is likewise
   disabled with a reason until the deferred custom-view feature exists; no enabled sidebar
   action may be owned only by `/ux-demo`.
 
-  Once that connection can accept turns, a MessageSquare action beside Drive opens the
-  production `AIConversation` dialog. Kerf retains an ordered transcript and composer draft
+  The MessageSquare action is available before Drive and opens the production
+  `AIConversation` dialog after preparing the selected tool without sending a workflow turn.
+  In other words, Chat starts an empty general conversation; Drive is the explicit `$hotsheet`
+  automation shortcut on the same connection. Kerf retains an ordered transcript and composer draft
   per connection; each submit appends a user message and one assistant message whose Markdown
   content grows in place from attributed `turn_event` output. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the

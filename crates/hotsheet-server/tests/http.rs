@@ -21,6 +21,7 @@ use hotsheet_extsync::{
 const SECRET: &str = "test-secret";
 type RecordedClientTurns = Arc<Mutex<Vec<(String, Option<String>)>>>;
 type RecordedClientHomes = Arc<Mutex<Vec<Option<std::path::PathBuf>>>>;
+type RecordedClientPreparations = Arc<Mutex<Vec<(std::path::PathBuf, Vec<String>)>>>;
 
 fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
@@ -32,6 +33,7 @@ fn state() -> (tempfile::TempDir, AppState) {
 struct FakeClientDriveBackend {
     turns: RecordedClientTurns,
     homes: RecordedClientHomes,
+    preparations: RecordedClientPreparations,
     supports_interrupt: bool,
 }
 
@@ -44,6 +46,10 @@ struct FakePreparedClientDrive {
 impl ClientDriveBackend for FakeClientDriveBackend {
     fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
         self.homes.lock().unwrap().push(request.persistent_home);
+        self.preparations
+            .lock()
+            .unwrap()
+            .push((request.project_path, request.env));
         Ok(Arc::new(FakePreparedClientDrive {
             tool: request.tool,
             turns: self.turns.clone(),
@@ -127,6 +133,58 @@ fn authed(method: &str, uri: &str, body: Option<&str>) -> Request<Body> {
 async fn body_json(resp: axum::response::Response) -> serde_json::Value {
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     serde_json::from_slice(&bytes).unwrap()
+}
+
+#[tokio::test]
+async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store() {
+    let (store_dir, base) = state();
+    let checkout_dir = tempfile::tempdir().unwrap();
+    let backend = Arc::new(FakeClientDriveBackend::default());
+    let preparations = backend.preparations.clone();
+    let router = app(base
+        .with_checkout_registry(store_dir.path().join("checkouts.json"))
+        .with_client_drive_backend(backend));
+    let opened = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&format!(
+                r#"{{"root":{},"sources":[]}}"#,
+                serde_json::to_string(checkout_dir.path()).unwrap()
+            )),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    let checkout_id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let checkout_root = checkout_dir.path().canonicalize().unwrap();
+    let created = router
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(&format!(
+                r#"{{"tool":"fake","checkout":{},"connection_id":"checkout-drive"}}"#,
+                serde_json::to_string(&checkout_id).unwrap()
+            )),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    assert_eq!(
+        body_json(created).await["project"],
+        checkout_root.display().to_string()
+    );
+    let prepared = preparations.lock().unwrap();
+    assert_eq!(prepared[0].0, checkout_root);
+    assert!(
+        prepared[0]
+            .1
+            .contains(&format!("HOTSHEET_PROJECT={}", checkout_root.display()))
+    );
 }
 
 #[tokio::test]

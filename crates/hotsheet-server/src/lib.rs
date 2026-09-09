@@ -4589,6 +4589,8 @@ async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionI
 struct CreateDriveConnectionReq {
     tool: String,
     #[serde(default)]
+    checkout: Option<String>,
+    #[serde(default)]
     connection_id: Option<String>,
     #[serde(default)]
     session_id: Option<String>,
@@ -4601,7 +4603,26 @@ async fn create_drive_connection(
     if request.tool.trim().is_empty() {
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "tool is required"));
     }
-    let project_path = state.store.root().to_path_buf();
+    let project_path = if let Some(reference) = request.checkout.as_deref() {
+        let checkout = state
+            .checkout_registry
+            .resolve(reference)
+            .map_err(|error| {
+                let status = match error {
+                    hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => {
+                        StatusCode::NOT_FOUND
+                    }
+                    hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => {
+                        StatusCode::CONFLICT
+                    }
+                    _ => StatusCode::BAD_REQUEST,
+                };
+                ApiError::new(status, error.to_string())
+            })?;
+        std::path::PathBuf::from(checkout.root)
+    } else {
+        state.store.root().to_path_buf()
+    };
     let mut env = vec![format!("HOTSHEET_PROJECT={}", project_path.display())];
     if let Some(url) = state
         .terminal_server_url

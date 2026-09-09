@@ -5,8 +5,8 @@ import {
   advanceRenderStorm,
   hasDismissalThrash,
   isUnexpectedQuickDismiss,
-  renderStormSuppressionReason,
   type RenderStormState,
+  renderStormSuppressionReason,
 } from './ui-stability-diagnostics';
 
 describe('UI stability diagnostics', () => {
@@ -79,8 +79,13 @@ describe('UI stability diagnostics', () => {
     expect(state.reported).toBe(true);
     state = advanceRenderStorm(state, 2_000, true);
     expect(state).toMatchObject({ passes: [], reported: true, shouldReport: false });
-    for (let at = 3_000; at <= 4_100; at += 100) state = advanceRenderStorm(state, at);
-    expect(state.shouldReport).toBe(false);
+    let shouldReport = false;
+    for (let at = 3_000; at <= 4_100; at += 100) {
+      const next = advanceRenderStorm(state, at);
+      state = next;
+      shouldReport ||= next.shouldReport;
+    }
+    expect(shouldReport).toBe(false);
   });
 
   it('classifies known render-heavy work as suppressed', () => {

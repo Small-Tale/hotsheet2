@@ -103,7 +103,7 @@ export class Api {
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
   activeToolConnections=()=>this.request<ToolConnection[]>('/connections');
   toolSessions=()=>this.request<ToolSession[]>('/drive/sessions');
-  createToolConnection=(value:{tool:string;connection_id?:string;session_id?:string})=>this.request<ToolConnection>('/drive/connections',{method:'POST',body:JSON.stringify(value)});
+  createToolConnection=(value:{tool:string;checkout:string;connection_id?:string;session_id?:string})=>this.request<ToolConnection>('/drive/connections',{method:'POST',body:JSON.stringify(value)});
   sendToolTurn=(id:string,content:string,session_id?:string)=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/turns`,{method:'POST',body:JSON.stringify({content,...(session_id?{session_id}:{})})});
   interruptToolTurn=(id:string)=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/interrupt`,{method:'POST'});
   terminals=()=>this.request<TerminalInfo[]>('/terminals');
