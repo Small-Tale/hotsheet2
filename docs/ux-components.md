@@ -147,14 +147,16 @@ does not introduce polling or another network request.
   percentage from the wireframe is intentionally omitted. Zero-completion days retain
   a one-pixel neutral baseline mark so all seven day positions remain visible. Production
   derives each bar from ticket completion timestamps in the corresponding local calendar
-  day. The whole summary is an accessible action that opens the selected project's
+  day. Brand and success chart-tone variants let an aggregate read separately from its
+  constituent projects, and both variants appear in the catalog. The whole summary is an accessible action that opens the selected project's
   statistics surface; HS2-38RJMK owns the full charts behind the current placeholder.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `TerminalOperationsSidebar` — **demo built**: the Terminal Dashboard's left rail
   reuses `MenuHeader` and `ProjectSummary` for each open project. When two or more
   projects are open, an `All projects` group precedes them and sums aligned trend days,
-  completed-today counts, and in-progress counts. Each summary opens statistics for
+  completed-today counts, and in-progress counts; its success-green chart distinguishes
+  the aggregate from brand-blue project charts. Each summary opens statistics for
   that project; the aggregate opens cross-project statistics. The component consumes
   the already-loaded ticket rows and does not introduce polling or network requests.
 - `RepositorySummary` — **production built**: one accessible branch/status action with

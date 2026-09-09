@@ -36,7 +36,7 @@ function DemoFrame({ children }: { children: unknown }) {
   return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail">{children}</div><p class="component-stage__event" aria-live="polite">{sidebarEvent.value}</p></section>;
 }
 const completionTrend = [3, 0, 2, 5, 4, 7, 6];
-export function ProjectSummaryDemo() { return <DemoFrame><ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} /></DemoFrame>; }
+export function ProjectSummaryDemo() { return <DemoFrame><div class="project-summary-demo__variants"><ProjectSummary completedToday={6} inProgress={3} trend={completionTrend} /><ProjectSummary completedToday={12} inProgress={5} trend={completionTrend.map(value=>value*2)} chartTone="success" /></div></DemoFrame>; }
 export function RepositorySummaryDemo() { return <DemoFrame><RepositorySummary branch="feature/client-sidebar" unpushed={6} uncommitted={2} /></DemoFrame>; }
 export function ViewNavigationDemo() { return <DemoFrame><ViewNavigation items={sidebarViews} selectedId={selectedViewId.value} /></DemoFrame>; }
 export function CommandNavigationDemo() { return <DemoFrame><CommandNavigation label="Project commands" expanded={commandGroupExpanded.value} commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} /></DemoFrame>; }

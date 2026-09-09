@@ -63,6 +63,7 @@ import { TerminalDrawer } from '../components/terminal-drawer';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
+import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
 import { AIConversationDemo, aiConversationDemoOpen, aiConversationDraft, aiConversationScenario, AIConversationSettings } from './ai-conversation-demo';
@@ -279,6 +280,9 @@ const contextMenu = signal<
 const tabContextMenu = signal<
   { x: number; y: number; projectId: string } | undefined
 >(undefined);
+const terminalDashboardContextMenu = signal<
+  { key: string; x: number; y: number } | undefined
+>(undefined);
 const markdownAutosave = createDebouncedAutosave((value: string) => {
   markdownSavedValue.value = value;
   markdownEvent.value = 'Markdown autosaved.';
@@ -492,7 +496,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'terminal-dashboard') return <section class="terminal-dashboard-demo"><TerminalDashboard groups={[{ projectId: 'demo', projectName: 'Demo project', sessions: [
     { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
     { id: 'tests', projectId: 'demo', projectName: 'Demo project', title: 'Tests', alive: true, busy: false, cwd: '/work/demo', scrollback: '42 tests passed\nwaiting for changes' },
-  ] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={{ key: 'demo:shell', x: 520, y: 280 }}/></section>;
+  ] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={terminalDashboardContextMenu.value}/></section>;
   if (item.id === 'terminal-operations-sidebar') return <TerminalOperationsSidebarDemo/>;
   if (item.id === 'terminal-ticket-rail') return <TerminalTicketRailDemo/>;
   if (item.id === 'fixed-aspect-terminal-card') {
@@ -752,6 +756,7 @@ function selectDemo(id: string, push = true): void {
   selectedId.value = id;
   settingsOpen.value = false;
   contextMenu.value = undefined;
+  terminalDashboardContextMenu.value = undefined;
   if (push)
     history.pushState(null, '', `/ux-demo?component=${encodeURIComponent(id)}`);
 }
@@ -771,6 +776,23 @@ delegate(root, 'click', '[data-action="toggle-settings"]', () => {
 });
 delegate(root, 'click', '[data-action="toggle-dev-review"]', () => {
   void setDevReview(!devReviewOn.value);
+});
+function showTerminalDashboardContextMenu(target: HTMLElement, x: number, y: number): void {
+  terminalDashboardContextMenu.value = {
+    key: target.dataset.terminalKey ?? target.dataset.itemId ?? '',
+    ...viewportSafeContextMenuPosition(x, y, innerWidth, innerHeight, { width: 224, height: 104 }),
+  };
+}
+delegate(root, 'contextmenu', '[data-component="terminal-tile"]', (event, target) => {
+  event.preventDefault();
+  const pointer = event as MouseEvent;
+  showTerminalDashboardContextMenu(target as HTMLElement, pointer.clientX, pointer.clientY);
+});
+delegate(root, 'click', '[data-action="open-terminal-context-menu"]', (event, target) => {
+  event.preventDefault();
+  event.stopPropagation();
+  const box = target.getBoundingClientRect();
+  showTerminalDashboardContextMenu(target as HTMLElement, box.right, box.bottom);
 });
 delegate(root, 'click', '[data-action="show-terminal-visibility-demo"]', showTerminalVisibilityDemo);
 delegate(root, 'wa-hide', '[data-terminal-visibility-dialog]', closeTerminalVisibilityDemo);
@@ -2249,10 +2271,12 @@ delegate(root, 'click', '[data-action="attachment-menu-action"]', (_event, targe
 addEventListener('pointerdown', (event) => {
   if (contextMenu.value && !eventTargetsContextMenu(event)) contextMenu.value = undefined;
   if (tabContextMenu.value && !eventTargetsContextMenu(event, '.project-tab-context-menu')) tabContextMenu.value = undefined;
+  if (terminalDashboardContextMenu.value && !(event.target as Element).closest('[data-component="terminal-context-menu"], [data-action="open-terminal-context-menu"]')) terminalDashboardContextMenu.value = undefined;
   if (attachmentDemoMenu.value && !(event.target as Element).closest('[data-component="attachment-context-menu"], [data-action="open-attachment-menu"]')) closeAttachmentDemoMenu();
 }, { capture: true });
 addEventListener('keydown', (event) => {
   if (event.key === 'Escape') contextMenu.value = undefined;
+  if (event.key === 'Escape') terminalDashboardContextMenu.value = undefined;
   if (event.key === 'Escape') closeAttachmentDemoMenu();
 });
 addEventListener('popstate', () => {

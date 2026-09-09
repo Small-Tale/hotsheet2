@@ -26,6 +26,6 @@ export function TerminalOperationsSidebar({projects}:{projects:readonly Terminal
   const groups=projects.length>1?[aggregateTerminalProjectSummaries(projects),...projects]:projects;
   return <aside class="terminal-operations-sidebar" data-component="terminal-operations-sidebar" aria-label="Terminal operations sidebar">
     <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide operations sidebar" title="Hide operations sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close"/></button></ToolbarControlGroup>}/>
-    <div class="terminal-operations-sidebar__groups">{groups.map(group=><section class="terminal-operations-sidebar__group" data-project-id={group.id}><MenuHeader label={group.name}/><ProjectSummary completedToday={group.completedToday} inProgress={group.inProgress} trend={group.trend} projectId={group.id}/></section>)}</div>
+    <div class="terminal-operations-sidebar__groups">{groups.map(group=><section class="terminal-operations-sidebar__group" data-project-id={group.id}><MenuHeader label={group.name}/><ProjectSummary completedToday={group.completedToday} inProgress={group.inProgress} trend={group.trend} projectId={group.id} chartTone={group.id==='all'?'success':'brand'}/></section>)}</div>
   </aside>;
 }

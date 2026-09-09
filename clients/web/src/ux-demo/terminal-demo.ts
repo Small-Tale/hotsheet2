@@ -1,6 +1,8 @@
 import { mountStaticTerminalViewport } from '../terminal-viewport';
 
-const bar=(value:string)=>`\u001b[7m${value.padEnd(80).slice(0,80)}\u001b[0m`;
+// Nano paints through the final column without moving the cursor into a wrapped row.
+// Erasing under reverse video reproduces that fill without scrolling the 80x24 viewport.
+const bar=(value:string)=>`\u001b[7m${value.slice(0,79)}\u001b[K\u001b[0m`;
 const line=(row:number,value:string)=>`\u001b[${row};1H${value}`;
 
 const nanoSource = [

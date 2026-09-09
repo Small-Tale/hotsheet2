@@ -15,6 +15,8 @@ describe('TerminalOperationsSidebar',()=>{
   it('adds an aggregate group only when multiple projects are open',()=>{
     const multiple=String(TerminalOperationsSidebar({projects})),single=String(TerminalOperationsSidebar({projects:[projects[0]]}));
     expect(multiple).toContain('All projects');
+    expect(multiple).toContain('data-chart-tone="success"');
+    expect(multiple.match(/data-chart-tone="brand"/g)).toHaveLength(2);
     expect(multiple.match(/data-component="project-summary"/g)).toHaveLength(3);
     expect(single).not.toContain('All projects');
     expect(single.match(/data-component="project-summary"/g)).toHaveLength(1);

@@ -20,6 +20,11 @@ describe('application shell components', () => {
     expect(productionCss).not.toMatch(/\.app-shell\[data-component="app-shell"\] \{[^}]*(?:min-width|min-height):/);
     expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.resizable-region[^{}]*display: none/);
   });
+
+  it('separates the terminal header from its lowered dashboard surface', () => {
+    const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    expect(css).toMatch(/\.app-shell\[data-mode="terminals"\][^{]*\.project-tab-bar \{[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/);
+  });
   it('draws one continuous focus outline around the ticket work area', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     expect(css).toContain('.app-shell__work-area:focus, .app-shell__work-area:focus-within');
