@@ -25,6 +25,7 @@ export interface ProjectSession {
 interface InstanceInfo { pid:number; url:string; secret:string }
 interface SessionTarget { url:string; secret:string; root?:string }
 interface CorruptDiagnostic { path:string }
+interface CliCompatibility {generation:string;store_schema:{min:number;max:number;creates:number};selected_store_schema?:number|null}
 
 export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
 export type FolderChooserRunner=(command:string,args:string[])=>Promise<string|undefined>;
@@ -78,6 +79,16 @@ export function requireCompatibleServer(assessment: CompatibilityAssessment): vo
   }
 }
 
+/** Refuse a store/bootstrap operation before it crosses a server format boundary. The
+ * application version can remain identical during pre-release schema work, so negotiate
+ * the actual store range instead of treating a version label as compatibility. */
+export function requireStoreSchemaCompatibility(server:ServerCompatibility|undefined,cli:CliCompatibility,mode:'open'|'create'):void{
+  const schema=mode==='create'?cli.store_schema.creates:cli.selected_store_schema;
+  if(schema===undefined||schema===null||!server?.store_schema||schema<=server.store_schema.max)return;
+  const action=mode==='create'?'No ticket repository was created.':'This ticket repository cannot be opened through that server.';
+  throw new Error(`${action} This project is connected to an older Hot Sheet server build that supports ticket-store schema through ${server.store_schema.max}, while the current Hot Sheet CLI ${mode==='create'?'creates':'found'} schema ${schema}. Finish any active work in this project, stop or restart its detached Hot Sheet server, then reopen the project.`);
+}
+
 export function developmentRepositoryRoot(cwd = process.cwd(), environment = process.env) {
   return resolve(environment.HOTSHEET_REPO_ROOT ?? resolve(cwd, '../..'));
 }
@@ -119,6 +130,19 @@ async function hasGitRemote(store:string|undefined):Promise<boolean>{
 export interface Hs1MigrationResult {ticketStore:string;connectionId:string;tickets:number;attachments:number;toolsConfigured:boolean}
 export type ProcessRunner=(command:string,args:string[],cwd:string)=>Promise<string>;
 const runProcess:ProcessRunner=(command,args,cwd)=>new Promise((resolveRun,reject)=>{const child=spawn(command,args,{cwd,stdio:['ignore','pipe','pipe']}),stdout:Buffer[]=[],stderr:Buffer[]=[];child.stdout.on('data',(chunk:Buffer)=>stdout.push(chunk));child.stderr.on('data',(chunk:Buffer)=>stderr.push(chunk));child.once('error',reject);child.once('close',code=>{const output=Buffer.concat(stdout).toString('utf8'),error=Buffer.concat(stderr).toString('utf8').trim();if(code===0)resolveRun(output);else reject(new Error(error||`${command} exited with status ${code??'unknown'}.`))})});
+
+async function cliCompatibility(store:string|undefined,runner:ProcessRunner):Promise<CliCompatibility>{
+  const args=[...(store?['-C',store]:[]),'compatibility','--json'];
+  return JSON.parse(await runner(toolBinary(),args,developmentRepositoryRoot())) as CliCompatibility;
+}
+
+function sessionForRoot(root:string):SessionTarget|undefined{return[...sessions.values()].find(target=>target.root===root)}
+
+/** Run current-app setup writers independently of the detached server's build. This is
+ * fire-and-forget from project open so stale managed files never add visible latency. */
+export async function refreshLocalProjectSetup(root:string,store:string,runner:ProcessRunner=runProcess):Promise<void>{
+  await runner(toolBinary(),['-C',store,'setup','--refresh','--project',root],developmentRepositoryRoot());
+}
 
 export async function migrateHs1Project(rootInput:string,locationInput?:string,runner:ProcessRunner=runProcess):Promise<Hs1MigrationResult>{
   const root=await realpath(rootInput.trim());
@@ -170,6 +194,12 @@ async function bootstrapStore():Promise<string>{
 export async function createLocalGitTicketStore(rootInput:string,locationInput?:string,runner:ProcessRunner=runProcess):Promise<string>{
   const root=await realpath(rootInput.trim()),path=locationInput?.trim()?resolve(locationInput.trim()):`${root}.hs2`,binary=toolBinary();
   if(!await exists(binary))throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
+  const target=sessionForRoot(root);
+  if(target){
+    const existing=await exists(resolve(path,'hotsheet-store.json'));
+    const [server,cli]=await Promise.all([serverRequest<ServerCompatibility>(target,'/compatibility').catch(()=>undefined),cliCompatibility(existing?path:undefined,runner)]);
+    requireStoreSchemaCompatibility(server,cli,existing?'open':'create');
+  }
   await runner(binary,projectBootstrapArgs(root,path),developmentRepositoryRoot());
   return realpath(path);
 }
@@ -263,9 +293,14 @@ async function serverRequest<T>(target: SessionTarget, path: string, init: Reque
 export async function openLocalProject(rootInput: string, ticketStoreInput?: string): Promise<ProjectSession> {
   const root = await realpath(rootInput.trim());
   const ticketStore = ticketStoreInput?.trim() ? await realpath(ticketStoreInput.trim()) : await suggestedTicketStore(root);
+  if(ticketStore)void refreshLocalProjectSetup(root,ticketStore).catch(()=>undefined);
   const instance = await ensureServer(ticketStore??await bootstrapStore());
   const target = { url: instance.url, secret: instance.secret, root };
   const metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
+  if(ticketStore){
+    const cli=await cliCompatibility(ticketStore,runProcess);
+    requireStoreSchemaCompatibility(metadata,cli,'open');
+  }
   const compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
   requireCompatibleServer(compatibility);
   const opened = await serverRequest<{checkout:{id:string;root:string;alias:string;stores:string[];sources:unknown[]}}>(target, '/projects/open', {

@@ -191,7 +191,34 @@ fn binary_on_path(name: &str) -> bool {
     let Some(paths) = std::env::var_os("PATH") else {
         return false;
     };
-    std::env::split_paths(&paths).any(|dir| dir.join(name).is_file())
+    let extensions = executable_extensions();
+    binary_in_paths(name, std::env::split_paths(&paths), &extensions)
+}
+
+fn binary_in_paths(
+    name: &str,
+    paths: impl IntoIterator<Item = std::path::PathBuf>,
+    extensions: &[String],
+) -> bool {
+    paths.into_iter().any(|dir| {
+        dir.join(name).is_file()
+            || extensions
+                .iter()
+                .any(|extension| dir.join(format!("{name}{extension}")).is_file())
+    })
+}
+
+fn executable_extensions() -> Vec<String> {
+    if cfg!(windows) {
+        std::env::var("PATHEXT")
+            .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+            .map(str::to_ascii_lowercase)
+            .collect()
+    } else {
+        Vec::new()
+    }
 }
 
 fn write_instructions(project: &Path, p: &Plugin) -> Result<String, SetupError> {
@@ -593,5 +620,31 @@ args = ["--path", "{store}"]
         permissions.set_readonly(true);
         std::fs::set_permissions(&path, permissions).unwrap();
         write_file(&path, "same").unwrap();
+    }
+
+    #[test]
+    fn path_detection_supports_windows_command_wrappers() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("codex.cmd"), "@echo off\n").unwrap();
+        assert!(binary_in_paths(
+            "codex",
+            [dir.path().to_path_buf()],
+            &[".cmd".to_string()]
+        ));
+    }
+
+    #[test]
+    fn bundled_claude_skill_matches_the_current_adapter_version() {
+        fn version(contents: &str) -> &str {
+            contents
+                .lines()
+                .find_map(|line| line.strip_prefix("<!-- hotsheet-skill-version: "))
+                .and_then(|line| line.strip_suffix(" -->"))
+                .expect("skill version marker")
+        }
+        assert_eq!(
+            version(include_str!("../../../plugins/claude/SKILL.md")),
+            version(include_str!("../../../.agents/skills/hotsheet/SKILL.md"))
+        );
     }
 }

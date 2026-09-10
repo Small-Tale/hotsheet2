@@ -258,6 +258,24 @@ test('uses one provider dialog for onboarding, repeated connection creation, and
   await expect(page.locator('.app-error')).toHaveCount(0);
 });
 
+test('blocks a new ticket store before an older project server can accept it',async({page})=>{
+  await page.setViewportSize({width:1536,height:960});
+  await mockProject(page,true,false,0,0,0,true);
+  await page.route('**/__hotsheet/projects/setup-git',route=>route.fulfill({status:400,json:{error:'No ticket repository was created. This project is connected to an older Hot Sheet server build that supports ticket-store schema through 2, while the current Hot Sheet CLI creates schema 3. Finish any active work in this project, stop or restart its detached Hot Sheet server, then reopen the project.'}}));
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const setup=page.locator('[data-ticket-source-setup-dialog]');
+  await expect(setup).toHaveJSProperty('open',true);
+  await setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository',exact:true}).click();
+  const alert=setup.getByRole('alert');
+  await expect(alert).toContainText('No ticket repository was created');
+  await expect(alert).toContainText('supports ticket-store schema through 2');
+  await expect(alert).toContainText('stop or restart its detached Hot Sheet server');
+  await expect(setup).toHaveAttribute('data-navigation','none');
+  await page.screenshot({path:'/private/tmp/hs2-cew85a-store-schema-preflight-after.png',fullPage:true});
+});
+
 test('keeps a dismissed ticket-source setup dialog closed across later project renders (HS2-4Y37T9)',async({page})=>{
   await mockProject(page,true,false,0,0,0,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();const setup=page.locator('[data-ticket-source-setup-dialog]');await expect(setup).toHaveJSProperty('open',true);await setup.getByRole('button',{name:'Close'}).click();await expect(setup).toBeHidden();await page.getByRole('tab',{name:/demo/}).click();await page.getByLabel('Columns view').click();await page.waitForTimeout(350);await expect(setup).toBeHidden();await expect(setup).toHaveJSProperty('open',false);
 });

@@ -288,6 +288,12 @@ cleanup of the old live HS1 data; backups are never removed.
   depend on a server or app-store release becoming available simultaneously. Newer
   incompatible ticket diagnostics are presented as “Hot Sheet 2 update required,” never
   as corrupt files (see [19](19-format-compatibility.md)).
+  Before graphical Git-store creation, the bridge compares the current CLI's created
+  store schema with the server already serving that project. It refuses before creating
+  any repository when the detached server is older, explicitly says no repository was
+  created, identifies both schema boundaries, and directs the user to finish active work
+  before stopping/restarting that project server. The warning is project-scoped: another
+  tab connected to a different, current server correctly remains unbadged.
   an old client offers reload/update, while an old server is surfaced without an unsafe
   restart action unless both restart and quiescence capabilities are explicitly present.
   Every compatibility warning's **View details** action opens an accessible build-details

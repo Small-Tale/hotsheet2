@@ -444,6 +444,12 @@ impl AppState {
     /// was newly added. Shared by `POST /stores` and startup discovery.
     fn host_store(&self, store: FsStore) -> Result<bool, ApiError> {
         let store = store.with_deferred_push();
+        // Validate the store boundary before registering an index, watcher, or discovery
+        // file. Otherwise an older server can appear to accept a newer store and fail only
+        // when its first ticket mutation reaches the writer.
+        store
+            .metadata()
+            .map_err(|error| ApiError::new(StatusCode::CONFLICT, error.to_string()))?;
         let id = multistore::store_url_id(&store);
         if self.host.contains(&id) {
             return Ok(false);
@@ -624,6 +630,7 @@ impl AppState {
     /// State over a store with a fresh **in-memory** index rebuilt from it (tests, or
     /// a run that doesn't want to persist the cache).
     pub fn new(store: FsStore, secret: String) -> anyhow::Result<Self> {
+        store.metadata()?;
         let index = Index::open_in_memory(store.root().display().to_string())?;
         index.rebuild_from_store(&store)?;
         Ok(Self::with_index(store, secret, index))

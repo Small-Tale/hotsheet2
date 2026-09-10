@@ -258,7 +258,12 @@ authenticated capability.
 
 Protocol ranges assume unsynchronized rollout. A non-intersecting range stops project API
 use and identifies which side requires an update; exact build differences remain
-informational. Persisted-format compatibility is independently governed by
+informational. Store attachment is also negotiated before mutation: a server validates
+metadata before registering a store, while `hotsheet-cli compatibility --json` reports
+the schema the CLI creates and (with `-C`) the selected store's schema. A graphical
+bootstrap compares those values with the active project's server range before creating
+anything, so a newer CLI cannot leave an older detached server hosting a store it can
+only fail to write later. Persisted-format compatibility is independently governed by
 [19](19-format-compatibility.md): released readers permanently accept older released
 ticket/store/project/settings fixtures, while newer incompatible markers produce a
 specific upgrade-required result.
@@ -417,7 +422,12 @@ tools that are detected or already have Hot Sheet-managed setup. The server sche
 that same core refresh in the background whenever a project opens or reopens (including
 remembered projects restored at client startup), so opening is not blocked by filesystem
 work. Clean bytes are never rewritten; instruction content outside managed blocks and
-unrelated MCP configuration remain user-owned.
+unrelated MCP configuration remain user-owned. The local development bridge also starts
+the current CLI refresh without awaiting it; this repairs projects attached to a still-
+compatible detached server built before the server hook existed. Bundled managed skills
+carry the same workflow version as the repository adapters, preventing a refresh from
+downgrading current instructions. Executable detection includes Windows `PATHEXT`
+wrappers such as `.cmd` as well as native binaries.
 
 **Headless bootstrap (HS2-J90FXF):** `bootstrap` is the idempotent composition for a
 new or existing code project. It initializes or reuses a standalone HS2 store, links

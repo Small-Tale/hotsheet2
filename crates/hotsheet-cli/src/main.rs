@@ -81,6 +81,12 @@ enum Cmd {
         #[arg(long)]
         acknowledge_pre_release_breakage: bool,
     },
+    /// Report the formats this CLI creates and can open (for headless compatibility checks).
+    Compatibility {
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Create a new ticket.
     New {
         /// Ticket title (positional). Alternatively pass --title.
@@ -841,6 +847,41 @@ fn main() -> Result<()> {
                 "Activated store format {}.",
                 hotsheet_ticketing::STORE_SCHEMA_VERSION
             );
+            Ok(())
+        }
+        Cmd::Compatibility { json } => {
+            let selected_store = cli
+                .path
+                .join(hotsheet_ticketing::STORE_METADATA_FILE)
+                .is_file()
+                .then(|| std::fs::read(cli.path.join(hotsheet_ticketing::STORE_METADATA_FILE)))
+                .transpose()?
+                .map(|bytes| serde_json::from_slice::<hotsheet_ticketing::StoreMetadata>(&bytes))
+                .transpose()?
+                .map(|metadata| metadata.schema_version);
+            let value = serde_json::json!({
+                "generation": "hs2",
+                "application_version": env!("CARGO_PKG_VERSION"),
+                "store_schema": {
+                    "min": 1,
+                    "max": hotsheet_ticketing::STORE_SCHEMA_VERSION,
+                    "creates": hotsheet_ticketing::STORE_SCHEMA_VERSION,
+                },
+                "selected_store_schema": selected_store,
+            });
+            if json {
+                println!("{}", serde_json::to_string(&value)?);
+            } else {
+                println!(
+                    "Hot Sheet 2 CLI {} creates store schema {} and opens schemas 1–{}.",
+                    env!("CARGO_PKG_VERSION"),
+                    hotsheet_ticketing::STORE_SCHEMA_VERSION,
+                    hotsheet_ticketing::STORE_SCHEMA_VERSION
+                );
+                if let Some(schema) = selected_store {
+                    println!("Selected store uses schema {schema}.");
+                }
+            }
             Ok(())
         }
         Cmd::New {

@@ -1265,6 +1265,63 @@ async fn opening_project_without_ticket_sources_keeps_the_checkout_usable() {
 }
 
 #[tokio::test]
+async fn adding_a_newer_store_is_rejected_before_the_checkout_or_host_changes() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let future_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let app = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    std::fs::create_dir_all(future_store.join("tickets")).unwrap();
+    std::fs::write(
+        future_store.join("hotsheet-store.json"),
+        r#"{"schemaVersion":"hotsheet/v99-future","ticketPrefix":"APP","idStrategy":"ulid","shard":"id-suffix-2"}"#,
+    )
+    .unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(&future_store);
+
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/sources/{}", source.connection_id),
+            Some(
+                &serde_json::json!({
+                    "provider": "git",
+                    "locator": future_store,
+                    "make_default": true
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let error = body_json(response).await;
+    assert!(error["error"].as_str().unwrap().contains("newer version"));
+    let checkout = body_json(
+        app.oneshot(authed("GET", &format!("/checkouts/{checkout_id}"), None))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(checkout["sources"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn opening_project_refreshes_stale_setup_in_the_background() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

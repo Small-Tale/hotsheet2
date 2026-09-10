@@ -80,6 +80,31 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
 }
 
 #[test]
+fn compatibility_reports_created_and_selected_store_schemas_headlessly() {
+    let store = tempfile::tempdir().unwrap();
+    hs(store.path())
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    let output = hs(store.path())
+        .args(["compatibility", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let value: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        value["store_schema"]["creates"],
+        hotsheet_ticketing::STORE_SCHEMA_VERSION
+    );
+    assert_eq!(
+        value["selected_store_schema"],
+        hotsheet_ticketing::STORE_SCHEMA_VERSION
+    );
+}
+
+#[test]
 fn edit_preserves_updated_at_for_up_next_only_but_not_mixed_mutations() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

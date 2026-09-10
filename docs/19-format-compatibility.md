@@ -43,3 +43,10 @@ unversioned legacy settings/project registries and write version 1 markers. They
 future markers with upgrade guidance. Ticket diagnostics expose `error_code` as either
 `invalid_ticket` or `upgrade_required`, allowing every client to preserve healthy rows
 while presenting newer tickets accurately.
+
+Store-schema compatibility is checked before a store is attached to a server, not on its
+first ticket mutation. `hotsheet-cli compatibility --json` exposes the schema the current
+headless bootstrap creates and, when `-C` selects a store, that store's schema. Graphical
+bootstrap compares it with the active project's authenticated server range before writing
+the new repository. If an older detached server cannot host it, creation is refused with
+project-scoped restart guidance and no partially usable store is left behind.

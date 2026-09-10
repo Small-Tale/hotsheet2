@@ -60,8 +60,8 @@ pub use secrets::{
 };
 pub use settings::{Scope, Settings, SettingsError};
 pub use store::{
-    AtomicAttachment, CorruptTicket, FsStore, STORE_SCHEMA_VERSION, StoreError, StoreListing,
-    StoreMetadata, recover_ticket_identity,
+    AtomicAttachment, CorruptTicket, FsStore, STORE_METADATA_FILE, STORE_SCHEMA_VERSION,
+    StoreError, StoreListing, StoreMetadata, recover_ticket_identity,
 };
 pub use sync::{SyncReport, sync_once};
 pub use wire::{ApiNote, ApiTicket, TicketRow};

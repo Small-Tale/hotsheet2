@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs, requireCompatibleServer, requireReportedCorruptPath, revealCommand, runGitCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs, projectSessionRegistry, refreshLocalProjectSetup, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -25,6 +25,21 @@ describe('developmentRepositoryRoot', () => {
 
   it('retains the normal clients/web fallback for hot development', () => {
     expect(developmentRepositoryRoot('/work/hotsheet2/clients/web', {})).toBe('/work/hotsheet2');
+  });
+});
+
+describe('project setup compatibility',()=>{
+  const cli={generation:'hs2',store_schema:{min:1,max:3,creates:3},selected_store_schema:3};
+  const oldServer={generation:'hs2',protocol:{min:1,max:1},store_schema:{min:1,max:2}};
+  it('rejects create and open before a newer store crosses an older server boundary',()=>{
+    expect(()=>{requireStoreSchemaCompatibility(oldServer,cli,'create')}).toThrow(/No ticket repository was created.*supports ticket-store schema through 2.*creates schema 3/i);
+    expect(()=>{requireStoreSchemaCompatibility(oldServer,cli,'open')}).toThrow(/cannot be opened through that server.*found schema 3/i);
+    expect(()=>{requireStoreSchemaCompatibility({...oldServer,store_schema:{min:1,max:3}},cli,'open')}).not.toThrow();
+  });
+  it('exposes the same setup refresh as a non-graphical CLI operation',async()=>{
+    const runner=vi.fn().mockResolvedValue('');
+    await refreshLocalProjectSetup('/work/code','/work/tickets.hs2',runner);
+    expect(runner).toHaveBeenCalledWith(expect.stringContaining('hotsheet-cli'),['-C','/work/tickets.hs2','setup','--refresh','--project','/work/code'],expect.any(String));
   });
 });
 
@@ -104,6 +119,21 @@ describe('native folder chooser',()=>{
       expect(calls[1]).toEqual(calls[0]);
     } finally {
       await rm(directory,{recursive:true,force:true});
+    }
+  });
+  it('preflights the active project server and leaves no store when its schema range is older',async()=>{
+    const directory=await mkdtemp(resolve(tmpdir(),'hotsheet-client-schema-')),project=resolve(directory,'project'),store=resolve(directory,'tickets.hs2');
+    await mkdir(project);
+    const canonicalProject=await realpath(project),sessions=projectSessionRegistry(),runner=vi.fn().mockResolvedValue(JSON.stringify({generation:'hs2',store_schema:{min:1,max:3,creates:3}}));
+    sessions.set('schema-preflight',{url:'http://older-server.test',secret:'private',root:canonicalProject});
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({generation:'hs2',protocol:{min:1,max:1},store_schema:{min:1,max:2}}),{status:200,headers:{'content-type':'application/json'}})));
+    try{
+      await expect(createLocalGitTicketStore(project,store,runner)).rejects.toThrow(/No ticket repository was created.*schema through 2/i);
+      expect(runner).toHaveBeenCalledOnce();
+      expect(runner.mock.calls[0]?.[1]).toEqual(['compatibility','--json']);
+      await expect(realpath(store)).rejects.toThrow();
+    }finally{
+      sessions.delete('schema-preflight');vi.unstubAllGlobals();await rm(directory,{recursive:true,force:true});
     }
   });
   it('exposes git ticket-store setup only through the local development bridge',async()=>{

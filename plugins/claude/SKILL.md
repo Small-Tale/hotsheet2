@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 37 -->
+<!-- hotsheet-skill-version: 44 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -21,17 +21,30 @@ actionable Up Next ticket; completing one ticket is not a stopping condition.
    bounded investigations in parallel. Do not parallelize tickets that edit the same
    surfaces or depend on unresolved decisions. The primary agent owns integration,
    ticket status, verification, and publishing.
-3. **Work each ticket end to end.** Mark it started, implement and verify its scope, run
-   the completion checklist below, then mark it completed with a result and verification note.
+3. **Work each ticket end to end under an exact claim lease.** Choose one stable,
+   session-specific worker id. Immediately before active work, claim the assigned ticket
+   with the atomic CLI form
+   `hotsheet-cli claim <id> --worker <worker> [--label <label>] [--lease-minutes N]`,
+   which acquires the claim and changes Not Started to Started in one durable write.
+   Do not issue separate claim and status commands. Renew
+   before the lease expires and before lengthy work with `hotsheet_renew` or
+   `hotsheet-cli renew`; release with `hotsheet_release` or `hotsheet-cli release` when
+   work stops for completion, handoff, error, or feedback. If another worker holds the
+   live lease, do not work concurrently; replan around other tickets. Then implement and
+   verify scope, run the completion checklist, and mark completed with a result and
+   verification note. Delegated workers claim their own exact assigned ticket and use a
+   distinct worker id; the primary agent remains responsible for integration.
 4. **Create every follow-up immediately, without asking.** As soon as you identify an
    unfinished step, open question, known gap, out-of-scope task, or designed-but-unbuilt
    behavior, create its ticket. Do not ask permission, wait, promise to file it later, or
    leave it only in a comment/TODO/note. Reference every follow-up slug in the current
    ticket's completing note, then continue.
 5. **Publish at ticket boundaries.** Run required gates, review the diff, make one commit
-   for that ticket, and push before beginning the next sequential ticket. Combine tickets
-   only when their implementations overlap so strongly that separation would be unsafe
-   or misleading, or when they are duplicates. Integrate parallel tickets separately.
+   for that ticket, include its ticket slug in the commit message, and push before
+   beginning the next sequential ticket. Combine tickets only when their implementations
+   overlap so strongly that separation would be unsafe or misleading, or when they are
+   duplicates; a combined commit message must reference every ticket slug it addresses.
+   Integrate parallel tickets separately.
 6. **Re-read the queue after every completion.** Concurrent work and new findings can
    change the plan. Continue until no actionable Up Next ticket remains.
 
@@ -53,6 +66,20 @@ for a ticket attachment. If capture or attachment is genuinely impossible after 
 safe alternatives, state the specific reason in the completion note. Screenshots supplement
 behavioral assertions; they do not replace them.
 
+Before attaching correctness evidence, apply `CLAUDE.md`'s visual-QA policy to the actual
+capture, not just its assertions: critically inspect readability, usability, contextual
+aesthetic fit and flow/order, clipping or truncation, icon-label alignment, spacing,
+responsive behavior, and any other obvious defect. Fix every defect found, rerun affected
+checks, and recapture; attach only evidence fit to hand off. An imperfect screenshot may be
+attached only as explicit `problem_evidence` in a `FEEDBACK NEEDED` blocker that names the
+real tradeoff or question—never as completion proof.
+
+When attaching AI-generated evidence files from one verification operation, pass
+them in one command (`hotsheet-cli attach <ticket> --actor-role ai --actor-id <worker-id> --purpose correctness_evidence <files…>`)
+so they receive one durable batch identity and AI attribution. Use `problem_evidence` for
+captures demonstrating a defect, `reference` for supporting material, and `other` only
+when none of the semantic purposes fit. Do not run one attach command per file in a set.
+
 Stop early only for an explicit user ticket/time/budget limit, an empty queue, or a
 genuine blocker requiring user input or unavailable external state. For that current-
 ticket blocker, leave the ticket started and add a `FEEDBACK NEEDED:` note naming the
@@ -68,9 +95,18 @@ Notes:
   HS1. If uncertain, use `hotsheet-cli -C <HS2-store>`.
 - If a ticket is unclear, do not guess. Record the needed decision, continue independent
   tickets, and return if the answer becomes available.
-- Activity notes are timeline history, not the primary result. Write investigation
-  conclusions, decisions, and important recommendations as `regular` Markdown notes,
-  with an optional short activity entry pointing to them.
+- When a genuine user decision can be narrowed to concise, distinct options, a
+  `FEEDBACK NEEDED` note may include an uppercase `CHOICE` or `CHOICE:` line immediately
+  followed by a Markdown list. Options may include attachment references. Use choices
+  to make a decision easier, not to offload ordinary implementation judgment or replace
+  an open-ended question. Users may select zero or multiple options and may always add a
+  freeform response, so do not describe the list as exhaustive or require a selection.
+- AI-authored `activity` notes include `--note-summary "Concise outcome"` (or MCP
+  `note_summary`) in the same update. Keep it plain-text, one line, outcome-oriented,
+  preferably at most 80 characters, and leave implementation/verification detail in
+  the full Markdown note body. Activity is timeline history, not the primary result:
+  write investigation conclusions, decisions, and important recommendations as `regular`
+  Markdown notes, with an optional short activity entry pointing to them.
 - Notes support Markdown. For multiline CLI notes, pass real line breaks with
   `hotsheet-cli edit <slug> --note-file <path>` or stdin via `--note-file -`; do not put
   JSON-escaped `\\n` sequences in `--note`. The CLI rejects likely escaped line breaks
