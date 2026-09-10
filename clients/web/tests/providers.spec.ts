@@ -170,7 +170,7 @@ test('opens a roomy project dialog with native browse controls and working cance
   await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.project-dialog__error')).toBeEmpty();await expect(page.locator('.app-error')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
 });
 
-test('keeps the project dialog dismissed after an inline error',async({page})=>{
+test('falls back to the project dialog when the direct native chooser fails',async({page})=>{
   await mockProject(page);
   await page.route('**/__hotsheet/folders/choose',async route=>{await new Promise(resolve=>setTimeout(resolve,250));await route.fulfill({status:500,json:{error:'The native folder chooser failed.'}})});
   await page.goto('/');
@@ -179,7 +179,8 @@ test('keeps the project dialog dismissed after an inline error',async({page})=>{
   await expect(page.locator('[data-project-dialog]')).toBeHidden();
   await page.getByRole('button',{name:'Add project'}).click();
   const dialog=page.locator('[data-project-dialog]');
-  await page.getByRole('button',{name:'Browse for project folder'}).click();
+  await expect(dialog).toHaveJSProperty('open',true);
+  await expect(dialog.locator('.project-dialog__error')).toContainText('The native folder chooser failed.');
   await dialog.getByRole('button',{name:'Close'}).click();
   await expect(dialog).toBeHidden();
   await page.waitForTimeout(500);
@@ -189,6 +190,7 @@ test('keeps the project dialog dismissed after an inline error',async({page})=>{
 
 test('clears a failed project-open error when retrying successfully',async({page})=>{
   await mockProject(page);
+  await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));
   await page.goto('/');
   await page.getByRole('button',{name:'Open project'}).click();
   await page.getByRole('button',{name:'Open project',exact:true}).last().click();
@@ -197,17 +199,27 @@ test('clears a failed project-open error when retrying successfully',async({page
     if(failNextOpen){failNextOpen=false;return route.fulfill({status:409,json:{error:'The previous detached server only supports schema 2.'}})}
     return route.fallback();
   });
-  const retry=async(openDialog=false)=>{
-    if(openDialog)await page.getByRole('button',{name:'Add project'}).click();
-    await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string})=>{node.value='/work/other';node.dispatchEvent(new Event('input',{bubbles:true}))});
-    await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  };
-  await retry(true);
+  const retry=async()=>page.getByRole('button',{name:'Add project'}).click();
+  await retry();
   await expect(page.locator('.app-error')).toContainText('only supports schema 2');
   await retry();
   await expect(page.locator('.app-error')).toHaveCount(0);
   await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
   await page.screenshot({path:'/private/tmp/hs2-nzffdh-successful-project-retry.png',fullPage:true});
+});
+
+test('opens the native folder chooser directly from Add project and only onboards a source-less checkout once',async({page})=>{
+  await page.setViewportSize({width:1100,height:760});await mockProject(page,true,false,0,0,0,false,0);
+  let configured=false;const openedRoots:string[]=[];
+  await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));
+  await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;openedRoots.push(root);return route.fulfill({status:201,json:root==='/work/other'?{...project,id:'other-checkout',root,name:'other',stores:configured?['/work/other.hs2']:[],apiPath:'/__hotsheet/project-api/other-checkout',needsTicketSetup:!configured}:project})});
+  await page.route('**/__hotsheet/projects/setup-git',route=>{configured=true;return route.fulfill({status:201,json:{ticketStore:'/work/other.hs2',connectionId:'git-other'}})});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');expect(openedRoots).toEqual(['/Users/westphal/Documents/hotsheet2','/work/other']);await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const setup=page.locator('[data-ticket-source-setup-dialog]');await expect(setup).toHaveJSProperty('open',true);await expect(setup).toContainText('other is open, but it does not have a ticket source yet.');await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-gcbc3e-direct-add-project-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-gcbc3e-direct-add-project-narrow.png',fullPage:true});
+  await page.setViewportSize({width:1100,height:760});await setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository',exact:true}).click();await expect(setup.getByText('Back up this ticket repository')).toBeVisible();await setup.getByRole('button',{name:'Close'}).click();
+  const otherTab=page.locator('[data-component="project-tab"]').filter({has:page.getByRole('tab',{name:'other'})});await otherTab.hover();await otherTab.getByRole('button',{name:'Close other'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveCount(0);
+  await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');await expect(setup).toBeHidden();await expect(setup).toHaveJSProperty('open',false);await expect(page.locator('[data-project-dialog]')).toBeHidden();expect(openedRoots).toEqual(['/Users/westphal/Documents/hotsheet2','/work/other','/work/other']);
 });
 
 test('uses one provider dialog for onboarding, repeated connection creation, and editing',async({page})=>{
@@ -1602,8 +1614,8 @@ test('resolves exact ticket links across projects and shows only a compact ambig
   await page.route('**/tickets/01',route=>route.request().method()==='GET'?route.fulfill({json:{store:'git-local',...full,details:'Open HS2-OTHER1. Missing: HS2-MISSING. Choose HS2-SHARED1. Explicit: @other-checkout/HS2-SHARED1.',notes:[]}}):route.fallback());
   await page.route('**/tickets/other-unique',route=>route.fulfill({json:{store:'git-local',...otherUnique,details:'Cross-project destination.',notes:[],attachments:[]}}));
   await page.route('**/tickets/shared-other',route=>route.fulfill({json:{store:'git-local',...sharedOther,details:'Chosen cross-project destination.',notes:[],attachments:[]}}));
+  await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();
-  await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string})=>{node.value='/work/other';node.dispatchEvent(new Event('input',{bubbles:true}))});await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const openSource=async()=>{await page.getByRole('tab',{name:'demo'}).click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();return page.locator('[data-component="ticket-inspector"]')};
   let inspector=await openSource();await inspector.getByRole('link',{name:'HS2-OTHER1',exact:true}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');await expect(page.locator('[data-component="ticket-inspector"]')).toContainText('Other unique ticket');
   inspector=await openSource();await inspector.getByRole('link',{name:'HS2-MISSING',exact:true}).click();await expect(page.locator('.app-toast')).toContainText('No exact match for HS2-MISSING.');
@@ -1712,7 +1724,7 @@ test('previews rows with a border-only outline and keeps column cards borderless
 
 test('drops selected tickets on another project tab to copy them there',async({page})=>{
   const creates:string[]=[];await mockProject(page);await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;if(root==='/work/other')return route.fulfill({status:201,json:{...project,id:'other-checkout',root,name:'other',apiPath:'/__hotsheet/project-api/other-checkout'}});return route.fulfill({status:201,json:project})});page.on('request',request=>{const path=new URL(request.url()).pathname;if(request.method()==='POST'&&path.includes('/checkouts/other-checkout/tickets'))creates.push(path)});
-  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string})=>{node.value='/work/other';node.dispatchEvent(new Event('input',{bubbles:true}))});await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('tab',{name:'demo'}).click();const first=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');await expect(first).toBeVisible();await first.click();await second.click({modifiers:['Meta']});
+  await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();await page.getByRole('tab',{name:'demo'}).click();const first=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),second=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-START02"]');await expect(first).toBeVisible();await first.click();await second.click({modifiers:['Meta']});
   await first.evaluate(node=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));document.querySelector<HTMLElement>('[data-ticket-drop-project="other-checkout"]')!.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:transfer}))});const destination=page.locator('[data-ticket-drop-project="other-checkout"]');await expect(destination).toHaveAttribute('data-dragging-ticket','true');await destination.dispatchEvent('drop');await expect.poll(()=>creates.length).toBe(2);await expect(page.locator('.app-toast')).toContainText('2 tickets copied to other.');await expect(page.getByRole('tab',{name:'demo'})).toHaveAttribute('aria-selected','true');
 });
 
@@ -1721,8 +1733,9 @@ test('switches already-open projects from cache within one frame and rejects sta
   let holdRefreshes=false;const pending=new Map<string,import('@playwright/test').Route>();
   await mockProject(page);
   await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;if(root==='/work/other')return route.fulfill({status:201,json:{...project,id:'other-checkout',root,name:'other',apiPath:'/__hotsheet/project-api/other-checkout'}});return route.fulfill({status:201,json:project})});
+  await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));
   await page.route('**/__hotsheet/project-api/*/checkouts/*/tickets',route=>{if(route.request().method()!=='GET')return route.fallback();const path=new URL(route.request().url()).pathname,other=path.includes('/other-checkout/'),rows=other?[otherRow]:[row,notStartedRow];if(holdRefreshes){pending.set(other?'other':'demo',route);return}return route.fulfill({json:rows})});
-  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string})=>{node.value='/work/other';node.dispatchEvent(new Event('input',{bubbles:true}))});await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();
   await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();holdRefreshes=true;
   const switchWithinFrame=async(name:string)=>page.evaluate(async label=>{const tab=[...document.querySelectorAll<HTMLElement>('[role="tab"]')].find(item=>item.textContent.trim()===label)!;const start=performance.now();tab.click();await new Promise<void>(resolve=>requestAnimationFrame(()=>{resolve()}));return performance.now()-start},name);
   expect(await switchWithinFrame('demo')).toBeLessThan(100);await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toHaveCount(0);await expect(page.locator('.app-loading')).toHaveCount(0);await expect.poll(()=>pending.has('demo')).toBe(true);
@@ -1732,7 +1745,7 @@ test('switches already-open projects from cache within one frame and rejects sta
 });
 
 test('reorders project and terminal tabs while preserving project order and complete keyboard focus',async({page})=>{
-  await page.setViewportSize({width:1100,height:840});await mockProject(page);await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;return route.fulfill({status:201,json:root==='/work/other'?{...project,id:'other-checkout',root,name:'other',apiPath:'/__hotsheet/project-api/other-checkout'}:project})});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string})=>{node.value='/work/other';node.dispatchEvent(new Event('input',{bubbles:true}))});await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.setViewportSize({width:1100,height:840});await mockProject(page);await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;return route.fulfill({status:201,json:root==='/work/other'?{...project,id:'other-checkout',root,name:'other',apiPath:'/__hotsheet/project-api/other-checkout'}:project})});await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Add project'}).click();
   const projectTabs=page.locator('[data-component="project-tab"]'),projectNames=()=>projectTabs.getByRole('tab').allTextContents();await expect.poll(projectNames).toEqual(['demo','other']);await projectTabs.nth(0).dragTo(projectTabs.nth(1),{targetPosition:{x:70,y:16}});await expect.poll(projectNames).toEqual(['other','demo']);await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual(['/work/other','/work/demo']);
   await projectTabs.getByRole('tab',{name:'demo'}).click();await projectTabs.getByRole('tab',{name:'demo'}).focus();const focusGeometry=await projectTabs.filter({has:page.getByRole('tab',{name:'demo'})}).evaluate(element=>{const tab=element.getBoundingClientRect(),scroller=element.parentElement!.getBoundingClientRect();return{leftInset:tab.left-scroller.left,rightInset:scroller.right-tab.right}});expect(focusGeometry.leftInset).toBeGreaterThanOrEqual(3);expect(focusGeometry.rightInset).toBeGreaterThanOrEqual(3);await page.screenshot({path:'/private/tmp/hs2-bkgfy7-q6f4f3-project-tab-focus-wide.png',fullPage:true});await page.setViewportSize({width:700,height:720});await expect(projectTabs.getByRole('tab',{name:'demo'})).toBeInViewport();await page.screenshot({path:'/private/tmp/hs2-bkgfy7-q6f4f3-project-tab-focus-narrow.png',fullPage:true});
   await page.reload();await expect.poll(projectNames).toEqual(['other','demo']);await expect(projectTabs.getByRole('tab',{name:'demo'})).toHaveAttribute('aria-selected','true');await projectTabs.getByRole('tab',{name:'other'}).focus();await page.keyboard.press('Tab');await expect(projectTabs.getByRole('tab',{name:'demo'})).toBeFocused();await page.keyboard.press('ArrowRight');await expect(projectTabs.getByRole('tab',{name:'other'})).toBeFocused();

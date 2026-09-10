@@ -16,4 +16,11 @@ describe('project dialog lifecycle', () => {
     expect(source).toMatch(/delegate\(document\.body,'wa-hide','\[data-ticket-source-setup-dialog\]'/);
     expect(source).not.toMatch(/delegate\(document\.body,'wa-request-close','\[data-ticket-source-setup-dialog\]'/);
   });
+
+  it('routes the project-tab plus directly through the native chooser', () => {
+    const source = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8');
+
+    expect(source).toMatch(/delegate\(document\.body,'click','\[data-action="choose-project"\]',\(\)=>\{void chooseAndOpenProject\(\)\}\)/);
+    expect(source).toMatch(/if\(result\.path\)await openProject\(result\.path\)/);
+  });
 });

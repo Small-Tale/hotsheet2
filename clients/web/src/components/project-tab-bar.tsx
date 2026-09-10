@@ -21,7 +21,7 @@ export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project' 
     </div>
     <div class="project-tab-bar__tabs" role="tablist" aria-label={label}>{tabs.map(tab => <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />)}</div>
     <div class="project-tab-bar__actions">
-      <wa-button appearance="plain" data-action="add-project" aria-label="Add project" title="Add project"><LucideIcon icon={Plus} name="plus" /></wa-button>
+      <wa-button appearance="plain" data-action="choose-project" aria-label="Add project" title="Add project"><LucideIcon icon={Plus} name="plus" /></wa-button>
     </div>
   </nav>;
 }

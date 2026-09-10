@@ -270,19 +270,25 @@ cleanup of the old live HS1 data; backups are never removed.
 
 - **Real local web entry point (initial implementation, HS2-0P1MDG).** `/` renders the
   production AppShell over checkout-scoped server APIs; `/ux-demo` remains the isolated
-  development catalog. The project-tab `+` action opens a code-checkout dialog. On first
-  open, the server conservatively discovers a valid sibling `<checkout>.hs2` git ticket
-  store, hosts it, and records the many-to-many checkout/store link. The roomy 48rem
-  dialog accepts an explicit git-store path when the convention does not apply; both
-  paths have host-native folder chooser buttons, and Cancel/Escape are controlled by
-  durable dialog state so unrelated renders cannot reopen or strand the surface.
+  development catalog. The project-tab `+` action invokes the host-native code-checkout
+  folder chooser immediately and sends a selected folder directly to project open. The
+  initial empty-state Open project action retains the roomy 48rem dialog so an explicit
+  git-store path can be supplied when convention-based discovery does not apply; both
+  dialog paths have host-native chooser buttons, and Cancel/Escape are controlled by
+  durable state so unrelated renders cannot reopen or strand the surface. On open, the
+  server conservatively discovers a valid sibling `<checkout>.hs2` git ticket store,
+  hosts it, and records the many-to-many checkout/store link.
   Retrying a failed project open clears the prior failure immediately. During startup,
   one failed hidden remembered project is pruned from the remembered set and reported
   non-modally; it must never leave stale compatibility or connection diagnostics over a
   different project that reopened successfully.
-  Source-less project setup uses a bounded dialog with shared multiline menu items whose
-  title and explanation remain inside one selectable row at compact sizes. It waits for
-  the project dialog's completed close event, so the two modal surfaces never overlap.
+  A checkout with existing sources opens directly. Source-less project setup uses a
+  bounded dialog with shared multiline menu items whose title and explanation remain
+  inside one selectable row at compact sizes. When opening from the initial dialog it
+  waits for that dialog's completed close event, so the two modal surfaces never overlap;
+  the direct `+` flow presents setup as soon as project open identifies zero sources.
+  Once a source is attached, later close/reopen operations use the persisted checkout
+  source link and do not repeat onboarding.
   Forward and backward setup navigation uses the shared stable A/B `ContentTransition`:
   the outgoing and incoming content areas move together for an iOS-style push/pop, while
   crossfade and motion-free replacement remain reusable variants in the UX catalog.

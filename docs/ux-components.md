@@ -324,8 +324,11 @@ does not introduce polling or another network request.
   an incomplete Lucide arc; browser coverage samples its center across animation frames.
 - `ProjectTabContextMenu` — **built** with Lucide icons for Close Tab, Close Other
   Tabs, Close Tabs to the Right, and Close All Tabs.
-- `AddProjectButton` — **demo built** with controlled insertion and selection.
-- `ProjectPicker` — remains part of the later add-project flow.
+- `AddProjectButton` — **production + demo built** with controlled insertion and selection;
+  production invokes the host-native folder chooser immediately.
+- `ProjectPicker` — **production built** as the native chooser boundary; a selected
+  checkout opens directly, with ticket-source setup shown only when the project reports
+  no configured source.
 - `TabOverflowMenu` — removed from the current design; the project strip itself is
   horizontally scrollable and does not duplicate projects in a secondary menu.
 - `TerminalDashboardButton` and `CrossProjectStatsButton` — **shell navigation built**
