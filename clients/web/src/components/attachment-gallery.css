@@ -15,6 +15,7 @@
 .attachment-gallery__media-wrap[data-draw-mode="true"] { cursor:crosshair; }
 .attachment-gallery__annotations { position:absolute; z-index:1; inset:0; pointer-events:none; }
 .attachment-gallery__annotation { position:absolute; padding:0; border:1px solid color-mix(in srgb,var(--wa-color-neutral-on-loud) 70%,transparent); color:var(--wa-color-neutral-on-loud); background:color-mix(in srgb,var(--wa-color-neutral-fill-loud) 8%,transparent); pointer-events:auto; }
+.attachment-gallery__annotation[hidden] { display:none; }
 .attachment-gallery__annotation[data-selected="true"] { border:2px solid var(--wa-color-brand-border-loud); background:color-mix(in srgb,var(--wa-color-brand-fill-normal) 9%,transparent); }
 .attachment-gallery__annotation-label { position:absolute; top:0; left:0; max-width:100%; padding:var(--wa-space-2xs) var(--wa-space-xs); overflow:hidden; border-radius:0 0 var(--wa-border-radius-s) 0; color:var(--wa-color-neutral-on-loud); background:color-mix(in srgb,var(--wa-color-neutral-fill-loud) 70%,transparent); font-size:var(--wa-font-size-xs); text-overflow:ellipsis; white-space:nowrap; }
 .attachment-gallery__annotation[data-selected="true"] .attachment-gallery__annotation-label { background:var(--wa-color-brand-fill-loud); }

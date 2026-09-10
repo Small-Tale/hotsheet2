@@ -47,6 +47,7 @@ import {
 } from 'lucide';
 
 import { AppTab } from '../components/app-tab';
+import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
 import { LucideIcon } from '../components/lucide-icon';
 import { MenuHeader } from '../components/menu-header';
 import { MenuItem } from '../components/menu-item';
@@ -2179,6 +2180,18 @@ delegate(root, 'click', '[data-action="toggle-gallery-draw"]', () => {
 delegate(root, 'click', '[data-action="toggle-gallery-playback"]', () => {
   galleryDemoPlaying.value = !galleryDemoPlaying.value;
 });
+delegate(root, 'keydown', '[data-component="attachment-gallery"]', (event) => {
+  const keyboard = event as KeyboardEvent, origin = event.target as Element, playheadControl = origin.matches('input[name="gallery-playhead"]');
+  if (!root.querySelector('.attachment-gallery video') || (!playheadControl && origin.closest('button,input,textarea,select,[contenteditable="true"]'))) return;
+  const action = attachmentGalleryKeyboardAction(keyboard.key, galleryDemoPlayhead.value, 6000, keyboard.shiftKey);
+  if (!action) return;
+  event.preventDefault();
+  if (action.kind === 'toggle-playback') galleryDemoPlaying.value = !galleryDemoPlaying.value;
+  else {
+    galleryDemoPlaying.value = false;
+    galleryDemoPlayhead.value = action.playheadMs;
+  }
+});
 delegate(root, 'input', 'input[name="gallery-playhead"]', (_event, target) => {
   galleryDemoPlayhead.value = Number((target as HTMLInputElement).value);
 });
@@ -2199,6 +2212,10 @@ delegate(root, 'click', '[data-action="toggle-gallery-muted"]', () => {
 });
 root.addEventListener('click', event => {
   if (galleryDemoVolumeOpen.value && !(event.target as Element).closest('.attachment-gallery__volume')) galleryDemoVolumeOpen.value = false;
+});
+delegateCapture(root, 'pointerdown', '[data-gallery-annotation-surface="true"]', (event) => {
+  if (!galleryDemoMarkup.value || (event.target as Element).closest('[data-annotation-id]')) return;
+  galleryDemoSelectedAnnotation.value = undefined;
 });
 delegate(root, 'keydown', '[data-gallery-range-handle]', (event, target) => {
   const keyboard = event as KeyboardEvent;

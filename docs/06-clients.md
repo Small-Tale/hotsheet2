@@ -515,7 +515,11 @@ cleanup of the old live HS1 data; backups are never removed.
   a click-persistent popup containing both the slider and mute action; only clicking
   outside that popup dismisses it. Playback ticks and scrub input update the live gallery
   imperatively and commit state only at interaction boundaries, avoiding application-wide
-  Kerf renders for every media event. Closing or changing gallery media explicitly pauses
+  Kerf renders for every media event without allowing an intervening render to reset an
+  in-progress scrub to `00:00`. When the video canvas has focus, Space or K toggles playback,
+  Left/Right step one 30-fps frame, Shift+Left/Right and J/L jog one second, and Home/End seek
+  to the media boundaries; video jogging never activates the image-gallery navigation path.
+  Closing or changing gallery media explicitly pauses
   and releases the prior video resource. The playback footer occupies layout space below the media
   stage, so both contain and cover scales are calculated from the space that remains.
   Full-screen media preserves the source image or video's square outer geometry: the
@@ -532,11 +536,16 @@ cleanup of the old live HS1 data; backups are never removed.
   Full-screen markup mode follows the exported image/video gallery wireframes: normalized
   rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
   and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
-  time ranges; only ranges at the current playhead appear over the media, while persistent
+  time ranges. New timed rectangles span five percent of the media duration before and after
+  the playhead, clamped at either media boundary. Rectangles appear over the media only while
+  the playhead is inside their range or its review tolerance (the larger of one second or one
+  percent of the media duration), while persistent
   white wireframe-style ticks remain over the scrubber. The selected annotation's presence
   indicator spans at least its complete time range. Selecting a visible annotation rectangle
   adds high-contrast white square-bracket range handles to the timeline; those endpoints can
-  be dragged or adjusted with the arrow keys, replacing ambiguous toolbar chevrons.
+  be dragged or adjusted with the arrow keys, replacing ambiguous toolbar chevrons. Only the
+  selected annotation exposes adjustable range brackets, and clicking empty image or video
+  canvas space clears the rectangle selection and its resize/range handles.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible
   before opening the media.

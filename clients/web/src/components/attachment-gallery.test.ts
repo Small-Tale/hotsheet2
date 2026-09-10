@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 
 import {describe,expect,it} from 'vitest';
 
-import {AttachmentGallery,attachmentGalleryImageIndex,attachmentGallerySelectionUrl,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
+import {AttachmentGallery,attachmentGalleryAnnotationTolerance,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
 
 describe('AttachmentGallery',()=>{
   const images=[{id:'a',name:'a.png',url:'/a.png'},{id:'b',name:'b.svg',url:'/b.svg'}];
@@ -70,6 +70,44 @@ describe('AttachmentGallery',()=>{
     expect(markup).toContain('Check **this**');
     expect(markup).toContain('aria-label="Finish markup, 1 annotation"');
     expect(markup).toContain('attachment-gallery__annotation-count');
+  });
+  it('renders range handles only for the currently selected timed annotation',()=>{
+    const annotations=[{id:'first',x:100,y:100,width:1000,height:1000,start_ms:1000,end_ms:2000,text:'First'},{id:'second',x:200,y:200,width:1000,height:1000,start_ms:3000,end_ms:4000,text:'Second'}];
+    const selected=String(AttachmentGallery({images:[{id:'video',name:'clip.mp4',url:'/clip.mp4'}],activeUrl:'/clip.mp4',markup:true,selectedAnnotation:'second',playheadMs:3000,durationMs:10_000,annotations}));
+    expect(selected.match(/data-gallery-range-handle=/g)).toHaveLength(2);
+    expect(selected).toContain('data-annotation-id="second" style="left:30%"');
+    const deselected=String(AttachmentGallery({images:[{id:'video',name:'clip.mp4',url:'/clip.mp4'}],activeUrl:'/clip.mp4',markup:true,playheadMs:3000,durationMs:10_000,annotations}));
+    expect(deselected).not.toContain('data-gallery-range-handle=');
+  });
+  it('uses a duration-scaled review tolerance around timed rectangles',()=>{
+    const range={id:'range',x:0,y:0,width:1,height:1,start_ms:10_000,end_ms:20_000,text:''};
+    expect(attachmentGalleryAnnotationTolerance(20_000)).toBe(1000);
+    expect(attachmentGalleryAnnotationTolerance(200_000)).toBe(2000);
+    expect(attachmentGalleryAnnotationVisible(range,9000,20_000)).toBe(true);
+    expect(attachmentGalleryAnnotationVisible(range,21_000,20_000)).toBe(true);
+    expect(attachmentGalleryAnnotationVisible(range,8999,20_000)).toBe(false);
+    expect(attachmentGalleryAnnotationVisible(range,21_001,20_000)).toBe(false);
+    expect(attachmentGalleryAnnotationVisible({...range,start_ms:15_000,end_ms:15_000},14_000,20_000)).toBe(true);
+    expect(readFileSync(new URL('./attachment-gallery.css',import.meta.url),'utf8')).toContain('.attachment-gallery__annotation[hidden] { display:none; }');
+  });
+  it('defaults new timed annotations to five percent on each side and clamps media edges',()=>{
+    expect(attachmentGalleryDefaultRange(5000,10_000)).toEqual({start_ms:4500,end_ms:5500});
+    expect(attachmentGalleryDefaultRange(100,10_000)).toEqual({start_ms:0,end_ms:600});
+    expect(attachmentGalleryDefaultRange(9900,10_000)).toEqual({start_ms:9400,end_ms:10_000});
+    expect(attachmentGalleryDefaultRange(-100,10_000)).toEqual({start_ms:0,end_ms:500});
+  });
+  it('maps standard playback and frame-jogging keys with bounded repeated transitions',()=>{
+    expect(attachmentGalleryKeyboardAction(' ',1500,6000)).toEqual({kind:'toggle-playback'});
+    expect(attachmentGalleryKeyboardAction('k',1500,6000)).toEqual({kind:'toggle-playback'});
+    expect(attachmentGalleryKeyboardAction('ArrowRight',1500,6000)).toEqual({kind:'seek',playheadMs:1533});
+    expect(attachmentGalleryKeyboardAction('ArrowLeft',0,6000)).toEqual({kind:'seek',playheadMs:0});
+    expect(attachmentGalleryKeyboardAction('ArrowRight',1500,6000,true)).toEqual({kind:'seek',playheadMs:2500});
+    expect(attachmentGalleryKeyboardAction('j',500,6000)).toEqual({kind:'seek',playheadMs:0});
+    expect(attachmentGalleryKeyboardAction('l',5500,6000)).toEqual({kind:'seek',playheadMs:6000});
+    expect(attachmentGalleryKeyboardAction('Home',5500,6000)).toEqual({kind:'seek',playheadMs:0});
+    expect(attachmentGalleryKeyboardAction('End',500,6000)).toEqual({kind:'seek',playheadMs:6000});
+    expect(attachmentGalleryKeyboardAction('Escape',500,6000)).toBeUndefined();
+    let playhead=5990;for(let index=0;index<4;index++){const action=attachmentGalleryKeyboardAction('ArrowRight',playhead,6000);if(action?.kind==='seek')playhead=action.playheadMs}expect(playhead).toBe(6000);
   });
   it('uses the same point/range controls for animated SVG annotations',()=>{
     const markup=String(AttachmentGallery({images:[{id:'svg',name:'animated.svg',url:'/animated.svg'}],activeUrl:'/animated.svg',markup:true,playheadMs:500,durationMs:2000,annotations:[{id:'point',x:100,y:100,width:1000,height:1000,start_ms:500,end_ms:500,text:''}],selectedAnnotation:'point'}));
