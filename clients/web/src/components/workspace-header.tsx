@@ -79,7 +79,8 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   const ticketActionsDisabled=projectActionsDisabled||selectedTicketCount===0||!selectedTicketsMutable;
   const directionIcon=sortDirection==='ascending'?ArrowUp:ArrowDown,directionName=sortDirection==='ascending'?'arrow-up':'arrow-down';
-  const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=sortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
+  const visibleSortOptions=mode==='board'?sortOptions.filter(option=>option.value!=='status'):sortOptions;
+  const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=visibleSortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
   const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
   return <div class="workspace-header__actions" data-component="workspace-controls">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">

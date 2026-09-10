@@ -72,6 +72,11 @@ describe('WorkspaceHeader', () => {
     expect(applyWorkspaceSortDirection(-3, 'descending')).toBe(3);
   });
 
+  it('omits status sorting from column view while retaining it for list view', () => {
+    expect(String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'board' }))).not.toContain('<wa-option value="status"');
+    expect(String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }))).toContain('<wa-option value="status"');
+  });
+
   it('renders the collapsed find state as a single magnifier button', () => {
     const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list', notificationCount: 7 }));
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="false"/);

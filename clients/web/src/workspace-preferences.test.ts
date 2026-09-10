@@ -47,4 +47,18 @@ describe('workspace preferences', () => {
       commandGroupExpanded: false,
     });
   });
+
+  it('replaces obsolete status sorting for columns without changing list sorting', () => {
+    const stored = JSON.stringify({
+      viewMode: 'board',
+      sorts: {
+        list: { sort: 'status', sortDirection: 'descending' },
+        board: { sort: 'status', sortDirection: 'ascending' },
+      },
+    });
+    expect(loadWorkspacePreferences({ getItem: () => stored }).sorts).toEqual({
+      list: { sort: 'status', sortDirection: 'descending' },
+      board: { sort: 'updated', sortDirection: 'descending' },
+    });
+  });
 });

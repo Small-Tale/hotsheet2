@@ -32,10 +32,12 @@ export function sortableWorkspaceView(mode: WorkspaceViewMode): SortableWorkspac
   return mode === 'board' ? 'board' : 'list';
 }
 
-function validatedSortPreference(value: unknown, fallback: WorkspaceSortPreference): WorkspaceSortPreference {
+function validatedSortPreference(value: unknown, fallback: WorkspaceSortPreference, allowedSorts: readonly WorkspaceSort[] = sorts): WorkspaceSortPreference {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
   const record = value as Record<string, unknown>;
-  const sort = sorts.includes(record.sort as WorkspaceSort) ? record.sort as WorkspaceSort : fallback.sort;
+  const requestedSort = record.sort as WorkspaceSort;
+  if (!allowedSorts.includes(requestedSort)) return fallback;
+  const sort = requestedSort;
   return {
     sort,
     sortDirection: directions.includes(record.sortDirection as WorkspaceSortDirection) ? record.sortDirection as WorkspaceSortDirection : sort === 'updated' ? 'descending' : 'ascending',
@@ -57,7 +59,7 @@ export function loadWorkspacePreferences(storage: Pick<Storage, 'getItem'>): Wor
     viewMode: viewModes.includes(record.viewMode as WorkspaceViewMode) ? record.viewMode as WorkspaceViewMode : DEFAULT_WORKSPACE_PREFERENCES.viewMode,
     sorts: {
       list: validatedSortPreference(storedSorts?.list, legacy),
-      board: validatedSortPreference(storedSorts?.board, legacy),
+      board: validatedSortPreference(storedSorts?.board, legacy.sort === 'status' ? DEFAULT_WORKSPACE_PREFERENCES.sorts.board : legacy, sorts.filter(sort => sort !== 'status')),
     },
     sidebarVisible: typeof record.sidebarVisible === 'boolean' ? record.sidebarVisible : DEFAULT_WORKSPACE_PREFERENCES.sidebarVisible,
     inspectorVisible: typeof record.inspectorVisible === 'boolean' ? record.inspectorVisible : DEFAULT_WORKSPACE_PREFERENCES.inspectorVisible,

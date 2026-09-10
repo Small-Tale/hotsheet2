@@ -744,6 +744,19 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(columnDemo.first().locator('.ticket-board-column__tickets')).toHaveCSS('overflow-y', 'auto');
 });
 
+test('omits status sorting from column view and restores it in list view', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/ux-demo?component=workspace-header');
+  const header = page.locator('[data-component="workspace-header"]');
+  const sortSelect = header.locator('wa-select[name="workspace-sort"]');
+  await expect(sortSelect.locator('wa-option[value="status"]')).toHaveCount(1);
+  await header.getByRole('button', { name: 'Columns view' }).click();
+  await expect(sortSelect.locator('wa-option[value="status"]')).toHaveCount(0);
+  await sortSelect.click();
+  await expect(sortSelect).toHaveJSProperty('open', true);
+  await page.screenshot({ path: '/private/tmp/hs2-nydfqf-column-sort-options.png', fullPage: true });
+});
+
 test('switches and searches the connected workspace through WorkspaceHeader', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto('/ux-demo?component=workspace-header');
