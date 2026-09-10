@@ -39,10 +39,12 @@ Dragging an unselected ticket moves only it, while
   menu. Pointer-opened ticket menus retain the raw viewport pointer anchor and delegate
   all measured popup flipping and shifting to Web Awesome; the app does not pre-clamp
   against an estimated menu size that can vary with ticket state. Production handlers cover reader opening, category/status/priority changes, batch
-  Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. Every bulk
-  metadata operation is submitted as one checkout-scoped atomic batch request (never one
-  request per selected ticket), with all concurrency tokens validated before any write.
-  metadata/tag/delete write is provider-capability gated and carries the freshly read opaque
+  Up Next, add/remove tag, duplication, archive, and confirmed soft deletion. A provider
+  advertising atomic batch support receives one checkout-scoped request with every
+  concurrency token validated before any write. Other update-capable providers degrade to
+  visible, best-effort per-ticket progress; successful writes remain applied and each failed
+  ticket is restored and reported. Every metadata/tag/delete write is provider-capability
+  gated and carries the freshly read opaque
   concurrency token; a stale ticket fails instead of overwriting a collaborator's edit.
   The complete selection remains one field-aware Undo transaction. A capture-phase,
   composed-path-aware outside pointer-down dismisses the menu reliably across native and
@@ -1357,9 +1359,11 @@ are ignored, while the current failed request restores its captured projection a
 shows the error. The client emits `hotsheet:mutation-timing` with optimistic and request
 phase durations for local profiling.
 
-Atomic bulk mutations hold event-driven collection refreshes until their authoritative
-batch response settles. Their optimistic rows therefore cannot disappear, reappear from
-an intermediate refresh, and disappear again while a multi-ticket status move is in flight.
+Bulk mutations hold event-driven collection refreshes until their authoritative atomic
+batch or best-effort request sequence settles. Their optimistic rows therefore cannot
+disappear, reappear from an intermediate refresh, and disappear again while a multi-ticket
+status move is in flight. Attaching a ticket source, including after HS1 import, refreshes
+provider descriptors before exposing the imported tickets for mutation.
 
 Ticket creation follows the same immediate-authority rule: as soon as the create
 response returns, the new ticket is inserted, selected, and opened for Details editing.

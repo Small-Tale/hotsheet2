@@ -8,15 +8,23 @@ export type BulkTicketAction =
   | { kind: 'remove-tag'; tag: string }
   | { kind: 'delete' };
 
-/** Bulk editing is only offered when every selected ticket's provider supports one batch mutation. */
+/** Bulk editing is offered when every selected ticket's provider can update tickets. */
 export function canBulkUpdate(
   tickets: readonly TicketRow[],
   capabilitiesFor: (connectionId: string) => Capabilities | undefined,
 ): boolean {
   return tickets.length > 0 && tickets.every(ticket => {
     const capabilities = capabilitiesFor(ticket.connection_id);
-    return Boolean(capabilities?.update && capabilities.atomic_batch);
+    return Boolean(capabilities?.update);
   });
+}
+
+/** One atomic request is safe only when every selected provider advertises it. */
+export function canAtomicallyBulkUpdate(
+  tickets: readonly TicketRow[],
+  capabilitiesFor: (connectionId: string) => Capabilities | undefined,
+): boolean {
+  return canBulkUpdate(tickets, capabilitiesFor) && tickets.every(ticket => capabilitiesFor(ticket.connection_id)?.atomic_batch === true);
 }
 
 export function bulkTagChoices(tickets: readonly TicketRow[]): string[] {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Capabilities, TicketRow } from './api';
-import { bulkTagChoices, bulkTicketPatch, canBulkUpdate } from './ticket-bulk-operations';
+import { bulkTagChoices, bulkTicketPatch, canAtomicallyBulkUpdate, canBulkUpdate } from './ticket-bulk-operations';
 
 const ticket = (slug: string, connection_id = 'git', tags: string[] = []): TicketRow => ({
   connection_id, native_id: slug, qualified_id: `${connection_id}:${slug}`, id: slug, slug, title: slug,
@@ -10,12 +10,14 @@ const ticket = (slug: string, connection_id = 'git', tags: string[] = []): Ticke
 const capabilities = (update: boolean, atomic_batch = update) => ({ update, atomic_batch } as Capabilities);
 
 describe('bulk ticket operations', () => {
-  it('requires atomic batch update support from every selected provider', () => {
+  it('allows best-effort bulk updates while distinguishing atomic providers', () => {
     const selected = [ticket('ONE', 'git'), ticket('TWO', 'jira')];
     expect(canBulkUpdate(selected, id => capabilities(id === 'git'))).toBe(false);
     expect(canBulkUpdate(selected, () => capabilities(true))).toBe(true);
-    expect(canBulkUpdate(selected, () => capabilities(true, false))).toBe(false);
+    expect(canBulkUpdate(selected, () => capabilities(true, false))).toBe(true);
     expect(canBulkUpdate([], () => capabilities(true))).toBe(false);
+    expect(canAtomicallyBulkUpdate(selected, () => capabilities(true))).toBe(true);
+    expect(canAtomicallyBulkUpdate(selected, () => capabilities(true, false))).toBe(false);
   });
 
   it('builds field and soft-delete patches', () => {
