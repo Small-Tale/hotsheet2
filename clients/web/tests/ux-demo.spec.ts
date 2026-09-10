@@ -1400,14 +1400,12 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(heading).toHaveAttribute('aria-expanded', 'false');
 
   await page.goto('/ux-demo?component=drive-control');
-  const drive = page.locator('[data-component="drive-control"]');
-  await expect(drive).toHaveAttribute('aria-label', 'Start Codex');
+  const drive = page.locator('[data-component="drive-control"]'),driveAction=drive.locator('[data-action="toggle-drive"]');
+  await expect(driveAction).toHaveAccessibleName('Drive with Codex');
   await drive.click();
-  await expect(drive).toHaveAttribute('aria-label', 'Stop Codex');
-  await expect(drive.locator('[data-lucide="square"]')).toHaveCount(1);
+  await expect(driveAction).toHaveAccessibleName('Codex workflow is running');
   await drive.click();
-  await expect(drive).toHaveAttribute('aria-label', 'Start Codex');
-  await expect(drive.locator('[data-lucide="play"]')).toHaveCount(1);
+  await expect(driveAction).toHaveAccessibleName('Drive with Codex');
 });
 
 test('holds the AppShell at its 1024 by 600 supported floor',async({page})=>{
@@ -1460,8 +1458,8 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(sidebar.getByRole('button', { name: /Backlog/ })).toHaveAttribute('aria-current', 'page');
   await command.click();
   await expect(sidebar.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
-  await sidebar.getByRole('button', { name: 'Start Codex' }).click();
-  await expect(sidebar.getByRole('button', { name: 'Stop Codex' })).toBeVisible();
+  await sidebar.getByRole('button', { name: 'Drive with Codex' }).click();
+  await expect(sidebar.getByRole('button', { name: 'Codex workflow is running' })).toBeVisible();
   const handle = page.getByRole('separator', { name: 'Resize project sidebar' });
   await expect(handle).toHaveAttribute('aria-valuenow', '640');
   const assertDrivePinned = async () => {

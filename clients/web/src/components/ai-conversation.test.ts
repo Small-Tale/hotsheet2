@@ -37,4 +37,5 @@ describe('AIConversation',()=>{
   });
 
   it('reuses the complete conversation surface as embedded drawer content',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'Ask about the project',busy:false,interruptible:false}));expect(markup).toContain('data-presentation="embedded"');expect(markup).toContain('ai-conversation--embedded');expect(markup).toContain('Conversation transcript');expect(markup).toContain('send-conversation-turn');expect(markup).not.toContain('wa-dialog')});
+  it('offers model and effort changes only when the plugin declares support',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,model:'gpt',effort:'high',models:[{id:'gpt',label:'GPT'}],efforts:['medium','high'],canChangeModel:true,canChangeEffort:true}));expect(markup).toContain('name="conversation-model"');expect(markup).toContain('name="conversation-effort"');expect(markup).not.toContain('data-action="stop-conversation"')});
 });

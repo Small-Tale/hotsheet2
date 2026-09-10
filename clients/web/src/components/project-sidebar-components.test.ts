@@ -100,10 +100,13 @@ describe('ProjectSidebar component slice', () => {
   });
 
   it('changes drive action semantics with running state', () => {
-    expect(String(DriveControl({ running: false, tool: 'Codex' }))).toContain('Start Codex');
+    const idle=String(DriveControl({ running: false, tool: 'Codex', optionsOpen:true }));
+    expect(idle).toContain('Drive with Codex');
+    expect(idle).toContain('data-action="toggle-drive-options"');
+    expect(idle).toContain('data-lucide="triangle"');
+    expect(idle).toContain('aria-expanded="true"');
     const running = String(DriveControl({ running: true, tool: 'Codex' }));
-    expect(running).toContain('Stop Codex');
-    expect(running).toContain('data-lucide="square"');
+    expect(running).toContain('Codex workflow is running');
     const disabled = String(DriveControl({ running: true, tool: 'Codex', disabled: true, disabledReason: 'Cannot stop here.' }));
     expect(disabled).toContain('disabled');
     expect(disabled).toContain('title="Cannot stop here."');
@@ -122,13 +125,15 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).not.toContain('Project commands');
   });
 
-  it('offers explicit tool selection and chat before the workflow starts',()=>{
+  it('offers split-button overrides and a separate chat before the workflow starts',()=>{
     const base={completedToday:0,inProgress:0,completionTrend:[],branch:'main',unpushed:0,uncommitted:0,views:[],selectedViewId:'all',commandGroupLabel:'Commands',commands:[],commandGroupExpanded:true,driveRunning:false,driveTool:'codex' as const,openCount:0,upNextCount:0,activeCount:0};
     const markup=String(ProjectSidebar(base));
-    expect(markup).toContain('name="drive-tool"');expect(markup).toContain('AI tool for Drive and Chat');expect(markup).toContain('>Codex<');expect(markup).toContain('>Claude<');
+    expect(markup).not.toContain('name="drive-tool"');expect(markup).toContain('Drive with Codex');expect(markup).toContain('Choose Drive provider, model, and effort');
     expect(markup).toContain('data-action="open-conversation" aria-label="Open Codex conversation" title="Open chat without starting the Hot Sheet workflow" aria-pressed="false"');
     expect(markup).not.toContain('aria-pressed="false" disabled');
     expect(String(ProjectSidebar({...base,driveTool:'claude',conversationOpen:true}))).toContain('aria-label="Open Claude conversation"');
+    const options=String(ProjectSidebar({...base,driveOptionsOpen:true,driveTools:[{id:'codex',display_name:'Codex',models:[]}],driveSelection:{tool:'codex'},driveDefaultSelection:{tool:'codex'}}));
+    expect(options).toContain('aria-label="Drive provider, model, and effort options"');
   });
 
 });

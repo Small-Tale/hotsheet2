@@ -8,14 +8,15 @@ const demo = (id: string, name: string, description: string, phase: DemoPhase = 
 export const demoCatalog: DemoCategory[] = [
   { id: 'shell', name: 'Application shell', demos: [
     demo('app-shell', 'AppShell', 'Top-level responsive application regions.', 'feature-floor', true, ['project-sidebar', 'workspace-header', 'project-tabs', 'connection-state-banner', 'resizable-region', 'toolbar', 'toolbar-control-group', 'ticket-list', 'ticket-inspector']),
-    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'menu-item', 'menu-header']),
+    demo('project-sidebar', 'ProjectSidebar', 'Project summary, repository state, views, commands, and drive controls.', 'feature-floor', true, ['toolbar', 'project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control', 'drive-options-menu', 'menu-item', 'menu-header']),
     demo('project-summary', 'ProjectSummary', 'Seven-day completion history and current ticket counts.', 'feature-floor', true),
     demo('repository-summary', 'RepositorySummary', 'Branch and working-copy status action.', 'feature-floor', true),
     demo('repository-status-popover', 'RepositoryStatusPopover', 'Master/detail repository files, commits, and host actions.', 'feature-floor', true, ['dialog-header','value-table','menu-item', 'menu-header', 'ticket-code-review']),
     demo('change-evidence-dialog', 'ChangeEvidenceDialog', 'Ticket commit-range files grouped by evidence type.', 'feature-floor', true, ['dialog-header','menu-item','menu-header']),
     demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
     demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
-    demo('drive-control', 'DriveControl', 'Primary AI drive start and stop action.', 'feature-floor', true),
+    demo('drive-control', 'DriveControl', 'Split AI workflow action and provider override trigger.', 'feature-floor', true),
+    demo('drive-options-menu', 'DriveOptionsMenu', 'Provider, model, and effort overrides for a driven session.', 'feature-floor', true),
     demo('workspace-header', 'WorkspaceHeader', 'Project identity, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']),
     demo('page-header', 'PageHeader', 'Current view identity below project tabs.', 'feature-floor', true),
     demo('project-tab', 'ProjectTab', 'One local or remote project connection tab.', 'feature-floor', true, ['app-tab']),
@@ -76,13 +77,14 @@ export const demoCatalog: DemoCategory[] = [
   ]},
   { id: 'ai', name: 'AI and attention', demos: [
     demo('ai-conversation', 'AIConversation', 'Multi-turn streamed AI conversation with inline permissions and interruption.', 'feature-floor', true, ['permission-request','drive-control']),
+    demo('ai-tool-settings', 'AiToolSettings', 'Machine-local default AI provider, model, and effort discovered from plugins.', 'feature-floor', true, ['select']),
     demo('busy-indicator', 'BusyIndicator', 'Tool and connection activity state.'),
     demo('permission-request', 'PermissionRequestCard', 'Human approval with timeout, project identity, and supported decision scopes.', 'feature-floor', true),
     demo('command-button', 'CommandButton', 'Configured safe command action.', 'later'),
     demo('notification-center', 'NotificationCenter', 'Pending permission requests and newest-first decision history.', 'feature-floor', true, ['permission-request']),
   ]},
   { id: 'terminal', name: 'Drawer and terminals', demos: [
-    demo('terminal-drawer', 'TerminalDrawer', 'Project terminal rail and dedicated terminal surface.', 'feature-floor', true, ['app-tab']),
+    demo('terminal-drawer', 'TerminalDrawer', 'Project grid, terminal, and embedded AI-chat tabs with a typed creation menu.', 'feature-floor', true, ['app-tab','menu-item','menu-header','ai-conversation']),
     demo('terminal-dashboard', 'TerminalDashboard', 'Responsive live grid with progressive visible-preview mounting and viewport controls.', 'feature-floor', true, ['fixed-aspect-terminal-card','menu-item']),
     demo('terminal-operations-sidebar', 'TerminalOperationsSidebar', 'Per-project and aggregate completion and in-progress summaries beside the terminal dashboard.', 'feature-floor', true, ['project-summary','menu-header','toolbar']),
     demo('terminal-ticket-rail', 'TerminalTicketRail', 'Compact list and notifications rail with push navigation into ticket detail.', 'feature-floor', true, ['ticket-list','ticket-inspector','content-transition','workspace-header']),

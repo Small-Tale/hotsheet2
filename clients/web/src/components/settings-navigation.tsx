@@ -1,16 +1,17 @@
 import './settings-navigation.css';
 
-import { Columns3, Database, PanelLeftClose, ShieldCheck, TerminalSquare } from 'lucide';
+import { Bot, Columns3, Database, PanelLeftClose, ShieldCheck, TerminalSquare } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 import { MenuItem } from './menu-item';
 import { Toolbar } from './toolbar';
 import { ToolbarControlGroup } from './toolbar-control-group';
 
-export type SettingsCategory = 'sources' | 'commands' | 'terminals' | 'permissions' | 'columns';
+export type SettingsCategory = 'sources' | 'ai' | 'commands' | 'terminals' | 'permissions' | 'columns';
 
 const categories = [
   { id: 'sources', label: 'Ticket sources', icon: Database, iconName: 'database' },
+  { id: 'ai', label: 'AI tools', icon: Bot, iconName: 'bot' },
   { id: 'commands', label: 'Commands', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'terminals', label: 'Terminals', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck, iconName: 'shield-check' },

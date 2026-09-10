@@ -146,10 +146,12 @@ import {
   stopPermissionRequestDemoAutomation,
 } from './permission-components-demo';
 import {
+  AiToolSettingsDemo,
   clampProjectSidebarHeight,
   commandGroupExpanded,
   CommandNavigationDemo,
   DriveControlDemo,
+  DriveOptionsMenuDemo,
   driveRunning,
   ProjectSidebarDemo,
   projectSidebarHeight,
@@ -500,6 +502,8 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
   if (item.id === 'drive-control') return <DriveControlDemo />;
+  if (item.id === 'drive-options-menu') return <DriveOptionsMenuDemo />;
+  if (item.id === 'ai-tool-settings') return <AiToolSettingsDemo />;
   if (item.id === 'ai-conversation') return <AIConversationDemo />;
   if (item.id === 'project-tab') return <ProjectTabDemo />;
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;

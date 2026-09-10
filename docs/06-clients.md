@@ -392,28 +392,32 @@ cleanup of the old live HS1 data; backups are never removed.
   workspace-session draft restoration, so cached immediacy cannot introduce cross-project
   state or stale network writes. A first visit with no cache retains the normal loading state.
 
-  Drive is a production control, not demo-only state. The adjacent selector chooses Codex or
-  Claude and is remembered locally for each project. Drive prepares a stable connection scoped
-  to that checkout and tool, then sends the `$hotsheet` workflow turn; later activations reuse
-  that connection and its retained session. The server resolves the checkout id to its code
+  Drive is a production control, not demo-only state. Its split-button label reflects the
+  machine-local default provider discovered from drivable plugin manifests. The arrow opens
+  hierarchical Default/provider/model/effort overrides without a client-owned provider table.
+  Drive prepares a stable dedicated connection scoped to that checkout and tool, opens and
+  selects its AI-chat tab in the bottom drawer, then sends the `$hotsheet` workflow turn; later
+  activations reuse that tab, connection, and retained session. The server resolves the checkout id to its code
   root before preparing the tool—ticket-store paths are never used as the working directory.
   The sidebar derives running
   state from `GET /connections`, refreshes it only from replayable `drive_updated` events,
-  and confirms before interrupting an active turn. A busy connection that does not advertise
-  `interrupt` remains visible but is disabled with the reason. The Views add action is likewise
+  and disables a second Drive activation while that turn is busy; interruption remains in the
+  selected chat when the connection advertises it. The Views add action is likewise
   disabled with a reason until the deferred custom-view feature exists; no enabled sidebar
   action may be owned only by `/ux-demo`.
 
   The MessageSquare action is available before Drive and opens the production
-  `AIConversation` dialog after preparing the selected tool without sending a workflow turn.
-  In other words, Chat starts an empty general conversation; Drive is the explicit `$hotsheet`
-  automation shortcut on the same connection. Kerf retains an ordered transcript and composer draft
+  `AIConversation` dialog after preparing the default tool without sending a workflow turn.
+  Project Chat and Drive use different stable connection ids: Chat is a general project
+  conversation, while Drive is the explicit `$hotsheet` automation shortcut in the drawer.
+  Kerf retains an ordered transcript and composer draft
   per connection; each submit appends a user message and one assistant message whose Markdown
   content grows in place from attributed `turn_event` output. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
   turn. Stop appears only for a busy connection advertising `interrupt`; Enter sends and
-  Shift+Enter adds a line. Connection refresh and transcript updates share the existing
+  Shift+Enter adds a line. Plugins may advertise live model and effort changes, which the
+  conversation applies to subsequent turns without changing provider. Connection refresh and transcript updates share the existing
   replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
   While the dialog is closed, streamed transcript/activity state remains retained but the
   conversation surface is not mounted and does not subscribe the application root to those
@@ -938,10 +942,14 @@ stage of startup.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
 sidebar and ticket inspector at full height. Its compact rail switches between the decorated
-grid and one undecorated, interactive xterm session that fills the content area. Its grid tab
+grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
+the content area. Its grid tab
 never shrinks when terminal tabs consume the available width. The terminal tabs scroll
-horizontally, with the explicit plus action immediately after them; plus creates
-the host user's default shell. Its dedicated xterm viewport receives focus as soon as it
+horizontally, with the explicit plus action immediately after them; plus opens a shared-menu
+choice of Default shell, AI shell, or AI chat. Option/Alt on either AI choice prompts for a
+plugin-discovered provider, model, and compatible effort; AI shells use the real plugin-backed
+`connect` launch path rather than treating the provider id as a shell command. A dedicated
+xterm viewport receives focus as soon as it
 mounts, allowing immediate typing without an extra click; this is a one-shot request that
 does not make later refreshes steal focus. Project and terminal tabs share one pill-tab primitive, with
 the close button before the label and optional leading/trailing state icons. Right-clicking

@@ -194,21 +194,26 @@ does not introduce polling or another network request.
   - `CommandButton`
   - `CommandGroup` with collapsible heading
   - running, stopping, last-run, success, and failure states
-- `DriveControl` — **production + demo built**: primary start/stop action with explicit
-  tool and running semantics, preceded by the centered open/Up Next project summary
-  and paired with a persisted per-project Codex/Claude selector
-  - primary launch/resume action
-  - active tool/connection state from the shared long-poll event stream and stop confirmation
-  - explicit disabled reason when the active connection cannot be interrupted
+- `DriveControl` — **production + demo built**: split workflow action with explicit
+  tool and running semantics, preceded by the centered open/Up Next project summary.
+  The primary side opens/reuses a dedicated drawer chat and runs `$hotsheet`; the arrow
+  side opens `DriveOptionsMenu` for Default or plugin-discovered provider/model/effort.
+  - primary launch/resume action; duplicate activation is disabled while busy
+  - active tool/connection state from the shared long-poll event stream
+  - `DriveOptionsMenu` — **production + demo built**: hierarchical session override menu
+  - `AiToolSettings` — **production + demo built**: machine-local plugin-discovered defaults
 
 - `AIConversation` — **production + demo built**: a project-scoped
-  dialog opened from a compact MessageSquare action beside Drive. Chat prepares the selected
-  tool and opens an empty conversation without running `$hotsheet`; Drive explicitly starts
-  that workflow on the same checkout-and-tool-scoped connection. It keeps the ticket workspace visible behind a bounded, vertically
+  dialog opened from a compact MessageSquare action beside Drive, plus an embedded presentation
+  for AI-chat tabs in `TerminalDrawer`. Project Chat prepares the default tool and opens an empty
+  conversation without running `$hotsheet`; Drive uses a separate stable connection and explicitly
+  starts that workflow in the drawer. It keeps the ticket workspace visible behind a bounded, vertically
   scrollable transcript rather than replacing the project route.
   - header: tool identity, persistent connection/session context, close action, and a Stop
     action only while the active connection advertises `interrupt`; absence hides Stop
     rather than rendering an inert control
+  - session controls: model and effort choices appear only for plugin-declared live-change
+    capabilities and apply to subsequent turns without changing provider
   - transcript: ordered user messages and one progressively appended assistant response per
     submitted turn; output chunks update that response in place, unknown additive events do
     not break it, and completed/failed/interrupted terminal state remains attached to the turn

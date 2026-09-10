@@ -1,0 +1,7 @@
+.ai-tool-settings { display:grid; gap:var(--wa-space-l); }
+.ai-tool-settings>p { margin:0; color:var(--wa-color-text-quiet); }
+.ai-tool-settings__grid { display:grid; max-width:42rem; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--wa-space-m); }
+.ai-tool-settings__empty { display:grid; min-height:14rem; color:var(--wa-color-text-quiet); text-align:center; place-content:center; justify-items:center; gap:var(--wa-space-xs); }
+.ai-tool-settings__empty svg { width:2rem; height:2rem; }
+.ai-tool-settings__empty p { max-width:30rem; margin:0; }
+@media (max-width:46rem) { .ai-tool-settings__grid { grid-template-columns:1fr; } }
