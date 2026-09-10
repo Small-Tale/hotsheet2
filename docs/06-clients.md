@@ -840,7 +840,11 @@ by another client or transport become history entries instead of silently disapp
 empty-action generic requests such as `ToolSearch` follow the same lifecycle.
 There is no fixed-interval network polling. Pending counts appear in the main segmented
 control and project tabs, and a non-modal popup appears even when another project is
-selected. The global Notifications view
+selected. When a standalone AI conversation is open, the active permission popup is
+promoted into that dialog's top layer so it remains visible and interactive instead of
+being trapped beneath the modal; resolving it uses the same authoritative permission
+path. Standalone conversation dialogs use native light-dismiss and Escape behavior and
+do not duplicate that dismissal with a header close button. The global Notifications view
 keeps pending requests above newest-first machine-local client history; a request that
 disappears without this client resolving it is labeled “Decision made outside Hot
 Sheet.” Responded history cards retain the same full bottom inset when their action is

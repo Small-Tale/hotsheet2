@@ -2,6 +2,7 @@ import {describe,expect,it} from 'vitest';
 
 import type {PermissionItem} from '../permission-notifications';
 import {AIConversation} from './ai-conversation';
+import {PermissionRequestPopup} from './permission-request-card';
 
 const permission:PermissionItem={id:1,connection:'connection-1',tool:'Bash',action:'npm test',key:'project:1',projectId:'project',projectName:'Project',agent:'Codex',role:'main worker',receivedAt:1,ignored:false,always_allow_supported:true};
 
@@ -16,6 +17,8 @@ describe('AIConversation',()=>{
     expect(markup).toContain('aria-label="AI-generated response by Codex"');
     expect(markup).toContain('data-ai-feedback-target="activity:activity-1"');
     expect(markup).toContain('without-header');
+    expect(markup).toContain('light-dismiss');
+    expect(markup).not.toContain('data-action="close-conversation"');
     expect(markup).toContain('data-component="dialog-header"');
     expect(markup).toContain('Enter to send · Shift+Enter for a new line');
     expect(markup).toContain('appearance="accent"');
@@ -37,5 +40,6 @@ describe('AIConversation',()=>{
   });
 
   it('reuses the complete conversation surface as embedded drawer content',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'Ask about the project',busy:false,interruptible:false}));expect(markup).toContain('data-presentation="embedded"');expect(markup).toContain('ai-conversation--embedded');expect(markup).toContain('Conversation transcript');expect(markup).toContain('send-conversation-turn');expect(markup).not.toContain('wa-dialog')});
+  it('promotes a permission popup into the dialog top layer without duplicating its inline card',()=>{const markup=String(AIConversation({open:true,tool:'Codex',messages:[],draft:'',busy:true,interruptible:true,permissions:[permission],foreground:PermissionRequestPopup({item:permission})}));expect(markup).toContain('ai-conversation__foreground');expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1)});
   it('offers model and effort changes only when the plugin declares support',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,model:'gpt',effort:'high',models:[{id:'gpt',label:'GPT'}],efforts:['medium','high'],canChangeModel:true,canChangeEffort:true}));expect(markup).toContain('name="conversation-model"');expect(markup).toContain('name="conversation-effort"');expect(markup).not.toContain('data-action="stop-conversation"')});
 });

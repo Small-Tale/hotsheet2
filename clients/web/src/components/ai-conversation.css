@@ -9,6 +9,8 @@
 .ai-conversation__session-controls .select { width:min(14rem,40%); }
 .ai-conversation__header-action::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); }
 .ai-conversation__header-action svg { width: 1rem; height: 1rem; }
+.ai-conversation__foreground { position: fixed; z-index: 100; display: flex; padding: 4.5rem 1rem 1rem; pointer-events: none; inset: 0; justify-content: center; }
+.ai-conversation__foreground .permission-request-popup { position: relative; top: auto; right: auto; width: min(44rem, calc(100vw - 2rem)); height: fit-content; pointer-events: auto; }
 .ai-conversation__transcript { display: flex; min-height: 0; padding: 1rem; overflow-y: auto; flex-direction: column; gap: .8rem; }
 .ai-conversation__empty { display: grid; max-width: 26rem; margin: auto; color: var(--wa-color-neutral-on-quiet); text-align: center; justify-items: center; gap: var(--wa-space-xs); }
 .ai-conversation__empty svg { width: 1.75rem; height: 1.75rem; }
@@ -45,4 +47,4 @@
 .ai-conversation__composer wa-button::part(base) { width: 2.75rem; height: 2.75rem; min-height: 2.75rem; padding: 0; border-radius: var(--wa-border-radius-m); }
 .ai-conversation__composer wa-button[disabled]::part(base) { cursor: not-allowed; }
 .ai-conversation__composer svg { width: 1rem; height: 1rem; }
-@media (max-width: 40rem) { .ai-conversation::part(dialog) { width: calc(100vw - 1rem); height: calc(100vh - 1rem); } .ai-conversation__message { max-width: 92%; } .ai-conversation__header-usage .ai-conversation__usage>span:last-child { display: none; } .ai-conversation__activity>header { align-items: flex-start; flex-direction: column; } .ai-conversation__composer small { display: none; } }
+@media (max-width: 40rem) { .ai-conversation::part(dialog) { width: calc(100vw - 1rem); height: calc(100vh - 1rem); } .ai-conversation__foreground { padding: 3.75rem .55rem .55rem; } .ai-conversation__message { max-width: 92%; } .ai-conversation__header-usage .ai-conversation__usage>span:last-child { display: none; } .ai-conversation__activity>header { align-items: flex-start; flex-direction: column; } .ai-conversation__composer small { display: none; } }
