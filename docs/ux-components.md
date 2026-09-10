@@ -926,7 +926,16 @@ the dialog opens only after activation and can be dismissed and reopened repeate
 New terminals appear in Default and begin hidden in named groups. Visibility and grouping
 changes never destroy sessions. The focused magnified or drawer consumer
 must reclaim its fitted dimensions after leaving the dashboard. Focus, resize claims,
-attention, and selection survive layout and scale changes.
+attention, and selection survive layout and scale changes. Magnification promotes the terminal
+workspace above neighboring shell dividers and disables its enclosing focus outline without a
+transition, preventing sidebar chrome from crossing the dimmed modal. Fixed dashboard consumers
+also discard only an exact leading reverse-video zsh partial-line marker from each connection's
+initial replay; normal `%` content and project-drawer streams remain byte-for-byte intact.
+
+The operations sidebar separates its aggregate `All projects` summary from individual projects
+with an inset divider. During remembered-project startup, the AppShell and terminal drawer remain
+unmounted behind one stable restoration status until tickets, terminals, and the active-project
+selection are all ready, then appear together without a mixed intermediate layout.
 
 `FixedAspectTerminalCard` is also a first-class UX catalog entry. Its catalog page renders
 both supported public variants with the real xterm frontend, a deterministic ANSI fixture whose

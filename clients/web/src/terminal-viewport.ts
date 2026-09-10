@@ -21,6 +21,17 @@ export const TERMINAL_PREVIEW_NATURAL_HEIGHT=768;
 export const TERMINAL_PREVIEW_SCROLLBACK=0;
 export const TERMINAL_MAGNIFIED_SCROLLBACK=1_000;
 export const TERMINAL_DEDICATED_SCROLLBACK=5_000;
+// ANSI ESC is the external terminal protocol byte intentionally recognized here.
+// eslint-disable-next-line no-control-regex
+const ZSH_PROMPT_EOL_MARK=/^(?:\u001b\[(?:0|1)m)*\u001b\[7m%\u001b\[27m(?:\u001b\[(?:0|1|27)m)*(?:\r?\n)?/;
+
+/** A late zsh attachment can begin at its reverse-video partial-line marker. The marker
+ * described output that preceded the bounded replay, so presenting it as a new first row
+ * is a reconstruction artifact rather than terminal content. */
+export function stripLeadingZshPromptEolMark(value:Uint8Array<ArrayBuffer>):Uint8Array<ArrayBuffer>{
+  const text=new TextDecoder().decode(value),trimmed=text.replace(ZSH_PROMPT_EOL_MARK,'');
+  return trimmed===text?value:new TextEncoder().encode(trimmed);
+}
 export function terminalScrollbackLimit(displayMode:string|undefined,fixedDashboardGrid:boolean):number {
   if(displayMode==='scaled-preview')return TERMINAL_PREVIEW_SCROLLBACK;
   return fixedDashboardGrid?TERMINAL_MAGNIFIED_SCROLLBACK:TERMINAL_DEDICATED_SCROLLBACK;

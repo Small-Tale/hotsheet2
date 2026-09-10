@@ -63,6 +63,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
     tests/providers.spec.ts  #   Real-browser project onboarding/ticket flows + opt-in live visual review
+    tests/terminal-dashboard-startup.spec.ts # Atomic remembered-project/terminal restoration and operations-sidebar composition
     src/components/*.tsx     #   Production web components; each imports its colocated component CSS
     src/components/*.css     #   Production styles exercised unchanged by /ux-demo and the real app
     tests/ux-demo.spec.ts    #   Real-browser catalog/component contracts plus pixel-verified dev-review draw/resize/scrolled-capture/review/submit flow

@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+
 import {describe,expect,it} from 'vitest';
 
 import {aggregateTerminalProjectSummaries,TerminalOperationsSidebar} from './terminal-operations-sidebar';
@@ -20,5 +22,10 @@ describe('TerminalOperationsSidebar',()=>{
     expect(multiple.match(/data-component="project-summary"/g)).toHaveLength(3);
     expect(single).not.toContain('All projects');
     expect(single.match(/data-component="project-summary"/g)).toHaveLength(1);
+  });
+
+  it('separates the multi-project aggregate from individual projects',()=>{
+    const css=readFileSync(new URL('./terminal-operations-sidebar.css',import.meta.url),'utf8');
+    expect(css).toMatch(/terminal-operations-sidebar__group\[data-project-id="all"\] \{[^}]*padding-bottom: var\(--wa-space-m\);[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/);
   });
 });

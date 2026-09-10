@@ -151,6 +151,7 @@ const terminalRailScreen=signal<'root'|'ticket'>('root'),terminalRailDirection=s
 const terminalGroups=signal<TerminalDashboardGroup[]>([]),terminalDashboardLoading=signal(false),terminalDashboardMessage=signal('');
 const inheritGlobalShellHistory=signal(false),terminalSettingsMessage=signal('');
 const terminalDashboardSize=signal({width:1200,height:601}),terminalFitAcross=signal(Number(localStorage.getItem('hotsheet.terminals.fit-across'))||TERMINAL_GRID_DEFAULT_ACROSS),terminalFitHigh=signal(Number(localStorage.getItem('hotsheet.terminals.fit-high'))||TERMINAL_GRID_DEFAULT_HIGH);
+const rememberedRoots=[...new Set(JSON.parse(localStorage.getItem('hotsheet.open-projects')||'[]') as string[])],initialProjectRestorePending=signal(rememberedRoots.length>0);
 const initialTerminalDrawerVisible=localStorage.getItem('hotsheet.terminals.drawer-open')==='true';
 const terminalDrawerVisible=signal(initialTerminalDrawerVisible),terminalDrawerMounted=signal(initialTerminalDrawerVisible),terminalDrawerTransitioning=signal(false),terminalDrawerSize=signal(loadAppRegionSize(localStorage,'app-terminal-drawer')),terminalDrawerMax=signal(520),terminalDrawerMaximized=signal(false),terminalDrawerBounds=signal({width:900,height:320}),terminalDrawerFitAcross=signal(Number(localStorage.getItem('hotsheet.terminals.drawer-fit-across'))||2),terminalDrawerFitHigh=signal(Number(localStorage.getItem('hotsheet.terminals.drawer-fit-high'))||2),terminalDrawerSelected=signal('grid');
 const magnifiedTerminalKey=signal<string|undefined>(undefined),terminalVisibility=signal(parseTerminalVisibilityState(localStorage.getItem(TERMINAL_VISIBILITY_STORAGE_KEY))),terminalVisibilityDialogScope=signal<string|undefined>(undefined),terminalVisibilityContextMenu=signal<{id:string;x:number;y:number}|undefined>(undefined),terminalVisibilityNamePrompt=signal<TerminalVisibilityNamePrompt|undefined>(undefined);
@@ -666,6 +667,7 @@ function TicketSourceSetupDialog(){
 }
 function TerminalRenameDialog(){const target=terminalRename.value;return <wa-dialog data-terminal-rename-dialog label="Rename terminal" open={Boolean(target)}><form class="terminal-rename" data-action="rename-terminal-form"><wa-input name="terminal-name" label="Terminal name" value={target?.value??''} required autofocus></wa-input><footer><wa-button appearance="plain" type="button" data-action="cancel-terminal-rename">Cancel</wa-button><wa-button appearance="accent" type="submit">Rename</wa-button></footer></form></wa-dialog>}
 function EmptyState(){return <section class="app-empty"><h1>Open a Hot Sheet project</h1><p>Choose a code checkout to discover its ticket sources and start working.</p><wa-button appearance="accent" data-action="add-project">Open project</wa-button></section>;}
+function ProjectRestoreState(){return <section class="app-empty" data-component="project-restore-state" role="status" aria-busy="true"><h1>Opening Hot Sheet</h1><p>Restoring projects, tickets, and terminals…</p></section>}
 function commandRunFor(commandId:string){return commandRuns.value.find(run=>run.command_id===commandId)}
 function showCommandDialog(){queueMicrotask(()=>{const dialog=document.querySelector<HTMLDialogElement>('[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]');if(dialog&&!dialog.open)dialog.showModal()})}
 function commandIcon(command:CommandDefinition):'send'|'test'|'build'{return command.program.includes('hotsheet')||command.args.some(value=>value.includes('trigger'))?'send':command.id.includes('test')||command.title.toLowerCase().includes('test')?'test':'build'}
@@ -736,6 +738,7 @@ function AttachmentMenuSurface(){const menu=attachmentMenu.value;if(!menu)return
 function TerminalOperations(){const summaries=projects.value.map(item=>{const rows=item.id===selectedProjectId.value?tickets.value:ticketRowsByProject.value[item.id]??[],trend=ticketCompletionTrend(rows);return{id:item.id,name:item.name,completedToday:trend.at(-1)??0,inProgress:rows.filter(ticket=>ticket.status==='started').length,trend}});return <TerminalOperationsSidebar projects={summaries}/>}
 
 function MainShell(){
+  if(initialProjectRestorePending.value)return <ProjectRestoreState/>;
   const current=project();if(!current)return <EmptyState/>;
   const permission=visiblePermission(),automation=permission?permissionAutomation(permission.projectId):DEFAULT_PERMISSION_AUTOMATION,countdown=permission&&permissionCountdown?.key===permission.key?formatPermissionCountdown(permissionCountdown.remainingMs):undefined,popup=permission?<PermissionRequestPopup item={permission} countdown={countdown} countdownAction={automation.action==='off'?undefined:automation.action}/>:undefined;
   const tabs=projects.value.map(item=>({id:item.id,name:item.name,location:'local' as const,selected:item.id===selectedProjectId.value,notificationCount:permissionCount(item.id)}));
@@ -1136,5 +1139,5 @@ document.addEventListener('keydown',event=>{if(!event.defaultPrevented&&attachme
 delegate(document.body,'click','*',completePointerDetailsFinish);
 delegateCapture(document.body,'pointerup','*',schedulePointerDetailsFinish);
 delegateCapture(document.body,'pointercancel','*',schedulePointerDetailsFinish);
-const rememberedRoots=[...new Set(JSON.parse(localStorage.getItem('hotsheet.open-projects')||'[]') as string[])],rememberedActiveRoot=activeProjectRoot(localStorage);
-void(async()=>{try{for(const root of rememberedRoots)await openProject(root,undefined,false);const rememberedActive=projects.value.find(item=>item.root===rememberedActiveRoot);if(rememberedActive&&rememberedActive.id!==selectedProjectId.value){const activated=activateOpenProject(rememberedActive.id);if(activated)await restoreProjectSession(activated.project,activated.generation)}}finally{initialProjectRestoreComplete=true}})();
+const rememberedActiveRoot=activeProjectRoot(localStorage);
+void(async()=>{try{for(const root of rememberedRoots)await openProject(root,undefined,false);const rememberedActive=projects.value.find(item=>item.root===rememberedActiveRoot);if(rememberedActive&&rememberedActive.id!==selectedProjectId.value){const activated=activateOpenProject(rememberedActive.id);if(activated)await restoreProjectSession(activated.project,activated.generation)}}finally{initialProjectRestoreComplete=true;initialProjectRestorePending.value=false}})();

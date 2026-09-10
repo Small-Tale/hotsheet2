@@ -2,6 +2,7 @@
 .terminal-operations-sidebar > .toolbar { flex: none; }
 .terminal-operations-sidebar__groups { min-height: 0; padding: var(--wa-space-xs); overflow: auto; flex: 1; }
 .terminal-operations-sidebar__group + .terminal-operations-sidebar__group { margin-top: var(--wa-space-m); }
+.terminal-operations-sidebar__group[data-project-id="all"] { padding-bottom: var(--wa-space-m); border-bottom: 1px solid var(--wa-color-surface-border); }
 .terminal-operations-sidebar__group > .menu-header { padding-inline: var(--wa-space-s); }
 .terminal-operations-sidebar__group > .project-summary { min-height: 4.25rem; padding: var(--wa-space-s); }
 .terminal-operations-sidebar__group > .project-summary .project-summary__chart { height: 2.75rem; }

@@ -833,7 +833,8 @@ ungrouped flow, so there is no redundant project/none grouping selector.
 The dashboard keeps a resizable left operations sidebar open by default. It presents one
 `MenuHeader` and the shared seven-day `ProjectSummary` for every open project. With multiple
 projects, a leading `All projects` group sums each aligned trend day plus the completed-today
-and in-progress counts. The project summaries open project statistics and the aggregate opens
+and in-progress counts. An inset divider below that aggregate keeps it distinct from the
+individual project list. The project summaries open project statistics and the aggregate opens
 cross-project statistics. These values derive from ticket collections already loaded for the
 open project tabs, so the sidebar adds no polling or network traffic. It remains usable beside
 the grid and ticket rail at the supported 1024×600 floor, and can be hidden and restored from
@@ -897,6 +898,12 @@ its project's maximized drawer. A grid-tile double-click does the same, while ri
 exposes shared Open/Hide menu items. A Lucide ellipsis in the shared grid/magnified card footer
 opens that exact same menu from the keyboard or pointer. The focused dedicated drawer consumer re-fits after both
 the immediate and settled layout passes, avoiding clipped cells and cross-surface resize races.
+While that magnified viewport is open, its containing workspace is promoted above adjacent
+sidebar dividers and suppresses its own focus presentation immediately, so neither shell chrome
+nor a transitioning focus outline can paint over the modal. On the first replay payload for a
+fixed 80×24 dashboard consumer, the client removes only zsh's exact reverse-video partial-line
+`%` marker when it leads the bounded replay. Ordinary percent signs, later output, and the
+dedicated drawer stream are preserved unchanged.
 The browser regression follows the complete user path with a newly created terminal: enter
 Nano, resize the drawer up and down, abruptly maximize, move to the dashboard grid, magnify
 and dismiss, then double-click back into the drawer. Every boundary asserts the current
@@ -913,6 +920,12 @@ open Web Awesome popup.
 HS2-PD4MZ9 replaced its snapshot-only panes with xterm-backed interactive
 viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the project-only
 bottom drawer over that same viewport boundary.
+
+When a launch restores remembered projects, the client holds a single project-restoration
+surface until every remembered project's tickets and terminals, plus the remembered active
+project, have settled. The complete shell is then revealed in one render boundary. A refresh
+therefore never exposes a partially restored board beside terminal content from a different
+stage of startup.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
 sidebar and ticket inspector at full height. Its compact rail switches between the decorated

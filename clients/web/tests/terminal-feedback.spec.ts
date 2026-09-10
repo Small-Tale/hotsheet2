@@ -11,18 +11,18 @@ async function sampleTerminalFrames(page:import('@playwright/test').Page,selecto
 
 async function doubleClickDrawerRail(page:import('@playwright/test').Page,drawer:import('@playwright/test').Locator){const rail=drawer.locator('.terminal-drawer__rail'),point=await rail.evaluate(element=>{const box=element.getBoundingClientRect();for(const y of [box.top+2,box.bottom-2])for(let x=box.left+2;x<box.right-2;x+=8)if(document.elementFromPoint(x,y)===element)return{x,y};throw new Error('Terminal drawer rail has no bare pointer target')});await page.mouse.dblclick(point.x,point.y)}
 
-async function installTerminalFixture(page:import('@playwright/test').Page){
-  await page.addInitScript(()=>{
+async function installTerminalFixture(page:import('@playwright/test').Page,leadingZshMarker=false){
+  await page.addInitScript(({leadingZshMarker})=>{
     const nano=(cols=80,rows=24)=>{const bar=(value:string)=>`\u001b[7m${value.padEnd(cols).slice(0,cols)}\u001b[0m`;return `\u001b[2J\u001b[H${bar('  GNU nano 8.4                 terminal-fill-proof.txt')}\u001b[2;1H${bar('File: terminal-fill-proof.txt')}\u001b[${Math.max(3,Math.floor(rows/2))};20H${cols} columns × ${rows} rows\u001b[${Math.max(2,rows-1)};1H${bar('^G Help  ^O Write Out  ^W Where Is  ^K Cut  ^T Execute')}\u001b[${rows};1H${bar('^X Exit  ^R Read File  ^\\ Replace  ^U Paste  ^J Justify')}`};
     const sockets:FakeSocket[]=[];
     class FakeSocket extends EventTarget{
       static CONNECTING=0;static OPEN=1;static CLOSING=2;static CLOSED=3;readyState=0;binaryType='blob';sent:unknown[]=[];
-      constructor(public url:string){super();sockets.push(this);setTimeout(()=>{if(this.readyState===FakeSocket.CLOSED)return;this.readyState=FakeSocket.OPEN;this.dispatchEvent(new Event('open'));this.dispatchEvent(new MessageEvent('message',{data:new TextEncoder().encode(nano()).buffer}))})}
-      send(value:unknown){this.sent.push(value);if(typeof value!=='string')return;try{const resize=JSON.parse(value).resize;if(resize){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({pty_size:{cols:resize.cols,rows:resize.rows},driven_by:resize.viewer_id})}));this.dispatchEvent(new MessageEvent('message',{data:new TextEncoder().encode(nano(resize.cols,resize.rows)).buffer}))}}catch{/* input */}}
+      constructor(public url:string){super();sockets.push(this);setTimeout(()=>{if(this.readyState===FakeSocket.CLOSED)return;this.readyState=FakeSocket.OPEN;this.dispatchEvent(new Event('open'));const output=leadingZshMarker?'\u001b[1m\u001b[7m%\u001b[27m\u001b[1m\u001b[0m\r\nprompt % ':nano();this.dispatchEvent(new MessageEvent('message',{data:new TextEncoder().encode(output).buffer}))})}
+      send(value:unknown){this.sent.push(value);if(typeof value!=='string')return;try{const resize=JSON.parse(value).resize;if(resize){this.dispatchEvent(new MessageEvent('message',{data:JSON.stringify({pty_size:{cols:resize.cols,rows:resize.rows},driven_by:resize.viewer_id})}));if(!leadingZshMarker)this.dispatchEvent(new MessageEvent('message',{data:new TextEncoder().encode(nano(resize.cols,resize.rows)).buffer}))}}catch{/* input */}}
       close(){this.readyState=3;this.dispatchEvent(new CloseEvent('close'))}
     }
     Object.assign(window,{WebSocket:FakeSocket,__terminalFeedbackSockets:sockets});
-  });
+  },{leadingZshMarker});
   let createdTerminal=false;
   await page.route('**/*',route=>{
     const request=route.request(),path=new URL(request.url()).pathname;
@@ -37,6 +37,11 @@ async function installTerminalFixture(page:import('@playwright/test').Page){
     return route.continue();
   });
 }
+
+test('keeps magnified terminal focus inside the modal and removes a leading zsh replay marker',async({page})=>{
+  await page.setViewportSize({width:1440,height:900});await installTerminalFixture(page,true);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Terminal dashboard'}).click();
+  const dashboard=page.getByRole('region',{name:'Terminal dashboard'}),tile=dashboard.locator('[data-terminal-key="terminal-feedback:nano"]'),preview=tile.locator('[data-display-mode="scaled-preview"]');await expect(preview).toHaveAttribute('data-geometry-ready','true');const rowText=async(locator:typeof preview)=>(await locator.locator('.xterm-rows > div').allTextContents()).map(text=>text.trimEnd()).filter(Boolean);await expect.poll(()=>rowText(preview)).toEqual(['prompt %']);await tile.click();const magnified=dashboard.getByRole('dialog',{name:'Magnified nano'}),viewport=magnified.locator('[data-display-mode="interactive"]');await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();await expect.poll(()=>rowText(viewport)).toEqual(['prompt %']);const focusPresentation=await page.locator('.app-shell__work-area').evaluate(element=>({outline:getComputedStyle(element).outlineColor,border:getComputedStyle(element,'::after').borderColor}));expect(focusPresentation).toEqual({outline:'rgba(0, 0, 0, 0)',border:'rgba(0, 0, 0, 0)'});await page.screenshot({path:'/private/tmp/hs2-bpyp2x-0m91rc-magnified-wide-after.png',fullPage:true});await page.setViewportSize({width:1024,height:650});await expect(viewport.locator('.xterm-helper-textarea')).toBeFocused();await page.screenshot({path:'/private/tmp/hs2-bpyp2x-0m91rc-magnified-narrow-after.png',fullPage:true});
+});
 
 test('fills fixed 80 by 24 Nano grids without stretching and keeps every dedicated row contained',async({page})=>{
   await page.setViewportSize({width:1440,height:1100});await installTerminalFixture(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Terminal dashboard'}).click();

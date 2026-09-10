@@ -674,7 +674,7 @@ test('makes no repeated permission requests or renders while an open project is 
   expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
 });
 
-test('does not report intentional render bursts during remembered-project startup',async({page})=>{
+test('keeps remembered-project startup atomic and does not report its intentional work',async({page})=>{
   const submissions:unknown[]=[];
   await mockProject(page);
   await page.route('**/__hotsheet/dev-review/tickets',async route=>{submissions.push(route.request().postDataJSON());await route.fulfill({status:201,json:{slug:'HS2-SHOULD-NOT-EXIST'}})});
@@ -686,10 +686,13 @@ test('does not report intentional render bursts during remembered-project startu
   await page.addInitScript(root=>{localStorage.setItem('hotsheet.open-projects',JSON.stringify([root]))},project.root);
   await page.goto('/');
   await page.waitForTimeout(5_200);
+  await expect(page.locator('[data-component="project-restore-state"]')).toBeVisible();
+  await expect(page.locator('[data-component="app-shell"]')).toHaveCount(0);
   await resetRenderMetrics(page);
   for(let index=0;index<14;index+=1){await page.setViewportSize({width:1280,height:760+index});await page.waitForTimeout(20)}
-  expect((await renderMetrics(page))!.passes).toBeGreaterThanOrEqual(12);
+  expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
   await expect(page.getByRole('tab',{name:/demo/})).toBeVisible({timeout:10_000});
+  await expect(page.locator('[data-component="project-restore-state"]')).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(submissions).toEqual([]);
 });
