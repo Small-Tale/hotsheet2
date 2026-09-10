@@ -19,7 +19,8 @@ use hotsheet_extsync::{
 };
 
 const SECRET: &str = "test-secret";
-type RecordedClientTurns = Arc<Mutex<Vec<(String, Option<String>)>>>;
+type RecordedClientTurns =
+    Arc<Mutex<Vec<(String, Option<String>, Option<String>, Option<String>)>>>;
 type RecordedClientHomes = Arc<Mutex<Vec<Option<std::path::PathBuf>>>>;
 type RecordedClientPreparations = Arc<Mutex<Vec<(std::path::PathBuf, Vec<String>)>>>;
 
@@ -72,13 +73,17 @@ impl PreparedClientDrive for FakePreparedClientDrive {
         prompt: &str,
         resume: Option<&str>,
         _connection_id: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
         control: &hotsheet_aitools::TurnControl,
         on_event: &mut dyn FnMut(&hotsheet_aitools::TurnEvent),
     ) -> Result<hotsheet_aitools::TurnDone, String> {
-        self.turns
-            .lock()
-            .unwrap()
-            .push((prompt.into(), resume.map(str::to_owned)));
+        self.turns.lock().unwrap().push((
+            prompt.into(),
+            resume.map(str::to_owned),
+            model.map(str::to_owned),
+            effort.map(str::to_owned),
+        ));
         on_event(&hotsheet_aitools::TurnEvent::Output("fake output".into()));
         if prompt == "hold" {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
@@ -184,6 +189,35 @@ async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store(
         prepared[0]
             .1
             .contains(&format!("HOTSHEET_PROJECT={}", checkout_root.display()))
+    );
+}
+
+#[tokio::test]
+async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated() {
+    let (_dir, state) = state();
+    let router = app(state);
+    let tools = router
+        .clone()
+        .oneshot(authed("GET", "/ai-tools", None))
+        .await
+        .unwrap();
+    assert_eq!(tools.status(), StatusCode::OK);
+    assert!(body_json(tools).await.is_array());
+
+    let invalid = router
+        .oneshot(authed(
+            "PUT",
+            "/ai-settings",
+            Some(r#"{"tool":"definitely-not-installed"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert!(
+        body_json(invalid).await["error"]
+            .as_str()
+            .unwrap()
+            .contains("not installed or drivable")
     );
 }
 
@@ -323,7 +357,7 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .oneshot(authed(
             "POST",
             "/drive/connections",
-            Some(r#"{"tool":"fake","connection_id":"client-1"}"#),
+            Some(r#"{"tool":"fake","connection_id":"client-1","model":"m1","effort":"high"}"#),
         ))
         .await
         .unwrap();
@@ -335,6 +369,8 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         serde_json::json!(["send_turn", "interrupt"])
     );
     assert!(!created["busy"].as_bool().unwrap());
+    assert_eq!(created["model"], "m1");
+    assert_eq!(created["effort"], "high");
     let replay_cursor = body_json(
         router
             .clone()
@@ -351,7 +387,7 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
         .oneshot(authed(
             "POST",
             "/drive/connections/client-1/turns",
-            Some(r#"{"content":"complete"}"#),
+            Some(r#"{"content":"complete","model":"m2","effort":"low"}"#),
         ))
         .await
         .unwrap();
@@ -458,8 +494,18 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
     assert_eq!(
         *turns.lock().unwrap(),
         vec![
-            ("complete".into(), None),
-            ("hold".into(), Some("thread-1".into()))
+            (
+                "complete".into(),
+                None,
+                Some("m2".into()),
+                Some("low".into())
+            ),
+            (
+                "hold".into(),
+                Some("thread-1".into()),
+                Some("m1".into()),
+                Some("high".into())
+            )
         ]
     );
 }

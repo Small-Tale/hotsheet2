@@ -377,6 +377,8 @@ impl ClaudeStreamTransport {
         resume: Option<&str>,
         mcp_config: Option<&Path>,
         permission_mode: Option<&str>,
+        model: Option<&str>,
+        effort: Option<&str>,
         env: &[(String, String)],
     ) -> std::io::Result<Box<Self>> {
         let mut args: Vec<String> = [
@@ -405,6 +407,14 @@ impl ClaudeStreamTransport {
         if let Some(mode) = permission_mode {
             args.push("--permission-mode".into());
             args.push(mode.to_string());
+        }
+        if let Some(model) = model {
+            args.push("--model".into());
+            args.push(model.to_string());
+        }
+        if let Some(effort) = effort {
+            args.push("--effort".into());
+            args.push(effort.to_string());
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         Ok(Box::new(Self(StreamChild::spawn(

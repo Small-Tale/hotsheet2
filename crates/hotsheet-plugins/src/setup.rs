@@ -179,7 +179,7 @@ fn mcp_command_for(exe_dir: Option<&Path>, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
-fn is_detected(p: &Plugin) -> bool {
+pub(crate) fn is_detected(p: &Plugin) -> bool {
     p.manifest
         .detection
         .binaries

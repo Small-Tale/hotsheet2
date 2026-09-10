@@ -445,6 +445,8 @@ mod tests {
     fn drive_delegates_to_the_injected_acp_session() {
         let ctx = DriveCtx {
             cwd: PathBuf::from("/project"),
+            model: None,
+            effort: None,
             spawner: &NoSpawn,
             env: vec![],
             app_server: None,

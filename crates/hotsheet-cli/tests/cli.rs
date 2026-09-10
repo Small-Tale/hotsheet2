@@ -79,6 +79,65 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("store");
+    let home = root.path().join("home");
+    let bin = root.path().join("bin");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::create_dir(&home).unwrap();
+    std::fs::create_dir(&bin).unwrap();
+    let codex = bin.join("codex");
+    std::fs::write(&codex, "#!/bin/sh\nexit 0\n").unwrap();
+    let mut permissions = std::fs::metadata(&codex).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&codex, permissions).unwrap();
+
+    let tools = hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .env("PATH", &bin)
+        .args(["ai-tools", "--json"])
+        .output()
+        .unwrap();
+    assert!(tools.status.success());
+    let tools: serde_json::Value = serde_json::from_slice(&tools.stdout).unwrap();
+    assert_eq!(tools[0]["id"], "codex");
+    assert_eq!(
+        tools[0]["actions"],
+        serde_json::json!(["change_model", "change_effort"])
+    );
+
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .env("PATH", &bin)
+        .args([
+            "ai-settings",
+            "set",
+            "--tool",
+            "codex",
+            "--model",
+            "gpt-5.4",
+            "--effort",
+            "high",
+        ])
+        .assert()
+        .success();
+    let read = hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .env("PATH", &bin)
+        .args(["ai-settings", "get", "--json"])
+        .output()
+        .unwrap();
+    let defaults: serde_json::Value = serde_json::from_slice(&read.stdout).unwrap();
+    assert_eq!(
+        defaults,
+        serde_json::json!({"tool":"codex","model":"gpt-5.4","effort":"high"})
+    );
+    assert!(home.join("settings.json").is_file());
+}
+
 #[test]
 fn compatibility_reports_created_and_selected_store_schemas_headlessly() {
     let store = tempfile::tempdir().unwrap();

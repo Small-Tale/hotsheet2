@@ -52,9 +52,26 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert_eq!(drive.program, "codex");
     assert_eq!(drive.args, vec!["app-server".to_string()]);
     assert!(drive.interrupt);
+    assert_eq!(drive.default_model.as_deref(), Some("gpt-5.4"));
+    assert!(
+        drive
+            .session_options
+            .iter()
+            .any(|option| option == "effort")
+    );
     let launch = p.manifest.launch.as_ref().expect("codex declares a launch");
     assert_eq!(launch.program, "codex");
     assert!(launch.args.is_empty());
+    assert_eq!(launch.model_args, ["--model", "{model}"]);
+    assert_eq!(
+        p.launch_args(Some("gpt-5.4"), Some("high")).unwrap(),
+        [
+            "--model",
+            "gpt-5.4",
+            "--config",
+            "model_reasoning_effort=\"high\""
+        ]
+    );
 
     // Codex opts into the metrics capability (docs/14, HS2-8PSAFE): it reports usage the
     // host maps via the `codex-usage` source.
@@ -87,6 +104,37 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
             .expect("claude declares a launch")
             .program,
         "claude"
+    );
+}
+
+#[test]
+fn plugin_model_catalog_validates_defaults_without_client_provider_tables() {
+    let plugin = find_in("codex", &[]).unwrap();
+    let drive = plugin.manifest.drive.as_ref().unwrap();
+    let tools = vec![AiToolDescriptor {
+        id: plugin.id().into(),
+        display_name: plugin.manifest.display_name.clone(),
+        models: drive.models.clone(),
+        default_model: drive.default_model.clone(),
+        default_effort: drive.default_effort.clone(),
+        actions: drive
+            .session_options
+            .iter()
+            .map(|option| format!("change_{option}"))
+            .collect(),
+    }];
+    let defaults = default_ai_settings(&tools).unwrap();
+    validate_ai_defaults(&tools, &defaults).unwrap();
+    assert!(
+        validate_ai_defaults(
+            &tools,
+            &AiToolDefaults {
+                tool: "codex".into(),
+                model: Some("missing".into()),
+                effort: None
+            }
+        )
+        .is_err()
     );
 }
 

@@ -46,6 +46,8 @@ pub struct Target(pub Option<String>);
 /// added here as those land (`docs/13` §13.3).
 pub struct DriveCtx<'a> {
     pub cwd: PathBuf,
+    pub model: Option<String>,
+    pub effort: Option<String>,
     /// Spawn drives launch through this. (Always provide one; app-server drives ignore it.)
     pub spawner: &'a dyn ProcessSpawner,
     /// Extra environment for a spawn-transport launch (e.g. the HS2-103 safety `PATH`

@@ -38,11 +38,20 @@ program = "codex"
 args = ["app-server"]
 content = "arg"
 interrupt = true
+models = [
+  { id = "gpt-5.4", label = "GPT-5.4", effort_levels = ["low", "medium", "high", "xhigh"] },
+  { id = "gpt-5.3-codex-spark", label = "GPT-5.3 Codex Spark", effort_levels = ["low", "medium", "high", "xhigh"] },
+]
+default_model = "gpt-5.4"
+default_effort = "medium"
+session_options = ["model", "effort"]
 
 [launch]
 # Interactive REPL; intentionally not the headless app-server drive command above.
 program = "codex"
 args = []
+model_args = ["--model", "{model}"]
+effort_args = ["--config", "model_reasoning_effort=\"{effort}\""]
 
 [metrics]
 # Codex reports token usage on its `turn/completed` notification; the host maps it to a

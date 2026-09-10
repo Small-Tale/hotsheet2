@@ -25,6 +25,8 @@ pub struct LiveTrigger {
     pub cwd: PathBuf,
     /// The prompt/turn content (e.g. "work the top Up Next ticket").
     pub prompt: String,
+    pub model: Option<String>,
+    pub effort: Option<String>,
     pub role: Role,
     /// Caller-minted connection id (session id).
     pub conn_id: String,
@@ -113,6 +115,8 @@ pub fn run_trigger_controlled(
                 t.resume.as_deref(),
                 t.mcp_config.as_deref(),
                 t.permission_mode.as_deref(),
+                t.model.as_deref(),
+                t.effort.as_deref(),
                 &t.env,
             )
             .map_err(|source| LiveError::Launch {
@@ -122,6 +126,8 @@ pub fn run_trigger_controlled(
             let channel = ClaudeChannel::connect(transport);
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
+                model: t.model.clone(),
+                effort: t.effort.clone(),
                 spawner: &spawner,
                 env: t.env.clone(),
                 app_server: None,
@@ -162,6 +168,8 @@ pub fn run_trigger_controlled(
             }
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
+                model: t.model.clone(),
+                effort: t.effort.clone(),
                 spawner: &spawner,
                 env: t.env.clone(),
                 app_server: Some(&app),
@@ -179,6 +187,8 @@ pub fn run_trigger_controlled(
             let acp = AcpSession::connect(transport).map_err(LiveError::Drive)?;
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
+                model: t.model.clone(),
+                effort: t.effort.clone(),
                 spawner: &spawner,
                 env: t.env.clone(),
                 app_server: None,
@@ -190,6 +200,8 @@ pub fn run_trigger_controlled(
         "spawn" => {
             let ctx = DriveCtx {
                 cwd: t.cwd.clone(),
+                model: t.model.clone(),
+                effort: t.effort.clone(),
                 spawner: &spawner,
                 env: t.env.clone(),
                 app_server: None,

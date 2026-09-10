@@ -33,7 +33,10 @@ export interface CodeReviewFile {path:string;original_path?:string;change:Exclud
 export interface CodeReview {commits:CodeReviewCommit[];ranges:CodeReviewRange[];difftool?:string;truncated:boolean;summary?:CodeReviewSummary;files?:CodeReviewFile[]}
 export type CodeReviewTarget={mode:'commit';commit:string}|{mode:'range';from:string;to:string}|{mode:'compare';from:string;to:string}|{mode:'ticket_file';path:string}|{mode:'worktree_file';path:string;area:'staged'|'unstaged'};
 export interface PermissionRequest {id:number;project?:string;connection:string;tool:string;action:string;always_allow_supported?:boolean}
-export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean;actions?:Array<'send_turn'|'interrupt'>;session_id?:string;last_error?:string}
+export interface AiModelDescriptor {id:string;label:string;effort_levels?:string[]}
+export interface AiToolDescriptor {id:string;display_name:string;models:AiModelDescriptor[];default_model?:string;default_effort?:string;actions?:Array<'change_model'|'change_effort'>}
+export interface AiToolDefaults {tool:string;model?:string;effort?:string}
+export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean;actions?:Array<'send_turn'|'interrupt'>;session_id?:string;last_error?:string;model?:string;effort?:string}
 export interface ToolSession {connection_id:string;tool:string;project:string;session_id:string;updated_at_ms:number}
 export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;link?:string;progress?:number}
 export interface TerminalSettings {inherit_global_shell_history:boolean}
@@ -102,15 +105,18 @@ export class Api {
   openCodeReview=(checkout:string,id:string,target:CodeReviewTarget)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,{method:'POST',body:JSON.stringify(target)});
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
   activeToolConnections=()=>this.request<ToolConnection[]>('/connections');
+  aiTools=()=>this.request<AiToolDescriptor[]>('/ai-tools');
+  aiSettings=()=>this.request<AiToolDefaults>('/ai-settings');
+  saveAiSettings=(value:AiToolDefaults)=>this.request<AiToolDefaults>('/ai-settings',{method:'PUT',body:JSON.stringify(value)});
   toolSessions=()=>this.request<ToolSession[]>('/drive/sessions');
-  createToolConnection=(value:{tool:string;checkout:string;connection_id?:string;session_id?:string})=>this.request<ToolConnection>('/drive/connections',{method:'POST',body:JSON.stringify(value)});
-  sendToolTurn=(id:string,content:string,session_id?:string)=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/turns`,{method:'POST',body:JSON.stringify({content,...(session_id?{session_id}:{})})});
+  createToolConnection=(value:{tool:string;checkout:string;connection_id?:string;session_id?:string;model?:string;effort?:string})=>this.request<ToolConnection>('/drive/connections',{method:'POST',body:JSON.stringify(value)});
+  sendToolTurn=(id:string,content:string,session_id?:string,selection?:{model?:string;effort?:string})=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/turns`,{method:'POST',body:JSON.stringify({content,...(session_id?{session_id}:{}),...selection})});
   interruptToolTurn=(id:string)=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/interrupt`,{method:'POST'});
   terminals=()=>this.request<TerminalInfo[]>('/terminals');
   terminalSettings=()=>this.request<TerminalSettings>('/terminal-settings');
   saveTerminalSettings=(value:TerminalSettings)=>this.request<TerminalSettings>('/terminal-settings',{method:'PUT',body:JSON.stringify(value)});
   terminal=(id:string)=>this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
-  createTerminal=(value:{id?:string;command?:string;args?:string[];cwd?:string;connect?:string}={})=>this.request<TerminalInfo>('/terminals',{method:'POST',body:JSON.stringify(value)});
+  createTerminal=(value:{id?:string;command?:string;args?:string[];cwd?:string;connect?:string;model?:string;effort?:string}={})=>this.request<TerminalInfo>('/terminals',{method:'POST',body:JSON.stringify(value)});
   deleteTerminal=(id:string)=>this.request<void>(`/terminals/${encodeURIComponent(id)}`,{method:'DELETE'});
   commands=()=>this.request<CommandDefinition[]>('/commands');
   saveCommands=(definitions:CommandDefinition[])=>this.request<CommandDefinition[]>('/commands',{method:'PUT',body:JSON.stringify(definitions)});

@@ -429,6 +429,11 @@ carry the same workflow version as the repository adapters, preventing a refresh
 downgrading current instructions. Executable detection includes Windows `PATHEXT`
 wrappers such as `.cmd` as well as native binaries.
 
+`hotsheet ai-tools --json` reports detected drivable plugins and their plugin-owned
+model/effort catalogs. `hotsheet ai-settings get --json` and `ai-settings set --tool
+<id> [--model <id>] [--effort <level>]` provide headless parity for the machine-local
+defaults exposed by the authenticated `/ai-tools` and `/ai-settings` server APIs.
+
 **Headless bootstrap (HS2-J90FXF):** `bootstrap` is the idempotent composition for a
 new or existing code project. It initializes or reuses a standalone HS2 store, links
 and registers the checkout, installs or refreshes every detected AI-tool integration

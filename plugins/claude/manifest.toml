@@ -42,11 +42,18 @@ program = "claude"
 args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]
 content = "stdin"
 interrupt = false
+models = [
+  { id = "sonnet", label = "Sonnet" },
+  { id = "opus", label = "Opus" },
+  { id = "haiku", label = "Haiku" },
+]
+default_model = "sonnet"
 
 [launch]
 # Interactive REPL; intentionally not the headless stream-json drive command above.
 program = "claude"
 args = []
+model_args = ["--model", "{model}"]
 
 [metrics]
 # Claude reports token usage on its stream-json `result` event; the host maps it to a

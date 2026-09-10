@@ -291,6 +291,16 @@ enum Cmd {
         #[command(subcommand)]
         cmd: PluginCmd,
     },
+    /// List detected, drivable AI tools and their plugin-declared model choices.
+    AiTools {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Read or update the machine-local default AI tool/model/effort.
+    AiSettings {
+        #[command(subcommand)]
+        cmd: AiSettingsCmd,
+    },
     /// Read/write core-owned project settings (shared = committed, local = gitignored).
     Settings {
         #[command(subcommand)]
@@ -652,6 +662,22 @@ enum SettingsCmd {
     List {
         #[arg(long)]
         scope: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum AiSettingsCmd {
+    Get {
+        #[arg(long)]
+        json: bool,
+    },
+    Set {
+        #[arg(long)]
+        tool: String,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        effort: Option<String>,
     },
 }
 
@@ -1061,6 +1087,8 @@ fn main() -> Result<()> {
             project,
         } => cmd_setup(&cli.path, tool, detect, refresh, project),
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
+        Cmd::AiTools { json } => cmd_ai_tools(json),
+        Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
         Cmd::Checkout { cmd } => cmd_checkout(cmd),
@@ -3497,6 +3525,72 @@ fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
             } else {
                 println!("No installed plugin '{id}'");
             }
+        }
+    }
+    Ok(())
+}
+
+fn discovered_ai_tools() -> Vec<hotsheet_plugins::AiToolDescriptor> {
+    hotsheet_plugins::ai_tool_descriptors(&hotsheet_plugins::default_dirs())
+}
+
+fn effective_ai_defaults(store: &Path) -> Result<hotsheet_plugins::AiToolDefaults> {
+    let tools = discovered_ai_tools();
+    let saved = hotsheet_ticketing::Settings::new(store)
+        .get("ai.defaults", hotsheet_ticketing::Scope::Global)?
+        .and_then(|value| serde_json::from_value(value).ok())
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(&tools, defaults).is_ok());
+    saved
+        .or_else(|| hotsheet_plugins::default_ai_settings(&tools))
+        .ok_or_else(|| anyhow::anyhow!("no drivable AI tools are installed"))
+}
+
+fn cmd_ai_tools(json: bool) -> Result<()> {
+    let tools = discovered_ai_tools();
+    if json {
+        println!("{}", serde_json::to_string(&tools)?);
+    } else {
+        for tool in tools {
+            println!("{}\t{}", tool.id, tool.display_name);
+        }
+    }
+    Ok(())
+}
+
+fn cmd_ai_settings(store: &Path, cmd: AiSettingsCmd) -> Result<()> {
+    match cmd {
+        AiSettingsCmd::Get { json } => {
+            let defaults = effective_ai_defaults(store)?;
+            if json {
+                println!("{}", serde_json::to_string(&defaults)?);
+            } else {
+                println!("{}", defaults.tool);
+                if let Some(model) = defaults.model {
+                    println!("model\t{model}");
+                }
+                if let Some(effort) = defaults.effort {
+                    println!("effort\t{effort}");
+                }
+            }
+        }
+        AiSettingsCmd::Set {
+            tool,
+            model,
+            effort,
+        } => {
+            let defaults = hotsheet_plugins::AiToolDefaults {
+                tool,
+                model,
+                effort,
+            };
+            hotsheet_plugins::validate_ai_defaults(&discovered_ai_tools(), &defaults)
+                .map_err(anyhow::Error::msg)?;
+            hotsheet_ticketing::Settings::new(store).set(
+                "ai.defaults",
+                serde_json::to_value(&defaults)?,
+                hotsheet_ticketing::Scope::Global,
+            )?;
+            println!("{}", serde_json::to_string(&defaults)?);
         }
     }
     Ok(())

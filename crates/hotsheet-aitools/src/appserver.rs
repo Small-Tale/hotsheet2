@@ -79,7 +79,14 @@ impl Drive for AppServerDrive {
         let thread = client
             .open_thread(target.0.as_deref(), &ctx.cwd)
             .map_err(as_drive_err)?;
-        let turn = client.start_turn(&thread, content).map_err(as_drive_err)?;
+        let turn = client
+            .start_turn(
+                &thread,
+                content,
+                ctx.model.as_deref(),
+                ctx.effort.as_deref(),
+            )
+            .map_err(as_drive_err)?;
         Ok(Box::new(AppServerTurnHandle { turn, done: None }))
     }
 }

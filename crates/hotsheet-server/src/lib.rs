@@ -1178,6 +1178,8 @@ pub fn app(state: AppState) -> Router {
         .route("/permissions/ask", post(ask_permission))
         // What the server is currently driving (HS2-TCV3BF).
         .route("/connections", get(list_connections))
+        .route("/ai-tools", get(list_ai_tools))
+        .route("/ai-settings", get(get_ai_settings).put(put_ai_settings))
         .route("/drive/connections", post(create_drive_connection))
         .route("/drive/sessions", get(list_drive_sessions))
         .route("/drive/connections/{id}/turns", post(send_drive_turn))
@@ -4599,6 +4601,10 @@ struct ConnectionInfo {
     session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effort: Option<String>,
 }
 
 /// `GET /connections` — what the server's driving loop is currently running (HS2-TCV3BF):
@@ -4621,6 +4627,8 @@ async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionI
             actions: Vec::new(),
             session_id: None,
             last_error: None,
+            model: None,
+            effort: None,
         })
         .collect::<Vec<_>>();
     drop(reg);
@@ -4638,6 +4646,8 @@ async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionI
             actions: client.actions,
             session_id: client.session_id,
             last_error: client.last_error,
+            model: client.model,
+            effort: client.effort,
         });
     }
     infos.sort_by(|left, right| left.id.cmp(&right.id));
@@ -4648,11 +4658,60 @@ async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionI
 struct CreateDriveConnectionReq {
     tool: String,
     #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    effort: Option<String>,
+    #[serde(default)]
     checkout: Option<String>,
     #[serde(default)]
     connection_id: Option<String>,
     #[serde(default)]
     session_id: Option<String>,
+}
+
+fn discovered_ai_tools(state: &AppState) -> Vec<hotsheet_plugins::AiToolDescriptor> {
+    hotsheet_plugins::ai_tool_descriptors(&state.plugin_dirs)
+}
+
+async fn list_ai_tools(
+    State(state): State<AppState>,
+) -> Json<Vec<hotsheet_plugins::AiToolDescriptor>> {
+    Json(discovered_ai_tools(&state))
+}
+
+fn effective_ai_settings(state: &AppState) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
+    let tools = discovered_ai_tools(state);
+    let saved = Settings::new(state.store.root())
+        .get("ai.defaults", hotsheet_ticketing::Scope::Global)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
+        .and_then(|value| serde_json::from_value(value).ok())
+        .filter(|defaults| hotsheet_plugins::validate_ai_defaults(&tools, defaults).is_ok());
+    saved
+        .or_else(|| hotsheet_plugins::default_ai_settings(&tools))
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no drivable AI tools are installed"))
+}
+
+async fn get_ai_settings(
+    State(state): State<AppState>,
+) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
+    Ok(Json(effective_ai_settings(&state)?))
+}
+
+async fn put_ai_settings(
+    State(state): State<AppState>,
+    Json(defaults): Json<hotsheet_plugins::AiToolDefaults>,
+) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
+    hotsheet_plugins::validate_ai_defaults(&discovered_ai_tools(&state), &defaults)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+    Settings::new(state.store.root())
+        .set(
+            "ai.defaults",
+            serde_json::to_value(&defaults)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+            hotsheet_ticketing::Scope::Global,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(defaults))
 }
 
 async fn create_drive_connection(
@@ -4661,6 +4720,20 @@ async fn create_drive_connection(
 ) -> Result<(StatusCode, Json<client_drive::ClientConnectionInfo>), ApiError> {
     if request.tool.trim().is_empty() {
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "tool is required"));
+    }
+    if request.model.is_some() || request.effort.is_some() {
+        let tools = discovered_ai_tools(&state);
+        if tools.iter().any(|tool| tool.id == request.tool) {
+            hotsheet_plugins::validate_ai_defaults(
+                &tools,
+                &hotsheet_plugins::AiToolDefaults {
+                    tool: request.tool.clone(),
+                    model: request.model.clone(),
+                    effort: request.effort.clone(),
+                },
+            )
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+        }
     }
     let project_path = if let Some(reference) = request.checkout.as_deref() {
         let checkout = state
@@ -4702,6 +4775,8 @@ async fn create_drive_connection(
                 env,
                 permission_bridge: state.permission_bridge(),
                 persistent_home: None,
+                model: request.model,
+                effort: request.effort,
             },
             request.connection_id,
             request.session_id,
@@ -4726,6 +4801,10 @@ struct SendDriveTurnReq {
     content: String,
     #[serde(default)]
     session_id: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    effort: Option<String>,
 }
 
 async fn send_drive_turn(
@@ -4739,9 +4818,49 @@ async fn send_drive_turn(
             "content is required",
         ));
     }
+    let connection = state
+        .client_drives
+        .get(&id)
+        .map_err(client_drive_api_error)?;
+    if request.model.is_some() || request.effort.is_some() {
+        let tools = discovered_ai_tools(&state);
+        if let Some(descriptor) = tools.iter().find(|tool| tool.id == connection.tool) {
+            if request.model.is_some()
+                && !descriptor
+                    .actions
+                    .iter()
+                    .any(|action| action == "change_model")
+            {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "this AI tool cannot change model within a session",
+                ));
+            }
+            if request.effort.is_some()
+                && !descriptor
+                    .actions
+                    .iter()
+                    .any(|action| action == "change_effort")
+            {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "this AI tool cannot change effort within a session",
+                ));
+            }
+            hotsheet_plugins::validate_ai_defaults(
+                &tools,
+                &hotsheet_plugins::AiToolDefaults {
+                    tool: connection.tool,
+                    model: request.model.clone(),
+                    effort: request.effort.clone(),
+                },
+            )
+            .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+        }
+    }
     let job = state
         .client_drives
-        .begin_turn(&id, request.session_id)
+        .begin_turn(&id, request.session_id, request.model, request.effort)
         .map_err(client_drive_api_error)?;
     let info = state
         .client_drives
@@ -4873,6 +4992,10 @@ struct OpenTerminalReq {
     /// OSC-133 / spinner inference (HS2-4M67VN). Omit for a plain shell terminal.
     #[serde(default)]
     connect: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -5087,6 +5210,17 @@ fn terminal_launch(
             format!("plugin '{tool}' does not declare an interactive launch"),
         )
     })?;
+    if req.model.is_some() || req.effort.is_some() {
+        hotsheet_plugins::validate_ai_defaults(
+            &discovered_ai_tools(state),
+            &hotsheet_plugins::AiToolDefaults {
+                tool: tool.to_string(),
+                model: req.model.clone(),
+                effort: req.effort.clone(),
+            },
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+    }
     let program = hotsheet_aitools::launch_safety::resolve_program(&launch.program)
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     let mut env = vec![
@@ -5101,9 +5235,12 @@ fn terminal_launch(
     {
         env.push(("HOTSHEET_SERVER".to_string(), url.clone()));
     }
+    let args = plugin
+        .launch_args(req.model.as_deref(), req.effort.as_deref())
+        .unwrap_or_default();
     Ok(PreparedTerminalLaunch {
         command: program.to_string_lossy().into_owned(),
-        args: launch.args.clone(),
+        args,
         env,
     })
 }

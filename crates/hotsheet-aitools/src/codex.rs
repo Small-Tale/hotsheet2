@@ -340,17 +340,23 @@ impl AppServerClient for CodexAppServer {
         &self,
         thread_id: &str,
         content: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
     ) -> Result<Box<dyn AppServerTurn>, AppServerError> {
         // Capture the notification cursor BEFORE sending, so a fast `turn/completed`
         // can't slip past between the response and our first scan.
         let cursor = self.inner.notes_len();
-        let result = self.inner.request(
-            "turn/start",
-            json!({
-                "threadId": thread_id,
-                "input": [{ "type": "text", "text": content, "text_elements": [] }],
-            }),
-        )?;
+        let mut params = json!({
+            "threadId": thread_id,
+            "input": [{ "type": "text", "text": content, "text_elements": [] }],
+        });
+        if let Some(model) = model {
+            params["model"] = json!(model);
+        }
+        if let Some(effort) = effort {
+            params["effort"] = json!(effort);
+        }
+        let result = self.inner.request("turn/start", params)?;
         let turn_id = result
             .get("turn")
             .and_then(|t| t.get("id"))

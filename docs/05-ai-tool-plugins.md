@@ -523,6 +523,17 @@ remove <id>`, and `hotsheet setup <tool|--detect>` (§5.1a).
 > yet — all current plugins are manifest-only data) and the **`hs-fake-agent`
 > conformance** half of `verify` (HS2-64).
 
+### Provider-owned model discovery and defaults
+
+Drivable plugin manifests own their model catalog, effort levels, defaults, live-session
+selection capabilities, and interactive-launch argument templates. Clients discover that
+data through `GET /ai-tools`; they do not maintain provider/model tables. Machine-local
+defaults are validated and stored through `GET`/`PUT /ai-settings` (or the equivalent
+`hotsheet-cli ai-settings get|set` commands) in the global Hot Sheet 2 settings file.
+Connection creation accepts optional model/effort selections. A live turn may override
+them only when the descriptor advertises `change_model` and/or `change_effort`. Interactive
+AI terminals use the same plugin declarations to expand model/effort launch arguments.
+
 ## 5.12 Cross-references
 - Storage concurrency the claim primitive protects: [02-ticket-storage.md](02-ticket-storage.md) §2.7
 - The core that hosts the plugin registry + settings model: [04-core-server-cli.md](04-core-server-cli.md) §4.1, §4.9

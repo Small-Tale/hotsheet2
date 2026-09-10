@@ -62,6 +62,8 @@ pub trait AppServerClient {
         &self,
         thread_id: &str,
         content: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
     ) -> Result<Box<dyn AppServerTurn>, AppServerError>;
     /// The most recently opened thread id (for cross-turn resume, HS2-3C1XK3). `None`
     /// until a thread has been opened.

@@ -107,6 +107,10 @@ pub struct LaunchSpec {
     pub program: String,
     #[serde(default)]
     pub args: Vec<String>,
+    #[serde(default)]
+    pub model_args: Vec<String>,
+    #[serde(default)]
+    pub effort_args: Vec<String>,
 }
 
 /// A tool's activity-capability declaration (`docs/15` §15.3). Declarative — the behavioral
@@ -159,6 +163,47 @@ pub struct DriveSpec {
     /// session when a session id is supplied, instead of starting a fresh one.
     #[serde(default)]
     pub resume_flag: Option<String>,
+    /// Plugin-owned model catalog. Clients consume this declaration rather than
+    /// hard-coding provider/model names.
+    #[serde(default)]
+    pub models: Vec<ModelSpec>,
+    #[serde(default)]
+    pub default_model: Option<String>,
+    #[serde(default)]
+    pub default_effort: Option<String>,
+    /// Optional live-session selections supported by this transport: `model`, `effort`.
+    #[serde(default)]
+    pub session_options: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, serde::Serialize, PartialEq, Eq)]
+pub struct ModelSpec {
+    pub id: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub effort_levels: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct AiToolDescriptor {
+    pub id: String,
+    pub display_name: String,
+    pub models: Vec<ModelSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, Deserialize, PartialEq, Eq)]
+pub struct AiToolDefaults {
+    pub tool: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
 }
 
 fn default_content_mode() -> String {
@@ -317,6 +362,29 @@ impl Plugin {
         Some((&skills.target, self.file(&skills.source).unwrap_or("")))
     }
 
+    /// Interactive launch arguments with optional selections expanded by the plugin.
+    pub fn launch_args(&self, model: Option<&str>, effort: Option<&str>) -> Option<Vec<String>> {
+        let launch = self.manifest.launch.as_ref()?;
+        let mut args = launch.args.clone();
+        if let Some(model) = model {
+            args.extend(
+                launch
+                    .model_args
+                    .iter()
+                    .map(|arg| arg.replace("{model}", model)),
+            );
+        }
+        if let Some(effort) = effort {
+            args.extend(
+                launch
+                    .effort_args
+                    .iter()
+                    .map(|arg| arg.replace("{effort}", effort)),
+            );
+        }
+        Some(args)
+    }
+
     /// The MCP `args` with `{store}` substituted for the given store path.
     pub fn mcp_args(&self, store_path: &str) -> Vec<String> {
         self.manifest
@@ -419,6 +487,77 @@ pub fn find_in(id: &str, search_dirs: &[PathBuf]) -> Option<Plugin> {
 /// Find a plugin by id across built-ins + the default machine search path.
 pub fn find(id: &str) -> Option<Plugin> {
     find_in(id, &default_dirs())
+}
+
+/// Detected plugins that declare a drive, in stable plugin-registry order.
+pub fn detected_drivable_plugins(search_dirs: &[PathBuf]) -> Vec<Plugin> {
+    all_plugins(search_dirs)
+        .into_iter()
+        .filter(|plugin| plugin.manifest.drive.is_some() && setup::is_detected(plugin))
+        .collect()
+}
+
+pub fn ai_tool_descriptors(search_dirs: &[PathBuf]) -> Vec<AiToolDescriptor> {
+    detected_drivable_plugins(search_dirs)
+        .into_iter()
+        .filter_map(|plugin| {
+            let drive = plugin.manifest.drive.as_ref()?;
+            Some(AiToolDescriptor {
+                id: plugin.id().to_string(),
+                display_name: plugin.manifest.display_name.clone(),
+                models: drive.models.clone(),
+                default_model: drive.default_model.clone(),
+                default_effort: drive.default_effort.clone(),
+                actions: drive
+                    .session_options
+                    .iter()
+                    .map(|option| format!("change_{option}"))
+                    .collect(),
+            })
+        })
+        .collect()
+}
+
+pub fn validate_ai_defaults(
+    tools: &[AiToolDescriptor],
+    defaults: &AiToolDefaults,
+) -> Result<(), String> {
+    let tool = tools
+        .iter()
+        .find(|candidate| candidate.id == defaults.tool)
+        .ok_or_else(|| format!("AI tool '{}' is not installed or drivable", defaults.tool))?;
+    let model = defaults
+        .model
+        .as_ref()
+        .and_then(|id| tool.models.iter().find(|candidate| &candidate.id == id));
+    if defaults.model.is_some() && model.is_none() {
+        return Err(format!(
+            "model '{}' is not declared by AI tool '{}'",
+            defaults.model.as_deref().unwrap_or_default(),
+            defaults.tool
+        ));
+    }
+    if let Some(effort) = defaults.effort.as_deref() {
+        let Some(model) = model else {
+            return Err("effort requires an explicit model".into());
+        };
+        if !model.effort_levels.iter().any(|level| level == effort) {
+            return Err(format!(
+                "effort '{effort}' is not supported by model '{}'",
+                model.id
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub fn default_ai_settings(tools: &[AiToolDescriptor]) -> Option<AiToolDefaults> {
+    let tool = tools.first()?;
+    Some(AiToolDefaults {
+        tool: tool.id.clone(),
+        model: tool.default_model.clone(),
+        effort: tool.default_effort.clone(),
+    })
 }
 
 /// The machine-local plugin search dirs (currently just `<home>/plugins`). Deliberately

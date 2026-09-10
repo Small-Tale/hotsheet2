@@ -60,6 +60,8 @@ impl ProcessSpawner for FakeSpawner {
 fn ctx<'a>(spawner: &'a FakeSpawner, cwd: &str) -> DriveCtx<'a> {
     DriveCtx {
         cwd: PathBuf::from(cwd),
+        model: None,
+        effort: None,
         spawner,
         env: Vec::new(),
         app_server: None,
@@ -92,7 +94,7 @@ impl AppServerTurn for FakeTurn {
 #[derive(Default)]
 struct FakeAppServer {
     opened: RefCell<Option<(Option<String>, PathBuf)>>, // (resume, cwd)
-    last_turn: RefCell<Option<(String, String)>>,       // (thread_id, content)
+    last_turn: RefCell<Option<(String, String, Option<String>, Option<String>)>>,
     interrupted: Rc<Cell<bool>>,
     fail: bool,
 }
@@ -114,8 +116,15 @@ impl AppServerClient for FakeAppServer {
         &self,
         thread_id: &str,
         content: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
     ) -> Result<Box<dyn AppServerTurn>, AppServerError> {
-        *self.last_turn.borrow_mut() = Some((thread_id.to_string(), content.to_string()));
+        *self.last_turn.borrow_mut() = Some((
+            thread_id.to_string(),
+            content.to_string(),
+            model.map(str::to_string),
+            effort.map(str::to_string),
+        ));
         Ok(Box::new(FakeTurn {
             running: true,
             outcome: AppServerOutcome::Completed,
@@ -127,6 +136,8 @@ impl AppServerClient for FakeAppServer {
 fn appctx<'a>(spawner: &'a FakeSpawner, app: &'a FakeAppServer, cwd: &str) -> DriveCtx<'a> {
     DriveCtx {
         cwd: PathBuf::from(cwd),
+        model: None,
+        effort: None,
         spawner,
         env: Vec::new(),
         app_server: Some(app),
@@ -303,6 +314,23 @@ fn app_server_drive_resumes_a_thread_and_interrupts() {
 }
 
 #[test]
+fn app_server_drive_passes_per_turn_model_and_effort() {
+    let spawner = FakeSpawner::new(0);
+    let app = FakeAppServer::default();
+    let mut context = appctx(&spawner, &app, "/w");
+    context.model = Some("gpt-5.4".into());
+    context.effort = Some("high".into());
+    let mut turn = AppServerDrive::new()
+        .run(&Target::default(), "continue", &context)
+        .unwrap();
+    assert_eq!(turn.wait(), DoneReason::Completed);
+    let sent = app.last_turn.borrow();
+    let sent = sent.as_ref().unwrap();
+    assert_eq!(sent.2.as_deref(), Some("gpt-5.4"));
+    assert_eq!(sent.3.as_deref(), Some("high"));
+}
+
+#[test]
 fn app_server_drive_errors_without_a_connection() {
     let spawner = FakeSpawner::new(0);
     // No app_server in the ctx. (Box<dyn TurnHandle> isn't Debug, so match.)
@@ -348,7 +376,9 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
     // The opened thread id is exposed for cross-turn resume (HS2-3C1XK3).
     assert_eq!(cx.session_id().as_deref(), Some("thread-1"));
 
-    let mut turn = cx.start_turn(&thread, "work the top ticket").unwrap();
+    let mut turn = cx
+        .start_turn(&thread, "work the top ticket", None, None)
+        .unwrap();
     assert_eq!(turn.wait(), AppServerOutcome::Completed);
     assert!(!turn.is_running());
     assert_eq!(
@@ -366,7 +396,7 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
 fn codex_client_streams_native_activity_and_agent_output_before_done() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
     let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
-    let mut turn = cx.start_turn(&thread, "work").unwrap();
+    let mut turn = cx.start_turn(&thread, "work", None, None).unwrap();
     match turn.next_event() {
         Some(TurnEvent::NativeActivity { source, payload }) => {
             assert_eq!(source, "codex-transcript");
@@ -396,7 +426,7 @@ fn codex_client_resumes_a_thread_by_id() {
     assert_eq!(thread, "thread-42");
     // The resumed thread id is surfaced as the session id (cross-turn resume, HS2-3C1XK3).
     assert_eq!(cx.session_id().as_deref(), Some("thread-42"));
-    let mut turn = cx.start_turn(&thread, "keep going").unwrap();
+    let mut turn = cx.start_turn(&thread, "keep going", None, None).unwrap();
     assert_eq!(turn.wait(), AppServerOutcome::Completed);
 }
 
@@ -404,7 +434,7 @@ fn codex_client_resumes_a_thread_by_id() {
 fn codex_client_maps_a_failed_turn() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoFail)).unwrap();
     let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
-    let mut turn = cx.start_turn(&thread, "x").unwrap();
+    let mut turn = cx.start_turn(&thread, "x", None, None).unwrap();
     match turn.wait() {
         AppServerOutcome::Failed(msg) => assert_eq!(msg, "boom"),
         other => panic!("expected Failed, got {other:?}"),
@@ -415,7 +445,7 @@ fn codex_client_maps_a_failed_turn() {
 fn codex_client_interrupts_a_running_turn() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::UntilInterrupt)).unwrap();
     let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
-    let mut turn = cx.start_turn(&thread, "long task").unwrap();
+    let mut turn = cx.start_turn(&thread, "long task", None, None).unwrap();
     assert!(turn.is_running(), "no turn/completed until interrupt");
     turn.interrupt();
     assert!(!turn.is_running());
@@ -428,6 +458,8 @@ fn codex_client_drives_the_appserver_drive_end_to_end() {
     let spawner = FakeSpawner::new(0);
     let ctx = DriveCtx {
         cwd: PathBuf::from("/proj"),
+        model: None,
+        effort: None,
         spawner: &spawner,
         env: Vec::new(),
         app_server: Some(&cx),
@@ -478,7 +510,12 @@ fn codex_live_turn_against_the_daemon() {
     let thread = cx.open_thread(None, &cwd).expect("thread/start");
     eprintln!("live: opened thread {thread}");
     let mut turn = cx
-        .start_turn(&thread, "Run `pwd`, then reply with only the word: pong")
+        .start_turn(
+            &thread,
+            "Run `pwd`, then reply with only the word: pong",
+            None,
+            None,
+        )
         .expect("turn/start");
     let mut saw_native = false;
     let outcome = loop {
@@ -616,7 +653,9 @@ fn codex_client_drives_a_turn_over_a_websocket_uds() {
         .open_thread(None, std::path::Path::new("/work/proj"))
         .expect("thread/start over websocket");
     assert_eq!(thread, "thread-1");
-    let mut turn = cx.start_turn(&thread, "work the top ticket").unwrap();
+    let mut turn = cx
+        .start_turn(&thread, "work the top ticket", None, None)
+        .unwrap();
     assert_eq!(turn.wait(), AppServerOutcome::Completed);
 }
 
@@ -662,7 +701,7 @@ fn codex_live_turn_over_the_shared_daemon() {
     let thread = cx.open_thread(None, &cwd).expect("thread/start");
     eprintln!("live(shared): opened thread {thread}");
     let mut turn = cx
-        .start_turn(&thread, "Reply with only the word: pong")
+        .start_turn(&thread, "Reply with only the word: pong", None, None)
         .expect("turn/start");
     let outcome = turn.wait();
     eprintln!("live(shared): turn outcome = {outcome:?}");
@@ -681,6 +720,8 @@ use crate::claude::scripted::{ClaudeMode, ScriptedClaude};
 fn chanctx<'a>(spawner: &'a FakeSpawner, ch: &'a ClaudeChannel, cwd: &str) -> DriveCtx<'a> {
     DriveCtx {
         cwd: PathBuf::from(cwd),
+        model: None,
+        effort: None,
         spawner,
         env: Vec::new(),
         app_server: None,
@@ -841,9 +882,17 @@ fn claude_live_turn_over_the_channel() {
     let mcp = configured_mcp
         .as_deref()
         .or_else(|| isolated_mcp.as_ref().map(|f| f.path()));
-    let transport =
-        crate::claude::ClaudeStreamTransport::spawn(&program, &cwd, None, mcp, None, &[])
-            .expect("claude spawn");
+    let transport = crate::claude::ClaudeStreamTransport::spawn(
+        &program,
+        &cwd,
+        None,
+        mcp,
+        None,
+        None,
+        None,
+        &[],
+    )
+    .expect("claude spawn");
     let ch = ClaudeChannel::connect(transport);
     let mut turn = ch
         .start_turn("Use Glob with the pattern '*' once, then reply with only the word: pong")
@@ -927,6 +976,8 @@ fn live(prompt: &str, cwd: &std::path::Path) -> LiveTrigger {
     LiveTrigger {
         cwd: cwd.to_path_buf(),
         prompt: prompt.to_string(),
+        model: None,
+        effort: None,
         role: Role::Main,
         conn_id: "conn-1".into(),
         resume: None,

@@ -19,6 +19,8 @@ pub struct PrepareDrive {
     pub env: Vec<String>,
     pub permission_bridge: Arc<SharedPermissionBridge>,
     pub persistent_home: Option<PathBuf>,
+    pub model: Option<String>,
+    pub effort: Option<String>,
 }
 
 /// Prepared drive boundary. Tests inject a fake here; production delegates to SafeTrigger,
@@ -31,6 +33,8 @@ pub trait PreparedClientDrive: Send + Sync {
         prompt: &str,
         resume: Option<&str>,
         connection_id: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
         control: &TurnControl,
         on_event: &mut dyn FnMut(&TurnEvent),
     ) -> Result<TurnDone, String>;
@@ -79,14 +83,18 @@ impl PreparedClientDrive for NativePreparedDrive {
         prompt: &str,
         resume: Option<&str>,
         connection_id: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
         control: &TurnControl,
         on_event: &mut dyn FnMut(&TurnEvent),
     ) -> Result<TurnDone, String> {
         let mut registry = ConnectionRegistry::new(30_000);
         self.0
-            .run_turn_controlled(
+            .run_turn_controlled_with_options(
                 prompt,
                 resume,
+                model,
+                effort,
                 false,
                 connection_id.to_owned(),
                 &mut registry,
@@ -109,6 +117,10 @@ pub struct ClientConnectionInfo {
     pub session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
 }
 
 struct ConnectionState {
@@ -163,6 +175,8 @@ struct ClientConnection {
     project: String,
     home_id: String,
     drive: Arc<dyn PreparedClientDrive>,
+    model: Option<String>,
+    effort: Option<String>,
     state: Mutex<ConnectionState>,
 }
 
@@ -252,6 +266,8 @@ impl ClientDriveManager {
             return Ok(connection_info(&existing));
         }
 
+        let model = request.model.clone();
+        let effort = request.effort.clone();
         let drive = self
             .backend
             .prepare(request)
@@ -263,6 +279,8 @@ impl ClientDriveManager {
             project,
             home_id,
             drive,
+            model,
+            effort,
             state: Mutex::new(ConnectionState {
                 busy: false,
                 session_id: session_id.clone(),
@@ -290,6 +308,8 @@ impl ClientDriveManager {
         &self,
         id: &str,
         explicit_session: Option<String>,
+        model: Option<String>,
+        effort: Option<String>,
     ) -> Result<ClientTurnJob, ClientDriveError> {
         let connection = self
             .connection(id)?
@@ -330,6 +350,8 @@ impl ClientDriveManager {
             connection,
             control,
             resume,
+            model,
+            effort,
         })
     }
 
@@ -505,6 +527,8 @@ pub struct ClientTurnJob {
     connection: Arc<ClientConnection>,
     control: TurnControl,
     resume: Option<String>,
+    model: Option<String>,
+    effort: Option<String>,
 }
 
 impl ClientTurnJob {
@@ -517,6 +541,8 @@ impl ClientTurnJob {
             prompt,
             self.resume.as_deref(),
             &self.connection.id,
+            self.model.as_deref().or(self.connection.model.as_deref()),
+            self.effort.as_deref().or(self.connection.effort.as_deref()),
             &self.control,
             on_event,
         )
@@ -538,6 +564,8 @@ fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
         actions,
         session_id: state.as_ref().and_then(|state| state.session_id.clone()),
         last_error: state.and_then(|state| state.last_error.clone()),
+        model: connection.model.clone(),
+        effort: connection.effort.clone(),
     }
 }
 

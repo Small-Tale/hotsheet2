@@ -243,6 +243,8 @@ impl SafeTrigger {
         let t = LiveTrigger {
             cwd: self.cwd.clone(),
             prompt: prompt.to_string(),
+            model: None,
+            effort: None,
             role: if worker { Role::Worker } else { Role::Main },
             conn_id,
             resume: resume.map(str::to_string),
@@ -275,6 +277,25 @@ impl SafeTrigger {
         control: &TurnControl,
         on_event: &mut dyn FnMut(&TurnEvent),
     ) -> Result<TurnDone> {
+        self.run_turn_controlled_with_options(
+            prompt, resume, None, None, worker, conn_id, registry, control, on_event,
+        )
+    }
+
+    /// Controlled turn with plugin-validated provider model/effort overrides.
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_turn_controlled_with_options(
+        &self,
+        prompt: &str,
+        resume: Option<&str>,
+        model: Option<&str>,
+        effort: Option<&str>,
+        worker: bool,
+        conn_id: String,
+        registry: &mut ConnectionRegistry,
+        control: &TurnControl,
+        on_event: &mut dyn FnMut(&TurnEvent),
+    ) -> Result<TurnDone> {
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -282,6 +303,8 @@ impl SafeTrigger {
         let t = LiveTrigger {
             cwd: self.cwd.clone(),
             prompt: prompt.to_string(),
+            model: model.map(str::to_string),
+            effort: effort.map(str::to_string),
             role: if worker { Role::Worker } else { Role::Main },
             conn_id,
             resume: resume.map(str::to_string),
