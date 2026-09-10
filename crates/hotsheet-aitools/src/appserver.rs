@@ -11,12 +11,19 @@
 //! the daemon through the `codex app-server proxy` byte-relay specifically is still open
 //! (HS2-115).
 
-use crate::codex::CodexDaemonService;
+use std::path::Path;
+use std::process::{Command, Stdio};
+use std::time::Duration;
+
+use crate::codex::{CodexAppServer, CodexDaemonService, StdioTransport};
 use crate::drive::{
     BackingService, DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport,
     TurnHandle,
 };
+use crate::model_catalog::{RuntimeModelCatalog, RuntimeModelCatalogSource};
 use crate::ports::{AppServerError, AppServerOutcome, AppServerTurn};
+
+const MODEL_CATALOG_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Drives Codex via its persistent app-server daemon. Optionally carries the
 /// [`CodexDaemonService`] so a generic caller can prestart the daemon through
@@ -24,6 +31,7 @@ use crate::ports::{AppServerError, AppServerOutcome, AppServerTurn};
 #[derive(Default)]
 pub struct AppServerDrive {
     service: Option<CodexDaemonService>,
+    model_catalog: Option<AppServerModelCatalog>,
 }
 
 impl AppServerDrive {
@@ -35,8 +43,10 @@ impl AppServerDrive {
 
     /// A drive that exposes `program`'s app-server daemon through [`Drive::service`].
     pub fn with_daemon(program: impl Into<String>) -> Self {
+        let program = program.into();
         Self {
-            service: Some(CodexDaemonService::new(program)),
+            service: Some(CodexDaemonService::new(program.clone())),
+            model_catalog: Some(AppServerModelCatalog::new(program, Vec::new())),
         }
     }
 
@@ -45,8 +55,17 @@ impl AppServerDrive {
         program: impl Into<String>,
         codex_home: impl Into<std::path::PathBuf>,
     ) -> Self {
+        let program = program.into();
+        let codex_home = codex_home.into();
         Self {
-            service: Some(CodexDaemonService::with_home(program, codex_home)),
+            service: Some(CodexDaemonService::with_home(
+                program.clone(),
+                codex_home.clone(),
+            )),
+            model_catalog: Some(AppServerModelCatalog::new(
+                program,
+                vec![("CODEX_HOME".into(), codex_home.display().to_string())],
+            )),
         }
     }
 }
@@ -64,6 +83,12 @@ impl Drive for AppServerDrive {
 
     fn service(&self) -> Option<&dyn BackingService> {
         self.service.as_ref().map(|s| s as &dyn BackingService)
+    }
+
+    fn model_catalog(&self) -> Option<&dyn RuntimeModelCatalogSource> {
+        self.model_catalog
+            .as_ref()
+            .map(|catalog| catalog as &dyn RuntimeModelCatalogSource)
     }
 
     fn run(
@@ -88,6 +113,56 @@ impl Drive for AppServerDrive {
             )
             .map_err(as_drive_err)?;
         Ok(Box::new(AppServerTurnHandle { turn, done: None }))
+    }
+}
+
+#[derive(Debug)]
+struct AppServerModelCatalog {
+    program: String,
+    env: Vec<(String, String)>,
+}
+
+impl AppServerModelCatalog {
+    fn new(program: String, env: Vec<(String, String)>) -> Self {
+        Self { program, env }
+    }
+}
+
+impl RuntimeModelCatalogSource for AppServerModelCatalog {
+    fn version(&self) -> Result<String, String> {
+        let mut command = Command::new(&self.program);
+        command
+            .arg("--version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        for (key, value) in &self.env {
+            command.env(key, value);
+        }
+        let output = command
+            .output()
+            .map_err(|error| format!("starting '{} --version': {error}", self.program))?;
+        if !output.status.success() {
+            return Err(format!(
+                "'{} --version' exited with {}",
+                self.program, output.status
+            ));
+        }
+        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if version.is_empty() {
+            Err(format!("'{} --version' returned no version", self.program))
+        } else {
+            Ok(version)
+        }
+    }
+
+    fn discover(&self, cwd: &Path) -> Result<RuntimeModelCatalog, String> {
+        let transport = StdioTransport::spawn(&self.program, cwd, &self.env)
+            .map_err(|error| format!("starting '{} app-server': {error}", self.program))?;
+        CodexAppServer::connect_with_timeout(transport, MODEL_CATALOG_REQUEST_TIMEOUT)
+            .map_err(|error| error.to_string())?
+            .list_models()
+            .map_err(|error| error.to_string())
     }
 }
 

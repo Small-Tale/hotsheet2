@@ -108,7 +108,7 @@ export class Api {
   openCodeReview=(checkout:string,id:string,target:CodeReviewTarget)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/tickets/${encodeURIComponent(id)}/code-review`,{method:'POST',body:JSON.stringify(target)});
   permissions=()=>this.request<PermissionRequest[]>('/permissions');
   activeToolConnections=()=>this.request<ToolConnection[]>('/connections');
-  aiTools=()=>this.request<AiToolDescriptor[]>('/ai-tools');
+  aiTools=(refresh=false)=>this.request<AiToolDescriptor[]>(`/ai-tools${refresh?'?refresh=true':''}`);
   aiSettings=()=>this.request<AiToolDefaults>('/ai-settings');
   saveAiSettings=(value:AiToolDefaults)=>this.request<AiToolDefaults>('/ai-settings',{method:'PUT',body:JSON.stringify(value)});
   toolSessions=()=>this.request<ToolSession[]>('/drive/sessions');

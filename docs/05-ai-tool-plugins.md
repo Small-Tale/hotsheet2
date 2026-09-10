@@ -525,16 +525,26 @@ remove <id>`, and `hotsheet setup <tool|--detect>` (§5.1a).
 
 ### Provider-owned model discovery and defaults
 
-Drivable plugin manifests own their model catalog, effort levels, defaults, live-session
-selection capabilities, and interactive-launch argument templates. Clients discover that
-data through `GET /ai-tools`; they do not maintain provider/model tables. Machine-local
-defaults are validated and stored through `GET`/`PUT /ai-settings` (or the equivalent
-`hotsheet-cli ai-settings get|set` commands) in the global Hot Sheet 2 settings file.
-The bundled Codex manifest is synchronized against the installed Codex app-server's
-`model/list` response: its current default is GPT-6 Astra, followed by the supported
-GPT-5.6 Sol/Terra/Luna, GPT-5.5, and GPT-5.3 Codex Spark entries, with each model's
-advertised effort choices. Runtime discovery with a manifest fallback is tracked by
-HS2-HTNN4F so future provider releases do not require a bundled catalog update.
+Drivable plugin manifests declare model labels, effort levels, defaults, live-session
+selection capabilities, and interactive-launch argument templates. A drive can also
+expose the optional `RuntimeModelCatalogSource` capability. Generic hosts query that
+capability without branching on a provider id: runtime ids, ordering, effort choices,
+and an advertised default are authoritative, while manifest labels remain stable for
+known ids. A valid manifest default (then the first live model) is the fallback when the
+runtime does not advertise one.
+
+Unsupported or unavailable providers use the complete manifest catalog. Successful and
+failed runtime lookups are cached per plugin id and runtime version; a version change
+invalidates the old result, while a transient version-probe failure retains the last good
+catalog. `GET /ai-tools?refresh=true` explicitly retries same-version discovery, retaining
+the last good catalog if that refresh fails. The web client uses that refresh path when
+loading AI settings, and `hotsheet-cli ai-tools --json` uses the same capability/merge
+core. Neither client maintains provider/model tables. Machine-local defaults are validated
+and stored through `GET`/`PUT /ai-settings` (or `hotsheet-cli ai-settings get|set`) in the
+global Hot Sheet 2 settings file.
+
+The bundled Codex manifest therefore remains a useful offline fallback, while a reachable
+Codex app-server supplies its current paginated `model/list` catalog at runtime.
 Connection creation accepts optional model/effort selections. A live turn may override
 them only when the descriptor advertises `change_model` and/or `change_effort`. Interactive
 AI terminals use the same plugin declarations to expand model/effort launch arguments.

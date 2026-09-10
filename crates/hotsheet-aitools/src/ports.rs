@@ -128,6 +128,9 @@ pub trait RpcTransport {
 pub trait RpcWriter: Send {
     /// Send one JSON-RPC message. The transport frames it (appends the newline).
     fn send(&mut self, msg: &str) -> std::io::Result<()>;
+    /// Close the outbound half when a short-lived client is finished. Stream transports
+    /// use this to deliver EOF and let their backing process exit.
+    fn close(&mut self) {}
 }
 
 /// The read half of an [`RpcTransport`] — yields one JSON message at a time.

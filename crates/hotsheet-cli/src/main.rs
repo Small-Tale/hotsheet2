@@ -3728,7 +3728,13 @@ fn cmd_plugin(cmd: PluginCmd) -> Result<()> {
 }
 
 fn discovered_ai_tools() -> Vec<hotsheet_plugins::AiToolDescriptor> {
-    hotsheet_plugins::ai_tool_descriptors(&hotsheet_plugins::default_dirs())
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    hotsheet_aitools::discover_ai_tool_descriptors(
+        &hotsheet_plugins::default_dirs(),
+        &cwd,
+        &mut hotsheet_aitools::ModelCatalogCache::default(),
+        false,
+    )
 }
 
 fn effective_ai_defaults(store: &Path) -> Result<hotsheet_plugins::AiToolDefaults> {

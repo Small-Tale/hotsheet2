@@ -41,7 +41,7 @@ impl StreamChild {
         let stdin = self.child.stdin.take().expect("piped stdin");
         let stdout = self.child.stdout.take().expect("piped stdout");
         (
-            Box::new(PipeWriter { stdin }),
+            Box::new(PipeWriter { stdin: Some(stdin) }),
             Box::new(PipeReader {
                 lines: BufReader::new(stdout),
                 _child: self.child,
@@ -51,13 +51,21 @@ impl StreamChild {
 }
 
 struct PipeWriter {
-    stdin: ChildStdin,
+    stdin: Option<ChildStdin>,
 }
 impl RpcWriter for PipeWriter {
     fn send(&mut self, msg: &str) -> std::io::Result<()> {
-        self.stdin.write_all(msg.as_bytes())?;
-        self.stdin.write_all(b"\n")?;
-        self.stdin.flush()
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::BrokenPipe, "RPC closed"))?;
+        stdin.write_all(msg.as_bytes())?;
+        stdin.write_all(b"\n")?;
+        stdin.flush()
+    }
+
+    fn close(&mut self) {
+        self.stdin.take();
     }
 }
 

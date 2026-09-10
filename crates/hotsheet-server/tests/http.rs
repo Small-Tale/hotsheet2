@@ -198,7 +198,7 @@ async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated(
     let router = app(state);
     let tools = router
         .clone()
-        .oneshot(authed("GET", "/ai-tools", None))
+        .oneshot(authed("GET", "/ai-tools?refresh=true", None))
         .await
         .unwrap();
     assert_eq!(tools.status(), StatusCode::OK);

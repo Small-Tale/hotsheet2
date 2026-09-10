@@ -14,7 +14,7 @@
 //! [`CodexAppServer`], [`CodexTurn`]) is exercised with no live `codex` (`docs/05` §5.10,
 //! the load-bearing testability rule).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 
+use crate::model_catalog::{RuntimeModelCatalog, RuntimeModelSpec};
 use crate::permission::{Decision, SharedPermissionBridge};
 use crate::ports::{
     AppServerClient, AppServerError, AppServerOutcome, AppServerTurn, RpcReader, RpcTransport,
@@ -60,6 +61,7 @@ const TURN_TIMEOUT: Duration = Duration::from_secs(600);
 /// messages a background reader thread routes into.
 struct Inner {
     writer: Mutex<Box<dyn RpcWriter>>,
+    request_timeout: Duration,
     next_id: AtomicI64,
     /// In-flight requests awaiting a response, keyed by request id.
     pending: Mutex<HashMap<i64, Sender<Value>>>,
@@ -96,7 +98,7 @@ impl Inner {
             return Err(e);
         }
 
-        match rx.recv_timeout(REQUEST_TIMEOUT) {
+        match rx.recv_timeout(self.request_timeout) {
             Ok(resp) => {
                 if let Some(err) = resp.get("error") {
                     return Err(AppServerError::Protocol(format!("{method}: {err}")));
@@ -166,6 +168,16 @@ impl Inner {
         let _guard = self.notes.lock().unwrap();
         self.cvar.notify_all();
     }
+
+    fn close(&self) {
+        if !self.closed.swap(true, Ordering::SeqCst) {
+            if let Ok(mut writer) = self.writer.lock() {
+                writer.close();
+            }
+            let _guard = self.notes.lock().unwrap();
+            self.cvar.notify_all();
+        }
+    }
 }
 
 /// Decide a Codex approval ServerRequest (`docs/05` §5.7). Without a policy, auto-approve
@@ -232,10 +244,11 @@ fn approval_action(params: &Value) -> String {
 struct CodexRpc;
 
 impl CodexRpc {
-    fn start(transport: Box<dyn RpcTransport>) -> Arc<Inner> {
+    fn start(transport: Box<dyn RpcTransport>, request_timeout: Duration) -> Arc<Inner> {
         let (writer, mut reader) = transport.split();
         let inner = Arc::new(Inner {
             writer: Mutex::new(writer),
+            request_timeout,
             next_id: AtomicI64::new(1),
             pending: Mutex::new(HashMap::new()),
             notes: Mutex::new(Vec::new()),
@@ -270,11 +283,28 @@ pub struct CodexAppServer {
     last_thread: Mutex<Option<String>>,
 }
 
+impl Drop for CodexAppServer {
+    fn drop(&mut self) {
+        self.inner.close();
+    }
+}
+
 impl CodexAppServer {
     /// Connect over `transport` and perform the `initialize` → `initialized` handshake.
     pub fn connect(transport: Box<dyn RpcTransport>) -> Result<Self, AppServerError> {
-        let inner = CodexRpc::start(transport);
-        inner.request(
+        Self::connect_with_timeout(transport, REQUEST_TIMEOUT)
+    }
+
+    /// Connect with a bounded per-request timeout for short-lived capability probes.
+    pub(crate) fn connect_with_timeout(
+        transport: Box<dyn RpcTransport>,
+        request_timeout: Duration,
+    ) -> Result<Self, AppServerError> {
+        let client = Self {
+            inner: CodexRpc::start(transport, request_timeout),
+            last_thread: Mutex::new(None),
+        };
+        client.inner.request(
             "initialize",
             json!({
                 "clientInfo": {
@@ -285,11 +315,8 @@ impl CodexAppServer {
                 "capabilities": null,
             }),
         )?;
-        inner.notify("initialized", json!(null))?;
-        Ok(Self {
-            inner,
-            last_thread: Mutex::new(None),
-        })
+        client.inner.notify("initialized", json!(null))?;
+        Ok(client)
     }
 
     /// Route Codex approval ServerRequests through a permission policy instead of
@@ -299,6 +326,98 @@ impl CodexAppServer {
         if let Ok(mut p) = self.inner.permission.lock() {
             *p = Some(policy);
         }
+    }
+
+    /// Query the v2 `model/list` catalog, following opaque cursors until exhausted.
+    /// Hidden entries stay hidden even if a future runtime ignores `includeHidden`.
+    pub fn list_models(&self) -> Result<RuntimeModelCatalog, AppServerError> {
+        let mut cursor: Option<String> = None;
+        let mut seen_cursors = HashSet::new();
+        let mut seen_models = HashSet::new();
+        let mut models = Vec::new();
+        for _ in 0..100 {
+            let result = self.inner.request(
+                "model/list",
+                json!({ "cursor": cursor, "limit": null, "includeHidden": false }),
+            )?;
+            let data = result
+                .get("data")
+                .and_then(Value::as_array)
+                .ok_or_else(|| {
+                    AppServerError::Protocol("model/list response missing data".into())
+                })?;
+            for value in data {
+                if value.get("hidden").and_then(Value::as_bool) == Some(true) {
+                    continue;
+                }
+                let Some(id) = value
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .or_else(|| value.get("id").and_then(Value::as_str))
+                    .map(str::trim)
+                    .filter(|id| !id.is_empty())
+                else {
+                    continue;
+                };
+                if !seen_models.insert(id.to_string()) {
+                    continue;
+                }
+                let label = value
+                    .get("displayName")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|label| !label.is_empty())
+                    .unwrap_or(id)
+                    .to_string();
+                let mut seen_efforts = HashSet::new();
+                let effort_levels = value
+                    .get("supportedReasoningEfforts")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|item| item.get("reasoningEffort").and_then(Value::as_str))
+                    .map(str::trim)
+                    .filter(|effort| !effort.is_empty() && seen_efforts.insert(*effort))
+                    .map(str::to_string)
+                    .collect();
+                models.push(RuntimeModelSpec {
+                    id: id.to_string(),
+                    label,
+                    effort_levels,
+                    default_effort: value
+                        .get("defaultReasoningEffort")
+                        .and_then(Value::as_str)
+                        .map(str::trim)
+                        .filter(|effort| !effort.is_empty())
+                        .map(str::to_string),
+                    is_default: value
+                        .get("isDefault")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false),
+                });
+            }
+            let next = match result.get("nextCursor") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(value)) => Some(value.clone()),
+                Some(_) => {
+                    return Err(AppServerError::Protocol(
+                        "model/list response has a non-string nextCursor".into(),
+                    ));
+                }
+            };
+            let Some(next) = next else {
+                return Ok(RuntimeModelCatalog { models });
+            };
+            if !seen_cursors.insert(next.clone()) {
+                return Err(AppServerError::Protocol(
+                    "model/list repeated a pagination cursor".into(),
+                ));
+            }
+            cursor = Some(next);
+        }
+        Err(AppServerError::Protocol(
+            "model/list exceeded 100 pages".into(),
+        ))
     }
 }
 
@@ -881,20 +1000,31 @@ impl UdsWsTransport {
 impl RpcTransport for UdsWsTransport {
     fn split(self: Box<Self>) -> (Box<dyn RpcWriter>, Box<dyn RpcReader>) {
         let Self { out_tx, in_rx } = *self;
-        (Box::new(WsWriter { out_tx }), Box::new(WsReader { in_rx }))
+        (
+            Box::new(WsWriter {
+                out_tx: Some(out_tx),
+            }),
+            Box::new(WsReader { in_rx }),
+        )
     }
 }
 
 /// Write half: hand each JSON-RPC line to the ws task to be framed as a text message.
 struct WsWriter {
-    out_tx: tokio::sync::mpsc::UnboundedSender<String>,
+    out_tx: Option<tokio::sync::mpsc::UnboundedSender<String>>,
 }
 
 impl RpcWriter for WsWriter {
     fn send(&mut self, msg: &str) -> std::io::Result<()> {
         self.out_tx
+            .as_ref()
+            .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::BrokenPipe, "writer closed"))?
             .send(msg.to_string())
             .map_err(|_| std::io::Error::other("websocket connection closed"))
+    }
+
+    fn close(&mut self) {
+        self.out_tx.take();
     }
 }
 
@@ -1062,7 +1192,7 @@ pub(crate) mod scripted {
             let (tx, rx) = channel::<String>();
             (
                 Box::new(ScriptWriter {
-                    out: tx,
+                    out: Some(tx),
                     mode: self.mode,
                 }),
                 Box::new(ScriptReader { inbox: rx }),
@@ -1072,13 +1202,15 @@ pub(crate) mod scripted {
 
     /// Parses each outgoing request and queues the daemon's replies onto the loopback.
     struct ScriptWriter {
-        out: Sender<String>,
+        out: Option<Sender<String>>,
         mode: TurnMode,
     }
 
     impl ScriptWriter {
         fn push(&self, v: Value) {
-            let _ = self.out.send(v.to_string());
+            if let Some(out) = &self.out {
+                let _ = out.send(v.to_string());
+            }
         }
     }
 
@@ -1100,6 +1232,38 @@ pub(crate) mod scripted {
                             "platformFamily": "unix", "platformOs": "macos" }),
                 ),
                 "initialized" => {} // client notification; nothing to answer
+                "model/list" => {
+                    if params.get("cursor").and_then(Value::as_str) == Some("next") {
+                        respond(
+                            self,
+                            json!({ "data": [
+                                { "id": "runtime-hidden", "model": "runtime-hidden",
+                                  "displayName": "Hidden", "hidden": true,
+                                  "supportedReasoningEfforts": [],
+                                  "defaultReasoningEffort": "medium", "isDefault": false },
+                                { "id": "runtime-fast", "model": "runtime-fast",
+                                  "displayName": "Runtime Fast", "hidden": false,
+                                  "supportedReasoningEfforts": [
+                                    { "reasoningEffort": "low", "description": "Fast" }
+                                  ], "defaultReasoningEffort": "low", "isDefault": false }
+                            ], "nextCursor": null }),
+                        );
+                    } else {
+                        respond(
+                            self,
+                            json!({ "data": [
+                                { "id": "runtime-default", "model": "runtime-default",
+                                  "displayName": "Runtime Default", "hidden": false,
+                                  "supportedReasoningEfforts": [
+                                    { "reasoningEffort": "medium", "description": "Balanced" },
+                                    { "reasoningEffort": "medium", "description": "Duplicate" },
+                                    { "reasoningEffort": "  ", "description": "Invalid" },
+                                    { "reasoningEffort": "high", "description": "Deep" }
+                                  ], "defaultReasoningEffort": "medium", "isDefault": true }
+                            ], "nextCursor": "next" }),
+                        );
+                    }
+                }
                 "thread/start" => respond(self, json!({ "thread": { "id": "thread-1" } })),
                 "thread/resume" => {
                     let tid = params
@@ -1179,6 +1343,10 @@ pub(crate) mod scripted {
                 _ => respond(self, json!({})),
             }
             Ok(())
+        }
+
+        fn close(&mut self) {
+            self.out.take();
         }
     }
 

@@ -128,6 +128,9 @@ pub struct AppState {
     terminal_broker: Option<terminal_broker::TerminalBroker>,
     /// Search roots for third-party plugins; embedded first-party plugins are always present.
     plugin_dirs: Arc<Vec<std::path::PathBuf>>,
+    /// Runtime AI model catalogs keyed by plugin id and installed runtime version. The
+    /// manifest remains the fallback for unsupported or unavailable capabilities.
+    model_catalogs: Arc<Mutex<hotsheet_aitools::ModelCatalogCache>>,
     /// Checkout ids with a background setup refresh in flight; repeated opens coalesce.
     setup_refreshes: Arc<Mutex<std::collections::HashSet<String>>>,
     /// Public URL injected into manifest-launched terminal tools for permission route-back.
@@ -266,6 +269,7 @@ impl AppState {
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
+            model_catalogs: Arc::new(Mutex::new(hotsheet_aitools::ModelCatalogCache::default())),
             setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
             terminal_server_url: Arc::new(Mutex::new(None)),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
@@ -556,6 +560,7 @@ impl AppState {
     /// Override plugin search roots (for hermetic hosts and integration tests).
     pub fn with_plugin_dirs(mut self, dirs: Vec<std::path::PathBuf>) -> Self {
         self.plugin_dirs = Arc::new(dirs);
+        self.model_catalogs = Arc::new(Mutex::new(hotsheet_aitools::ModelCatalogCache::default()));
         self
     }
 
@@ -5020,18 +5025,31 @@ struct CreateDriveConnectionReq {
     session_id: Option<String>,
 }
 
-fn discovered_ai_tools(state: &AppState) -> Vec<hotsheet_plugins::AiToolDescriptor> {
-    hotsheet_plugins::ai_tool_descriptors(&state.plugin_dirs)
+fn discovered_ai_tools(state: &AppState, refresh: bool) -> Vec<hotsheet_plugins::AiToolDescriptor> {
+    let mut cache = state.model_catalogs.lock().unwrap();
+    hotsheet_aitools::discover_ai_tool_descriptors(
+        &state.plugin_dirs,
+        state.store.root(),
+        &mut cache,
+        refresh,
+    )
+}
+
+#[derive(Default, Deserialize)]
+struct AiToolsQuery {
+    #[serde(default)]
+    refresh: bool,
 }
 
 async fn list_ai_tools(
     State(state): State<AppState>,
+    Query(query): Query<AiToolsQuery>,
 ) -> Json<Vec<hotsheet_plugins::AiToolDescriptor>> {
-    Json(discovered_ai_tools(&state))
+    Json(discovered_ai_tools(&state, query.refresh))
 }
 
 fn effective_ai_settings(state: &AppState) -> Result<hotsheet_plugins::AiToolDefaults, ApiError> {
-    let tools = discovered_ai_tools(state);
+    let tools = discovered_ai_tools(state, false);
     let saved = Settings::new(state.store.root())
         .get("ai.defaults", hotsheet_ticketing::Scope::Global)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
@@ -5052,7 +5070,7 @@ async fn put_ai_settings(
     State(state): State<AppState>,
     Json(defaults): Json<hotsheet_plugins::AiToolDefaults>,
 ) -> Result<Json<hotsheet_plugins::AiToolDefaults>, ApiError> {
-    hotsheet_plugins::validate_ai_defaults(&discovered_ai_tools(&state), &defaults)
+    hotsheet_plugins::validate_ai_defaults(&discovered_ai_tools(&state, false), &defaults)
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
     Settings::new(state.store.root())
         .set(
@@ -5073,7 +5091,7 @@ async fn create_drive_connection(
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "tool is required"));
     }
     if request.model.is_some() || request.effort.is_some() {
-        let tools = discovered_ai_tools(&state);
+        let tools = discovered_ai_tools(&state, false);
         if tools.iter().any(|tool| tool.id == request.tool) {
             hotsheet_plugins::validate_ai_defaults(
                 &tools,
@@ -5213,7 +5231,7 @@ async fn send_drive_turn(
         .get(&id)
         .map_err(client_drive_api_error)?;
     if request.model.is_some() || request.effort.is_some() {
-        let tools = discovered_ai_tools(&state);
+        let tools = discovered_ai_tools(&state, false);
         if let Some(descriptor) = tools.iter().find(|tool| tool.id == connection.tool) {
             if request.model.is_some()
                 && !descriptor
@@ -5602,7 +5620,7 @@ fn terminal_launch(
     })?;
     if req.model.is_some() || req.effort.is_some() {
         hotsheet_plugins::validate_ai_defaults(
-            &discovered_ai_tools(state),
+            &discovered_ai_tools(state, false),
             &hotsheet_plugins::AiToolDefaults {
                 tool: tool.to_string(),
                 model: req.model.clone(),

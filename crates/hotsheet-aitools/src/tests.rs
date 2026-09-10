@@ -393,6 +393,24 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
 }
 
 #[test]
+fn codex_client_reads_the_paginated_visible_runtime_model_catalog() {
+    let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
+    let catalog = cx.list_models().unwrap();
+    assert_eq!(
+        catalog
+            .models
+            .iter()
+            .map(|model| model.id.as_str())
+            .collect::<Vec<_>>(),
+        ["runtime-default", "runtime-fast"]
+    );
+    assert_eq!(catalog.models[0].effort_levels, ["medium", "high"],);
+    assert_eq!(catalog.models[0].default_effort.as_deref(), Some("medium"));
+    assert!(catalog.models[0].is_default);
+    assert_eq!(catalog.models[1].label, "Runtime Fast");
+}
+
+#[test]
 fn codex_client_streams_native_activity_and_agent_output_before_done() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
     let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();

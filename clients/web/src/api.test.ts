@@ -102,6 +102,7 @@ describe('client-owned AI drive transport',()=>{
     const api=new Api('/api');
     await api.toolSessions();
     await api.aiTools();
+    await api.aiTools(true);
     await api.aiSettings();
     await api.saveAiSettings({tool:'codex',model:'gpt-5.4',effort:'high'});
     await api.createToolConnection({tool:'codex',checkout:'checkout-1',connection_id:'main/1',model:'gpt-5.4',effort:'high'});
@@ -110,12 +111,13 @@ describe('client-owned AI drive transport',()=>{
     await api.deleteToolConnection('checkout/1','main/1');
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/drive/sessions',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/ai-tools',expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/ai-settings',expect.any(Object));
-    expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/ai-settings',expect.objectContaining({method:'PUT',body:'{"tool":"codex","model":"gpt-5.4","effort":"high"}'}));
-    expect(fetchMock).toHaveBeenNthCalledWith(5,'/api/drive/connections',expect.objectContaining({method:'POST',body:'{"tool":"codex","checkout":"checkout-1","connection_id":"main/1","model":"gpt-5.4","effort":"high"}'}));
-    expect(fetchMock).toHaveBeenNthCalledWith(6,'/api/drive/connections/main%2F1/turns',expect.objectContaining({method:'POST',body:'{"content":"Continue this work","session_id":"thread/1","model":"gpt-5.4","effort":"xhigh"}'}));
-    expect(fetchMock).toHaveBeenNthCalledWith(7,'/api/drive/connections/main%2F1/interrupt',expect.objectContaining({method:'POST'}));
-    expect(fetchMock).toHaveBeenNthCalledWith(8,'/api/checkouts/checkout%2F1/drive/connections/main%2F1',expect.objectContaining({method:'DELETE'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/ai-tools?refresh=true',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/ai-settings',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(5,'/api/ai-settings',expect.objectContaining({method:'PUT',body:'{"tool":"codex","model":"gpt-5.4","effort":"high"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(6,'/api/drive/connections',expect.objectContaining({method:'POST',body:'{"tool":"codex","checkout":"checkout-1","connection_id":"main/1","model":"gpt-5.4","effort":"high"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(7,'/api/drive/connections/main%2F1/turns',expect.objectContaining({method:'POST',body:'{"content":"Continue this work","session_id":"thread/1","model":"gpt-5.4","effort":"xhigh"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(8,'/api/drive/connections/main%2F1/interrupt',expect.objectContaining({method:'POST'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(9,'/api/checkouts/checkout%2F1/drive/connections/main%2F1',expect.objectContaining({method:'DELETE'}));
     fetchMock.mockRestore();
   });
 });

@@ -435,10 +435,15 @@ carry the same workflow version as the repository adapters, preventing a refresh
 downgrading current instructions. Executable detection includes Windows `PATHEXT`
 wrappers such as `.cmd` as well as native binaries.
 
-`hotsheet ai-tools --json` reports detected drivable plugins and their plugin-owned
-model/effort catalogs. `hotsheet ai-settings get --json` and `ai-settings set --tool
-<id> [--model <id>] [--effort <level>]` provide headless parity for the machine-local
-defaults exposed by the authenticated `/ai-tools` and `/ai-settings` server APIs.
+`hotsheet ai-tools --json` reports detected drivable plugins and their effective
+model/effort catalogs. A drive may expose the optional runtime-catalog capability; when
+it does, the core queries the installed provider, merges live ids and effort levels with
+manifest labels/default fallbacks, and degrades to the manifest when the runtime is
+offline. The server caches results by plugin id plus runtime version; authenticated
+`GET /ai-tools?refresh=true` bypasses the same-version cache so clients can refresh after
+provider changes. `hotsheet ai-settings get --json` and `ai-settings set --tool <id>
+[--model <id>] [--effort <level>]` provide headless parity for the machine-local defaults
+exposed by `/ai-tools` and `/ai-settings`.
 
 **Headless bootstrap (HS2-J90FXF):** `bootstrap` is the idempotent composition for a
 new or existing code project. It initializes or reuses a standalone HS2 store, links

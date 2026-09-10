@@ -497,24 +497,29 @@ pub fn detected_drivable_plugins(search_dirs: &[PathBuf]) -> Vec<Plugin> {
         .collect()
 }
 
+/// Project one detected plugin's declarative AI-tool descriptor. Runtime hosts may
+/// enrich this descriptor through optional transport capabilities, while this remains
+/// the authoritative offline/unsupported fallback.
+pub fn ai_tool_descriptor(plugin: &Plugin) -> Option<AiToolDescriptor> {
+    let drive = plugin.manifest.drive.as_ref()?;
+    Some(AiToolDescriptor {
+        id: plugin.id().to_string(),
+        display_name: plugin.manifest.display_name.clone(),
+        models: drive.models.clone(),
+        default_model: drive.default_model.clone(),
+        default_effort: drive.default_effort.clone(),
+        actions: drive
+            .session_options
+            .iter()
+            .map(|option| format!("change_{option}"))
+            .collect(),
+    })
+}
+
 pub fn ai_tool_descriptors(search_dirs: &[PathBuf]) -> Vec<AiToolDescriptor> {
     detected_drivable_plugins(search_dirs)
         .into_iter()
-        .filter_map(|plugin| {
-            let drive = plugin.manifest.drive.as_ref()?;
-            Some(AiToolDescriptor {
-                id: plugin.id().to_string(),
-                display_name: plugin.manifest.display_name.clone(),
-                models: drive.models.clone(),
-                default_model: drive.default_model.clone(),
-                default_effort: drive.default_effort.clone(),
-                actions: drive
-                    .session_options
-                    .iter()
-                    .map(|option| format!("change_{option}"))
-                    .collect(),
-            })
-        })
+        .filter_map(|plugin| ai_tool_descriptor(&plugin))
         .collect()
 }
 

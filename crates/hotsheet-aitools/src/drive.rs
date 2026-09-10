@@ -225,6 +225,12 @@ pub trait Drive {
     fn service(&self) -> Option<&dyn BackingService> {
         None
     }
+
+    /// A runtime model catalog, when this transport can query one. Presence of this
+    /// object is the capability signal; callers never infer support from the tool id.
+    fn model_catalog(&self) -> Option<&dyn crate::model_catalog::RuntimeModelCatalogSource> {
+        None
+    }
 }
 
 /// A persistent process a drive connects to across turns (e.g. the Codex `app-server`
