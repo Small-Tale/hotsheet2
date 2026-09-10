@@ -337,9 +337,11 @@ represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally without truncating identities; the overflow
 strip provides direct access to tabs outside the current viewport and reserves enough inset
-for the complete selected shadow and keyboard focus ring at both ends. Project and terminal
-tabs support same-strip pointer drag reordering; project order is device-local and persists
-across reloads. The Add action remains
+for the complete selected shadow and keyboard focus ring at both ends. Project tabs support
+same-strip pointer drag reordering. Terminal and AI-chat tabs share one project-scoped
+device-local order and can drag across kinds or move with Alt+Shift+Left/Right; closing the
+selected drawer tab transfers focus to the nearest live mixed-kind neighbor. Project and
+drawer order persist across reloads. The Add action remains
 vertically centered with the pills.
 
 In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →

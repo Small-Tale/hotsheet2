@@ -992,11 +992,14 @@ the close button before the label and optional leading/trailing state icons. Rig
 either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
 Tabs; terminal tabs additionally offer Rename. Human-readable defaults replace generated
 ids, and device-local rename overrides survive refresh/reopen without renaming the PTY
-identity. Project tabs and the terminals inside one project can be reordered directly by
-dragging. Project order is stored with the open-project roots and restored without changing
-the remembered active project; terminal order remains stable across session refreshes for
-the current client lifetime. Holding Option/Alt when opening the menu changes the directional
-action to the left.
+identity. Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
+one mixed drawer strip by dragging across either kind. Project order is stored with the
+open-project roots and restored without changing the remembered active project. Each
+project's mixed drawer order is stored device-locally and remains stable across refresh and
+drawer reopen. Holding Option/Alt when opening the menu changes the directional action to the
+left. Alt+Shift+Left/Right reorders the focused drawer tab without losing focus. Closing a
+selected terminal or chat chooses the nearest remaining tab to its right, then left, across
+both kinds before falling back to the grid.
 Closeable tabs reserve the same trailing state slot even when it is empty, balancing the
 leading close control and preventing labels from shifting when status appears. Terminal tabs
 use that shared tab surface directly rather than layering a second selected background inside
