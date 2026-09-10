@@ -556,6 +556,11 @@ cleanup of the old live HS1 data; backups are never removed.
   by-name URL aliases. Each image in a multi-image note therefore opens the media item
   the user actually selected; button, keyboard-arrow, and horizontal-swipe navigation
   continue from that item.
+  Swipe navigation arms only from a primary-pointer gesture on non-interactive media-stage
+  space while markup and horizontal zoom panning are inactive. It follows one pointer and
+  requires a 48px horizontal-dominant movement; controls, scrubbers, vertical motion, and
+  cancelled gestures cannot change the selected attachment. Native video-slider drags
+  therefore update the playhead and `currentTime` without resetting the media or annotations.
   Full-screen markup mode follows the exported image/video gallery wireframes: normalized
   rectangles can be drawn, selected, moved, resized from edges/corners, labeled, edited,
   and confirmation-deleted. Video and animated-SVG annotations can be points or inclusive
@@ -566,7 +571,7 @@ cleanup of the old live HS1 data; backups are never removed.
   white wireframe-style ticks remain over the scrubber. The selected annotation's presence
   indicator spans at least its complete time range. Selecting a visible annotation rectangle
   adds high-contrast white square-bracket range handles to the timeline; those endpoints can
-  be dragged or adjusted with the arrow keys, replacing ambiguous toolbar chevrons. Only the
+  be dragged with a real pointer or adjusted with the arrow keys, replacing ambiguous toolbar chevrons. Only the
   selected annotation exposes adjustable range brackets, and clicking empty image or video
   canvas space clears the rectangle selection and its resize/range handles.
   The gallery annotation action carries the current annotation-count badge, and media-grid

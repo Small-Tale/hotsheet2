@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 
 import {describe,expect,it} from 'vitest';
 
-import {AttachmentGallery,attachmentGalleryAnnotationTolerance,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
+import {AttachmentGallery,attachmentGalleryAnnotationTolerance,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGallerySwipeDirection,attachmentGallerySwipeGesture,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
 
 describe('AttachmentGallery',()=>{
   const images=[{id:'a',name:'a.png',url:'/a.png'},{id:'b',name:'b.svg',url:'/b.svg'}];
@@ -108,6 +108,17 @@ describe('AttachmentGallery',()=>{
     expect(attachmentGalleryKeyboardAction('End',500,6000)).toEqual({kind:'seek',playheadMs:6000});
     expect(attachmentGalleryKeyboardAction('Escape',500,6000)).toBeUndefined();
     let playhead=5990;for(let index=0;index<4;index++){const action=attachmentGalleryKeyboardAction('ArrowRight',playhead,6000);if(action?.kind==='seek')playhead=action.playheadMs}expect(playhead).toBe(6000);
+  });
+  it('arbitrates gallery swipes away from controls, markup, and zoom panning',()=>{
+    const start={pointerId:7,clientX:200,clientY:100,button:0,markup:false,stage:true,interactive:false,horizontallyScrollable:false};
+    const gesture=attachmentGallerySwipeGesture(start);
+    expect(gesture).toEqual({pointerId:7,startX:200,startY:100});
+    expect(attachmentGallerySwipeDirection(gesture,7,140,102)).toBe(1);
+    expect(attachmentGallerySwipeDirection(gesture,7,260,102)).toBe(-1);
+    expect(attachmentGallerySwipeDirection(gesture,7,160,102)).toBeUndefined();
+    expect(attachmentGallerySwipeDirection(gesture,7,140,170)).toBeUndefined();
+    expect(attachmentGallerySwipeDirection(gesture,8,140,102)).toBeUndefined();
+    for(const disabled of [{interactive:true},{markup:true},{stage:false},{horizontallyScrollable:true},{button:2}])expect(attachmentGallerySwipeGesture({...start,...disabled})).toBeUndefined();
   });
   it('uses the same point/range controls for animated SVG annotations',()=>{
     const markup=String(AttachmentGallery({images:[{id:'svg',name:'animated.svg',url:'/animated.svg'}],activeUrl:'/animated.svg',markup:true,playheadMs:500,durationMs:2000,annotations:[{id:'point',x:100,y:100,width:1000,height:1000,start_ms:500,end_ms:500,text:''}],selectedAnnotation:'point'}));
