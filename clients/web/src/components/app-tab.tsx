@@ -6,7 +6,7 @@ import { X } from 'lucide';
 import { LucideIcon } from './lucide-icon';
 
 export interface AppTabProps {
-  kind:'project'|'terminal';
+  kind:'project'|'terminal'|'ai-chat';
   id:string;
   name:string;
   selected?:boolean;
@@ -17,7 +17,7 @@ export interface AppTabProps {
 }
 
 export function AppTab({kind,id,name,selected=false,closable=true,leading,trailing,rootAttributes={}}:AppTabProps){
-  const idAttribute=kind==='project'?{'data-project-id':id}:{'data-terminal-id':id},selectAction=kind==='project'?'select-project-tab':'select-drawer-terminal',closeAction=kind==='project'?'close-project-tab':'close-terminal-tab';
+  const idAttribute=kind==='project'?{'data-project-id':id}:kind==='terminal'?{'data-terminal-id':id}:{'data-chat-id':id},selectAction=kind==='project'?'select-project-tab':'select-drawer-item',closeAction=kind==='project'?'close-project-tab':kind==='terminal'?'close-terminal-tab':'close-ai-chat-tab';
   return <div class={`app-tab ${kind}-tab`} data-component={`${kind}-tab`} data-tab-kind={kind} data-tab-id={id} data-selected={String(selected)} draggable="true" {...idAttribute} {...rootAttributes}>
     {closable&&<button type="button" tabindex="-1" class={`app-tab__close ${kind}-tab__close`} data-action={closeAction} {...idAttribute} aria-label={`Close ${name}`} title={`Close ${name}`}><LucideIcon icon={X} name="x"/></button>}
     <button type="button" class={`app-tab__select ${kind}-tab__select`} role="tab" aria-selected={String(selected)} aria-keyshortcuts="Delete Backspace" data-action={selectAction} {...idAttribute} tabindex="0">

@@ -1,6 +1,7 @@
 .ai-conversation::part(dialog) { width: min(48rem, calc(100vw - 2rem)); height: min(38rem, calc(100vh - 3rem)); }
 .ai-conversation::part(body) { display: grid; min-height: 0; padding: 0; grid-template-rows: auto minmax(0, 1fr); }
 .ai-conversation::part(footer) { display: block; padding: 0; border: 0; }
+.ai-conversation--embedded { display: grid; width: 100%; height: 100%; min-height: 0; background: var(--wa-color-surface-default); grid-template-rows: minmax(0, 1fr) auto; }
 .ai-conversation__header-action::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); }
 .ai-conversation__header-action svg { width: 1rem; height: 1rem; }
 .ai-conversation__transcript { display: flex; min-height: 0; padding: 1rem; overflow-y: auto; flex-direction: column; gap: .8rem; }

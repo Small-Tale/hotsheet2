@@ -35,4 +35,6 @@ describe('AIConversation',()=>{
     expect(String(AIConversation({open:true,tool:'Codex',messages:[message],draft:'',busy:false,interruptible:false}))).not.toContain('rate-ai-content');
     expect(String(AIConversation({open:true,tool:'Codex',messages:[message],draft:'',busy:false,interruptible:false,feedbackAvailable:true}))).toContain('data-ai-feedback-target="conversation:answer"');
   });
+
+  it('reuses the complete conversation surface as embedded drawer content',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'Ask about the project',busy:false,interruptible:false}));expect(markup).toContain('data-presentation="embedded"');expect(markup).toContain('ai-conversation--embedded');expect(markup).toContain('Conversation transcript');expect(markup).toContain('send-conversation-turn');expect(markup).not.toContain('wa-dialog')});
 });
