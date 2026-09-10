@@ -48,6 +48,8 @@ pub struct RepositoryStatus {
 
 #[derive(Debug, Error)]
 pub enum RepositoryStatusError {
+    #[error("the checkout is not a Git repository")]
+    NotRepository,
     #[error("git status failed: {0}")]
     Git(String),
     #[error(transparent)]
@@ -55,6 +57,14 @@ pub enum RepositoryStatusError {
 }
 
 pub fn snapshot(root: &Path) -> Result<RepositoryStatus, RepositoryStatusError> {
+    let metadata = std::fs::metadata(root)?;
+    if !metadata.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "repository root is not a directory",
+        )
+        .into());
+    }
     let output = std::process::Command::new("git")
         .args([
             "-C",
@@ -68,11 +78,23 @@ pub fn snapshot(root: &Path) -> Result<RepositoryStatus, RepositoryStatusError> 
         ])
         .output()?;
     if !output.status.success() {
+        // Do not key behavior to Git's localized diagnostic text. A checkout can be a
+        // nested directory or a linked worktree (where `.git` is a file), so look for
+        // either kind of work-tree marker through its ancestors. If one exists, retain
+        // the exact Git failure: a damaged or inaccessible repository is not the same
+        // recoverable state as a folder that has never been initialized.
+        if !has_git_worktree_marker(root) {
+            return Err(RepositoryStatusError::NotRepository);
+        }
         return Err(RepositoryStatusError::Git(
             String::from_utf8_lossy(&output.stderr).trim().to_owned(),
         ));
     }
     Ok(parse_porcelain_v2(&String::from_utf8_lossy(&output.stdout)))
+}
+
+fn has_git_worktree_marker(root: &Path) -> bool {
+    root.ancestors().any(|path| path.join(".git").exists())
 }
 
 pub fn parse_porcelain_v2(text: &str) -> RepositoryStatus {
@@ -189,6 +211,39 @@ fn change_kind(value: u8) -> Option<RepositoryFileChange> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
+
+    #[test]
+    fn distinguishes_an_uninitialized_folder_from_a_broken_repository() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            snapshot(root.path()),
+            Err(RepositoryStatusError::NotRepository)
+        ));
+
+        std::fs::create_dir(root.path().join(".git")).unwrap();
+        assert!(matches!(
+            snapshot(root.path()),
+            Err(RepositoryStatusError::Git(_))
+        ));
+    }
+
+    #[test]
+    fn snapshots_a_newly_initialized_repository() {
+        let root = tempfile::tempdir().unwrap();
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(root.path())
+            .args(["init", "--quiet"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+
+        let status = snapshot(root.path()).unwrap();
+        assert!(status.branch.is_some());
+        assert!(status.clean);
+    }
+
     #[test]
     fn parses_branch_divergence_and_worktree_counts() {
         let input = concat!(

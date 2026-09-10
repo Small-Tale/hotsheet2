@@ -643,7 +643,7 @@ impl AppState {
             return;
         }
         let root = std::path::PathBuf::from(&checkout.root);
-        if !root.join(".git").exists() {
+        if hotsheet_ticketing::repository_status::snapshot(&root).is_err() {
             return;
         }
         match spawn_repository_watcher(
@@ -1146,6 +1146,14 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/repository/status",
             get(checkout_repository_status),
+        )
+        .route(
+            "/checkouts/{reference}/repository/init",
+            post(initialize_checkout_repository),
+        )
+        .route(
+            "/checkouts/{reference}/repository/remote",
+            post(configure_checkout_repository_remote),
         )
         .route(
             "/checkouts/{reference}/repository/files",
@@ -2887,6 +2895,59 @@ async fn checkout_repository_status(
         .map_err(repository_browser_api_error)
 }
 
+async fn initialize_checkout_repository(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<repository_browser::RepositoryOverview>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let root: std::path::PathBuf = checkout.root.clone().into();
+    let overview = tokio::task::spawn_blocking(move || repository_browser::initialize(&root))
+        .await
+        .map_err(|error| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("repository initialization task failed: {error}"),
+            )
+        })?
+        .map_err(repository_setup_api_error)?;
+    state.watch_checkout_repository(&checkout);
+    state.emit(repository_change_event(&checkout.id));
+    Ok(Json(overview))
+}
+
+#[derive(Deserialize)]
+struct RepositoryRemoteBody {
+    remote: String,
+}
+
+async fn configure_checkout_repository_remote(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(body): Json<RepositoryRemoteBody>,
+) -> Result<Json<repository_browser::RepositoryOverview>, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let root: std::path::PathBuf = checkout.root.clone().into();
+    let overview = tokio::task::spawn_blocking(move || {
+        repository_browser::configure_origin(&root, &body.remote)
+    })
+    .await
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("repository remote task failed: {error}"),
+        )
+    })?
+    .map_err(repository_setup_api_error)?;
+    state.emit(repository_change_event(&checkout.id));
+    Ok(Json(overview))
+}
+
 async fn checkout_repository_files(
     State(state): State<AppState>,
     Path(reference): Path<String>,
@@ -2998,6 +3059,21 @@ fn repository_browser_api_error(error: repository_browser::RepositoryBrowserErro
         RepositoryBrowserError::Review(_) | RepositoryBrowserError::Launch(_) => {
             StatusCode::INTERNAL_SERVER_ERROR
         }
+    };
+    ApiError::new(status, error.to_string())
+}
+
+fn repository_setup_api_error(error: repository_browser::RepositorySetupError) -> ApiError {
+    use repository_browser::RepositorySetupError;
+    let status = match error {
+        RepositorySetupError::InvalidRemote => StatusCode::BAD_REQUEST,
+        RepositorySetupError::NotRepository | RepositorySetupError::OriginAlreadyConfigured(_) => {
+            StatusCode::CONFLICT
+        }
+        RepositorySetupError::Git { .. } | RepositorySetupError::Discovery(_) => {
+            StatusCode::UNPROCESSABLE_ENTITY
+        }
+        RepositorySetupError::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     ApiError::new(status, error.to_string())
 }

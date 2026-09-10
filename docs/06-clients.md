@@ -1420,6 +1420,13 @@ same warm click-to-DOM ceiling applies to an authoritative new-ticket response.
 ## 6.10 Repository status browser
 
 The project sidebar repository summary opens a viewport-bounded master/detail dialog.
+When the selected project folder has not been initialized as a Git repository, the same
+dialog presents a typed recovery state instead of a raw Git diagnostic. Its explicit
+Initialize action runs `git init` only at that checkout root, leaves every existing file
+untracked, and never stages, commits, or pushes. A second step can add an `origin` remote
+or be skipped; it is idempotent for the same URL and refuses to replace an existing
+origin. Both mutations require the server secret, resolve only a registered checkout,
+and start repository monitoring after initialization succeeds.
 The master column uses value cells for branch, upstream, ahead, and behind, followed by
 counted Staged, Unstaged, Untracked, Conflicted, and Commits views. The detail column
 scrolls independently. File views preserve porcelain-v2 change kinds (including rename

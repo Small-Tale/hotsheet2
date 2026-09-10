@@ -7,16 +7,19 @@ import { DialogHeader, ValueTable } from './dialog-layout';
 import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
+import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
 import { type CodeReviewComparison, TicketCodeReview } from './ticket-code-review';
 import { ToolbarControlGroup } from './toolbar-control-group';
 
-export type RepositoryStatusState='clean'|'dirty'|'ahead'|'behind'|'diverged'|'conflicted'|'error';
+export type RepositoryStatusState='clean'|'dirty'|'ahead'|'behind'|'diverged'|'conflicted'|'uninitialized'|'error';
 export type RepositoryStatusView='staged'|'unstaged'|'untracked'|'conflicted'|'commits';
 export type ChangeEvidenceView='docs'|'tests'|'source'|'other';
 export interface RepositoryFileMenu {path:string;paths?:string[];absolutePath?:string;absolutePaths?:string[];x:number;y:number;diff?:'ticket'|'staged'|'unstaged'}
 
-export function repositoryStatusState(status:RepositoryStatus|null,error=''):RepositoryStatusState {
-  if(error||!status)return 'error';
+export function repositoryStatusState(status:RepositoryStatus|null,error='',initialized=true):RepositoryStatusState {
+  if(error)return 'error';
+  if(!initialized)return 'uninitialized';
+  if(!status)return 'error';
   if(status.conflicted>0)return 'conflicted';
   if(status.ahead>0&&status.behind>0)return 'diverged';
   if(status.behind>0)return 'behind';
@@ -26,7 +29,7 @@ export function repositoryStatusState(status:RepositoryStatus|null,error=''):Rep
 }
 
 const stateCopy:Record<RepositoryStatusState,string>={
-  clean:'Working tree is clean',dirty:'Local changes have not been committed',ahead:'Local commits have not been pushed',behind:'Remote commits have not been integrated',diverged:'Local and remote histories have diverged',conflicted:'Repository has unresolved conflicts',error:'Repository status is unavailable',
+  clean:'Working tree is clean',dirty:'Local changes have not been committed',ahead:'Local commits have not been pushed',behind:'Remote commits have not been integrated',diverged:'Local and remote histories have diverged',conflicted:'Repository has unresolved conflicts',uninitialized:'Git has not been initialized for this folder',error:'Repository status is unavailable',
 };
 
 const viewDefinitions=[
@@ -37,14 +40,15 @@ const viewDefinitions=[
   {id:'commits',label:'Commits',icon:GitCommitHorizontal},
 ] as const;
 
-export function RepositoryStatusPopover({status,error='',refreshing=false,view='unstaged',fileMenu,selectedFiles=[],embedded=false,comparison,expandedCommits,detailFiles,detailCommits,detailLoading=false,detailError='',detailHasMore=false}:{status:RepositoryStatus|null;error?:string;refreshing?:boolean;view?:RepositoryStatusView;fileMenu?:RepositoryFileMenu;selectedFiles?:readonly string[];embedded?:boolean;comparison?:CodeReviewComparison;expandedCommits?:readonly string[];detailFiles?:RepositoryFile[];detailCommits?:CodeReview['commits'];detailLoading?:boolean;detailError?:string;detailHasMore?:boolean}){
-  const state=repositoryStatusState(status,error),branch=status?.branch||'No branch',upstream=status?.upstream||'No upstream';
+export function RepositoryStatusPopover({status,error='',initialized=true,setupStep,setupBusy=false,setupError='',refreshing=false,view='unstaged',fileMenu,selectedFiles=[],embedded=false,comparison,expandedCommits,detailFiles,detailCommits,detailLoading=false,detailError='',detailHasMore=false}:{status:RepositoryStatus|null;error?:string;initialized?:boolean;setupStep?:RepositorySetupStep;setupBusy?:boolean;setupError?:string;refreshing?:boolean;view?:RepositoryStatusView;fileMenu?:RepositoryFileMenu;selectedFiles?:readonly string[];embedded?:boolean;comparison?:CodeReviewComparison;expandedCommits?:readonly string[];detailFiles?:RepositoryFile[];detailCommits?:CodeReview['commits'];detailLoading?:boolean;detailError?:string;detailHasMore?:boolean}){
+  const recoveryStep=error?undefined:setupStep??(!initialized?'initialize':undefined),state=repositoryStatusState(status,error,initialized),branch=status?.branch||'No branch',upstream=status?.upstream||'No upstream';
   const files=repositoryFilesForView(detailFiles??status?.files??[],view);
   const review:CodeReview|undefined=status?{commits:detailCommits??status.commits??[],ranges:status.ranges??[],difftool:status.difftool,truncated:Boolean(status.truncated)}:undefined;
-  const actions=<>{comparison&&<ToolbarControlGroup buttonAppearance="push" single><button type="button" data-action="toggle-repository-comparison" aria-label="Compare two commits" title="Compare two commits" aria-pressed={String(comparison.active)}><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup>}<ToolbarControlGroup single><button type="button" class="repository-status-popover__refresh" data-action="refresh-repository-status" disabled={refreshing} aria-label={refreshing?'Refreshing repository status':'Refresh repository status'}><LucideIcon icon={RefreshCw} name="refresh-cw"/></button></ToolbarControlGroup></>;
-  return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'repository-status-popover'} class="dialog-surface repository-status-popover" data-component="repository-status-popover" data-state={state} data-view={view} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="repository-status-title">
-    <DialogHeader title="Repository Status" titleId="repository-status-title" summary={stateCopy[state]} iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/>} actions={actions}/>
-    {status&&<div class="repository-status-popover__layout"><aside>
+  const actions=<>{comparison&&!recoveryStep&&<ToolbarControlGroup buttonAppearance="push" single><button type="button" data-action="toggle-repository-comparison" aria-label="Compare two commits" title="Compare two commits" aria-pressed={String(comparison.active)}><LucideIcon icon={GitCompare} name="git-compare" /></button></ToolbarControlGroup>}<ToolbarControlGroup single><button type="button" class="repository-status-popover__refresh" data-action="refresh-repository-status" disabled={refreshing} aria-label={refreshing?'Refreshing repository status':'Refresh repository status'}><LucideIcon icon={RefreshCw} name="refresh-cw"/></button></ToolbarControlGroup></>;
+  return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'repository-status-popover'} class="dialog-surface repository-status-popover" data-component="repository-status-popover" data-state={state} data-view={view} data-setup-step={recoveryStep} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="repository-status-title">
+    <DialogHeader title="Repository Status" titleId="repository-status-title" summary={recoveryStep==='remote'?'Git is ready; add an origin remote or skip for now':stateCopy[state]} iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={state==='clean'?CircleCheck:state==='error'||state==='conflicted'?TriangleAlert:GitBranch} name={state==='clean'?'circle-check':state==='error'||state==='conflicted'?'triangle-alert':'git-branch'}/>} actions={actions}/>
+    {recoveryStep&&<RepositorySetup step={recoveryStep} busy={setupBusy} error={setupError}/>}
+    {status&&!recoveryStep&&<div class="repository-status-popover__layout"><aside>
       <ValueTable className="repository-status-popover__values" label="Repository identity"><div><dt>Branch</dt><dd>{branch}</dd></div><div><dt>Upstream</dt><dd>{upstream}</dd></div></ValueTable>
       <ValueTable className="repository-status-popover__values" label="Repository synchronization"><div><dt>Ahead</dt><dd><LucideIcon icon={ArrowUp} name="arrow-up"/>{status.ahead}</dd></div><div><dt>Behind</dt><dd><LucideIcon icon={ArrowDown} name="arrow-down"/>{status.behind}</dd></div></ValueTable>
       <nav aria-label="Repository views"><MenuHeader label="Views"/>{viewDefinitions.map(item=><MenuItem action="select-repository-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'square-pen':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/>} label={item.label} trailing={<small class="menu-item__count">{repositoryViewCount(status,item.id)}</small>}/>)}</nav>
@@ -53,8 +57,8 @@ export function RepositoryStatusPopover({status,error='',refreshing=false,view='
       {detailError&&<p class="repository-status-popover__detail-error" role="alert">{detailError}</p>}
       {(detailHasMore||detailLoading)&&<div class="repository-status-popover__pagination" data-repository-pagination-sentinel="true" role="status">{detailLoading?'Loading more…':'Load more'}</div>}
     </main></div>}
-    {!status&&!error&&<p class="repository-status-popover__loading" role="status">Loading repository status…</p>}
-    {error&&<p class="repository-status-popover__error" role="alert">{error}</p>}
+    {!recoveryStep&&!status&&!error&&<p class="repository-status-popover__loading" role="status">Loading repository status…</p>}
+    {!recoveryStep&&error&&<p class="repository-status-popover__error" role="alert">{error}</p>}
     {fileMenu&&<RepositoryFileContextMenu menu={fileMenu} platform={status?.platform}/>}
   </section>;
 }

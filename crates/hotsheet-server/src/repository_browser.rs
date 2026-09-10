@@ -29,6 +29,7 @@ impl HostPlatform {
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct RepositoryOverview {
+    pub initialized: bool,
     #[serde(flatten)]
     pub status: RepositoryStatus,
     pub root: String,
@@ -101,12 +102,48 @@ pub enum RepositoryBrowserError {
     Launch(String),
 }
 
+#[derive(Debug, Error)]
+pub enum RepositorySetupError {
+    #[error("the checkout is not a Git repository")]
+    NotRepository,
+    #[error("enter a valid Git remote URL")]
+    InvalidRemote,
+    #[error("origin is already configured as {0}; refusing to replace existing user configuration")]
+    OriginAlreadyConfigured(String),
+    #[error("could not run Git: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("git {operation} failed: {detail}")]
+    Git {
+        operation: &'static str,
+        detail: String,
+    },
+    #[error(transparent)]
+    Discovery(#[from] RepositoryBrowserError),
+}
+
 pub fn discover(root: &Path) -> Result<RepositoryOverview, RepositoryBrowserError> {
-    let mut status = repository_status::snapshot(root)?;
+    let mut status = match repository_status::snapshot(root) {
+        Ok(status) => status,
+        Err(repository_status::RepositoryStatusError::NotRepository) => {
+            return Ok(RepositoryOverview {
+                initialized: false,
+                status: RepositoryStatus::default(),
+                root: root.display().to_string(),
+                platform: HostPlatform::current(),
+                commit_count: 0,
+                commits: Vec::new(),
+                ranges: Vec::new(),
+                difftool: None,
+                truncated: false,
+            });
+        }
+        Err(error) => return Err(error.into()),
+    };
     let (ranges, difftool) =
         code_review::discover_repository_metadata(root, status.ahead as usize)?;
     status.files.clear();
     Ok(RepositoryOverview {
+        initialized: true,
         root: root.display().to_string(),
         platform: HostPlatform::current(),
         commit_count: commit_count(root),
@@ -116,6 +153,85 @@ pub fn discover(root: &Path) -> Result<RepositoryOverview, RepositoryBrowserErro
         difftool,
         truncated: false,
     })
+}
+
+/// Initialize only the supplied checkout root and return the same typed overview used by
+/// repository-status reads. The operation is idempotent and never stages or commits files.
+pub fn initialize(root: &Path) -> Result<RepositoryOverview, RepositorySetupError> {
+    let current = discover(root)?;
+    if current.initialized {
+        return Ok(current);
+    }
+    checked_git(root, &["init", "--quiet"], "init")?;
+    let initialized = discover(root)?;
+    if !initialized.initialized {
+        return Err(RepositorySetupError::NotRepository);
+    }
+    Ok(initialized)
+}
+
+/// Add a provider-neutral `origin` without replacing user configuration or publishing
+/// project contents. Publishing needs an explicit user-owned commit and remains outside
+/// this recovery operation.
+pub fn configure_origin(
+    root: &Path,
+    remote: &str,
+) -> Result<RepositoryOverview, RepositorySetupError> {
+    let remote = remote.trim();
+    if remote.is_empty() || remote.starts_with('-') || remote.contains(['\r', '\n']) {
+        return Err(RepositorySetupError::InvalidRemote);
+    }
+    if !discover(root)?.initialized {
+        return Err(RepositorySetupError::NotRepository);
+    }
+
+    let remotes = checked_git(root, &["remote"], "remote list")?;
+    if remotes.lines().any(|name| name.trim() == "origin") {
+        let current = checked_git(root, &["remote", "get-url", "origin"], "remote lookup")?;
+        let current = current.trim();
+        if current == remote {
+            return discover(root).map_err(Into::into);
+        }
+        return Err(RepositorySetupError::OriginAlreadyConfigured(
+            current.to_owned(),
+        ));
+    }
+
+    checked_git(
+        root,
+        &["remote", "add", "origin", remote],
+        "remote add origin",
+    )?;
+    discover(root).map_err(Into::into)
+}
+
+fn checked_git(
+    root: &Path,
+    args: &[&str],
+    operation: &'static str,
+) -> Result<String, RepositorySetupError> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        return Err(RepositorySetupError::Git {
+            operation,
+            detail: if stderr.is_empty() {
+                if stdout.is_empty() {
+                    format!("Git exited with {}", output.status)
+                } else {
+                    stdout
+                }
+            } else {
+                stderr
+            },
+        });
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 pub fn files_page(
@@ -298,6 +414,86 @@ fn spawn(program: &str, args: &[std::ffi::OsString]) -> Result<(), RepositoryBro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn git(root: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    }
+
+    #[test]
+    fn represents_an_uninitialized_checkout_without_an_api_error() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("project.txt"), "project\n").unwrap();
+
+        let overview = discover(root.path()).unwrap();
+        assert!(!overview.initialized);
+        assert_eq!(overview.root, root.path().display().to_string());
+        assert_eq!(overview.commit_count, 0);
+        assert!(!overview.status.clean);
+        assert!(overview.ranges.is_empty());
+    }
+
+    #[test]
+    fn initializes_a_checkout_idempotently_without_committing_its_files() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("project.txt"), "project\n").unwrap();
+
+        let first = initialize(root.path()).unwrap();
+        let second = initialize(root.path()).unwrap();
+        assert!(first.initialized);
+        assert!(second.initialized);
+        assert_eq!(first.status.untracked, 1);
+        assert_eq!(first.commit_count, 0);
+        assert!(
+            !Command::new("git")
+                .arg("-C")
+                .arg(root.path())
+                .args(["rev-parse", "--verify", "HEAD"])
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+    }
+
+    #[test]
+    fn configures_origin_idempotently_without_replacing_it_or_pushing() {
+        let root = tempfile::tempdir().unwrap();
+        initialize(root.path()).unwrap();
+
+        let first = "git@example.com:team/project.git";
+        assert!(configure_origin(root.path(), first).unwrap().initialized);
+        assert!(configure_origin(root.path(), first).unwrap().initialized);
+        assert_eq!(git(root.path(), &["remote", "get-url", "origin"]), first);
+        assert!(matches!(
+            configure_origin(root.path(), "git@example.com:other/project.git"),
+            Err(RepositorySetupError::OriginAlreadyConfigured(current)) if current == first
+        ));
+        assert_eq!(git(root.path(), &["remote", "get-url", "origin"]), first);
+    }
+
+    #[test]
+    fn rejects_unsafe_remote_values_before_changing_git_configuration() {
+        let root = tempfile::tempdir().unwrap();
+        initialize(root.path()).unwrap();
+        for remote in ["", "--upload-pack=bad", "good\nbad"] {
+            assert!(matches!(
+                configure_origin(root.path(), remote),
+                Err(RepositorySetupError::InvalidRemote)
+            ));
+        }
+        assert!(git(root.path(), &["remote"]).is_empty());
+    }
 
     #[test]
     fn rejects_paths_that_can_escape_the_checkout() {

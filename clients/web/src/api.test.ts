@@ -65,6 +65,19 @@ describe('custom view transport',()=>{
   });
 });
 
+describe('repository setup transport',()=>{
+  it('initializes the selected checkout and adds origin through checkout-scoped routes',async()=>{
+    const status={initialized:true,ahead:0,behind:0,staged:0,unstaged:0,untracked:1,conflicted:0};
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response(JSON.stringify(status),{status:200}));
+    const api=new Api('/api');
+    await expect(api.initializeRepository('folder with spaces')).resolves.toEqual(status);
+    await expect(api.configureRepositoryRemote('folder with spaces','git@example.com:team/project.git')).resolves.toEqual(status);
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/checkouts/folder%20with%20spaces/repository/init',expect.objectContaining({method:'POST'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/checkouts/folder%20with%20spaces/repository/remote',expect.objectContaining({method:'POST',body:'{"remote":"git@example.com:team/project.git"}'}));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('change polling transport',()=>{
   it('requests the secret-hiding project proxy with a cursor and abort signal',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({cursor:8,events:[],overflow:false}),{status:200}));

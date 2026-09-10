@@ -23,7 +23,27 @@ describe('RepositoryStatusPopover',()=>{
     expect(repositoryStatusState(status({conflicted:0,behind:1}))).toBe('behind');
     expect(repositoryStatusState(status({conflicted:0,ahead:1,behind:1}))).toBe('diverged');
     expect(repositoryStatusState(status())).toBe('conflicted');
+    expect(repositoryStatusState(null,'',false)).toBe('uninitialized');
     expect(repositoryStatusState(null,'git failed')).toBe('error');
+  });
+
+  it('renders typed no-Git recovery instead of a raw repository error',()=>{
+    const markup=String(RepositoryStatusPopover({status:status({branch:undefined,upstream:undefined,staged:0,unstaged:0,untracked:0,conflicted:0,files:[]}),initialized:false}));
+    expect(markup).toContain('data-state="uninitialized"');
+    expect(markup).toContain('data-setup-step="initialize"');
+    expect(markup).toContain('Git has not been initialized for this folder');
+    expect(markup).toContain('data-action="initialize-repository"');
+    expect(markup).not.toContain('<dt>Branch</dt>');
+    expect(markup).not.toContain('fatal: not a git repository');
+  });
+
+  it('can present the optional origin step after initialization',()=>{
+    const markup=String(RepositoryStatusPopover({status:status({conflicted:0}),setupStep:'remote'}));
+    expect(markup).toContain('data-setup-step="remote"');
+    expect(markup).toContain('data-action="connect-repository-remote"');
+    expect(markup).toContain('data-action="skip-repository-remote"');
+    expect(markup).toContain('Add origin');
+    expect(markup).not.toContain('<dt>Branch</dt>');
   });
 
   it('renders value cells, selectable views, and iconic file status in a master-detail layout',()=>{

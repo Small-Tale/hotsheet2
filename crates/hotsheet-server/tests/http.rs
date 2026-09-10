@@ -2576,6 +2576,7 @@ async fn repository_status_endpoint_reports_real_git_state() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let status = body_json(resp).await;
+    assert_eq!(status["initialized"], true);
     assert_eq!(status["unstaged"], 1);
     assert_eq!(status["untracked"], 1);
     assert_eq!(status["clean"], false);
@@ -2659,6 +2660,116 @@ async fn repository_status_endpoint_reports_real_git_state() {
         .await
         .unwrap();
     assert_eq!(unsafe_action.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn repository_setup_initializes_only_the_checkout_and_preserves_existing_origin() {
+    let (_d, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    std::fs::write(checkout.path().join("existing.txt"), "leave me untracked\n").unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let registry = registry_home.path().join("checkouts.json");
+    let app = app(st.with_checkout_registry(&registry));
+    let body =
+        serde_json::json!({"root": checkout.path(), "alias": "no-git", "stores": []}).to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&body)))
+        .await
+        .unwrap();
+
+    let status = app
+        .clone()
+        .oneshot(authed("GET", "/checkouts/no-git/repository/status", None))
+        .await
+        .unwrap();
+    assert_eq!(status.status(), StatusCode::OK);
+    let status = body_json(status).await;
+    assert_eq!(status["initialized"], false);
+    assert_eq!(status["untracked"], 0);
+
+    let denied = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/checkouts/no-git/repository/init")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+    let missing = app
+        .clone()
+        .oneshot(authed("POST", "/checkouts/missing/repository/init", None))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    for _ in 0..2 {
+        let initialized = app
+            .clone()
+            .oneshot(authed("POST", "/checkouts/no-git/repository/init", None))
+            .await
+            .unwrap();
+        assert_eq!(initialized.status(), StatusCode::OK);
+        let initialized = body_json(initialized).await;
+        assert_eq!(initialized["initialized"], true);
+        assert!(initialized["untracked"].as_u64().unwrap() >= 1);
+    }
+    assert!(checkout.path().join(".git").is_dir());
+
+    let invalid_remote = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/no-git/repository/remote",
+            Some(r#"{"remote":"-unsafe"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid_remote.status(), StatusCode::BAD_REQUEST);
+
+    let first_remote = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/no-git/repository/remote",
+            Some(r#"{"remote":"git@example.com:team/project.git"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(first_remote.status(), StatusCode::OK);
+    let same_remote = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/no-git/repository/remote",
+            Some(r#"{"remote":"git@example.com:team/project.git"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(same_remote.status(), StatusCode::OK);
+    let replacement = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/checkouts/no-git/repository/remote",
+            Some(r#"{"remote":"git@example.com:team/other.git"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(replacement.status(), StatusCode::CONFLICT);
+    let configured = Command::new("git")
+        .arg("-C")
+        .arg(checkout.path())
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&configured.stdout).trim(),
+        "git@example.com:team/project.git"
+    );
 }
 
 #[tokio::test]
