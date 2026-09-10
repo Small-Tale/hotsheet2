@@ -1,7 +1,13 @@
 .ticket-tag-editor { display: grid; gap: var(--wa-space-xs); }
 .ticket-tag-editor__chips { display: flex; flex-wrap: wrap; gap: .4rem; }
-.ticket-tag-editor__add { display: flex; width: 100%; min-height: 1.8rem; padding: 0 .45rem; border-radius: .4rem; color: var(--wa-color-neutral-on-quiet); cursor: text; align-items: center; gap: .35rem; font-size: var(--wa-font-size-xs); }
-.ticket-tag-editor__add:focus-within, .ticket-tag-editor__add:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
+.ticket-tag-editor__add { display: inline-flex; width: max-content; min-height: 1.8rem; padding: 0 .45rem; border: 0; border-radius: .4rem; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; align-items: center; gap: .35rem; font: inherit; font-size: var(--wa-font-size-xs); }
+.ticket-tag-editor__add:hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
+.ticket-tag-editor__add:focus-visible { color: var(--wa-color-brand-on-quiet); outline: var(--wa-focus-ring); outline-offset: 1px; }
 .ticket-tag-editor__add svg { width: .8rem; height: .8rem; flex: none; }
-.ticket-tag-editor__add input { flex: 1; min-width: 3rem; padding: 0; border: 0; color: inherit; background: transparent; outline: 0; font: inherit; }
 .ticket-tag-editor__add span { white-space: nowrap; }
+.ticket-tag-editor__popover { position: fixed; position-area: block-end span-inline-end; width: min(18rem, calc(100vw - 2 * var(--wa-space-m))); margin: var(--wa-space-2xs) 0 0; padding: var(--wa-space-m); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); color: var(--wa-color-text-normal); background: var(--wa-color-surface-raised); box-shadow: var(--wa-shadow-l); box-sizing: border-box; }
+.ticket-tag-editor__popover strong { display: block; margin-bottom: var(--wa-space-s); font-size: var(--wa-font-size-s); }
+.ticket-tag-editor__popover label { display: grid; color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-xs); gap: var(--wa-space-2xs); }
+.ticket-tag-editor__popover input { width: 100%; min-width: 0; height: 2.25rem; padding: 0 var(--wa-space-s); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-s); color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); box-sizing: border-box; font: inherit; }
+.ticket-tag-editor__popover input:focus-visible { border-color: var(--wa-color-brand-border-normal); outline: var(--wa-focus-ring); outline-offset: 1px; }
+.ticket-tag-editor__popover small { display: block; margin-top: var(--wa-space-xs); color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-2xs); }

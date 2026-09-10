@@ -1042,7 +1042,9 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await titleEditor.fill('Autosaved inspector title');
   await titleEditor.blur();
   await expect(inspector.getByRole('heading', { name: 'Autosaved inspector title' })).toBeVisible();
-  const tagEditor = inspector.getByRole('combobox', { name: 'Add tag' });
+  await inspector.getByRole('button', { name: 'Add tag' }).click();
+  const tagEditor = page.getByRole('dialog', { name: 'Add tag' }).getByRole('combobox', { name: 'Tag name' });
+  await expect(tagEditor).toBeFocused();
   await tagEditor.fill('regression');
   await tagEditor.press('Enter');
   await expect(inspector.locator('[data-component="tag-chip"][data-tag-id="regression"]')).toBeVisible();

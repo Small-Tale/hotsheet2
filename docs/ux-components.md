@@ -556,6 +556,10 @@ the canonical ticket instead of relying on a freeform explanatory note.
   provenance. Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
+  Editable tags use a discrete Add tag trigger and uniquely targeted anchored popover
+  in sidebar and reader instances. The popover contains a labeled autocomplete field,
+  supports repeated Enter/comma additions, dismisses with Escape while restoring trigger
+  focus, and remains within the narrow viewport.
   An unblocked ticket exposes a full-width dashed `Block ticket` action without an
   otherwise-empty `Blocked reason` heading. Its controlled editor flushes on blur,
   preserves the saved reason, and creates the adjacent status `Blocked` pill.
