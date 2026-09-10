@@ -276,9 +276,10 @@ cleanup of the old live HS1 data; backups are never removed.
   Forward and backward setup navigation uses the shared stable A/B `ContentTransition`:
   the outgoing and incoming content areas move together for an iOS-style push/pop, while
   crossfade and motion-free replacement remain reusable variants in the UX catalog.
-  The Vite-only bridge
-  discovers or detached-starts the local server and keeps its bearer credential out of
-  browser state; Tauri will replace that bridge with its native lifecycle layer.
+  The Vite-only bridge discovers or detached-starts one bootstrap machine server and
+  attaches every discovered or explicit project store through the server's multi-store
+  open path; it never starts one server per project. The bridge keeps the bearer
+  credential out of browser state; Tauri will replace it with its native lifecycle layer.
   Creating a ticket selects it and immediately opens and focuses its Details editor so
   the user can continue writing without another pointer action. Creation from Backlog
   sends and persists `status=backlog`; an authoritative refresh therefore keeps the new

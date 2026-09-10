@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs, projectSessionRegistry, refreshLocalProjectSetup, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectServerPlan, projectSessionRegistry, refreshLocalProjectSetup, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -103,6 +103,10 @@ describe('native folder chooser',()=>{
     expect(localStoreInitArgs('/work/demo.hs2',true)).toEqual(['init','--standalone','--at','/work/demo.hs2','--prefix','HS2']);
     expect(projectBootstrapArgs('/work/demo','/work/demo.hs2')).toEqual(['bootstrap','--project','/work/demo','--store','/work/demo.hs2','--prefix','HS2']);
     expect(projectBootstrapArgs('/work/demo','/work/demo.hs2','git@example.com:tickets.git')).toEqual(['bootstrap','--project','/work/demo','--store','/work/demo.hs2','--prefix','HS2','--remote','git@example.com:tickets.git']);
+    const first=projectServerPlan('/machine/bootstrap.hs2','/work/one','/work/one.hs2'),second=projectServerPlan('/machine/bootstrap.hs2','/work/two','/work/two.hs2');
+    expect(first).toEqual({serverStore:'/machine/bootstrap.hs2',openBody:{root:'/work/one',stores:['/work/one.hs2']}});
+    expect(second).toEqual({serverStore:first.serverStore,openBody:{root:'/work/two',stores:['/work/two.hs2']}});
+    expect(projectServerPlan('/machine/bootstrap.hs2','/work/empty').openBody).toEqual({root:'/work/empty'});
   });
 
   it('has the graphical bridge invoke the same headless bootstrap workflow on every setup',async()=>{

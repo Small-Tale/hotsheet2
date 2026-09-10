@@ -179,6 +179,8 @@ export function projectBootstrapArgs(root:string,store:string,remote?:string):st
   return['bootstrap','--project',root,'--store',store,'--prefix','HS2',...(remote?['--remote',remote]:[])];
 }
 
+export function projectServerPlan(bootstrapStore:string,root:string,ticketStore?:string):{serverStore:string;openBody:{root:string;stores?:string[]}}{return{serverStore:bootstrapStore,openBody:{root,...(ticketStore?{stores:[ticketStore]}:{})}}}
+
 async function initializeStore(path:string,standaloneRoot?:string):Promise<void>{
   const binary=toolBinary();
   if(!await exists(binary))throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
@@ -294,7 +296,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const root = await realpath(rootInput.trim());
   const ticketStore = ticketStoreInput?.trim() ? await realpath(ticketStoreInput.trim()) : await suggestedTicketStore(root);
   if(ticketStore)void refreshLocalProjectSetup(root,ticketStore).catch(()=>undefined);
-  const instance = await ensureServer(ticketStore??await bootstrapStore());
+  const plan=projectServerPlan(await bootstrapStore(),root,ticketStore),instance = await ensureServer(plan.serverStore);
   const target = { url: instance.url, secret: instance.secret, root };
   const metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
   if(ticketStore){
@@ -305,7 +307,7 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   requireCompatibleServer(compatibility);
   const opened = await serverRequest<{checkout:{id:string;root:string;alias:string;stores:string[];sources:unknown[]}}>(target, '/projects/open', {
     method: 'POST',
-    body: JSON.stringify({ root, ...(ticketStoreInput?.trim() ? { stores: [ticketStore] } : {}) }),
+    body: JSON.stringify(plan.openBody),
   });
   sessions.set(opened.checkout.id, target);
   const activeStore=ticketStore??opened.checkout.stores[0],hs1SourcePath=resolve(root,'.hotsheet'),hs1DatabasePath=resolve(root,'.hotsheet/db'),hs1MarkerPath=resolve(root,HS1_MARKER),hs1DataPresent=await exists(hs1MarkerPath),imported=await receiptMatchesProject(activeStore,root),hs1PostgresVersion=hs1DataPresent?(await readFile(hs1MarkerPath,'utf8').catch(()=>'' )).trim():'';
