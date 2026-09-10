@@ -1,0 +1,5 @@
+.saved-view-dialog { --width:min(32rem,calc(100vw - 2rem)); }
+.saved-view-dialog__form { display:grid; gap:var(--wa-space-l); }
+.saved-view-dialog__form > p { margin:0; color:var(--wa-color-neutral-on-quiet); line-height:1.45; }
+.saved-view-dialog__form footer { display:flex; justify-content:flex-end; gap:var(--wa-space-xs); }
+.saved-view-dialog__error { color:var(--wa-color-danger-on-quiet) !important; }

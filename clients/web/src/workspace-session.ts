@@ -39,7 +39,7 @@ export function loadProjectWorkspaceSession(storage:Pick<Storage,'getItem'>,proj
     if(Object.keys(value).length===0||Object.keys(composer).length===0)return undefined;
     const selectedView=stringValue(value.selectedView),inspectorTab=stringValue(value.inspectorTab),readerTab=stringValue(value.readerTab),notWorking=recordValue(value.notWorking);
     return {
-      selectedView:(['all','backlog','archive','errors'].includes(selectedView)?selectedView:'all') as TicketView,
+      selectedView:((['all','backlog','archive','errors'].includes(selectedView)||/^custom:[a-z0-9][a-z0-9-]{0,63}$/.test(selectedView))?selectedView:'all') as TicketView,
       selectedTicketSlugs:Array.isArray(value.selectedTicketSlugs)?value.selectedTicketSlugs.filter((item):item is string=>typeof item==='string'):[],
       searchOpen:booleanValue(value.searchOpen),searchQuery:stringValue(value.searchQuery),
       inspectorTab:(['info','timeline','attachments','code-review'].includes(inspectorTab)?inspectorTab:'info') as InspectorTab,

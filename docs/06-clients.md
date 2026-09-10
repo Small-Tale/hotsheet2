@@ -427,9 +427,14 @@ cleanup of the old live HS1 data; backups are never removed.
   The sidebar derives running
   state from `GET /connections`, refreshes it only from replayable `drive_updated` events,
   and disables a second Drive activation while that turn is busy; interruption remains in the
-  selected chat when the connection advertises it. The Views add action is likewise
-  disabled with a reason until the deferred custom-view feature exists; no enabled sidebar
-  action may be owned only by `/ux-demo`.
+  selected chat when the connection advertises it. The Views add action opens a compact
+  create dialog for a readable name and any ordinary search expression. Saved views live in
+  the ticket store's shared settings, appear in both the project sidebar and terminal ticket
+  rail, and apply their query through the same inline text/token search pipeline. Their
+  `custom:<id>` selection restores per project, follows replayable `views_updated` events,
+  and falls back to Queue if a selected shared view is removed. Creating a view rejects empty,
+  overlong, or case-insensitively duplicate names and empty or overlong queries before saving.
+  Renaming and deletion are tracked separately by HS2-JPRFNQ.
 
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.
@@ -856,7 +861,7 @@ node—not the application root—so an unrelated open Web Awesome select or pop
 its live element, open state, focus, and selection. Automatic decisions use the same
 authenticated route as clicks and are distinguished in client history.
 
-The long tail of HS1 UI (custom views/query builder, stats, Announcer, telemetry
+The long tail of HS1 UI (rule-oriented query builders, saved-view management, stats, Announcer, telemetry
 dashboards, print) remains **deferred**, each its own ticket after the floor lands. The
 terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,

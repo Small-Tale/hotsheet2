@@ -1,6 +1,10 @@
 import type { TicketRow } from './api';
 
-export type TicketView = 'all' | 'backlog' | 'archive' | 'errors';
+export type BuiltInTicketView = 'all' | 'backlog' | 'archive' | 'errors';
+export type TicketView = BuiltInTicketView | `custom:${string}`;
+
+export const customTicketViewId = (id: string): TicketView => `custom:${id}`;
+export const customTicketViewKey = (view: TicketView): string | undefined => view.startsWith('custom:') ? view.slice('custom:'.length) : undefined;
 
 export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'errors'].includes(view);
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' => view === 'backlog' ? 'backlog' : 'not_started';

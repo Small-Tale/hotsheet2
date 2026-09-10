@@ -52,6 +52,19 @@ describe('corrupt ticket transport',()=>{
   });
 });
 
+describe('custom view transport',()=>{
+  it('loads and replaces the shared saved-view collection',async()=>{
+    const views=[{id:'needs-docs',name:'Needs docs',query:'tag:docs AND NOT is:completed'}];
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response(JSON.stringify(views),{status:200}));
+    const api=new Api('/api');
+    await expect(api.customViews()).resolves.toEqual(views);
+    await expect(api.saveCustomViews(views)).resolves.toEqual(views);
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/views',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/views',expect.objectContaining({method:'PUT',body:JSON.stringify(views)}));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('change polling transport',()=>{
   it('requests the secret-hiding project proxy with a cursor and abort signal',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({cursor:8,events:[],overflow:false}),{status:200}));

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView } from './ticket-views';
+import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -9,6 +9,11 @@ const ticket = (status: string): TicketRow => ({
 });
 
 describe('ticket views', () => {
+  it('names custom views without colliding with built-in ids', () => {
+    expect(customTicketViewId('needs-docs')).toBe('custom:needs-docs');
+    expect(customTicketViewKey('custom:needs-docs')).toBe('needs-docs');
+    expect(customTicketViewKey('all')).toBeUndefined();
+  });
   it('partitions active queue, backlog, and every archived status without overlap', () => {
     const tickets = ['not_started', 'started', 'backlog', 'completed', 'verified', 'archive', 'deleted', 'moved'].map(ticket);
     expect(tickets.filter(isQueuedTicket).map(item => item.status)).toEqual(['not_started', 'started', 'completed', 'verified']);

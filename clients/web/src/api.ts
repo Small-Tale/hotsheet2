@@ -42,6 +42,7 @@ export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;
 export interface TerminalSettings {inherit_global_shell_history:boolean}
 export interface TerminalRead extends TerminalInfo {scrollback:string}
 export interface CommandDefinition {id:string;title:string;program:string;args:string[];group?:string;confirmation?:string}
+export interface CustomView {id:string;name:string;query:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}
 export interface CommandRun {id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:CommandOutputLine[]}
 export interface ActivityEvent {id:string;ts:string;tool:string;project?:string;ticket?:string;session?:string;kind:string;summary:string;detail?:unknown;importance:'low'|'normal'|'high'}
@@ -120,6 +121,8 @@ export class Api {
   deleteTerminal=(id:string)=>this.request<void>(`/terminals/${encodeURIComponent(id)}`,{method:'DELETE'});
   commands=()=>this.request<CommandDefinition[]>('/commands');
   saveCommands=(definitions:CommandDefinition[])=>this.request<CommandDefinition[]>('/commands',{method:'PUT',body:JSON.stringify(definitions)});
+  customViews=()=>this.request<CustomView[]>('/views');
+  saveCustomViews=(views:CustomView[])=>this.request<CustomView[]>('/views',{method:'PUT',body:JSON.stringify(views)});
   commandRuns=()=>this.request<CommandRun[]>('/command-runs');
   runCommand=(id:string)=>this.request<CommandRun>(`/commands/${encodeURIComponent(id)}/run`,{method:'POST'});
   commandRun=(id:string,after=0)=>this.request<CommandRun>(`/command-runs/${encodeURIComponent(id)}?after=${after}`);

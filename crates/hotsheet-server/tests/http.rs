@@ -2988,6 +2988,50 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
 }
 
 #[tokio::test]
+async fn custom_views_round_trip_through_shared_settings_and_emit_changes() {
+    let (dir, state) = state();
+    let mut events = state.subscribe();
+    let router = app(state);
+    let definitions =
+        r#"[{"id":"needs-docs","name":"Needs docs","query":"tag:docs AND NOT status:completed"}]"#;
+    let saved = router
+        .clone()
+        .oneshot(authed("PUT", "/views", Some(definitions)))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(saved).await[0]["query"],
+        "tag:docs AND NOT status:completed"
+    );
+    let listed = router
+        .clone()
+        .oneshot(authed("GET", "/views", None))
+        .await
+        .unwrap();
+    assert_eq!(body_json(listed).await[0]["name"], "Needs docs");
+    assert_eq!(
+        Settings::new(dir.path())
+            .get("views", Scope::Shared)
+            .unwrap()
+            .unwrap()[0]["id"],
+        "needs-docs"
+    );
+    assert!(dir.path().join("hotsheet-settings.json").exists());
+    assert_eq!(events.recv().await.unwrap().kind, "views_updated");
+
+    let invalid = router
+        .oneshot(authed(
+            "PUT",
+            "/views",
+            Some(r#"[{"id":"one","name":"Review","query":"one"},{"id":"two","name":"review","query":"two"}]"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn notifications_route_dedupe_ack_and_emit_live_events() {
     let (_d, st) = state();
     let mut events = st.subscribe();

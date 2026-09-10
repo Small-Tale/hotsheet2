@@ -72,8 +72,8 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-attention="true"');
     expect(markup).toContain('aria-label="Add view"');
-    expect(markup).toContain('title="Custom views are not available yet."');
-    expect(markup).toContain('disabled');
+    expect(markup).not.toContain('disabled');
+    expect(String(ViewNavigation({ selectedId: 'custom:docs', items: [{ id: 'custom:docs', label: 'Needs docs', icon: 'custom' }] }))).toContain('data-lucide="search"');
   });
 
   it('gives parsing errors a distinct shared navigation item', () => {

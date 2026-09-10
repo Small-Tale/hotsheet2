@@ -366,7 +366,9 @@ always retain native clipboard behavior.
 - `ListWorkspace`
 - `ColumnWorkspace`
 - `SearchResultsWorkspace`
-- later: `TerminalDashboard`, `AnalyticsDashboard`, and custom views
+- built: shared custom views created from ordinary search queries and selected from either
+  the project sidebar or terminal ticket rail
+- later: `TerminalDashboard`, `AnalyticsDashboard`, and saved-view rename/delete management
 - `WorkspaceState` — loading skeleton, empty state, error/retry, offline snapshot,
   unsupported view, and no-project onboarding
 

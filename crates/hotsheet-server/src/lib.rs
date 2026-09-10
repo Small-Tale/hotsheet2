@@ -8,6 +8,7 @@
 pub mod client_drive;
 pub mod code_review;
 pub mod commands;
+mod custom_views;
 pub mod dist_work_loop;
 pub mod github_app_config;
 pub mod lifecycle;
@@ -1321,6 +1322,7 @@ pub fn app(state: AppState) -> Router {
         .route("/analytics/tickets", get(ticket_flow_summary))
         .route("/analytics/usage", get(usage_metrics_summary))
         .route("/commands", get(list_commands).put(save_commands))
+        .route("/views", get(list_custom_views).put(save_custom_views))
         .route("/commands/{id}/run", post(run_command))
         .route("/command-runs", get(list_command_runs))
         .route("/command-runs/{id}", get(get_command_run))
@@ -4033,6 +4035,36 @@ async fn save_commands(
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     state.commands.replace_definitions(definitions.clone());
     Ok(Json(definitions))
+}
+
+async fn list_custom_views(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<custom_views::CustomView>>, ApiError> {
+    custom_views::from_settings(&Settings::new(state.store.root()))
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+async fn save_custom_views(
+    State(state): State<AppState>,
+    Json(views): Json<Vec<custom_views::CustomView>>,
+) -> Result<Json<Vec<custom_views::CustomView>>, ApiError> {
+    custom_views::validate(&views)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+    custom_views::replace(&Settings::new(state.store.root()), &views)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: String::new(),
+        kind: "views_updated".into(),
+        id: String::new(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
+    Ok(Json(views))
 }
 
 async fn run_command(

@@ -47,7 +47,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-change-poll.ts # Replay-safe selected-project long poll; coalesced ticket refresh, overflow/reconnect recovery, and abortable lifecycle
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request
-    src/ticket-views.ts      #   Disjoint active Queue, Backlog, and Archive view semantics
+    src/ticket-views.ts      #   Built-in plus collision-safe custom view identities and ticket collection semantics
+    src/saved-views.ts       #   Readable collision-free shared-view ids and case-insensitive name validation
     src/ticket-blocking.ts   #   Collection-aware unresolved dependency projection matching core Completed/Verified semantics
     src/ticket-operations.ts #   Checkout-scoped field/external undo/redo and structured attachment-aware ticket clipboard operations
     src/new-ticket-attachments.ts # Post-create staged attachment upload with partial-failure accounting
@@ -59,7 +60,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     scripts/production-bundle-policy.mjs # production entry-asset/request budget used by build verification
     src/dev-server.ts        #   Hono local project bridge incl. source-less bootstrap/git setup, plus dev-only /ux-demo, corrupt-file reveal, and review routes
     src/dev-review/          #   Query-gated main-app/catalog activation, content-anchored capture/delete overlay, modern-CSS-color normalization for the legacy screenshot renderer, upload/removal review UI, and single-commit local-dev CLI submission adapter (shell.ts: POSIX arg-quoting + runCommand for copy-paste-runnable failure messages)
-    src/components/          #   Production domain UI components, including stable A/B ContentTransition, AttachmentContextMenu, TerminalDashboard/TerminalDrawer/TerminalVisibilityDialog, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
+    src/components/          #   Production domain UI components, including SavedViewDialog, stable A/B ContentTransition, AttachmentContextMenu, TerminalDashboard/TerminalDrawer/TerminalVisibilityDialog, RepositoryStatusPopover, shared Toolbar/ToolbarText/ToolbarControlGroup, Select, MenuItem/MenuHeader, project/page headers, sidebar/tab-shell surfaces; shared palette, cursor semantics, and Lucide policy
     src/ux-demo/             #   Categorized master/detail catalog with evocative icons and dependency-aware modification recency, connected workspace/composer/inspector/sidebar mock state, optional non-modal settings inspector
       repository-status-demo.tsx # Embedded production RepositoryStatusPopover fixture and interaction feedback
       terminal-visibility-demo.tsx # Live production dialog fixture with group CRUD and terminal toggles
@@ -127,6 +128,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/dist_work_loop.rs  #   server-hosted distributed driving loop: SafeTrigger per claimed ticket, permission bridge, attributed usage, coarse activity, and Codex/Claude native mapper events through the persistence+broadcast sink (HS2-SW655F)
       src/lifecycle.rs       #   server lifecycle: InstanceInfo registry + discovery (one machine server writes a discovery file per hosted store, HS2-87 topology A), per-store index-writer lock, stop_instance (HS2-59)
       src/commands.rs        #   configured argv execution, cursor output, cancellation, bounded history (HS2-JN3X4W)
+      src/custom_views.rs    #   validated shared-settings persistence for named ordinary-search views
       src/repository_browser.rs # rich repository status/commit discovery plus freshly validated host-native file open/reveal actions (HS2-323XHG)
       src/notifications.rs   #   targeted/deduplicated/acknowledged notification routing (HS2-ZP869N)
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
