@@ -48,6 +48,12 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-selected="true"');
     expect(markup).toContain('data-location="remote"');
     expect(markup).toContain('data-ticket-drop-project="one"');
+    expect(markup).toContain('data-tab-kind="project"');
+    expect(markup).toContain('data-tab-id="one"');
+    expect(markup).toContain('draggable="true"');
+    expect(markup).toContain('tabindex="0"');
+    expect(markup).toContain('aria-keyshortcuts="Delete Backspace"');
+    expect(markup).toMatch(/app-tab__close[^>]*tabindex="-1"|tabindex="-1"[^>]*app-tab__close/);
     expect(markup).toContain('data-lucide="cloud"');
     expect(markup).toContain('aria-label="Project busy"');
     expect(markup).not.toContain('data-lucide="loader-circle"');
@@ -60,11 +66,12 @@ describe('application shell components', () => {
   });
 
   it('draws tab-selection focus around the complete compound pill', () => {
-    const css=readFileSync(new URL('./app-tab.css',import.meta.url),'utf8');
+    const css=readFileSync(new URL('./app-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
     expect(css).toContain('.app-tab:has(.app-tab__select:focus-visible) { outline: var(--wa-focus-ring); outline-offset: -2px; }');
     expect(css).toContain('.app-tab__select:focus-visible { outline: none; }');
     expect(css).toContain('.app-tab__close:focus-visible { border-radius: var(--wa-border-radius-pill); outline: var(--wa-focus-ring); outline-offset: -2px; }');
     expect(css).not.toContain('.app-tab__select:focus-visible, .app-tab__close:focus-visible');
+    expect(barCss).toMatch(/\.project-tab-bar__tabs \{[^}]*margin: calc\(var\(--wa-space-2xs\) \* -1\);[^}]*padding: var\(--wa-space-2xs\);/);
   });
 
   it('composes tabs with add and overflow actions', () => {
@@ -73,6 +80,7 @@ describe('application shell components', () => {
     expect(markup).toContain('aria-label="Add project"');
     expect(markup).toContain('aria-label="Terminal dashboard"');
     expect(markup).toContain('aria-label="Cross-project stats"');
+    expect(markup.match(/tabindex="0"/g)?.length).toBeGreaterThanOrEqual(3);
     expect(markup).not.toContain('aria-label="Hide project sidebar"');
     expect(markup).toContain('data-project-id="one"');
     expect(markup.indexOf('Global dashboards')).toBeLessThan(markup.indexOf('role="tablist"'));

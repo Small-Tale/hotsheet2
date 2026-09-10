@@ -765,7 +765,8 @@ view layer is new work.
 - Live updates over WebSocket (index changes, claims, busy state).
 - The AI-drive surface: launch/trigger a tool, the **permission popup**, the
   **busy indicator**, the connection count.
-- Multi-project tabs (local + remote).
+- Multi-project tabs (local + remote), with pointer drag reordering and remembered
+  device-local project order.
 - Search (FTS) and filtered views.
 
 The web client now implements the permission portion of that floor for Claude and
@@ -908,11 +909,19 @@ the close button before the label and optional leading/trailing state icons. Rig
 either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
 Tabs; terminal tabs additionally offer Rename. Human-readable defaults replace generated
 ids, and device-local rename overrides survive refresh/reopen without renaming the PTY
-identity. Holding Option/Alt when opening the menu changes the directional action to the left.
+identity. Project tabs and the terminals inside one project can be reordered directly by
+dragging. Project order is stored with the open-project roots and restored without changing
+the remembered active project; terminal order remains stable across session refreshes for
+the current client lifetime. Holding Option/Alt when opening the menu changes the directional
+action to the left.
 Closeable tabs reserve the same trailing state slot even when it is empty, balancing the
 leading close control and preventing labels from shifting when status appears. Terminal tabs
 use that shared tab surface directly rather than layering a second selected background inside
-it. A dedicated terminal uses the same token-sized inset as a dashboard viewport and shares
+it. Every selected and unselected tab is reachable in sequential Tab order, while
+Left/Right/Home/End traverse the current tablist and Delete/Backspace closes the focused
+closeable tab. The segmented dashboard and view controls likewise expose each choice in Tab
+order. The horizontally scrolling tab strips reserve an inset on every edge so pill shadows
+and focus rings remain complete at either end. A dedicated terminal uses the same token-sized inset as a dashboard viewport and shares
 one domain background token between its session container, viewport, and xterm theme, so
 the edge area is symmetric and visually continuous with the terminal canvas.
 Double-clicking the rail, grid tab, or any terminal tab toggles drawer maximization while

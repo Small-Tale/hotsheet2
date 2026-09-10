@@ -34,6 +34,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ai-conversation.ts   #   Per-connection multi-turn transcript transitions for streamed output, activity, permissions, and terminal outcomes
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
+    src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
     src/terminal-grid-layout.ts # Pure terminal tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, and terminal inclusion rules

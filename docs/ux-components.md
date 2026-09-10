@@ -295,8 +295,9 @@ does not introduce polling or another network request.
 
 - `ProjectTab` — **demo built**: macOS Tahoe-inspired pill presentation owned by the
   component itself, with selected, remote/local, busy, disconnected, attention,
-  closable, and fixed states plus roving focus and arrow/Home/End keyboard navigation
-  when composed in the bar. Fine-pointer devices reveal close affordances on hover or
+  closable, and fixed states. Every tab selector participates in sequential Tab order;
+  arrow/Home/End keyboard navigation remains available within a composed tablist, and
+  Delete/Backspace closes a focused closeable tab. Fine-pointer devices reveal close affordances on hover or
   keyboard focus; touch-oriented devices retain the visible close control. Local tabs
   omit the redundant folder/branch icon, while remote tabs retain their cloud marker.
   Keyboard focus on the tab-selection action outlines the complete compound pill,
@@ -324,7 +325,10 @@ Global dashboard modes precede project tabs; Add follows the project strip. Tabs
 represent server/project connections rather than embedded stores. The component
 must tolerate two tabs that expose the same store through different checkouts or
 servers. The tab strip scrolls horizontally without truncating identities; the overflow
-strip provides direct access to tabs outside the current viewport. The Add action remains
+strip provides direct access to tabs outside the current viewport and reserves enough inset
+for the complete selected shadow and keyboard focus ring at both ends. Project and terminal
+tabs support same-strip pointer drag reordering; project order is device-local and persists
+across reloads. The Add action remains
 vertically centered with the pills.
 
 In AppShell the hierarchy is Toolbar(WorkspaceHeader) → ProjectTabBar → connection banner →
@@ -829,7 +833,9 @@ notification model.
 
 - `DrawerTabBar`
 - `AppTab` / `DrawerTab` — shared with project tabs; close action precedes the label,
-  supports leading/trailing icons, and exposes the same close/others/directional/all menu
+  supports leading/trailing icons, participates in sequential Tab order whether selected or
+  not, supports arrow/Home/End navigation and Delete/Backspace closing, and exposes the same
+  close/others/directional/all menu
 - `AddDrawerTabButton`
 - `DrawerVisibilityButton`
 - `DrawerResizeHandle`
@@ -839,7 +845,8 @@ The shipped terminal drawer is a center-column-only vertical `ResizableRegion` w
 compact grid/terminal tab rail, explicit new-terminal action, hidden-session recovery,
 persisted 228 px-to-workspace-boundary height, and a floating restore button when collapsed. The
 splitter resists below 228 px and treats a continued 48 px overshoot as an intentional collapse.
-Grid and
+Terminal tabs can be pointer-dragged into a new same-project order, which survives session
+list refreshes for the current client lifetime. Grid and
 dedicated tabs attach viewports to existing sessions; only the plus action creates a PTY.
 Activity and command-output tab kinds remain later extensions.
 

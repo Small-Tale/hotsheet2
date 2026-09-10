@@ -1,5 +1,5 @@
 .project-tab-bar { display: flex; min-width: 0; height: 3.25rem; padding: .35rem .45rem; box-sizing: border-box; border-bottom: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-lowered); align-items: center; gap: .35rem; }
-.project-tab-bar__tabs { display: flex; min-width: 0; height: 100%; overflow-x: auto; scrollbar-width: none; align-items: center; gap: .2rem; }
+.project-tab-bar__tabs { display: flex; min-width: 0; height: 100%; margin: calc(var(--wa-space-2xs) * -1); padding: var(--wa-space-2xs); overflow-x: auto; scrollbar-width: none; align-items: center; gap: .2rem; }
 .project-tab-bar__tabs::-webkit-scrollbar { display: none; }
 .project-tab-bar__modes, .project-tab-bar__actions { display: flex; flex: none; height: 100%; align-items: center; }
 .project-tab-bar__modes { gap: .1rem; }

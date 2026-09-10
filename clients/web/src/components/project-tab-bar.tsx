@@ -16,8 +16,8 @@ export type ProjectTabBarMode = 'project' | 'terminals' | 'stats';
 export function ProjectTabBar({ tabs, label = 'Open projects', mode = 'project' }: ProjectTabBarProps) {
   return <nav class="project-tab-bar" data-component="project-tab-bar" aria-label={label}>
     <div class="project-tab-bar__modes" role="group" aria-label="Global dashboards">
-      <button type="button" data-action="set-shell-mode" data-shell-mode="terminals" aria-label="Terminal dashboard" title="Terminal dashboard" aria-pressed={String(mode === 'terminals')}><LucideIcon icon={SquareTerminal} name="square-terminal" /></button>
-      <button type="button" data-action="set-shell-mode" data-shell-mode="stats" aria-label="Cross-project stats" title="Cross-project stats" aria-pressed={String(mode === 'stats')}><LucideIcon icon={ChartNoAxesCombined} name="chart-no-axes-combined" /></button>
+      <button type="button" tabindex="0" data-action="set-shell-mode" data-shell-mode="terminals" aria-label="Terminal dashboard" title="Terminal dashboard" aria-pressed={String(mode === 'terminals')}><LucideIcon icon={SquareTerminal} name="square-terminal" /></button>
+      <button type="button" tabindex="0" data-action="set-shell-mode" data-shell-mode="stats" aria-label="Cross-project stats" title="Cross-project stats" aria-pressed={String(mode === 'stats')}><LucideIcon icon={ChartNoAxesCombined} name="chart-no-axes-combined" /></button>
     </div>
     <div class="project-tab-bar__tabs" role="tablist" aria-label={label}>{tabs.map(tab => <ProjectTab {...tab} selected={mode === 'project' && tab.selected} />)}</div>
     <div class="project-tab-bar__actions">

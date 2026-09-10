@@ -38,7 +38,7 @@ export function WorkspaceIdentity({ projectName }: { projectName: string }) {
 }
 
 function ModeButton({ mode, current, label, icon, iconName, badge = 0 }: { mode: WorkspaceViewMode; current: WorkspaceViewMode; label: string; icon: IconNode; iconName: string; badge?:number }) {
-  return <button type="button" class="view-mode-switcher__button" data-action="set-view-mode" data-view-mode={mode} aria-label={`${label} view${badge?`, ${badge} pending`:''}`} aria-pressed={String(mode === current)} title={`${label} view`}><LucideIcon icon={icon} name={iconName} />{badge>0&&<span class="view-mode-switcher__badge" aria-hidden="true">{badge>99?'99+':badge}</span>}</button>;
+  return <button type="button" tabindex="0" class="view-mode-switcher__button" data-action="set-view-mode" data-view-mode={mode} aria-label={`${label} view${badge?`, ${badge} pending`:''}`} aria-pressed={String(mode === current)} title={`${label} view`}><LucideIcon icon={icon} name={iconName} />{badge>0&&<span class="view-mode-switcher__badge" aria-hidden="true">{badge>99?'99+':badge}</span>}</button>;
 }
 
 const sortOptions: ReadonlyArray<{ value: WorkspaceSort; label: string }> = [
