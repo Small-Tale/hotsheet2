@@ -15,7 +15,7 @@ export function uniqueCustomViewId(name: string, existing: readonly CustomView[]
   return `${base}-${Date.now().toString(36)}`;
 }
 
-export function customViewNameAvailable(name: string, existing: readonly CustomView[]): boolean {
+export function customViewNameAvailable(name: string, existing: readonly CustomView[], exceptId?: string): boolean {
   const normalized = name.trim().toLocaleLowerCase();
-  return Boolean(normalized) && !existing.some(view => view.name.trim().toLocaleLowerCase() === normalized);
+  return Boolean(normalized) && !existing.some(view => view.id !== exceptId && view.name.trim().toLocaleLowerCase() === normalized);
 }

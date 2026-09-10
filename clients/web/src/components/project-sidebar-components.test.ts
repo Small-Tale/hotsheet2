@@ -73,7 +73,10 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-attention="true"');
     expect(markup).toContain('aria-label="Add view"');
     expect(markup).not.toContain('disabled');
-    expect(String(ViewNavigation({ selectedId: 'custom:docs', items: [{ id: 'custom:docs', label: 'Needs docs', icon: 'custom' }] }))).toContain('data-lucide="search"');
+    const custom=String(ViewNavigation({ selectedId: 'custom:docs', items: [{ id: 'custom:docs', label: 'Needs docs', icon: 'custom', manageable:true }] }));
+    expect(custom).toContain('data-lucide="search"');
+    expect(custom).toContain('aria-label="Rename Needs docs"');
+    expect(custom).toContain('aria-label="Delete Needs docs"');
   });
 
   it('gives parsing errors a distinct shared navigation item', () => {

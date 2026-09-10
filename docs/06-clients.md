@@ -440,7 +440,10 @@ cleanup of the old live HS1 data; backups are never removed.
   `custom:<id>` selection restores per project, follows replayable `views_updated` events,
   and falls back to Queue if a selected shared view is removed. Creating a view rejects empty,
   overlong, or case-insensitively duplicate names and empty or overlong queries before saving.
-  Renaming and deletion are tracked separately by HS2-JPRFNQ.
+  Every saved-view row exposes labeled rename and delete actions. Rename keeps the stable view
+  identity and search query, including while selected; delete confirms that tickets are not
+  affected and returns a deleted active view to Queue. Both mutations preserve shared-setting
+  ordering and reject case-insensitive name collisions.
 
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.
