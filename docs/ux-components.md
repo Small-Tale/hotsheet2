@@ -205,6 +205,8 @@ does not introduce polling or another network request.
   - primary launch/resume action; duplicate activation is disabled while busy
   - active tool/connection state from the shared long-poll event stream
   - `DriveOptionsMenu` — **production + demo built**: hierarchical session override menu
+    with one library-owned disclosure marker per parent, compact aligned semantic-icon child
+    choices, and a single highlighted current provider/model/effort value
   - `AiToolSettings` — **production + demo built**: machine-local plugin-discovered defaults
 
 - `AIConversation` — **production + demo built**: a project-scoped

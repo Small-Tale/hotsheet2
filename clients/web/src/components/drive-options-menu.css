@@ -1,5 +1,8 @@
 .project-sidebar__drive-row { position:relative; }
 .drive-options-menu { position:absolute; z-index:80; right:2.75rem; bottom:calc(100% + var(--wa-space-xs)); width:18rem; }
 .drive-options-menu__anchor { position:absolute; width:1px; height:1px; }
-.drive-options-menu wa-dropdown-item [data-lucide="chevron-right"] { width:.85rem; height:.85rem; margin-inline-start:auto; }
 .drive-options-menu wa-dropdown-item::part(details) { color:var(--wa-color-neutral-on-quiet); }
+.drive-options-menu wa-dropdown-item[slot="submenu"] { min-width:13rem; padding-inline:.75rem; }
+.drive-options-menu wa-dropdown-item[slot="submenu"] [slot="icon"] { display:inline-flex; width:1rem; justify-content:center; }
+.drive-options-menu wa-dropdown-item[slot="submenu"] [slot="icon"] svg { width:.9rem; height:.9rem; }
+.drive-options-menu wa-dropdown-item[slot="submenu"][aria-current="true"] { color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-normal); font-weight:650; }

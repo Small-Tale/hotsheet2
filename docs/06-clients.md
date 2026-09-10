@@ -410,6 +410,9 @@ cleanup of the old live HS1 data; backups are never removed.
   Drive is a production control, not demo-only state. Its split-button label reflects the
   machine-local default provider discovered from drivable plugin manifests. The arrow opens
   hierarchical Default/provider/model/effort overrides without a client-owned provider table.
+  Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
+  effort choices use aligned semantic icons plus one highlighted current value with compact
+  submenu insets, including at the supported narrow width.
   Drive prepares a stable dedicated connection scoped to that checkout and tool, opens and
   selects its AI-chat tab in the bottom drawer, then sends the `$hotsheet` workflow turn; later
   activations reuse that tab, connection, and retained session. The server resolves the checkout id to its code
