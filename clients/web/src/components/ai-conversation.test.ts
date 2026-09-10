@@ -40,6 +40,13 @@ describe('AIConversation',()=>{
   });
 
   it('reuses the complete conversation surface as embedded drawer content',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'Ask about the project',busy:false,interruptible:false}));expect(markup).toContain('data-presentation="embedded"');expect(markup).toContain('ai-conversation--embedded');expect(markup).toContain('Conversation transcript');expect(markup).toContain('send-conversation-turn');expect(markup).not.toContain('wa-dialog')});
+  it('offers exports for completed transcripts and makes partial saved transcripts read-only',()=>{
+    const message={id:'answer',role:'assistant' as const,content:'Saved result.',status:'completed' as const};
+    const active=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[message],draft:'Continue',busy:false,interruptible:false}));
+    expect(active).toContain('data-action="save-conversation"');expect(active).toContain('aria-label="Save conversation"');expect(active).toContain('send-conversation-turn');
+    const saved=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[message],draft:'',busy:false,interruptible:false,readOnly:true,savedSource:'/Exports/review.hotsheet-chat'}));
+    expect(saved).toContain('data-read-only="true"');expect(saved).toContain('Saved transcript');expect(saved).toContain('/Exports/review.hotsheet-chat');expect(saved).not.toContain('send-conversation-turn');expect(saved).not.toContain('conversation-model');
+  });
   it('promotes a permission popup into the dialog top layer without duplicating its inline card',()=>{const markup=String(AIConversation({open:true,tool:'Codex',messages:[],draft:'',busy:true,interruptible:true,permissions:[permission],foreground:PermissionRequestPopup({item:permission})}));expect(markup).toContain('ai-conversation__foreground');expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1)});
   it('offers model and effort changes only when the plugin declares support',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,model:'gpt',effort:'high',models:[{id:'gpt',label:'GPT'}],efforts:['medium','high'],canChangeModel:true,canChangeEffort:true}));expect(markup).toContain('name="conversation-model"');expect(markup).toContain('name="conversation-effort"');expect(markup).not.toContain('data-action="stop-conversation"')});
 });

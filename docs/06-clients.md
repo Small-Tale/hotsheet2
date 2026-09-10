@@ -472,6 +472,18 @@ cleanup of the old live HS1 data; backups are never removed.
   starts at its latest message; streamed growth remains pinned while the reader is already at the
   bottom, but never pulls them away from older messages they intentionally scrolled back to read.
 
+  Completed transcripts can be saved from either conversation presentation. The save dialog
+  supports the full transcript or an inclusive message range and uses the host folder picker to
+  create a portable `.hotsheet-chat` directory bundle. Every bundle contains `manifest.json`, a
+  readable `transcript.md`, and lossless `conversation.json`; optional `summary.md`, attachment,
+  and original-media entries are explicit. The browser receives only an opaque destination token,
+  while the trusted local bridge validates sizes and identities and owns all filesystem reads and
+  writes. Selecting an existing bundle requires an explicit overwrite or same-conversation
+  re-export, with revision lineage recorded in the manifest. Saved conversation bundles reopen
+  from the terminal-drawer New menu. A selection that ends before the live transcript tail opens
+  read-only; a tail-ending selection with a compatible project/session reconnects to that session
+  and can continue. Continued turns remain live-only until the user deliberately saves again.
+
   The repository row is also the checkout's compact status chip. It distinguishes clean,
   dirty, ahead, behind, conflicted, and unavailable states from the checkout-scoped status
   snapshot. Activating it opens a repository popover with branch/upstream identity and the

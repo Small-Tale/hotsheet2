@@ -3,11 +3,14 @@ import { resolve } from 'node:path';
 
 import { Hono } from 'hono';
 
+import type { ConversationExportPayload } from './conversation-export';
+import { createConversationExportBridge } from './conversation-export-bridge';
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
 import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, migrateHs1Project, openLocalProject, proxyProjectRequest, removeImportedHs1Data, revealCorruptTicket } from './project-bridge';
 
 export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote,migrate:(root:string,location?:string)=>Promise<unknown>=migrateHs1Project,removeHs1:(project:string)=>Promise<string[]>=removeImportedHs1Data): Hono {
   const app = new Hono();
+  const conversationExports=createConversationExportBridge(chooseFolder);
   app.post('/__hotsheet/projects/open', async context => {
     if (!dev) return context.notFound();
     try {
@@ -20,6 +23,18 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
   app.post('/__hotsheet/folders/choose',async context=>{
     if(!dev)return context.notFound();
     try{return context.json({path:await chooseFolder()})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not open the folder chooser.'},400)}
+  });
+  app.post('/__hotsheet/conversation-exports/destination',async context=>{
+    if(!dev)return context.notFound();
+    try{const body=await context.req.json<{suggestedName:string}>();return context.json({destination:await conversationExports.chooseDestination(body.suggestedName)})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not choose a conversation export destination.'},400)}
+  });
+  app.post('/__hotsheet/conversation-exports/write',async context=>{
+    if(!dev)return context.notFound();
+    try{return context.json(await conversationExports.write(await context.req.json<ConversationExportPayload>()),201)}catch(error){return context.json({error:error instanceof Error?error.message:'Could not save the conversation export.'},400)}
+  });
+  app.post('/__hotsheet/conversation-exports/open',async context=>{
+    if(!dev)return context.notFound();
+    try{return context.json({conversation:await conversationExports.open()})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not open the saved conversation.'},400)}
   });
   app.post('/__hotsheet/projects/setup-git',async context=>{
     if(!dev)return context.notFound();

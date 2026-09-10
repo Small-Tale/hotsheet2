@@ -6,6 +6,7 @@ describe('development server route boundary', () => {
   it.each([
     '/ux-demo',
     '/__hotsheet/folders/choose',
+    '/__hotsheet/conversation-exports/open',
     '/__hotsheet/projects/open',
     '/__hotsheet/project-api/project/tickets',
   ])('passes %s through to the Hono bridge', path => {
