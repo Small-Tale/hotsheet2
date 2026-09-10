@@ -512,7 +512,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'terminal-dashboard') return <section class="terminal-dashboard-demo"><TerminalDashboard groups={[{ projectId: 'demo', projectName: 'Demo project', sessions: [
     { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
     { id: 'tests', projectId: 'demo', projectName: 'Demo project', title: 'Tests', alive: true, busy: false, cwd: '/work/demo', scrollback: '42 tests passed\nwaiting for changes' },
-  ] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={terminalDashboardContextMenu.value}/></section>;
+  ], chats: [{ id: 'chat:review', projectId: 'demo', projectName: 'Demo project', name: 'Review chat', tool: 'Codex', busy: true, summary: 'Reviewing the latest workspace changes and test results.' }] }]} width={900} height={560} fitAcross={3} fitHigh={3} contextMenu={terminalDashboardContextMenu.value}/></section>;
   if (item.id === 'terminal-operations-sidebar') return <TerminalOperationsSidebarDemo/>;
   if (item.id === 'terminal-ticket-rail') return <TerminalTicketRailDemo/>;
   if (item.id === 'fixed-aspect-terminal-card') {
@@ -1034,7 +1034,7 @@ delegate(root, 'click', '[data-action="set-shell-mode"]', (_event, target) => {
   workspaceSearchQuery.value = '';
   shellEvent.value =
     shellMode.value === 'terminals'
-      ? 'Terminal dashboard selected.'
+      ? 'Workspace grid selected.'
       : 'Cross-project stats selected.';
 });
 delegate(root, 'click', '[data-action="open-project-stats"]', () => {

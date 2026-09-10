@@ -96,8 +96,8 @@ describe('change polling transport',()=>{
 });
 
 describe('client-owned AI drive transport',()=>{
-  it('starts a connection, sends a resumable turn, and interrupts by advertised action',async()=>{
-    const connection={id:'main/1',tool:'codex',project:'/project',role:'main',busy:false,actions:['send_turn','interrupt']};
+  it('starts, drives, interrupts, and closes a checkout-scoped connection',async()=>{
+    const connection={id:'main/1',tool:'codex',project:'/project',role:'main',busy:false,actions:['send_turn','interrupt','close']};
     const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response(JSON.stringify(connection),{status:202}));
     const api=new Api('/api');
     await api.toolSessions();
@@ -107,6 +107,7 @@ describe('client-owned AI drive transport',()=>{
     await api.createToolConnection({tool:'codex',checkout:'checkout-1',connection_id:'main/1',model:'gpt-5.4',effort:'high'});
     await api.sendToolTurn('main/1','Continue this work','thread/1',{model:'gpt-5.4',effort:'xhigh'});
     await api.interruptToolTurn('main/1');
+    await api.deleteToolConnection('checkout/1','main/1');
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/drive/sessions',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/ai-tools',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/ai-settings',expect.any(Object));
@@ -114,6 +115,7 @@ describe('client-owned AI drive transport',()=>{
     expect(fetchMock).toHaveBeenNthCalledWith(5,'/api/drive/connections',expect.objectContaining({method:'POST',body:'{"tool":"codex","checkout":"checkout-1","connection_id":"main/1","model":"gpt-5.4","effort":"high"}'}));
     expect(fetchMock).toHaveBeenNthCalledWith(6,'/api/drive/connections/main%2F1/turns',expect.objectContaining({method:'POST',body:'{"content":"Continue this work","session_id":"thread/1","model":"gpt-5.4","effort":"xhigh"}'}));
     expect(fetchMock).toHaveBeenNthCalledWith(7,'/api/drive/connections/main%2F1/interrupt',expect.objectContaining({method:'POST'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(8,'/api/checkouts/checkout%2F1/drive/connections/main%2F1',expect.objectContaining({method:'DELETE'}));
     fetchMock.mockRestore();
   });
 });

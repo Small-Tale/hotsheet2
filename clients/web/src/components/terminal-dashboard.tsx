@@ -1,7 +1,7 @@
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './terminal-dashboard.css';
 
-import { Ellipsis, ExternalLink, Eye, EyeOff, Minus, Plus } from 'lucide';
+import { Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus } from 'lucide';
 
 import { terminalDrawerGridLayout, terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
 import type { TerminalVisibilityGroup } from '../terminal-visibility';
@@ -25,6 +25,18 @@ export interface TerminalDashboardGroup {
   projectId: string;
   projectName: string;
   sessions: TerminalDashboardSession[];
+  chats?: WorkspaceGridChat[];
+  itemOrder?: string[];
+}
+
+export interface WorkspaceGridChat {
+  id: string;
+  projectId: string;
+  projectName: string;
+  name: string;
+  tool: string;
+  busy?: boolean;
+  summary?: string;
 }
 
 export interface TerminalDashboardProps {
@@ -46,6 +58,7 @@ export interface TerminalDashboardProps {
 }
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
+const chatKeyFor = (chat: WorkspaceGridChat) => `${chat.projectId}:${chat.id}`;
 export function TerminalVisibilityControls({hiddenCount=0,groups=[],activeId='default',scope='dashboard'}:{hiddenCount?:number;groups?:readonly TerminalVisibilityGroup[];activeId?:string;scope?:string}){
   const choices=groups.map(group=>({value:group.id,label:group.name}));
   return <div class="terminal-dashboard-controls__visibility-group" data-visibility-scope={scope}><ToolbarControlGroup single><button type="button" class="terminal-dashboard-controls__visibility" data-action="open-terminal-visibility" aria-label="Manage terminal visibility" title="Show / Hide Terminals"><LucideIcon icon={Eye} name="eye" />{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</button></ToolbarControlGroup><ToolbarControlGroup single><Select className="terminal-dashboard-controls__visibility-select" name="terminal-visibility-group" ariaLabel="Terminal visibility group" value={activeId} choices={choices} renderSelected={choice=><span>{choice.label}</span>} /></ToolbarControlGroup></div>;
@@ -80,24 +93,37 @@ export function TerminalSession({ session }: {session:TerminalDashboardSession})
   </section>;
 }
 
-function Grid({ sessions, layout }: {sessions:TerminalDashboardSession[];layout:ReturnType<typeof terminalGridLayout>}) {
+export function WorkspaceGridChatCard({chat}:{chat:WorkspaceGridChat}){
+  const key=chatKeyFor(chat),state=chat.busy?'Working':'Ready';
+  return <article class="terminal-tile workspace-chat-tile" data-key={key} data-component="workspace-chat-tile" data-chat-key={key} data-project-id={chat.projectId} data-chat-id={chat.id} data-busy={String(Boolean(chat.busy))} data-preview-only="true" data-action="open-grid-ai-chat" data-item-id={key} tabindex="0" aria-label={`Open ${chat.name} in ${chat.projectName}`}>
+    <div class="terminal-tile__preview workspace-chat-tile__preview"><LucideIcon icon={MessageSquare} name="message-square"/><div><strong>{chat.tool} AI chat</strong><p>{chat.summary||`Open ${chat.name} to continue the conversation.`}</p></div></div>
+    <footer class="terminal-tile__footer"><span class="terminal-tile__state" aria-label={state} title={state}></span><button type="button" class="terminal-tile__identity" data-action="open-grid-ai-chat" data-item-id={key} data-project-id={chat.projectId} data-chat-id={chat.id} aria-label={`Open ${chat.name} in ${chat.projectName}`}><strong>{chat.projectName}<span aria-hidden="true"> › </span>{chat.name}</strong></button></footer>
+  </article>;
+}
+
+type GridItem={kind:'terminal';session:TerminalDashboardSession}|{kind:'chat';chat:WorkspaceGridChat};
+
+function Grid({ sessions,chats=[],itemOrder=[], layout }: {sessions:TerminalDashboardSession[];chats?:WorkspaceGridChat[];itemOrder?:string[];layout:ReturnType<typeof terminalGridLayout>}) {
   const style = `--terminal-tile-width:${layout.tileWidth}px;--terminal-tile-height:${layout.tileHeight}px;--terminal-grid-fit:${layout.fit}`;
-  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{sessions.map(session => <FixedAspectTerminalCard session={session}/>)}</div>;
+  const rank=new Map(itemOrder.map((id,index)=>[id,index])),items:GridItem[]=[...sessions.map(session=>({kind:'terminal' as const,session})),...chats.map(chat=>({kind:'chat' as const,chat}))];
+  if(itemOrder.length)items.sort((left,right)=>(rank.get(left.kind==='terminal'?left.session.id:left.chat.id)??Number.MAX_SAFE_INTEGER)-(rank.get(right.kind==='terminal'?right.session.id:right.chat.id)??Number.MAX_SAFE_INTEGER));
+  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{items.map(item=>item.kind==='terminal'?<FixedAspectTerminalCard session={item.session}/>:<WorkspaceGridChatCard chat={item.chat}/>)}</div>;
 }
 
 export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, grouping = 'flow',layoutMode='responsive', magnifiedKey, hiddenKeys = [], loading = false, message = '',contextMenu }: TerminalDashboardProps) {
   const hidden = new Set(hiddenKeys);
-  const visibleGroups = groups.map(group => ({ ...group, sessions: group.sessions.filter(session => !hidden.has(keyFor(session))) })).filter(group => group.sessions.length > 0);
+  const visibleGroups = groups.map(group => ({ ...group, sessions: group.sessions.filter(session => !hidden.has(keyFor(session))),chats:(group.chats??[]).filter(chat=>!hidden.has(chatKeyFor(chat))) })).filter(group => group.sessions.length+group.chats.length > 0);
   const sessions = visibleGroups.flatMap(group => group.sessions);
+  const chats=visibleGroups.flatMap(group=>group.chats);
   const layout = layoutMode==='drawer'?terminalDrawerGridLayout(width,height,fitHigh):terminalGridLayout(width, height, fitAcross, fitHigh);
   const magnified = groups.flatMap(group => group.sessions).find(session => keyFor(session) === magnifiedKey);
-  return <section class="terminal-dashboard" data-component="terminal-dashboard" data-layout-mode={layoutMode} data-basis={layout.basis} data-fit={String(layout.fit)} aria-label="Terminal dashboard">
+  return <section class="terminal-dashboard" data-component="terminal-dashboard" data-layout-mode={layoutMode} data-basis={layout.basis} data-fit={String(layout.fit)} aria-label="Workspace grid">
     <div class="terminal-dashboard__content" data-terminal-grid-measure="true">
-      {loading ? <div class="terminal-dashboard__empty" role="status">Loading terminals…</div> : message ? <div class="terminal-dashboard__empty" role="status">{message}</div> : sessions.length === 0 ? <div class="terminal-dashboard__empty"><strong>No active terminals</strong><span>Open a project terminal to add it to this dashboard.</span></div> : grouping === 'flow' ? <Grid sessions={sessions} layout={layout} /> : visibleGroups.map(group => <section class="terminal-dashboard__project" data-key={group.projectId} data-project-id={group.projectId}><h2>{group.projectName}<span>{group.sessions.length}</span></h2><Grid sessions={group.sessions} layout={layout} /></section>)}
+      {loading ? <div class="terminal-dashboard__empty" role="status">Loading workspace items…</div> : message ? <div class="terminal-dashboard__empty" role="status">{message}</div> : sessions.length+chats.length === 0 ? <div class="terminal-dashboard__empty"><strong>Nothing open yet</strong><span>Open a project terminal or AI chat to add it to this grid.</span></div> : grouping === 'flow' ? <Grid sessions={sessions} chats={chats} itemOrder={visibleGroups.length===1?visibleGroups[0].itemOrder:undefined} layout={layout} /> : visibleGroups.map(group => <section class="terminal-dashboard__project" data-key={group.projectId} data-project-id={group.projectId}><h2>{group.projectName}<span>{group.sessions.length+group.chats.length}</span></h2><Grid sessions={group.sessions} chats={group.chats} itemOrder={group.itemOrder} layout={layout} /></section>)}
     </div>
-    <div class="terminal-dashboard__zoom" role="group" aria-label="Terminal tile zoom">
-      <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="out" disabled={layout.fit >= layout.max} aria-label={`Zoom out, fit more terminals ${layout.basis}`} title="Zoom out"><LucideIcon icon={Minus} name="minus" /></button>
-      <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="in" disabled={layout.fit <= 1} aria-label={`Zoom in, fit fewer terminals ${layout.basis}`} title="Zoom in"><LucideIcon icon={Plus} name="plus" /></button>
+    <div class="terminal-dashboard__zoom" role="group" aria-label="Workspace tile zoom">
+      <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="out" disabled={layout.fit >= layout.max} aria-label={`Zoom out, fit more items ${layout.basis}`} title="Zoom out"><LucideIcon icon={Minus} name="minus" /></button>
+      <button type="button" data-action="zoom-terminal-grid" data-zoom-direction="in" disabled={layout.fit <= 1} aria-label={`Zoom in, fit fewer items ${layout.basis}`} title="Zoom in"><LucideIcon icon={Plus} name="plus" /></button>
     </div>
     {magnified && <div class="terminal-dashboard__magnified" role="dialog" aria-modal="true" aria-label={`Magnified ${magnified.title ?? magnified.id}`} data-action="dismiss-magnified-terminal"><FixedAspectTerminalCard session={magnified} mode="magnified" /></div>}
     {contextMenu&&<div class="terminal-dashboard__context-menu" data-component="terminal-context-menu" role="menu" style={`left:${contextMenu.x}px;top:${contextMenu.y}px`} data-terminal-key={contextMenu.key}><wa-dropdown-item data-action="open-terminal-project" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={ExternalLink} name="external-link"/></span>Open</wa-dropdown-item><wa-dropdown-item data-action="hide-dashboard-terminal" data-item-id={contextMenu.key}><span slot="icon"><LucideIcon icon={EyeOff} name="eye-off"/></span>Hide Terminal</wa-dropdown-item></div>}

@@ -832,6 +832,15 @@ view layer is new work.
   device-local project order.
 - Search (FTS) and filtered views.
 
+Closing a project tab first inventories its live terminals and AI chats. When any are
+running, a confirmation dialog lets the user inspect terminal working directory,
+progress, and recent scrollback or AI provider, model, session, and latest activity.
+**Close Project** removes only the local project tab and leaves those server-owned
+resources running; **Close All** explicitly deletes every listed terminal and AI
+connection before removing the tab. Cancel and native dialog dismissal preserve both
+the project and all resources. Multi-tab close actions apply the same decision project
+by project instead of silently terminating background work.
+
 The web client now implements the permission portion of that floor for Claude and
 Codex. Every open project has a replay-safe long poll; a `permission_asked` event
 triggers one fetch of that project's authenticated permission and connection state. A
@@ -867,7 +876,8 @@ authenticated route as clicks and are distinguished in client history.
 
 The long tail of HS1 UI (rule-oriented query builders, saved-view management, stats, Announcer, telemetry
 dashboards, print) remains **deferred**, each its own ticket after the floor lands. The
-terminal dashboard is active work: HS2-946EQG settled its interaction contract from the
+user-facing **Workspace grid** (internally `TerminalDashboard`) is active work:
+HS2-946EQG settled its interaction contract from the
 updated project/drawer wireframes. HS2-2ZCN7K shipped the global dashboard shell,
 flow layout, magnification/hiding, and independent persisted width/high zoom
 controls. HS2-ZTYJKD completes that visibility action: the eye opens a shared-component
@@ -881,7 +891,12 @@ surface rather than introducing a separate gray band. Visibility groups apply on
 global dashboard; the project drawer
 always shows its project's terminals and has no visibility controls. Newly created terminals
 appear in Default and start hidden in existing named groups. The dashboard always uses one
-ungrouped flow, so there is no redundant project/none grouping selector.
+ungrouped flow, so there is no redundant project/none grouping selector. Terminal and AI-chat
+cards share that flow in both the cross-project Workspace grid and the drawer's **Project
+grid**. AI cards show provider, working/ready state, and the latest conversation summary,
+retain their mixed terminal/chat drawer order, and reopen the owning project and embedded
+conversation by click or keyboard. Both grid launchers use the Lucide `grid-3x3` icon; the
+broader name leaves room for browser and other workspace surfaces later.
 The dashboard keeps a resizable left operations sidebar open by default. It presents one
 `MenuHeader` and the shared seven-day `ProjectSummary` for every open project. With multiple
 projects, a leading `All projects` group sums each aligned trend day plus the completed-today

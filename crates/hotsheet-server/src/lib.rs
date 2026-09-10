@@ -1322,6 +1322,10 @@ pub fn app(state: AppState) -> Router {
         .route("/ai-settings", get(get_ai_settings).put(put_ai_settings))
         .route("/drive/connections", post(create_drive_connection))
         .route("/drive/sessions", get(list_drive_sessions))
+        .route(
+            "/checkouts/{reference}/drive/connections/{id}",
+            delete(delete_drive_connection),
+        )
         .route("/drive/connections/{id}/turns", post(send_drive_turn))
         .route(
             "/drive/connections/{id}/interrupt",
@@ -5133,6 +5137,45 @@ async fn create_drive_connection(
     Ok((StatusCode::CREATED, Json(info)))
 }
 
+async fn delete_drive_connection(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| {
+            let status = match error {
+                hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => StatusCode::NOT_FOUND,
+                hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => StatusCode::CONFLICT,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            ApiError::new(status, error.to_string())
+        })?;
+    let project = std::path::PathBuf::from(checkout.root)
+        .display()
+        .to_string();
+    let removed = state
+        .client_drives
+        .close(&project, &id)
+        .map_err(client_drive_api_error)?;
+    if removed {
+        let permissions = state.permission_bridge();
+        for request in permissions
+            .pending()
+            .into_iter()
+            .filter(|request| request.project == project && request.connection == id)
+        {
+            permissions.resolve(
+                request.id,
+                hotsheet_aitools::PermissionDecision::Deny,
+                hotsheet_aitools::PermissionScope::Once,
+            );
+        }
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn list_drive_sessions(
     State(state): State<AppState>,
 ) -> Json<Vec<client_drive::ClientSessionInfo>> {
@@ -5277,7 +5320,7 @@ async fn send_drive_turn(
                 thread_state.emit_turn_event(&thread_store, &thread_id, None, &tool, event);
             }
         }
-        manager.finish_turn(&thread_id, &result);
+        manager.finish_turn(&job, &result);
         if let Ok(info) = manager.get(&thread_id) {
             thread_state.emit_drive_updated(&info);
         }

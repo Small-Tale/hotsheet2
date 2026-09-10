@@ -30,13 +30,14 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   spikes/kerf-webawesome/    # Kerf 4.4 + Web Awesome 3.11 Vite/Playwright compatibility proof
   clients/web/               # Kerf + Web Awesome API-only web/Tauri UI foundation
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
-    src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission/drive updates, and global terminal dashboard state
+    src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission/drive updates, and mixed terminal/AI Workspace grid state
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
     src/ai-conversation.ts   #   Per-connection multi-turn transcript transitions for streamed output, activity, permissions, and terminal outcomes
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
+    src/components/project-close-dialog.tsx # Running terminal/AI-chat inventory and explicit keep-running versus close-all project dismissal
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
-    src/terminal-grid-layout.ts # Pure terminal tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
+    src/terminal-grid-layout.ts # Pure workspace tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
     src/components/terminal-ticket-rail.tsx # Compact terminal-dashboard ticket/notification rail with project selection and push/pop inspector navigation
     src/terminal-visibility.ts # Tolerant device-local named visibility groups, per-scope selection, CRUD, and terminal inclusion rules
     src/terminal-viewport.ts #   Lightweight terminal protocol/geometry and lazy runtime loader

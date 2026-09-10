@@ -125,6 +125,7 @@ pub struct ClientConnectionInfo {
 
 struct ConnectionState {
     busy: bool,
+    closing: bool,
     session_id: Option<String>,
     control: Option<TurnControl>,
     last_error: Option<String>,
@@ -283,6 +284,7 @@ impl ClientDriveManager {
             effort,
             state: Mutex::new(ConnectionState {
                 busy: false,
+                closing: false,
                 session_id: session_id.clone(),
                 control: None,
                 last_error: None,
@@ -322,6 +324,9 @@ impl ClientDriveManager {
             .state
             .lock()
             .map_err(|_| ClientDriveError::Unavailable)?;
+        if state.closing {
+            return Err(ClientDriveError::NotFound(id.into()));
+        }
         if state.busy {
             return Err(ClientDriveError::Conflict(format!(
                 "connection '{id}' already has a running turn"
@@ -355,10 +360,8 @@ impl ClientDriveManager {
         })
     }
 
-    pub fn finish_turn(&self, id: &str, result: &Result<TurnDone, String>) {
-        let Ok(Some(connection)) = self.connection(id) else {
-            return;
-        };
+    pub fn finish_turn(&self, job: &ClientTurnJob, result: &Result<TurnDone, String>) {
+        let connection = &job.connection;
         let Ok(mut active_sessions) = self.active_sessions.lock() else {
             return;
         };
@@ -381,12 +384,47 @@ impl ClientDriveManager {
         let session_id = state.session_id.clone();
         drop(state);
         if let Some(session_id) = session_id {
-            if let Err(error) = self.record_session(&connection, session_id)
+            if let Err(error) = self.record_session(connection, session_id)
                 && let Ok(mut state) = connection.state.lock()
             {
                 state.last_error = Some(error.to_string());
             }
         }
+    }
+
+    /// Close one client-owned drive without exposing whether the id belongs to another
+    /// checkout. A busy drive is removed only after its interrupt signal is accepted; the
+    /// running job retains its `Arc` so `finish_turn` can still release session ownership.
+    pub fn close(&self, project: &str, id: &str) -> Result<bool, ClientDriveError> {
+        let mut connections = self
+            .connections
+            .lock()
+            .map_err(|_| ClientDriveError::Unavailable)?;
+        let Some(connection) = connections.get(id).cloned() else {
+            return Ok(false);
+        };
+        if connection.project != project {
+            return Ok(false);
+        }
+        let mut state = connection
+            .state
+            .lock()
+            .map_err(|_| ClientDriveError::Unavailable)?;
+        if state.busy {
+            if !connection.drive.supports_interrupt() {
+                return Err(ClientDriveError::Unsupported(format!(
+                    "connection '{id}' cannot be closed while its turn is running"
+                )));
+            }
+            state
+                .control
+                .as_ref()
+                .ok_or(ClientDriveError::Unavailable)?
+                .request_interrupt();
+        }
+        state.closing = true;
+        connections.remove(id);
+        Ok(true)
     }
 
     pub fn interrupt(&self, id: &str) -> Result<(), ClientDriveError> {
@@ -555,6 +593,7 @@ fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
     if connection.drive.supports_interrupt() {
         actions.push("interrupt".into());
     }
+    actions.push("close".into());
     ClientConnectionInfo {
         id: connection.id.clone(),
         tool: connection.tool.clone(),
@@ -583,4 +622,122 @@ pub enum ClientDriveError {
     Unavailable,
     #[error("client session persistence: {0}")]
     Persistence(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct StubBackend {
+        supports_interrupt: bool,
+    }
+
+    struct StubDrive {
+        tool: String,
+        supports_interrupt: bool,
+    }
+
+    impl ClientDriveBackend for StubBackend {
+        fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
+            Ok(Arc::new(StubDrive {
+                tool: request.tool,
+                supports_interrupt: self.supports_interrupt,
+            }))
+        }
+    }
+
+    impl PreparedClientDrive for StubDrive {
+        fn tool(&self) -> &str {
+            &self.tool
+        }
+
+        fn supports_interrupt(&self) -> bool {
+            self.supports_interrupt
+        }
+
+        fn run_turn(
+            &self,
+            _: &str,
+            _: Option<&str>,
+            _: &str,
+            _: Option<&str>,
+            _: Option<&str>,
+            _: &TurnControl,
+            _: &mut dyn FnMut(&TurnEvent),
+        ) -> Result<TurnDone, String> {
+            unreachable!("manager tests do not execute the prepared drive")
+        }
+    }
+
+    fn manager(supports_interrupt: bool) -> ClientDriveManager {
+        ClientDriveManager::new(Arc::new(StubBackend { supports_interrupt }))
+    }
+
+    fn prepare(project: &str) -> PrepareDrive {
+        PrepareDrive {
+            store_path: PathBuf::from("/store"),
+            project_path: PathBuf::from(project),
+            tool: "fake".into(),
+            env: Vec::new(),
+            permission_bridge: Arc::new(SharedPermissionBridge::default()),
+            persistent_home: None,
+            model: None,
+            effort: None,
+        }
+    }
+
+    #[test]
+    fn close_is_scoped_idempotent_and_releases_an_interrupted_turn() {
+        let manager = manager(true);
+        manager
+            .create_or_attach(prepare("/project-a"), Some("connection-1".into()), None)
+            .unwrap();
+        let job = manager
+            .begin_turn("connection-1", None, None, None)
+            .unwrap();
+
+        assert!(!manager.close("/project-b", "connection-1").unwrap());
+        assert!(manager.get("connection-1").unwrap().busy);
+        assert!(manager.close("/project-a", "connection-1").unwrap());
+        assert!(job.control.interrupt_requested());
+        assert!(matches!(
+            manager.get("connection-1"),
+            Err(ClientDriveError::NotFound(_))
+        ));
+        assert!(!manager.close("/project-a", "connection-1").unwrap());
+
+        manager.finish_turn(
+            &job,
+            &Ok(TurnDone {
+                reason: hotsheet_aitools::DoneReason::Interrupted,
+                session_id: None,
+            }),
+        );
+        assert!(manager.active_sessions.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn close_keeps_a_busy_non_interruptible_connection_attached() {
+        let manager = manager(false);
+        manager
+            .create_or_attach(prepare("/project"), Some("connection-1".into()), None)
+            .unwrap();
+        let job = manager
+            .begin_turn("connection-1", None, None, None)
+            .unwrap();
+
+        assert!(matches!(
+            manager.close("/project", "connection-1"),
+            Err(ClientDriveError::Unsupported(_))
+        ));
+        assert!(manager.get("connection-1").unwrap().busy);
+
+        manager.finish_turn(
+            &job,
+            &Ok(TurnDone {
+                reason: hotsheet_aitools::DoneReason::Completed,
+                session_id: None,
+            }),
+        );
+    }
 }

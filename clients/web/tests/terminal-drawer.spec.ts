@@ -5,7 +5,7 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   await page.goto('/ux-demo?component=terminal-drawer');
 
   const drawer = page.locator('[data-component="terminal-drawer"]');
-  const gridTab = drawer.getByRole('tab', { name: 'Terminal grid' });
+  const gridTab = drawer.getByRole('tab', { name: 'Project grid' });
   const tabs = drawer.locator('.terminal-drawer__tabs');
   await expect(drawer.locator('[data-component="terminal-tab"]')).toHaveCount(1);
 

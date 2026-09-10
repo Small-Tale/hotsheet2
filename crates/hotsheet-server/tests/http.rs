@@ -366,7 +366,7 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
     assert_eq!(created["project"], dir.path().display().to_string());
     assert_eq!(
         created["actions"],
-        serde_json::json!(["send_turn", "interrupt"])
+        serde_json::json!(["send_turn", "interrupt", "close"])
     );
     assert!(!created["busy"].as_bool().unwrap());
     assert_eq!(created["model"], "m1");
@@ -511,6 +511,192 @@ async fn client_drive_starts_resumes_and_interrupts_through_real_routes() {
 }
 
 #[tokio::test]
+async fn client_drive_delete_is_authenticated_scoped_idempotent_and_interrupts() {
+    let (store_dir, base) = state();
+    let checkout_a = tempfile::tempdir().unwrap();
+    let checkout_b = tempfile::tempdir().unwrap();
+    let backend = Arc::new(FakeClientDriveBackend {
+        supports_interrupt: true,
+        ..FakeClientDriveBackend::default()
+    });
+    let router = app(base
+        .with_checkout_registry(store_dir.path().join("checkouts.json"))
+        .with_client_drive_backend(backend));
+    let mut checkout_ids = Vec::new();
+    for checkout in [&checkout_a, &checkout_b] {
+        let opened = router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root": checkout.path(), "sources": []}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::CREATED);
+        checkout_ids.push(
+            body_json(opened).await["checkout"]["id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    let [checkout_a_id, checkout_b_id] = checkout_ids.as_slice() else {
+        unreachable!()
+    };
+    let created = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(
+                &serde_json::json!({
+                    "tool": "fake",
+                    "checkout": checkout_a_id,
+                    "connection_id": "client/close"
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let replay_cursor = body_json(
+        router
+            .clone()
+            .oneshot(authed("GET", "/ws/poll?timeout_ms=0", None))
+            .await
+            .unwrap(),
+    )
+    .await["cursor"]
+        .as_u64()
+        .unwrap();
+    let started = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/client%2Fclose/turns",
+            Some(r#"{"content":"hold"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::ACCEPTED);
+
+    let delete_path = format!("/checkouts/{checkout_a_id}/drive/connections/client%2Fclose");
+    let unauthenticated = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(&delete_path)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+
+    let wrong_checkout = router
+        .clone()
+        .oneshot(authed(
+            "DELETE",
+            &format!("/checkouts/{checkout_b_id}/drive/connections/client%2Fclose"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(wrong_checkout.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap()
+        )
+        .await
+        .as_array()
+        .unwrap()
+        .len(),
+        1
+    );
+
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &delete_path, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed("DELETE", &delete_path, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert!(
+        body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap()
+        )
+        .await
+        .as_array()
+        .unwrap()
+        .is_empty()
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/drive/connections/client%2Fclose/turns",
+                Some(r#"{"content":"again"}"#),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let replay = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "GET",
+                    &format!("/ws/poll?since={replay_cursor}&timeout_ms=0"),
+                    None,
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if replay["events"].as_array().unwrap().iter().any(|event| {
+            event["turn"]["connection_id"] == "client/close"
+                && event["turn"]["event"]["type"] == "done"
+                && event["turn"]["event"]["reason"] == "interrupted"
+        }) {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the deleted connection's active turn was not interrupted"
+        );
+        tokio::task::yield_now().await;
+    }
+}
+
+#[tokio::test]
 async fn client_drive_omits_and_rejects_an_unsupported_interrupt() {
     let (_dir, base) = state();
     let router = app(base.with_client_drive_backend(Arc::new(FakeClientDriveBackend::default())));
@@ -525,7 +711,7 @@ async fn client_drive_omits_and_rejects_an_unsupported_interrupt() {
         .unwrap();
     assert_eq!(
         body_json(created).await["actions"],
-        serde_json::json!(["send_turn"])
+        serde_json::json!(["send_turn", "close"])
     );
     let rejected = router
         .oneshot(authed(

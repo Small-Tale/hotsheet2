@@ -108,7 +108,8 @@ test('represents every server-build details state with shared dialog geometry',a
 });
 
 test('represents the production terminal dashboard and its shared context menu in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-dashboard');const dashboard=page.getByRole('region',{name:'Terminal dashboard'});await expect(dashboard).toBeVisible();await expect(dashboard).toHaveAttribute('data-basis','high');await expect(dashboard).toHaveAttribute('data-fit','3');await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(2);const menu=dashboard.getByRole('menu');await expect(menu).toHaveCount(0);const first=dashboard.locator('[data-component="terminal-tile"]').first();await first.getByRole('button',{name:/More actions/}).click();await expect(menu.getByRole('menuitem')).toHaveCount(2);await expect(menu.getByText('Open')).toBeVisible();await expect(menu.getByText('Hide Terminal')).toBeVisible();await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await first.click({button:'right'});await expect(menu).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-fw96jm-terminal-dashboard-menu-on-demand.png',fullPage:true});
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=terminal-dashboard');const dashboard=page.getByRole('region',{name:'Workspace grid'});await expect(dashboard).toBeVisible();await expect(dashboard).toHaveAttribute('data-basis','high');await expect(dashboard).toHaveAttribute('data-fit','3');await expect(dashboard.locator('[data-fixed-aspect-terminal-card="preview"]')).toHaveCount(2);const chat=dashboard.locator('[data-component="workspace-chat-tile"]');await expect(chat).toHaveCount(1);await expect(chat).toContainText('Codex AI chat');await expect(chat).toContainText('Reviewing the latest workspace changes');const menu=dashboard.getByRole('menu');await expect(menu).toHaveCount(0);const first=dashboard.locator('[data-component="terminal-tile"]').first();await first.getByRole('button',{name:/More actions/}).click();await expect(menu.getByRole('menuitem')).toHaveCount(2);await expect(menu.getByText('Open')).toBeVisible();await expect(menu.getByText('Hide Terminal')).toBeVisible();await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await first.click({button:'right'});await expect(menu).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-wide.png',fullPage:true});
+  await page.keyboard.press('Escape');await page.setViewportSize({width:700,height:700});await expect(chat).toBeVisible();await expect.poll(()=>dashboard.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-hpy5r0-workspace-grid-ai-chat-narrow.png',fullPage:true});
 });
 
 test('represents aggregate and per-project terminal operations in the UX catalog',async({page})=>{
@@ -1519,7 +1520,7 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-tab');
   const sharedTabs=page.locator('[data-component$="-tab"]');await expect(sharedTabs).toHaveCount(2);await expect(page.getByRole('tab',{name:/Project tab/})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'Close Terminal tab'})).toBeAttached();
   await page.goto('/ux-demo?component=terminal-drawer');
-  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-component="terminal-tab"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();const gridTab=terminalDrawer.getByRole('tab',{name:'Terminal grid'}),gridWidth=(await gridTab.boundingBox())!.width;await expect(gridTab).toHaveCSS('flex-shrink','0');await terminalDrawer.evaluate(node=>{node.style.width='520px';const tabs=node.querySelector('.terminal-drawer__tabs')!,source=tabs.firstElementChild!;for(let index=0;index<8;index+=1)tabs.append(source.cloneNode(true))});await expect(terminalDrawer.locator('[data-component="terminal-tab"]')).toHaveCount(9);expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth,0);expect(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.scrollWidth)).toBeGreaterThan(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.clientWidth));await terminalDrawer.locator('.terminal-drawer__rail').screenshot({path:'/private/tmp/hs2-029pmj-fixed-grid-tab.png'});
+  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-component="terminal-tab"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();const gridTab=terminalDrawer.getByRole('tab',{name:'Project grid'}),gridWidth=(await gridTab.boundingBox())!.width;await expect(gridTab).toHaveCSS('flex-shrink','0');await terminalDrawer.evaluate(node=>{node.style.width='520px';const tabs=node.querySelector('.terminal-drawer__tabs')!,source=tabs.firstElementChild!;for(let index=0;index<8;index+=1)tabs.append(source.cloneNode(true))});await expect(terminalDrawer.locator('[data-component="terminal-tab"]')).toHaveCount(9);expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth,0);expect(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.scrollWidth)).toBeGreaterThan(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.clientWidth));await terminalDrawer.locator('.terminal-drawer__rail').screenshot({path:'/private/tmp/hs2-029pmj-fixed-grid-tab.png'});
 
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -1609,11 +1610,13 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('tab', { name: /Internal API/ })).toHaveCount(0);
   await tabBar.getByRole('button', { name: 'Add project' }).click();
   await expect(tabBar.getByRole('tab', { name: /New Project 1/ })).toHaveAttribute('aria-selected', 'true');
-  await tabBar.getByRole('button', { name: 'Terminal dashboard' }).click();
-  await expect(tabBar.getByRole('button', { name: 'Terminal dashboard' })).toHaveAttribute('aria-pressed', 'true');
+  await tabBar.getByRole('button', { name: 'Workspace grid' }).click();
+  await expect(tabBar.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(tabBar.getByRole('button', { name: 'Workspace grid' }).locator('[data-lucide="grid-3x3"]')).toBeVisible();
   await expect(tabBar.getByRole('tab', { selected: true })).toHaveCount(0);
+  await tabBar.screenshot({path:'/private/tmp/hs2-hpy5r0-workspace-grid-launcher.png'});
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click();
-  await expect(tabBar.getByRole('button', { name: 'Terminal dashboard' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(tabBar.getByRole('button', { name: 'Workspace grid' })).toHaveAttribute('aria-pressed', 'false');
 
   await page.goto('/ux-demo?component=resizable-region');
   const horizontal = page.getByRole('separator', { name: 'Resize Example sidebar' });
@@ -1828,7 +1831,7 @@ test('exercises the application-shell component slice and responsive composition
   await shellSearch.blur();
   await expect(shell.getByRole('textbox', { name: 'Search tickets' })).toHaveCount(0);
   await expect(shell.getByRole('button', { name: 'Search tickets' })).toBeVisible();
-  await shell.getByRole('button', { name: 'Terminal dashboard' }).click();
+  await shell.getByRole('button', { name: 'Workspace grid' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'terminals');
   await expect(shell.locator('[data-component="project-sidebar"]')).toHaveCount(0);
   await expect(shell.getByRole('complementary', { name: 'Terminal operations sidebar' })).toBeVisible();
@@ -1836,8 +1839,8 @@ test('exercises the application-shell component slice and responsive composition
   await expect(shell.getByRole('region', { name: 'Ticket rail' })).toBeVisible();
   await expect(shell.locator('[data-component="ticket-inspector"]')).toBeVisible();
   await expect(shell.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
-  await expect(shell.getByText('Terminals', { exact: true })).toBeVisible();
-  await expect(shell.getByRole('region', { name: 'Terminal dashboard workspace' })).toBeVisible();
+  await expect(shell.locator('[data-component="workspace-identity"]').getByText('Workspace grid', { exact: true })).toBeVisible();
+  await expect(shell.getByRole('region', { name: 'Workspace grid workspace' })).toBeVisible();
   await expect(shell.locator('.workspace-header__actions')).toHaveCount(0);
   await shell.getByRole('button', { name: 'Cross-project stats' }).click();
   await expect(shell).toHaveAttribute('data-mode', 'stats');
