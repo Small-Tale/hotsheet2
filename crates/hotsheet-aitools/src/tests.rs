@@ -363,7 +363,7 @@ fn codex_client_starts_a_thread_and_completes_a_turn() {
 }
 
 #[test]
-fn codex_client_streams_completed_native_items_before_done() {
+fn codex_client_streams_native_activity_and_agent_output_before_done() {
     let cx = CodexAppServer::connect(ScriptedDaemon::new(TurnMode::AutoComplete)).unwrap();
     let thread = cx.open_thread(None, std::path::Path::new("/w")).unwrap();
     let mut turn = cx.start_turn(&thread, "work").unwrap();
@@ -375,6 +375,10 @@ fn codex_client_streams_completed_native_items_before_done() {
         }
         other => panic!("expected native activity, got {other:?}"),
     }
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Output("Today is Thursday.".into()))
+    );
     assert_eq!(
         turn.next_event(),
         Some(TurnEvent::Done(DoneReason::Completed))

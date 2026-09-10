@@ -364,6 +364,7 @@ impl AppServerClient for CodexAppServer {
             done: None,
             usage: None,
             pending: std::collections::VecDeque::new(),
+            streamed_agent_items: std::collections::HashSet::new(),
             done_emitted: false,
         }))
     }
@@ -385,6 +386,10 @@ struct CodexTurn {
     /// Rich, turn-scoped transcript items captured from `item/completed` in protocol
     /// order. `is_running` may poll ahead, so queue rather than dropping them.
     pending: std::collections::VecDeque<crate::drive::TurnEvent>,
+    /// Agent-message item ids already emitted through delta notifications. Codex also
+    /// repeats the complete text in `item/completed`; suppress that duplicate while
+    /// retaining the completion fallback for versions/transports that omit deltas.
+    streamed_agent_items: std::collections::HashSet<String>,
     done_emitted: bool,
 }
 
@@ -516,6 +521,30 @@ fn completed_item(notification: &Value, thread_id: &str, turn_id: Option<&str>) 
     params.get("item").cloned()
 }
 
+/// Extract one user-visible assistant-text delta for this turn. Current Codex emits
+/// these before the corresponding completed `agentMessage` transcript item.
+fn agent_message_delta(
+    notification: &Value,
+    thread_id: &str,
+    turn_id: Option<&str>,
+) -> Option<(String, String)> {
+    if notification.get("method").and_then(Value::as_str) != Some("item/agentMessage/delta") {
+        return None;
+    }
+    let params = notification.get("params")?;
+    if params.get("threadId").and_then(Value::as_str) != Some(thread_id) {
+        return None;
+    }
+    if let Some(want) = turn_id
+        && params.get("turnId").and_then(Value::as_str) != Some(want)
+    {
+        return None;
+    }
+    let item_id = params.get("itemId")?.as_str()?.to_owned();
+    let delta = params.get("delta")?.as_str()?.to_owned();
+    (!delta.is_empty()).then_some((item_id, delta))
+}
+
 fn codex_done_reason(outcome: &AppServerOutcome) -> crate::drive::DoneReason {
     match outcome {
         AppServerOutcome::Completed => crate::drive::DoneReason::Completed,
@@ -534,12 +563,34 @@ impl CodexTurn {
             if let Some(usage) = token_usage_updated(n, &self.thread_id, self.turn_id.as_deref()) {
                 self.usage = Some(usage);
             }
-            if let Some(payload) = completed_item(n, &self.thread_id, self.turn_id.as_deref()) {
+            if let Some((item_id, delta)) =
+                agent_message_delta(n, &self.thread_id, self.turn_id.as_deref())
+            {
+                self.streamed_agent_items.insert(item_id);
                 self.pending
-                    .push_back(crate::drive::TurnEvent::NativeActivity {
-                        source: "codex-transcript".into(),
-                        payload,
-                    });
+                    .push_back(crate::drive::TurnEvent::Output(delta));
+            }
+            if let Some(payload) = completed_item(n, &self.thread_id, self.turn_id.as_deref()) {
+                if payload.get("type").and_then(Value::as_str) == Some("agentMessage") {
+                    let item_id = payload
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    let text = payload
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .unwrap_or_default();
+                    if !text.is_empty() && !self.streamed_agent_items.contains(item_id) {
+                        self.pending
+                            .push_back(crate::drive::TurnEvent::Output(text.to_owned()));
+                    }
+                } else {
+                    self.pending
+                        .push_back(crate::drive::TurnEvent::NativeActivity {
+                            source: "codex-transcript".into(),
+                            payload,
+                        });
+                }
             }
             if let Some(o) = completed_outcome(n, &self.thread_id, self.turn_id.as_deref()) {
                 self.usage = self.usage.clone().or_else(|| {
@@ -1084,6 +1135,16 @@ pub(crate) mod scripted {
                                         "aggregatedOutput": null, "durationMs": 12,
                                         "exitCode": 0, "processId": null, "source": null,
                                         "scriptPath": null, "pluginId": null } } }));
+                            self.push(
+                                json!({ "jsonrpc": "2.0", "method": "item/agentMessage/delta",
+                                "params": { "threadId": thread_id, "turnId": "turn-1",
+                                    "itemId": "item-answer", "delta": "Today is Thursday." } }),
+                            );
+                            self.push(json!({ "jsonrpc": "2.0", "method": "item/completed",
+                                "params": { "threadId": thread_id, "turnId": "turn-1",
+                                    "completedAtMs": 1,
+                                    "item": { "id": "item-answer", "type": "agentMessage",
+                                        "text": "Today is Thursday.", "phase": "final" } } }));
                             // Codex 0.148 reports usage immediately before completion in a
                             // separate notification (live-verified by HS2-CQ6B96).
                             self.push(json!({ "jsonrpc": "2.0",

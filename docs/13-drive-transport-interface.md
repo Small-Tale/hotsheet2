@@ -31,7 +31,10 @@
 > demultiplexing responses / notifications / auto-answered approval `ServerRequest`s)
 > speaking the verified `codex 0.148` protocol: `initialize`→`initialized`,
 > `thread/start`|`thread/resume`, `turn/start` (text input), observing
-> `turn/started`→`turn/completed` (busy→done), `turn/interrupt`. Threads open with
+> `turn/started`, streaming `item/agentMessage/delta` as user-visible `Output`, then
+> `turn/completed` (busy→done), `turn/interrupt`. A completed `agentMessage` is the
+> fallback when a transport omits deltas and is deduplicated when deltas were received.
+> Threads open with
 > `approvalPolicy:"never"` + `sandbox:"workspace-write"` (headless). The bytes ride an
 > injected `RpcTransport` (`send`/`recv` line-oriented JSON — the verified framing):
 > `StdioTransport` runs `codex app-server` **direct** (one persistent process per
@@ -218,8 +221,9 @@ The interface is only real if the tool it was **not** designed around fits. Chec
   spawn/app-server drives are sync under the same signature (they return `None` from
   `next_event` and callers use `wait`). **Verified by construction (HS2-116).**
 - `TurnEvent::NativeActivity` carries an exact narratable protocol payload plus its
-  declared activity-source id. Codex emits completed app-server transcript items; Claude
-  emits tool-use payloads in its verified hook contract. Mapping and ticket/project/session
+  declared activity-source id. Codex emits non-message completed app-server transcript
+  items as activity while agent-message deltas become user-visible `Output`; Claude emits
+  tool-use payloads in its verified hook contract. Mapping and ticket/project/session
   attribution remain host responsibilities, so the drive crate stays independent of the
   ticket activity model.
 - **Codex** needs **`interrupt`** and a **backing service**; Claude declares neither,
