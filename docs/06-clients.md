@@ -693,6 +693,9 @@ cleanup of the old live HS1 data; backups are never removed.
   remains selected while visiting the cross-project terminal dashboard and when following
   ticket references in details or notes; if navigation begins from a non-ticket workspace,
   it restores the last explicitly selected list-or-column mode.
+  Status, priority, and title sorts use most-recently-updated first as their secondary
+  order, regardless of the selected primary direction; exact remaining ties use the
+  stable ticket slug. Updated-date sorting continues to follow its selected direction.
 
 - **Rust shell + web UI, no embedded core.** The Rust shell's job on the server
   front is to **launch and supervise the local `hotsheet-server`** (spawn it
