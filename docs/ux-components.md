@@ -9,6 +9,10 @@
 > [06-clients.md](06-clients.md). The wireframe establishes information architecture,
 > not final color, type, spacing, or density.
 
+The [Kerf UI design philosophy](ui-design-philosophy.md) governs quality tradeoffs,
+state continuity, semantic reuse, and the review gates for these components. The
+[design guidelines](design-guidelines.md) supply the concrete platform rules.
+
 Hot Sheet will build the browser implementation first for rapid UX iteration, then
 host it in Tauri and implement a closely corresponding native macOS SwiftUI client.
 The browser exposes the real production components at `/ux-demo`, backed by a
