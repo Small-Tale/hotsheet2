@@ -746,6 +746,21 @@ test('keeps remembered-project startup atomic and does not report its intentiona
   expect(submissions).toEqual([]);
 });
 
+test('prunes a failed hidden remembered project without obscuring a successful one',async({page})=>{
+  await mockProject(page);
+  const failedRoot='/work/older-server';
+  await page.route('**/__hotsheet/projects/open',route=>route.request().postDataJSON().root===failedRoot
+    ?route.fulfill({status:409,json:{error:'The older server only supports schema 2.'}})
+    :route.fallback());
+  await page.addInitScript(({good,bad})=>{localStorage.setItem('hotsheet.open-projects',JSON.stringify([good,bad]))},{good:project.root,bad:failedRoot});
+  await page.goto('/');
+  await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toContainText(failedRoot);
+  await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual([project.root]);
+  await page.screenshot({path:'/private/tmp/hs2-nzffdh-hidden-restore-recovery.png',fullPage:true});
+});
+
 test('suppresses interaction-bound render bursts but reports a storm that persists afterward',async({page})=>{
   const submissions:unknown[]=[];
   await mockProject(page);

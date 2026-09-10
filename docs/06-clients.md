@@ -266,8 +266,10 @@ cleanup of the old live HS1 data; backups are never removed.
   dialog accepts an explicit git-store path when the convention does not apply; both
   paths have host-native folder chooser buttons, and Cancel/Escape are controlled by
   durable dialog state so unrelated renders cannot reopen or strand the surface.
-  Retrying a failed project open clears the prior failure immediately; a successful
-  retry must never leave stale compatibility or connection diagnostics over the project.
+  Retrying a failed project open clears the prior failure immediately. During startup,
+  one failed hidden remembered project is pruned from the remembered set and reported
+  non-modally; it must never leave stale compatibility or connection diagnostics over a
+  different project that reopened successfully.
   Source-less project setup uses a bounded dialog with shared multiline menu items whose
   title and explanation remain inside one selectable row at compact sizes. It waits for
   the project dialog's completed close event, so the two modal surfaces never overlap.

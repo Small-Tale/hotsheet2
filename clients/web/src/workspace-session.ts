@@ -56,6 +56,7 @@ export function loadProjectWorkspaceSession(storage:Pick<Storage,'getItem'>,proj
 export function saveProjectWorkspaceSession(storage:Pick<Storage,'setItem'>,projectId:string,value:ProjectWorkspaceSession){storage.setItem(PREFIX+projectId,JSON.stringify(value))}
 export function activeProjectRoot(storage:Pick<Storage,'getItem'>){return storage.getItem(ACTIVE_ROOT)??''}
 export function saveActiveProjectRoot(storage:Pick<Storage,'setItem'>,root:string){storage.setItem(ACTIVE_ROOT,root)}
+export function reconcileRememberedProjectRoots(requested:readonly string[],opened:readonly string[]){const available=new Set(opened);return{remembered:requested.filter(root=>available.has(root)),failed:requested.filter(root=>!available.has(root))}}
 export function hs1MigrationPromptDismissed(storage:Pick<Storage,'getItem'>,projectId:string,sourceIdentity:string){return Boolean(sourceIdentity)&&storage.getItem(HS1_MIGRATION_DISMISSED+projectId)===sourceIdentity}
 export function dismissHs1MigrationPrompt(storage:Pick<Storage,'setItem'>,projectId:string,sourceIdentity:string){if(sourceIdentity)storage.setItem(HS1_MIGRATION_DISMISSED+projectId,sourceIdentity)}
 
