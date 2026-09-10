@@ -128,7 +128,8 @@ cleanup of the old live HS1 data; backups are never removed.
   package into a temporary snapshot and starts Vite there. The running app retains the
   development bridge and `/ux-demo`, but concurrent edits in the checkout cannot trigger
   HMR or expose a partially edited multi-file state; restart the command to load a new
-  snapshot. Each stable process also owns a private Vite dependency cache inside its
+  snapshot. Generated package-local `target` output is excluded from the snapshot just
+  like `dist`, test results, and dependency output. Each stable process also owns a private Vite dependency cache inside its
   snapshot and disables runtime dependency discovery. A later route may therefore load a
   previously unseen ESM dependency without Vite optimizing it and forcing a document
   reload. Playwright and Vitest use separate disposable Vite caches, so a test run cannot
@@ -137,9 +138,12 @@ cleanup of the old live HS1 data; backups are never removed.
   project bridge still resolves the real `target/debug/hotsheet-server` rather than a
   nonexistent temporary `target` directory. Use `npm run dev:hot` only when actively developing the web UI and immediate
   HMR is desired. Browser tests use `dev:hot` on a separate default port and never reuse
-  an already-running maintainer server. On shutdown, the stable launcher first waits for
-  its Vite child to exit, then removes the private snapshot before the launcher itself
-  exits; this prevents concurrent Vite writes from racing snapshot cleanup.
+  an already-running maintainer server. Signal handling is active before snapshot creation:
+  an interrupt during startup prevents Vite from launching, awaits the in-flight snapshot,
+  and removes it before returning the conventional signal exit status. After Vite starts,
+  shutdown first waits for the child to exit and then removes the private snapshot before
+  the launcher itself exits; every path removes its signal listeners and prevents concurrent
+  Vite writes from racing snapshot cleanup.
 
 - **Startup delivery budget.** Vite development intentionally serves the source module
   graph as separate requests: a cold local profile on 2026-09-03 loaded 175 scripts

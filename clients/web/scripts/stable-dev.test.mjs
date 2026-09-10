@@ -1,10 +1,11 @@
+import { EventEmitter } from 'node:events';
 import { lstat, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createStableSnapshot, removeStableSnapshot, stableDevEnvironment } from './stable-dev.mjs';
+import { createStableSnapshot, removeStableSnapshot, runStableDev, stableDevEnvironment } from './stable-dev.mjs';
 
 const cleanup = [];
 afterEach(async () => {
@@ -18,8 +19,10 @@ describe('stable dev snapshot', () => {
     await mkdir(resolve(source, 'src'));
     await mkdir(resolve(source, 'node_modules'));
     await mkdir(resolve(source, 'dist'));
+    await mkdir(resolve(source, 'target'));
     await writeFile(resolve(source, 'src/main.ts'), 'before');
     await writeFile(resolve(source, 'dist/generated.js'), 'excluded');
+    await writeFile(resolve(source, 'target/generated'), 'excluded');
 
     const snapshot = await createStableSnapshot(source);
     cleanup.push(snapshot);
@@ -28,6 +31,7 @@ describe('stable dev snapshot', () => {
     expect(await readFile(resolve(snapshot, 'src/main.ts'), 'utf8')).toBe('before');
     expect((await lstat(resolve(snapshot, 'node_modules'))).isSymbolicLink()).toBe(true);
     await expect(stat(resolve(snapshot, 'dist'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(stat(resolve(snapshot, 'target'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('preserves the original repository root for every snapshot-side bridge', () => {
@@ -45,5 +49,47 @@ describe('stable dev snapshot', () => {
     expect(overridden.HOTSHEET_REPO_ROOT).toBe('/real/repository');
     expect(overridden.HOTSHEET_DEV_REVIEW_REPO_ROOT).toBe('/review/repository');
     expect(overridden.HOTSHEET_VITE_CACHE_DIR).toBe('/tmp/other-snapshot/.vite-cache');
+  });
+
+  it('awaits and removes a snapshot when shutdown arrives during startup', async () => {
+    const processHost = new EventEmitter();
+    processHost.execPath = '/test/node';
+    let finishSnapshot;
+    const snapshotReady = new Promise(resolveReady => { finishSnapshot = resolveReady; });
+    let announceRemoval;
+    const removalStarted = new Promise(resolveStarted => { announceRemoval = resolveStarted; });
+    let finishRemoval;
+    const removalFinished = new Promise(resolveFinished => { finishRemoval = resolveFinished; });
+    const removed = [];
+    const running = runStableDev({
+      sourceRoot: '/work/web',
+      temporaryRoot: '/tmp/runtime',
+      environment: {},
+      processHost,
+      createSnapshot: async () => {
+        await snapshotReady;
+        return '/tmp/runtime/hotsheet-web-stable-test';
+      },
+      removeSnapshot: async path => {
+        removed.push(path);
+        announceRemoval();
+        await removalFinished;
+      },
+      spawnChild: () => { throw new Error('Vite must not start after shutdown begins.'); },
+      log: () => undefined,
+    });
+    let settled = false;
+    void running.finally(() => { settled = true; });
+
+    processHost.emit('SIGTERM');
+    finishSnapshot();
+    await removalStarted;
+
+    expect(settled).toBe(false);
+    finishRemoval();
+    await expect(running).resolves.toBe(143);
+    expect(removed).toEqual(['/tmp/runtime/hotsheet-web-stable-test']);
+    expect(processHost.listenerCount('SIGINT')).toBe(0);
+    expect(processHost.listenerCount('SIGTERM')).toBe(0);
   });
 });

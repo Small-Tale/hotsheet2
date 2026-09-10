@@ -10,6 +10,7 @@ const excludedTopLevel = new Set([
   'dist',
   'node_modules',
   'playwright-report',
+  'target',
   'test-results',
 ]);
 
@@ -44,44 +45,60 @@ export function stableDevEnvironment(sourceRoot, snapshotRoot, environment = pro
   };
 }
 
-async function main() {
-  const sourceRoot = resolve(process.env.HOTSHEET_WEB_STABLE_SOURCE_ROOT ?? scriptRoot);
-  const temporaryRoot = resolve(process.env.HOTSHEET_WEB_STABLE_TEMP_ROOT ?? tmpdir());
-  const snapshotRoot = await createStableSnapshot(sourceRoot, temporaryRoot);
-  const viteEntry = resolve(sourceRoot, 'node_modules/vite/bin/vite.js');
-  const child = spawn(process.execPath, [viteEntry, '--host', '127.0.0.1', ...process.argv.slice(2)], {
-    cwd: snapshotRoot,
-    env: stableDevEnvironment(sourceRoot, snapshotRoot),
-    stdio: 'inherit',
-  });
-
-  console.log(`Stable dev snapshot: ${snapshotRoot}`);
-  console.log('Workspace edits will be visible after this command is restarted.');
-
+export async function runStableDev({
+  sourceRoot = resolve(process.env.HOTSHEET_WEB_STABLE_SOURCE_ROOT ?? scriptRoot),
+  temporaryRoot = resolve(process.env.HOTSHEET_WEB_STABLE_TEMP_ROOT ?? tmpdir()),
+  viteArguments = process.argv.slice(2),
+  environment = process.env,
+  processHost = process,
+  createSnapshot = createStableSnapshot,
+  removeSnapshot = removeStableSnapshot,
+  spawnChild = spawn,
+  log = console.log,
+} = {}) {
   let stoppingSignal;
+  let snapshotRoot;
+  let child;
   const signalHandlers = new Map();
   for (const signal of ['SIGINT', 'SIGTERM']) {
     const handler = () => {
       if (stoppingSignal) return;
       stoppingSignal = signal;
-      child.kill(signal);
+      child?.kill(signal);
     };
     signalHandlers.set(signal, handler);
-    process.on(signal, handler);
+    processHost.on(signal, handler);
   }
-  const result = await new Promise((resolveClose, rejectClose) => {
-    child.once('error', rejectClose);
-    child.once('close', (code, signal) => resolveClose({ code, signal }));
-  });
+
   try {
-    await removeStableSnapshot(snapshotRoot);
+    snapshotRoot = await createSnapshot(sourceRoot, temporaryRoot);
+    if (stoppingSignal) return stoppingSignal === 'SIGINT' ? 130 : 143;
+
+    const viteEntry = resolve(sourceRoot, 'node_modules/vite/bin/vite.js');
+    child = spawnChild(processHost.execPath, [viteEntry, '--host', '127.0.0.1', ...viteArguments], {
+      cwd: snapshotRoot,
+      env: stableDevEnvironment(sourceRoot, snapshotRoot, environment),
+      stdio: 'inherit',
+    });
+
+    log(`Stable dev snapshot: ${snapshotRoot}`);
+    log('Workspace edits will be visible after this command is restarted.');
+
+    const result = await new Promise((resolveClose, rejectClose) => {
+      child.once('error', rejectClose);
+      child.once('close', (code, signal) => resolveClose({ code, signal }));
+    });
+    const exitSignal = stoppingSignal ?? result.signal;
+    return result.code ?? (exitSignal === 'SIGINT' ? 130 : 143);
   } finally {
-    for (const [signal, handler] of signalHandlers) process.off(signal, handler);
+    try {
+      if (snapshotRoot) await removeSnapshot(snapshotRoot);
+    } finally {
+      for (const [signal, handler] of signalHandlers) processHost.off(signal, handler);
+    }
   }
-  const exitSignal = stoppingSignal ?? result.signal;
-  process.exitCode = result.code ?? (exitSignal === 'SIGINT' ? 130 : 143);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  await main();
+  process.exitCode = await runStableDev();
 }
