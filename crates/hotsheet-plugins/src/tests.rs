@@ -52,7 +52,26 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert_eq!(drive.program, "codex");
     assert_eq!(drive.args, vec!["app-server".to_string()]);
     assert!(drive.interrupt);
-    assert_eq!(drive.default_model.as_deref(), Some("gpt-5.4"));
+    assert_eq!(drive.default_model.as_deref(), Some("gpt-6-astra"));
+    assert_eq!(
+        drive
+            .models
+            .iter()
+            .map(|model| model.id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "gpt-6-astra",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.5",
+            "gpt-5.3-codex-spark",
+        ]
+    );
+    assert_eq!(
+        drive.models[0].effort_levels,
+        ["low", "medium", "high", "xhigh", "max", "ultra"]
+    );
     assert!(
         drive
             .session_options
@@ -64,10 +83,10 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert!(launch.args.is_empty());
     assert_eq!(launch.model_args, ["--model", "{model}"]);
     assert_eq!(
-        p.launch_args(Some("gpt-5.4"), Some("high")).unwrap(),
+        p.launch_args(Some("gpt-6-astra"), Some("high")).unwrap(),
         [
             "--model",
-            "gpt-5.4",
+            "gpt-6-astra",
             "--config",
             "model_reasoning_effort=\"high\""
         ]

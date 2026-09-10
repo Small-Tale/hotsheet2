@@ -118,7 +118,7 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
             "--tool",
             "codex",
             "--model",
-            "gpt-5.4",
+            "gpt-6-astra",
             "--effort",
             "high",
         ])
@@ -133,7 +133,7 @@ fn ai_tool_catalog_and_machine_defaults_have_headless_cli_parity() {
     let defaults: serde_json::Value = serde_json::from_slice(&read.stdout).unwrap();
     assert_eq!(
         defaults,
-        serde_json::json!({"tool":"codex","model":"gpt-5.4","effort":"high"})
+        serde_json::json!({"tool":"codex","model":"gpt-6-astra","effort":"high"})
     );
     assert!(home.join("settings.json").is_file());
 }

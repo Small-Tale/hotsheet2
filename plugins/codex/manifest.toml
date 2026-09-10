@@ -39,10 +39,14 @@ args = ["app-server"]
 content = "arg"
 interrupt = true
 models = [
-  { id = "gpt-5.4", label = "GPT-5.4", effort_levels = ["low", "medium", "high", "xhigh"] },
+  { id = "gpt-6-astra", label = "GPT-6 Astra", effort_levels = ["low", "medium", "high", "xhigh", "max", "ultra"] },
+  { id = "gpt-5.6-sol", label = "GPT-5.6 Sol", effort_levels = ["low", "medium", "high", "xhigh", "max", "ultra"] },
+  { id = "gpt-5.6-terra", label = "GPT-5.6 Terra", effort_levels = ["low", "medium", "high", "xhigh", "max", "ultra"] },
+  { id = "gpt-5.6-luna", label = "GPT-5.6 Luna", effort_levels = ["low", "medium", "high", "xhigh", "max"] },
+  { id = "gpt-5.5", label = "GPT-5.5", effort_levels = ["low", "medium", "high", "xhigh"] },
   { id = "gpt-5.3-codex-spark", label = "GPT-5.3 Codex Spark", effort_levels = ["low", "medium", "high", "xhigh"] },
 ]
-default_model = "gpt-5.4"
+default_model = "gpt-6-astra"
 default_effort = "medium"
 session_options = ["model", "effort"]
 

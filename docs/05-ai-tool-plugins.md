@@ -530,6 +530,11 @@ selection capabilities, and interactive-launch argument templates. Clients disco
 data through `GET /ai-tools`; they do not maintain provider/model tables. Machine-local
 defaults are validated and stored through `GET`/`PUT /ai-settings` (or the equivalent
 `hotsheet-cli ai-settings get|set` commands) in the global Hot Sheet 2 settings file.
+The bundled Codex manifest is synchronized against the installed Codex app-server's
+`model/list` response: its current default is GPT-6 Astra, followed by the supported
+GPT-5.6 Sol/Terra/Luna, GPT-5.5, and GPT-5.3 Codex Spark entries, with each model's
+advertised effort choices. Runtime discovery with a manifest fallback is tracked by
+HS2-HTNN4F so future provider releases do not require a bundled catalog update.
 Connection creation accepts optional model/effort selections. A live turn may override
 them only when the descriptor advertises `change_model` and/or `change_effort`. Interactive
 AI terminals use the same plugin declarations to expand model/effort launch arguments.
