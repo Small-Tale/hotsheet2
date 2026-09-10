@@ -5,12 +5,12 @@
 .terminal-drawer__tabs::-webkit-scrollbar { display: none; }
 .terminal-drawer__tabs .app-tab { flex: none; }
 .terminal-drawer__views > [role="tab"] { flex: none; }
-.terminal-drawer__rail > button, .terminal-drawer__views > button, .terminal-drawer__actions > button { display: inline-flex; min-width: 2rem; height: 2rem; padding: 0 var(--wa-space-s); align-items: center; justify-content: center; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; gap: var(--wa-space-xs); font: inherit; }
+.terminal-drawer__rail > button, .terminal-drawer__views > button, .terminal-drawer__create, .terminal-drawer__actions > button { display: inline-flex; min-width: 2rem; height: 2rem; padding: 0 var(--wa-space-s); align-items: center; justify-content: center; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; gap: var(--wa-space-xs); font: inherit; }
 .terminal-drawer__views > [role="tab"][aria-selected="true"] { color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-quiet); }
 .terminal-drawer__rail .terminal-tab__name { max-width: 9rem; }
 .terminal-drawer__rail .terminal-tab i { width: .45rem; height: .45rem; border-radius: var(--wa-border-radius-circle); background: var(--wa-color-success-fill-loud); flex: none; }
-.terminal-drawer__rail > button:hover, .terminal-drawer__views > button:hover, .terminal-drawer__actions > button:hover { background: var(--wa-color-neutral-fill-quiet); }
-.terminal-drawer__rail > button:focus-visible, .terminal-drawer__views > button:focus-visible, .terminal-drawer__actions > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
+.terminal-drawer__rail > button:hover, .terminal-drawer__views > button:hover, .terminal-drawer__create:hover, .terminal-drawer__actions > button:hover { background: var(--wa-color-neutral-fill-quiet); }
+.terminal-drawer__rail > button:focus-visible, .terminal-drawer__views > button:focus-visible, .terminal-drawer__create:focus-visible, .terminal-drawer__actions > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .terminal-drawer__rail svg { width: 1rem; height: 1rem; flex: none; }
 .terminal-drawer__create-wrap { position: relative; flex: none; }
 .terminal-drawer__create { flex: none; }

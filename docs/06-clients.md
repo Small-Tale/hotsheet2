@@ -956,8 +956,9 @@ sidebar and ticket inspector at full height. Its compact rail switches between t
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
 the content area. Its grid tab
 never shrinks when terminal tabs consume the available width. The terminal tabs scroll
-horizontally, with the explicit plus action immediately after them; plus opens a shared-menu
-choice of Default shell, AI shell, or AI chat. Option/Alt on either AI choice prompts for a
+horizontally, with the explicit quiet pill-shaped plus action immediately after them; plus
+opens a direct shared-menu choice of Default shell, AI shell, or AI chat. The menu has no
+redundant heading, and leaf actions do not display submenu chevrons. Option/Alt on either AI choice prompts for a
 plugin-discovered provider, model, and compatible effort; AI shells use the real plugin-backed
 `connect` launch path rather than treating the provider id as a shell command. A dedicated
 xterm viewport receives focus as soon as it
