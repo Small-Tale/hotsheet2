@@ -415,7 +415,9 @@ install + the `hotsheet plugin` management commands are still to come.
 new or existing code project. It initializes or reuses a standalone HS2 store, links
 and registers the checkout, installs or refreshes every detected AI-tool integration
 (or each repeated `--tool`), and optionally configures an existing Git remote without
-replacing a different `origin`. With no remote it prints exact provider-neutral rerun
+replacing a different `origin`. Bootstrap creates a committed store baseline before
+remote setup, so the first `git push -u origin HEAD` is valid even before any ticket
+has been created. With no remote it prints exact provider-neutral rerun
 and first-push commands. It preserves user-authored instruction and MCP configuration,
 and the graphical project's Git-source flow invokes this same CLI workflow.
 

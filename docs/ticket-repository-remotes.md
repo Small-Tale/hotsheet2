@@ -15,5 +15,7 @@ non-empty remote, or a repository with no commit yet. An unrecognized Git failur
 shown with its operation context and original diagnostic instead of being reduced to an
 exit status. A failed first push removes only the `origin` that attempt just added, so
 correcting the URL or credentials and choosing **Connect & push** again is safe.
+New stores receive an initial committed schema baseline before this screen is shown, so
+the first push never depends on a later ticket mutation creating `HEAD`.
 
 Jira is an issue provider rather than a Git host. Connect Jira from **Settings → Ticket sources** when Jira itself should own the tickets; use a Git remote only for Hot Sheet Git ticket repositories.

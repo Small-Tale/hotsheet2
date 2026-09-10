@@ -902,6 +902,21 @@ fn bootstrap_prepares_a_clean_project_headlessly_and_is_idempotent() {
             .ticket_prefix,
         "ACME"
     );
+    let head = Command::new("git")
+        .args([
+            "-C",
+            store.to_str().unwrap(),
+            "rev-parse",
+            "--verify",
+            "HEAD",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        head.status.success(),
+        "bootstrap must create a pushable initial commit: {}",
+        String::from_utf8_lossy(&head.stderr)
+    );
     assert_eq!(
         std::fs::read_to_string(project.join(hotsheet_cli::STORE_LINK))
             .unwrap()

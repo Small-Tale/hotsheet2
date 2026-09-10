@@ -1357,6 +1357,20 @@ fn cmd_bootstrap(
     hotsheet_cli::register_merge_driver(&store_candidate);
     let store = hotsheet_cli::link_store(&store_candidate, &project)?;
 
+    // A newly initialized store contains its schema and merge attributes but no ticket
+    // mutation has occurred yet, so the normal autocommit path has not run. Remote setup
+    // immediately pushes HEAD; make that contract true before either the CLI or a client
+    // offers the remote step. This also repairs an older bootstrap-created empty repo.
+    let store_handle = FsStore::open(&store)?;
+    if store_handle.head_commit().is_none() {
+        store_handle
+            .autocommit("Initialize Hot Sheet ticket repository")
+            .context("creating the initial ticket-store commit")?;
+        if store_handle.head_commit().is_none() {
+            bail!("ticket repository setup did not create an initial Git commit");
+        }
+    }
+
     let repository = std::process::Command::new("git")
         .args([
             "-C",
