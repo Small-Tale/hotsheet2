@@ -14,6 +14,12 @@ const attachment = { id: 'file-1', filename: '../notes.txt', dataUrl: `data:text
 const submission = { notes: 'Button overlaps heading', captures: [capture], attachments: [attachment], actorRole: 'human' as const, pageUrl: 'http://localhost/ux-demo', viewport: { width: 1200, height: 800 } };
 
 describe('dev review tool', () => {
+  it('keeps the ticket dialog header and footer visually continuous with its body', async () => {
+    const css = await readFile(resolve(import.meta.dirname, 'dev-review.css'), 'utf8');
+    expect(css).toMatch(/\.hs-dev-review__dialog \.dialog-header \{[^}]*border-bottom: 0/);
+    expect(css.match(/\.hs-dev-review__dialog footer \{([^}]*)\}/)?.[1]).not.toContain('border-top');
+  });
+
   it('coalesces bursty pointer geometry work into one animation-frame update', () => {
     let callback: FrameRequestCallback | undefined;
     const host = {

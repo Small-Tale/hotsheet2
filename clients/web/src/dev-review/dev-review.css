@@ -31,12 +31,12 @@ html.hs-dev-review--delete body *:not(.hs-dev-review__rect):not(.hs-dev-review__
 .hs-dev-review__dialog { width: min(42.5rem, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); font: var(--wa-font-size-s)/1.4 system-ui, sans-serif; pointer-events: auto; }
 .hs-dev-review__dialog::backdrop { background: var(--wa-color-overlay-modal); backdrop-filter: blur(2px); }
 .hs-dev-review__form { display: grid; width: 100%; max-height: calc(100vh - 48px); box-sizing: border-box; grid-template-rows: auto minmax(0, 1fr) auto; }
-.hs-dev-review__dialog .dialog-header { min-height: 4.9rem; }
+.hs-dev-review__dialog .dialog-header { min-height: 4.9rem; border-bottom: 0; }
 .hs-dev-review__dialog .dialog-header__copy p { font-size: var(--wa-font-size-xs); }
 .hs-dev-review__close { position: relative; width: 2rem; min-width: 2rem; height: 2rem; min-height: 2rem !important; padding: 0 !important; border-radius: var(--wa-border-radius-circle) !important; }
 .hs-dev-review__close::before, .hs-dev-review__close::after { position: absolute; top: calc(50% - 1px); left: calc(50% - .45rem); width: .9rem; height: 2px; border-radius: 1px; background: currentColor; content: ''; transform: rotate(45deg); }
 .hs-dev-review__close::after { transform: rotate(-45deg); }
-.hs-dev-review__dialog footer { display: flex; min-height: 4rem; padding: var(--wa-space-s) var(--wa-space-l); box-sizing: border-box; border-top: 1px solid var(--wa-color-surface-border); align-items: center; justify-content: flex-end; gap: var(--wa-space-xs); }
+.hs-dev-review__dialog footer { display: flex; min-height: 4rem; padding: var(--wa-space-s) var(--wa-space-l); box-sizing: border-box; align-items: center; justify-content: flex-end; gap: var(--wa-space-xs); }
 .hs-dev-review__dialog footer .hs-dev-review__submit { color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); }
 .hs-dev-review__dialog-body { display: grid; padding: var(--wa-space-l); overflow: auto; gap: var(--wa-space-l); }
 .hs-dev-review__evidence { display: grid; gap: var(--wa-space-m); }

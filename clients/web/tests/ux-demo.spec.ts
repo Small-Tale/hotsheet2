@@ -204,6 +204,8 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
   await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.dialog-header')).toHaveCSS('border-bottom-width', '0px');
+  await expect(dialog.locator('footer')).toHaveCSS('border-top-width', '0px');
   expect(await dialog.evaluate(node => ({
     border: getComputedStyle(node).borderColor,
     divider: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),
