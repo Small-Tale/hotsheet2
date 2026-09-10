@@ -828,7 +828,7 @@ async fn client_drive_route_runs_a_real_codex_turn() {
 }
 
 #[tokio::test]
-async fn compatibility_is_authenticated_and_reports_ranges_without_promising_restart() {
+async fn compatibility_is_authenticated_and_reports_ranges_with_safe_restart() {
     let (_d, st) = state();
     let router = app(st);
     let denied = router
@@ -856,12 +856,65 @@ async fn compatibility_is_authenticated_and_reports_ranges_without_promising_res
         value["store_schema"],
         serde_json::json!({"min": 1, "max": STORE_SCHEMA_VERSION})
     );
-    assert_eq!(value["capabilities"]["lifecycle_restart"], false);
-    assert_eq!(value["capabilities"]["lifecycle_quiescence"], false);
+    assert_eq!(value["capabilities"]["lifecycle_restart"], true);
+    assert_eq!(value["capabilities"]["lifecycle_quiescence"], true);
     assert!(value["build_revision"].is_string());
     assert_eq!(value["source_revision"], value["build_revision"]);
     assert_eq!(value["source_stale"], false);
     assert!(value.get("started_at").is_some());
+}
+
+#[tokio::test]
+async fn lifecycle_restart_preserves_active_work_then_closes_mutation_admission() {
+    let (_d, state) = state();
+    let shutdown = state.clone();
+    let router = app(state);
+
+    let opened = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/terminals",
+            Some(r#"{"command":"cat","id":"restart-blocker"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+
+    let blocked = router
+        .clone()
+        .oneshot(authed("POST", "/lifecycle/restart", None))
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::CONFLICT);
+    let blocked = body_json(blocked).await;
+    assert_eq!(blocked["quiescence"]["quiescent"], false);
+    assert_eq!(blocked["quiescence"]["blockers"][0]["kind"], "terminals");
+
+    let killed = router
+        .clone()
+        .oneshot(authed("DELETE", "/terminals/restart-blocker", None))
+        .await
+        .unwrap();
+    assert_eq!(killed.status(), StatusCode::NO_CONTENT);
+
+    let waiter = tokio::spawn(async move { shutdown.shutdown_requested().await });
+    let accepted = router
+        .clone()
+        .oneshot(authed("POST", "/lifecycle/restart", None))
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+        .await
+        .expect("restart wakes graceful shutdown")
+        .unwrap();
+
+    let rejected = router
+        .oneshot(authed("POST", "/tickets", Some(r#"{"title":"too late"}"#)))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::SERVICE_UNAVAILABLE);
 }
 
 #[tokio::test]

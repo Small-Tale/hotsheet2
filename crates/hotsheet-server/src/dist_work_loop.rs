@@ -118,6 +118,9 @@ pub fn work_pass<D>(
 where
     D: Fn(&FsStore, &hotsheet_model::Ulid) -> WorkOutcome,
 {
+    let Some(_lifecycle_guard) = state.begin_background_work() else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     let mut in_flight = 0usize;
     for (id, root) in state.hosted_store_roots() {

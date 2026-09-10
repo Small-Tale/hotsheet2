@@ -22,8 +22,8 @@ export interface ProjectSession {
   hs1PostgresVersion?: string;
 }
 
-interface InstanceInfo { pid:number; url:string; secret:string }
-interface SessionTarget { url:string; secret:string; root?:string }
+export interface InstanceInfo { pid:number; url:string; secret:string; started_at?:string }
+interface SessionTarget { url:string; secret:string; root?:string; serverStore?:string }
 interface CorruptDiagnostic { path:string }
 interface CliCompatibility {generation:string;store_schema:{min:number;max:number;creates:number};selected_store_schema?:number|null}
 
@@ -265,25 +265,89 @@ async function instanceFor(store: string): Promise<InstanceInfo | undefined> {
   const id = createHash('sha256').update(canonical).digest('hex').slice(0, 16);
   try {
     const info = JSON.parse(await readFile(resolve(hotsheetHome(), 'instances', `${id}.json`), 'utf8')) as InstanceInfo;
+    if(!Number.isSafeInteger(info.pid)||info.pid<=0||!/^https?:\/\//.test(info.url)||!info.secret)throw new Error('invalid instance registration');
     process.kill(info.pid, 0);
     return info;
   } catch { return undefined; }
 }
 
-async function ensureServer(store: string): Promise<InstanceInfo> {
-  const existing = await instanceFor(store);
-  if (existing) return existing;
+export interface ServerSupervisorPlatform {
+  discover():Promise<InstanceInfo|undefined>;
+  probe(instance:InstanceInfo):Promise<boolean>;
+  launch():Promise<void>;
+  wait():Promise<void>;
+}
+
+function sameInstance(left:InstanceInfo|undefined,right:InstanceInfo|undefined):boolean{return Boolean(left&&right&&left.pid===right.pid&&left.url===right.url&&left.started_at===right.started_at)}
+
+/** Discover and health-check the machine server, launching only after its registered process
+ * is gone. This is safe under concurrent clients: the server writer lock remains the final
+ * join-don't-collide boundary. Calls are event-driven by project open/API/WS reconnects. */
+export async function superviseServer(platform:ServerSupervisorPlatform,maxAttempts=80):Promise<InstanceInfo>{
+  const first=await platform.discover();
+  if(first&&await platform.probe(first))return first;
+  let launched=false;
+  if(!first){await platform.launch();launched=true}
+  for(let attempt=0;attempt<maxAttempts;attempt+=1){
+    await platform.wait();
+    const current=await platform.discover();
+    if(current&&await platform.probe(current))return current;
+    if(!current&&!launched){await platform.launch();launched=true}
+  }
+  if(first&&!launched)throw new Error(`The Hot Sheet server process ${first.pid} is registered but unhealthy. Active work was preserved; stop it explicitly before starting another server.`);
+  throw new Error('Timed out waiting for a healthy Hot Sheet server.');
+}
+
+function serverPlatform(store:string):ServerSupervisorPlatform{
   const repoRoot = developmentRepositoryRoot();
   const binary = process.env.HOTSHEET_SERVER_BIN || resolve(repoRoot, 'target/debug/hotsheet-server');
-  if (!await exists(binary)) throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
-  const child = spawn(binary, ['-C', store, '--bind', '127.0.0.1:0'], { cwd: repoRoot, detached: true, stdio: 'ignore' });
-  child.unref();
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    await new Promise(resolveWait => setTimeout(resolveWait, 100));
-    const info = await instanceFor(store);
-    if (info) return info;
+  return{
+    discover:()=>instanceFor(store),
+    probe:async instance=>{try{const response=await fetch(`${instance.url}/health`,{signal:AbortSignal.timeout(750)});if(!response.ok)return false;return (await response.json() as {status?:string}).status==='ok'}catch{return false}},
+    launch:async()=>{
+      if(!await exists(binary))throw new Error(`Hot Sheet server is not built at ${binary}. Run cargo build -p hotsheet-server.`);
+      await new Promise<void>((resolveLaunch,reject)=>{const child=spawn(binary,['-C',store,'--bind','127.0.0.1:0'],{cwd:repoRoot,detached:true,stdio:'ignore'});child.once('error',reject);child.once('spawn',()=>{child.unref();resolveLaunch()})});
+    },
+    wait:()=>new Promise(resolveWait=>setTimeout(resolveWait,100)),
+  };
+}
+
+async function ensureServer(store:string):Promise<InstanceInfo>{return superviseServer(serverPlatform(store))}
+
+export interface SafeRestartPlatform {
+  request():Promise<void>;
+  discover():Promise<InstanceInfo|undefined>;
+  supervise():Promise<InstanceInfo>;
+  wait():Promise<void>;
+}
+
+/** Ask the server to restart itself only through its quiescence gate, then wait for its
+ * registration to change before supervising the replacement. The client never sends a
+ * process signal and never starts a duplicate beside a still-live server. */
+export async function safelyRestartServer(current:InstanceInfo,platform:SafeRestartPlatform,maxAttempts=80):Promise<InstanceInfo>{
+  await platform.request();
+  for(let attempt=0;attempt<maxAttempts;attempt+=1){
+    await platform.wait();
+    const discovered=await platform.discover();
+    if(!sameInstance(current,discovered))return platform.supervise();
   }
-  throw new Error(`Timed out starting the Hot Sheet server for ${store}.`);
+  throw new Error(`Timed out waiting for Hot Sheet server process ${current.pid} to stop after accepting a safe restart.`);
+}
+
+export function storeNeedsServerUpgrade(server:ServerCompatibility|undefined,cli:CliCompatibility|undefined):boolean{
+  return Boolean(server?.store_schema&&cli?.selected_store_schema&&cli.selected_store_schema>server.store_schema.max);
+}
+
+function supportsSafeRestart(server:ServerCompatibility|undefined):boolean{return server?.capabilities?.lifecycle_restart===true&&server.capabilities.lifecycle_quiescence===true}
+
+async function restartForUpgrade(store:string,target:SessionTarget,current:InstanceInfo):Promise<InstanceInfo>{
+  const platform=serverPlatform(store);
+  return safelyRestartServer(current,{
+    request:()=>serverRequest(target,'/lifecycle/restart',{method:'POST'}).then(()=>undefined),
+    discover:()=>platform.discover(),
+    supervise:()=>superviseServer(platform),
+    wait:()=>platform.wait(),
+  });
 }
 
 async function serverRequest<T>(target: SessionTarget, path: string, init: RequestInit = {}): Promise<T> {
@@ -296,14 +360,18 @@ export async function openLocalProject(rootInput: string, ticketStoreInput?: str
   const root = await realpath(rootInput.trim());
   const ticketStore = ticketStoreInput?.trim() ? await realpath(ticketStoreInput.trim()) : await suggestedTicketStore(root);
   if(ticketStore)void refreshLocalProjectSetup(root,ticketStore).catch(()=>undefined);
-  const plan=projectServerPlan(await bootstrapStore(),root,ticketStore),instance = await ensureServer(plan.serverStore);
-  const target = { url: instance.url, secret: instance.secret, root };
-  const metadata = await serverRequest<ServerCompatibility>(target, '/compatibility').catch(() => undefined);
-  if(ticketStore){
-    const cli=await cliCompatibility(ticketStore,runProcess);
-    requireStoreSchemaCompatibility(metadata,cli,'open');
+  const plan=projectServerPlan(await bootstrapStore(),root,ticketStore);
+  let instance=await ensureServer(plan.serverStore),target:SessionTarget={url:instance.url,secret:instance.secret,root,serverStore:plan.serverStore};
+  let metadata=await serverRequest<ServerCompatibility>(target,'/compatibility').catch(()=>undefined);
+  const cli=ticketStore?await cliCompatibility(ticketStore,runProcess):undefined;
+  let compatibility=assessCompatibility(metadata,undefined,process.env.HOT_SHEET_BUILD_REVISION);
+  if((compatibility.kind==='server_too_old'||storeNeedsServerUpgrade(metadata,cli))&&supportsSafeRestart(metadata)){
+    instance=await restartForUpgrade(plan.serverStore,target,instance);
+    target={url:instance.url,secret:instance.secret,root,serverStore:plan.serverStore};
+    metadata=await serverRequest<ServerCompatibility>(target,'/compatibility').catch(()=>undefined);
+    compatibility=assessCompatibility(metadata,undefined,process.env.HOT_SHEET_BUILD_REVISION);
   }
-  const compatibility = assessCompatibility(metadata, undefined, process.env.HOT_SHEET_BUILD_REVISION);
+  if(ticketStore&&cli)requireStoreSchemaCompatibility(metadata,cli,'open');
   requireCompatibleServer(compatibility);
   const opened = await serverRequest<{checkout:{id:string;root:string;alias:string;stores:string[];sources:unknown[]}}>(target, '/projects/open', {
     method: 'POST',
@@ -321,8 +389,19 @@ export async function proxyProjectRequest(projectId: string, path: string, reque
   headers.set('x-hotsheet-secret', target.secret);
   headers.delete('host');
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
-  const response = await fetch(authenticatedServerUrl(target.url, path, target.secret), { method: request.method, headers, body, redirect: 'manual' });
-  return new Response(response.body, { status: response.status, headers: response.headers });
+  const forward=async()=>{const response=await fetch(authenticatedServerUrl(target.url,path,target.secret),{method:request.method,headers,body,redirect:'manual'});return new Response(response.body,{status:response.status,headers:response.headers})};
+  try{return await forward()}catch(error){
+    if(!target.serverStore)throw error;
+    await refreshSupervisedTarget(target);
+    if(request.method!=='GET'&&request.method!=='HEAD')return Response.json({error:'The server restarted while this write was in flight. Its completion is unknown; refresh before retrying.'},{status:503});
+    return forward();
+  }
+}
+
+async function refreshSupervisedTarget(target:SessionTarget):Promise<void>{
+  if(!target.serverStore)return;
+  const instance=await ensureServer(target.serverStore);
+  for(const session of sessions.values())if(session.serverStore===target.serverStore){session.url=instance.url;session.secret=instance.secret}
 }
 
 /** Reveal only a path the authenticated server still reports as corrupt for this checkout. */
@@ -347,9 +426,10 @@ export function authenticatedServerUrl(origin: string, path: string, secret: str
 
 /** Resolve a browser-facing project session to its authenticated terminal attach URL.
  * This runs only inside the local bridge; the returned URL and secret never reach browser JS. */
-export function projectTerminalWebSocketUrl(projectId:string,terminalId:string):string|undefined {
+export async function projectTerminalWebSocketUrl(projectId:string,terminalId:string):Promise<string|undefined> {
   const target=sessions.get(projectId);
   if(!target)return undefined;
+  await refreshSupervisedTarget(target);
   return authenticatedTerminalWebSocketUrl(target.url,terminalId,target.secret);
 }
 

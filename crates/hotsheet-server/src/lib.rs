@@ -23,6 +23,7 @@ pub mod tts;
 pub mod turn_stream;
 
 use std::path::Path as FsPath;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use multistore::{StoreEntry, StoreHost, StoreInfo};
@@ -30,7 +31,7 @@ use multistore::{StoreEntry, StoreHost, StoreInfo};
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, patch, post, put};
@@ -52,7 +53,7 @@ pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use time::OffsetDateTime;
-use tokio::sync::broadcast;
+use tokio::sync::{Notify, broadcast};
 
 /// Attachment uploads may contain screenshots, recordings, and other binary evidence.
 /// Keep this route-specific so ordinary JSON endpoints retain Axum's conservative default.
@@ -146,6 +147,29 @@ pub struct AppState {
     activity_volume: Arc<Mutex<hotsheet_ticketing::ActivityVolumeGuard>>,
     /// Human/client-owned AI connections, separate from the autonomous work queue.
     client_drives: client_drive::ClientDriveManager,
+    /// Coordinates client-requested upgrades. Mutation admission closes atomically before
+    /// quiescence is checked, so no new write or process launch can race a safe restart.
+    lifecycle: Arc<LifecycleControl>,
+}
+
+#[derive(Default)]
+struct LifecycleControl {
+    quiescing: AtomicBool,
+    active_mutations: AtomicUsize,
+    active_background: AtomicUsize,
+    shutdown: Notify,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct QuiescenceBlocker {
+    kind: &'static str,
+    count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct QuiescenceReport {
+    quiescent: bool,
+    blockers: Vec<QuiescenceBlocker>,
 }
 
 /// The machine server's coordinates, shared by every hosted store's discovery instance file.
@@ -255,6 +279,109 @@ impl AppState {
                 hotsheet_ticketing::ActivityVolumeGuard::default(),
             )),
             client_drives: client_drive::ClientDriveManager::default(),
+            lifecycle: Arc::new(LifecycleControl::default()),
+        }
+    }
+
+    /// Resolves when an authenticated client has atomically entered quiescence and asked
+    /// this process to restart. The binary races this with SIGTERM/Ctrl-C.
+    pub async fn shutdown_requested(&self) {
+        self.lifecycle.shutdown.notified().await;
+    }
+
+    fn quiescence_report(&self) -> QuiescenceReport {
+        let mut blockers = Vec::new();
+        let active_mutations = self.lifecycle.active_mutations.load(Ordering::Acquire);
+        if active_mutations > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "mutations",
+                count: active_mutations,
+            });
+        }
+        let active_background = self.lifecycle.active_background.load(Ordering::Acquire);
+        if active_background > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "background_tasks",
+                count: active_background,
+            });
+        }
+        let commands = self
+            .commands
+            .list()
+            .into_iter()
+            .filter(|run| run.state == "running")
+            .count();
+        if commands > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "commands",
+                count: commands,
+            });
+        }
+        let setup_refreshes = self
+            .setup_refreshes
+            .lock()
+            .map(|set| set.len())
+            .unwrap_or(1);
+        if setup_refreshes > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "setup_refreshes",
+                count: setup_refreshes,
+            });
+        }
+        let driven_turns = self
+            .drive_registry
+            .lock()
+            .map(|reg| reg.count())
+            .unwrap_or(1);
+        if driven_turns > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "driven_turns",
+                count: driven_turns,
+            });
+        }
+        let client_turns = self
+            .client_drives
+            .list()
+            .into_iter()
+            .filter(|connection| connection.busy)
+            .count();
+        if client_turns > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "client_turns",
+                count: client_turns,
+            });
+        }
+        let permissions = self.permissions.pending().len();
+        if permissions > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "permissions",
+                count: permissions,
+            });
+        }
+        let github_auth = self
+            .github_auth_sessions
+            .lock()
+            .map(|sessions| sessions.len())
+            .unwrap_or(1);
+        if github_auth > 0 {
+            blockers.push(QuiescenceBlocker {
+                kind: "github_auth",
+                count: github_auth,
+            });
+        }
+        if self.terminal_broker.is_none() {
+            self.terminals.reap();
+            let terminals = self.terminals.count();
+            if terminals > 0 {
+                blockers.push(QuiescenceBlocker {
+                    kind: "terminals",
+                    count: terminals,
+                });
+            }
+        }
+        QuiescenceReport {
+            quiescent: blockers.is_empty(),
+            blockers,
         }
     }
 
@@ -1166,6 +1293,10 @@ pub fn app(state: AppState) -> Router {
         // Authenticated application/protocol negotiation. `/health` intentionally remains
         // a small unauthenticated liveness probe.
         .route("/compatibility", get(compatibility))
+        // A client may supervise this process but never owns it: restart is accepted only
+        // after mutation admission closes and all server-owned work is proven quiescent.
+        .route("/lifecycle/quiescence", get(lifecycle_quiescence))
+        .route("/lifecycle/restart", post(lifecycle_restart))
         // Cross-store resolve: a global ULID → its live instance in whichever store hosts
         // it (follows moved tombstones). HS2-87 / HS2-S4H2AM.
         .route("/resolve/{id}", get(resolve_ticket))
@@ -1246,14 +1377,28 @@ async fn require_secret(
         .headers()
         .get("x-hotsheet-secret")
         .and_then(|v| v.to_str().ok());
-    if presented == Some(state.secret.as_str()) {
-        Ok(next.run(req).await)
-    } else {
-        Err(ApiError::new(
+    if presented != Some(state.secret.as_str()) {
+        return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "missing or invalid secret",
-        ))
+        ));
     }
+    let is_mutation = matches!(
+        *req.method(),
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE
+    );
+    let is_restart = req.uri().path() == "/lifecycle/restart";
+    let _mutation = if is_mutation && !is_restart {
+        Some(state.begin_mutation().ok_or_else(|| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "server is quiescing for a safe restart; retry after reconnecting",
+            )
+        })?)
+    } else {
+        None
+    };
+    Ok(next.run(req).await)
 }
 
 // ---- handlers --------------------------------------------------------------------
@@ -1281,6 +1426,100 @@ async fn health(State(state): State<AppState>) -> Result<Json<serde_json::Value>
     })))
 }
 
+struct ActiveMutation(Arc<LifecycleControl>);
+
+impl Drop for ActiveMutation {
+    fn drop(&mut self) {
+        self.0.active_mutations.fetch_sub(1, Ordering::Release);
+    }
+}
+
+impl AppState {
+    fn begin_mutation(&self) -> Option<ActiveMutation> {
+        if self.lifecycle.quiescing.load(Ordering::Acquire) {
+            return None;
+        }
+        self.lifecycle
+            .active_mutations
+            .fetch_add(1, Ordering::AcqRel);
+        if self.lifecycle.quiescing.load(Ordering::Acquire) {
+            self.lifecycle
+                .active_mutations
+                .fetch_sub(1, Ordering::Release);
+            None
+        } else {
+            Some(ActiveMutation(self.lifecycle.clone()))
+        }
+    }
+
+    pub(crate) fn begin_background_work(&self) -> Option<ActiveBackgroundWork> {
+        if self.lifecycle.quiescing.load(Ordering::Acquire) {
+            return None;
+        }
+        self.lifecycle
+            .active_background
+            .fetch_add(1, Ordering::AcqRel);
+        if self.lifecycle.quiescing.load(Ordering::Acquire) {
+            self.lifecycle
+                .active_background
+                .fetch_sub(1, Ordering::Release);
+            None
+        } else {
+            Some(ActiveBackgroundWork(self.lifecycle.clone()))
+        }
+    }
+}
+
+pub(crate) struct ActiveBackgroundWork(Arc<LifecycleControl>);
+
+impl Drop for ActiveBackgroundWork {
+    fn drop(&mut self) {
+        self.0.active_background.fetch_sub(1, Ordering::Release);
+    }
+}
+
+async fn lifecycle_quiescence(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "quiescing": state.lifecycle.quiescing.load(Ordering::Acquire),
+        "report": state.quiescence_report(),
+    }))
+}
+
+async fn lifecycle_restart(State(state): State<AppState>) -> Response {
+    if state
+        .lifecycle
+        .quiescing
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "error": "a safe restart is already being evaluated"
+            })),
+        )
+            .into_response();
+    }
+    let report = state.quiescence_report();
+    if !report.quiescent {
+        state.lifecycle.quiescing.store(false, Ordering::Release);
+        return (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "error": "server is not quiescent; active work was preserved",
+                "quiescence": report,
+            })),
+        )
+            .into_response();
+    }
+    state.lifecycle.shutdown.notify_one();
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({ "restarting": true })),
+    )
+        .into_response()
+}
+
 const API_PROTOCOL_MIN: u32 = 1;
 const API_PROTOCOL_MAX: u32 = 1;
 
@@ -1302,8 +1541,8 @@ async fn compatibility(State(state): State<AppState>) -> Json<serde_json::Value>
         "protocol": { "min": API_PROTOCOL_MIN, "max": API_PROTOCOL_MAX },
         "store_schema": { "min": 1, "max": hotsheet_ticketing::STORE_SCHEMA_VERSION },
         "capabilities": {
-            "lifecycle_restart": false,
-            "lifecycle_quiescence": false
+            "lifecycle_restart": true,
+            "lifecycle_quiescence": true
         },
         "started_at": started_at
     }))

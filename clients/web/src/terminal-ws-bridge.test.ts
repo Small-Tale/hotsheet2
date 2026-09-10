@@ -11,10 +11,15 @@ afterEach(async()=>{await Promise.all(servers.splice(0).map(server=>new Promise<
 const listen=async(server:ReturnType<typeof createServer>)=>{server.listen(0,'127.0.0.1');await once(server,'listening');const address=server.address();if(!address||typeof address==='string')throw new Error('missing test address');return address.port};
 
 describe('terminal WebSocket bridge',()=>{
-  it('parses only credential-free project terminal attach paths',()=>{
+  it('parses only credential-free project terminal attach paths',async()=>{
     const resolve=(project:string,terminal:string)=>`${project}:${terminal}`;
-    expect(browserTerminalAttachTarget('/__hotsheet/project-api/project%20one/terminals/codex%2Fmain/attach',resolve)).toBe('project one:codex/main');
-    expect(browserTerminalAttachTarget('/__hotsheet/project-api/project/terminals',resolve)).toBeUndefined();
+    await expect(browserTerminalAttachTarget('/__hotsheet/project-api/project%20one/terminals/codex%2Fmain/attach',resolve)).resolves.toBe('project one:codex/main');
+    await expect(browserTerminalAttachTarget('/__hotsheet/project-api/project/terminals',resolve)).resolves.toBeUndefined();
+  });
+
+  it('awaits asynchronous supervision before resolving a reconnect target',async()=>{
+    const resolve=async(project:string,terminal:string)=>{await Promise.resolve();return`${project}:${terminal}`};
+    await expect(browserTerminalAttachTarget('/__hotsheet/project-api/project/terminals/main/attach',resolve)).resolves.toBe('project:main');
   });
 
   it('forwards text and binary frames across an actual WebSocket upgrade',async()=>{

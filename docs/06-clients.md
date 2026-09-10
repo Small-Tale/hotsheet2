@@ -288,8 +288,14 @@ cleanup of the old live HS1 data; backups are never removed.
   crossfade and motion-free replacement remain reusable variants in the UX catalog.
   The Vite-only bridge discovers or detached-starts one bootstrap machine server and
   attaches every discovered or explicit project store through the server's multi-store
-  open path; it never starts one server per project. The bridge keeps the bearer
-  credential out of browser state; Tauri will replace it with its native lifecycle layer.
+  open path; it never starts one server per project. Discovery is health checked and the
+  bridge re-supervises after transport failures and terminal-WebSocket reconnects. Safe
+  GET/HEAD requests retry after recovery, while ambiguous writes return an explicit 503
+  instead of risking duplicate mutation. Compatible old servers may be upgraded through
+  their authenticated quiescence/restart capabilities; the bridge waits for the old
+  registration to disappear before starting or joining its replacement. The bridge keeps
+  the bearer credential out of browser state; Tauri will replace it with its native
+  lifecycle layer.
   Creating a ticket selects it and immediately opens and focuses its Details editor so
   the user can continue writing without another pointer action. Creation from Backlog
   sends and persists `status=backlog`; an authoritative refresh therefore keeps the new
@@ -309,8 +315,9 @@ cleanup of the old live HS1 data; backups are never removed.
   created, identifies both schema boundaries, and directs the user to finish active work
   before stopping/restarting that project server. The warning is project-scoped: another
   tab connected to a different, current server correctly remains unbadged.
-  an old client offers reload/update, while an old server is surfaced without an unsafe
-  restart action unless both restart and quiescence capabilities are explicitly present.
+  an old client offers reload/update, while an old server is restarted automatically only
+  when both restart and quiescence capabilities are explicitly present; otherwise it is
+  surfaced without an unsafe restart action.
   Every compatibility warning's **View details** action opens an accessible build-details
   dialog. It reports the running server application version, build revision, current local
   source revision, client revision, both protocol ranges, and server start time when the

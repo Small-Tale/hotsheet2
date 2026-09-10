@@ -28,6 +28,9 @@ pub struct SyncHandle {
 /// Run one sync pass over every hosted store, returning each store's report. A store with
 /// no remote reports `NoRemote` (a local-only project) — harmless.
 pub fn sync_all(state: &AppState) -> Vec<(String, SyncReport)> {
+    let Some(_lifecycle_guard) = state.begin_background_work() else {
+        return Vec::new();
+    };
     state
         .hosted_store_roots()
         .into_iter()

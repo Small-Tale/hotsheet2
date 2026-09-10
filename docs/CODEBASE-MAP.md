@@ -11,12 +11,13 @@ evidence in [TEST-COVERAGE.md](TEST-COVERAGE.md).
 > **filesystem watcher** (live reindex), the `hotsheet-cli` CLI + `hotsheet-migrate`,
 > the Node HS1 exporter, the **`hotsheet-server`** (index-backed HTTP REST + WS,
 > loopback auth; **file-backed index restored + reconciled on launch**), and the
-> **`hotsheet-mcp`** shim, the **server-side lifecycle** (instance registry, writer
-> lock, `serve --stop`; HS2-59), the `hotsheet-cli reindex` CLI, the plugin host +
+> **`hotsheet-mcp`** shim, the **server/client lifecycle** (instance registry, writer
+> lock, quiescence-gated restart, detached supervision, `serve --stop/--list`;
+> HS2-59/HS2-4072GM), the `hotsheet-cli reindex` CLI, the plugin host +
 > AI-tool **drive/permission/metrics** stack (`hotsheet-aitools`, `hotsheet-plugins`),
 > and **`hotsheet-terminals`** (PTY + manager + busy) with server `/terminals*` routes.
-> Still design-only or incomplete: **client** auto-start/supervise, serverless incremental
-> index maintenance, and the Tauri/native clients. Git-aware fast-path reindex, Tier-1
+> Still design-only or incomplete: serverless incremental index maintenance and the
+> Tauri/native clients. Git-aware fast-path reindex, Tier-1
 > mTLS, and version-pinned/live AI-tool protocol verification are built.
 
 ## Directory tree

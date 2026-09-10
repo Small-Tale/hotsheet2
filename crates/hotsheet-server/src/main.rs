@@ -249,6 +249,7 @@ async fn main() -> Result<()> {
     // ignores. Runtime `POST /stores` additions register themselves the same way.
     let started_at = Timestamp::from_datetime(OffsetDateTime::now_utc());
     state.publish_instances(url, started_at.as_str().to_string());
+    let lifecycle_state = state.clone();
 
     // Explicit shutdown only (HS2-59): serve until SIGTERM / Ctrl-C, then the guards drop
     // (instance file + writer lock removed), and any in-flight work has already run in the
@@ -261,14 +262,14 @@ async fn main() -> Result<()> {
                 app(state),
                 config,
                 Some(acl_file),
-                shutdown_signal(),
+                shutdown_signal(lifecycle_state),
             )
             .await?;
         }
         // Tier 0: plaintext loopback, with axum's per-connection graceful shutdown.
         None => {
             axum::serve(listener, app(state))
-                .with_graceful_shutdown(shutdown_signal())
+                .with_graceful_shutdown(shutdown_signal(lifecycle_state))
                 .await?;
         }
     }
@@ -276,7 +277,7 @@ async fn main() -> Result<()> {
 }
 
 /// Resolve when the process is asked to stop: SIGTERM (the `--stop` path) or Ctrl-C.
-async fn shutdown_signal() {
+async fn shutdown_signal(state: AppState) {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;
     };
@@ -292,6 +293,7 @@ async fn shutdown_signal() {
     tokio::select! {
         _ = ctrl_c => {},
         _ = term => {},
+        _ = state.shutdown_requested() => {},
     }
 }
 

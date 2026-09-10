@@ -222,7 +222,7 @@ The server's life is **decoupled from any client's** (maintainer requirement,
   make an independent daemon impractical); iOS connects to a *remote* server on a
   Mac. See [06-clients.md](06-clients.md) §6.4.
 
-**Built (HS2-59, server-side; HS2-5A01DC, CLI wrapper):**
+**Built (HS2-59, server-side; HS2-5A01DC/HS2-4072GM, CLI and client supervision):**
 `hotsheet-server::lifecycle` implements the
 machine-local **instance registry** (`${HOTSHEET_HOME:-~/.hotsheet2}/instances/
 <project-id>.json` — not `~/.hotsheet`, which HS1 owns, HS2-104), **discovery**
@@ -234,10 +234,13 @@ guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already se
 the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
 `hotsheet-cli serve` resolves the sibling `hotsheet-server` first, falls back to PATH,
 requires its version to match the CLI, and forwards foreground/stop arguments with
-clear missing-binary and mismatch diagnostics. The **client-side** half — a client
-spawning the server *detached* and *supervising* it — lands with the clients
-(**HS2-4072GM**); the server is already a separate process,
-so a detached spawn makes it outlive the client by construction.
+clear missing-binary and mismatch diagnostics. `hotsheet-cli serve --list` works without
+selecting a store: it deduplicates registrations by server identity, health-checks live
+processes, labels stale/unhealthy/invalid records, lists every hosted store, and never
+prints bearer secrets. The Vite platform bridge supplies the client-side half: detached
+launch, health-checked discovery, and event-driven supervision after project-open, API,
+or terminal-WebSocket failures. It never starts a duplicate beside a registered live
+process; the server is already separate, so it outlives the client by construction.
 
 Clients negotiate the protected `GET /compatibility` contract before relying on the
 application API. It reports the HS2 generation, semantic application version, optional
@@ -250,11 +253,14 @@ built and current source revisions plus `source_stale`; the client can therefore
 that the detached server needs a rebuild/restart without treating unrelated monorepo Git
 commits as staleness. Release/explicit-revision builds omit local source probing, and an
 unavailable source tree is not reported as stale. Missing or invalid metadata is an
-explicit unknown state. The server currently
-advertises lifecycle restart and quiescence as unsupported: clients must not offer an
-automatic restart until the server can account for active commands, AI work, mutations,
-terminals, and other connected clients. Remote restart likewise requires a future explicit
-authenticated capability.
+explicit unknown state. The server advertises authenticated restart and quiescence only
+with its admission gate active. A restart first refuses new mutations/background passes,
+then proceeds only when mutations, sync/drive passes, commands, setup refreshes, AI turns,
+permission requests, authentication flows, and server-owned terminals are quiescent;
+broker-hosted terminals may survive the process replacement. The client uses this path for
+protocol or store-schema upgrades only when both capabilities are explicit, waits for the
+old registration to be relinquished, and then supervises the replacement. Ambiguous writes
+are never replayed across recovery. Remote restart remains a separately authorized concern.
 
 Protocol ranges assume unsynchronized rollout. A non-intersecting range stops project API
 use and identifies which side requires an update; exact build differences remain

@@ -74,17 +74,29 @@ pub fn register_instance(info: &InstanceInfo, store_path: &Path) -> std::io::Res
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
     }
-    Ok(InstanceGuard { path })
+    Ok(InstanceGuard {
+        path,
+        registration: info.clone(),
+    })
 }
 
 /// Removes the instance file when the server stops.
 pub struct InstanceGuard {
     path: PathBuf,
+    registration: InstanceInfo,
 }
 
 impl Drop for InstanceGuard {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        // An upgrading replacement may publish this same store before the old process has
+        // finished dropping its state. Never let the old guard erase the new registration.
+        let still_ours = std::fs::read_to_string(&self.path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<InstanceInfo>(&text).ok())
+            .is_some_and(|current| current == self.registration);
+        if still_ours {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -252,6 +264,22 @@ mod tests {
             !instance_path(store.path()).exists(),
             "guard cleaned up on drop"
         );
+    }
+
+    #[test]
+    fn old_instance_guard_preserves_a_replacement_registration() {
+        let _home = isolated_home();
+        let store = tempfile::tempdir().unwrap();
+        let old = info(std::process::id(), store.path());
+        let old_guard = register_instance(&old, store.path()).unwrap();
+        let mut replacement = old.clone();
+        replacement.started_at = "2026-01-02T00:00:00Z".into();
+        let replacement_guard = register_instance(&replacement, store.path()).unwrap();
+
+        drop(old_guard);
+        assert_eq!(find_instance(store.path()), Some(replacement));
+        drop(replacement_guard);
+        assert!(!instance_path(store.path()).exists());
     }
 
     #[test]

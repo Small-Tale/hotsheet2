@@ -5,14 +5,14 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectServerPlan, projectSessionRegistry, refreshLocalProjectSetup, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectServerPlan, projectSessionRegistry, refreshLocalProjectSetup, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
     const moduleUrl=new URL('./project-bridge.ts',import.meta.url).href;
     const configGraph=await import(`${moduleUrl}?graph=config`),ssrGraph=await import(`${moduleUrl}?graph=ssr`);
     configGraph.projectSessionRegistry().set('module-graph-checkout',{url:'http://127.0.0.1:1',secret:'private'});
-    expect(ssrGraph.projectTerminalWebSocketUrl('module-graph-checkout','terminal')).toBe('ws://127.0.0.1:1/terminals/terminal/attach?secret=private');
+    await expect(ssrGraph.projectTerminalWebSocketUrl('module-graph-checkout','terminal')).resolves.toBe('ws://127.0.0.1:1/terminals/terminal/attach?secret=private');
   });
 });
 
@@ -193,5 +193,39 @@ describe('requireCompatibleServer', () => {
   it('allows intersecting ranges and legacy servers with unknown metadata', () => {
     expect(() => { requireCompatibleServer({ ...base, kind: 'compatible' }); }).not.toThrow();
     expect(() => { requireCompatibleServer({ ...base, kind: 'unknown' }); }).not.toThrow();
+  });
+});
+
+describe('machine server supervision',()=>{
+  const running={pid:42,url:'http://127.0.0.1:8787',secret:'private',started_at:'2026-09-10T01:00:00Z'};
+  const replacement={...running,pid:43,started_at:'2026-09-10T02:00:00Z'};
+
+  it('reuses a healthy discovered server without launching another process',async()=>{
+    const launch=vi.fn(),probe=vi.fn().mockResolvedValue(true);
+    await expect(superviseServer({discover:vi.fn().mockResolvedValue(running),probe,launch,wait:vi.fn()},1)).resolves.toEqual(running);
+    expect(probe).toHaveBeenCalledWith(running);expect(launch).not.toHaveBeenCalled();
+  });
+
+  it('restarts after a crash but refuses to duplicate a live unhealthy process',async()=>{
+    let launched=false;
+    const discover=vi.fn().mockImplementation(()=>launched?replacement:undefined),launch=vi.fn().mockImplementation(()=>{launched=true});
+    await expect(superviseServer({discover,probe:vi.fn().mockResolvedValue(true),launch,wait:vi.fn()},2)).resolves.toEqual(replacement);
+    expect(launch).toHaveBeenCalledOnce();
+
+    const unsafeLaunch=vi.fn();
+    await expect(superviseServer({discover:vi.fn().mockResolvedValue(running),probe:vi.fn().mockResolvedValue(false),launch:unsafeLaunch,wait:vi.fn()},2)).rejects.toThrow(/registered but unhealthy.*preserved/i);
+    expect(unsafeLaunch).not.toHaveBeenCalled();
+  });
+
+  it('waits for an accepted quiescent restart to relinquish discovery before supervising its replacement',async()=>{
+    const request=vi.fn(),supervise=vi.fn().mockResolvedValue(replacement),discover=vi.fn().mockResolvedValueOnce(running).mockResolvedValueOnce(undefined);
+    await expect(safelyRestartServer(running,{request,discover,supervise,wait:vi.fn()},3)).resolves.toEqual(replacement);
+    expect(request).toHaveBeenCalledOnce();expect(supervise).toHaveBeenCalledOnce();
+  });
+
+  it('recognizes a hosted store schema that requires the current server build',()=>{
+    const server={generation:'hs2',protocol:{min:1,max:1},store_schema:{min:1,max:2}};
+    expect(storeNeedsServerUpgrade(server,{generation:'hs2',store_schema:{min:1,max:3,creates:3},selected_store_schema:3})).toBe(true);
+    expect(storeNeedsServerUpgrade(server,{generation:'hs2',store_schema:{min:1,max:3,creates:3},selected_store_schema:2})).toBe(false);
   });
 });
