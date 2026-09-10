@@ -135,6 +135,7 @@ impl ClaudeChannelClient for ClaudeChannel {
             done: None,
             usage: None,
             pending: std::collections::VecDeque::new(),
+            seen_assistant_output: std::collections::HashSet::new(),
         }))
     }
 }
@@ -150,6 +151,11 @@ struct ClaudeTurn {
     /// Token usage captured from the final `result` event, if it reported any (HS2-TJ8FGR).
     usage: Option<crate::drive::Usage>,
     pending: std::collections::VecDeque<TurnEvent>,
+    /// Claude may repeat the same complete `assistant` stream record (same provider
+    /// message id and text) within one turn. Remember exactly those projections so the
+    /// host sees each provider message fragment once without globally deduplicating
+    /// legitimate repeated prose from different messages or transports.
+    seen_assistant_output: std::collections::HashSet<(String, String)>,
 }
 
 /// Extract token usage from a Claude stream-json `result` event (`docs/14`, the
@@ -189,10 +195,13 @@ pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
 }
 
 /// Map one output event to zero or more user-visible/native [`TurnEvent`] values.
-fn map_events(v: &Value) -> Vec<TurnEvent> {
+fn map_events(
+    v: &Value,
+    seen_assistant_output: &mut std::collections::HashSet<(String, String)>,
+) -> Vec<TurnEvent> {
     match v.get("type").and_then(Value::as_str) {
         Some("assistant") => {
-            let text = assistant_text(v);
+            let text = assistant_text(v, seen_assistant_output);
             let mut events = Vec::new();
             if !text.is_empty() {
                 events.push(TurnEvent::Output(text));
@@ -236,8 +245,13 @@ fn map_events(v: &Value) -> Vec<TurnEvent> {
     }
 }
 
-/// Concatenate the text blocks of an `assistant` message event.
-fn assistant_text(v: &Value) -> String {
+/// Concatenate the text blocks of an `assistant` message event, suppressing only an exact
+/// repeat carrying the same provider message id. Text from a distinct message id (or from
+/// an event without an id) is always preserved, even when the prose is identical.
+fn assistant_text(
+    v: &Value,
+    seen_assistant_output: &mut std::collections::HashSet<(String, String)>,
+) -> String {
     let mut out = String::new();
     if let Some(blocks) = v
         .get("message")
@@ -252,7 +266,18 @@ fn assistant_text(v: &Value) -> String {
             }
         }
     }
-    out
+    let Some(message_id) = v
+        .get("message")
+        .and_then(|message| message.get("id"))
+        .and_then(Value::as_str)
+    else {
+        return out;
+    };
+    if out.is_empty() || seen_assistant_output.insert((message_id.to_string(), out.clone())) {
+        out
+    } else {
+        String::new()
+    }
 }
 
 impl ClaudeTurn {
@@ -274,7 +299,7 @@ impl ClaudeTurn {
                 if ev.get("type").and_then(Value::as_str) == Some("result") {
                     self.usage = claude_result_usage(ev);
                 }
-                let mapped = map_events(ev);
+                let mapped = map_events(ev, &mut self.seen_assistant_output);
                 self.cursor += 1;
                 self.pending.extend(mapped);
                 if let Some(te) = self.pending.pop_front() {
@@ -444,6 +469,8 @@ pub(crate) mod scripted {
     pub enum ClaudeMode {
         /// Emit an assistant message then a `result` (`success`).
         Success,
+        /// Repeat one provider-identified assistant record before a successful result.
+        DuplicateOutput,
         /// Emit an assistant message then a `result` (`error_during_execution`).
         Failure,
         /// Emit text plus a tool-use block, then a successful result.
@@ -497,8 +524,9 @@ pub(crate) mod scripted {
                     .and_then(|m| m.get("content"))
                     .and_then(Value::as_str)
                     .unwrap_or("");
-                self.push(json!({ "type": "assistant",
+                let assistant = json!({ "type": "assistant",
                     "message": { "role": "assistant",
+                                 "id": "msg-scripted",
                                  "content": if matches!(self.mode, ClaudeMode::RichSuccess) {
                                      json!([{ "type": "text", "text": format!("done: {content}") },
                                          { "type": "tool_use", "id": "tool-redacted",
@@ -506,9 +534,16 @@ pub(crate) mod scripted {
                                  } else {
                                      json!([{ "type": "text", "text": format!("done: {content}") }])
                                  } },
-                    "session_id": "sess-abc" }));
+                    "session_id": "sess-abc" });
+                self.push(assistant.clone());
+                if matches!(self.mode, ClaudeMode::DuplicateOutput) {
+                    self.push(assistant.clone());
+                    self.push(assistant);
+                }
                 let (subtype, is_error, result) = match self.mode {
-                    ClaudeMode::Success | ClaudeMode::RichSuccess => ("success", false, "done"),
+                    ClaudeMode::Success | ClaudeMode::DuplicateOutput | ClaudeMode::RichSuccess => {
+                        ("success", false, "done")
+                    }
                     ClaudeMode::Failure => ("error_during_execution", true, ""),
                 };
                 self.push(
@@ -572,5 +607,36 @@ mod usage_tests {
 
         // No usage block → nothing to attribute.
         assert!(claude_result_usage(&json!({ "type": "result" })).is_none());
+    }
+
+    #[test]
+    fn assistant_text_deduplicates_only_the_same_provider_message_projection() {
+        let event = |id: Option<&str>, text: &str| {
+            let mut message = json!({
+                "role": "assistant",
+                "content": [{ "type": "text", "text": text }]
+            });
+            if let Some(id) = id {
+                message["id"] = Value::String(id.to_string());
+            }
+            json!({ "type": "assistant", "message": message })
+        };
+        let mut seen = std::collections::HashSet::new();
+
+        assert_eq!(
+            assistant_text(&event(Some("msg-a"), "same"), &mut seen),
+            "same"
+        );
+        assert_eq!(assistant_text(&event(Some("msg-a"), "same"), &mut seen), "");
+        assert_eq!(
+            assistant_text(&event(Some("msg-a"), " next"), &mut seen),
+            " next"
+        );
+        assert_eq!(
+            assistant_text(&event(Some("msg-b"), "same"), &mut seen),
+            "same"
+        );
+        assert_eq!(assistant_text(&event(None, "same"), &mut seen), "same");
+        assert_eq!(assistant_text(&event(None, "same"), &mut seen), "same");
     }
 }

@@ -753,6 +753,23 @@ fn claude_channel_streams_output_then_done() {
 }
 
 #[test]
+fn claude_channel_emits_a_repeated_provider_assistant_record_once() {
+    let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::DuplicateOutput));
+    let mut turn = ch.start_turn("what time is it?").unwrap();
+
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Output("done: what time is it?".into()))
+    );
+    assert_eq!(
+        turn.next_event(),
+        Some(TurnEvent::Done(DoneReason::Completed)),
+        "the repeated assistant records do not become repeated output events"
+    );
+    assert_eq!(turn.next_event(), None);
+}
+
+#[test]
 fn claude_channel_projects_native_tool_use_as_the_verified_hook_contract() {
     let ch = ClaudeChannel::connect(ScriptedClaude::new(ClaudeMode::RichSuccess));
     let mut turn = ch.start_turn("work").unwrap();
