@@ -27,6 +27,7 @@ describe('advanced search semantics',()=>{
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'(tag-does-not-exist OR client) AND is:open'))).toEqual([rows[0]]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'"Parser docs" OR is:backlog'))).toEqual([rows[1],rows[2]]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'parser is:completed'))).toEqual([rows[1]]);
+    expect(rows.filter(ticket=>matchesSearchExpression(ticket,'NOT tag:client AND parser'))).toEqual([rows[1]]);
     expect(usesAdvancedSearchExpression('ordinary words')).toBe(false);expect(usesAdvancedSearchExpression('NOT (is:archived OR is:backlog)')).toBe(true);
   });
   it('safely rejects incomplete groups and unknown lifecycle aliases',()=>{

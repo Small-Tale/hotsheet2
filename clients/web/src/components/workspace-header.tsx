@@ -1,10 +1,10 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
-import '@awesome.me/webawesome/dist/components/input/input.js';
 import './workspace-header.css';
 
 import type { IconNode } from 'lucide';
 import { ArrowDown, ArrowDownAZ, ArrowDownWideNarrow, ArrowUp, ArrowUpAZ, ArrowUpNarrowWide, Bell, CircleHelp, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
 
+import {inlineSearchParts,type InlineSearchToken} from '../inline-search';
 import { LucideIcon } from './lucide-icon';
 import { Select, type SelectChoice } from './select';
 import { ToolbarControlGroup } from './toolbar-control-group';
@@ -19,7 +19,7 @@ export interface WorkspaceHeaderProps {
   mode: WorkspaceViewMode;
   searchOpen?: boolean;
   searchQuery?: string;
-  searchTokens?: readonly {raw:string;label:string}[];
+  searchTokens?: readonly InlineSearchToken[];
   searchTagSuggestions?: readonly string[];
   searchDatePrefix?: string;
   searchHelpOpen?: boolean;
@@ -82,6 +82,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
   const visibleSortOptions=mode==='board'?sortOptions.filter(option=>option.value!=='status'):sortOptions;
   const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=visibleSortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
   const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
+  const searchParts=inlineSearchParts(searchQuery,searchTokens);
   return <div class="workspace-header__actions" data-component="workspace-controls">
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
@@ -100,11 +101,9 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
         {searchOpen
           ? <>
             <div class="workspace-header__search-editor">
-              <wa-input class="workspace-header__search" name="workspace-search" label="Search tickets" placeholder={searchTokens.length?'Add search…':'Search tickets'} value={searchQuery} disabled={projectActionsDisabled} autofocus>
-                <span slot="start" class="workspace-header__search-icon"><LucideIcon icon={Search} name="search" /></span>
-                <span slot="end" class="workspace-header__search-end">{(searchQuery||searchTokens.length>0) && <button type="button" class="workspace-header__search-clear" data-action="clear-workspace-search" aria-label="Clear search" title="Clear search"><LucideIcon icon={X} name="x" /></button>}<button type="button" class="workspace-header__search-help-button" data-action="toggle-workspace-search-help" aria-label="Search syntax help" aria-expanded={String(searchHelpOpen)} title="Search syntax help"><LucideIcon icon={CircleHelp} name="circle-help" /></button></span>
-              </wa-input>
-              {searchTokens.length>0&&<div class="workspace-header__search-tokens">{searchTokens.map(token=><span class="workspace-header__search-token" data-component="filter-chip" data-token-raw={token.raw} title="Double-click to edit"><span>{token.label}</span><button type="button" data-action="remove-workspace-search-token" data-token-raw={token.raw} aria-label={`Remove ${token.label.replace(/^tag:/,'tag ')}`}><LucideIcon icon={X} name="x"/></button></span>)}</div>}
+              <span class="workspace-header__search-icon" aria-hidden="true"><LucideIcon icon={Search} name="search" /></span>
+              <div class="workspace-header__search" data-key={`workspace-search:${searchTokens.map(token=>token.raw).join('|')}`} data-morph-skip data-workspace-search="true" data-token-count={searchTokens.length} role="textbox" aria-label="Search tickets" aria-multiline="true" contenteditable={projectActionsDisabled?'false':'true'} data-placeholder={searchTokens.length?'Add search…':'Search tickets'} spellcheck="false" autofocus>{searchParts.map(part=>part.kind==='text'?<span data-search-text="true">{part.value}</span>:<span class="workspace-header__search-token" contenteditable="false" data-component="filter-chip" data-token-raw={part.token.raw} title="Double-click to edit"><button type="button" class="workspace-header__search-token-edit" data-action="edit-workspace-search-token" data-token-raw={part.token.raw} aria-label={`Edit ${part.token.label.replace(/^tag:/,'tag ')}`}>{part.token.label}</button><button type="button" data-action="remove-workspace-search-token" data-token-raw={part.token.raw} aria-label={`Remove ${part.token.label.replace(/^tag:/,'tag ')}`}><LucideIcon icon={X} name="x"/></button></span>)}</div>
+              <span class="workspace-header__search-end">{(searchQuery||searchTokens.length>0) && <button type="button" class="workspace-header__search-clear" data-action="clear-workspace-search" aria-label="Clear search" title="Clear search"><LucideIcon icon={X} name="x" /></button>}<button type="button" class="workspace-header__search-help-button" data-action="toggle-workspace-search-help" aria-label="Search syntax help" aria-expanded={String(searchHelpOpen)} title="Search syntax help"><LucideIcon icon={CircleHelp} name="circle-help" /></button></span>
             </div>
             {searchTagSuggestions.length>0&&<div class="workspace-header__search-suggestions" role="listbox" aria-label="Matching tags">{searchTagSuggestions.map(tag=><button type="button" role="option" data-action="select-workspace-search-tag" data-tag={tag}>tag:{tag.includes(' ')?`"${tag}"`:tag}</button>)}</div>}
             {searchDatePrefix&&<div class="workspace-header__search-date" role="group" aria-label="Date and time helper"><label>Date<input name="workspace-search-date" type="date"/></label><label>Time (optional)<input name="workspace-search-time" type="time"/></label><button type="button" data-action="apply-workspace-search-date" data-date-prefix={searchDatePrefix}>Apply</button></div>}

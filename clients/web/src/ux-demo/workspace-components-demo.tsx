@@ -47,7 +47,7 @@ export const inspectorCodeReview: CodeReview = {
 let demoSequence = 1;
 
 export function focusWorkspaceSearch(root: ParentNode): boolean {
-  const input = root.querySelector<HTMLElement>('[name="workspace-search"]');
+  const input = root.querySelector<HTMLElement>('[data-workspace-search="true"]');
   if (!input) return false;
   input.focus({ preventScroll: true });
   return true;

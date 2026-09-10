@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {activeTagPrefix,consumeSearchToken,dateTokenFromInput,effectiveSearch,parseSearchDate,tokenFromRaw,tokenQuery} from './inline-search';
+import {activeTagPrefix,consumeSearchToken,consumeSearchTokens,dateTokenFromInput,effectiveSearch,inlineSearchParts,orderedSearchText,parseSearchDate,tokenFromRaw,tokenQuery} from './inline-search';
 
 describe('inline advanced-search tokens',()=>{
   it('supports quoted tags and attachment wildcards',()=>{
@@ -23,6 +23,20 @@ describe('inline advanced-search tokens',()=>{
     expect(consumeSearchToken('updated-after:2026/09/07',true)).toMatchObject({text:'',token:{kind:'date',raw:'updated-after:2026/09/07'}});
     expect(effectiveSearch('parser has:commit',[])).toMatchObject({text:'parser',tokens:[{kind:'has',value:'commit'}]});
     expect(effectiveSearch('',[tokenFromRaw('is:active')!])).toMatchObject({text:'is:active',tokens:[{kind:'is',value:'active'}]});
+  });
+  it('keeps committed tokens ordered inside ordinary boolean text',()=>{
+    expect(consumeSearchTokens('NOT tag:client',true)).toMatchObject({text:'NOT ',tokens:[{raw:'tag:client',offset:4}]});
+    const parsed=consumeSearchTokens('NOT tag:client AND hello ');
+    expect(parsed).toMatchObject({text:'NOT  AND hello ',tokens:[{kind:'tag',value:'client',offset:4}]});
+    expect(inlineSearchParts(parsed.text,parsed.tokens)).toEqual([
+      {kind:'text',value:'NOT '},
+      {kind:'token',token:expect.objectContaining({raw:'tag:client',offset:4})},
+      {kind:'text',value:' AND hello '},
+    ]);
+    expect(orderedSearchText(parsed.text,parsed.tokens)).toBe('NOT tag:client AND hello');
+    expect(effectiveSearch(parsed.text,parsed.tokens).text).toBe('NOT tag:client AND hello');
+    const simple=consumeSearchTokens('tag:client ',true);
+    expect(effectiveSearch(simple.text,simple.tokens).text).toBe('');
   });
   it('normalizes machine-local and ISO dates and rejects impossible dates',()=>{
     expect(parseSearchDate('09/01/2026 11:05 AM','en-US')).toMatch(/^2026-09-01T/);

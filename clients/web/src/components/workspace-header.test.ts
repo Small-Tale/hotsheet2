@@ -7,14 +7,16 @@ import { applyWorkspaceSortDirection, nextWorkspaceSort, WorkspaceHeader, type W
 
 describe('WorkspaceHeader', () => {
   it('exposes an accessible selected view mode and optional search field', () => {
-    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'tag:cl', searchTokens:[{raw:'tag:server',label:'tag:server'}],searchTagSuggestions:['client'], searchDatePrefix:'created-after',searchHelpOpen:true, sort: 'priority', sortDirection: 'descending' }));
+    const markup = String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'settings', searchOpen: true, searchQuery: 'NOT  AND tag:cl', searchTokens:[{kind:'tag',value:'server',raw:'tag:server',label:'tag:server',offset:4}],searchTagSuggestions:['client'], searchDatePrefix:'created-after',searchHelpOpen:true, sort: 'priority', sortDirection: 'descending' }));
     expect(markup).not.toContain('All Tickets');
     expect(markup).toContain('data-component="toolbar-text" data-size="large">Hot Sheet 2');
     expect(markup).toContain('aria-label="View mode"');
     expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
-    expect(markup).toContain('name="workspace-search"');
-    expect(markup).toContain('value="tag:cl"');
-    expect(markup).toContain('>tag:server</span>');
+    expect(markup).toContain('data-workspace-search="true"');
+    expect(markup).toContain('role="textbox" aria-label="Search tickets" aria-multiline="true" contenteditable="false"');
+    expect(markup).toMatch(/data-search-text="true">NOT <\/span><span class="workspace-header__search-token"[^>]*>.*tag:server.*data-search-text="true"> AND tag:cl<\/span>/s);
+    expect(markup).toContain('aria-label="Edit tag server">tag:server</button>');
+    expect(markup).toContain('aria-label="Remove tag server"');
     expect(markup).toContain('title="Double-click to edit"');
     expect(markup).toContain('data-action="select-workspace-search-tag" data-tag="client"');
     expect(markup).toContain('name="workspace-sort"');
@@ -24,7 +26,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('class="select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
     expect(markup).not.toContain('type="checkbox"');
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
-    expect(markup).toContain('slot="start"');
+    expect(markup).not.toContain('workspace-header__search-tokens');
     expect(markup).toContain('aria-label="Search syntax help"');
     expect(markup).toContain('aria-label="Date and time helper"');
     expect(markup).toContain('aria-label="Search syntax"');
@@ -40,16 +42,15 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('data-action="open-workspace-search"');
     expect(markup).not.toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
-    expect(markup.match(/disabled/g)).toHaveLength(4);
+    expect(markup.match(/disabled/g)).toHaveLength(3);
     const headerCss=readFileSync(resolve(import.meta.dirname,'workspace-header.css'),'utf8'),shellCss=readFileSync(resolve(import.meta.dirname,'app-shell.css'),'utf8');
     expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(48rem, 100%); max-width:100%; height:auto; overflow:visible;border-radius:1.5428125rem;');
-    expect(headerCss).not.toContain('.workspace-header__search-group[data-expanded="true"]:has(.workspace-header__search-tokens)');
-    expect(headerCss).toContain('.workspace-header__actions:has(.workspace-header__search-tokens) { align-items:flex-start; }');
-    expect(headerCss).toContain('.workspace-header__actions:has(.workspace-header__search-tokens) > :not(.workspace-header__search-group) { margin-block-start:calc((var(--wa-space-xs) + var(--wa-space-3xs))/2); }');
+    expect(headerCss).toContain('.workspace-header__search { min-width: 7rem; min-height: 1.5rem;');
+    expect(headerCss).toContain('white-space: pre-wrap; overflow-wrap: anywhere;');
+    expect(headerCss).toContain('.workspace-header__search-token{display:inline-flex;');
     expect(headerCss).toContain('.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(26rem,100%);align-items:stretch;flex-direction:column;text-align:left}');
     expect(headerCss).toContain('.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;');
-    expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { align-items:start; }');
-    expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-tokens) { height:auto; }');
+    expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }');
   });
 
   it.each([
@@ -84,7 +85,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('aria-label="Notifications view, 7 pending"');
     expect(markup).toContain('class="view-mode-switcher__badge" aria-hidden="true">7</span>');
     expect(markup.match(/tabindex="0" class="view-mode-switcher__button"/g)).toHaveLength(4);
-    expect(markup).not.toContain('name="workspace-search"');
+    expect(markup).not.toContain('data-workspace-search="true"');
     const css = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
     expect(css).toMatch(/\.view-mode-switcher__badge \{[^}]*min-width: \.9rem;[^}]*padding: \.0625rem \.3125rem;/);
     expect(css).not.toMatch(/\.view-mode-switcher__badge \{[^}]*(?:^|[;{]\s*)height:/);

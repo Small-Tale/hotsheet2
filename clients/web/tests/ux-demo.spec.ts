@@ -784,7 +784,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const findButton = header.getByRole('button', { name: 'Search tickets' });
   await findButton.click();
   await expect(findButton).toHaveCount(0);
-  const searchControl = header.locator('wa-input[name="workspace-search"]');
+  const searchControl = header.locator('.workspace-header__search-editor');
   const search = header.getByRole('textbox', { name: 'Search tickets' });
   await expect(search).toBeFocused();
   await expect(searchControl.locator('[data-lucide="search"]')).toBeVisible();
@@ -798,7 +798,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   const clearSearch = header.locator('[data-action="clear-workspace-search"]');
   await expect(clearSearch).toBeVisible();
   await clearSearch.click();
-  await expect(search).toHaveValue('');
+  await expect(search).toHaveText('');
   await expect(page.getByRole('listbox', { name: 'Workspace board' }).locator('[data-component="ticket-list-row"]')).toHaveCount(20);
   await expect(clearSearch).toHaveCount(0);
   await search.fill('long-tag-example');

@@ -894,8 +894,13 @@ tag completion, attachment/presence filters, relative or local dates, and syntax
 well-formed structured value becomes a chip as soon as an impossible
 continuation such as trailing whitespace is entered, or when the search field loses focus;
 this includes workflow `is:` values and relative, ISO, localized, or year-first slash dates.
-The expanded search field keeps its single-line 1.5428125rem corner radius after chips wrap it
-onto additional lines, instead of changing to a different radius. Both workspace and global
+Committed chips stay at their exact positions inside the editable expression, so queries such
+as `NOT tag:client AND parser` retain readable boolean order. Ordinary text wraps at character
+boundaries while each chip wraps atomically; the toolbar grows downward without clipping or
+moving peer controls. A chip can return to editable text through its labeled edit action or a
+double-click, while removal leaves the search focused at its former position. The expanded
+search field keeps its single-line 1.5428125rem corner radius as content wraps onto additional
+lines, instead of changing to a different radius. Both workspace and global
 ticket search also accept case-insensitive
 `AND`, `OR`, and `NOT`, with parentheses and the conventional `NOT` → `AND` → `OR`
 precedence. `is:` predicates cover Up Next, an unexpired active claim, open (`not_started` or

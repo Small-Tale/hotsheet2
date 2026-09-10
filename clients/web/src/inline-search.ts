@@ -3,12 +3,14 @@ export type SearchDateDirection='before'|'after';
 export type SearchPresence='attachment'|'media-annotation'|'commit';
 export type SearchLifecycle='up-next'|'active'|'open'|'closed'|'duplicate'|'not-started'|'started'|'completed'|'verified'|'backlog'|'backlogged'|'archived';
 
-export type InlineSearchToken=
+type InlineSearchTokenValue=
   |{kind:'tag';value:string;raw:string;label:string}
   |{kind:'has';value:SearchPresence;raw:string;label:string}
   |{kind:'attachment';value:string;raw:string;label:string}
   |{kind:'is';value:SearchLifecycle;raw:string;label:string}
   |{kind:'date';value:string;field:SearchDateField;direction:SearchDateDirection;raw:string;label:string};
+export type InlineSearchToken=InlineSearchTokenValue&{offset?:number};
+export type InlineSearchPart={kind:'text';value:string}|{kind:'token';token:InlineSearchToken};
 
 const dateFields:readonly SearchDateField[]=['created','completed','started','verified','archived','updated'];
 const unquote=(value:string)=>value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replaceAll('\\"','"'):value;
@@ -81,6 +83,14 @@ export function consumeSearchToken(input:string,force=false):{text:string;token?
   return token?{text:trimmed.slice(0,start).trimEnd(),token}:{text:input};
 }
 
+/** Consume every complete structured token, including tokens embedded in boolean text. */
+export function consumeSearchTokens(input:string,force=false):{text:string;tokens:InlineSearchToken[];removed:ReadonlyArray<{start:number;end:number}>}{
+  const pattern=/(?:^|[\s(])((?:is|tag|has|attachment):(?:"(?:\\.|[^"])*"|[^\s()]+)|(?:created|completed|started|verified|archived|updated)-(?:before|after):(?:"(?:\\.|[^"])*"|[^\s()]+(?:\s+ago)?))(?=$|[\s)])/gi,result:InlineSearchToken[]=[],removed:Array<{start:number;end:number}>=[];
+  let text='',cursor=0;
+  for(const match of input.matchAll(pattern)){const raw=match[1],start=match.index+match[0].lastIndexOf(raw),end=start+raw.length;if(end===input.length&&!force&&!/\s$/.test(input))continue;const token=tokenFromRaw(raw);if(!token)continue;text+=input.slice(cursor,start);result.push({...token,offset:text.length});removed.push({start,end});cursor=end}
+  text+=input.slice(cursor);return{text,tokens:result,removed};
+}
+
 export function activeTagPrefix(input:string):string|undefined{
   const match=input.match(/(?:^|\s)tag:(?:"([^"]*)|([^\s]*))$/i);
   if(!match)return undefined;
@@ -93,11 +103,27 @@ export function activeDatePrefix(input:string):`${SearchDateField}-${SearchDateD
   return match[1].toLowerCase() as `${SearchDateField}-${SearchDateDirection}`;
 }
 
+/** Split the editable text around the committed, atomic tokens that live inside it. */
+export function inlineSearchParts(input:string,tokens:readonly InlineSearchToken[]):InlineSearchPart[]{
+  const ordered=tokens.map((token,index)=>({token,index,offset:Math.max(0,Math.min(input.length,token.offset??input.length))})).sort((left,right)=>left.offset-right.offset||left.index-right.index),parts:InlineSearchPart[]=[];
+  let cursor=0;
+  for(const {token,offset} of ordered){if(offset>cursor)parts.push({kind:'text',value:input.slice(cursor,offset)});parts.push({kind:'token',token:{...token,offset}});cursor=offset}
+  if(cursor<input.length||parts.length===0)parts.push({kind:'text',value:input.slice(cursor)});
+  return parts;
+}
+
+/** Rebuild the readable expression while retaining the visual order of committed tokens. */
+export function orderedSearchText(input:string,tokens:readonly InlineSearchToken[],include:(token:InlineSearchToken)=>boolean=(token)=>token.kind==='is'||token.kind==='tag'){
+  const parts=inlineSearchParts(input,tokens).filter(part=>part.kind==='text'||include(part.token));let result='';
+  for(let index=0;index<parts.length;index+=1){const part=parts[index],value=part.kind==='text'?part.value:part.token.raw;if(!value)continue;const previous=result.at(-1),next=parts.at(index+1),nextValue=next?.kind==='text'?next.value:next?.token.raw;if(part.kind==='token'&&previous&&!/[\s(]/.test(previous))result+=' ';result+=value;if(part.kind==='token'&&nextValue&&!/^[\s)]/.test(nextValue))result+=' '}
+  return result.trim();
+}
+
 /** Treat a complete token still in the editor as structured search without changing the UI. */
 export function effectiveSearch(input:string,tokens:readonly InlineSearchToken[]){
-  const parsed=consumeSearchToken(input,true),next=parsed.token&&!tokens.some(token=>token.kind===parsed.token!.kind&&token.value===parsed.token!.value)?[...tokens,parsed.token]:[...tokens];
-  const text=(parsed.token?parsed.text:input).trim(),lifecycle=next.filter((token):token is Extract<InlineSearchToken,{kind:'is'}>=>token.kind==='is').map(token=>token.raw);
-  return{text:[text,...lifecycle].filter(Boolean).join(' '),tokens:next};
+  const parsed=consumeSearchToken(input,true),text=parsed.token?parsed.text:input,next=parsed.token&&!tokens.some(token=>token.kind===parsed.token!.kind&&token.value===parsed.token!.value)?[...tokens,{...parsed.token,offset:text.length}]:[...tokens];
+  const ordered=orderedSearchText(text,next),advanced=/(?:^|[\s(])(?:AND|OR|NOT)(?=$|[\s)])|[()]/i.test(ordered);
+  return{text:advanced?ordered:orderedSearchText(text,next,token=>token.kind==='is'),tokens:next};
 }
 
 export function tokenQuery(tokens:readonly InlineSearchToken[]){

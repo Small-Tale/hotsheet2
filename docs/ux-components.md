@@ -490,7 +490,9 @@ The inline search and active-filter surface is built under HS2-383D6K; the later
 query-builder/editor is tracked separately by HS2-G7FWSS. Advanced constraints belong in
 the ordinary toolbar search rather than a separate launcher and dialog.
 
-- `SearchQueryInput` — **built**: full-text toolbar input with inline tag,
+- `SearchQueryInput` — **built**: one multiline editable flow containing ordinary text and
+  atomic chips in their expression order, with character-level text wrapping and token-level
+  chip wrapping; supports inline tag,
   attachment/media-annotation/commit presence, wildcard-filename, and lifecycle date/time
   tokens. Date chips and help examples use the client machine's locale, relative values
   such as `4h ago` resolve at search time, and ISO 8601 input remains portable and always
@@ -501,8 +503,8 @@ the ordinary toolbar search rather than a separate launcher and dialog.
   in place, while lifecycle prefixes expose a native date and optional-time helper.
 - `SearchResultRow` — **built**: provider-qualified result with explicit match reason.
 - `ActiveFilterBar` and removable `FilterChip` — **built** into the toolbar search; chips
-  wrap below the input without internal truncation and can be returned to the input for
-  editing with a double-click.
+  remain inline without internal truncation, expose labeled edit/remove actions, and return to
+  text at the same caret position for editing by button or double-click.
 - `SavedViewAction` — **built**: hands the active query to the later view editor.
 
 Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
