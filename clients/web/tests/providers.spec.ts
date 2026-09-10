@@ -730,6 +730,22 @@ test('defers ticket refresh without hiding an open select popup',async({page})=>
   await composer.getByRole('textbox',{name:'Ticket title'}).click();await expect.poll(()=>category.evaluate(node=>(node as HTMLElement&{open?:boolean}).open)).toBe(false);await expect(page.locator('[data-column-id="started"] [data-ticket-slug="HS2-NEXT01"]')).toBeVisible();await expect(composer).toBeVisible();
 });
 
+test('remembers the last ticket category after cancelling and refreshing',async({page})=>{
+  await mockProject(page);
+  await page.goto('/?dev-review=false');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'New ticket…'}).click();
+  const composer=page.getByRole('dialog',{name:'Create ticket'}),category=composer.locator('wa-select[name="new-ticket-category"]');
+  await category.evaluate((node:HTMLElement&{value:string})=>{node.value='investigation';node.dispatchEvent(new Event('change',{bubbles:true}))});
+  await expect(category).toHaveJSProperty('value','investigation');
+  await composer.getByRole('button',{name:'Cancel'}).click();
+  await page.reload();
+  await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+  await page.getByRole('button',{name:'New ticket…'}).click();
+  await expect(page.getByRole('dialog',{name:'Create ticket'}).locator('wa-select[name="new-ticket-category"]')).toHaveJSProperty('value','investigation');
+});
+
 test('animates ticket moves, arrivals, and departures in sequence',async({page})=>{
   await page.setViewportSize({width:2400,height:1000});await page.emulateMedia({reducedMotion:'no-preference'});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();
   await page.evaluate(()=>{

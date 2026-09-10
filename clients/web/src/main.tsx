@@ -18,6 +18,7 @@ import { type AppRegionId, isAppRegionId, loadAppRegionSize, normalizeAppRegionS
 import {attachmentReferences,attachmentReferenceUrl,isGalleryMediaAttachment,isVideoAttachment,type AttachmentReferenceContext} from './attachment-references';
 import {attachmentRoundNumbers,attachmentUploadBatchId} from './attachment-grouping';
 import { loadWorkspacePreferences, saveWorkspacePreferences, sortableWorkspaceView } from './workspace-preferences';
+import { loadLastTicketCategory, saveLastTicketCategory } from './ticket-category-preference';
 import { compareWorkspaceTickets } from './workspace-ticket-sort';
 import {updateRepositoryFileSelection} from './repository-file-selection';
 import {createRefreshBarrier} from './refresh-barrier';
@@ -216,7 +217,8 @@ function showToast(message:string){toastMessage.value=message;if(toastTimer!==un
 const activeTicketCount=signal(0);
 const settingsCategory = signal<SettingsCategory>('sources');
 const notificationView = signal<NotificationView>('pending');
-const composerExpanded = signal(false), composerTitle = signal(''), composerDetails = signal(''), composerCategory = signal('task'), composerUpNext = signal(false), inspectorTab = signal<InspectorTab>('info'), readerTab = signal<InspectorTab>('info'), sidebarVisible = signal(storedWorkspacePreferences.sidebarVisible), inspectorVisible = signal(storedWorkspacePreferences.inspectorVisible);
+const lastUsedTicketCategory=loadLastTicketCategory(localStorage);
+const composerExpanded = signal(false), composerTitle = signal(''), composerDetails = signal(''), composerCategory = signal(lastUsedTicketCategory), composerUpNext = signal(false), inspectorTab = signal<InspectorTab>('info'), readerTab = signal<InspectorTab>('info'), sidebarVisible = signal(storedWorkspacePreferences.sidebarVisible), inspectorVisible = signal(storedWorkspacePreferences.inspectorVisible);
 const composerAttachments=signal<PendingEvidence[]>([]),composerAttachmentMessage=signal(''),composerAttachmentError=signal(false),composerScreening=signal(false),composerSubmitting=signal(false);
 let composerAttachmentEpoch=0;
 const activeComposerScreenings=new Set<symbol>();
@@ -944,7 +946,7 @@ delegate(document.body,'click','[data-action="expand-ticket-composer"]',()=>{com
 delegate(document.body,'click','[data-action="cancel-ticket-composer"]',()=>{resetTicketComposer()});
 delegate(document.body,'input','[name="new-ticket-title"]',(_event,target)=>{composerTitle.value=(target as Control).value;scheduleProjectSessionPersistence()});
 delegate(document.body,'input','[name="new-ticket-details"]',(_event,target)=>{composerDetails.value=(target as HTMLTextAreaElement).value;scheduleProjectSessionPersistence()});
-delegate(document.body,'change','[name="new-ticket-category"]',(_event,target)=>{composerCategory.value=(target as Control).value;scheduleProjectSessionPersistence()});
+delegate(document.body,'change','[name="new-ticket-category"]',(_event,target)=>{composerCategory.value=(target as Control).value;saveLastTicketCategory(localStorage,composerCategory.value);scheduleProjectSessionPersistence()});
 delegate(document.body,'click','[data-action="toggle-new-ticket-up-next"]',()=>{composerUpNext.value=!composerUpNext.value;scheduleProjectSessionPersistence()});
 delegate(document.body,'change','input[name="new-ticket-attachments"]',(_event,target)=>{const input=target as HTMLInputElement;if(input.files?.length)void addNewTicketFiles(input.files);input.value=''});
 delegate(document.body,'click','[data-action="remove-new-ticket-attachment"]',(_event,target)=>{const id=data(target).pendingAttachmentId;if(id)void deleteDraftFiles(draftScope('composer'),[id]);composerAttachments.value=composerAttachments.value.filter(item=>item.id!==id);composerAttachmentMessage.value='';composerAttachmentError.value=false;scheduleProjectSessionPersistence()});
