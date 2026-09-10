@@ -445,6 +445,11 @@ cleanup of the old live HS1 data; backups are never removed.
   affected and returns a deleted active view to Queue. Both mutations preserve shared-setting
   ordering and reject case-insensitive name collisions.
 
+  Search has one primary surface: the project toolbar. The former global search overlay and
+  its separate scope, suggestions, result rows, and saved-view handoff were removed because
+  they duplicated the ordinary inline search flow without a distinct navigation role. Exact
+  cross-project ticket references continue through the compact link-resolution chooser.
+
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.
   Project Chat and Drive use different stable connection ids: Chat is a general project

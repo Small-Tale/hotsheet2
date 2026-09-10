@@ -19,7 +19,6 @@ import {
   Columns3,
   Command,
   FilePenLine,
-  Filter,
   FolderGit2,
   GitBranch,
   GitCommitHorizontal,
@@ -37,7 +36,6 @@ import {
   PanelRight,
   Paperclip,
   Play,
-  Search,
   Settings,
   ShieldCheck,
   Tags,
@@ -166,7 +164,6 @@ import {
   ViewNavigationDemo,
 } from './project-sidebar-demo';
 import { changeEvidenceDemoView, ChangeEvidenceDialogDemo, repositoryDemoComparison, repositoryDemoEvent, repositoryDemoExpandedCommits, repositoryDemoFileMenu, repositoryDemoScenario, repositoryDemoView, RepositoryStatusPopoverDemo, RepositoryStatusPopoverSettings, resetRepositoryStatusDemo } from './repository-status-demo';
-import { GlobalSearchDemo } from './search-demo';
 import { SelectDemo } from './select-demo';
 import {
   resetStatusBadgeDemo,
@@ -419,8 +416,6 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'markdown-editor': { icon: FilePenLine, name: 'file-pen-line' },
     'note-card': { icon: MessageSquareText, name: 'message-square-text' },
     'tag-chip': { icon: Tags, name: 'tags' },
-    'global-search': { icon: Search, name: 'search' },
-    'filter-chip': { icon: Filter, name: 'filter' },
     'status-badge': { icon: Badge, name: 'badge' },
     'terminal-dashboard': { icon: Terminal, name: 'terminal' },
     'settings-window': { icon: Settings, name: 'settings' },
@@ -457,7 +452,6 @@ function demoNavigation(category: DemoCategory) {
 }
 
 function demoContent(item: DemoDefinition) {
-  if (['global-search', 'search-query-input', 'search-scope-picker', 'search-suggestion-list', 'search-result-row', 'active-filter-bar', 'filter-chip', 'saved-view-action'].includes(item.id)) return <GlobalSearchDemo/>;
   if (item.id === 'status-badge') return <StatusBadgeDemo />;
   if (item.id === 'tag-chip') return <TagChipDemo />;
   if (item.id === 'ticket-row') return <TicketRowDemo />;

@@ -501,7 +501,10 @@ coverage.
 
 The inline search and active-filter surface is built under HS2-383D6K; the later custom
 query-builder/editor is tracked separately by HS2-G7FWSS. Advanced constraints belong in
-the ordinary toolbar search rather than a separate launcher and dialog.
+the ordinary toolbar search rather than a separate launcher and dialog. The earlier
+`GlobalSearchOverlay` composition and its overlay-only scope, result-row, filter suggestion,
+and saved-view handoff components were removed: they duplicated this simpler primary flow
+without a clear place in the product.
 
 - `SearchQueryInput` — **built**: one multiline editable flow containing ordinary text and
   atomic chips in their expression order, with character-level text wrapping and token-level
@@ -512,13 +515,14 @@ the ordinary toolbar search rather than a separate launcher and dialog.
   accepted. Complete uncommitted filters already affect results; space or blur commits a
   chip. Its concise placeholder remains ordinary search guidance while a help button
   exposes the complete syntax.
-- `SearchSuggestionList` — **built**: typing `tag:` offers readable matching project tags
+- Search suggestions — **built**: typing `tag:` offers readable matching project tags
   in place, while lifecycle prefixes expose a native date and optional-time helper.
-- `SearchResultRow` — **built**: provider-qualified result with explicit match reason.
-- `ActiveFilterBar` and removable `FilterChip` — **built** into the toolbar search; chips
+- Active filters and removable chips — **built** into the toolbar search; chips
   remain inline without internal truncation, expose labeled edit/remove actions, and return to
   text at the same caret position for editing by button or double-click.
-- `SavedViewAction` — **built**: hands the active query to the later view editor.
+
+Saved views are created and managed from the Views section rather than from a separate
+search overlay.
 
 Later custom-query work adds `QueryBuilder`, `FilterRule`, `FilterGroup`, and
 `ViewEditor` without replacing the basic search components.
