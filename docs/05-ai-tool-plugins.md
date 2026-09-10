@@ -51,6 +51,14 @@ core" ([04](04-core-server-cli.md) §4.1), it *requests* setup through the serve
 and renders the plugin's declared `preferences`. What moved is *authorship of the
 artifacts*, from the app down into the shared core.
 
+Freshness uses the same ownership boundary (HS2-40HZMB): the headless
+`hotsheet setup --refresh` command and the server's non-blocking project-open hook both
+invoke the core merge-safe writers. They migrate only settings files that already exist
+and refresh detected or previously managed enabled plugins, which repairs stale or
+partial setup without opting a clean project into an absent tool. Identical output is a
+byte-level no-op, and managed instruction markers remain the boundary around content
+Hot Sheet may replace.
+
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same
 capability seen from two sides: the loader decides *what* tools exist, the setup

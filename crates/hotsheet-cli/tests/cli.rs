@@ -23,6 +23,63 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    let home = root.path().join("home");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    std::fs::create_dir(&home).unwrap();
+    hs(&store)
+        .env("HOTSHEET_HOME", &home)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    std::fs::write(
+        store.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["codex"],"user_key":7}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        project.join("AGENTS.md"),
+        "User text.\n\n<!-- BEGIN hotsheet:codex -->\nstale\n<!-- END hotsheet:codex -->\n",
+    )
+    .unwrap();
+
+    let refresh = || {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .arg("setup")
+            .arg("--refresh")
+            .arg("--project")
+            .arg(&project)
+            .assert()
+            .success();
+    };
+    refresh();
+    let instructions = std::fs::read(project.join("AGENTS.md")).unwrap();
+    let mcp = std::fs::read(project.join(".codex/config.toml")).unwrap();
+    assert!(String::from_utf8_lossy(&instructions).contains("User text."));
+    assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
+    let settings: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(store.join("hotsheet-settings.json")).unwrap())
+            .unwrap();
+    assert_eq!(settings["$hotsheetSchema"], 1);
+    assert_eq!(settings["user_key"], 7);
+
+    refresh();
+    assert_eq!(
+        std::fs::read(project.join("AGENTS.md")).unwrap(),
+        instructions
+    );
+    assert_eq!(
+        std::fs::read(project.join(".codex/config.toml")).unwrap(),
+        mcp
+    );
+}
+
+#[test]
 fn edit_preserves_updated_at_for_up_next_only_but_not_mixed_mutations() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();

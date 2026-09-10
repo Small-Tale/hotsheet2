@@ -187,6 +187,18 @@ impl Settings {
         Ok(existed)
     }
 
+    /// Rewrite existing readable settings files in the current schema, preserving every
+    /// user key. Missing scopes stay missing and already-current bytes are left untouched.
+    pub fn migrate_existing(&self) -> Result<(), SettingsError> {
+        for scope in [Scope::Global, Scope::Shared, Scope::Local] {
+            if self.path(scope).is_file() {
+                let map = self.map(scope)?;
+                self.write(scope, &map)?;
+            }
+        }
+        Ok(())
+    }
+
     fn write(&self, scope: Scope, map: &Map<String, Value>) -> Result<(), SettingsError> {
         let mut persisted = map.clone();
         persisted.insert(SETTINGS_SCHEMA_KEY.into(), SETTINGS_SCHEMA_VERSION.into());
@@ -199,7 +211,10 @@ impl Settings {
                 std::fs::create_dir_all(parent)?;
             }
         }
-        std::fs::write(&path, text + "\n")?;
+        let text = text + "\n";
+        if !std::fs::read(&path).is_ok_and(|existing| existing == text.as_bytes()) {
+            std::fs::write(&path, text)?;
+        }
         if scope == Scope::Local {
             self.ensure_gitignored(Scope::Local.file_name())?;
         }
@@ -354,6 +369,22 @@ mod tests {
         let error = s.map(Scope::Shared).unwrap_err().to_string();
         assert!(error.contains("newer version of Hot Sheet 2"));
         assert!(error.contains("Update Hot Sheet 2"));
+    }
+
+    #[test]
+    fn migrate_existing_versions_legacy_settings_and_is_byte_idempotent() {
+        let d = root();
+        let path = d.path().join("hotsheet-settings.json");
+        std::fs::write(&path, r#"{"theme":"dark","user_key":7}"#).unwrap();
+        let settings = Settings::new(d.path());
+        settings.migrate_existing().unwrap();
+        let migrated = std::fs::read(&path).unwrap();
+        let value: Value = serde_json::from_slice(&migrated).unwrap();
+        assert_eq!(value[SETTINGS_SCHEMA_KEY], SETTINGS_SCHEMA_VERSION);
+        assert_eq!(value["user_key"], 7);
+        settings.migrate_existing().unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), migrated);
+        assert!(!d.path().join("hotsheet-settings.local.json").exists());
     }
 
     #[test]

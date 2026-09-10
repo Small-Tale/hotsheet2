@@ -126,6 +126,8 @@ pub struct AppState {
     terminal_broker: Option<terminal_broker::TerminalBroker>,
     /// Search roots for third-party plugins; embedded first-party plugins are always present.
     plugin_dirs: Arc<Vec<std::path::PathBuf>>,
+    /// Checkout ids with a background setup refresh in flight; repeated opens coalesce.
+    setup_refreshes: Arc<Mutex<std::collections::HashSet<String>>>,
     /// Public URL injected into manifest-launched terminal tools for permission route-back.
     terminal_server_url: Arc<Mutex<Option<String>>>,
     /// Machine-local checkout discovery. Checkout ids identify working directories and
@@ -239,6 +241,7 @@ impl AppState {
             terminals: Arc::new(hotsheet_terminals::TerminalManager::new()),
             terminal_broker: None,
             plugin_dirs: Arc::new(hotsheet_plugins::default_dirs()),
+            setup_refreshes: Arc::new(Mutex::new(std::collections::HashSet::new())),
             terminal_server_url: Arc::new(Mutex::new(None)),
             checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry::new(
                 hotsheet_plugins::hotsheet_home().join("checkouts.json"),
@@ -2385,6 +2388,54 @@ struct OpenProjectResponse {
     discovered: bool,
 }
 
+fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::checkouts::Checkout) {
+    let source = checkout
+        .default_source
+        .as_deref()
+        .and_then(|id| checkout.source(id))
+        .filter(|source| source.provider == "git")
+        .or_else(|| {
+            checkout
+                .sources
+                .iter()
+                .find(|source| source.provider == "git")
+        });
+    let Some(source) = source else { return };
+    let id = checkout.id.clone();
+    if !state
+        .setup_refreshes
+        .lock()
+        .is_ok_and(|mut active| active.insert(id.clone()))
+    {
+        return;
+    }
+    let active = state.setup_refreshes.clone();
+    let project = std::path::PathBuf::from(&checkout.root);
+    let store = std::path::PathBuf::from(&source.locator);
+    let plugin_dirs = state.plugin_dirs.as_ref().clone();
+    tokio::task::spawn_blocking(move || {
+        let settings = Settings::new(&store);
+        let _ = settings.migrate_existing();
+        let enabled = settings
+            .get("enabled_plugins", hotsheet_ticketing::Scope::Shared)
+            .ok()
+            .flatten()
+            .and_then(|value| value.as_array().cloned())
+            .map(|values| {
+                values
+                    .into_iter()
+                    .filter_map(|value| value.as_str().map(str::to_owned))
+                    .collect::<std::collections::HashSet<_>>()
+            })
+            .filter(|values| !values.is_empty());
+        let _ =
+            hotsheet_plugins::refresh_setup_in(&store, &project, enabled.as_ref(), &plugin_dirs);
+        if let Ok(mut active) = active.lock() {
+            active.remove(&id);
+        }
+    });
+}
+
 /// Open a code checkout for client use: discover or accept its git ticket stores, host
 /// them in this machine server, and persist the checkout-to-store links atomically from
 /// the client's point of view. An empty result is valid and lets a settings UI ask the
@@ -2431,6 +2482,7 @@ async fn open_project(
     hotsheet_ticketing::worklist::regenerate_checkout(&checkout)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     state.watch_checkout_repository(&checkout);
+    schedule_setup_freshness(&state, &checkout);
     Ok((
         StatusCode::CREATED,
         Json(OpenProjectResponse {

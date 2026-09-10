@@ -1264,6 +1264,112 @@ async fn opening_project_without_ticket_sources_keeps_the_checkout_usable() {
     assert!(body_json(tickets).await.as_array().unwrap().is_empty());
 }
 
+#[tokio::test]
+async fn opening_project_refreshes_stale_setup_in_the_background() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    std::fs::write(checkout.join("AGENTS.md"), "User instructions.\n\n<!-- BEGIN hotsheet:fixture -->\nstale\n<!-- END hotsheet:fixture -->\n").unwrap();
+    std::fs::write(
+        ticket_store.join("hotsheet-settings.json"),
+        r#"{"enabled_plugins":["fixture"],"user_key":7}"#,
+    )
+    .unwrap();
+    let plugins = tempfile::tempdir().unwrap();
+    let fixture = plugins.path().join("fixture");
+    std::fs::create_dir(&fixture).unwrap();
+    std::fs::write(
+        fixture.join("instructions.md"),
+        "Current managed instructions.\n",
+    )
+    .unwrap();
+    std::fs::write(fixture.join("SKILL.md"), "Current managed skill.\n").unwrap();
+    std::fs::write(
+        fixture.join("manifest.toml"),
+        r#"
+id = "fixture"
+display_name = "Fixture"
+product_name = "Fixture Tool"
+tier = "cli-agent"
+[detection]
+binaries = ["definitely-not-installed-hotsheet-fixture"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[skills]
+target = ".fixture/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_plugin_dirs(vec![plugins.path().to_path_buf()]));
+
+    let opened = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        application.clone().oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":checkout,"stores":[ticket_store]}).to_string()),
+        )),
+    )
+    .await
+    .expect("project open must not wait for setup refresh")
+    .unwrap();
+    assert_eq!(opened.status(), StatusCode::CREATED);
+    for _ in 0..50 {
+        let ready = std::fs::read_to_string(checkout.join("AGENTS.md"))
+            .is_ok_and(|text| text.contains("Current managed instructions"))
+            && checkout.join(".fixture/skills/hotsheet/SKILL.md").is_file()
+            && checkout.join(".fixture/mcp.json").is_file();
+        if ready {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    let instructions = std::fs::read_to_string(checkout.join("AGENTS.md")).unwrap();
+    assert!(instructions.contains("User instructions."));
+    assert!(instructions.contains("Current managed instructions."));
+    assert_eq!(
+        instructions
+            .matches("<!-- BEGIN hotsheet:fixture -->")
+            .count(),
+        1
+    );
+    assert_eq!(
+        std::fs::read_to_string(checkout.join(".fixture/skills/hotsheet/SKILL.md")).unwrap(),
+        "Current managed skill.\n"
+    );
+    let mcp: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(checkout.join(".fixture/mcp.json")).unwrap())
+            .unwrap();
+    assert_eq!(
+        mcp["mcpServers"]["hotsheet"]["args"][1],
+        ticket_store
+            .canonicalize()
+            .unwrap()
+            .to_string_lossy()
+            .as_ref()
+    );
+    let settings: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(ticket_store.join("hotsheet-settings.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(settings["$hotsheetSchema"], 1);
+    assert_eq!(settings["user_key"], 7);
+}
+
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn opening_project_does_not_wait_for_ignored_checkout_traversal() {

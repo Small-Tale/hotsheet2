@@ -411,6 +411,14 @@ entry registering the serverless `hotsheet-mcp --path <store>` (an **absolute**
 HS2-117); re-running refreshes the managed pieces in place. The permission-bridge
 install + the `hotsheet plugin` management commands are still to come.
 
+`hotsheet setup --refresh --project <code-repo>` is the explicit headless freshness
+check (HS2-40HZMB). It migrates existing readable settings, then refreshes enabled
+tools that are detected or already have Hot Sheet-managed setup. The server schedules
+that same core refresh in the background whenever a project opens or reopens (including
+remembered projects restored at client startup), so opening is not blocked by filesystem
+work. Clean bytes are never rewritten; instruction content outside managed blocks and
+unrelated MCP configuration remain user-owned.
+
 **Headless bootstrap (HS2-J90FXF):** `bootstrap` is the idempotent composition for a
 new or existing code project. It initializes or reuses a standalone HS2 store, links
 and registers the checkout, installs or refreshes every detected AI-tool integration

@@ -90,6 +90,43 @@ pub fn run_setup_in(
         return Err(SetupError::NoneDetected);
     }
 
+    setup_plugins(store_path, project_dir, plugins)
+}
+
+/// Refresh every tool that is currently detected or already has a Hot Sheet managed
+/// instruction block. This is the idempotent project-open/startup path: it repairs partial
+/// setup and updates bundled assets without requiring the client to know tool-specific files.
+pub fn refresh_setup_in(
+    store_path: &Path,
+    project_dir: &Path,
+    enabled: Option<&HashSet<String>>,
+    plugin_dirs: &[std::path::PathBuf],
+) -> Result<Vec<SetupReport>, SetupError> {
+    let plugins = all_plugins(plugin_dirs)
+        .into_iter()
+        .filter(|plugin| enabled.is_none_or(|set| set.contains(plugin.id())))
+        .filter(|plugin| is_detected(plugin) || has_managed_setup(project_dir, plugin))
+        .collect::<Vec<_>>();
+    if plugins.is_empty() {
+        return Ok(Vec::new());
+    }
+    setup_plugins(store_path, project_dir, plugins)
+}
+
+fn has_managed_setup(project_dir: &Path, plugin: &Plugin) -> bool {
+    let marker = format!("<!-- BEGIN hotsheet:{} -->", plugin.id());
+    std::fs::read_to_string(project_dir.join(&plugin.manifest.instructions.target))
+        .is_ok_and(|contents| contents.contains(&marker))
+        || plugin
+            .skill()
+            .is_some_and(|(target, _)| project_dir.join(target).is_file())
+}
+
+fn setup_plugins(
+    store_path: &Path,
+    project_dir: &Path,
+    plugins: Vec<Plugin>,
+) -> Result<Vec<SetupReport>, SetupError> {
     // Absolute store path so the MCP `--path` works from wherever the tool launches.
     let store_abs = store_path
         .canonicalize()
@@ -412,6 +449,9 @@ fn write_mcp_toml(
 }
 
 fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
+    if std::fs::read(path).is_ok_and(|existing| existing == contents.as_bytes()) {
+        return Ok(());
+    }
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|source| SetupError::Io {
             path: parent.display().to_string(),
@@ -427,6 +467,37 @@ fn write_file(path: &Path, contents: &str) -> Result<(), SetupError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture_plugin(root: &Path, instructions: &str) {
+        let plugin = root.join("fixture");
+        std::fs::create_dir(&plugin).unwrap();
+        std::fs::write(plugin.join("instructions.md"), instructions).unwrap();
+        std::fs::write(plugin.join("SKILL.md"), "current skill\n").unwrap();
+        std::fs::write(
+            plugin.join("manifest.toml"),
+            r#"
+id = "fixture"
+display_name = "Fixture"
+product_name = "Fixture Tool"
+tier = "cli-agent"
+[detection]
+binaries = ["definitely-not-installed-hotsheet-fixture"]
+[instructions]
+target = "AGENTS.md"
+section = "instructions.md"
+[skills]
+target = ".fixture/skills/hotsheet/SKILL.md"
+source = "SKILL.md"
+[mcp]
+target = ".fixture/mcp.json"
+format = "claude-json"
+server_name = "hotsheet"
+command = "hotsheet-mcp"
+args = ["--path", "{store}"]
+"#,
+        )
+        .unwrap();
+    }
 
     #[test]
     fn mcp_command_prefers_the_absolute_sibling() {
@@ -449,5 +520,78 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let err = run_setup(dir.path(), dir.path(), None, false, None).unwrap_err();
         assert!(matches!(err, SetupError::NoToolGiven));
+    }
+
+    #[test]
+    fn refresh_repairs_a_stale_managed_tool_and_is_idempotent() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let plugins = tempfile::tempdir().unwrap();
+        fixture_plugin(plugins.path(), "current instructions\n");
+        let enabled = HashSet::from(["fixture".to_string()]);
+        std::fs::write(
+            project.path().join("AGENTS.md"),
+            "User text.\n\n<!-- BEGIN hotsheet:fixture -->\nstale\n<!-- END hotsheet:fixture -->\n",
+        )
+        .unwrap();
+
+        refresh_setup_in(
+            store.path(),
+            project.path(),
+            Some(&enabled),
+            &[plugins.path().to_path_buf()],
+        )
+        .unwrap();
+        let instructions = std::fs::read(project.path().join("AGENTS.md")).unwrap();
+        assert!(String::from_utf8_lossy(&instructions).contains("User text."));
+        assert!(String::from_utf8_lossy(&instructions).contains("current instructions"));
+        assert_eq!(
+            std::fs::read(project.path().join(".fixture/skills/hotsheet/SKILL.md")).unwrap(),
+            b"current skill\n"
+        );
+        assert!(project.path().join(".fixture/mcp.json").is_file());
+
+        refresh_setup_in(
+            store.path(),
+            project.path(),
+            Some(&enabled),
+            &[plugins.path().to_path_buf()],
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read(project.path().join("AGENTS.md")).unwrap(),
+            instructions
+        );
+    }
+
+    #[test]
+    fn refresh_leaves_a_clean_unconfigured_project_untouched() {
+        let store = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let plugins = tempfile::tempdir().unwrap();
+        fixture_plugin(plugins.path(), "current instructions\n");
+        let enabled = HashSet::from(["fixture".to_string()]);
+        assert!(
+            refresh_setup_in(
+                store.path(),
+                project.path(),
+                Some(&enabled),
+                &[plugins.path().to_path_buf()]
+            )
+            .unwrap()
+            .is_empty()
+        );
+        assert_eq!(std::fs::read_dir(project.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn unchanged_managed_files_are_not_rewritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("managed.txt");
+        std::fs::write(&path, "same").unwrap();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&path, permissions).unwrap();
+        write_file(&path, "same").unwrap();
     }
 }

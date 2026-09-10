@@ -271,8 +271,11 @@ enum Cmd {
         /// The tool to set up (e.g. `claude`). Omit together with --detect.
         tool: Option<String>,
         /// Set up every AI tool detected on this machine.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "refresh")]
         detect: bool,
+        /// Migrate settings and refresh every detected or previously managed tool.
+        #[arg(long, conflicts_with = "tool")]
+        refresh: bool,
         /// Project directory to write the tool config into (defaults to the store path).
         #[arg(long)]
         project: Option<PathBuf>,
@@ -1013,8 +1016,9 @@ fn main() -> Result<()> {
         Cmd::Setup {
             tool,
             detect,
+            refresh,
             project,
-        } => cmd_setup(&cli.path, tool, detect, project),
+        } => cmd_setup(&cli.path, tool, detect, refresh, project),
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
@@ -3328,6 +3332,7 @@ fn cmd_setup(
     store: &Path,
     tool: Option<String>,
     detect: bool,
+    refresh: bool,
     project: Option<PathBuf>,
 ) -> Result<()> {
     let project_dir = project.unwrap_or_else(|| store.to_path_buf());
@@ -3351,7 +3356,14 @@ fn cmd_setup(
         hotsheet_plugins::hotsheet_home().join("checkouts.json"),
     )
     .register(&project_dir, None, repository, vec![store.to_path_buf()])?;
-    let reports = hotsheet_cli::run_setup(store, &project_dir, tool.as_deref(), detect)?;
+    let reports = if refresh {
+        hotsheet_cli::setup::refresh_setup(store, &project_dir)?
+    } else {
+        hotsheet_cli::run_setup(store, &project_dir, tool.as_deref(), detect)?
+    };
+    if refresh && reports.is_empty() {
+        println!("Setup is current; no applicable AI-tool integrations found.");
+    }
     for r in &reports {
         println!("Set up {} in {}:", r.tool, project_dir.display());
         for w in &r.wrote {

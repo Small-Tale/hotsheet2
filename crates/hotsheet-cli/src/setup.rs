@@ -29,6 +29,20 @@ pub fn run_setup(
     )?)
 }
 
+/// Migrate existing settings and refresh every detected or previously managed tool using
+/// the same core writers as explicit setup and bootstrap.
+pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<Vec<SetupReport>> {
+    let settings = hotsheet_ticketing::Settings::new(store_path);
+    settings.migrate_existing()?;
+    let enabled = enabled_plugin_ids(store_path);
+    Ok(hotsheet_plugins::refresh_setup_in(
+        store_path,
+        project_dir,
+        enabled.as_ref(),
+        &hotsheet_plugins::default_dirs(),
+    )?)
+}
+
 /// The project's `enabled_plugins` shared setting as a set of ids, or `None` if unset (no
 /// restriction). A non-array or empty value is treated as "no restriction". (HS2-94 settings
 /// driving HS2-92/HS2-98 setup.)
