@@ -4,6 +4,7 @@ import { raw } from 'kerfjs';
 import { marked } from 'marked';
 
 import {type AttachmentReferenceContext,expandAttachmentReferences,parseAttachmentReference} from '../attachment-references';
+import {parseTicketLinkReference,ticketReferencePattern} from '../ticket-link-resolution';
 
 export function escapeMarkdownHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -22,7 +23,6 @@ function attachmentUrlInfo(href:string,title?:string|null):{ticket:string;filena
   try{return{ticket:decodeURIComponent(direct[1]),filename:reference.filename,id:decodeURIComponent(direct[2])}}catch{return undefined}
 }
 
-const TICKET_REFERENCE=/\b([A-Z][A-Z0-9]{1,15}-[A-Z0-9]{2,24})\b/g;
 const REFERENCE_SUPPRESSING_TAGS=new Set(['a','button','code','pre']);
 
 /** Link plain-text ticket references after Markdown rendering, without touching code or links. */
@@ -35,7 +35,7 @@ export function linkTicketReferences(html:string):string {
       return part;
     }
     if(suppressed>0)return part;
-    return part.replace(TICKET_REFERENCE,(reference:string)=>`<a class="markdown-preview__ticket-reference" href="#ticket-${reference}" data-action="open-linked-ticket" data-ticket-slug="${reference}" title="Open ${reference}">${reference}</a>`);
+    return part.replace(ticketReferencePattern(),(raw:string)=>{const reference=parseTicketLinkReference(raw)!;return `<a class="markdown-preview__ticket-reference" href="#ticket-${reference.slug}" data-action="open-linked-ticket" data-ticket-slug="${reference.slug}"${reference.projectId?` data-ticket-project-id="${reference.projectId}"`:''} title="Open ${reference.raw}">${reference.raw}</a>`});
   }).join('');
 }
 

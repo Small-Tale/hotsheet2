@@ -1,0 +1,27 @@
+.ticket-link-choice-dialog::part(dialog) { width: min(35rem, calc(100vw - 2rem)); }
+.ticket-link-choice-dialog__body { display: grid; gap: var(--wa-space-m); }
+.ticket-link-choice-dialog__body > p { margin: 0; color: var(--wa-color-neutral-on-quiet); line-height: 1.45; }
+.ticket-link-choice-dialog__matches { display: grid; padding: 0; margin: 0; gap: var(--wa-space-3xs); list-style: none; }
+.ticket-link-choice-dialog__matches > li > button { display: grid; width: 100%; min-width: 0; padding: var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-normal); background: transparent; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--wa-space-xs); font: inherit; text-align: left; cursor: pointer; }
+.ticket-link-choice-dialog__matches > li > button:hover, .ticket-link-choice-dialog__matches > li > button:focus-visible { background: var(--wa-color-neutral-fill-quiet); }
+.ticket-link-choice-dialog__matches > li > button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
+.ticket-link-choice-dialog__matches > li > button > svg { width: 1rem; height: 1rem; color: var(--wa-color-neutral-on-quiet); }
+.ticket-link-choice-dialog__status { display: inline-flex; color: var(--wa-color-neutral-on-quiet); }
+.ticket-link-choice-dialog__status[data-status="started"] { color: var(--wa-color-brand-on-quiet); }
+.ticket-link-choice-dialog__status[data-status="completed"], .ticket-link-choice-dialog__status[data-status="verified"] { color: var(--wa-color-success-on-quiet); }
+.ticket-link-choice-dialog__status svg { width: .85rem; height: .85rem; }
+.ticket-link-choice-dialog__ticket, .ticket-link-choice-dialog__source { display: grid; min-width: 0; gap: var(--wa-space-3xs); }
+.ticket-link-choice-dialog__ticket > span { overflow: hidden; color: var(--wa-color-neutral-on-quiet); text-overflow: ellipsis; white-space: nowrap; }
+.ticket-link-choice-dialog__source { justify-items: end; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.ticket-link-choice-dialog__source > span { display: inline-flex; align-items: center; gap: var(--wa-space-3xs); }
+.ticket-link-choice-dialog__source svg { width: .75rem; height: .75rem; }
+.ticket-link-choice-dialog__actions { display: flex; justify-content: flex-end; }
+
+@media (max-width: 32rem) {
+  .ticket-link-choice-dialog::part(dialog) { width: calc(100vw - 1rem); }
+  .ticket-link-choice-dialog__matches > li > button { min-height: 5.5rem; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "status ticket arrow" ". source ."; align-items: start; row-gap: var(--wa-space-xs); }
+  .ticket-link-choice-dialog__status { grid-area: status; margin-top: var(--wa-space-3xs); }
+  .ticket-link-choice-dialog__ticket { grid-area: ticket; }
+  .ticket-link-choice-dialog__source { display: flex; grid-area: source; align-items: center; justify-content: flex-start; gap: var(--wa-space-xs); }
+  .ticket-link-choice-dialog__matches > li > button > svg { grid-area: arrow; }
+}

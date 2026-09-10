@@ -529,10 +529,13 @@ cleanup of the old live HS1 data; backups are never removed.
   becomes internally scrollable when the viewport is smaller than the menu.
 
   Plain uppercase ticket references such as `HS2-BD09B6` in details and notes render
-  as accessible links. Activating an unambiguous reference selects that ticket and
-  changes to its lifecycle view when needed; ambiguous or currently unloaded references
-  open an exact global search for explicit selection. References already inside Markdown
-  links, inline/fenced code, or attachment controls remain unchanged.
+  as accessible links. Activating one searches exact slugs across every open project:
+  one match switches projects when necessary and selects the ticket, no match reports a
+  transient toast, and multiple matches open a compact source chooser rather than the
+  advanced-search surface. The explicit `@<project-id>/<ticket-slug>` form, for example
+  `@product-docs/HS2-BD09B6`, limits resolution to one open project and makes cross-project
+  links unambiguous. References already inside Markdown links, inline/fenced code, or
+  attachment controls remain unchanged.
 
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained previews for browser-compatible image and video
