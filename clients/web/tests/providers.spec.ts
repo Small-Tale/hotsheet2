@@ -632,6 +632,22 @@ test('resizes and persists both production shell sidebars',async({page})=>{
   await page.getByRole('button',{name:'Show ticket inspector'}).click();await expect.poll(()=>inspector.evaluate(node=>node.getBoundingClientRect().width)).toBe(initialInspector+16);
 });
 
+test('orders equal status priority and title groups by most recently updated',async({page})=>{
+  const recencyRows=[
+    {...row,id:'21',native_id:'21',qualified_id:'git-local:21',slug:'HS2-OLD001',title:'Same title',priority:'high',status:'started',updated_at:'2026-09-08T10:00:00Z'},
+    {...row,id:'22',native_id:'22',qualified_id:'git-local:22',slug:'HS2-NEW001',title:'Same title',priority:'high',status:'started',updated_at:'2026-09-10T10:00:00Z'},
+    {...row,id:'23',native_id:'23',qualified_id:'git-local:23',slug:'HS2-MID001',title:'Same title',priority:'high',status:'started',updated_at:'2026-09-09T10:00:00Z'},
+  ];
+  await mockProject(page);await page.route('**/__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/tickets*',route=>route.request().method()==='GET'?route.fulfill({json:recencyRows}):route.fallback());
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  const order=()=>page.locator('[data-component="ticket-list-row"]').evaluateAll(rows=>rows.map(item=>(item as HTMLElement).dataset.ticketSlug));
+  const sort=page.locator('wa-select[name="workspace-sort"]');
+  for(const field of ['title','priority','status']){
+    await sort.click();const option=sort.locator(`wa-option[value="${field}"]`);await expect(option).toBeVisible();await option.click();
+    await expect(sort).toHaveJSProperty('value',field);await expect.poll(order).toEqual(['HS2-NEW001','HS2-MID001','HS2-OLD001']);await page.waitForTimeout(100);
+  }
+});
+
 test('uses labels only when the inspector segmented control has enough room',async({page})=>{
   await mockProject(page);await page.goto('/?dev-review=false');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();
   const sidebarTabs=page.locator('[data-region-id="app-inspector"] .ticket-inspector__tabs');
@@ -676,6 +692,20 @@ test('does not report intentional render bursts during remembered-project startu
   await expect(page.getByRole('tab',{name:/demo/})).toBeVisible({timeout:10_000});
   await page.waitForTimeout(500);
   expect(submissions).toEqual([]);
+});
+
+test('suppresses interaction-bound render bursts but reports a storm that persists afterward',async({page})=>{
+  const submissions:unknown[]=[];
+  await mockProject(page);
+  await page.route('**/__hotsheet/dev-review/tickets',async route=>{submissions.push(route.request().postDataJSON());await route.fulfill({status:201,json:{slug:'HS2-DIAGNOSTIC'}})});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();
+  await page.waitForTimeout(5_100);
+  await page.getByLabel('List view').click();
+  for(let index=0;index<14;index+=1){await page.setViewportSize({width:1280,height:760+index});await page.waitForTimeout(20)}
+  expect(submissions).toEqual([]);
+  await page.waitForTimeout(5_100);
+  for(let index=0;index<14;index+=1){await page.setViewportSize({width:1280,height:800+index});await page.waitForTimeout(20)}
+  await expect.poll(()=>submissions.length).toBe(1);
 });
 
 test('projects background AI activity without rerendering the closed conversation surface',async({page})=>{

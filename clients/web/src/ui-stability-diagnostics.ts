@@ -3,6 +3,7 @@ import type { RenderMetricsSnapshot } from './render-metrics';
 
 const QUICK_DISMISS_MS = 1_000;
 const USER_INTENT_GRACE_MS = 150;
+const RENDER_USER_INTENT_GRACE_MS = 5_000;
 const THRASH_WINDOW_MS = 10_000;
 const THRASH_COUNT = 3;
 const REPORT_COOLDOWN_MS = 60_000;
@@ -32,6 +33,15 @@ export function renderStormSuppressionReason(context: RenderStormContext): strin
   if (context.progressiveTicketRendering) return 'progressive-ticket-rendering';
   if (context.backgroundProjectRefresh) return 'background-project-refresh';
   if (context.activeToolTurn) return 'active-tool-turn';
+  return undefined;
+}
+
+/** A complex intentional interaction can legitimately render for several seconds. Keep
+ * those passes visible in diagnostics without allowing them to seed an automatic report;
+ * a storm that truly persists will be detected afresh once this grace period ends. */
+export function renderStormTimingSuppressionReason(installedAt: number, lastUserIntentAt: number, now: number): string | undefined {
+  if (now - installedAt <= STARTUP_GRACE_MS) return 'startup-grace';
+  if (now - lastUserIntentAt <= RENDER_USER_INTENT_GRACE_MS) return 'recent-user-interaction';
   return undefined;
 }
 
@@ -191,16 +201,17 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
     attachment,
     recordRender(metrics, automaticReportSuppressed) {
       const timestamp = now();
-      const nextRenderStorm = advanceRenderStorm(renderStorm, timestamp, Boolean(automaticReportSuppressed));
+      const suppressionReason = automaticReportSuppressed ?? renderStormTimingSuppressionReason(installedAt, lastUserIntentAt, timestamp);
+      const nextRenderStorm = advanceRenderStorm(renderStorm, timestamp, Boolean(suppressionReason));
       renderStorm = nextRenderStorm;
       record('render-pass', undefined, {
         ...metrics,
         pass_delta: metrics.passes - previousRenderMetrics.passes,
         mutation_delta: metrics.mutations - previousRenderMetrics.mutations,
-        ...(automaticReportSuppressed ? { automatic_report_suppressed: automaticReportSuppressed } : {}),
+        ...(suppressionReason ? { automatic_report_suppressed: suppressionReason } : {}),
       });
       previousRenderMetrics = metrics;
-      if (timestamp - installedAt > STARTUP_GRACE_MS && timestamp - lastUserIntentAt > USER_INTENT_GRACE_MS && nextRenderStorm.shouldReport) report('render-storm');
+      if (nextRenderStorm.shouldReport) report('render-storm');
     },
     destroy() {
       observer.disconnect();

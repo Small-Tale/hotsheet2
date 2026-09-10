@@ -170,11 +170,14 @@ cleanup of the old live HS1 data; backups are never removed.
   dialog offers a checked diagnostic-log attachment so a manually reported transient
   failure carries the same context. Automatic render-storm reporting remains suppressed while
   remembered projects are restoring, a foreground operation owns the app's loading
-  state, or the ticket collection is appending a scheduled progressive chunk; those
+  state, the ticket collection is appending a scheduled progressive chunk, or a
+  multi-step UI transition is still within five seconds of its initiating pointer or
+  keyboard action; those
   intentional renders stay in the bounded diagnostic log with their
-  suppression reason and cannot seed a later background storm. This uses lifecycle state
-  rather than a fixed startup duration, so slow project opens do not become false-positive
-  tickets. Project refreshes remain deferred while any
+  suppression reason and cannot seed a later background storm. A render loop that
+  persists after the interaction grace is detected from a fresh window, so suppression
+  does not permanently mask it. This uses lifecycle state rather than a fixed startup
+  duration, so slow project opens do not become false-positive tickets. Project refreshes remain deferred while any
   Web Awesome select is open, including the new-ticket composer, so a background
   ticket column move cannot replace the control or dismiss its popup.
 

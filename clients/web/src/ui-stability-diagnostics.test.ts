@@ -7,6 +7,7 @@ import {
   isUnexpectedQuickDismiss,
   type RenderStormState,
   renderStormSuppressionReason,
+  renderStormTimingSuppressionReason,
 } from './ui-stability-diagnostics';
 
 describe('UI stability diagnostics', () => {
@@ -99,5 +100,24 @@ describe('UI stability diagnostics', () => {
     expect(renderStormSuppressionReason(idle)).toBeUndefined();
     expect(renderStormSuppressionReason({ ...idle, backgroundProjectRefresh: true })).toBe('background-project-refresh');
     expect(renderStormSuppressionReason({ ...idle, activeToolTurn: true })).toBe('active-tool-turn');
+  });
+
+  it('suppresses startup and multi-step user interaction renders without hiding a persistent idle storm', () => {
+    expect(renderStormTimingSuppressionReason(1_000, Number.NEGATIVE_INFINITY, 5_000)).toBe('startup-grace');
+    expect(renderStormTimingSuppressionReason(1_000, 8_000, 12_999)).toBe('recent-user-interaction');
+    expect(renderStormTimingSuppressionReason(1_000, 8_000, 13_001)).toBeUndefined();
+
+    let state: RenderStormState = { passes: [], reported: false };
+    for (let at = 8_000; at <= 12_900; at += 100) {
+      state = advanceRenderStorm(state, at, Boolean(renderStormTimingSuppressionReason(1_000, 8_000, at)));
+    }
+    expect(state).toMatchObject({ passes: [], reported: false });
+    let reports = 0;
+    for (let at = 13_100; at <= 14_200; at += 100) {
+      const next = advanceRenderStorm(state, at, Boolean(renderStormTimingSuppressionReason(1_000, 8_000, at)));
+      state = next;
+      if (next.shouldReport) reports += 1;
+    }
+    expect(reports).toBe(1);
   });
 });
