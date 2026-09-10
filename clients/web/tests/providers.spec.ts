@@ -174,6 +174,29 @@ test('keeps the project dialog dismissed after an inline error',async({page})=>{
   await expect(dialog).toHaveJSProperty('open',false);
 });
 
+test('clears a failed project-open error when retrying successfully',async({page})=>{
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  let failNextOpen=true;
+  await page.route('**/__hotsheet/projects/open',async route=>{
+    if(failNextOpen){failNextOpen=false;return route.fulfill({status:409,json:{error:'The previous detached server only supports schema 2.'}})}
+    return route.fallback();
+  });
+  const retry=async(openDialog=false)=>{
+    if(openDialog)await page.getByRole('button',{name:'Add project'}).click();
+    await page.locator('wa-input[name="project-root"]').evaluate((node:HTMLElement&{value:string})=>{node.value='/work/other';node.dispatchEvent(new Event('input',{bubbles:true}))});
+    await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  };
+  await retry(true);
+  await expect(page.locator('.app-error')).toContainText('only supports schema 2');
+  await retry();
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-nzffdh-successful-project-retry.png',fullPage:true});
+});
+
 test('uses one provider dialog for onboarding, repeated connection creation, and editing',async({page})=>{
   await page.setViewportSize({width:1100,height:760});
   await mockProject(page,true,false,0,0,0,true);
