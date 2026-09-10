@@ -46,6 +46,8 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).not.toContain('.workspace-header__search-group[data-expanded="true"]:has(.workspace-header__search-tokens)');
     expect(headerCss).toContain('.workspace-header__actions:has(.workspace-header__search-tokens) { align-items:flex-start; }');
     expect(headerCss).toContain('.workspace-header__actions:has(.workspace-header__search-tokens) > :not(.workspace-header__search-group) { margin-block-start:calc((var(--wa-space-xs) + var(--wa-space-3xs))/2); }');
+    expect(headerCss).toContain('.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(26rem,100%);align-items:stretch;flex-direction:column;text-align:left}');
+    expect(headerCss).toContain('.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;');
     expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { align-items:start; }');
     expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-tokens) { height:auto; }');
   });

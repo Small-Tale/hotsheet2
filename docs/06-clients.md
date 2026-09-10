@@ -830,10 +830,12 @@ The dashboard keeps a resizable right ticket rail open by default and allows it 
 and restored from the dashboard toolbar. That rail reuses the selected project's list and
 notification views, compact workspace actions, content-sized project selector, and quick-ticket
 launcher; board and settings modes are deliberately absent. The rectangular list/notification
-segmented control owns its full first row, while sort, selection actions, and the final animated
-search control share the second row. This is the same advanced search surface and state as the
-main workspace, including chips, tag completion, attachment/presence filters, relative or local
-dates, and syntax help. A well-formed structured value becomes a chip as soon as an impossible
+segmented control owns its full first row, while sort, selection actions, and the compact search
+launcher share the second row. Activating search animates it onto a dedicated full-width third
+row, where tag-autocomplete options stretch across the popup with consistently left-aligned
+labels. This is the same advanced search surface and state as the main workspace, including chips,
+tag completion, attachment/presence filters, relative or local dates, and syntax help. A
+well-formed structured value becomes a chip as soon as an impossible
 continuation such as trailing whitespace is entered, or when the search field loses focus;
 this includes workflow `is:` values and relative, ISO, localized, or year-first slash dates.
 The expanded search field keeps its single-line 1.5428125rem corner radius after chips wrap it
