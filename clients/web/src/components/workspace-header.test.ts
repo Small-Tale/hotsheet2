@@ -31,6 +31,8 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('<dt>Tags</dt>');
     expect(markup).toContain('<dt>Content</dt>');
     expect(markup).toContain('<dt>Workflow</dt>');
+    expect(markup).toContain('<code>is:closed</code>');
+    expect(markup).toContain('<code>is:duplicate</code>');
     expect(markup).toContain('<dt>Dates</dt>');
     expect(markup).toContain('<strong>Combine filters</strong>');
     expect(markup).toContain('local, relative, and ISO 8601 dates work');

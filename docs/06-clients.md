@@ -836,7 +836,8 @@ The expanded search field keeps its single-line 1.5428125rem corner radius after
 onto additional lines, instead of changing to a different radius. Both workspace and global
 ticket search also accept case-insensitive
 `AND`, `OR`, and `NOT`, with parentheses and the conventional `NOT` → `AND` → `OR`
-precedence. `is:` predicates cover Up Next, an unexpired active claim, open lifecycle states,
+precedence. `is:` predicates cover Up Next, an unexpired active claim, open (`not_started` or
+`started`), closed (`completed`, `verified`, or `archive`), structured duplicate close reasons,
 and each named lifecycle state (including `backlogged`/`backlog` and `archived`). Expressions
 are evaluated against the complete checkout rather than only the currently visible queue, so
 an explicit archived or backlogged predicate can find those rows. Queue, Backlog, and Archive

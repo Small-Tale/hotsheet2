@@ -1,7 +1,7 @@
 export type SearchDateField='created'|'completed'|'started'|'verified'|'archived'|'updated';
 export type SearchDateDirection='before'|'after';
 export type SearchPresence='attachment'|'media-annotation'|'commit';
-export type SearchLifecycle='up-next'|'active'|'open'|'not-started'|'started'|'completed'|'verified'|'backlog'|'backlogged'|'archived';
+export type SearchLifecycle='up-next'|'active'|'open'|'closed'|'duplicate'|'not-started'|'started'|'completed'|'verified'|'backlog'|'backlogged'|'archived';
 
 export type InlineSearchToken=
   |{kind:'tag';value:string;raw:string;label:string}
@@ -55,7 +55,7 @@ export function dateTokenFromInput(prefix:`${SearchDateField}-${SearchDateDirect
 
 export function tokenFromRaw(raw:string):InlineSearchToken|undefined{
   const source=raw.trim();
-  const lifecycle=source.match(/^is:(up-next|active|open|not-started|started|completed|verified|backlog|backlogged|archived)$/i);
+  const lifecycle=source.match(/^is:(up-next|active|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)$/i);
   if(lifecycle){const value=lifecycle[1].toLowerCase() as SearchLifecycle;return{kind:'is',value,raw:`is:${value}`,label:`is:${value}`}}
   const presence=source.match(/^has:(attachment|media-annotation|commit)$/i);
   if(presence){const value=presence[1].toLowerCase() as SearchPresence;return{kind:'has',value,raw:`has:${value}`,label:`has ${value.replace('-',' ')}`}}

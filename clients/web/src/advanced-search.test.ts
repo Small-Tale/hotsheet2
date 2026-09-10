@@ -10,10 +10,12 @@ describe('advanced search semantics',()=>{
   it('filters blocked tickets by their visible reason rather than a dependency edge',()=>{const reason=row('HS2-REASON','started',{blocked_reason:'Waiting'}),edge=row('HS2-EDGE','started',{blocked_by:['missing']});expect(filterAdvancedSearchResults([reason,edge],'','all',['blocked'])).toEqual([reason])});
   it('replaces lifecycle filters and clearly labels ticket references',()=>{expect(addSearchFilter(['status:archive'],'status:deleted')).toEqual(['status:deleted']);expect(searchMatchLabel(row('HS2-ONE','not_started',{details:'Depends on HS2-TWO'}),'HS2-TWO')).toBe('Ticket reference')});
   it('supports every is: lifecycle alias and live Up Next/active state',()=>{
-    const now=Date.parse('2026-09-09T10:00:00Z'),active=row('HS2-ACTIVE','started',{up_next:true,claimed_by:'worker',claim_lease_expires_at:'2026-09-09T10:05:00Z'}),rows=[row('HS2-NEW'),active,row('HS2-DONE','completed'),row('HS2-VERIFIED','verified'),row('HS2-BACKLOG','backlog'),row('HS2-ARCHIVE','archive')];
+    const now=Date.parse('2026-09-09T10:00:00Z'),active=row('HS2-ACTIVE','started',{up_next:true,claimed_by:'worker',claim_lease_expires_at:'2026-09-09T10:05:00Z'}),rows=[row('HS2-NEW'),active,row('HS2-DONE','completed'),row('HS2-VERIFIED','verified'),row('HS2-BACKLOG','backlog'),row('HS2-ARCHIVE','archive'),row('HS2-DUPLICATE','completed',{close_reason:'duplicate',duplicate_of:'git:2'})];
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:up-next',now))).toEqual([active]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:active',now))).toEqual([active]);
-    expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:open',now))).toEqual(rows.slice(0,4));
+    expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:open',now))).toEqual(rows.slice(0,2));
+    expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:closed',now))).toEqual([rows[2],rows[3],rows[5],rows[6]]);
+    expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:duplicate',now))).toEqual([rows[6]]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:not-started',now))).toEqual([rows[0]]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:backlogged',now))).toEqual([rows[4]]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'is:archived',now))).toEqual([rows[5]]);

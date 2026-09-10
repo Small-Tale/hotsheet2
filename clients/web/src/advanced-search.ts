@@ -22,7 +22,7 @@ const normalized=(value:string)=>value.trim().toLowerCase();
 type SearchExpression={kind:'term';value:string}|{kind:'not';value:SearchExpression}|{kind:'and'|'or';left:SearchExpression;right:SearchExpression};
 type Lexeme={kind:'term'|'and'|'or'|'not'|'left'|'right';value:string};
 const lifecycleAliases:Partial<Record<string,string[]>>= {
-  'not-started':['not_started'],started:['started'],completed:['completed'],verified:['verified'],backlog:['backlog'],backlogged:['backlog'],archived:['archive'],open:['not_started','started','completed','verified'],
+  'not-started':['not_started'],started:['started'],completed:['completed'],verified:['verified'],backlog:['backlog'],backlogged:['backlog'],archived:['archive'],open:['not_started','started'],closed:['completed','verified','archive'],
 };
 
 function lexSearchExpression(query:string):Lexeme[]{
@@ -52,9 +52,9 @@ function parseSearchExpression(query:string):SearchExpression|undefined{
 }
 
 function ticketContains(ticket:TicketRow,value:string){const needle=normalized(value);return Boolean(needle)&&[ticket.slug,ticket.native_id,ticket.qualified_id,ticket.title,ticket.details??'',...ticket.tags,...(ticket.notes??[]).map(note=>note.text)].some(field=>normalized(field).includes(needle))}
-function matchesTerm(ticket:TicketRow,value:string,now:number){const match=value.match(/^is:(.+)$/i),state=match?.[1].toLowerCase();if(!state)return ticketContains(ticket,value);if(state==='up-next')return ticket.up_next;if(state==='active')return isTicketActivelyWorkedOn(ticket,now);const statuses=lifecycleAliases[state];return statuses ? statuses.includes(ticket.status??'') : false}
+function matchesTerm(ticket:TicketRow,value:string,now:number){const match=value.match(/^is:(.+)$/i),state=match?.[1].toLowerCase();if(!state)return ticketContains(ticket,value);if(state==='up-next')return ticket.up_next;if(state==='active')return isTicketActivelyWorkedOn(ticket,now);if(state==='duplicate')return ticket.close_reason==='duplicate';const statuses=lifecycleAliases[state];return statuses ? statuses.includes(ticket.status??'') : false}
 function evaluateSearchExpression(ticket:TicketRow,expression:SearchExpression,now:number):boolean{switch(expression.kind){case'term':return matchesTerm(ticket,expression.value,now);case'not':return!evaluateSearchExpression(ticket,expression.value,now);case'and':return evaluateSearchExpression(ticket,expression.left,now)&&evaluateSearchExpression(ticket,expression.right,now);case'or':return evaluateSearchExpression(ticket,expression.left,now)||evaluateSearchExpression(ticket,expression.right,now)}}
-export function usesAdvancedSearchExpression(query:string){return /(?:^|[\s(])(?:AND|OR|NOT)(?=$|[\s)])|[()]|(?:^|\s)is:(?:up-next|active|open|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(query)}
+export function usesAdvancedSearchExpression(query:string){return /(?:^|[\s(])(?:AND|OR|NOT)(?=$|[\s)])|[()]|(?:^|\s)is:(?:up-next|active|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(query)}
 export function matchesSearchExpression(ticket:TicketRow,query:string,now=Date.now()){const expression=parseSearchExpression(query);return expression?evaluateSearchExpression(ticket,expression,now):ticketContains(ticket,query)}
 export function isExactTicketSlug(ticket:TicketRow,query:string){const value=normalized(query);return [ticket.slug,ticket.native_id,ticket.qualified_id].some(id=>normalized(id)===value)}
 export function filterAdvancedSearchResults(rows:TicketRow[],query:string,scope:SearchScope,filters:readonly SearchFilter[],currentIds?:ReadonlySet<string>){

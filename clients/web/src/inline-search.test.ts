@@ -16,6 +16,8 @@ describe('inline advanced-search tokens',()=>{
     expect(consumeSearchToken('is:up-next ')).toMatchObject({text:'',token:{kind:'is',value:'up-next'}});
     expect(consumeSearchToken('is:active')).toEqual({text:'is:active'});
     expect(consumeSearchToken('is:active',true)).toMatchObject({text:'',token:{kind:'is',value:'active'}});
+    expect(consumeSearchToken('is:closed ')).toMatchObject({text:'',token:{kind:'is',value:'closed'}});
+    expect(consumeSearchToken('is:duplicate',true)).toMatchObject({text:'',token:{kind:'is',value:'duplicate'}});
     expect(consumeSearchToken('updated-after:4h ')).toEqual({text:'updated-after:4h '});
     expect(consumeSearchToken('updated-after:4h ago ')).toMatchObject({text:'',token:{kind:'date',raw:'updated-after:4h ago'}});
     expect(consumeSearchToken('updated-after:2026/09/07',true)).toMatchObject({text:'',token:{kind:'date',raw:'updated-after:2026/09/07'}});
