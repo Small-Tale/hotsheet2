@@ -16,7 +16,7 @@ describe('AttachmentContextMenu',()=>{
 
   it('preserves the gallery host actions through the same menu',()=>{
     const markup=String(AttachmentContextMenu({x:12,y:24,kind:'host',revealLabel:'Show in Finder'}));
-    expect(markup.match(/data-component="menu-item"/g)).toHaveLength(5);
-    expect(markup).toContain('data-item-id="copy-path"');expect(markup).toContain('Show in Finder');expect(markup).not.toContain('data-item-id="remove"');
+    expect(markup.match(/data-component="menu-item"/g)).toHaveLength(6);
+    expect(markup).toContain('data-item-id="copy-path"');expect(markup).toContain('Show in Finder');expect(markup).toContain('data-item-id="remove"');
   });
 });

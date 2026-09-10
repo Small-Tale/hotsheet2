@@ -465,7 +465,9 @@ cleanup of the old live HS1 data; backups are never removed.
   without persisting round numbers, and labels missing provider/legacy metadata as Legacy /
   Uncategorized. Each transparent group reads as a titled section: its label switches to an
   inline editor on double-click, while its purpose remains a compact tag-sized control. Files
-  move between groups by dragging the file row itself (without a separate handle glyph); only
+  move between groups by dragging either the file row or its media-grid preview (without a
+  separate handle glyph). Preview drags use the existing attachment identity and never fall
+  through to the upload path or create a copied attachment; only
   the current group target receives a focus outline, and a New group target appears while a
   file is being dragged. The item menu also exposes rename. The presentation remains usable at
   narrow widths without turning purpose tags into full-width fields.
@@ -554,7 +556,8 @@ cleanup of the old live HS1 data; backups are never removed.
   canvas space clears the rectangle selection and its resize/range handles.
   The gallery annotation action carries the current annotation-count badge, and media-grid
   cards with annotations carry a lower-right annotation marker so review work is visible
-  before opening the media.
+  before opening the media. The gallery action menu includes Remove so a user can verify
+  the full-size image or video before deleting it; removal closes the deleted media view.
   Annotation geometry and time are stored on attachment metadata, so zooming, resizing,
   reopening, and git synchronization do not change their meaning. Full-ticket REST, MCP,
   CLI, and AI worklist reads all use the canonical ticket attachment shape, including the

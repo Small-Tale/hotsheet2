@@ -29,6 +29,6 @@ export function AttachmentContextMenu({x,y,kind='item',revealLabel='Show in file
     {kind==='host'&&action('copy-path','Copy path',Copy,'copy')}
     <hr/>
     {action('reveal',revealLabel,FolderOpen,'folder-open')}
-    {kind==='item'&&action('remove','Remove',Trash2,'trash-2','attachment-context-menu__danger')}
+    {action('remove','Remove',Trash2,'trash-2','attachment-context-menu__danger')}
   </div>;
 }

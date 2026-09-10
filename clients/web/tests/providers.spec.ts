@@ -1771,3 +1771,25 @@ test('edits an attachment group title through the production inspector (HS2-C0R4
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Attachments, 1'}).click();
   const batch=page.locator('[data-attachment-group-drop-target]').first(),title=batch.getByRole('button',{name:'Edit batch label Legacy / Uncategorized'});await title.dblclick();const editor=batch.getByRole('textbox',{name:'Batch label for Legacy / Uncategorized'});await expect(editor).toBeFocused();await editor.fill('Implementation evidence');await editor.press('Enter');await expect.poll(()=>writes).toHaveLength(1);expect(writes[0]).toMatchObject({attachment_ids:['A1'],batch_label:'Implementation evidence'});await expect(batch.getByRole('button',{name:'Edit batch label Implementation evidence'})).toBeFocused();
 });
+
+test('moves a media thumbnail between batches and removes active media from its gallery menu (HS2-9PA2KD, HS2-EDX5J3)',async({page})=>{
+  const metadataWrites:Record<string,unknown>[]=[],uploads:string[]=[];
+  let ticket={...full,attachments:[
+    {...full.attachments[0],batch_id:'before',batch_label:'Before'},
+    {id:'A2',filename:'second.svg',created_at:'2026-08-30T00:41:00Z',batch_id:'after',batch_label:'After'},
+  ]};
+  await mockProject(page);
+  await page.route('**/tickets/01**',async route=>{
+    const request=route.request(),path=new URL(request.url()).pathname;
+    if(path.endsWith('/tickets/01')&&request.method()==='GET')return route.fulfill({json:{store:'git-local',...ticket}});
+    if(path.endsWith('/tickets/01/attachments')&&request.method()==='POST'){uploads.push(request.postData()??'');return route.fallback()}
+    if(path.endsWith('/tickets/01/attachments')&&request.method()==='PATCH'){
+      const body=request.postDataJSON() as Record<string,unknown>&{attachment_ids:string[]};metadataWrites.push(body);ticket={...ticket,attachments:ticket.attachments.map(item=>body.attachment_ids.includes(item.id)?{...item,batch_id:String(body.batch_id),batch_label:String(body.batch_label)}:item)};return route.fulfill({json:{store:'git-local',...ticket}})
+    }
+    if(path.endsWith('/tickets/01/attachments/A1')&&request.method()==='DELETE'){ticket={...ticket,attachments:ticket.attachments.filter(item=>item.id!=='A1')};return route.fulfill({json:{store:'git-local',...ticket}})}
+    return route.fallback();
+  });
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.locator('[data-ticket-slug="HS2-DEMO01"]').click();await page.getByRole('button',{name:'Attachments, 2'}).click();
+  const thumbnail=page.getByRole('button',{name:'Open proof.png in media gallery'}),attachments=page.locator('[data-component="ticket-attachments"]');await expect(thumbnail).toHaveAttribute('draggable','true');await thumbnail.evaluate((node,target)=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));document.querySelector<HTMLElement>(target)!.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}))},'[data-attachment-batch="after"]');await expect.poll(()=>metadataWrites).toHaveLength(1);expect(metadataWrites[0]).toMatchObject({attachment_ids:['A1'],batch_id:'after',batch_label:'After'});expect(uploads).toHaveLength(0);await attachments.screenshot({path:'/private/tmp/hs2-9pa2kd-media-move-wide.png'});await page.setViewportSize({width:760,height:640});await attachments.screenshot({path:'/private/tmp/hs2-9pa2kd-media-move-narrow.png'});await page.setViewportSize({width:1280,height:720});
+  await thumbnail.click();const gallery=page.getByRole('dialog',{name:/proof.png/});await gallery.getByRole('button',{name:'More image actions'}).click();const menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu.getByRole('menuitem',{name:'Remove'})).toBeVisible();await gallery.screenshot({path:'/private/tmp/hs2-edx5j3-gallery-remove-wide.png'});await page.setViewportSize({width:760,height:640});await gallery.getByRole('button',{name:'More image actions'}).click();await expect(menu.getByRole('menuitem',{name:'Remove'})).toBeVisible();await gallery.screenshot({path:'/private/tmp/hs2-edx5j3-gallery-remove-narrow.png'});await menu.getByRole('menuitem',{name:'Remove'}).click();await expect(gallery).toHaveCount(0);await expect(page.locator('.app-toast')).toContainText('Attachment removed.');await expect(page.getByRole('button',{name:'Open proof.png in media gallery'})).toHaveCount(0);
+});

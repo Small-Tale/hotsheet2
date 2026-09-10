@@ -63,6 +63,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('data-attachment-menu-kind="item"');
     expect(attachments).toContain('class="ticket-attachments__image-grid"');
     expect(attachments).toContain('data-action="open-attachment-gallery"');
+    expect(attachments).toContain('data-drag-attachment-id="one"');
+    expect(attachments).toContain('<img draggable="false"');
     expect(attachments).toContain('Open one.png in media gallery, 2 annotations');
     expect(attachments).toContain('ticket-attachments__annotation-marker');
     expect(attachments).toContain('data-lucide="pencil"');
@@ -76,6 +78,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(unsupported).not.toContain('name="ticket-attachments"');
     expect(unsupported).not.toContain('data-action="open-attachment-menu"');
     expect(unsupported).not.toContain('data-action="open-attachment-row"');
+    expect(unsupported).not.toContain('data-drag-attachment-id');
     expect(unsupported).not.toContain('data-action="edit-attachment-batch-label"');
     expect(unsupported).toContain('<h3 class="ticket-attachments__batch-title">Legacy / Uncategorized</h3>');
   });
