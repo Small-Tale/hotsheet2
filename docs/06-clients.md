@@ -881,7 +881,10 @@ Codex. Every open project has a replay-safe long poll; a `permission_asked` even
 triggers one fetch of that project's authenticated permission and connection state. A
 replayable `permission_resolved` event triggers the same reconciliation, so decisions made
 by another client or transport become history entries instead of silently disappearing;
-empty-action generic requests such as `ToolSearch` follow the same lifecycle.
+empty-action generic requests such as `ToolSearch` follow the same lifecycle. That
+authoritative resolution immediately removes the popup even while this client's Allow or
+Deny HTTP response is still in flight; a delayed response is idempotent and cannot
+resurrect or duplicate the resolved request.
 There is no fixed-interval network polling. Pending counts appear in the main segmented
 control and project tabs, and a non-modal popup appears even when another project is
 selected. When a standalone AI conversation is open, the active permission popup is

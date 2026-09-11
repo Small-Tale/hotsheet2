@@ -56,7 +56,7 @@ export class PermissionInbox {
   }
   ignore(key:string){const item=this.pendingItems.get(key);if(item)this.pendingItems.set(key,{...item,ignored:true})}
   present(key:string){const item=this.pendingItems.get(key);if(item)this.pendingItems.set(key,{...item,ignored:false})}
-  resolve(key:string,decision:PermissionDecision,scope:PermissionScope,automatic=false,now=Date.now()){const item=this.pendingItems.get(key);if(!item)return;this.pendingItems.delete(key);this.record({...item,decision,scope,resolvedAt:now,automatic})}
+  resolve(key:string,decision:PermissionDecision,scope:PermissionScope,automatic=false,now=Date.now()){const item=this.pendingItems.get(key);if(!item)return false;this.pendingItems.delete(key);this.record({...item,decision,scope,resolvedAt:now,automatic});return true}
   private record(item:PermissionHistoryItem){this.historyItems=[...this.historyItems.filter(value=>value.key!==item.key),item].slice(-200)}
 }
 
