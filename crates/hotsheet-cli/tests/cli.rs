@@ -2073,6 +2073,68 @@ fn attach_adds_stable_metadata_and_nested_payload() {
 }
 
 #[test]
+fn attach_prints_a_note_reference_and_edit_repairs_a_bare_attachment_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    let proof = p.join("proof image.png");
+    let unrepresentable = p.join("proof`quote.png");
+    std::fs::write(&proof, b"proof").unwrap();
+    std::fs::write(&unrepresentable, b"quoted proof").unwrap();
+    hs(p).args(["init"]).assert().success();
+    let slug = new_ticket(p, "Canonical attachment references");
+
+    hs(p)
+        .arg("attach")
+        .arg(&slug)
+        .arg(&proof)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Attached `attachment:proof image.png`",
+        ))
+        .stdout(predicate::str::contains("Durable attachment id:"));
+    hs(p)
+        .arg("attach")
+        .arg(&slug)
+        .arg(&unrepresentable)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Attached proof`quote.png"))
+        .stderr(predicate::str::contains(
+            "cannot yet be used in an attachment: note reference",
+        ));
+
+    let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+    let ticket = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    let attachment_id = ticket
+        .attachments
+        .iter()
+        .find(|attachment| attachment.filename == "proof image.png")
+        .unwrap()
+        .id
+        .to_string();
+    hs(p)
+        .args([
+            "edit",
+            &slug,
+            "--note",
+            &format!("Correctness evidence: {attachment_id}."),
+        ])
+        .assert()
+        .success();
+
+    let repaired = hotsheet_ticketing::ops::resolve(&store, &slug)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        repaired.notes[0].text,
+        "Correctness evidence: `attachment:proof image.png`."
+    );
+}
+
+#[test]
 fn attachment_actor_corrects_existing_provenance_without_losing_other_metadata() {
     let dir = tempfile::tempdir().unwrap();
     let source = tempfile::NamedTempFile::new().unwrap();

@@ -3234,7 +3234,7 @@ fn cmd_attach(
             .ok_or_else(|| anyhow::anyhow!("attachment path has no UTF-8 filename"))?;
         let bytes = std::fs::read(file)?;
         let attachment_id = Ulid::new();
-        let (_, written) = store.write_attachment_with_metadata(
+        let (updated, written) = store.write_attachment_with_metadata(
             &ticket.id,
             attachment_id,
             now_ts(),
@@ -3247,7 +3247,25 @@ fn cmd_attach(
                 purpose,
             },
         )?;
-        println!("Attached {attachment_id} ({})", written.display());
+        let filename = updated
+            .attachments
+            .iter()
+            .find(|attachment| attachment.id == attachment_id)
+            .map(|attachment| attachment.filename.as_str())
+            .unwrap_or(filename);
+        match ops::attachment_reference(None, filename) {
+            Some(reference) => println!("Attached {reference}"),
+            None => {
+                println!("Attached {filename}");
+                eprintln!(
+                    "warning: attachment filename contains a backtick and cannot yet be used in an attachment: note reference; rename it before referencing it"
+                );
+            }
+        }
+        println!(
+            "Durable attachment id: {attachment_id} ({})",
+            written.display()
+        );
     }
     Ok(())
 }

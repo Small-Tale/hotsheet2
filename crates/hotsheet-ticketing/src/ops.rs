@@ -6,7 +6,7 @@
 //! [`Timestamp`] by the caller (which owns a clock), keeping this layer testable.
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::str::FromStr;
 
@@ -704,6 +704,7 @@ pub fn add_note_with_summary(
     text: String,
 ) -> Result<Ticket, StoreError> {
     let mut t = store.read_ticket(id)?;
+    let text = canonicalize_attachment_id_references(store, &t, &text);
     let kind = if kind == NoteKind::Regular && Note::text_requests_feedback(&text) {
         NoteKind::FeedbackNeeded
     } else {
@@ -734,6 +735,7 @@ pub fn edit_note(
     text: String,
 ) -> Result<Ticket, StoreError> {
     let mut ticket = store.read_ticket(ticket_id)?;
+    let text = canonicalize_attachment_id_references(store, &ticket, &text);
     let note = ticket
         .notes
         .iter_mut()
@@ -749,6 +751,174 @@ pub fn edit_note(
     ticket.updated_at = now;
     store.write_ticket_committing(&ticket)?;
     Ok(ticket)
+}
+
+/// Replace unambiguous bare attachment ULIDs in prose with the filename references that
+/// Markdown clients can render. Durable ids remain untouched inside inline/fenced code and
+/// URL/path-like text, where an author may be documenting the storage identity itself.
+///
+/// The current ticket wins when a copied attachment id also exists elsewhere. An id found
+/// only on multiple other tickets is ambiguous and is therefore left unchanged.
+pub fn canonicalize_attachment_id_references(
+    store: &FsStore,
+    owner: &Ticket,
+    text: &str,
+) -> String {
+    if !contains_prose_ulid(text) {
+        return text.to_string();
+    }
+
+    let mut references: HashMap<String, Option<String>> = HashMap::new();
+    if let Ok(listing) = store.list_tickets_resilient() {
+        for ticket in listing.tickets {
+            if ticket.id == owner.id {
+                continue;
+            }
+            for attachment in ticket.attachments {
+                let reference = attachment_reference(Some(&ticket.slug), &attachment.filename);
+                references
+                    .entry(attachment.id.to_string())
+                    .and_modify(|existing| *existing = None)
+                    .or_insert(reference);
+            }
+        }
+    }
+    for attachment in &owner.attachments {
+        references.insert(
+            attachment.id.to_string(),
+            attachment_reference(None, &attachment.filename),
+        );
+    }
+
+    replace_prose_attachment_ids(text, &references)
+}
+
+/// Canonical note syntax for one attachment filename. Whitespace-bearing filenames use an
+/// inline-code reference because the bare Markdown form intentionally ends at whitespace.
+/// The current grammar cannot safely represent a filename containing a backtick.
+pub fn attachment_reference(ticket: Option<&str>, filename: &str) -> Option<String> {
+    if filename.contains('`') {
+        return None;
+    }
+    let raw = format!(
+        "attachment:{}{filename}",
+        ticket.map(|slug| format!("[{slug}]")).unwrap_or_default()
+    );
+    Some(if filename.chars().any(char::is_whitespace) {
+        format!("`{raw}`")
+    } else {
+        raw
+    })
+}
+
+fn contains_prose_ulid(text: &str) -> bool {
+    text.as_bytes().windows(26).any(is_ulid_bytes)
+}
+
+fn replace_prose_attachment_ids(
+    text: &str,
+    references: &HashMap<String, Option<String>>,
+) -> String {
+    let bytes = text.as_bytes();
+    let mut output = String::with_capacity(text.len());
+    let mut cursor = 0;
+    let mut index = 0;
+    let mut inline_delimiter = 0;
+    let mut fenced_code = false;
+    let mut at_line_start = true;
+
+    while index < bytes.len() {
+        if at_line_start {
+            let mut marker = index;
+            while marker < bytes.len() && matches!(bytes[marker], b' ' | b'\t') {
+                marker += 1;
+            }
+            if bytes.get(marker..marker + 3) == Some(b"```")
+                || bytes.get(marker..marker + 3) == Some(b"~~~")
+            {
+                fenced_code = !fenced_code;
+                at_line_start = false;
+                index = marker + 3;
+                continue;
+            }
+            at_line_start = false;
+        }
+        if bytes[index] == b'\n' {
+            at_line_start = true;
+            index += 1;
+            continue;
+        }
+        if !fenced_code && bytes[index] == b'`' {
+            let run = bytes[index..]
+                .iter()
+                .take_while(|byte| **byte == b'`')
+                .count();
+            if inline_delimiter == 0 {
+                inline_delimiter = run;
+            } else if inline_delimiter == run {
+                inline_delimiter = 0;
+            }
+            index += run;
+            continue;
+        }
+        if !fenced_code
+            && inline_delimiter == 0
+            && index + 26 <= bytes.len()
+            && is_ulid_bytes(&bytes[index..index + 26])
+            && prose_boundary_before(bytes, index)
+            && prose_boundary_after(bytes, index + 26)
+        {
+            let id = &text[index..index + 26];
+            if let Some(Some(reference)) = references.get(id) {
+                let duplicate_prefix = format!("{reference} (");
+                if text[..index].ends_with(&duplicate_prefix)
+                    && bytes.get(index + 26) == Some(&b')')
+                {
+                    output.push_str(&text[cursor..index - 2]);
+                    index += 27;
+                    cursor = index;
+                    continue;
+                }
+                output.push_str(&text[cursor..index]);
+                output.push_str(reference);
+                index += 26;
+                cursor = index;
+                continue;
+            }
+        }
+        index += 1;
+    }
+    output.push_str(&text[cursor..]);
+    output
+}
+
+fn is_ulid_bytes(candidate: &[u8]) -> bool {
+    candidate.len() == 26
+        && candidate.iter().all(|byte| {
+            matches!(
+                byte,
+                b'0'..=b'9'
+                    | b'A'..=b'H'
+                    | b'J'..=b'N'
+                    | b'P'..=b'T'
+                    | b'V'..=b'Z'
+            )
+        })
+}
+
+fn prose_boundary_before(bytes: &[u8], index: usize) -> bool {
+    index == 0
+        || bytes[index - 1].is_ascii_whitespace()
+        || matches!(bytes[index - 1], b'(' | b'[' | b'{' | b'"' | b'\'')
+}
+
+fn prose_boundary_after(bytes: &[u8], index: usize) -> bool {
+    index == bytes.len()
+        || bytes[index].is_ascii_whitespace()
+        || matches!(
+            bytes[index],
+            b')' | b']' | b'}' | b',' | b'.' | b';' | b':' | b'!' | b'?' | b'"' | b'\''
+        )
 }
 
 /// Return actionable warnings for `attachment:` references which do not resolve yet.
@@ -1965,6 +2135,122 @@ mod tests {
             )
             .unwrap();
         assert!(attachment_reference_warnings(&store, &owner, note).is_empty());
+    }
+
+    #[test]
+    fn note_writes_canonicalize_unambiguous_attachment_ids_but_preserve_identity_examples() {
+        let (_d, store) = store();
+        let owner_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+        let other_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        let duplicate_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB5").unwrap();
+        create(
+            &store,
+            owner_id,
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let other = create(
+            &store,
+            other_id,
+            "HS",
+            ts("2026-08-19T00:00:01Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let third = create(
+            &store,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB6").unwrap(),
+            "HS",
+            ts("2026-08-19T00:00:02Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let owner_attachment = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB1").unwrap();
+        let other_attachment = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB2").unwrap();
+        let unrepresentable_attachment = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB8").unwrap();
+        store
+            .write_attachment(
+                &owner_id,
+                owner_attachment,
+                ts("2026-08-19T00:01:00Z"),
+                "proof.png",
+                b"owner",
+            )
+            .unwrap();
+        store
+            .write_attachment(
+                &owner_id,
+                unrepresentable_attachment,
+                ts("2026-08-19T00:01:01Z"),
+                "proof`quote.png",
+                b"unrepresentable",
+            )
+            .unwrap();
+        store
+            .write_attachment(
+                &other.id,
+                other_attachment,
+                ts("2026-08-19T00:01:01Z"),
+                "cross ticket.svg",
+                b"other",
+            )
+            .unwrap();
+        for ticket in [&other, &third] {
+            store
+                .write_attachment(
+                    &ticket.id,
+                    duplicate_id,
+                    ts("2026-08-19T00:01:02Z"),
+                    "ambiguous.png",
+                    b"duplicate",
+                )
+                .unwrap();
+        }
+
+        let note_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB7").unwrap();
+        let added = add_note(
+            &store,
+            &owner_id,
+            note_id,
+            ts("2026-08-19T00:02:00Z"),
+            NoteKind::Regular,
+            format!(
+                "Evidence: {owner_attachment}; cross: {other_attachment}; ambiguous: {duplicate_id}; unrepresentable: {unrepresentable_attachment}.\n\
+                 Identity examples: `{owner_attachment}`, ``{other_attachment}``, and /attachments/{owner_attachment}.\n\
+                 Authored repetition: attachment:proof.png (attachment:proof.png).\n\
+                 ```text\n{other_attachment}\n```"
+            ),
+        )
+        .unwrap();
+        let text = &added.notes[0].text;
+        assert!(text.contains("Evidence: attachment:proof.png"));
+        assert!(text.contains(&format!(
+            "cross: `attachment:[{}]cross ticket.svg`",
+            other.slug
+        )));
+        assert!(text.contains(&format!("ambiguous: {duplicate_id}")));
+        assert!(text.contains(&format!("unrepresentable: {unrepresentable_attachment}")));
+        assert_eq!(attachment_reference(None, "proof`quote.png"), None);
+        assert!(text.contains(&format!("`{owner_attachment}`")));
+        assert!(text.contains(&format!("``{other_attachment}``")));
+        assert!(text.contains(&format!("/attachments/{owner_attachment}")));
+        assert!(text.contains("attachment:proof.png (attachment:proof.png)"));
+        assert!(text.contains(&format!("```text\n{other_attachment}\n```")));
+
+        let edited = edit_note(
+            &store,
+            &owner_id,
+            &note_id,
+            ts("2026-08-19T00:03:00Z"),
+            format!("Visual evidence: attachment:proof.png ({owner_attachment})."),
+        )
+        .unwrap();
+        assert_eq!(
+            edited.notes[0].text,
+            "Visual evidence: attachment:proof.png."
+        );
     }
 
     #[test]

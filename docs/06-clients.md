@@ -565,7 +565,11 @@ cleanup of the old live HS1 data; backups are never removed.
   metadata has not been loaded. This keeps an inline preview and its gallery action on the
   same concrete attachment even when filenames or trailing prose are ambiguous.
   Missing ticket or filename targets do not reject a note (attachments may be uploaded next),
-  but mutation callers receive prominent actionable warning feedback. Browser-compatible
+  but mutation callers receive prominent actionable warning feedback. Attach output leads with
+  this filename syntax rather than its opaque storage id. Git-backed note writes also translate
+  unambiguous bare attachment ids in ordinary prose into resolvable same-ticket or cross-ticket
+  references, while retaining literal ids in code, URLs/paths, and ambiguous or currently
+  unrepresentable filename cases (HS2-H2PTVZ). Browser-compatible
   bare references and explicit image destinations render inline; explicit Markdown links
   remain compact links even when their target is an image, while other references
   ask the host to open the file with its default application. Right-click actions can

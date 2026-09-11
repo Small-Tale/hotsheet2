@@ -335,7 +335,13 @@ resolve yet, which supports note-before-upload workflows. The CLI prints an acti
 to stderr, and mutation API responses include a non-persisted `warnings` array. Resolution uses
 the longest actual attachment filename after the marker, so sentence punctuation such as the
 last period in `attachment:proof.png.` is retained as prose rather than treated as part of the
-filename.
+filename. `hotsheet attach` prints the canonical filename reference before the opaque durable id
+so its result can be copied directly into a note. As a final write-boundary safeguard, Git-backed
+note append/edit operations translate unambiguous bare attachment ULIDs in prose to same-ticket
+`attachment:filename` or cross-ticket `attachment:[TICKET-SLUG]filename` references. Inline and
+fenced code, URL/path segments, ids duplicated across multiple other tickets, and filenames the
+current reference grammar cannot represent remain literal; the repair never guesses when
+identity or author intent is ambiguous (the backtick-filename grammar gap is HS2-H2PTVZ).
 
 The server equivalent is `POST /tickets/{id}/attachments` with raw file bytes and
 an `x-hotsheet-filename` header. Browser clients percent-encode Unicode filenames and
