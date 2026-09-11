@@ -53,7 +53,12 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .co
 .terminal-rename { display: grid; gap: var(--wa-space-l); }
 .terminal-rename footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
 .app-loading, .app-error, .app-toast { position: fixed; z-index: 1000; right: 1rem; bottom: 1rem; padding: .65rem .85rem; border-radius: var(--wa-border-radius-m); box-shadow: var(--wa-shadow-l); background: var(--wa-color-neutral-fill-loud); color: var(--wa-color-neutral-on-loud); }
-.app-error { background: var(--wa-color-danger-fill-loud); max-width: 32rem; }
+.app-error { display:flex; align-items:flex-start; gap:var(--wa-space-s); background:var(--wa-color-danger-fill-loud); max-width:32rem; line-height:1.4; }
+.app-error > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.app-error > button { display:grid; flex:0 0 auto; width:1.75rem; height:1.75rem; margin:-.2rem -.35rem -.2rem 0; padding:0; border:0; border-radius:var(--wa-border-radius-s); align-items:center; justify-items:center; color:inherit; background:transparent; cursor:pointer; }
+.app-error > button:hover { background:color-mix(in srgb,currentColor 16%,transparent); }
+.app-error > button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.app-error > button svg { width:1rem; height:1rem; }
 .ticket-inspector-transition { position: relative; height: 100%; pointer-events: none; }
 .ticket-inspector-transition > [data-component="ticket-inspector"] { opacity: .72; }
 .ticket-inspector-transition::after { position: absolute; top: .3rem; left: 50%; padding: .2rem .5rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); content: 'Loading ticket…'; font-size: var(--wa-font-size-2xs); transform: translateX(-50%); }

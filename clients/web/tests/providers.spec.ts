@@ -191,6 +191,7 @@ test('falls back to the project dialog when the direct native chooser fails',asy
 });
 
 test('clears a failed project-open error when retrying successfully',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});
   await mockProject(page);
   await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));
   await page.goto('/');
@@ -203,7 +204,8 @@ test('clears a failed project-open error when retrying successfully',async({page
   });
   const retry=async()=>page.getByRole('button',{name:'Add project'}).click();
   await retry();
-  await expect(page.locator('.app-error')).toContainText('only supports schema 2');
+  const appError=page.locator('[data-component="app-error"]');await expect(appError).toContainText('only supports schema 2');await expect(appError.getByRole('button',{name:'Dismiss error'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-c6at65-dismissible-error-wide.png',fullPage:true});await page.setViewportSize({width:760,height:640});await expect(appError).toBeInViewport();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-c6at65-dismissible-error-narrow.png',fullPage:true});await appError.getByRole('button',{name:'Dismiss error'}).click();await expect(appError).toHaveCount(0);await expect(page.getByRole('button',{name:'Add project'})).toBeEnabled();
+  await page.setViewportSize({width:1280,height:800});
   await retry();
   await expect(page.locator('.app-error')).toHaveCount(0);
   await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();

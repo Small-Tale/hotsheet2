@@ -102,6 +102,10 @@ bootstrap store only to reach the standalone server; that store is never linked 
 project. Once the empty checkout is visible, the client asks whether to create and link a
 standalone `<project>.hs2` git repository or configure another provider in Sources. The
 prompt can be dismissed and returns on a later open until a source is configured.
+Global operation failures use a high-contrast alert toast with a keyboard-accessible
+Dismiss error action. Dismissing clears only the presented client error; it does not
+retry, undo, or otherwise mutate the failed operation, and the rest of the project stays
+available for a deliberate retry.
 When that folder contains an HS1 PGLite marker, the ordinary empty-source prompt is
 replaced by a one-time import prompt that identifies the exact detected `.hotsheet`
 source folder, database path, and PostgreSQL version, then asks only for the destination
