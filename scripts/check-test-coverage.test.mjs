@@ -40,3 +40,11 @@ test("rejects a dishonest double-covered status", () => {
   const result = validateMatrix(root, fixture("double-covered", "—"));
   assert.ok(result.failures.some((failure) => failure.includes("requires unit and E2E")));
 });
+
+test("rejects feature rows after the coverage matrix end marker", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
+  for (const file of ["req.md", "unit.rs", "e2e.rs"]) fs.writeFileSync(path.join(root, file), "");
+  const matrix = `${fixture()}\n| hidden-feature | req.md | Hidden | \`unit.rs\` | \`e2e.rs\` | — | double-covered |`;
+  const result = validateMatrix(root, matrix);
+  assert.ok(result.failures.includes("hidden-feature: feature row is outside coverage matrix markers"));
+});
