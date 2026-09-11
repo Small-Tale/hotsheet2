@@ -1565,6 +1565,13 @@ test('searches indexed ticket details and notes without discarding the full proj
   const pending=page.waitForRequest(request=>new URL(request.url()).searchParams.get('text')==='QQRY00');await page.getByRole('textbox',{name:'Search tickets'}).fill('QQRY00');await pending;await page.getByRole('button',{name:'Clear search'}).click();await page.waitForTimeout(200);await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();
 });
 
+test('shows every indexed ordinary-search match regardless of lifecycle status',async({page})=>{
+  const stabilityRows:TicketRow[]=Array.from({length:40},(_,index)=>({...row,native_id:`stability-${index}`,qualified_id:`git-local:stability-${index}`,id:`stability-${index}`,slug:`HS2-STAB${String(index).padStart(2,'0')}`,title:`Stability report ${index+1}`,status:index<2?'started':'archive',up_next:false,feedback_needed:false}));
+  await mockProject(page);await page.route('**/checkouts/demo-checkout/tickets*',route=>{const request=route.request(),url=new URL(request.url());if(request.method()==='GET'&&url.searchParams.get('text')==='stability')return route.fulfill({json:{items:stabilityRows,counts:{total:40,queued:2,backlog:0,archive:38,open:2,up_next:0,active:0,started:2,completed_today:0}}});return route.fallback()});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Search tickets'}).click();await page.getByRole('textbox',{name:'Search tickets'}).fill('stability');
+  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(40);await expect(page.locator('[data-ticket-slug="HS2-STAB39"]')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-nk2s9r-search-all-lifecycles.png',fullPage:true});
+});
+
 test('tokenizes inline tag search with autocomplete and no separate advanced-search button',async({page})=>{
   await mockProject(page);await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.getByRole('button',{name:'Advanced search'})).toHaveCount(0);
   await page.getByRole('button',{name:'Search tickets'}).click();const query=page.getByRole('textbox',{name:'Search tickets'});await query.fill('tag:cl');const suggestions=page.getByRole('listbox',{name:'Matching tags'});await expect(suggestions.getByRole('option',{name:'tag:client'})).toBeVisible();await suggestions.getByRole('option',{name:'tag:client'}).click();

@@ -397,10 +397,10 @@ and identity-less legacy entries remain conservatively blocking.
   sidebar and background project tabs authoritative even when most rows are not resident.
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
-  Search semantics do not
-  inherit the selected sidebar view: ordinary queries cover the normal working statuses,
-  exact-slug lookup can reveal Backlog/Archive/Deleted matches, and explicit scope/filter
-  chips opt into normally excluded lifecycle states. Reference-mention matches say why
+  Search semantics do not inherit the selected sidebar view: ordinary queries show every
+  indexed match across Queue, Backlog, Archive, and Deleted lifecycle states. Explicit
+  lifecycle expressions and filter chips narrow that complete result set rather than being
+  required to reveal it. Reference-mention matches say why
   they matched, every result names its provider, and the global overlay can hand its
   current query/scope/filter payload to the separately owned saved-view editor without
   replacing the compact workspace search. The overlay is available from the toolbar and
