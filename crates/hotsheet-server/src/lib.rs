@@ -37,7 +37,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
-use hotsheet_index::{Index, IndexError, TicketRow, hash_bytes};
+use hotsheet_index::{Index, IndexError, TicketRow, TicketSummary, hash_bytes};
 use hotsheet_model::{
     CloseReason, NoteKind, ReviewKind, ReviewRequest, Status, Ticket, Timestamp, Ulid, parse_file,
     to_file_string,
@@ -55,6 +55,7 @@ pub use hotsheet_ticketing::{ApiNote, ApiTicket};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use time::OffsetDateTime;
+use time::format_description::well_known::Rfc3339;
 use tokio::sync::{Notify, broadcast};
 
 /// Attachment uploads may contain screenshots, recordings, and other binary evidence.
@@ -3336,7 +3337,10 @@ async fn list_checkout_tickets(
     State(state): State<AppState>,
     Path(reference): Path<String>,
     Query(params): Query<ListParams>,
-) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if params.page_size.is_some() {
+        return list_checkout_ticket_page(&state, &reference, params).map(Json);
+    }
     let checkout = state
         .checkout_registry
         .resolve(&reference)
@@ -3411,7 +3415,301 @@ async fn list_checkout_tickets(
                 .is_some_and(|slug| matches.contains(slug) == want)
         });
     }
-    Ok(Json(result))
+    Ok(Json(serde_json::Value::Array(result)))
+}
+
+#[derive(Debug, Default, Serialize)]
+struct CheckoutTicketCounts {
+    total: u64,
+    queued: u64,
+    backlog: u64,
+    archive: u64,
+    open: u64,
+    up_next: u64,
+    active: u64,
+    started: u64,
+    completed_today: u64,
+}
+
+impl CheckoutTicketCounts {
+    fn add(&mut self, summary: TicketSummary) {
+        self.total += summary.total;
+        self.queued += summary.queued;
+        self.backlog += summary.backlog;
+        self.archive += summary.archive;
+        self.open += summary.open;
+        self.up_next += summary.up_next;
+        self.active += summary.active;
+        self.started += summary.started;
+        self.completed_today += summary.completed_today;
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct CheckoutTicketPage {
+    items: Vec<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_cursor: Option<String>,
+    counts: CheckoutTicketCounts,
+}
+
+fn checkout_page_cursor(value: Option<&str>) -> Result<(usize, Option<String>), ApiError> {
+    let Some(value) = value else {
+        return Ok((0, None));
+    };
+    let (source, after) = value
+        .split_once('.')
+        .ok_or_else(|| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
+    let source = source
+        .parse::<usize>()
+        .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
+    Ok((source, (after != "-").then(|| after.to_owned())))
+}
+
+fn add_external_ticket_count(
+    counts: &mut CheckoutTicketCounts,
+    value: &serde_json::Value,
+    now: &str,
+    today: &str,
+) {
+    let status = value
+        .get("status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("not_started");
+    if status == "moved" {
+        return;
+    }
+    counts.total += 1;
+    if status != "backlog" && !matches!(status, "archive" | "deleted" | "moved") {
+        counts.queued += 1;
+    }
+    if status == "backlog" {
+        counts.backlog += 1;
+    }
+    if matches!(status, "archive" | "deleted" | "moved") {
+        counts.archive += 1;
+    }
+    if matches!(status, "not_started" | "started") {
+        counts.open += 1;
+    }
+    if status == "started" {
+        counts.started += 1;
+    }
+    if value
+        .get("up_next")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+        && matches!(status, "not_started" | "started")
+    {
+        counts.up_next += 1;
+    }
+    if value
+        .get("claimed_by")
+        .and_then(serde_json::Value::as_str)
+        .is_some()
+        && value
+            .get("claim_lease_expires_at")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|expiry| expiry > now)
+        && matches!(status, "not_started" | "started")
+    {
+        counts.active += 1;
+    }
+    if value
+        .get("completed_at")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|completed| completed >= today)
+    {
+        counts.completed_today += 1;
+    }
+}
+
+fn list_checkout_ticket_page(
+    state: &AppState,
+    reference: &str,
+    params: ListParams,
+) -> Result<serde_json::Value, ApiError> {
+    let page_size = params.page_size.unwrap_or(200);
+    if page_size == 0 || page_size > 500 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "page_size must be between 1 and 500",
+        ));
+    }
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let contexts = auto_context::effective(&checkout.settings())
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let entries = checkout_entries(state, reference)?;
+    let external_sources = checkout
+        .sources
+        .iter()
+        .filter(|source| source.provider != "git")
+        .collect::<Vec<_>>();
+    let (mut source_index, mut after) = checkout_page_cursor(params.cursor.as_deref())?;
+    if source_index > entries.len() + external_sources.len() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "stale checkout ticket cursor",
+        ));
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let now_text = now
+        .format(&Rfc3339)
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    let today = format!(
+        "{:04}-{:02}-{:02}T00:00:00Z",
+        now.year(),
+        u8::from(now.month()),
+        now.day()
+    );
+    let mut counts = CheckoutTicketCounts::default();
+    for (_, entry) in &entries {
+        let summary = entry
+            .index
+            .lock()
+            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
+            .summary(&now_text, &today)?;
+        counts.add(summary);
+    }
+    for source in &external_sources {
+        let provider = provider_for(state, &source.connection_id)?;
+        for ticket in provider
+            .query(&TicketQuery::default())
+            .map_err(provider_transfer_error)?
+        {
+            let value = serde_json::to_value(ticket).map_err(|error| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            })?;
+            add_external_ticket_count(&mut counts, &value, &now_text, &today);
+        }
+    }
+
+    let compact = params.compact.unwrap_or(true);
+    let fields = parse_fields(&params.fields);
+    let mut items = Vec::with_capacity(page_size);
+    let mut next_cursor = None;
+    while source_index < entries.len() && items.len() < page_size {
+        let (store_id, entry) = &entries[source_index];
+        let remaining = page_size - items.len();
+        let mut query = params.clone().into_query(entry.store.root())?;
+        query.limit = Some(remaining + 1);
+        query.page_after = after
+            .as_deref()
+            .map(Ulid::from_string)
+            .transpose()
+            .map_err(|_| {
+                ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor")
+            })?;
+        let mut rows = entry
+            .index
+            .lock()
+            .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
+            .query(&query)?;
+        let scanned_has_more = rows.len() > remaining;
+        let scanned_last_id = rows
+            .get(remaining.saturating_sub(1))
+            .and_then(|row| Ulid::from_string(&row.id).ok());
+
+        if let Some(want) = params.has_commit {
+            let slugs = rows.iter().map(|row| row.slug.clone()).collect::<Vec<_>>();
+            let matches = match code_review::slugs_with_commits(FsPath::new(&checkout.root), &slugs)
+            {
+                Ok(matches) => matches,
+                Err(code_review::CodeReviewError::NotRepository) => Default::default(),
+                Err(error) => return Err(code_review_api_error(error)),
+            };
+            rows.retain(|row| matches.contains(&row.slug) == want);
+        }
+
+        rows.truncate(remaining);
+        for row in &mut rows {
+            row.set_connection(store_id);
+            if compact {
+                row.make_compact();
+            }
+            row.add_auto_context(&contexts);
+        }
+        let mut values = rows_to_json(rows, &fields)
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for value in &mut values {
+            if let Some(object) = value.as_object_mut() {
+                object.insert("store".into(), store_id.clone().into());
+            }
+        }
+        items.extend(values);
+        if scanned_has_more {
+            next_cursor = scanned_last_id.map(|id| format!("{source_index}.{id}"));
+            break;
+        }
+        source_index += 1;
+        after = None;
+    }
+    while next_cursor.is_none()
+        && source_index < entries.len() + external_sources.len()
+        && items.len() < page_size
+    {
+        let source = external_sources[source_index - entries.len()];
+        let provider = provider_for(state, &source.connection_id)?;
+        let query = params.clone().into_query(state.store.root())?;
+        let mut rows = provider.query(&query).map_err(provider_transfer_error)?;
+        if let Some(want) = params.has_commit {
+            let slugs = rows
+                .iter()
+                .map(|ticket| ticket.slug.clone())
+                .collect::<Vec<_>>();
+            let matches = match code_review::slugs_with_commits(FsPath::new(&checkout.root), &slugs)
+            {
+                Ok(matches) => matches,
+                Err(code_review::CodeReviewError::NotRepository) => Default::default(),
+                Err(error) => return Err(code_review_api_error(error)),
+            };
+            rows.retain(|ticket| matches.contains(&ticket.slug) == want);
+        }
+        for ticket in &mut rows {
+            ticket.auto_context =
+                auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
+        }
+        let offset = after
+            .as_deref()
+            .unwrap_or("0")
+            .parse::<usize>()
+            .map_err(|_| {
+                ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor")
+            })?;
+        let remaining = page_size - items.len();
+        let total = rows.len();
+        let end = (offset + remaining).min(total);
+        for ticket in rows.drain(offset.min(total)..end) {
+            let mut value = serde_json::to_value(ticket).map_err(|error| {
+                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            })?;
+            if let Some(object) = value.as_object_mut() {
+                object.insert("store".into(), source.connection_id.clone().into());
+            }
+            items.push(value);
+        }
+        if end < total {
+            next_cursor = Some(format!("{source_index}.{end}"));
+        } else {
+            source_index += 1;
+            after = None;
+        }
+    }
+    if next_cursor.is_none() && source_index < entries.len() + external_sources.len() {
+        next_cursor = Some(format!("{source_index}.-"));
+    }
+    serde_json::to_value(CheckoutTicketPage {
+        items,
+        next_cursor,
+        counts,
+    })
+    .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
 }
 
 #[derive(Serialize)]
@@ -7465,6 +7763,10 @@ struct ListParams {
     attachment: Option<String>,
     sort: Option<String>,
     limit: Option<usize>,
+    /// Opt into the bounded checkout page envelope. Capped to protect server and browser.
+    page_size: Option<usize>,
+    /// Opaque checkout-level cursor returned by a prior paged response.
+    cursor: Option<String>,
     /// Keyset cursor (a ULID): return rows strictly after this one in `sort` order (HS2-TCDTCH).
     page_after: Option<String>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.

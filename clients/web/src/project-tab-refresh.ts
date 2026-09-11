@@ -1,16 +1,14 @@
-import type { TicketRow } from './api';
-
 export interface ProjectTabRefreshTarget {
   id: string;
 }
 
-export interface ProjectTabRefreshCoordinatorOptions<Target extends ProjectTabRefreshTarget> {
+export interface ProjectTabRefreshCoordinatorOptions<Target extends ProjectTabRefreshTarget, Snapshot> {
   waitUntilSafe(): Promise<void>;
   activeProjectId(): string;
   isOpen(target: Target): boolean;
   refreshActive(target: Target): Promise<void>;
-  loadBackground(target: Target): Promise<TicketRow[] | undefined>;
-  publishBackground(target: Target, tickets: TicketRow[]): void;
+  loadBackground(target: Target): Promise<Snapshot | undefined>;
+  publishBackground(target: Target, snapshot: Snapshot): void;
 }
 
 export interface ProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTarget> {
@@ -19,7 +17,7 @@ export interface ProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTa
 }
 
 /** Coalesce per-project invalidations while preserving refreshes for every open tab. */
-export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTarget>(options: ProjectTabRefreshCoordinatorOptions<Target>): ProjectTabRefreshCoordinator<Target> {
+export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTarget, Snapshot>(options: ProjectTabRefreshCoordinatorOptions<Target, Snapshot>): ProjectTabRefreshCoordinator<Target> {
   const pending = new Map<string, Target>();
   const revisions = new Map<string, number>();
   let running: Promise<void> | undefined;
@@ -31,13 +29,13 @@ export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefr
       await options.refreshActive(target);
       return;
     }
-    const tickets = await options.loadBackground(target);
-    if (revision(target.id) !== expectedRevision || !tickets || !options.isOpen(target)) return;
+    const snapshot = await options.loadBackground(target);
+    if (revision(target.id) !== expectedRevision || !snapshot || !options.isOpen(target)) return;
     if (options.activeProjectId() === target.id) {
       await options.refreshActive(target);
       return;
     }
-    options.publishBackground(target, tickets);
+    options.publishBackground(target, snapshot);
   };
 
   const drain = async () => {

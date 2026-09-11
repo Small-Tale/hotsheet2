@@ -108,6 +108,8 @@ wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] .co
 .project-settings__commands-actions span { color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-xs); }
 .notification-inspector-empty { height: 100%; background: var(--wa-color-surface-default); }
 .notification-inspector-empty .toolbar { border-bottom: 0; }
+.ticket-page-more { display:block; min-height:2.5rem; margin:var(--wa-space-m) auto; padding:0 var(--wa-space-l); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-pill); color:var(--wa-color-text-normal); background:var(--wa-color-surface-default); cursor:pointer; }
+.ticket-page-more:disabled { opacity:.55; cursor:wait; }
 @media (max-width: 40rem) { .project-settings__permission-grid { grid-template-columns: 1fr; } }
 @media (max-width: 48rem) { .provider-setup-form__grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { wa-dialog[data-ticket-source-setup-dialog] .content-transition__side { animation-duration:1ms !important; } }

@@ -392,10 +392,12 @@ and identity-less legacy entries remain conservatively blocking.
   fields accept only an existing keychain reference; secret values are never returned to
   browser JavaScript.
 
-  Workspace search delegates to the checkout index rather than filtering compact rows
-  in the browser. It therefore matches slug, title, tags, Markdown details, and note text
-  while retaining the full local ticket collection for project counts, mutations, and an
-  immediate return to the unfiltered view when search is cleared. Search semantics do not
+  Workspace collection refreshes retain one bounded compact page and expose explicit
+  cursor continuation instead of downloading every ticket. SQL aggregate counts keep the
+  sidebar and background project tabs authoritative even when most rows are not resident.
+  Workspace search delegates to the checkout index rather than filtering Markdown bodies
+  in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
+  Search semantics do not
   inherit the selected sidebar view: ordinary queries cover the normal working statuses,
   exact-slug lookup can reveal Backlog/Archive/Deleted matches, and explicit scope/filter
   chips opt into normally excluded lifecycle states. Reference-mention matches say why

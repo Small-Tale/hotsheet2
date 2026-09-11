@@ -279,7 +279,17 @@ async function benchmarkServer(env, store, checkout, count, root, timeoutMs) {
       try { return scenarios[name] = await operation(); }
       catch (error) { return scenarios[name] = { error: error instanceof Error ? error.message : String(error) }; }
     };
-    await record('list_compact', () => fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets?compact=true`, { timeoutMs }));
+    let firstPage;
+    await record('list_compact', async () => {
+      const measured = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets?compact=true&page_size=200`, { capture: true, timeoutMs });
+      firstPage = JSON.parse(measured.text);
+      return { wall_ms: measured.wall_ms, response_bytes: measured.response_bytes, item_count: firstPage.items.length, has_next_cursor: Boolean(firstPage.next_cursor), total_count: firstPage.counts.total };
+    });
+    if (firstPage?.next_cursor) await record('list_compact_next', async () => {
+      const measured = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets?compact=true&page_size=200&cursor=${encodeURIComponent(firstPage.next_cursor)}`, { capture: true, timeoutMs });
+      const page = JSON.parse(measured.text);
+      return { wall_ms: measured.wall_ms, response_bytes: measured.response_bytes, item_count: page.items.length, has_next_cursor: Boolean(page.next_cursor), total_count: page.counts.total };
+    });
     await record('view_ticket', () => fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets/${syntheticTicket(count).slug}`, { timeoutMs }));
     let created;
     try { created = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets`, { method: 'POST', body: JSON.stringify({ title: `Server scale mutation ${count}`, category: 'task', status: 'not_started' }), capture: true, timeoutMs }); }

@@ -208,6 +208,10 @@ query(filter, sort, text?, paging) -> TicketRow[]
   paths return an **empty page** for a stale cursor (a ULID no longer in the store),
   so the client restarts from the top. To page, pass the last row's ULID as the next
   `page_after`. The CLI (`ls --page-after <slug|ULID>`) accepts a slug for convenience.
+  Checkout/browser collection reads use the higher-level `page_size` + opaque `cursor`
+  contract. Each response is capped at 500 compact rows and includes constant-memory SQL
+  aggregates for navigation counts; callers must explicitly request another page, so a
+  100K or 1M checkout is never serialized into one response or eagerly retained by the UI.
 - **"me":** the `assignee` / `review_requested` person filters accept the sentinel
   `me`, resolved to the store's **git `user.email`** (the same identity assignment
   writes, §10.2) by the query builders in the CLI, server, and MCP shim (HS2-TCDTCH).

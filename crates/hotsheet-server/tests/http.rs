@@ -2347,6 +2347,91 @@ async fn checkout_search_matches_slug_details_and_notes() {
 }
 
 #[tokio::test]
+async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    for (title, status, up_next) in [
+        ("First", "not_started", true),
+        ("Second", "started", false),
+        ("Third", "backlog", false),
+    ] {
+        let body = serde_json::json!({"title":title,"status":status,"up_next":up_next}).to_string();
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(authed(
+                    "POST",
+                    &format!("/checkouts/{checkout_id}/tickets"),
+                    Some(&body),
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CREATED
+        );
+    }
+
+    let first = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=2"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 2);
+    assert_eq!(first["counts"]["total"], 3);
+    assert_eq!(first["counts"]["open"], 2);
+    assert_eq!(first["counts"]["up_next"], 1);
+    assert_eq!(first["counts"]["backlog"], 1);
+    let cursor = first["next_cursor"].as_str().unwrap();
+    let second = body_json(
+        router
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=2&cursor={cursor}"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert!(second.get("next_cursor").is_none());
+    let ids = first["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(second["items"].as_array().unwrap())
+        .map(|row| row["id"].as_str().unwrap())
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(ids.len(), 3);
+}
+
+#[tokio::test]
 async fn checkout_ticket_feedback_prefix_projects_as_typed_needs_review_data() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

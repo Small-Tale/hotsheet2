@@ -17,8 +17,9 @@ the same clean-store contract as normal auto-committed operation), and records:
 
 - generation time and dataset bytes;
 - CLI reindex, bounded list, full-text query, show, create, and edit wall time plus peak RSS;
-- server cold index/startup time and peak RSS, followed by compact-list, detail, create, and
-  update HTTP timings and response sizes;
+- server cold index/startup time and peak RSS, followed by bounded 200-row compact first
+  and continuation pages (including cursor, exact total count, and response bytes), detail,
+  create, and update HTTP timings and response sizes;
 - Chromium Playwright initial load, Queue/Backlog/Archive switches, ticket opening, ticket
   creation, ticket mutation, and browser JavaScript heap.
 

@@ -101,6 +101,11 @@ both HTTP and serverless modes. Every checkout-qualified list, full-ticket read,
 mutation response resolves standing auto-context from that checkout's project settings;
 one ticket store shared by several checkouts never supplies an implicit project identity.
 Unqualified and `/stores/{id}` routes remain explicitly store-only compatibility APIs.
+Browser collection reads opt into a bounded envelope with `page_size=1..500` and resume
+with the opaque `next_cursor`; the response contains `items`, `next_cursor`, and SQL-backed
+project `counts`. The cursor walks linked stores without concatenating their complete row
+sets, while the aggregate counts keep Queue/Backlog/Archive and project-tab summaries exact.
+Omitting `page_size` preserves the legacy array response for existing integrations.
 
 Checkout corrupt diagnostics also expose a safe repair-ticket action. It revalidates the
 reported path, routes the generated work item to the affected store, and returns the

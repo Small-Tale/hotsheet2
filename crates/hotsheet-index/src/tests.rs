@@ -89,6 +89,23 @@ fn rebuild_indexes_every_ticket() {
 }
 
 #[test]
+fn summary_aggregates_navigation_counts_without_loading_rows() {
+    let (_d, _s, ix) = seeded();
+    let summary = ix
+        .summary("2026-08-19T12:00:00Z", "2026-08-19T00:00:00Z")
+        .unwrap();
+    assert_eq!(summary.total, 3);
+    assert_eq!(summary.queued, 3);
+    assert_eq!(summary.backlog, 0);
+    assert_eq!(summary.archive, 0);
+    assert_eq!(summary.open, 2);
+    assert_eq!(summary.up_next, 1);
+    assert_eq!(summary.active, 0);
+    assert_eq!(summary.started, 0);
+    assert_eq!(summary.completed_today, 1);
+}
+
+#[test]
 fn structured_filters_match_the_file_scan() {
     let (_d, store, ix) = seeded();
     for q in [

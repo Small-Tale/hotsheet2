@@ -81,6 +81,20 @@ pub enum IndexError {
 /// list is identical whichever path produced it.
 pub use hotsheet_ticketing::TicketRow;
 
+/// Constant-memory checkout summary computed directly by SQLite.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TicketSummary {
+    pub total: u64,
+    pub queued: u64,
+    pub backlog: u64,
+    pub archive: u64,
+    pub open: u64,
+    pub up_next: u64,
+    pub active: u64,
+    pub started: u64,
+    pub completed_today: u64,
+}
+
 /// The index over one store.
 pub struct Index {
     conn: Connection,
@@ -88,6 +102,38 @@ pub struct Index {
 }
 
 impl Index {
+    /// Aggregate the counts needed by checkout navigation without loading ticket rows.
+    pub fn summary(&self, now: &str, today: &str) -> Result<TicketSummary, IndexError> {
+        let mut statement = self.conn.prepare(
+            "SELECT COUNT(*),
+             COALESCE(SUM(status <> 'backlog' AND status NOT IN ('archive','deleted','moved')),0),
+             COALESCE(SUM(status = 'backlog'),0),
+             COALESCE(SUM(status IN ('archive','deleted','moved')),0),
+             COALESCE(SUM(status IN ('not_started','started')),0),
+             COALESCE(SUM(up_next = 1 AND status IN ('not_started','started')),0),
+             COALESCE(SUM(claimed_by IS NOT NULL AND claim_lease_expires_at > ?2
+                          AND status IN ('not_started','started')),0),
+             COALESCE(SUM(status = 'started'),0),
+             COALESCE(SUM(completed_at >= ?3),0)
+             FROM tickets WHERE store_id = ?1 AND status IS NOT 'moved'",
+        )?;
+        statement
+            .query_row(params![self.store_id, now, today], |row| {
+                Ok(TicketSummary {
+                    total: row.get(0)?,
+                    queued: row.get(1)?,
+                    backlog: row.get(2)?,
+                    archive: row.get(3)?,
+                    open: row.get(4)?,
+                    up_next: row.get(5)?,
+                    active: row.get(6)?,
+                    started: row.get(7)?,
+                    completed_today: row.get(8)?,
+                })
+            })
+            .map_err(IndexError::from)
+    }
+
     /// Open an in-memory index (for tests).
     pub fn open_in_memory(store_id: impl Into<String>) -> Result<Self, IndexError> {
         Self::init(Connection::open_in_memory()?, store_id.into())
