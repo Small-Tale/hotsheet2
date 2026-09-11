@@ -21,8 +21,8 @@ describe('content components', () => {
   it('offers the visible Add note action when the note list is empty', () => {
     const markup = String(TicketNotes({ notes: [] }));
     expect(markup).toContain('No notes added.');
-    expect(markup).toContain('class="ticket-notes__add"');
-    expect(markup).toContain('>Add note</button>');
+    expect(markup).toContain('class="menu-item ticket-notes__add"');
+    expect(markup).toContain('<span class="menu-item__label">Add note</span>');
   });
   it('places a focused new-note composer after existing notes', () => {
     const markup=String(TicketNotes({ notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }], composing: true }));
@@ -124,7 +124,7 @@ describe('content components', () => {
     const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'high', category: 'feature', tags: ['client'], details: 'Details', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
     expect(markup).toContain('HS2-TEST');
     expect(markup).toContain('data-component="note-card"');
-    expect(markup).toContain('<span>1</span>');
+    expect(markup).toContain('<h2>Notes 1</h2>');
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-large-text="false"');

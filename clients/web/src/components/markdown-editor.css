@@ -7,6 +7,8 @@
 .markdown-editor--embedded .markdown-editor__preview, .markdown-editor--embedded .markdown-editor__surface textarea { min-height: 3rem; }
 .markdown-editor--embedded .markdown-editor__preview { padding: .75rem; }
 .markdown-editor--embedded .markdown-editor__surface textarea { display: block; box-sizing: border-box; height: auto; padding: .75rem; resize: vertical; }
+.ticket-inspector .markdown-editor--embedded .markdown-editor__preview,
+.ticket-inspector .markdown-editor--embedded .markdown-editor__surface textarea { padding-inline: .55rem; }
 .markdown-editor__toolbar { display: flex; min-height: 2.75rem; padding: .35rem .45rem .35rem .8rem; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); background: var(--wa-color-surface-lowered); align-items: center; justify-content: space-between; }
 .markdown-editor__toolbar > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 650; }
 .markdown-editor__toolbar button { display: inline-flex; height: 2rem; padding: 0 .65rem; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; align-items: center; gap: .35rem; font: inherit; font-size: var(--wa-font-size-xs); }

@@ -1143,7 +1143,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   );
   expect(sectionRhythm).toHaveLength(3);
   expect(sectionRhythm.map(section => section.gap)).toEqual(['8.8px', '8.8px', '8.8px']);
-  expect(sectionRhythm.map(section => section.headerHeight)).toEqual([undefined, 32, 32]);
+  expect(sectionRhythm[0].headerHeight).toBeUndefined();expect(sectionRhythm[1].headerHeight).toBeCloseTo(28.8,1);expect(sectionRhythm[2].headerHeight).toBeCloseTo(32.8,1);
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   const blockedReason = inspector.getByRole('textbox', { name: 'Blocked reason' });

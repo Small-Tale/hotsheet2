@@ -598,6 +598,10 @@ the canonical ticket instead of relying on a freeform explanatory note.
   provenance. Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
+  The sidebar uses an 8px content gutter and the same `MenuHeader`/`MenuItem`
+  primitives as the left project sidebar for Details, Tags, Notes, Block ticket,
+  and Add note. Headers and content align by their text/icon inset while bordered
+  surfaces remain flush below their headers without a second indentation level.
   Editable tags use the shared `MenuHeader` with a trailing icon-only Add tag action,
   matching the Views header, and a uniquely targeted anchored popover in sidebar and
   reader instances. The popover contains a labeled autocomplete field,

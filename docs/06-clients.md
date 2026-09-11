@@ -268,6 +268,10 @@ cleanup of the old live HS1 data; backups are never removed.
   from a project that is no longer selected.
   Right-sidebar toolbars are divider-free in every state—ticket, loading, multi-selection,
   Settings, and Notifications—so content sections, not the shell toolbar, own separators.
+  The ticket inspector uses an 8px horizontal content gutter. Details, Tags, Notes,
+  Block ticket, and Add note reuse the shared sidebar `MenuHeader`/`MenuItem`
+  primitives; their text and icons share one inset while section surfaces stay flush
+  beneath their headers instead of accumulating another indentation level.
 
 - **Persistent shell splitters.** The project sidebar and ticket inspector are
   independently resizable by pointer or keyboard. Dragging updates only splitter

@@ -132,11 +132,11 @@ describe('TicketInspector', () => {
     expect(inspectorCss).toContain('@container (max-width: 52rem) { .ticket-inspector__tab-label { display: none; } }');
   });
 
-  it('puts the tab-to-content gap on the segmented control without duplicate content padding', () => {
+  it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 1rem 1rem;/);
-    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 1rem 1rem;/);
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 \.5rem 1rem;/);
+    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 \.5rem \.5rem;/);
   });
 
   it('hides the Up Next action for ineligible lifecycle states', () => {

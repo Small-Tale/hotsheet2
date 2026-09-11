@@ -34,20 +34,24 @@ describe('ticket metadata controls and inspector panels', () => {
   it('renders inspector sections independently of the inspector shell', () => {
     const info = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }));
     expect(info).toContain('data-component="ticket-info-panel"');
-    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(2);
+    expect(info.match(/data-component="menu-header"/g)).toHaveLength(3);
+    expect(info).toContain('<header class="menu-header" data-component="menu-header"><h2>Details</h2>');
     expect(info).toContain('<header class="menu-header" data-component="menu-header"><h2>Tags</h2>');
     expect(info).toContain('data-action="open-ticket-tag-popover" popoverTarget="ticket-tag-popover" aria-haspopup="dialog" aria-controls="ticket-tag-popover" aria-label="Add tag"');
     expect(info).toContain('data-action="edit-blocked-reason"');
     expect(info).toContain('Block ticket');
     expect(info).not.toContain('<h2>Blocked reason</h2>');
     expect(info).toContain('ticket-inspector__block-action');
+    expect(info).toContain('class="menu-item ticket-inspector__block-action" data-component="menu-item"');
+    expect(info).toContain('<h2>Notes 0</h2>');
+    expect(info).toContain('class="menu-item ticket-notes__add" data-component="menu-item"');
     const blocked = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: [], details: '', blockedReason: 'Waiting' }));
-    expect(blocked).toContain('<h2>Blocked reason</h2>');
+    expect(blocked).toContain('<header class="menu-header" data-component="menu-header"><h2>Blocked reason</h2>');
     expect(blocked).toContain('data-edit-blocked-reason="true"');
     expect(blocked).toContain('aria-label="Edit blocked reason"');
     expect(blocked).not.toContain('ticket-inspector__text-action');
     expect(blocked).toContain('Waiting');
-    expect(blocked.match(/ticket-inspector__section-header/g)).toHaveLength(3);
+    expect(blocked.match(/data-component="menu-header"/g)).toHaveLength(4);
     expect(info).toContain('data-component="ticket-notes"');
     const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }));
     expect(timeline.match(/<li/g)).toHaveLength(1);
