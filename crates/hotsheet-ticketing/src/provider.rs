@@ -28,6 +28,42 @@ impl TicketRef {
     }
 }
 
+/// A ticket reference that remains routable when it crosses a client project boundary.
+/// Connection ids are project-scoped, so the project id is part of the persisted form.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ProjectTicketRef {
+    pub project_id: String,
+    pub connection_id: String,
+    pub native_id: String,
+}
+
+impl ProjectTicketRef {
+    pub fn qualified(&self) -> String {
+        format!(
+            "@{}/{}",
+            self.project_id,
+            TicketRef {
+                connection_id: self.connection_id.clone(),
+                native_id: self.native_id.clone(),
+            }
+            .qualified()
+        )
+    }
+
+    pub fn from_qualified(value: &str) -> Option<Self> {
+        let (project_id, ticket) = value.strip_prefix('@')?.split_once('/')?;
+        let (connection_id, native_id) = ticket.split_once(':')?;
+        if project_id.is_empty() || connection_id.is_empty() || native_id.is_empty() {
+            return None;
+        }
+        Some(Self {
+            project_id: project_id.to_string(),
+            connection_id: connection_id.to_string(),
+            native_id: native_id.to_string(),
+        })
+    }
+}
+
 /// Stable connection id for a git store, shared by CLI/MCP/server surfaces.
 pub fn git_connection_id(store: &FsStore) -> String {
     let root = store
@@ -893,8 +929,15 @@ impl TicketProvider for GitProvider {
         }
         let ticket = self.ticket(native_id)?;
         let duplicate = duplicate_of
-            .as_deref()
-            .map(|id| self.ticket(id).map(|t| t.id))
+            .map(|reference| {
+                if !reference.starts_with('@') {
+                    let native_id = reference
+                        .strip_prefix(&format!("{}:", self.connection_id))
+                        .unwrap_or(&reference);
+                    self.ticket(native_id)?;
+                }
+                Ok::<_, ProviderError>(reference)
+            })
             .transpose()?;
         let updated = ops::close(&self.store, &ticket.id, now, reason, duplicate)?;
         Ok(ApiTicket::from_provider(
@@ -1233,6 +1276,21 @@ mod tests {
             now: Timestamp::new(at),
             generated_id: id,
         }
+    }
+
+    #[test]
+    fn project_ticket_refs_round_trip_colon_bearing_native_ids() {
+        let reference = ProjectTicketRef {
+            project_id: "kerf-a1b2".into(),
+            connection_id: "jira-eng".into(),
+            native_id: "ENG:42".into(),
+        };
+        assert_eq!(reference.qualified(), "@kerf-a1b2/jira-eng:ENG:42");
+        assert_eq!(
+            ProjectTicketRef::from_qualified(&reference.qualified()),
+            Some(reference)
+        );
+        assert!(ProjectTicketRef::from_qualified("01ARZ3NDEKTSV4RRFFQ69G5FC0").is_none());
     }
 
     #[test]

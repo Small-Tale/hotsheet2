@@ -134,6 +134,7 @@ export async function exportFromDb(db, project = {}, settings = {}) {
     project: {
       name: project.name ?? null,
       ticketPrefix: project.ticketPrefix ?? 'HS',
+      ...(project.sourceRoot ? { sourceRoot: project.sourceRoot } : {}),
     },
     settings,
     tickets,
@@ -152,15 +153,38 @@ export async function exportDatadir(hotsheetDir, outPath) {
   const path = await import('node:path');
   const { join } = path;
 
-  let project = {};
+  let project = { sourceRoot: path.resolve(hotsheetDir, '..') };
   let settings = {};
   const settingsPath = join(hotsheetDir, 'settings.json');
   if (fs.existsSync(settingsPath)) {
     try {
       settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-      project = { name: settings.appName ?? null, ticketPrefix: settings.ticketPrefix ?? null };
+      project = {
+        name: settings.appName ?? null,
+        ticketPrefix: settings.ticketPrefix ?? null,
+        sourceRoot: path.resolve(hotsheetDir, '..'),
+      };
     } catch (err) {
       console.warn(`warning: could not read settings.json (${err.message})`);
+    }
+  }
+
+  // HS1's effective custom-command tree can include a machine-local replacement or
+  // tree delta. Export only that effective key from settings.local.json: the other
+  // local values are machine/runtime details that have never been part of the
+  // portable project export.
+  const localSettingsPath = join(hotsheetDir, 'settings.local.json');
+  if (fs.existsSync(localSettingsPath)) {
+    try {
+      const local = JSON.parse(fs.readFileSync(localSettingsPath, 'utf8'));
+      if (Object.hasOwn(local, 'custom_commands')) {
+        settings.custom_commands = resolveCustomCommands(
+          settings.custom_commands,
+          local.custom_commands,
+        );
+      }
+    } catch (err) {
+      console.warn(`warning: could not read settings.local.json (${err.message})`);
     }
   }
 
@@ -184,6 +208,107 @@ export async function exportDatadir(hotsheetDir, outPath) {
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
+}
+
+// ---- HS1 custom-command settings ------------------------------------------------
+
+/** Coerce HS1's native or legacy-JSON-string command tree to an array. */
+function asCommandTree(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function commandId(item) {
+  return typeof item?.id === 'string' ? item.id : '';
+}
+
+function commandGroup(item) {
+  return typeof item === 'object' && item !== null && 'type' in item;
+}
+
+function cloneCommandItem(item) {
+  if (commandGroup(item)) {
+    return {
+      ...item,
+      children: Array.isArray(item.children) ? item.children.map((child) => ({ ...child })) : [],
+    };
+  }
+  return { ...item };
+}
+
+/**
+ * Resolve the effective HS1 custom-command tree exactly like HS1's settings layer:
+ * a local array replaces shared wholesale; a local object is a tree delta (including
+ * empty `{}`); absent local data leaves the shared tree unchanged.
+ */
+export function resolveCustomCommands(sharedValue, localValue) {
+  const shared = asCommandTree(sharedValue);
+  if (localValue === undefined) return shared.map(cloneCommandItem);
+  if (Array.isArray(localValue) || typeof localValue === 'string') {
+    return asCommandTree(localValue).map(cloneCommandItem);
+  }
+  if (typeof localValue !== 'object' || localValue === null) return [];
+
+  const hidden = new Set(Array.isArray(localValue.hidden) ? localValue.hidden : []);
+  const overrides =
+    typeof localValue.overrides === 'object' && localValue.overrides !== null
+      ? localValue.overrides
+      : {};
+  const childAdded =
+    typeof localValue.childAdded === 'object' && localValue.childAdded !== null
+      ? localValue.childAdded
+      : {};
+  const out = [];
+  const seenGroups = new Set();
+
+  for (const item of shared) {
+    const id = commandId(item);
+    if (hidden.has(id)) continue;
+    const override =
+      typeof overrides[id] === 'object' && overrides[id] !== null ? overrides[id] : {};
+    if (commandGroup(item)) {
+      seenGroups.add(id);
+      const children = [];
+      for (const child of Array.isArray(item.children) ? item.children : []) {
+        const childId = commandId(child);
+        if (hidden.has(childId)) continue;
+        const childOverride =
+          typeof overrides[childId] === 'object' && overrides[childId] !== null
+            ? overrides[childId]
+            : {};
+        children.push({ ...child, ...childOverride });
+      }
+      const addition = childAdded[id];
+      if (Array.isArray(addition?.children)) {
+        children.push(...addition.children.map((child) => ({ ...child })));
+      }
+      out.push({ ...item, ...override, children });
+    } else {
+      out.push({ ...item, ...override });
+    }
+  }
+
+  if (Array.isArray(localValue.added)) {
+    out.push(...localValue.added.map(cloneCommandItem));
+  }
+  for (const [id, addition] of Object.entries(childAdded)) {
+    if (seenGroups.has(id) || !Array.isArray(addition?.children)) continue;
+    out.push({
+      type: 'group',
+      id: typeof addition.group?.id === 'string' ? addition.group.id : id,
+      name: typeof addition.group?.name === 'string' ? addition.group.name : '',
+      children: addition.children.map((child) => ({ ...child })),
+    });
+  }
+  return out;
 }
 
 // ---- attachment staging ----------------------------------------------------------

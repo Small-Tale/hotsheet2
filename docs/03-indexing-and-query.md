@@ -229,7 +229,10 @@ source of truth. HS2 writes one machine-local `<checkout>/.hotsheet/worklist.md`
 checkout, aggregated from every git ticket store configured for that checkout; it never
 writes the projection into a ticket repository. CLI operations refresh affected local
 checkouts synchronously, project open/registration seeds it, and server watchers coalesce
-external/git changes. The Up Next section includes only `not_started`/`started` tickets
+external/git changes. Registered and ad-hoc project projections always carry the explicit
+checkout/root into settings resolution, so two worklists backed by one shared store can
+apply different project guidance; the legacy store-only generator remains an explicit
+compatibility API. The Up Next section includes only `not_started`/`started` tickets
 even when projecting stale legacy data; other open tickets are deliberately omitted so the
 file remains a focused executable queue. Concise status/note/follow-up instructions are
 embedded so these files remain useful to an AI tool without the skill or API. See

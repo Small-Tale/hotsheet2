@@ -97,8 +97,8 @@ required.
 // hotsheet-export.json  — one file per HS1 project
 {
   "exportVersion": 1,
-  "project": { "name": "…", "ticketPrefix": "HS" },
-  "settings": { /* .hotsheet/settings.json merged */ },
+  "project": { "name": "…", "ticketPrefix": "HS", "sourceRoot": "/code/project" },
+  "settings": { /* shared settings + the effective HS1 custom-command tree */ },
   "tickets": [
     {
       "ticket_number": "HS-1234",
@@ -117,7 +117,22 @@ required.
 Attachment files are copied to a staging dir alongside the JSON. This reads the full
 HS1 schema the exploration confirmed (`tickets`, `attachments`, `ticket_blocked_by`,
 notes-as-JSON, tags-as-JSON; the claim columns are runtime-only and **not**
-exported).
+exported). `sourceRoot` is optional for compatibility with older version-1 exports;
+the live datadir exporter records it so the importer can reuse the code project's
+settings directory. For `custom_commands` only, the exporter resolves the shared
+`settings.json` value against `settings.local.json` using HS1's replacement/tree-delta
+rules (including hidden items, overrides, child additions, and orphan-group survival).
+Other machine-local HS1 settings remain excluded.
+
+The imported shared settings and typed local commands are written back to the original
+code project's `.hotsheet/settings.json` and `settings.local.json`, now carrying HS2's
+`$hotsheetSchema` marker. This deliberately reuses HS1's filenames while changing their
+ownership to the HS2 project-settings contract. Post-import cleanup preserves recognized
+schema-marked HS2 files and still removes unmarked HS1 runtime settings. If an export lacks
+an existing `sourceRoot` with an HS1 `.hotsheet` directory, the store-only import command
+retains the old beside-store settings paths instead of inventing
+`<ticket-store>/.hotsheet`; it never changes ticket-source discovery or ticket-store
+locations.
 
 ### What the write step does (either shape)
 
@@ -132,12 +147,27 @@ For each ticket:
 - Write the file into the target store; copy attachments to `attachments/<id>/`.
 - Rewrite `blocked_by` old-number refs to new ULIDs (**two-pass**: assign all IDs
   first, then resolve edges — including `duplicate_of` if present).
+- Translate every runnable HS1 custom-command leaf into a native HS2 command kind in
+  machine-local `commands` settings. Modern nested groups and the older per-command
+  `group` format retain every command and group label. Ordinary buttons retain their
+  command text and resolve the current platform shell and project root only at run time,
+  so settings contain no fixed local executable or checkout path. AI buttons retain a
+  dedicated `ai` kind, prompt, and selected drivable tool (with HS1's Claude fallback),
+  without serializing `hotsheet-cli` or its argv. HS1 icon and color metadata carry over;
+  retired worker-target and group-collapse state do not.
 - `git init` the store if needed, install the merge driver (§2.7), make the initial
   commit ("Import N tickets from Hot Sheet 1"). The HS2 server (re)builds the index
   from the files afterward.
 
-**Idempotent & safe:** re-running derives the same HS2 ULIDs and skips them (never
-duplicates); the source cluster is opened **read-only** and never modified.
+**Idempotent & safe:** re-running derives the same HS2 ULIDs and command ids and skips
+equivalent existing values. Existing HS2 command definitions always win; a deterministic
+suffix preserves both definitions if a migrated id conflicts, rather than overwriting
+local customization. The source cluster is opened **read-only** and never modified.
+Shell buttons work immediately. AI buttons also work before the remote-gated cleanup
+removes the retained `.hotsheet/db/PG_VERSION` marker, but only when the selected HS2
+store has the schema-valid durable `hotsheet-hs1-import.json` receipt whose canonical
+`sourceProject` matches this exact checkout. Missing, malformed, or unrelated receipts
+leave the strict HS1 launch refusal in place.
 
 ## 7.3 The UI-prompted flow (per project, on demand)
 
@@ -158,8 +188,16 @@ may not have open at once):
    and leaves the old `.hotsheet/` data in place. A durable receipt in the new store
    distinguishes a completed import from an unrelated HS2 repository.
 4. Only after an `origin` remote exists does the project show its cleanup banner.
-   Cleanup requires confirmation, removes the live HS1 artifacts, and preserves
-   backup-named entries plus the HS2 `.hotsheet/store` link.
+   Cleanup requires confirmation and refuses to start while a registered HS1 channel
+   process owned by this checkout is still live, because that process can recreate its
+   database after removal. Project-tagged entries owned by another checkout are ignored;
+   matching and identity-less legacy entries remain conservatively blocking.
+   It removes only the explicit HS1 live-data/runtime allowlist (database, attachments,
+   migrated settings, and generated runtime files); backups, snapshots, the HS2
+   `.hotsheet/store` link, and unknown files are preserved. Dismiss hides the reminder
+   for that checkout and detected HS1 source identity across refreshes. Successful
+   cleanup records the same dismissal so a stale or concurrently recreated marker does
+   not make the banner recur.
 
 The same migration is runnable **by hand** in one command, independent of the UI
 prompt: **`hotsheet-migrate <old-project>/.hotsheet -C <new-store>`** spawns the Node
@@ -177,7 +215,7 @@ and real commit failures still retain the migrator's best-effort warning.
 
 - **Migrated:** tickets (all fields), notes, tags, attachments, blocked-by edges,
   category/priority/status, up_next, timestamps, project settings that still apply,
-  and detected AI-tool instructions/MCP setup.
+  effective shared/local custom commands, and detected AI-tool instructions/MCP setup.
 - **Not migrated (runtime/derived):** claim/lease state (transient), the index
   (rebuilt), generated `worklist.md`/`open-tickets.md` (regenerated), telemetry
   rollups and the Announcer history (HS1-specific; a later, optional export if

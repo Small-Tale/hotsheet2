@@ -247,7 +247,7 @@ verified_at: null
 # close outcome (set when the ticket is closed; see §2.6a)
 closed_at: null
 close_reason: null            # completed | not_planned | duplicate | obsolete
-duplicate_of: null            # a ticket ULID, required when close_reason == duplicate
+duplicate_of: null            # exact ticket reference; required when close_reason == duplicate
 # coordination (optional; omitted when unclaimed)
 claimed_by: worker-1
 claim_lease_expires_at: 2026-08-19T15:50:44Z
@@ -365,10 +365,17 @@ workflow `status`:
 - **`close_reason`** — `completed | not_planned | duplicate | obsolete`
   (extensible). `completed` = the work was done; `not_planned` = deliberately won't
   do it; `duplicate` = the same as another ticket; `obsolete` = no longer relevant.
-- **`duplicate_of`** — a ticket **ULID** (may live in another store — resolved
-  globally, §2.2.1), **required when** `close_reason == duplicate`. This is a real
-  reference, so the UI links to the canonical ticket and the two show their
-  relationship both ways.
+- **`duplicate_of`** — an exact ticket reference, **required when**
+  `close_reason == duplicate`. Legacy and headless same-store writes use the target's
+  globally unique ULID. Cross-project/provider writes use
+  `@<project-id>/<connection-id>:<native-id>` so a repeated slug or provider-native id
+  cannot silently select the wrong project or source. This is a real reference, so the
+  UI links to the canonical ticket. Reverse backlinks from the canonical ticket are
+  tracked separately in **HS2-HEQR6E**.
+  Checkout registry ids are durable across an explicit `checkout relocate`; non-Git
+  source renames retain an alias chain through `checkout rename-source`. Resolution
+  follows those aliases to the current connection id and rejects cycles or ambiguous
+  retargeting. Git source ids remain path-derived and require a store migration instead.
 - **`closed_at`** — timestamp of the close.
 
 **Relationship to `status` (and to the status decision, HS2-24).** `close_reason`
@@ -415,7 +422,8 @@ for the human.
 **Merge behavior (automatic).** All three fields are scalar frontmatter, so they
 merge by the §2.7 rule — **newest `updated_at` wins**. If two people close the same
 ticket concurrently with different reasons, the later close wins and nothing
-conflicts; `duplicate_of` is a plain ULID that survives a move (§2.13).
+conflicts; legacy bare-ULID `duplicate_of` references survive a move (§2.13), while
+qualified references preserve the exact owning project/source identity.
 
 **Reopening** clears `close_reason` / `closed_at` / `duplicate_of` and the prior work
 cycle's `completed_at` / `verified_at` timestamps when it returns the ticket to an open
@@ -581,7 +589,7 @@ differ per person or per device:
 - **Machine-local preferences** (per-device settings — HS1's `settings.local.json`).
 
 **Where Tier B lives — the rule: on disk, gitignored, index is only a cache.**
-Local durable data is stored in **gitignored overlay files inside the store**, e.g.
+Local ticket overlays are stored in **gitignored files inside the store**, e.g.
 `.hotsheet/local/reads.json`, `.hotsheet/local/drafts/…`, keyed by ticket ULID.
 The `.gitignore` block ignores `.hotsheet/local/**` while the ticket files stay
 committed. This follows the cardinal principle
@@ -615,7 +623,7 @@ maps to exactly one tier:
 | **read state** (`last_read_at` / unread) | **B (local)** | `local/reads.json` (gitignored), keyed by ULID |
 | **feedback drafts** (notes of kind `feedback_draft`) | **B (local)** | dropped from the committed file today; overlay persistence is HS2-AWTHJE |
 | **UI / view state** (last view, scroll, drawer) | **B (local)** | overlay `local/…` — HS2-AWTHJE |
-| **machine preferences** | **B (local)** | `hotsheet-settings.local.json` (gitignored, `Scope::Local`) / overlay |
+| **machine preferences** | **B (local)** | `<project-root>/.hotsheet/settings.local.json` (gitignored, `Scope::Local`); unlike ticket overlays, project settings are not owned by a ticket store |
 | a whole `visibility: local` store | C | its own git repo, no remote, gitignored from the project |
 
 **Built (HS2-21):** the Tier B **overlay mechanism** — `ticketing::LocalOverlay`

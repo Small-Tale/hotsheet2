@@ -515,7 +515,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await noteHistory.scrollIntoViewIfNeeded();
   await reader.screenshot({ path: '/private/tmp/hs2-hnh0m6-markdown-links-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await expect(reader.getByRole('heading', { name: /Notes/ }).locator('span')).toHaveText('5');
+  await expect(reader.getByRole('heading', { name: 'Notes 5' })).toBeVisible();
   await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
   const readerWidth = await reader.boundingBox();
   const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
@@ -1464,8 +1464,8 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next, 2 claimed');
   for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const menuHeaderLefts = await sidebar.locator('[data-component="menu-header"]').evaluateAll(headers => headers.map(header => header.querySelector('h2, span')!.getBoundingClientRect().left));
-  expect(menuHeaderLefts).toHaveLength(2);
-  expect(menuHeaderLefts[0]).toBeCloseTo(menuHeaderLefts[1], 0);
+  expect(menuHeaderLefts).toHaveLength(4);
+  for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left-menuHeaderLefts[0])).toBeLessThan(1);
   const viewActionAlignment = await sidebar.evaluate(node => {
     const action = node.querySelector<HTMLElement>('.view-navigation [data-component="menu-header"] button')!.getBoundingClientRect();
     const item = node.querySelector<HTMLElement>('.view-navigation .menu-item')!.getBoundingClientRect();

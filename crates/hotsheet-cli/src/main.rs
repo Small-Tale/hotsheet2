@@ -701,6 +701,13 @@ enum CheckoutCmd {
     List,
     /// Resolve an id, id prefix, alias, or path and print its JSON record.
     Resolve { reference: String },
+    /// Move a registered checkout while preserving its durable project id.
+    Relocate {
+        reference: String,
+        root: PathBuf,
+        #[arg(long)]
+        alias: Option<String>,
+    },
     /// Associate a provider-neutral ticket source with a checkout.
     AddSource {
         reference: String,
@@ -714,6 +721,12 @@ enum CheckoutCmd {
     RemoveSource {
         reference: String,
         connection_id: String,
+    },
+    /// Rename a non-Git source while retaining its old id as a durable alias.
+    RenameSource {
+        reference: String,
+        connection_id: String,
+        new_connection_id: String,
     },
     /// Select the source used by unqualified creates, or clear it with --clear.
     SetDefault {
@@ -1095,7 +1108,7 @@ fn main() -> Result<()> {
         Cmd::Plugin { cmd } => cmd_plugin(cmd),
         Cmd::AiTools { json } => cmd_ai_tools(json),
         Cmd::AiSettings { cmd } => cmd_ai_settings(&cli.path, cmd),
-        Cmd::Settings { cmd } => cmd_settings(&cli.path, cmd),
+        Cmd::Settings { cmd } => cmd_settings(&cli.path, &cwd, cmd),
         Cmd::Key { cmd } => cmd_key(cmd),
         Cmd::Checkout { cmd } => cmd_checkout(cmd),
         Cmd::Import { file, prefix } => cmd_import(&cli.path, &file, &prefix),
@@ -2255,7 +2268,7 @@ fn cmd_doctor(path: &PathBuf, project: &Path) -> Result<()> {
             }
         }
         if let Some(d) = &t.duplicate_of {
-            if !ids.contains(d) {
+            if Ulid::from_string(d).is_ok_and(|id| !ids.contains(&id)) {
                 println!("  ! {} duplicate_of unknown id {d}", t.slug);
                 issues += 1;
             }
@@ -2662,7 +2675,7 @@ fn cmd_worklist(path: &Path, cwd: &Path) -> Result<()> {
     let n = if let Some(checkout) = registered {
         hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?
     } else {
-        hotsheet_ticketing::worklist::regenerate_to(&store, &output)?
+        hotsheet_ticketing::worklist::regenerate_for_project(&store, &checkout_root, &output)?
     };
     println!("wrote {} ({n} Up Next ticket(s))", output.display());
     Ok(())
@@ -2693,8 +2706,9 @@ fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
     }
     if !refreshed_current && FsStore::open(&store_path).is_ok() {
         let checkout_root = local_checkout_root(&store_path, cwd);
-        hotsheet_ticketing::worklist::regenerate_to(
+        hotsheet_ticketing::worklist::regenerate_for_project(
             &FsStore::open(&store_path)?,
+            &checkout_root,
             &checkout_root.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST),
         )?;
     }
@@ -3564,7 +3578,7 @@ fn cmd_close(path: &PathBuf, id: &str, reason: &str, duplicate_of: Option<String
     let ticket = resolve(&store, id)?;
     let reason_enum = parse_close_reason(reason)?;
     let dup = match duplicate_of {
-        Some(d) => Some(resolve(&store, &d)?.id),
+        Some(d) => Some(resolve(&store, &d)?.id.to_string()),
         None => None,
     };
     let closed = ops::close(&store, &ticket.id, now_ts(), reason_enum, dup)?;
@@ -3817,8 +3831,36 @@ fn cmd_ai_settings(store: &Path, cmd: AiSettingsCmd) -> Result<()> {
     Ok(())
 }
 
-fn cmd_settings(store: &Path, cmd: SettingsCmd) -> Result<()> {
-    use hotsheet_ticketing::{Scope, Settings};
+fn settings_for_cli(store: &Path, cwd: &Path) -> hotsheet_ticketing::Settings {
+    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let canonical_store = canonical(store);
+    let canonical_cwd = canonical(cwd);
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+        hotsheet_plugins::hotsheet_home().join("checkouts.json"),
+    );
+    let mut matches = registry
+        .list()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|checkout| canonical_cwd.starts_with(canonical(Path::new(&checkout.root))))
+        .filter(|checkout| {
+            checkout.sources.iter().any(|source| {
+                source.provider == "git" && canonical(Path::new(&source.locator)) == canonical_store
+            })
+        })
+        .collect::<Vec<_>>();
+    matches
+        .sort_by_key(|checkout| std::cmp::Reverse(Path::new(&checkout.root).components().count()));
+    if let Some(checkout) = matches.into_iter().next() {
+        checkout.settings()
+    } else {
+        let project = local_checkout_root(store, cwd);
+        hotsheet_ticketing::Settings::with_legacy_stores(project, [store])
+    }
+}
+
+fn cmd_settings(store: &Path, cwd: &Path, cmd: SettingsCmd) -> Result<()> {
+    use hotsheet_ticketing::Scope;
     let parse_scope = |s: &Option<String>| -> Result<Option<Scope>> {
         match s.as_deref() {
             None => Ok(None),
@@ -3828,7 +3870,7 @@ fn cmd_settings(store: &Path, cmd: SettingsCmd) -> Result<()> {
             Some(other) => bail!("invalid scope '{other}' (global|shared|local)"),
         }
     };
-    let settings = Settings::new(store);
+    let settings = settings_for_cli(store, cwd);
     match cmd {
         SettingsCmd::Get { key, scope } => {
             let value = match parse_scope(&scope)? {
@@ -3954,6 +3996,18 @@ fn cmd_checkout(cmd: CheckoutCmd) -> Result<()> {
                 serde_json::to_string_pretty(&registry.resolve(&reference)?)?
             );
         }
+        CheckoutCmd::Relocate {
+            reference,
+            root,
+            alias,
+        } => println!(
+            "{}",
+            serde_json::to_string_pretty(&registry.relocate(
+                &reference,
+                &root,
+                alias.as_deref()
+            )?)?
+        ),
         CheckoutCmd::AddSource {
             reference,
             connection_id,
@@ -3985,6 +4039,18 @@ fn cmd_checkout(cmd: CheckoutCmd) -> Result<()> {
         } => println!(
             "{}",
             serde_json::to_string_pretty(&registry.remove_source(&reference, &connection_id)?)?
+        ),
+        CheckoutCmd::RenameSource {
+            reference,
+            connection_id,
+            new_connection_id,
+        } => println!(
+            "{}",
+            serde_json::to_string_pretty(&registry.rename_source(
+                &reference,
+                &connection_id,
+                &new_connection_id,
+            )?)?
         ),
         CheckoutCmd::SetDefault {
             reference,

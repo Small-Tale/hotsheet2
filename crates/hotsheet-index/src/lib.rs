@@ -247,7 +247,7 @@ impl Index {
                 self.store_id, id, t.slug, t.title, t.details, t.category,
                 enum_str(&t.priority), priority_rank(t.priority) as i64,
                 enum_str(&t.status), t.status as i64,
-                t.close_reason.as_ref().map(enum_str), t.duplicate_of.map(|u| u.to_string()),
+                t.close_reason.as_ref().map(enum_str), t.duplicate_of,
                 ts(&t.closed_at), t.up_next as i64, tags_json, blocked_json, t.blocked_reason, attachment_names_json,
                 t.created_at.as_str(), t.updated_at.as_str(), ts(&t.completed_at), ts(&t.verified_at),
                 t.claimed_by, ts(&t.claim_lease_expires_at), t.worker_label, t.claim_count,

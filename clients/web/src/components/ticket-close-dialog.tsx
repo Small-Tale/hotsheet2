@@ -5,7 +5,7 @@ import './ticket-close-dialog.css';
 
 import { CheckCircle2, CopyX, Search } from 'lucide';
 
-import { type DuplicateTarget, TICKET_CLOSE_REASON_CHOICES, type TicketCloseReason, validateTicketClose } from '../ticket-close';
+import { type DuplicateTarget, duplicateTargetKey, TICKET_CLOSE_REASON_CHOICES, type TicketCloseReason, validateTicketClose } from '../ticket-close';
 import { LucideIcon } from './lucide-icon';
 import { MenuItem } from './menu-item';
 import { Select } from './select';
@@ -24,17 +24,17 @@ export interface TicketCloseDialogState {
 export function TicketCloseDialog({ state }: { state?: TicketCloseDialogState }) {
   if (!state) return <></>;
   const duplicate = state.reason === 'duplicate';
-  const validation = validateTicketClose(state.reason, state.source.id, state.selected);
-  const candidates = state.candidates.filter(candidate => candidate.id !== state.source.id);
+  const validation = validateTicketClose(state.reason, state.source, state.selected);
+  const candidates = state.candidates.filter(candidate => duplicateTargetKey(candidate) !== duplicateTargetKey(state.source));
   return <wa-dialog class="ticket-close-dialog" open data-component="ticket-close-dialog" label={`Close ${state.source.slug}`}>
     <form data-action="submit-ticket-close" class="ticket-close-dialog__form">
       <p>Record why this ticket is being closed so the outcome remains searchable and unambiguous.</p>
       <Select name="ticket-close-reason" value={state.reason} label="Close as" choices={TICKET_CLOSE_REASON_CHOICES} />
       {duplicate && <section class="ticket-close-dialog__duplicate" aria-label="Duplicate target">
         <wa-input name="ticket-close-target-search" label="Existing ticket" placeholder="Search by ticket number or title" value={state.query}><span slot="start"><LucideIcon icon={Search} name="search" /></span></wa-input>
-        {state.selected && <div class="ticket-close-dialog__selected" role="status"><LucideIcon icon={CheckCircle2} name="check-circle-2" /><span><strong>{state.selected.slug}</strong><span>{state.selected.title}</span></span><wa-button type="button" appearance="plain" size="small" data-action="clear-ticket-close-target">Change</wa-button></div>}
+        {state.selected && <div class="ticket-close-dialog__selected" role="status"><LucideIcon icon={CheckCircle2} name="check-circle-2" /><span><strong>{state.selected.slug}<small>{state.selected.projectName}</small></strong><span>{state.selected.title}</span></span><wa-button type="button" appearance="plain" size="small" data-action="clear-ticket-close-target">Change</wa-button></div>}
         {!state.selected && state.query.trim() && <div class="ticket-close-dialog__results" aria-label="Matching tickets" aria-busy={String(Boolean(state.searching))}>
-          {candidates.map(candidate => <MenuItem action="select-ticket-close-target" itemId={candidate.id} icon={<LucideIcon icon={CopyX} name="copy-x" />} label={<><strong>{candidate.slug}</strong><span>{candidate.title}</span></>} multiline />)}
+          {candidates.map(candidate => <MenuItem action="select-ticket-close-target" itemId={duplicateTargetKey(candidate)} icon={<LucideIcon icon={CopyX} name="copy-x" />} label={<><strong>{candidate.slug}<small>{candidate.projectName}</small></strong><span>{candidate.title}</span></>} multiline />)}
           {!state.searching && candidates.length === 0 && <p>No matching tickets.</p>}
         </div>}
         <p class="ticket-close-dialog__hint">The selected ticket becomes the canonical target. This relationship is stored as structured duplicate metadata.</p>

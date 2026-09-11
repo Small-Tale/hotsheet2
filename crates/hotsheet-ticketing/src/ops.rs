@@ -1028,7 +1028,7 @@ pub fn close(
     id: &Ulid,
     now: Timestamp,
     reason: CloseReason,
-    duplicate_of: Option<Ulid>,
+    duplicate_of: Option<String>,
 ) -> Result<Ticket, OpError> {
     if reason == CloseReason::Duplicate && duplicate_of.is_none() {
         return Err(OpError::DuplicateNeedsTarget);
@@ -2815,7 +2815,14 @@ mod tests {
         create(&store, id, "HS", ts("t0"), NewTicket::default()).unwrap();
         create(&store, dup, "HS", ts("t0"), NewTicket::default()).unwrap();
 
-        let c = close(&store, &id, ts("t1"), CloseReason::Duplicate, Some(dup)).unwrap();
+        let c = close(
+            &store,
+            &id,
+            ts("t1"),
+            CloseReason::Duplicate,
+            Some(dup.to_string()),
+        )
+        .unwrap();
         assert!(c.close_reason.is_some() && c.closed_at.is_some() && c.duplicate_of.is_some());
 
         // Reopening (back to an active status) clears close_reason/closed_at/duplicate_of.

@@ -483,10 +483,10 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ticket-attachments') return <TicketAttachmentsDemo />;
   if (item.id === 'attachment-gallery') return <AttachmentGalleryDemo />;
   if (item.id === 'ticket-close-dialog') return <TicketCloseDialog state={{
-    source: { id: 'source', slug: 'HS2-29MDFH', title: 'Repeated UI stability diagnostics' },
+    source: { id: 'source', slug: 'HS2-29MDFH', title: 'Repeated UI stability diagnostics', projectId: 'kerf', projectName: 'Kerf', connectionId: 'kerf-git', nativeId: 'source', qualifiedId: 'kerf-git:source' },
     reason: 'duplicate',
     query: 'UI stability',
-    candidates: [{ id: 'target', slug: 'HS2-8WG3W9', title: 'UI stability diagnostics detected render thrashing' }],
+    candidates: [{ id: 'target', slug: 'HS2-8WG3W9', title: 'UI stability diagnostics detected render thrashing', projectId: 'hotsheet2', projectName: 'Hot Sheet 2', connectionId: 'hs2-git', nativeId: 'target', qualifiedId: 'hs2-git:target' }],
   }}/>;
   if (item.id === 'project-summary') return <ProjectSummaryDemo />;
   if (item.id === 'project-sidebar') return <ProjectSidebarDemo />;

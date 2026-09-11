@@ -60,3 +60,4 @@ Thumbs.db
 
 /.glassbox/*
 !/.glassbox/settings.json
+.hotsheet/settings.local.json

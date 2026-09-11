@@ -1,7 +1,7 @@
 # 11. HS1 Feature Inventory → Rewrite Decisions
 
 > **Status: Complete (HS2-22, final carryover pass HS2-RFMZ1A).** A thorough survey of every high- and low-level
-> feature in Hot Sheet 1 (`~/Documents/hotsheet`, README + 188 requirement docs),
+> feature in [Hot Sheet 1](https://github.com/brianwestphal/hotsheet) (README + 188 requirement docs),
 > so each can get an explicit **"build it in Hot Sheet 2? and if so, with what
 > changes?"** decision — the maintainer's ask (2026-08-19).
 

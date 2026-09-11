@@ -67,7 +67,8 @@ mod tests {
     #[test]
     fn round_trips_views_through_shared_project_settings() {
         let root = tempfile::tempdir().unwrap();
-        let settings = Settings::with_global_home(root.path(), root.path().join("home"));
+        let settings =
+            Settings::for_project_with_global_home(root.path(), root.path().join("home"));
         let views = vec![CustomView {
             id: "needs-docs".to_owned(),
             name: "Needs docs".to_owned(),
@@ -76,7 +77,7 @@ mod tests {
         validate(&views).unwrap();
         replace(&settings, &views).unwrap();
         assert_eq!(from_settings(&settings).unwrap(), views);
-        assert!(root.path().join("hotsheet-settings.json").exists());
+        assert!(root.path().join(".hotsheet/settings.json").exists());
     }
 
     #[test]

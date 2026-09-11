@@ -152,5 +152,15 @@ describe('content components', () => {
     expect(String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', activeTab: 'code-review', codeReviewLoading: true }))).toContain('Finding ticket commits');
   });
 
+  it('labels layered cross-project readers and keeps covered layers out of the modal tree', () => {
+    const markup = String(TicketReader({ slug: 'HS2-LINKED', title: 'Linked reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: 'More at HS2-DEEPER.', active: true, readOnly: true, projectName: 'Other project', stackPosition: 2, stackSize: 3 }));
+    expect(markup).toContain('aria-label="Read HS2-LINKED in Other project"');
+    expect(markup).toContain('data-reader-position="2" data-reader-count="3"');
+    expect(markup).toContain('<span>Other project</span><small>Reader 2 of 3</small>');
+    expect(markup).not.toContain('data-action="toggle-inspector-up-next"');
+    const covered = String(TicketReader({ slug: 'HS2-COVERED', title: 'Covered reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', active: false, projectName: 'First project', stackPosition: 1, stackSize: 2 }));
+    expect(covered).not.toContain('aria-modal="true"');
+  });
+
   it('keeps the feedback catchall at half the ordinary note-editor minimum height',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).toMatch(/textarea\[data-note-response="true"\] \{ min-height: 2\.5rem; \}/)});
 });

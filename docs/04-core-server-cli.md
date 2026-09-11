@@ -97,7 +97,10 @@ Checkout-qualified `/checkouts/{id}/tickets` routes aggregate reads across every
 hosted store. Get/update/close require the ticket to resolve uniquely; create selects the
 only linked store or requires an explicit store id when several are linked. MCP ticket
 tools accept the same optional `checkout` target (and `store` for ambiguous creates) in
-both HTTP and serverless modes.
+both HTTP and serverless modes. Every checkout-qualified list, full-ticket read, and
+mutation response resolves standing auto-context from that checkout's project settings;
+one ticket store shared by several checkouts never supplies an implicit project identity.
+Unqualified and `/stores/{id}` routes remain explicitly store-only compatibility APIs.
 
 Checkout corrupt diagnostics also expose a safe repair-ticket action. It revalidates the
 reported path, routes the generated work item to the affected store, and returns the
@@ -112,6 +115,10 @@ one source. An empty discovered source set remains valid at the core layer so a 
 client can present provider setup. Checkout ticket enumeration is also valid for that
 empty source set and returns an empty array; it must not turn a successful project-open
 transaction into a later conflict while the client presents source setup.
+The response path does not regenerate the checkout's complete local worklist. That
+all-store scan runs shortly afterward as best-effort blocking work, giving the client's
+initial ticket-index requests priority; store watchers keep the projection current after
+subsequent ticket changes.
 
 ### Headless platform APIs
 
@@ -494,14 +501,17 @@ Up Next. Each turn currently spawns a fresh process; cross-turn session resume i
 `trigger` launches/injects one turn into an AI tool and streams it (HS2-109). It is
 **safe by default (HS2-117 launch safety):** it prepends a `hotsheet` → `hotsheet-cli`
 shim (plus the CLI's own dir) to the tool's PATH so a bare `hotsheet` can't hit an HS1
-launcher and kill the dev instance (§4.4); refuses to run when the project holds an
-HS1 store (`assert_no_hs1`) or when the tool isn't set up; and defaults `--mcp-config`
-to the tool's project config so the tool can reach **only** the Hot Sheet MCP (Claude
-via `--strict-mcp-config`). Codex reads its MCP servers from `$CODEX_HOME`, so `trigger`
+launcher and kill the dev instance (§4.4); refuses to run when the project holds a live
+HS1 store unless the selected HS2 store contains a schema-valid completed-import receipt
+whose canonical `sourceProject` is that exact checkout; refuses when the tool isn't set up;
+and defaults `--mcp-config` to the tool's project config so the tool can reach **only**
+the Hot Sheet MCP (Claude via `--strict-mcp-config`). Missing, malformed, relative-path,
+or unrelated migration receipts fail closed. Codex reads its MCP servers from
+`$CODEX_HOME`, so `trigger`
 **auto-builds a throwaway MCP-free `CODEX_HOME`** for it (HS2-YRDQNX): a copy of the
 user's `auth.json` plus a `config.toml` whose only server is the Hot Sheet shim — so a
 bare `trigger codex` can't load the user's global MCP servers (pass `--env CODEX_HOME=…`
-to override). The safety primitives live in `crates/hotsheet-cli/src/launch_safety.rs`.
+to override). The safety primitives live in `crates/hotsheet-aitools/src/launch_safety.rs`.
 
 **Project settings (core-owned; shared + local scopes — §4.9):**
 ```
@@ -567,11 +577,12 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 
 ## 4.7 Project settings (shared / local / client) — core-owned
 
-> **Built (HS2-94, HS2-34):** `hotsheet_ticketing::settings::Settings` — a flat
+> **Built (HS2-94, HS2-34, HS2-REF96F):** `hotsheet_ticketing::settings::Settings` — a flat
 > `key -> JSON` map per scope: **global** `${HOTSHEET_HOME}/settings.json`
-> (machine-wide, store-independent), **shared** `hotsheet-settings.json` (committed
-> beside the store) and **local** `hotsheet-settings.local.json` (auto-added to
-> `.gitignore`). The effective value resolves in precedence **global < shared < local**
+> (machine-wide and project-independent), **shared**
+> `<project-root>/.hotsheet/settings.json` (committed with the code project), and
+> **local** `<project-root>/.hotsheet/settings.local.json` (auto-added to the code
+> project's `.gitignore`). The effective value resolves in precedence **global < shared < local**
 > (most specific wins). Driven headless by `hotsheet-cli settings get|set|list
 > [--scope global|shared|local]`. Client/device-only settings still never enter core.
 >
@@ -586,8 +597,8 @@ shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ti
 | Scope | Examples | On disk | Managed by |
 |---|---|---|---|
 | **Global** | cross-project personal defaults (default AI tool, editor) set once per machine | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store) | core → **CLI + server** |
-| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, enabled-plugin set for the *project* | **committed** in the store repo (travels with the project) | core → **CLI + server + client** |
-| **Local** | which tools are enabled *on this machine*, index location, machine paths | **gitignored** overlay beside the store (machine-local, not device-app-local) | core → **CLI + server**; client via API |
+| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, enabled-plugin set for the *project* | **`<project-root>/.hotsheet/settings.json`**, committed with the code project and independent of its ticket sources | core → **CLI + server + client** |
+| **Local** | which tools are enabled *on this machine*, index location, machine paths | **`<project-root>/.hotsheet/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
 | **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7) | the client's own app storage | **client only — never enters core** |
 
 The dividing test: *does a headless CLI or the server ever need this value?* If yes,
@@ -595,6 +606,20 @@ it's shared or local and lives in core-owned settings. If it only means somethin
 a running GUI on one device, it's client-only and the core never sees it. This is
 why `hotsheet settings` (§4.4) can manage the first two scopes with no client at all,
 while a window position stays out of the core entirely.
+
+Checkout-owned settings remain available when a project has zero ticket sources and have
+one identity when it has several. Older `hotsheet-settings.json` and
+`hotsheet-settings.local.json` files beside linked git stores are deterministic read-through
+inputs (default source first) until the project file is written or setup migration copies
+them forward; legacy store-only/serverless APIs retain their old paths rather than creating
+`<ticket-store>/.hotsheet`. Global settings and ticket-source discovery are unchanged.
+
+The `commands` key is a machine-local array of typed definitions: `id`, `title`, exact
+`program` + `args`, optional `group`/`confirmation`, and optional `cwd`. Without `cwd`
+the checkout-scoped command runner uses the code-project root; HS1 migration sets it to the original
+code-project root so imported shell and AI command buttons retain their working-directory
+semantics without embedding a shell-formatted `cd` string. Definitions, run history,
+lookup, and cancellation are isolated by checkout on a shared server.
 
 Rich-activity distillation is a stricter case: consent is read from the **local scope
 only**, even though normal effective settings permit shared/global fallback. A committed
@@ -611,12 +636,16 @@ The failure fallback defaults to `false`; the example opts into it explicitly. T
 separate from selecting the deterministic adapter itself.
 
 Set `enabled` to `false` (or unset the local key) to stop it immediately; pending
-in-memory windows are discarded. Native clients can select a client-owned adapter such
-as `apple_foundation_models`. The server records and broadcasts the normalized local
-stream but never loads Apple Foundation Models or any other client model.
+in-memory windows for that checkout are discarded. Project-attributed events resolve the
+explicit checkout id/root, verify that the checkout links the target store, and keep each
+checkout's candidate window separate even when the store is shared. Events without a
+project identity retain the legacy store-only policy; an invalid explicit identity is not
+silently guessed. Native clients can select a client-owned adapter such as
+`apple_foundation_models`. The server records and broadcasts the normalized local stream
+but never loads Apple Foundation Models or any other client model.
 
-Shared settings are versioned by the same git as tickets (diffable, mergeable via
-the same driver where sensible); local settings are disposable machine state. The
+Shared settings are versioned by the code project's git, independently of whether its
+tickets use zero, one, or several stores; local settings are disposable machine state. The
 `plugins` module reads the enabled-plugin set from settings to decide what `hotsheet
 setup` writes ([05](05-ai-tool-plugins.md) §5.1a).
 

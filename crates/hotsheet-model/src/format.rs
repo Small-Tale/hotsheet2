@@ -694,7 +694,7 @@ mod tests {
         t.completed_at = Some("2026-08-20T09:00:00Z".into());
         t.closed_at = Some("2026-08-20T09:00:00Z".into());
         t.close_reason = Some(CloseReason::Duplicate);
-        t.duplicate_of = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"));
+        t.duplicate_of = Some("@project-a/git-main:01ARZ3NDEKTSV4RRFFQ69G5FC0".into());
         t.blocked_by = vec![ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1")];
         t.blocked_reason = Some("waiting on the theme refactor".into());
         t.claimed_by = Some("worker-1".into());
@@ -1025,7 +1025,7 @@ mod tests {
         t.verified_at = Some("x".into());
         t.closed_at = Some("x".into());
         t.close_reason = Some(CloseReason::Completed);
-        t.duplicate_of = Some(ulid("01ARZ3NDEKTSV4RRFFQ69G5FC0"));
+        t.duplicate_of = Some("01ARZ3NDEKTSV4RRFFQ69G5FC0".into());
         t.blocked_by = vec![ulid("01ARZ3NDEKTSV4RRFFQ69G5FC1")];
         t.blocked_reason = Some("x".into());
         t.claimed_by = Some("w".into());

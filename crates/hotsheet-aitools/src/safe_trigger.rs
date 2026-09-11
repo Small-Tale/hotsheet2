@@ -84,7 +84,7 @@ pub fn prepare_trigger_with_home(
         .collect::<Result<_>>()?;
 
     // ---- HS2-103 launch safety (baked in so a bare `trigger`/`work` is safe) ----
-    launch_safety::assert_no_hs1(&cwd)?;
+    launch_safety::assert_trigger_project_safe(&cwd, store_path)?;
 
     // Codex (`app-server`) reads its MCP servers from `$CODEX_HOME`, so the `--mcp-config`
     // isolation below can't reach it. Instead, unless the caller pinned a `CODEX_HOME`, hand

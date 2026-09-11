@@ -11,7 +11,8 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
-    "test:performance": "playwright test tests/providers.spec.ts -g 'projects Up Next immediately'"
+    "test:performance": "playwright test tests/providers.spec.ts -g 'projects Up Next immediately'",
+    "stress:scale": "node scripts/scale-stress.mjs"
   },
   "dependencies": {
     "@awesome.me/webawesome": "3.11.0",

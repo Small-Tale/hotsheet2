@@ -48,10 +48,10 @@ pub use ops::{NewTicket, OpError, SortKey, TicketPatch, TicketQuery};
 pub use overlay::LocalOverlay;
 pub use ports::{Clock, Rng};
 pub use provider::{
-    GitProvider, MutationContext, NotWorkingReport, ProviderCapabilities, ProviderConfigRegistry,
-    ProviderConnection, ProviderDescriptor, ProviderDraft, ProviderError, ProviderEvidence,
-    ProviderPatch, ProviderRegistry, TicketProvider, TicketRef, TransferError, TransferOutcome,
-    TransferProvenance, copy_between, git_connection_id, move_between,
+    GitProvider, MutationContext, NotWorkingReport, ProjectTicketRef, ProviderCapabilities,
+    ProviderConfigRegistry, ProviderConnection, ProviderDescriptor, ProviderDraft, ProviderError,
+    ProviderEvidence, ProviderPatch, ProviderRegistry, TicketProvider, TicketRef, TransferError,
+    TransferOutcome, TransferProvenance, copy_between, git_connection_id, move_between,
 };
 pub use registry::StoreRegistry;
 pub use roster::{Person, Roster};

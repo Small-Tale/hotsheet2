@@ -91,10 +91,18 @@ impl AppServerTurn for FakeTurn {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CapturedAppServerTurn {
+    thread_id: String,
+    content: String,
+    model: Option<String>,
+    effort: Option<String>,
+}
+
 #[derive(Default)]
 struct FakeAppServer {
     opened: RefCell<Option<(Option<String>, PathBuf)>>, // (resume, cwd)
-    last_turn: RefCell<Option<(String, String, Option<String>, Option<String>)>>,
+    last_turn: RefCell<Option<CapturedAppServerTurn>>,
     interrupted: Rc<Cell<bool>>,
     fail: bool,
 }
@@ -119,12 +127,12 @@ impl AppServerClient for FakeAppServer {
         model: Option<&str>,
         effort: Option<&str>,
     ) -> Result<Box<dyn AppServerTurn>, AppServerError> {
-        *self.last_turn.borrow_mut() = Some((
-            thread_id.to_string(),
-            content.to_string(),
-            model.map(str::to_string),
-            effort.map(str::to_string),
-        ));
+        *self.last_turn.borrow_mut() = Some(CapturedAppServerTurn {
+            thread_id: thread_id.to_string(),
+            content: content.to_string(),
+            model: model.map(str::to_string),
+            effort: effort.map(str::to_string),
+        });
         Ok(Box::new(FakeTurn {
             running: true,
             outcome: AppServerOutcome::Completed,
@@ -300,7 +308,7 @@ fn trigger_codex_uses_the_app_server_and_registers_a_connection() {
     // it opened a NEW thread (no resume) and sent the turn — no process spawned
     assert_eq!(app.opened.borrow().as_ref().unwrap().0, None);
     assert_eq!(
-        app.last_turn.borrow().as_ref().unwrap().1,
+        app.last_turn.borrow().as_ref().unwrap().content,
         "work the top ticket"
     );
     assert!(
@@ -351,8 +359,9 @@ fn app_server_drive_passes_per_turn_model_and_effort() {
     assert_eq!(turn.wait(), DoneReason::Completed);
     let sent = app.last_turn.borrow();
     let sent = sent.as_ref().unwrap();
-    assert_eq!(sent.2.as_deref(), Some("gpt-5.4"));
-    assert_eq!(sent.3.as_deref(), Some("high"));
+    assert_eq!(sent.thread_id, "thread-1");
+    assert_eq!(sent.model.as_deref(), Some("gpt-5.4"));
+    assert_eq!(sent.effort.as_deref(), Some("high"));
 }
 
 #[test]

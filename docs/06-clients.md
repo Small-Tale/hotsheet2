@@ -113,7 +113,12 @@ ticket repository. Choosing Not now is persisted for that checkout and detected 
 so the modal does not return on every launch; a non-blocking project banner retains the
 source path and an Import action. A changed source identity may prompt again.
 After a successful import and remote backup, a non-blocking project banner offers explicit
-cleanup of the old live HS1 data; backups are never removed.
+cleanup of the old live HS1 data or source-scoped persistent dismissal. Cleanup is
+allowlist-only, preserves backups, snapshots, the HS2 store link, and unknown files, and
+refuses to delete anything while a registered HS1 channel process for that checkout can
+still recreate it. Current registry entries carry the project-derived channel identity;
+live entries that explicitly identify another project do not block cleanup, while matching
+and identity-less legacy entries remain conservatively blocking.
 
 ## 6.3 Web client and Tauri desktop host
 
@@ -246,8 +251,12 @@ cleanup of the old live HS1 data; backups are never removed.
 - **Custom project commands.** The sidebar renders machine-local typed command
   definitions as collapsible groups with running feedback, stop confirmation, latest
   outcome, and press-and-hold output history. Definitions are edited in Project
-  Settings and persisted to `hotsheet-settings.local.json`; commands always execute
-  as an exact program plus argument array. Run transitions use the shared WebSocket/
+  Settings and persisted to `<project-root>/.hotsheet/settings.local.json`. Native
+  `program` definitions execute an exact program plus argument array; portable `shell`
+  definitions store command text and resolve the current machine's shell only at run time;
+  `ai` definitions store only the prompt and tool selection, never a hard-coded Hot Sheet
+  executable or CLI argv. Optional icon/color metadata controls the sidebar presentation.
+  Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in
   new terminal” for shell commands and capability-aware “Create task from command” for
@@ -351,8 +360,9 @@ cleanup of the old live HS1 data; backups are never removed.
   Recovery guidance distinguishes safe compatible skew, stale local source, old client,
   old server, and unavailable metadata; it never offers automatic restart without the
   same explicit restart plus quiescence capability gate.
-  Ticket-provider connections are not stored in `hotsheet-settings.json` or
-  `hotsheet-settings.local.json`: those remain shared/local preferences. Git sources are
+  Ticket-provider connections are not stored in project
+  `.hotsheet/settings.json` or `.hotsheet/settings.local.json`: those remain
+  shared/local preferences. Git sources are
   checkout/store links in the machine registry, while external provider connections are
   non-secret records in the ticket store's `providers.json` (credentials remain keychain
   references). The real Sources settings view lists active git and external connections
@@ -431,7 +441,15 @@ cleanup of the old live HS1 data; backups are never removed.
   Switching to an already-open project is a local projection change, not a loading gate. The
   tab click atomically restores that project's most recent ticket rows, repository summary,
   corrupt-ticket diagnostics, and command state from memory within the next frame, without
-  showing the global loading indicator. An authoritative refresh follows in the background.
+  showing the global loading indicator. An authoritative refresh follows in the background,
+  but is not started until a task after that first browser paint, so request setup cannot
+  delay the cached projection becoming visible.
+  Every open project's replay-safe live-update stream also refreshes its cached ticket rows,
+  even while another project is selected. Project-tab Up Next counts and live-claim activity
+  therefore remain authoritative without activating each tab. Repeated invalidations for one
+  project coalesce, distinct projects are retained, open metadata controls defer the batch
+  until their popup closes, and a project that becomes active mid-refresh is promoted to the
+  complete active-project reconciliation path. Closing a tab invalidates its pending work.
   Project-activation and request generations reject late A→B→A responses, including delayed
   workspace-session draft restoration, so cached immediacy cannot introduce cross-project
   state or stale network writes. A first visit with no cache retains the normal loading state.
@@ -451,7 +469,7 @@ cleanup of the old live HS1 data; backups are never removed.
   and disables a second Drive activation while that turn is busy; interruption remains in the
   selected chat when the connection advertises it. The Views add action opens a compact
   create dialog for a readable name and any ordinary search expression. Saved views live in
-  the ticket store's shared settings, appear in both the project sidebar and terminal ticket
+  the code project's shared settings, appear in both the project sidebar and terminal ticket
   rail, and apply their query through the same inline text/token search pipeline. Their
   `custom:<id>` selection restores per project, follows replayable `views_updated` events,
   and falls back to Queue if a selected shared view is removed. Creating a view rejects empty,
@@ -465,6 +483,11 @@ cleanup of the old live HS1 data; backups are never removed.
   its separate scope, suggestions, result rows, and saved-view handoff were removed because
   they duplicated the ordinary inline search flow without a distinct navigation role. Exact
   cross-project ticket references continue through the compact link-resolution chooser.
+  Linked ticket readers keep their own qualified provider identity, provider capabilities,
+  and text-edit sessions instead of borrowing the workspace selection. Details, note, and
+  blocked-reason drafts autosave independently; refresh reconciliation preserves a dirty
+  local draft, and closing a reader flushes its pending writes through the owning project's
+  checkout before the stack unwinds and focus returns to the originating link.
 
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.
@@ -570,11 +593,11 @@ cleanup of the old live HS1 data; backups are never removed.
   same concrete attachment even when filenames or trailing prose are ambiguous.
   Missing ticket or filename targets do not reject a note (attachments may be uploaded next),
   but mutation callers receive prominent actionable warning feedback. Attach output leads with
-  this filename syntax rather than its opaque storage id. Git-backed note writes also translate
-  unambiguous bare attachment ids in ordinary prose into resolvable same-ticket or cross-ticket
-  references, while retaining literal ids in code, URLs/paths, and ambiguous or currently
-  unrepresentable filename cases (HS2-H2PTVZ). Browser-compatible
-  bare references and explicit image destinations render inline; explicit Markdown links
+  this filename syntax rather than its opaque storage id. Git-backed
+  note writes also translate unambiguous bare attachment ids in ordinary prose into resolvable
+  same-ticket or cross-ticket references, while retaining literal ids in code, URLs/paths, and
+  ambiguous or currently unrepresentable filename cases (HS2-H2PTVZ). Browser-compatible bare
+  references and explicit image destinations render inline; explicit Markdown links
   remain compact links even when their target is an image, while other references
   ask the host to open the file with its default application. Right-click actions can
   download, copy the durable reference or host path, and reveal the file using the host
@@ -587,12 +610,17 @@ cleanup of the old live HS1 data; backups are never removed.
 
   Plain uppercase ticket references such as `HS2-BD09B6` in details and notes render
   as accessible links. Activating one searches exact slugs across every open project:
-  one match switches projects when necessary and selects the ticket, no match reports a
-  transient toast, and multiple matches open a compact source chooser rather than the
-  advanced-search surface. The explicit `@<project-id>/<ticket-slug>` form, for example
-  `@product-docs/HS2-BD09B6`, limits resolution to one open project and makes cross-project
-  links unambiguous. References already inside Markdown links, inline/fenced code, or
-  attachment controls remain unchanged.
+  one match opens an exact, read-only reader layer above the current inspector or reader,
+  no match reports a transient toast, and multiple matches open a compact source chooser
+  rather than the advanced-search surface. The explicit `@<project-id>/<ticket-slug>`
+  form, for example `@product-docs/HS2-BD09B6`, limits resolution to one open project and
+  makes cross-project links unambiguous. A linked reader identifies its owning project and
+  stack depth, and links inside it may push further layers without changing the workspace's
+  selected project, ticket, or list/column view. Only the top reader is modal and interactive.
+  Close or Escape removes one layer and restores focus to the link that opened it; unwinding
+  the final linked layer returns to the unchanged inspector or editable workspace reader.
+  References already inside Markdown links, inline/fenced code, or attachment controls
+  remain unchanged.
 
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained previews for browser-compatible image and video
@@ -729,10 +757,22 @@ cleanup of the old live HS1 data; backups are never removed.
   The ticket context menu also exposes the server's structured close operation when the
   provider advertises `close` and `close_reasons`. The close dialog records Completed,
   Not planned, Duplicate, or Obsolete rather than approximating those outcomes with a
-  status patch or note. Duplicate closure searches checkout-wide tickets, excludes and
-  rejects the source ticket, requires an explicit canonical target, and sends its durable
-  identity as `duplicate_of`. The inspector renders the saved outcome and lets users open
-  the canonical duplicate target even when it is outside the current list filter.
+  status patch or note. Duplicate closure searches every open project, labels each result
+  with its owning project, excludes and rejects the exact source identity, requires an
+  explicit canonical target, and sends its `(project_id, connection_id, native_id)` tuple.
+  The server validates that tuple against the target checkout and persists it as
+  `@project/connection:native-id`, so same-slug tickets cannot become ambiguous. The
+  inspector renders the saved outcome and switches projects to open the exact canonical
+  target even when it is outside the current list filter. Checkout-scoped self-reference
+  rejection compares all three identity fields; compatibility provider/store routes lack
+  a source project and intentionally treat the same connection/native pair as the same
+  underlying ticket. A canonical ticket also lists every reverse duplicate relationship
+  discoverable across the machine server's registered checkouts and provider sources.
+  Each backlink always includes its project name and slug, so same-slug results remain
+  distinct, and opens the exact project/connection/native reference. Legacy bare-ULID
+  relationships remain discoverable. An inaccessible registered project does not suppress
+  healthy backlinks; the inspector names the project whose additional results could not
+  be checked.
 
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. Live diagnostics supersede any stale indexed row with the same recovered
@@ -816,9 +856,8 @@ cleanup of the old live HS1 data; backups are never removed.
   across reloads. Missing, partial, malformed, or unknown enum values fall back per
   field to safe defaults rather than preventing project open. Selecting a ticket still
   reopens the inspector and persists that explicit state transition. List or column mode
-  remains selected while visiting the cross-project terminal dashboard and when following
-  ticket references in details or notes; if navigation begins from a non-ticket workspace,
-  it restores the last explicitly selected list-or-column mode.
+  remains selected while visiting the cross-project terminal dashboard. Ticket references
+  in details or notes open layered readers without changing the workspace view at all.
   Status, priority, and title sorts use most-recently-updated first as their secondary
   order, regardless of the selected primary direction; exact remaining ties use the
   stable ticket slug. Updated-date sorting continues to follow its selected direction.
@@ -894,9 +933,18 @@ view layer is new work.
 - Live updates over WebSocket (index changes, claims, busy state).
 - The AI-drive surface: launch/trigger a tool, the **permission popup**, the
   **busy indicator**, the connection count.
-- Multi-project tabs (local + remote), with pointer drag reordering and remembered
-  device-local project order. A live claim uses a static segmented claim ring and a
-  “claimed” accessible label; it never presents a lease as proof of active AI execution.
+- Multi-project tabs (local + remote), with pointer drag reordering, remembered
+  device-local project order, and an accessible per-project Up Next count. The count
+  is omitted at zero, shows its exact value through 99, and renders `99+` above that
+  while retaining the full count for assistive technology. Any live ticket claim turns
+  the yellow count circle into a static claim ring split into one segment per
+  simultaneous claimed ticket, and the center switches to that claimed count (including
+  a visible `1` when there is no Up Next count). Each open project's existing long-poll stream reconciles
+  those cached rows after ticket, claim, renew, and release events even when the project is
+  not selected; the indicator never waits for a tab activation to become current. A
+  closeable local tab's empty trailing reserve subtracts
+  the selector gap already present beside the label, keeping that label geometrically
+  centered in the complete pill rather than balancing the close control twice.
 - Search (FTS) and filtered views.
 
 Closing a project tab first inventories its live terminals and AI chats. When any are
@@ -1346,7 +1394,8 @@ the checkout path and terminal id into stable machine-local identities: bash and
 separate `HISTFILE` paths under the Hot Sheet home, while fish uses a separate durable
 `fish_history` session name. Project Settings → Terminals exposes the local-only **Use my
 global shell history** opt-out; it affects newly created terminals and persists as
-`terminal.inherit_global_shell_history` in `hotsheet-settings.local.json` (HS2-A5V801).
+`terminal.inherit_global_shell_history` in
+`<project-root>/.hotsheet/settings.local.json` (HS2-A5V801).
 
 ## 6.8 Notes, reader mode & editing
 
@@ -1470,6 +1519,12 @@ ticket's details + notes on one large scrollable surface with no separate top-le
 mode. The reader uses the available browser height with exactly 24px of backdrop above
 and below; it has no desktop-height cap that leaves unnecessary vertical space. Details
 and ordinary notes expose their normal edit interactions immediately.
+The workspace reader remains the editable surface for its selected ticket. Ticket links
+open read-only reader layers above it (or above the sidebar inspector) so each frame can
+hold an exact project-qualified ticket without sharing the workspace's edit drafts or
+selection. Linked readers use the same responsive inspector composition; their compact
+project/depth header remains visible at wide and narrow widths while covered frames are
+inert and hidden from the active accessibility tree.
 Its **A Large Small** action toggles a user-global preference that renders every
 Details and note-content size from its own ordinary semantic size, including paragraphs,
 lists, headings, quotations, code, tables, activity text, and edit fields, at exactly 1.5×.
@@ -1513,9 +1568,8 @@ order requested: each action derives its patch, inverse, and expected concurrenc
 only after the preceding action has committed or rolled back. A successful second action
 therefore uses the first response's fresh token, while a genuine external conflict still
 restores that action's captured rows, reports the error, and does not poison later queued
-work. Independent projects retain independent mutation queues. Attaching a ticket source,
-including after HS1 import, refreshes provider descriptors before exposing the imported
-tickets for mutation.
+work. Attaching a ticket source, including after HS1 import, refreshes provider descriptors
+before exposing the imported tickets for mutation.
 
 Ticket creation follows the same immediate-authority rule: as soon as the create
 response returns, the new ticket is inserted, selected, and opened for Details editing.

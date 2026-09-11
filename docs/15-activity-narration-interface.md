@@ -95,6 +95,9 @@ The `activity` capability turns native signals → events; the host owns the str
 > bounded windows from the normalized stream and may turn them into shared `activity`
 > notes. It is disabled by default and consent comes exclusively from the machine-local
 > `activity_distillation` settings object; global/shared settings cannot enable it.
+> When an event identifies a project, the server resolves that exact checkout and reads
+> its local project settings; it does not infer a checkout from the ticket store. Pipeline
+> state is isolated by checkout plus store, including when several checkouts share a store.
 
 Candidate selection is deterministic: meaningful decisions, explicitly changed plans,
 blocked/unblocked transitions, three edit/command events by default, a substantive turn

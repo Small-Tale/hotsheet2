@@ -9,8 +9,10 @@
 //! - [`ShimDir`] + [`prepend_path`] put a `hotsheet` → `hotsheet-cli` shim (and the CLI's
 //!   own dir) at the front of the launched tool's PATH, so bare `hotsheet` hits *our*
 //!   safe CLI and `hotsheet-mcp` resolves.
-//! - [`assert_no_hs1`] refuses to drive a tool in a project that still holds an HS1
-//!   store, and [`assert_hotsheet_resolves`] confirms the shim actually wins on PATH.
+//! - [`assert_trigger_project_safe`] refuses to drive a tool in a project that still
+//!   holds a live HS1 store unless the selected HS2 store has the matching completed-
+//!   import receipt. [`assert_no_hs1`] remains the strict gate for non-trigger launches,
+//!   and [`assert_hotsheet_resolves`] confirms the shim actually wins on PATH.
 //! - [`mcp_command`] lets `setup` write an **absolute** `hotsheet-mcp` path, so the MCP
 //!   config works even without the PATH shim.
 //!
@@ -20,6 +22,16 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
+
+const HS1_IMPORT_RECEIPT: &str = "hotsheet-hs1-import.json";
+
+#[derive(serde::Deserialize)]
+struct Hs1ImportReceipt {
+    #[serde(rename = "$hotsheetSchema")]
+    schema: u32,
+    #[serde(rename = "sourceProject")]
+    source_project: PathBuf,
+}
 
 /// Locate the real `hotsheet-cli` that a safety shim must execute. The caller may be the
 /// CLI itself, the sibling server binary, or a Cargo test under `target/*/deps`.
@@ -432,6 +444,37 @@ pub fn assert_no_hs1(project: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Apply the HS1 gate for a driven AI turn. A retained HS1 marker is safe only after
+/// migration has durably recorded a receipt in the selected HS2 store for this exact
+/// checkout. Receipt reads, parsing, and path resolution all fail closed.
+pub fn assert_trigger_project_safe(project: &Path, store_path: &Path) -> Result<()> {
+    if !project.join(".hotsheet/db/PG_VERSION").is_file()
+        || hs1_import_receipt_matches(project, store_path)
+    {
+        return Ok(());
+    }
+    assert_no_hs1(project)
+}
+
+fn hs1_import_receipt_matches(project: &Path, store_path: &Path) -> bool {
+    let Ok(contents) = std::fs::read(store_path.join(HS1_IMPORT_RECEIPT)) else {
+        return false;
+    };
+    let Ok(receipt) = serde_json::from_slice::<Hs1ImportReceipt>(&contents) else {
+        return false;
+    };
+    if receipt.schema != 1 || !receipt.source_project.is_absolute() {
+        return false;
+    }
+    let (Ok(source_project), Ok(project)) = (
+        receipt.source_project.canonicalize(),
+        project.canonicalize(),
+    ) else {
+        return false;
+    };
+    source_project == project
+}
+
 /// Assert that a bare `hotsheet` on `path` resolves to our shim — i.e. the first PATH
 /// directory carrying an executable `hotsheet` is `shim_dir`.
 pub fn assert_hotsheet_resolves(path: &str, shim_dir: &Path) -> Result<()> {
@@ -548,6 +591,67 @@ mod tests {
         std::fs::write(dir.path().join(".hotsheet/db/PG_VERSION"), "17").unwrap();
         let err = assert_no_hs1(dir.path()).unwrap_err().to_string();
         assert!(err.contains("HS1 store"), "{err}");
+    }
+
+    #[test]
+    fn trigger_allows_a_retained_hs1_store_only_for_its_completed_import() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let store = root.path().join("tickets.hs2");
+        std::fs::create_dir_all(project.join(".hotsheet/db")).unwrap();
+        std::fs::create_dir(&store).unwrap();
+        std::fs::write(project.join(".hotsheet/db/PG_VERSION"), "17").unwrap();
+
+        assert!(assert_trigger_project_safe(&project, &store).is_err());
+        std::fs::write(
+            store.join(HS1_IMPORT_RECEIPT),
+            serde_json::json!({
+                "$hotsheetSchema": 1,
+                "sourceProject": project.canonicalize().unwrap(),
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        assert!(assert_trigger_project_safe(&project, &store).is_ok());
+        assert!(assert_no_hs1(&project).is_err());
+    }
+
+    #[test]
+    fn trigger_rejects_unrelated_or_invalid_import_receipts() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let other = root.path().join("other");
+        let store = root.path().join("tickets.hs2");
+        std::fs::create_dir_all(project.join(".hotsheet/db")).unwrap();
+        std::fs::create_dir(&other).unwrap();
+        std::fs::create_dir(&store).unwrap();
+        std::fs::write(project.join(".hotsheet/db/PG_VERSION"), "17").unwrap();
+
+        for receipt in [
+            serde_json::json!({
+                "$hotsheetSchema": 1,
+                "sourceProject": other.canonicalize().unwrap(),
+            })
+            .to_string(),
+            r#"{"$hotsheetSchema":1,"sourceProject":"relative/project"}"#.to_string(),
+            serde_json::json!({
+                "$hotsheetSchema": 2,
+                "sourceProject": project.canonicalize().unwrap(),
+            })
+            .to_string(),
+            serde_json::json!({
+                "sourceProject": project.canonicalize().unwrap(),
+            })
+            .to_string(),
+            "not json".to_string(),
+        ] {
+            std::fs::write(store.join(HS1_IMPORT_RECEIPT), receipt).unwrap();
+            let err = assert_trigger_project_safe(&project, &store)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("HS1 store"), "{err}");
+        }
     }
 
     #[test]

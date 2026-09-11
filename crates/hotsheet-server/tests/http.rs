@@ -2,7 +2,9 @@
 
 use axum::body::{Body, Bytes};
 use axum::http::{Request, StatusCode, header};
-use hotsheet_server::client_drive::{ClientDriveBackend, PrepareDrive, PreparedClientDrive};
+use hotsheet_server::client_drive::{
+    ClientDriveBackend, ClientTurnRequest, PrepareDrive, PreparedClientDrive,
+};
 use hotsheet_server::source_revision::{SourceRevisionMonitor, revision_for_source_root};
 use hotsheet_server::{AppState, MAX_ATTACHMENT_BODY_BYTES, app};
 use hotsheet_ticketing::{FsStore, STORE_SCHEMA_VERSION, Scope, Settings, StoreMetadata};
@@ -70,27 +72,22 @@ impl PreparedClientDrive for FakePreparedClientDrive {
 
     fn run_turn(
         &self,
-        prompt: &str,
-        resume: Option<&str>,
-        _connection_id: &str,
-        model: Option<&str>,
-        effort: Option<&str>,
-        control: &hotsheet_aitools::TurnControl,
+        request: ClientTurnRequest<'_>,
         on_event: &mut dyn FnMut(&hotsheet_aitools::TurnEvent),
     ) -> Result<hotsheet_aitools::TurnDone, String> {
         self.turns.lock().unwrap().push((
-            prompt.into(),
-            resume.map(str::to_owned),
-            model.map(str::to_owned),
-            effort.map(str::to_owned),
+            request.prompt.into(),
+            request.resume.map(str::to_owned),
+            request.model.map(str::to_owned),
+            request.effort.map(str::to_owned),
         ));
         on_event(&hotsheet_aitools::TurnEvent::Output("fake output".into()));
-        if prompt == "hold" {
+        if request.prompt == "hold" {
             let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
-            while !control.interrupt_requested() && std::time::Instant::now() < deadline {
+            while !request.control.interrupt_requested() && std::time::Instant::now() < deadline {
                 std::thread::sleep(std::time::Duration::from_millis(5));
             }
-            if !control.interrupt_requested() {
+            if !request.control.interrupt_requested() {
                 return Err("fake interrupt timed out".into());
             }
             on_event(&hotsheet_aitools::TurnEvent::Done(
@@ -98,7 +95,7 @@ impl PreparedClientDrive for FakePreparedClientDrive {
             ));
             return Ok(hotsheet_aitools::TurnDone {
                 reason: hotsheet_aitools::DoneReason::Interrupted,
-                session_id: resume.map(str::to_owned),
+                session_id: request.resume.map(str::to_owned),
             });
         }
         on_event(&hotsheet_aitools::TurnEvent::Usage(
@@ -1595,6 +1592,283 @@ async fn opening_project_without_ticket_sources_keeps_the_checkout_usable() {
 }
 
 #[tokio::test]
+async fn source_free_checkout_settings_round_trip_under_the_project_root() {
+    let (primary, st) = state();
+    let mut events = st.subscribe();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    std::fs::create_dir(&checkout).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = application
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":checkout}).to_string()),
+        ))
+        .await
+        .unwrap();
+    let checkout_id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let views = application
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/views"),
+            Some(r#"[{"id":"mine","name":"Mine","query":"status:started"}]"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(views.status(), StatusCode::OK);
+    let view_event = events.recv().await.unwrap();
+    assert_eq!(view_event.kind, "views_updated");
+    assert_eq!(view_event.store, checkout_id);
+    let terminals = application
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/terminal-settings"),
+            Some(r#"{"inherit_global_shell_history":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(terminals.status(), StatusCode::OK);
+    let commands = application
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{checkout_id}/commands"),
+            Some(r#"[{"id":"check","title":"Check","program":"true","args":[]}]"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(commands.status(), StatusCode::OK);
+
+    let shared: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(checkout.join(".hotsheet/settings.json")).unwrap(),
+    )
+    .unwrap();
+    let local: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(checkout.join(".hotsheet/settings.local.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(shared["views"][0]["id"], "mine");
+    assert_eq!(local["commands"][0]["id"], "check");
+    assert_eq!(local["terminal.inherit_global_shell_history"], true);
+    assert!(
+        std::fs::read_to_string(checkout.join(".gitignore"))
+            .unwrap()
+            .lines()
+            .any(|line| line == ".hotsheet/settings.local.json")
+    );
+    assert!(!primary.path().join(".hotsheet/settings.json").exists());
+    assert!(!primary.path().join("hotsheet-settings.json").exists());
+}
+
+#[tokio::test]
+async fn shared_store_ticket_responses_use_the_explicit_checkout_auto_context() {
+    let (primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let first_root = workspace.path().join("first");
+    let second_root = workspace.path().join("second");
+    std::fs::create_dir(&first_root).unwrap();
+    std::fs::create_dir(&second_root).unwrap();
+    for (root, text) in [
+        (&first_root, "first project"),
+        (&second_root, "second project"),
+    ] {
+        Settings::for_project(root)
+            .set(
+                "auto_context",
+                serde_json::json!([{"type":"category","key":"issue","text":text}]),
+                Scope::Shared,
+            )
+            .unwrap();
+    }
+    Settings::new(primary.path())
+        .set(
+            "auto_context",
+            serde_json::json!([{"type":"category","key":"issue","text":"legacy store"}]),
+            Scope::Shared,
+        )
+        .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let mut checkout_ids = Vec::new();
+    for root in [&first_root, &second_root] {
+        let opened = application
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":root,"stores":[primary.path()]}).to_string()),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::CREATED);
+        checkout_ids.push(
+            body_json(opened).await["checkout"]["id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+
+    let created = application
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{}/tickets", checkout_ids[0]),
+            Some(r#"{"title":"Shared ticket"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = body_json(created).await;
+    let slug = created["slug"].as_str().unwrap();
+    assert_eq!(created["auto_context"][0]["text"], "first project");
+
+    let updated = application
+        .clone()
+        .oneshot(authed(
+            "PATCH",
+            &format!("/checkouts/{}/tickets/{slug}", checkout_ids[1]),
+            Some(r#"{"up_next":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(updated.status(), StatusCode::OK);
+    assert_eq!(
+        body_json(updated).await["auto_context"][0]["text"],
+        "second project"
+    );
+
+    let fetched = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{}/tickets/{slug}", checkout_ids[0]),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(fetched).await["auto_context"][0]["text"],
+        "first project"
+    );
+
+    let legacy = application
+        .oneshot(authed("GET", &format!("/tickets/{slug}"), None))
+        .await
+        .unwrap();
+    assert_eq!(
+        body_json(legacy).await["auto_context"][0]["text"],
+        "legacy store"
+    );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn checkout_command_definitions_and_runs_do_not_leak_between_projects() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let first = workspace.path().join("first");
+    let second = workspace.path().join("second");
+    std::fs::create_dir(&first).unwrap();
+    std::fs::create_dir(&second).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let mut ids = Vec::new();
+    for root in [&first, &second] {
+        let opened = application
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":root}).to_string()),
+            ))
+            .await
+            .unwrap();
+        ids.push(
+            body_json(opened).await["checkout"]["id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+    }
+    let saved = application
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            &format!("/checkouts/{}/commands", ids[0]),
+            Some(r#"[{"id":"wait","title":"Wait","program":"/bin/sh","args":["-c","sleep 2"]}]"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    let second_commands = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{}/commands", ids[1]),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert!(
+        body_json(second_commands)
+            .await
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let started = application
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{}/commands/wait/run", ids[0]),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::ACCEPTED);
+    let run_id = body_json(started).await["id"].as_str().unwrap().to_owned();
+    let second_runs = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{}/command-runs", ids[1]),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert!(body_json(second_runs).await.as_array().unwrap().is_empty());
+    let leaked = application
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{}/command-runs/{run_id}", ids[1]),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(leaked.status(), StatusCode::NOT_FOUND);
+    let cancelled = application
+        .oneshot(authed(
+            "POST",
+            &format!("/checkouts/{}/command-runs/{run_id}/cancel", ids[0]),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(cancelled.status(), StatusCode::OK);
+}
+
+#[tokio::test]
 async fn adding_a_newer_store_is_rejected_before_the_checkout_or_host_changes() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();
@@ -1750,11 +2024,71 @@ args = ["--path", "{store}"]
             .as_ref()
     );
     let settings: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(ticket_store.join("hotsheet-settings.json")).unwrap(),
+        &std::fs::read_to_string(checkout.join(".hotsheet/settings.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(settings["$hotsheetSchema"], 1);
     assert_eq!(settings["user_key"], 7);
+    assert_eq!(
+        std::fs::read_to_string(ticket_store.join("hotsheet-settings.json")).unwrap(),
+        r#"{"enabled_plugins":["fixture"],"user_key":7}"#
+    );
+}
+
+#[tokio::test]
+async fn opening_project_regenerates_its_worklist_after_responding() {
+    use hotsheet_model::{Timestamp, Ulid};
+    use hotsheet_ticketing::{NewTicket, ops};
+
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    let store = FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    ops::create(
+        &store,
+        Ulid::new(),
+        "APP",
+        Timestamp::new("2026-09-11T00:00:00Z"),
+        NewTicket {
+            title: "Background worklist ticket".into(),
+            category: "task".into(),
+            up_next: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let application = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let worklist = checkout.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST);
+
+    let response = tokio::time::timeout(
+        std::time::Duration::from_secs(1),
+        application.oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root":checkout,"stores":[ticket_store]}).to_string()),
+        )),
+    )
+    .await
+    .expect("project open must not wait for worklist generation")
+    .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert!(
+        !worklist.exists(),
+        "the deferred worklist refresh should not run on the response path"
+    );
+
+    for _ in 0..50 {
+        if std::fs::read_to_string(&worklist)
+            .is_ok_and(|body| body.contains("Background worklist ticket"))
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("project open did not regenerate worklist.md within 1s");
 }
 
 #[cfg(target_os = "macos")]
@@ -2539,6 +2873,499 @@ async fn checkout_scoped_ticket_routes_aggregate_and_resolve_linked_stores() {
 }
 
 #[tokio::test]
+async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
+    let (source_dir, st) = state();
+    let target_dir = tempfile::tempdir().unwrap();
+    let target_store = FsStore::init(target_dir.path(), &StoreMetadata::new("TG")).unwrap();
+    let source_checkout = tempfile::tempdir().unwrap();
+    let source_alias_checkout = tempfile::tempdir().unwrap();
+    let target_checkout = tempfile::tempdir().unwrap();
+    let external_checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let registry_path = registry.path().join("checkouts.json");
+    let external = GitHubProvider::new(
+        GitHubConfig::new("github-target", "acme/target", "fixture-token"),
+        Arc::new(FakeGitHub {
+            responses: Mutex::new(
+                vec![
+                    github_response(200, github_issue(42, "canonical provider issue")),
+                    github_response(200, serde_json::json!([])),
+                    github_response(200, serde_json::json!([])),
+                ]
+                .into(),
+            ),
+            requests: Mutex::new(Vec::new()),
+        }),
+    );
+    let renamed_external = GitHubProvider::new(
+        GitHubConfig::new("github-renamed", "acme/target", "fixture-token"),
+        Arc::new(FakeGitHub {
+            responses: Mutex::new(
+                vec![
+                    github_response(200, github_issue(43, "canonical renamed provider issue")),
+                    github_response(200, serde_json::json!([])),
+                    github_response(200, github_issue(43, "canonical renamed provider issue")),
+                    github_response(200, serde_json::json!([])),
+                    github_response(200, serde_json::json!([])),
+                ]
+                .into(),
+            ),
+            requests: Mutex::new(Vec::new()),
+        }),
+    );
+    let app = app(st
+        .with_checkout_registry(registry_path.clone())
+        .with_ticket_provider(Arc::new(external))
+        .with_ticket_provider(Arc::new(renamed_external)));
+
+    let target_source = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/stores",
+                Some(&serde_json::json!({"path":target_dir.path()}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let source_registration = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(
+                    &serde_json::json!({
+                        "root":source_checkout.path(),
+                        "alias":"source-project",
+                        "stores":[source_dir.path()]
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let target_registration = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(
+                    &serde_json::json!({
+                        "root":target_checkout.path(),
+                        "alias":"target-project",
+                        "stores":[target_dir.path()]
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let source_alias_registration = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(
+                    &serde_json::json!({
+                        "root":source_alias_checkout.path(),
+                        "alias":"source-alias",
+                        "stores":[source_dir.path()]
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let external_registration = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                "/checkouts",
+                Some(
+                    &serde_json::json!({
+                        "root":external_checkout.path(),
+                        "alias":"external-target",
+                        "sources":[{
+                            "connection_id":"github-target",
+                            "provider":"github",
+                            "locator":"acme/target"
+                        }],
+                        "default_source":"github-target"
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let source_project = source_registration["id"].as_str().unwrap();
+    let source_connection = source_registration["sources"][0]["connection_id"]
+        .as_str()
+        .unwrap();
+    let source_alias_project = source_alias_registration["id"].as_str().unwrap();
+    let target_project = target_registration["id"].as_str().unwrap();
+    let external_project = external_registration["id"].as_str().unwrap();
+
+    let source = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{source_project}/tickets"),
+                Some(r#"{"title":"reported twice"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let target = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{target_project}/tickets"),
+                Some(r#"{"title":"canonical issue"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let self_reference = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!(
+                "/checkouts/{source_project}/tickets/{}/close",
+                source["qualified_id"].as_str().unwrap()
+            ),
+            Some(
+                &serde_json::json!({
+                    "reason":"duplicate",
+                    "duplicate_of":{
+                        "project_id":source_project,
+                        "connection_id":source_connection,
+                        "native_id":source["native_id"]
+                    }
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(self_reference.status(), StatusCode::BAD_REQUEST);
+
+    // Connection ids are project-scoped. The same connection/native pair in a different
+    // project is a distinct qualified identity and must not be mistaken for self-reference.
+    let aliased = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{source_project}/tickets"),
+                Some(r#"{"title":"same source exposed by another project"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let alias_close = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!(
+                "/checkouts/{source_project}/tickets/{}/close",
+                aliased["qualified_id"].as_str().unwrap()
+            ),
+            Some(
+                &serde_json::json!({
+                    "reason":"duplicate",
+                    "duplicate_of":{
+                        "project_id":source_alias_project,
+                        "connection_id":source_connection,
+                        "native_id":aliased["native_id"]
+                    }
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(alias_close.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(authed(
+            "POST",
+            &format!(
+                "/checkouts/{source_project}/tickets/{}/close",
+                source["qualified_id"].as_str().unwrap()
+            ),
+            Some(
+                &serde_json::json!({
+                    "reason":"duplicate",
+                    "duplicate_of":{
+                        "project_id":target_project,
+                        "connection_id":target_source,
+                        "native_id":target["native_id"]
+                    }
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let closed = body_json(response).await;
+    let persisted_reference = format!(
+        "@{target_project}/{target_source}:{}",
+        target["native_id"].as_str().unwrap()
+    );
+    assert_eq!(closed["duplicate_of"], persisted_reference);
+
+    let persisted = FsStore::open(source_dir.path())
+        .unwrap()
+        .read_ticket(
+            &hotsheet_model::Ulid::from_string(source["native_id"].as_str().unwrap()).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        persisted.duplicate_of.as_deref(),
+        Some(persisted_reference.as_str())
+    );
+    assert!(
+        target_store
+            .read_ticket(
+                &hotsheet_model::Ulid::from_string(target["native_id"].as_str().unwrap()).unwrap()
+            )
+            .is_ok()
+    );
+    let relocated_checkout = tempfile::tempdir().unwrap();
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .relocate(target_project, relocated_checkout.path(), None)
+        .unwrap();
+    let after_relocation = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!(
+                "/checkouts/{target_project}/tickets/{}",
+                target["qualified_id"].as_str().unwrap()
+            ),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(after_relocation.status(), StatusCode::OK);
+
+    let cross_provider_source = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{source_project}/tickets"),
+                Some(r#"{"title":"duplicate of provider issue"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let cross_provider = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!(
+                    "/checkouts/{source_project}/tickets/{}/close",
+                    cross_provider_source["qualified_id"].as_str().unwrap()
+                ),
+                Some(
+                    &serde_json::json!({
+                        "reason":"duplicate",
+                        "duplicate_of":{
+                            "project_id":external_project,
+                            "connection_id":"github-target",
+                            "native_id":"42"
+                        }
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        cross_provider["duplicate_of"],
+        format!("@{external_project}/github-target:42")
+    );
+
+    // Historical references keep resolving after an explicit source rename and are
+    // normalized to the source's current id when a new duplicate relationship is saved.
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .rename_source(external_project, "github-target", "github-renamed")
+        .unwrap();
+    let historical_reference = app
+        .clone()
+        .oneshot(authed(
+            "GET",
+            &format!("/checkouts/{external_project}/tickets/github-target:43"),
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(historical_reference.status(), StatusCode::OK);
+    let renamed_source = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{source_project}/tickets"),
+                Some(r#"{"title":"duplicate through renamed provider alias"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let renamed_close = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!(
+                    "/checkouts/{source_project}/tickets/{}/close",
+                    renamed_source["qualified_id"].as_str().unwrap()
+                ),
+                Some(
+                    &serde_json::json!({
+                        "reason":"duplicate",
+                        "duplicate_of":{
+                            "project_id":external_project,
+                            "connection_id":"github-target",
+                            "native_id":"43"
+                        }
+                    })
+                    .to_string(),
+                ),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        renamed_close["duplicate_of"],
+        format!("@{external_project}/github-renamed:43")
+    );
+
+    let reopened = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                &format!(
+                    "/checkouts/{source_project}/tickets/{}",
+                    source["qualified_id"].as_str().unwrap()
+                ),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(reopened["duplicate_of"], persisted_reference);
+
+    // Reverse lookup spans every registered project, keeps shared-store slug collisions
+    // project-qualified, tolerates an inaccessible project, and recognizes pre-qualified
+    // legacy bare-ULID references.
+    let source_store = FsStore::open(source_dir.path()).unwrap();
+    let legacy_id = hotsheet_model::Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap();
+    hotsheet_ticketing::ops::create(
+        &source_store,
+        legacy_id,
+        "HS",
+        hotsheet_model::Timestamp::new("2026-09-11T02:00:00Z"),
+        hotsheet_ticketing::NewTicket {
+            title: "legacy duplicate".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    hotsheet_ticketing::ops::close(
+        &source_store,
+        &legacy_id,
+        hotsheet_model::Timestamp::new("2026-09-11T02:01:00Z"),
+        hotsheet_model::CloseReason::Duplicate,
+        Some(target["native_id"].as_str().unwrap().to_string()),
+    )
+    .unwrap();
+    let inaccessible_checkout = tempfile::tempdir().unwrap();
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register_sources(
+            inaccessible_checkout.path(),
+            Some("offline-project"),
+            None,
+            vec![hotsheet_ticketing::checkouts::TicketSource {
+                connection_id: "missing-git".into(),
+                provider: "git".into(),
+                locator: inaccessible_checkout
+                    .path()
+                    .join("missing.hs2")
+                    .display()
+                    .to_string(),
+            }],
+            Some("missing-git".into()),
+        )
+        .unwrap();
+    let backlinks = body_json(
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            app.oneshot(authed(
+                "GET",
+                &format!(
+                    "/checkouts/{target_project}/tickets/{}/duplicate-backlinks",
+                    target["qualified_id"].as_str().unwrap()
+                ),
+                None,
+            )),
+        )
+        .await
+        .expect("duplicate backlink lookup completes")
+        .unwrap(),
+    )
+    .await;
+    let backlink_rows = backlinks["backlinks"].as_array().unwrap();
+    assert!(
+        backlink_rows
+            .iter()
+            .any(|row| row["project_name"] == "source-project" && row["slug"] == source["slug"])
+    );
+    assert!(
+        backlink_rows
+            .iter()
+            .any(|row| row["project_name"] == "source-alias" && row["slug"] == source["slug"])
+    );
+    assert!(
+        backlink_rows
+            .iter()
+            .any(|row| row["title"] == "legacy duplicate")
+    );
+    assert!(
+        backlink_rows
+            .iter()
+            .all(|row| row["reference"].as_str().unwrap().starts_with('@'))
+    );
+    assert!(
+        backlinks["inaccessible_projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|project| project["project_name"] == "offline-project")
+    );
+}
+
+#[tokio::test]
 async fn checkout_corrupt_tickets_reports_each_linked_store_without_breaking_ticket_list() {
     let (primary, st) = state();
     let extra = tempfile::tempdir().unwrap();
@@ -3227,18 +4054,32 @@ async fn configured_commands_stream_output_keep_history_and_cancel() {
         CommandDefinition {
             id: "echo".into(),
             title: "Echo".into(),
+            kind: Default::default(),
             program: "/bin/echo".into(),
             args: vec!["hello".into()],
+            cwd: None,
             group: None,
             confirmation: None,
+            command: None,
+            prompt: None,
+            tool: None,
+            icon: None,
+            color: None,
         },
         CommandDefinition {
             id: "sleep".into(),
             title: "Sleep".into(),
+            kind: Default::default(),
             program: "/bin/sleep".into(),
             args: vec!["10".into()],
+            cwd: None,
             group: None,
             confirmation: None,
+            command: None,
+            prompt: None,
+            tool: None,
+            icon: None,
+            color: None,
         },
     ];
     let app = app(st.with_commands(defs));
@@ -3295,7 +4136,7 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
     let (_d, st) = state();
     let mut events = st.subscribe();
     let app = app(st);
-    let definitions = r#"[{"id":"review","title":"Ask for review","program":"/bin/echo","args":["review"],"group":"AI"}]"#;
+    let definitions = r#"[{"id":"review","title":"Ask for review","program":"/bin/echo","args":["review"],"cwd":".","group":"AI"}]"#;
     let saved = app
         .clone()
         .oneshot(authed("PUT", "/commands", Some(definitions)))
@@ -3308,7 +4149,9 @@ async fn configured_commands_can_be_replaced_in_local_settings() {
         .oneshot(authed("GET", "/commands", None))
         .await
         .unwrap();
-    assert_eq!(body_json(listed).await[0]["id"], "review");
+    let listed = body_json(listed).await;
+    assert_eq!(listed[0]["id"], "review");
+    assert_eq!(listed[0]["cwd"], ".");
     let started = app
         .clone()
         .oneshot(authed("POST", "/commands/review/run", None))
@@ -6330,12 +7173,12 @@ async fn provider_transfer_is_idempotent_and_move_closes_source_after_copy() {
         .await
         .unwrap();
     assert_eq!(body_json(retry).await["destination"], first_destination);
-    let destination_tickets = FsStore::open(dir2.path())
-        .unwrap()
-        .list_tickets()
-        .unwrap();
+    let destination_tickets = FsStore::open(dir2.path()).unwrap().list_tickets().unwrap();
     assert_eq!(destination_tickets.len(), 1);
-    assert_eq!(destination_tickets[0].status, hotsheet_model::Status::NotStarted);
+    assert_eq!(
+        destination_tickets[0].status,
+        hotsheet_model::Status::NotStarted
+    );
     assert!(!destination_tickets[0].up_next);
 
     let moving = transfer.trim_end_matches('}').to_string() + r#", "confirm":true}"#;

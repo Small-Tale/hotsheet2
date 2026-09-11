@@ -23,6 +23,15 @@ pub struct PrepareDrive {
     pub effort: Option<String>,
 }
 
+pub struct ClientTurnRequest<'a> {
+    pub prompt: &'a str,
+    pub resume: Option<&'a str>,
+    pub connection_id: &'a str,
+    pub model: Option<&'a str>,
+    pub effort: Option<&'a str>,
+    pub control: &'a TurnControl,
+}
+
 /// Prepared drive boundary. Tests inject a fake here; production delegates to SafeTrigger,
 /// retaining its isolated home across turns.
 pub trait PreparedClientDrive: Send + Sync {
@@ -30,12 +39,7 @@ pub trait PreparedClientDrive: Send + Sync {
     fn supports_interrupt(&self) -> bool;
     fn run_turn(
         &self,
-        prompt: &str,
-        resume: Option<&str>,
-        connection_id: &str,
-        model: Option<&str>,
-        effort: Option<&str>,
-        control: &TurnControl,
+        request: ClientTurnRequest<'_>,
         on_event: &mut dyn FnMut(&TurnEvent),
     ) -> Result<TurnDone, String>;
 }
@@ -80,25 +84,20 @@ impl PreparedClientDrive for NativePreparedDrive {
 
     fn run_turn(
         &self,
-        prompt: &str,
-        resume: Option<&str>,
-        connection_id: &str,
-        model: Option<&str>,
-        effort: Option<&str>,
-        control: &TurnControl,
+        request: ClientTurnRequest<'_>,
         on_event: &mut dyn FnMut(&TurnEvent),
     ) -> Result<TurnDone, String> {
         let mut registry = ConnectionRegistry::new(30_000);
         self.0
             .run_turn_controlled_with_options(
-                prompt,
-                resume,
-                model,
-                effort,
+                request.prompt,
+                request.resume,
+                request.model,
+                request.effort,
                 false,
-                connection_id.to_owned(),
+                request.connection_id.to_owned(),
                 &mut registry,
-                control,
+                request.control,
                 on_event,
             )
             .map_err(|error| error.to_string())
@@ -576,12 +575,14 @@ impl ClientTurnJob {
         on_event: &mut dyn FnMut(&TurnEvent),
     ) -> Result<TurnDone, String> {
         self.connection.drive.run_turn(
-            prompt,
-            self.resume.as_deref(),
-            &self.connection.id,
-            self.model.as_deref().or(self.connection.model.as_deref()),
-            self.effort.as_deref().or(self.connection.effort.as_deref()),
-            &self.control,
+            ClientTurnRequest {
+                prompt,
+                resume: self.resume.as_deref(),
+                connection_id: &self.connection.id,
+                model: self.model.as_deref().or(self.connection.model.as_deref()),
+                effort: self.effort.as_deref().or(self.connection.effort.as_deref()),
+                control: &self.control,
+            },
             on_event,
         )
     }
@@ -657,12 +658,7 @@ mod tests {
 
         fn run_turn(
             &self,
-            _: &str,
-            _: Option<&str>,
-            _: &str,
-            _: Option<&str>,
-            _: Option<&str>,
-            _: &TurnControl,
+            _: ClientTurnRequest<'_>,
             _: &mut dyn FnMut(&TurnEvent),
         ) -> Result<TurnDone, String> {
             unreachable!("manager tests do not execute the prepared drive")

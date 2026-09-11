@@ -93,10 +93,14 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     assert!(String::from_utf8_lossy(&instructions).contains("User text."));
     assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
     let settings: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(store.join("hotsheet-settings.json")).unwrap())
+        serde_json::from_slice(&std::fs::read(project.join(".hotsheet/settings.json")).unwrap())
             .unwrap();
     assert_eq!(settings["$hotsheetSchema"], 1);
     assert_eq!(settings["user_key"], 7);
+    assert_eq!(
+        std::fs::read_to_string(store.join("hotsheet-settings.json")).unwrap(),
+        r#"{"enabled_plugins":["codex"],"user_key":7}"#
+    );
 
     refresh();
     assert_eq!(
@@ -1367,23 +1371,48 @@ fn trigger_preflight_blocks_hs1_and_requires_setup() {
     // Uses the built-in `claude` plugin (always embedded), so `trigger` gets past
     // `find(tool)` and reaches the HS2-103 preflight gates, which both bail before any
     // real tool is launched.
-    let dir = tempfile::tempdir().unwrap();
-    let p = dir.path();
-    hs(p).arg("init").assert().success();
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("tickets.hs2");
+    let project = root.path().join("project");
+    std::fs::create_dir(&store).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    hs(&store).arg("init").assert().success();
 
     // 1) An HS1 store under the project is refused before anything launches.
-    std::fs::create_dir_all(p.join(".hotsheet/db")).unwrap();
-    std::fs::write(p.join(".hotsheet/db/PG_VERSION"), "17").unwrap();
-    hs(p)
-        .args(["trigger", "claude"])
+    std::fs::create_dir_all(project.join(".hotsheet/db")).unwrap();
+    std::fs::write(project.join(".hotsheet/db/PG_VERSION"), "17").unwrap();
+    hs(&store)
+        .args(["trigger", "claude", "--project"])
+        .arg(&project)
         .assert()
         .failure()
         .stderr(predicate::str::contains("HS1 store"));
-    std::fs::remove_dir_all(p.join(".hotsheet")).unwrap();
+    // 2) The matching durable migration receipt lets trigger advance beyond the retained
+    //    marker to the next safety gate. The strict HS1 gate remains fail-closed above.
+    std::fs::write(
+        store.join("hotsheet-hs1-import.json"),
+        serde_json::json!({
+            "$hotsheetSchema": 1,
+            "sourceProject": project.canonicalize().unwrap(),
+            "tickets": 0,
+            "attachments": 0,
+        })
+        .to_string(),
+    )
+    .unwrap();
+    hs(&store)
+        .args(["trigger", "claude", "--project"])
+        .arg(&project)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("isn't set up"));
+    std::fs::remove_dir_all(project.join(".hotsheet")).unwrap();
 
-    // 2) Without the tool set up (no .mcp.json), trigger refuses (MCP isolation gate).
-    hs(p)
-        .args(["trigger", "claude"])
+    // 3) Without an HS1 marker or tool setup (no .mcp.json), trigger still refuses at
+    //    the MCP isolation gate.
+    hs(&store)
+        .args(["trigger", "claude", "--project"])
+        .arg(&project)
         .assert()
         .failure()
         .stderr(predicate::str::contains("isn't set up"));
@@ -2234,8 +2263,11 @@ fn settings_shared_and_local_scopes() {
 
     // local file is gitignored; shared file is committed (present, not ignored)
     let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
-    assert!(gi.lines().any(|l| l == "hotsheet-settings.local.json"));
-    assert!(p.join("hotsheet-settings.json").is_file());
+    assert!(
+        gi.lines()
+            .any(|line| line == ".hotsheet/settings.local.json")
+    );
+    assert!(p.join(".hotsheet/settings.json").is_file());
 
     // an unknown key errors
     hs(p)
@@ -2243,6 +2275,50 @@ fn settings_shared_and_local_scopes() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("no setting 'nope'"));
+}
+
+#[test]
+fn settings_use_the_current_checkout_when_projects_share_a_store() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("shared.hs2");
+    let first = root.path().join("first");
+    let second = root.path().join("second");
+    let home = root.path().join("home");
+    for path in [&store, &first, &second, &home] {
+        std::fs::create_dir(path).unwrap();
+    }
+    hs(&store)
+        .args(["init", "--prefix", "HS"])
+        .assert()
+        .success();
+    for (project, alias) in [(&first, "first"), (&second, "second")] {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .args(["checkout", "register"])
+            .arg(project)
+            .args(["--alias", alias, "--store"])
+            .arg(&store)
+            .assert()
+            .success();
+    }
+    for (project, value) in [(&first, "first"), (&second, "second")] {
+        hs(&store)
+            .env("HOTSHEET_HOME", &home)
+            .current_dir(project)
+            .args(["settings", "set", "categories"])
+            .arg(serde_json::to_string(&[value]).unwrap())
+            .assert()
+            .success();
+    }
+    let read = |project: &std::path::PathBuf| {
+        serde_json::from_slice::<serde_json::Value>(
+            &std::fs::read(project.join(".hotsheet/settings.json")).unwrap(),
+        )
+        .unwrap()
+    };
+    assert_eq!(read(&first)["categories"], serde_json::json!(["first"]));
+    assert_eq!(read(&second)["categories"], serde_json::json!(["second"]));
+    assert!(!store.join(".hotsheet/settings.json").exists());
 }
 
 /// LIVE, gated: a real `hotsheet-cli trigger codex` drives codex in an auto-built,

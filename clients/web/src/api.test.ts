@@ -221,9 +221,14 @@ describe('checkout bulk update transport',()=>{
 describe('structured ticket close transport',()=>{
   it('sends duplicate outcomes and canonical target identity through the checkout route',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('{"store":"git","ticket":{}}',{status:200}));
-    await new Api('/api').closeCheckoutTicket('folder with spaces','source/1','duplicate','target-1');
-    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/tickets/source%2F1/close',expect.objectContaining({method:'POST',body:'{"reason":"duplicate","duplicate_of":"target-1"}'}));
+    await new Api('/api').closeCheckoutTicket('folder with spaces','source/1','duplicate',{project_id:'other-project',connection_id:'git-other',native_id:'target-1'});
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/tickets/source%2F1/close',expect.objectContaining({method:'POST',body:'{"reason":"duplicate","duplicate_of":{"project_id":"other-project","connection_id":"git-other","native_id":"target-1"}}'}));
     fetchMock.mockRestore();
+  });
+  it('reads provider-aware reverse duplicate backlinks through the exact ticket route',async()=>{
+    const payload={backlinks:[{reference:'@alpha/git:one',project_id:'alpha',project_name:'Alpha',connection_id:'git',native_id:'one',qualified_id:'git:one',slug:'HS2-ONE',title:'Duplicate'}],inaccessible_projects:[{project_id:'offline',project_name:'Offline'}]},fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify(payload),{status:200}));
+    await expect(new Api('/api').checkoutTicketDuplicateBacklinks('folder with spaces','git:target/1')).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/tickets/git%3Atarget%2F1/duplicate-backlinks',expect.anything());fetchMock.mockRestore();
   });
 });
 

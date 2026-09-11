@@ -84,6 +84,11 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-lucide="copy-x"');
   });
 
+  it('renders project-qualified reverse duplicate backlinks and partial lookup status',()=>{
+    const markup=String(TicketInspector({...base,duplicateBacklinks:[{reference:'@other/git-other:source',project_id:'other',project_name:'Other project',connection_id:'git-other',native_id:'source',qualified_id:'git-other:source',slug:'HS2-SAME',title:'Earlier report'}],duplicateBacklinkInaccessibleProjects:['Offline project']}));
+    expect(markup).toContain('data-component="ticket-duplicate-backlinks"');expect(markup).toContain('Other project · HS2-SAME');expect(markup).toContain('data-item-id="@other/git-other:source"');expect(markup).toContain('Could not check Offline project for additional duplicates.');
+  });
+
   it('renders marked description choices as the reader feedback surface',()=>{
     const details='FEEDBACK NEEDED: Which direction?\n\nCHOICE:\n- Keep **A**\n- Use `B`';
     const sidebar=String(TicketInspector({...base,details,feedbackNeeded:true}));

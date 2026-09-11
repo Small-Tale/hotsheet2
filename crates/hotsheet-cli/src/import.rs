@@ -8,11 +8,14 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use hotsheet_model::{
     CloseReason, Note, NoteKind, Priority, Status, Ticket, Timestamp, Ulid, derive_slug,
 };
-use hotsheet_ticketing::{FsStore, Scope, Settings};
+use hotsheet_ticketing::{
+    FsStore, Scope, Settings,
+    commands::{CommandDefinition, CommandKind},
+};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -38,6 +41,43 @@ pub struct ExportFile {
 pub struct ProjectInfo {
     pub name: Option<String>,
     pub ticket_prefix: Option<String>,
+    /// Absolute code-project root recorded by the HS1 datadir exporter. Optional
+    /// for compatibility with exportVersion 1 files made by older exporters.
+    pub source_root: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Hs1Command {
+    #[serde(default)]
+    id: Option<String>,
+    name: String,
+    prompt: String,
+    #[serde(default)]
+    target: Option<String>,
+    #[serde(default)]
+    group: Option<String>,
+    #[serde(default)]
+    icon: Option<String>,
+    #[serde(default)]
+    color: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct Hs1CommandGroup {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    id: Option<String>,
+    name: String,
+    #[serde(default)]
+    children: Vec<Hs1Command>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum Hs1CommandItem {
+    Group(Hs1CommandGroup),
+    Command(Hs1Command),
 }
 
 /// One HS1 ticket as exported (snake_case, mirroring the HS1 schema).
@@ -141,17 +181,282 @@ pub fn import(store: &FsStore, export: &ExportFile, base_dir: &Path) -> Result<I
 }
 
 /// Carry forward HS1's project settings that are still meaningful as shared HS2
-/// settings. Identity fields initialize the store itself and are not duplicated;
-/// every other JSON value is preserved under its original key so custom categories,
-/// views, and future-compatible settings survive the one-time conversion.
+/// settings. Identity fields initialize the store itself and are not duplicated.
+/// `custom_commands` is translated separately into HS2's typed, machine-local
+/// `commands` setting; every other JSON value keeps its original key.
 fn import_settings(store: &FsStore, export: &ExportFile) -> Result<()> {
-    let settings = Settings::new(store.root());
+    let project_root = export
+        .project
+        .source_root
+        .as_deref()
+        .map(Path::new)
+        .filter(|root| root.join(".hotsheet").is_dir());
+    let settings = project_root
+        .map(|root| Settings::with_legacy_stores(root, [store.root()]))
+        .unwrap_or_else(|| Settings::new(store.root()));
+    let local_was_hs2 = settings.is_schema_marked(Scope::Local)?;
+    for source_only_key in ["appName", "ticketPrefix", "custom_commands"] {
+        settings.unset(source_only_key, Scope::Shared)?;
+    }
     for (key, value) in &export.settings {
-        if key != "appName" && key != "ticketPrefix" {
+        if key != "appName" && key != "ticketPrefix" && key != "custom_commands" {
             settings.set(key, value.clone(), Scope::Shared)?;
         }
     }
+    import_custom_commands(store, export, &settings, local_was_hs2)?;
     Ok(())
+}
+
+/// Translate HS1's ordered command tree into the flat typed HS2 command list.
+/// Existing effective HS2 commands win: equivalent definitions are deduplicated,
+/// while id collisions receive a deterministic suffix and never overwrite a user
+/// definition. The resulting list is local because it carries machine paths/programs.
+fn import_custom_commands(
+    store: &FsStore,
+    export: &ExportFile,
+    settings: &Settings,
+    local_was_hs2: bool,
+) -> Result<()> {
+    let Some(value) = export.settings.get("custom_commands") else {
+        return Ok(());
+    };
+    let items = decode_hs1_commands(value)?;
+    let migrated = convert_hs1_commands(store, export, &items)?;
+    let original = hotsheet_ticketing::commands::from_settings(settings)?;
+    let mut merged = original.clone();
+
+    for mut command in migrated {
+        if original
+            .iter()
+            .any(|existing| equivalent_command(existing, &command))
+        {
+            continue;
+        }
+        let base = command.id.clone();
+        let mut suffix = 1_usize;
+        loop {
+            if let Some(existing) = merged.iter().find(|existing| existing.id == command.id) {
+                if equivalent_command(existing, &command) {
+                    break;
+                }
+                suffix += 1;
+                command.id = format!("{base}-{suffix}");
+                continue;
+            }
+            merged.push(command);
+            break;
+        }
+    }
+
+    if merged != original {
+        let commands =
+            serde_json::to_value(&merged).context("serializing migrated HS1 custom commands")?;
+        if local_was_hs2 {
+            settings.set("commands", commands, Scope::Local)?;
+        } else {
+            let mut local = serde_json::Map::new();
+            local.insert("commands".into(), commands);
+            settings.replace_scope(Scope::Local, &local)?;
+        }
+    }
+    // Repair stores produced by the old importer, which copied this unused HS1 key
+    // into shared settings instead of creating runnable HS2 definitions.
+    settings.unset("custom_commands", Scope::Shared)?;
+    Ok(())
+}
+
+fn decode_hs1_commands(value: &Value) -> Result<Vec<Hs1CommandItem>> {
+    let value = match value {
+        Value::String(text) => match serde_json::from_str::<Value>(text) {
+            Ok(value) => value,
+            Err(_) => return Ok(Vec::new()),
+        },
+        value => value.clone(),
+    };
+    if !value.is_array() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_value(value).context("parsing HS1 custom_commands")
+}
+
+fn convert_hs1_commands(
+    store: &FsStore,
+    export: &ExportFile,
+    items: &[Hs1CommandItem],
+) -> Result<Vec<CommandDefinition>> {
+    let legacy_groups = !items
+        .iter()
+        .any(|item| matches!(item, Hs1CommandItem::Group(_)))
+        && items.iter().any(|item| {
+            matches!(item, Hs1CommandItem::Command(command) if command.group.as_deref().is_some_and(|group| !group.trim().is_empty()))
+        });
+    let tool = migrated_ai_tool(export);
+    let mut definitions = Vec::new();
+
+    if legacy_groups {
+        let mut ungrouped = Vec::new();
+        let mut groups: Vec<(String, Vec<(usize, &Hs1Command)>)> = Vec::new();
+        for (index, item) in items.iter().enumerate() {
+            let Hs1CommandItem::Command(command) = item else {
+                continue;
+            };
+            let group = command.group.as_deref().unwrap_or_default().trim();
+            if group.is_empty() {
+                ungrouped.push((index, command));
+            } else if let Some((_, commands)) = groups.iter_mut().find(|(name, _)| name == group) {
+                commands.push((index, command));
+            } else {
+                groups.push((group.to_string(), vec![(index, command)]));
+            }
+        }
+        for (index, command) in ungrouped {
+            if let Some(definition) = hs1_command_definition(
+                store,
+                export,
+                command,
+                None,
+                &format!("item:{index}"),
+                &tool,
+            )? {
+                definitions.push(definition);
+            }
+        }
+        for (group, commands) in groups {
+            for (index, command) in commands {
+                if let Some(definition) = hs1_command_definition(
+                    store,
+                    export,
+                    command,
+                    Some(group.clone()),
+                    &format!("item:{index}"),
+                    &tool,
+                )? {
+                    definitions.push(definition);
+                }
+            }
+        }
+        return Ok(definitions);
+    }
+
+    for (index, item) in items.iter().enumerate() {
+        match item {
+            Hs1CommandItem::Command(command) => {
+                let group = command
+                    .group
+                    .as_deref()
+                    .filter(|group| !group.trim().is_empty())
+                    .map(str::to_owned);
+                if let Some(definition) = hs1_command_definition(
+                    store,
+                    export,
+                    command,
+                    group,
+                    &format!("item:{index}"),
+                    &tool,
+                )? {
+                    definitions.push(definition);
+                }
+            }
+            Hs1CommandItem::Group(group) => {
+                if group.kind != "group" {
+                    bail!("unsupported HS1 custom command item type '{}'", group.kind);
+                }
+                for (child_index, command) in group.children.iter().enumerate() {
+                    if let Some(definition) = hs1_command_definition(
+                        store,
+                        export,
+                        command,
+                        Some(group.name.clone()),
+                        &format!(
+                            "group:{}:{index}/child:{child_index}",
+                            group.id.as_deref().unwrap_or("")
+                        ),
+                        &tool,
+                    )? {
+                        definitions.push(definition);
+                    }
+                }
+            }
+        }
+    }
+    Ok(definitions)
+}
+
+fn hs1_command_definition(
+    _store: &FsStore,
+    _export: &ExportFile,
+    command: &Hs1Command,
+    group: Option<String>,
+    source_key: &str,
+    tool: &str,
+) -> Result<Option<CommandDefinition>> {
+    if command.name.trim().is_empty() || command.prompt.trim().is_empty() {
+        eprintln!("warning: skipping an HS1 custom command with an empty name or prompt");
+        return Ok(None);
+    }
+    let kind = if command.target.as_deref() == Some("shell") {
+        CommandKind::Shell
+    } else {
+        CommandKind::Ai
+    };
+    let identity = format!(
+        "{source_key}\0{}",
+        command.id.as_deref().unwrap_or_default()
+    );
+    Ok(Some(CommandDefinition {
+        id: format!("hs1-{:016x}", stable_hash(&identity)),
+        title: command.name.clone(),
+        kind,
+        program: String::new(),
+        args: Vec::new(),
+        cwd: None,
+        group,
+        confirmation: None,
+        command: (kind == CommandKind::Shell).then(|| command.prompt.clone()),
+        prompt: (kind == CommandKind::Ai).then(|| command.prompt.clone()),
+        tool: (kind == CommandKind::Ai).then(|| tool.to_string()),
+        icon: command.icon.clone(),
+        color: command.color.clone(),
+    }))
+}
+
+fn migrated_ai_tool(export: &ExportFile) -> String {
+    let requested = export
+        .settings
+        .get("ai_tool")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|tool| !tool.is_empty() && !tool.eq_ignore_ascii_case("auto"))
+        .map(str::to_ascii_lowercase);
+    requested
+        .filter(|tool| {
+            hotsheet_plugins::find(tool)
+                .as_ref()
+                .and_then(hotsheet_plugins::ai_tool_descriptor)
+                .is_some()
+        })
+        .unwrap_or_else(|| "claude".to_string())
+}
+
+fn equivalent_command(left: &CommandDefinition, right: &CommandDefinition) -> bool {
+    left.title == right.title
+        && left.program == right.program
+        && left.args == right.args
+        && left.cwd == right.cwd
+        && left.group == right.group
+        && left.confirmation == right.confirmation
+        && left.kind == right.kind
+        && left.command == right.command
+        && left.prompt == right.prompt
+        && left.tool == right.tool
+        && left.icon == right.icon
+        && left.color == right.color
+}
+
+fn stable_hash(value: &str) -> u64 {
+    value.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
 }
 
 /// Stable, time-sortable import identity: the timestamp comes from the HS1 creation
@@ -460,6 +765,189 @@ mod tests {
         );
         assert!(!migrated.contains_key("appName"));
         assert!(!migrated.contains_key("ticketPrefix"));
+    }
+
+    #[test]
+    fn live_hs1_project_import_reuses_project_settings_paths_and_marks_them_hs2() {
+        let (_store_dir, store) = temp_store();
+        let project = tempfile::tempdir().unwrap();
+        std::fs::create_dir(project.path().join(".hotsheet")).unwrap();
+        std::fs::write(
+            project.path().join(".hotsheet/settings.json"),
+            r#"{"appName":"Old","ticketPrefix":"OLD","user_key":7}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            project.path().join(".hotsheet/settings.local.json"),
+            r#"{"custom_commands":[],"hs1_only_machine_value":true}"#,
+        )
+        .unwrap();
+        let mut export = export_json();
+        export.project.source_root = Some(project.path().display().to_string());
+        export
+            .settings
+            .insert("categories".into(), serde_json::json!(["bug", "task"]));
+        export.settings.insert(
+            "custom_commands".into(),
+            serde_json::json!([{"id":"check","name":"Check","prompt":"true","target":"shell"}]),
+        );
+
+        import(&store, &export, Path::new(".")).unwrap();
+
+        let shared: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(project.path().join(".hotsheet/settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(shared["$hotsheetSchema"], 1);
+        assert_eq!(shared["user_key"], 7);
+        assert_eq!(shared["categories"], serde_json::json!(["bug", "task"]));
+        assert!(shared.get("appName").is_none());
+        assert!(shared.get("ticketPrefix").is_none());
+        let local: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(project.path().join(".hotsheet/settings.local.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(local["$hotsheetSchema"], 1);
+        assert_eq!(local["commands"][0]["title"], "Check");
+        assert!(local.get("custom_commands").is_none());
+        assert!(local.get("hs1_only_machine_value").is_none());
+        assert!(!store.root().join(".hotsheet/settings.json").exists());
+        assert!(!store.root().join("hotsheet-settings.json").exists());
+    }
+
+    #[test]
+    fn migrates_hs1_ai_shell_and_group_commands_to_typed_local_definitions() {
+        let (dir, store) = temp_store();
+        let project = dir.path().join("code project");
+        std::fs::create_dir(&project).unwrap();
+        let json = serde_json::json!({
+            "exportVersion": 1,
+            "project": {
+                "ticketPrefix": "HS",
+                "sourceRoot": project.display().to_string()
+            },
+            "settings": {
+                "ai_tool": "codex",
+                "custom_commands": [
+                    {"id":"review","name":"Review","prompt":"Review the diff","icon":"send","color":"#3b82f6"},
+                    {"type":"group","id":"checks","name":"Checks","children":[
+                        {"id":"test","name":"Test","prompt":"npm test && npm run lint","target":"shell"}
+                    ]}
+                ]
+            },
+            "tickets": []
+        });
+        let export: ExportFile = serde_json::from_value(json).unwrap();
+
+        import(&store, &export, Path::new(".")).unwrap();
+
+        let settings = Settings::new(store.root());
+        let commands = hotsheet_ticketing::commands::from_settings(&settings).unwrap();
+        assert_eq!(commands.len(), 2);
+        assert_eq!(commands[0].title, "Review");
+        assert_eq!(commands[0].kind, CommandKind::Ai);
+        assert!(commands[0].program.is_empty() && commands[0].args.is_empty());
+        assert_eq!(commands[0].prompt.as_deref(), Some("Review the diff"));
+        assert_eq!(commands[0].tool.as_deref(), Some("codex"));
+        assert_eq!(commands[0].icon.as_deref(), Some("send"));
+        assert_eq!(commands[0].color.as_deref(), Some("#3b82f6"));
+        assert_eq!(commands[1].kind, CommandKind::Shell);
+        assert!(commands[1].program.is_empty() && commands[1].args.is_empty());
+        assert_eq!(
+            commands[1].command.as_deref(),
+            Some("npm test && npm run lint")
+        );
+        assert_eq!(commands[1].group.as_deref(), Some("Checks"));
+        assert!(commands.iter().all(|command| command.cwd.is_none()));
+        assert!(settings.get("commands", Scope::Local).unwrap().is_some());
+        assert_eq!(
+            settings.get("custom_commands", Scope::Shared).unwrap(),
+            None,
+            "the unused HS1 key is not committed into HS2"
+        );
+    }
+
+    #[test]
+    fn legacy_flat_command_groups_follow_hs1_ordering_and_unknown_tools_fall_back_to_claude() {
+        let (_dir, store) = temp_store();
+        let json = serde_json::json!({
+            "exportVersion": 1,
+            "project": {"ticketPrefix":"HS"},
+            "settings": {
+                "ai_tool": "an-old-editor-without-an-hs2-drive",
+                "custom_commands": [
+                    {"name":"Build","prompt":"build","target":"shell","group":"Checks"},
+                    {"name":"Review","prompt":"review"},
+                    {"name":"Lint","prompt":"lint","target":"shell","group":"Checks"},
+                    {"name":"Deploy","prompt":"deploy","target":"shell","group":"Release"}
+                ]
+            },
+            "tickets": []
+        });
+        let export: ExportFile = serde_json::from_value(json).unwrap();
+
+        import(&store, &export, Path::new(".")).unwrap();
+
+        let commands =
+            hotsheet_ticketing::commands::from_settings(&Settings::new(store.root())).unwrap();
+        assert_eq!(
+            commands
+                .iter()
+                .map(|command| (command.title.as_str(), command.group.as_deref()))
+                .collect::<Vec<_>>(),
+            [
+                ("Review", None),
+                ("Build", Some("Checks")),
+                ("Lint", Some("Checks")),
+                ("Deploy", Some("Release")),
+            ]
+        );
+        assert_eq!(commands[0].tool.as_deref(), Some("claude"));
+    }
+
+    #[test]
+    fn command_import_is_byte_idempotent_and_preserves_id_conflicts() {
+        let (_dir, store) = temp_store();
+        let json = serde_json::json!({
+            "exportVersion": 1,
+            "project": {"ticketPrefix":"HS"},
+            "settings": {
+                "custom_commands": [{"id":"review","name":"Review","prompt":"Review it"}]
+            },
+            "tickets": []
+        });
+        let export: ExportFile = serde_json::from_value(json).unwrap();
+        import(&store, &export, Path::new(".")).unwrap();
+        let settings = Settings::new(store.root());
+        let local_path = store.root().join("hotsheet-settings.local.json");
+        let first_bytes = std::fs::read(&local_path).unwrap();
+
+        import(&store, &export, Path::new(".")).unwrap();
+        assert_eq!(std::fs::read(&local_path).unwrap(), first_bytes);
+
+        let mut existing = hotsheet_ticketing::commands::from_settings(&settings).unwrap();
+        existing[0].title = "My edited command".into();
+        settings
+            .set(
+                "commands",
+                serde_json::to_value(&existing).unwrap(),
+                Scope::Local,
+            )
+            .unwrap();
+
+        import(&store, &export, Path::new(".")).unwrap();
+        let after_conflict = hotsheet_ticketing::commands::from_settings(&settings).unwrap();
+        assert_eq!(after_conflict.len(), 2);
+        assert_eq!(after_conflict[0].title, "My edited command");
+        assert_eq!(after_conflict[1].title, "Review");
+        assert_eq!(after_conflict[1].id, format!("{}-2", after_conflict[0].id));
+
+        import(&store, &export, Path::new(".")).unwrap();
+        assert_eq!(
+            hotsheet_ticketing::commands::from_settings(&settings).unwrap(),
+            after_conflict,
+            "the conflict copy is also retry-safe"
+        );
     }
 
     #[test]

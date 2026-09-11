@@ -323,7 +323,8 @@ does not introduce polling or another network request.
 
 - `ProjectTab` — **demo built**: macOS Tahoe-inspired pill presentation owned by the
   component itself, with selected, remote/local, busy, disconnected, attention,
-  closable, and fixed states. Every tab selector participates in sequential Tab order;
+  closable, fixed, Up Next count, and active-ticket states. Every tab selector
+  participates in sequential Tab order;
   arrow/Home/End keyboard navigation remains available within a composed tablist, and
   Delete/Backspace closes a focused closeable tab. Fine-pointer devices reveal close affordances on hover or
   keyboard focus; touch-oriented devices retain the visible close control. Local tabs
@@ -333,9 +334,21 @@ does not introduce polling or another network request.
   focusing Close retains a separate compact focus indicator for that independent action.
   The close affordance is a compact, highlight-free leading control with balanced
   trailing space
-  so the tab identity remains visually centered; transient trailing indicators such as
-  busy, offline, and attention occupy that reserved balance space instead of widening
-  the tab or displacing its label. Busy uses a full-ring CSS spinner: its statically
+  so the tab identity remains visually centered. When that trailing balance slot is
+  empty, it subtracts the selector's existing item gap instead of counting that gap a
+  second time; transient trailing indicators such as
+  busy, offline, attention, and ticket-work state occupy that reserved balance space.
+  Ticket-work state derives from each open project's already-cached ticket rows without
+  adding requests: a yellow circle is absent at zero, shows 1–99, caps visible overflow
+  at `99+`, and changes to a yellow half-speed activity ring for any live claim. The ring
+  is static because a live lease proves reservation, not a currently running AI process.
+  It has one yellow segment per simultaneous claimed ticket and its center shows the claim
+  count, including `1`; the accessible label continues reporting both uncapped axes.
+  Each project's replay-safe live-update connection authoritatively replaces that
+  cache after ticket/claim events while the tab is inactive. Refresh coordination coalesces
+  repeated work without dropping distinct projects, defers rendering while an open select
+  owns focus, and preserves cache-first project switching.
+  It can coexist with a permission notification. Busy uses a full-ring CSS spinner: its statically
   centered wrapper never transforms, and the ring alone rotates around its center.
   This avoids both transform-composition drift and the perceptual wobble of rotating
   an incomplete Lucide arc; browser coverage samples its center across animation frames.
@@ -583,7 +596,10 @@ offers Completed, Not planned, Duplicate, and Obsolete; Duplicate requires searc
 and selecting a distinct canonical ticket before submission. Search results reuse
 `MenuItem`, the reason control reuses `Select`, and validation prevents self-reference.
 Closed tickets retain a visible outcome in the inspector, and duplicate outcomes link to
-the canonical ticket instead of relying on a freeform explanatory note.
+the canonical ticket instead of relying on a freeform explanatory note. Canonical tickets
+render reverse duplicate backlinks as shared menu rows labeled with both project and slug;
+same-slug sources remain unambiguous, and a compact status message names registered
+projects that could not be searched without hiding results from accessible projects.
 
 - `InspectorHeader`
   - ticket identifier
@@ -607,7 +623,7 @@ the canonical ticket instead of relying on a freeform explanatory note.
   reader instances. The popover contains a labeled autocomplete field,
   supports repeated Enter/comma additions, dismisses with Escape while restoring trigger
   focus, and remains within the narrow viewport.
-  An unblocked ticket exposes a full-width dashed `Block ticket` action without an
+  An unblocked ticket exposes a full-width shared-menu `Block ticket` action without an
   otherwise-empty `Blocked reason` heading. Its controlled editor flushes on blur,
   preserves the saved reason, and creates the adjacent status `Blocked` pill.
   - `TicketTimeline` — **demo built**: chronological activity shown as time-ago and a
@@ -710,7 +726,12 @@ the canonical ticket instead of relying on a freeform explanatory note.
   parallel reader implementation. The inspector exposes a Reader action, reader content
   uses its full available width, and details/notes retain their normal direct editing
   affordances without a separate reader-wide Edit mode. In-progress inline details
-  drafts carry into the larger surface without losing focus or content.
+  drafts carry into the larger surface without losing focus or content. Ticket-reference
+  links push exact project-qualified, read-only `TicketReader` layers without changing the
+  main project/ticket selection. Navigation may recurse; only the top layer is modal and
+  interactive, and Close/Escape unwinds one frame before restoring focus to its originating
+  link. A compact project/depth header distinguishes stacked same-slug readers and remains
+  usable at narrow viewport widths.
 - `UnsavedChangesGuard`
 
 ### 4.3 Tags — feature floor

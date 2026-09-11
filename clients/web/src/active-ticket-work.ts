@@ -1,4 +1,5 @@
 import type { TicketRow } from './api';
+import { isUpNextTicket } from './ticket-views';
 
 type ClaimState = Pick<TicketRow, 'claimed_by' | 'claim_lease_expires_at'> & Pick<Partial<TicketRow>, 'status'>;
 
@@ -14,4 +15,14 @@ export function nextActiveTicketExpiry(tickets: ClaimState[], now = Date.now()):
     .filter(ticket => isTicketActivelyWorkedOn(ticket, now))
     .map(ticket => Date.parse(ticket.claim_lease_expires_at!));
   return expiries.length ? Math.min(...expiries) : undefined;
+}
+
+export function projectTabTicketState(tickets: readonly TicketRow[], now = Date.now()): { upNextCount: number; activeTicketCount: number } {
+  let upNextCount = 0;
+  let activeTicketCount = 0;
+  for (const ticket of tickets) {
+    if (isUpNextTicket(ticket)) upNextCount += 1;
+    if (isTicketActivelyWorkedOn(ticket, now)) activeTicketCount += 1;
+  }
+  return { upNextCount, activeTicketCount };
 }

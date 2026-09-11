@@ -171,7 +171,10 @@ fn arb_ticket() -> impl Strategy<Value = Ticket> {
     let times = (arb_ts(), arb_ts(), arb_opt_ts(), arb_opt_ts(), arb_opt_ts());
     let close_coord = (
         arb_close_reason(),
-        option::of(arb_ulid()),
+        option::of(prop_oneof![
+            arb_ulid().prop_map(|id| id.to_string()),
+            scalar().prop_map(|native| format!("@project/git-main:{native}")),
+        ]),
         option::of(scalar()),
         arb_opt_ts(),
         option::of(scalar()),

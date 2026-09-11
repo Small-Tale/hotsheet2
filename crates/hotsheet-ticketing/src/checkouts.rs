@@ -2,6 +2,7 @@
 //! ticket-store identity: several checkouts may share one repository and each checkout
 //! may use several ticket stores (and vice versa).
 
+use std::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -85,9 +86,14 @@ struct RegistryFile {
     schema_version: u64,
     #[serde(default)]
     checkouts: Vec<Checkout>,
+    /// Historical connection ids keyed by the checkout's durable registry id. Values are
+    /// the current connection ids. Kept outside `Checkout` so operational source records
+    /// always contain ids understood by the active provider registry.
+    #[serde(default, rename = "sourceAliases")]
+    source_aliases: BTreeMap<String, BTreeMap<String, String>>,
 }
 
-const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 2;
+const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 3;
 const fn registry_schema_version() -> u64 {
     CHECKOUT_REGISTRY_SCHEMA_VERSION
 }
@@ -172,6 +178,7 @@ impl Default for RegistryFile {
         Self {
             schema_version: CHECKOUT_REGISTRY_SCHEMA_VERSION,
             checkouts: Vec::new(),
+            source_aliases: BTreeMap::new(),
         }
     }
 }
@@ -323,7 +330,7 @@ impl CheckoutRegistry {
         let root = root
             .canonicalize()
             .map_err(|_| CheckoutError::Missing(root.display().to_string()))?;
-        let id = checkout_id(&root)?;
+        let generated_id = checkout_id(&root)?;
         let alias = alias.map(str::to_owned).unwrap_or_else(|| {
             root.file_name()
                 .and_then(|v| v.to_str())
@@ -347,9 +354,19 @@ impl CheckoutRegistry {
                 .any(|source| &source.connection_id == default)
         {
             return Err(CheckoutError::Invalid(format!(
-                "default source '{default}' is not associated with checkout {id}"
+                "default source '{default}' is not associated with checkout {generated_id}"
             )));
         }
+        let mut file = self.read_locked()?;
+        // An explicitly relocated checkout keeps its original id. Re-registering the new
+        // root (for example on the next app open) must update that durable entry rather
+        // than reintroducing the new path-derived id beside it.
+        let id = file
+            .checkouts
+            .iter()
+            .find(|checkout| checkout.root == root.to_string_lossy())
+            .map(|checkout| checkout.id.clone())
+            .unwrap_or(generated_id);
         let mut store_strings = sources
             .iter()
             .filter(|source| source.provider == "git")
@@ -365,7 +382,6 @@ impl CheckoutRegistry {
             sources,
             default_source,
         };
-        let mut file = self.read_locked()?;
         if let Some(existing) = file.checkouts.iter_mut().find(|c| c.id == id) {
             *existing = entry.clone();
         } else {
@@ -377,6 +393,77 @@ impl CheckoutRegistry {
 
     pub fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
         resolve_checkout(self.list()?, reference)
+    }
+
+    /// Move a registered checkout to a new working-tree path while preserving the id used
+    /// by durable cross-project ticket references. This is explicit because one ticket
+    /// source may intentionally be shared by several checkouts; source overlap alone is
+    /// not safe evidence that two paths are the same project.
+    pub fn relocate(
+        &self,
+        reference: &str,
+        new_root: &Path,
+        alias: Option<&str>,
+    ) -> Result<Checkout, CheckoutError> {
+        let root = new_root
+            .canonicalize()
+            .map_err(|_| CheckoutError::Missing(new_root.display().to_string()))?;
+        let _lock = self.acquire_lock()?;
+        let mut file = self.read_locked()?;
+        let current = resolve_checkout(file.checkouts.clone(), reference)?;
+        let root_text = root.to_string_lossy().into_owned();
+        if file
+            .checkouts
+            .iter()
+            .any(|checkout| checkout.id != current.id && checkout.root == root_text)
+        {
+            return Err(CheckoutError::Invalid(format!(
+                "checkout path is already registered: {}",
+                root.display()
+            )));
+        }
+        let entry = file
+            .checkouts
+            .iter_mut()
+            .find(|checkout| checkout.id == current.id)
+            .expect("resolved checkout remains in the locked registry");
+        entry.root = root_text;
+        if let Some(alias) = alias {
+            entry.alias = alias.to_string();
+        }
+        let relocated = entry.clone();
+        self.write_locked(&file)?;
+        Ok(relocated)
+    }
+
+    /// Resolve a source by its current id or an id retained by `rename_source`.
+    pub fn resolve_source(
+        &self,
+        checkout_reference: &str,
+        source_reference: &str,
+    ) -> Result<(Checkout, TicketSource), CheckoutError> {
+        let file = self.read()?;
+        let checkout = resolve_checkout(file.checkouts.clone(), checkout_reference)?;
+        let aliases = file.source_aliases.get(&checkout.id);
+        let mut current = source_reference;
+        let mut followed = 0;
+        while let Some(next) = aliases.and_then(|values| values.get(current)) {
+            current = next;
+            followed += 1;
+            if followed > aliases.map_or(0, BTreeMap::len) {
+                return Err(CheckoutError::Invalid(format!(
+                    "source alias cycle in checkout {}",
+                    checkout.id
+                )));
+            }
+        }
+        let source = checkout.source(current).cloned().ok_or_else(|| {
+            CheckoutError::NotFound(format!(
+                "ticket source {source_reference} in checkout {}",
+                checkout.id
+            ))
+        })?;
+        Ok((checkout, source))
     }
 
     fn resolve_locked(&self, reference: &str) -> Result<Checkout, CheckoutError> {
@@ -481,6 +568,69 @@ impl CheckoutRegistry {
             checkout.sources,
             checkout.default_source,
         )
+    }
+
+    /// Rename an external provider connection while retaining its previous id for durable
+    /// ticket references. Git source ids are derived from their store path and therefore
+    /// require a store migration rather than a connection rename.
+    pub fn rename_source(
+        &self,
+        reference: &str,
+        connection_id: &str,
+        new_connection_id: &str,
+    ) -> Result<Checkout, CheckoutError> {
+        if new_connection_id.is_empty() {
+            return Err(CheckoutError::Invalid(
+                "new ticket source id cannot be empty".into(),
+            ));
+        }
+        let _lock = self.acquire_lock()?;
+        let mut file = self.read_locked()?;
+        let checkout = resolve_checkout(file.checkouts.clone(), reference)?;
+        if file
+            .source_aliases
+            .get(&checkout.id)
+            .is_some_and(|aliases| aliases.contains_key(new_connection_id))
+        {
+            return Err(CheckoutError::Invalid(format!(
+                "ticket source id '{new_connection_id}' is retained as a historical alias"
+            )));
+        }
+        let entry = file
+            .checkouts
+            .iter_mut()
+            .find(|candidate| candidate.id == checkout.id)
+            .expect("resolved checkout remains in the locked registry");
+        if entry.source(new_connection_id).is_some() {
+            return Err(CheckoutError::Invalid(format!(
+                "ticket source '{new_connection_id}' is already associated with checkout {}",
+                entry.id
+            )));
+        }
+        let source = entry
+            .sources
+            .iter_mut()
+            .find(|source| source.connection_id == connection_id)
+            .ok_or_else(|| CheckoutError::NotFound(connection_id.into()))?;
+        if source.provider == "git" {
+            return Err(CheckoutError::Invalid(
+                "git source ids cannot be renamed; migrate the store path instead".into(),
+            ));
+        }
+        source.connection_id = new_connection_id.to_string();
+        if entry.default_source.as_deref() == Some(connection_id) {
+            entry.default_source = Some(new_connection_id.to_string());
+        }
+        let aliases = file.source_aliases.entry(entry.id.clone()).or_default();
+        for target in aliases.values_mut() {
+            if target == connection_id {
+                *target = new_connection_id.to_string();
+            }
+        }
+        aliases.insert(connection_id.to_string(), new_connection_id.to_string());
+        let renamed = entry.clone();
+        self.write_locked(&file)?;
+        Ok(renamed)
     }
 
     pub fn remove_source(
@@ -865,6 +1015,180 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("not associated")
+        );
+    }
+
+    #[test]
+    fn explicit_relocation_preserves_the_durable_checkout_reference() {
+        let temp = tempfile::tempdir().unwrap();
+        let original = temp.path().join("original");
+        let relocated = temp.path().join("relocated");
+        let store = temp.path().join("tickets");
+        std::fs::create_dir(&original).unwrap();
+        std::fs::create_dir(&store).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let before = registry
+            .register(&original, Some("app"), None, vec![store.clone()])
+            .unwrap();
+
+        std::fs::rename(&original, &relocated).unwrap();
+        let after = registry
+            .relocate(&before.id, &relocated, Some("app-moved"))
+            .unwrap();
+
+        assert_eq!(
+            after.id, before.id,
+            "persisted project references stay valid"
+        );
+        assert_eq!(after.alias, "app-moved");
+        assert_eq!(registry.resolve(&before.id).unwrap(), after);
+        assert_eq!(
+            registry.resolve(relocated.to_str().unwrap()).unwrap(),
+            after
+        );
+        let reopened = registry
+            .register(&relocated, Some("app-moved"), None, vec![store])
+            .unwrap();
+        assert_eq!(
+            reopened.id, before.id,
+            "ordinary reopen keeps the migrated id"
+        );
+        assert_eq!(registry.list().unwrap(), vec![reopened]);
+    }
+
+    #[test]
+    fn renamed_external_source_resolves_old_references_without_retargeting() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        std::fs::create_dir(&checkout).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let old = TicketSource {
+            connection_id: "github-old".into(),
+            provider: "github".into(),
+            locator: "acme/app".into(),
+        };
+        let saved = registry
+            .register_sources(&checkout, None, None, vec![old], Some("github-old".into()))
+            .unwrap();
+
+        let renamed = registry
+            .rename_source(&saved.id, "github-old", "github-current")
+            .unwrap();
+        assert_eq!(renamed.sources.len(), 1);
+        assert_eq!(renamed.sources[0].connection_id, "github-current");
+        assert_eq!(renamed.default_source.as_deref(), Some("github-current"));
+        assert_eq!(
+            registry.resolve_source(&saved.id, "github-old").unwrap().1,
+            renamed.sources[0]
+        );
+        assert_eq!(
+            registry
+                .resolve_source(&saved.id, "github-current")
+                .unwrap()
+                .1,
+            renamed.sources[0]
+        );
+
+        let other = TicketSource {
+            connection_id: "github-other".into(),
+            provider: "github".into(),
+            locator: "acme/app".into(),
+        };
+        let with_other = registry.add_source(&saved.id, other, false).unwrap();
+        assert_eq!(with_other.sources.len(), 2);
+        assert_eq!(
+            registry
+                .resolve_source(&saved.id, "github-old")
+                .unwrap()
+                .1
+                .connection_id,
+            "github-current",
+            "a same-locator source is never silently treated as the rename target"
+        );
+        let renamed_again = registry
+            .rename_source(&saved.id, "github-current", "github-next")
+            .unwrap();
+        assert_eq!(renamed_again.default_source.as_deref(), Some("github-next"));
+        for historical in ["github-old", "github-current"] {
+            assert_eq!(
+                registry
+                    .resolve_source(&saved.id, historical)
+                    .unwrap()
+                    .1
+                    .connection_id,
+                "github-next"
+            );
+        }
+        assert!(
+            registry
+                .rename_source(&saved.id, "github-next", "github-old")
+                .unwrap_err()
+                .to_string()
+                .contains("historical alias")
+        );
+    }
+
+    #[test]
+    fn rename_source_rejects_git_ids() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        let store = temp.path().join("tickets");
+        std::fs::create_dir(&checkout).unwrap();
+        std::fs::create_dir(&store).unwrap();
+        let registry = CheckoutRegistry::new(temp.path().join("checkouts.json"));
+        let saved = registry
+            .register(&checkout, None, None, vec![store])
+            .unwrap();
+        let source = saved.sources[0].connection_id.clone();
+        assert!(
+            registry
+                .rename_source(&saved.id, &source, "renamed")
+                .unwrap_err()
+                .to_string()
+                .contains("git source ids cannot be renamed")
+        );
+    }
+
+    #[test]
+    fn checkout_settings_are_project_owned_and_prefer_the_default_legacy_store() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        let first = temp.path().join("first.hs2");
+        let preferred = temp.path().join("preferred.hs2");
+        for path in [&project, &first, &preferred] {
+            std::fs::create_dir(path).unwrap();
+        }
+        std::fs::write(first.join("hotsheet-settings.json"), r#"{"theme":"first"}"#).unwrap();
+        std::fs::write(
+            preferred.join("hotsheet-settings.json"),
+            r#"{"theme":"preferred"}"#,
+        )
+        .unwrap();
+        let first_source = TicketSource::git(&first);
+        let preferred_source = TicketSource::git(&preferred);
+        let checkout = CheckoutRegistry::new(temp.path().join("checkouts.json"))
+            .register_sources(
+                &project,
+                None,
+                None,
+                vec![first_source, preferred_source.clone()],
+                Some(preferred_source.connection_id),
+            )
+            .unwrap();
+
+        let settings = checkout.settings();
+        assert_eq!(
+            settings.get("theme", crate::Scope::Shared).unwrap(),
+            Some(serde_json::json!("preferred"))
+        );
+        settings
+            .set("theme", serde_json::json!("project"), crate::Scope::Shared)
+            .unwrap();
+        assert!(project.join(".hotsheet/settings.json").is_file());
+        assert!(!first.join(".hotsheet").exists());
+        assert_eq!(
+            settings.get("theme", crate::Scope::Shared).unwrap(),
+            Some(serde_json::json!("project"))
         );
     }
 

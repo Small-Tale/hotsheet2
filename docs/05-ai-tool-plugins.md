@@ -61,6 +61,14 @@ Hot Sheet may replace. Bundled skill versions are checked against the current sh
 adapter, and Windows detection honors command wrappers from `PATHEXT`, so freshness does
 not silently skip npm-installed tools or replace a newer workflow with an older bundle.
 
+All bundled instruction and ticket-workflow artifacts teach **portable durable
+references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion
+summaries use repository-relative paths inside the current checkout. References to another
+repository use its stable name and canonical URL when helpful, or a technical placeholder
+such as `<repo-root>/path`; a developer's home directory, username, or absolute clone
+location is not presented as shared project structure. An exact local path is retained only
+when the path itself is indispensable evidence for a machine-local diagnostic.
+
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same
 capability seen from two sides: the loader decides *what* tools exist, the setup
@@ -209,15 +217,18 @@ similar connections."
 > **`hotsheet-cli trigger` launch safety is baked in (HS2-117).** A bare `trigger <tool>`
 > is safe by default: it prepends a `hotsheet` → `hotsheet-cli` shim (+ the CLI's own dir)
 > to the launched tool's PATH so a bare `hotsheet` can't hit an HS1 launcher; refuses to
-> run in a project that still holds an HS1 store (`assert_no_hs1`) or one where the tool
-> isn't set up; and defaults `--mcp-config` to the tool's project config so it reaches
-> **only** the Hot Sheet shim (Claude via `--strict-mcp-config`). `setup` now writes an
+> run in a project that still holds a live HS1 store unless the selected HS2 store has a
+> schema-valid durable import receipt whose canonical `sourceProject` matches that checkout;
+> fails closed for any absent, malformed, relative-path, or unrelated receipt; refuses
+> when the tool isn't set up; and defaults `--mcp-config` to the tool's project config
+> so it reaches **only** the Hot Sheet shim (Claude via `--strict-mcp-config`). `setup`
+> now writes an
 > **absolute** `hotsheet-mcp` path so the config works without the shim. Codex reads its
 > MCP servers from `$CODEX_HOME`, so `trigger` **auto-builds a throwaway MCP-free
 > `CODEX_HOME`** for it (HS2-YRDQNX) — a copy of `auth.json` plus a `config.toml` whose
 > only server is the Hot Sheet shim — so a bare `trigger codex` can't reach the user's
 > global MCP servers (`--env CODEX_HOME=…` overrides). See
-> `crates/hotsheet-cli/src/launch_safety.rs` and `docs/04` §4.4.
+> `crates/hotsheet-aitools/src/launch_safety.rs` and `docs/04` §4.4.
 >
 > **`hotsheet-cli work` is the headless loop (HS2-118)** built on this: it drives one
 > safe turn at a time — each turn takes the top Up Next ticket — until the queue drains,

@@ -12,11 +12,12 @@ export function validateMatrix(root, text) {
   const ids = new Set();
   const failures = [];
 
-  function evidence(cell, id, layer) {
+  function references(cell, id, layer) {
     if (cell === "—") return false;
     for (const raw of cell.split(";")) {
       const ref = raw.trim().replaceAll("`", "").split("#", 1)[0].trim();
-      if (!ref || !fs.existsSync(path.join(root, ref))) failures.push(`${id}: missing ${layer} evidence ${ref}`);
+      if (layer === "manual" && /^HS2-[A-Z0-9]+$/.test(ref)) continue;
+      if (!ref || !fs.existsSync(path.join(root, ref))) failures.push(`${id}: missing ${layer}${layer === "requirement" ? "" : " evidence"} ${ref}`);
     }
     return true;
   }
@@ -26,11 +27,11 @@ export function validateMatrix(root, text) {
     if (cells.length !== 7) { failures.push(`malformed row: ${row}`); continue; }
     const [id, requirement, , unitCell, e2eCell, manualCell, status] = cells;
     if (ids.has(id)) failures.push(`${id}: duplicate id`); else ids.add(id);
-    if (!fs.existsSync(path.join(root, requirement))) failures.push(`${id}: missing requirement ${requirement}`);
+    references(requirement, id, "requirement");
     if (!allowed.has(status)) failures.push(`${id}: invalid status ${status}`);
-    const unit = evidence(unitCell, id, "unit");
-    const e2e = evidence(e2eCell, id, "E2E");
-    evidence(manualCell, id, "manual");
+    const unit = references(unitCell, id, "unit");
+    const e2e = references(e2eCell, id, "E2E");
+    references(manualCell, id, "manual");
     if (status === "double-covered" && !(unit && e2e)) failures.push(`${id}: double-covered requires unit and E2E evidence`);
     if (status === "unit-only" && !(unit && !e2e)) failures.push(`${id}: unit-only status/evidence disagree`);
     if (status === "e2e-only" && !(!unit && e2e)) failures.push(`${id}: e2e-only status/evidence disagree`);

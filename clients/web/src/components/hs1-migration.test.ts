@@ -13,9 +13,10 @@ describe('HS1 migration presentation',()=>{
     expect(markup).not.toContain('provider');
   });
   it('keeps a dismissed import available from a non-modal source banner',()=>{const markup=String(Hs1MigrationBanner({databasePath:'/work/demo/.hotsheet/db'}));expect(markup).toContain('/work/demo/.hotsheet/db');expect(markup).toContain('data-action="open-hs1-migration"')});
-  it('offers cleanup only as an explicit user action',()=>{
+  it('offers cleanup or dismissal as explicit user actions',()=>{
     const markup=String(Hs1CleanupBanner());
     expect(markup).toContain('safely backed up');
     expect(markup).toContain('data-action="remove-hs1-data"');
+    expect(markup).toContain('data-action="dismiss-hs1-cleanup"');
   });
 });

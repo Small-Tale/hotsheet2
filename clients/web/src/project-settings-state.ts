@@ -1,4 +1,4 @@
-export function projectSettingsValue<T,Fallback extends T>(values:Readonly<Record<string,T>>,projectId:string,fallback:Fallback):T {
+export function projectSettingsValue<T>(values:Readonly<Record<string,T>>,projectId:string,fallback:T):T {
   return values[projectId]??fallback;
 }
 

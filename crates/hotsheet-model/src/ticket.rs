@@ -184,8 +184,10 @@ pub struct Ticket {
     pub closed_at: Option<Timestamp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close_reason: Option<CloseReason>,
+    /// Canonical duplicate target. Legacy git-only tickets contain a bare ULID; new
+    /// cross-project/provider references use `@<project>/<connection>:<native-id>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub duplicate_of: Option<Ulid>,
+    pub duplicate_of: Option<String>,
 
     // Coordination (`docs/05` §5.7) — ephemeral, lease-expiring.
     #[serde(default, skip_serializing_if = "Option::is_none")]

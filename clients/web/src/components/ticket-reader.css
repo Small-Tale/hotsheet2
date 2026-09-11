@@ -1,4 +1,8 @@
 .ticket-reader { position: relative; z-index: 1; display: grid; width: min(64rem, 100%); height: calc(100vh - 3rem); min-height: 34rem; overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: 1rem; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
+.ticket-reader[data-reader-count]:not([data-reader-count="1"]) { grid-template-rows: auto minmax(0, 1fr); }
+.ticket-reader__layer-context { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 1rem; margin: 0; padding: .45rem 1.25rem; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); color: var(--wa-color-text-quiet); font-size: var(--wa-font-size-xs); }
+.ticket-reader__layer-context span { overflow: hidden; color: var(--wa-color-text-normal); font-weight: var(--wa-font-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+.ticket-reader__layer-context small { flex: none; font: inherit; }
 .ticket-reader .ticket-inspector--reader { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
 .ticket-reader .ticket-inspector--reader .ticket-inspector__header h1 { max-width: 54rem; font-size: var(--wa-font-size-l); }
 .ticket-reader .ticket-inspector--reader .ticket-inspector__tabs { width: auto; }
@@ -11,4 +15,4 @@
 .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview :is(h2, h3, h4, h5, h6) { font-size: var(--hs-reader-font-size-m); }
 .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview code { font-size: var(--hs-reader-font-size-s); }
 .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview blockquote, .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview blockquote :is(p, li, h1, h2, h3, h4, h5, h6, th, td) { font-size: var(--hs-reader-font-size-s); }
-@media (max-width: 48rem) { .ticket-reader .ticket-inspector--reader .ticket-inspector__content { padding-inline: 1rem; } }
+@media (max-width: 48rem) { .ticket-reader .ticket-inspector--reader .ticket-inspector__content { padding-inline: 1rem; } .ticket-reader__layer-context { padding-inline: 1rem; } }

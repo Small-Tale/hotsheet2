@@ -23,6 +23,7 @@ export interface ProjectWorkspaceSession {
 const PREFIX='hotsheet.workspace.project-session.v1.';
 const ACTIVE_ROOT='hotsheet.workspace.active-project-root.v1';
 const HS1_MIGRATION_DISMISSED='hotsheet.workspace.hs1-migration-dismissed.v1.';
+const HS1_CLEANUP_DISMISSED='hotsheet.workspace.hs1-cleanup-dismissed.v1.';
 const DB_NAME='hotsheet-draft-files-v1',STORE='files';
 
 const stringValue=(value:unknown,fallback='')=>typeof value==='string'?value:fallback;
@@ -59,6 +60,8 @@ export function saveActiveProjectRoot(storage:Pick<Storage,'setItem'>,root:strin
 export function reconcileRememberedProjectRoots(requested:readonly string[],opened:readonly string[]){const available=new Set(opened);return{remembered:requested.filter(root=>available.has(root)),failed:requested.filter(root=>!available.has(root))}}
 export function hs1MigrationPromptDismissed(storage:Pick<Storage,'getItem'>,projectId:string,sourceIdentity:string){return Boolean(sourceIdentity)&&storage.getItem(HS1_MIGRATION_DISMISSED+projectId)===sourceIdentity}
 export function dismissHs1MigrationPrompt(storage:Pick<Storage,'setItem'>,projectId:string,sourceIdentity:string){if(sourceIdentity)storage.setItem(HS1_MIGRATION_DISMISSED+projectId,sourceIdentity)}
+export function hs1CleanupPromptDismissed(storage:Pick<Storage,'getItem'>,projectId:string,sourceIdentity:string){return Boolean(sourceIdentity)&&storage.getItem(HS1_CLEANUP_DISMISSED+projectId)===sourceIdentity}
+export function dismissHs1CleanupPrompt(storage:Pick<Storage,'setItem'>,projectId:string,sourceIdentity:string){if(sourceIdentity)storage.setItem(HS1_CLEANUP_DISMISSED+projectId,sourceIdentity)}
 
 function database():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{const request=indexedDB.open(DB_NAME,1);request.onupgradeneeded=()=>{request.result.createObjectStore(STORE)};request.onsuccess=()=>{resolve(request.result)};request.onerror=()=>{reject(request.error??new Error('Could not open the draft file database.'))}})}
 export async function saveDraftFile(scope:string,id:string,file:File){const db=await database();await transaction(db,'readwrite',store=>{store.put({blob:file,name:file.name,type:file.type,lastModified:file.lastModified},`${scope}:${id}`)});db.close()}

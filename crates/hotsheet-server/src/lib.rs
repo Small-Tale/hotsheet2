@@ -45,9 +45,10 @@ use hotsheet_model::{
 use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
-    OsKeychain, ProviderConfigRegistry, ProviderConnection, ProviderDraft, ProviderEvidence,
-    ProviderPatch, ProviderRegistry, Settings, SortKey, StoreError, StoreRegistry, TicketPatch,
-    TicketQuery, TicketRef, auto_context, copy_between, move_between, ops,
+    OsKeychain, ProjectTicketRef, ProviderConfigRegistry, ProviderConnection, ProviderDraft,
+    ProviderEvidence, ProviderPatch, ProviderRegistry, Settings, SortKey, StoreError,
+    StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between, move_between,
+    ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -142,9 +143,9 @@ pub struct AppState {
     notifications: notifications::NotificationHub,
     tts: tts::TtsProviders,
     source_revision: source_revision::SourceRevisionMonitor,
-    /// Candidate windows for the built-in deterministic local adapter. The policy is
-    /// re-read from each store's machine-local settings on every event, so opt-out takes
-    /// effect immediately and no shared setting can enable distillation.
+    /// Candidate windows for the built-in deterministic local adapter. Project-attributed
+    /// events are keyed by checkout and re-read that checkout's machine-local settings on
+    /// every event; unattributed legacy events retain store-only compatibility behavior.
     activity_distillation:
         Arc<Mutex<std::collections::HashMap<String, hotsheet_ticketing::DistillationPipeline>>>,
     /// Per-session admission state keeps a noisy tool from flooding disk or live clients.
@@ -232,7 +233,7 @@ impl AppState {
                     &command_events,
                     ChangeEvent {
                         cursor: None,
-                        store: String::new(),
+                        store: run.project.clone(),
                         kind: "command_updated".into(),
                         id: run.id,
                         slug: run.command_id,
@@ -312,7 +313,7 @@ impl AppState {
         }
         let commands = self
             .commands
-            .list()
+            .list_all()
             .into_iter()
             .filter(|run| run.state == "running")
             .count();
@@ -901,21 +902,58 @@ impl AppState {
     }
 
     fn maybe_distill_activity(&self, store: &FsStore, event: &hotsheet_ticketing::ActivityEvent) {
-        let policy = match hotsheet_ticketing::DistillationPolicy::from_local_settings(
-            &Settings::new(store.root()),
-        ) {
+        let store_id = multistore::store_url_id(store);
+        let (pipeline_id, settings) = match event.project.as_deref() {
+            Some(reference) => {
+                let checkout = match self.checkout_registry.resolve(reference) {
+                    Ok(checkout) => checkout,
+                    Err(error) => {
+                        eprintln!(
+                            "activity distillation skipped for unresolved checkout {reference}: {error}"
+                        );
+                        return;
+                    }
+                };
+                let canonical_store = store
+                    .root()
+                    .canonicalize()
+                    .unwrap_or_else(|_| store.root().to_path_buf());
+                let linked = checkout.sources.iter().any(|source| {
+                    source.provider == "git"
+                        && std::path::Path::new(&source.locator)
+                            .canonicalize()
+                            .unwrap_or_else(|_| source.locator.clone().into())
+                            == canonical_store
+                });
+                if !linked {
+                    eprintln!(
+                        "activity distillation skipped because checkout {} does not own store {store_id}",
+                        checkout.id
+                    );
+                    return;
+                }
+                (
+                    format!("checkout:{}:store:{store_id}", checkout.id),
+                    checkout.settings(),
+                )
+            }
+            None => (
+                format!("legacy-store:{store_id}"),
+                Settings::new(store.root()),
+            ),
+        };
+        let policy = match hotsheet_ticketing::DistillationPolicy::from_local_settings(&settings) {
             Ok(policy) => policy,
             Err(error) => {
                 eprintln!("activity distillation policy ignored: {error}");
                 return;
             }
         };
-        let store_id = multistore::store_url_id(store);
         // Named client adapters (including Apple Foundation Models) consume the same
         // normalized stream on-device. They are never loaded as server requirements.
         if !policy.enabled || policy.adapter != "deterministic" {
             if let Ok(mut pipelines) = self.activity_distillation.lock() {
-                pipelines.remove(&store_id);
+                pipelines.remove(&pipeline_id);
             }
             return;
         }
@@ -925,7 +963,7 @@ impl AppState {
             .ok()
             .and_then(|mut pipelines| {
                 pipelines
-                    .entry(store_id.clone())
+                    .entry(pipeline_id)
                     .or_default()
                     .observe(event, &policy)
             });
@@ -1141,6 +1179,34 @@ pub fn app(state: AppState) -> Router {
         .route("/projects/open", post(open_project))
         .route("/checkouts/{reference}", get(resolve_checkout))
         .route(
+            "/checkouts/{reference}/commands",
+            get(list_checkout_commands).put(save_checkout_commands),
+        )
+        .route(
+            "/checkouts/{reference}/commands/{id}/run",
+            post(run_checkout_command),
+        )
+        .route(
+            "/checkouts/{reference}/command-runs",
+            get(list_checkout_command_runs),
+        )
+        .route(
+            "/checkouts/{reference}/command-runs/{id}",
+            get(get_checkout_command_run),
+        )
+        .route(
+            "/checkouts/{reference}/command-runs/{id}/cancel",
+            post(cancel_checkout_command_run),
+        )
+        .route(
+            "/checkouts/{reference}/views",
+            get(list_checkout_custom_views).put(save_checkout_custom_views),
+        )
+        .route(
+            "/checkouts/{reference}/terminal-settings",
+            get(get_checkout_terminal_settings).put(put_checkout_terminal_settings),
+        )
+        .route(
             "/checkouts/{reference}/sources/{connection_id}",
             put(add_checkout_source).delete(remove_checkout_source),
         )
@@ -1199,6 +1265,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}",
             get(get_checkout_ticket).patch(update_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/tickets/{id}/duplicate-backlinks",
+            get(get_checkout_ticket_duplicate_backlinks),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/close",
@@ -1605,7 +1675,15 @@ async fn get_ticket(
 }
 
 fn api_ticket(entry: &StoreEntry, ticket: &Ticket) -> Result<ApiTicket, ApiError> {
-    let contexts = auto_context::effective(&Settings::new(entry.store.root()))
+    api_ticket_with_settings(entry, ticket, &Settings::new(entry.store.root()))
+}
+
+fn api_ticket_with_settings(
+    entry: &StoreEntry,
+    ticket: &Ticket,
+    settings: &Settings,
+) -> Result<ApiTicket, ApiError> {
+    let contexts = auto_context::effective(settings)
         .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(ApiTicket::with_provider_auto_context(
         ticket,
@@ -1613,6 +1691,16 @@ fn api_ticket(entry: &StoreEntry, ticket: &Ticket) -> Result<ApiTicket, ApiError
         None,
         &contexts,
     ))
+}
+
+fn contextualize_api_ticket(
+    mut ticket: ApiTicket,
+    settings: &Settings,
+) -> Result<ApiTicket, ApiError> {
+    let contexts = auto_context::effective(settings)
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    ticket.auto_context = auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
+    Ok(ticket)
 }
 
 // ---- activity timeline (HS2-KP31ZE) ----------------------------------------------
@@ -2555,12 +2643,30 @@ async fn close_provider_ticket(
     Path((connection_id, id)): Path<(String, String)>,
     Json(req): Json<CloseReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
+    let duplicate_of = match req.duplicate_of {
+        Some(DuplicateOfReq::Legacy(reference)) => Some(reference),
+        Some(DuplicateOfReq::Qualified(reference)) => {
+            let target = resolve_project_ticket_ref(&state, reference)?;
+            // This compatibility route is provider-scoped rather than checkout-scoped,
+            // so it has no source project identity to compare. Treat the same provider
+            // connection/native pair as the same underlying ticket. Checkout routes use
+            // all three ProjectTicketRef fields below.
+            if target.connection_id == connection_id && target.native_id == id {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "a ticket cannot be a duplicate of itself",
+                ));
+            }
+            Some(target.qualified())
+        }
+        None => None,
+    };
     provider_for(&state, &connection_id)?
         .close(
             &id,
             now(),
             opt_parse(Some(&req.reason))?.expect("required close reason"),
-            req.duplicate_of,
+            duplicate_of,
         )
         .map(Json)
         .map_err(provider_transfer_error)
@@ -2656,6 +2762,7 @@ struct OpenProjectResponse {
 }
 
 fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::checkouts::Checkout) {
+    let settings = checkout.settings();
     let source = checkout
         .default_source
         .as_deref()
@@ -2667,7 +2774,12 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
                 .iter()
                 .find(|source| source.provider == "git")
         });
-    let Some(source) = source else { return };
+    let Some(source) = source else {
+        tokio::task::spawn_blocking(move || {
+            let _ = settings.migrate_existing();
+        });
+        return;
+    };
     let id = checkout.id.clone();
     if !state
         .setup_refreshes
@@ -2681,7 +2793,6 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
     let store = std::path::PathBuf::from(&source.locator);
     let plugin_dirs = state.plugin_dirs.as_ref().clone();
     tokio::task::spawn_blocking(move || {
-        let settings = Settings::new(&store);
         let _ = settings.migrate_existing();
         let enabled = settings
             .get("enabled_plugins", hotsheet_ticketing::Scope::Shared)
@@ -2699,6 +2810,26 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
             hotsheet_plugins::refresh_setup_in(&store, &project, enabled.as_ref(), &plugin_dirs);
         if let Ok(mut active) = active.lock() {
             active.remove(&id);
+        }
+    });
+}
+
+/// Keep the generated checkout projection fresh without making project opening wait for a
+/// full scan of every linked ticket store. The short delay also gives the client's initial
+/// ticket-index requests priority over this best-effort local projection refresh.
+fn schedule_worklist_regeneration(checkout: &hotsheet_ticketing::checkouts::Checkout) {
+    let checkout = checkout.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        let root = checkout.root.clone();
+        match tokio::task::spawn_blocking(move || {
+            hotsheet_ticketing::worklist::regenerate_checkout(&checkout)
+        })
+        .await
+        {
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => eprintln!("worklist regenerate failed for {root}: {error}"),
+            Err(error) => eprintln!("worklist regenerate task failed for {root}: {error}"),
         }
     });
 }
@@ -2746,9 +2877,8 @@ async fn open_project(
             default_source,
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
-    hotsheet_ticketing::worklist::regenerate_checkout(&checkout)
-        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     state.watch_checkout_repository(&checkout);
+    schedule_worklist_regeneration(&checkout);
     schedule_setup_freshness(&state, &checkout);
     Ok((
         StatusCode::CREATED,
@@ -3097,9 +3227,9 @@ async fn get_checkout_code_review(
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
-    let root: std::path::PathBuf = checkout.root.into();
     let slug = ticket.slug;
-    let classification = Settings::new(entry.store.root())
+    let classification = checkout
+        .settings()
         .get_effective("code_review_file_classes")
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?
         .map(serde_json::from_value::<code_review::CodeReviewClassification>)
@@ -3111,6 +3241,7 @@ async fn get_checkout_code_review(
             )
         })?
         .unwrap_or_default();
+    let root: std::path::PathBuf = checkout.root.into();
     tokio::task::spawn_blocking(move || {
         code_review::discover_with_classification(&root, &slug, &classification)
     })
@@ -3210,6 +3341,8 @@ async fn list_checkout_tickets(
         .checkout_registry
         .resolve(&reference)
         .map_err(|e| ApiError::new(StatusCode::NOT_FOUND, e.to_string()))?;
+    let contexts = auto_context::effective(&checkout.settings())
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     let mut result = Vec::new();
     for (store_id, entry) in checkout_entries(&state, &reference)? {
         let compact = params.compact.unwrap_or(true);
@@ -3228,8 +3361,6 @@ async fn list_checkout_tickets(
                 row.make_compact();
             }
         }
-        let contexts = auto_context::effective(&Settings::new(entry.store.root()))
-            .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
         for row in &mut rows {
             row.add_auto_context(&contexts);
         }
@@ -3251,7 +3382,9 @@ async fn list_checkout_tickets(
     {
         let provider = provider_for(&state, &source.connection_id)?;
         let query = params.clone().into_query(state.store.root())?;
-        for ticket in provider.query(&query).map_err(provider_transfer_error)? {
+        for mut ticket in provider.query(&query).map_err(provider_transfer_error)? {
+            ticket.auto_context =
+                auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
             let mut value = serde_json::to_value(ticket).map_err(|error| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             })?;
@@ -3328,6 +3461,7 @@ async fn create_corrupt_ticket_repair(
     Path(reference): Path<String>,
     Json(req): Json<CorruptTicketRepairReq>,
 ) -> Result<Response, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let requested = std::path::PathBuf::from(&req.path);
     for (_, entry) in checkout_entries(&state, &reference)? {
         let listing = entry.store.list_tickets_resilient()?;
@@ -3354,7 +3488,11 @@ async fn create_corrupt_ticket_repair(
             .iter()
             .find(|ticket| ticket.details.contains(&marker) && ops::is_open(ticket))
         {
-            return Ok((StatusCode::OK, Json(api_ticket(&entry, existing)?)).into_response());
+            return Ok((
+                StatusCode::OK,
+                Json(api_ticket_with_settings(&entry, existing, &settings)?),
+            )
+                .into_response());
         }
 
         let identity = corrupt
@@ -3386,7 +3524,11 @@ async fn create_corrupt_ticket_repair(
                 blocked_by: None,
             },
         )?;
-        return Ok((StatusCode::CREATED, Json(created)).into_response());
+        return Ok((
+            StatusCode::CREATED,
+            Json(contextualize_api_ticket(created, &settings)?),
+        )
+            .into_response());
     }
     Err(ApiError::new(
         StatusCode::NOT_FOUND,
@@ -3456,11 +3598,17 @@ fn checkout_ticket_owner(
         .checkout_registry
         .resolve(reference)
         .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
-    if let Some((source, native_id)) = checkout.sources.iter().find_map(|source| {
-        id.strip_prefix(&format!("{}:", source.connection_id))
-            .map(|native| (source.clone(), native.to_string()))
-    }) {
-        return Ok((source, native_id));
+    if let Some((connection_id, native_id)) = id.split_once(':') {
+        match state
+            .checkout_registry
+            .resolve_source(reference, connection_id)
+        {
+            Ok((_, source)) => return Ok((source, native_id.to_string())),
+            Err(hotsheet_ticketing::checkouts::CheckoutError::NotFound(_)) => {}
+            Err(error) => {
+                return Err(ApiError::new(StatusCode::CONFLICT, error.to_string()));
+            }
+        }
     }
     let mut found = Vec::new();
     for source in checkout.sources {
@@ -3492,12 +3640,46 @@ fn checkout_ticket_owner(
         )),
     }
 }
+
+fn resolve_project_ticket_ref(
+    state: &AppState,
+    reference: ProjectTicketRef,
+) -> Result<ProjectTicketRef, ApiError> {
+    let (checkout, source) = state
+        .checkout_registry
+        .resolve_source(&reference.project_id, &reference.connection_id)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let native_id = if source.provider == "git" {
+        let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                format!("checkout links an unhosted git source: {}", source.locator),
+            )
+        })?;
+        ops::resolve(&entry.store, &reference.native_id)?
+            .ok_or_else(|| ApiError::not_found(&reference.qualified()))?
+            .id
+            .to_string()
+    } else {
+        provider_for(state, &source.connection_id)?
+            .get(&reference.native_id)
+            .map_err(provider_transfer_error)?
+            .native_id
+    };
+    Ok(ProjectTicketRef {
+        project_id: checkout.id,
+        connection_id: source.connection_id,
+        native_id,
+    })
+}
+
 async fn create_checkout_ticket(
     State(state): State<AppState>,
     Path(reference): Path<String>,
     Query(q): Query<CheckoutStoreQuery>,
     Json(req): Json<CreateReq>,
 ) -> Result<(StatusCode, Json<ApiTicket>), ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let source = checkout_source_for_create(
         &state,
         &reference,
@@ -3514,12 +3696,16 @@ async fn create_checkout_ticket(
     } else {
         do_provider_create(&state, &source.connection_id, req)?
     };
-    Ok((StatusCode::CREATED, Json(ticket)))
+    Ok((
+        StatusCode::CREATED,
+        Json(contextualize_api_ticket(ticket, &settings)?),
+    ))
 }
 async fn get_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
     if source.provider != "git" {
         let ticket = provider_for(&state, &source.connection_id)?
@@ -3527,7 +3713,7 @@ async fn get_checkout_ticket(
             .map_err(provider_transfer_error)?;
         return Ok(Json(ResolvedTicket {
             store: source.connection_id,
-            ticket,
+            ticket: contextualize_api_ticket(ticket, &settings)?,
         }));
     }
     let entry = state.host.get(&source.connection_id).ok_or_else(|| {
@@ -3539,7 +3725,138 @@ async fn get_checkout_ticket(
     let ticket = ops::resolve(&entry.store, &native_id)?.ok_or_else(|| ApiError::not_found(&id))?;
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: api_ticket(&entry, &ticket)?,
+        ticket: api_ticket_with_settings(&entry, &ticket, &settings)?,
+    }))
+}
+
+#[derive(Debug, Serialize)]
+struct DuplicateBacklink {
+    reference: String,
+    project_id: String,
+    project_name: String,
+    connection_id: String,
+    native_id: String,
+    qualified_id: String,
+    slug: String,
+    title: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DuplicateBacklinkProject {
+    project_id: String,
+    project_name: String,
+}
+
+#[derive(Debug, Serialize)]
+struct DuplicateBacklinkResponse {
+    backlinks: Vec<DuplicateBacklink>,
+    inaccessible_projects: Vec<DuplicateBacklinkProject>,
+}
+
+fn duplicate_reference_matches(reference: &str, target: &ProjectTicketRef) -> bool {
+    if let Some(exact) = ProjectTicketRef::from_qualified(reference) {
+        return exact == *target;
+    }
+    reference == target.native_id
+}
+
+async fn get_checkout_ticket_duplicate_backlinks(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<Json<DuplicateBacklinkResponse>, ApiError> {
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
+    let target = resolve_project_ticket_ref(
+        &state,
+        ProjectTicketRef {
+            project_id: reference,
+            connection_id: source.connection_id,
+            native_id,
+        },
+    )?;
+    let checkouts = state
+        .checkout_registry
+        .list()
+        .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
+    let mut backlinks = Vec::new();
+    let mut inaccessible_projects = Vec::new();
+    for checkout in checkouts {
+        let mut inaccessible = false;
+        for source in &checkout.sources {
+            let tickets = if source.provider == "git" {
+                match FsStore::open(&source.locator)
+                    .and_then(|store| store.list_tickets_resilient())
+                {
+                    Ok(listing) => listing
+                        .tickets
+                        .iter()
+                        .map(|ticket| ApiTicket::from_provider(ticket, &source.connection_id, None))
+                        .collect(),
+                    Err(_) => {
+                        inaccessible = true;
+                        continue;
+                    }
+                }
+            } else {
+                match provider_for(&state, &source.connection_id).and_then(|provider| {
+                    provider
+                        .query(&TicketQuery::default())
+                        .map_err(provider_transfer_error)
+                }) {
+                    Ok(tickets) => tickets,
+                    Err(_) => {
+                        inaccessible = true;
+                        continue;
+                    }
+                }
+            };
+            for ticket in tickets {
+                let Some(duplicate_of) = ticket.duplicate_of.as_deref() else {
+                    continue;
+                };
+                if ticket.close_reason != Some(CloseReason::Duplicate)
+                    || !duplicate_reference_matches(duplicate_of, &target)
+                {
+                    continue;
+                }
+                let source_reference = ProjectTicketRef {
+                    project_id: checkout.id.clone(),
+                    connection_id: ticket.connection_id.clone(),
+                    native_id: ticket.native_id.clone(),
+                };
+                backlinks.push(DuplicateBacklink {
+                    reference: source_reference.qualified(),
+                    project_id: checkout.id.clone(),
+                    project_name: checkout.alias.clone(),
+                    connection_id: ticket.connection_id,
+                    native_id: ticket.native_id,
+                    qualified_id: ticket.qualified_id,
+                    slug: ticket.slug,
+                    title: ticket.title,
+                });
+            }
+        }
+        if inaccessible {
+            inaccessible_projects.push(DuplicateBacklinkProject {
+                project_id: checkout.id,
+                project_name: checkout.alias,
+            });
+        }
+    }
+    backlinks.sort_by(|left, right| {
+        left.project_name
+            .cmp(&right.project_name)
+            .then(left.slug.cmp(&right.slug))
+            .then(left.reference.cmp(&right.reference))
+    });
+    backlinks.dedup_by(|left, right| left.reference == right.reference);
+    inaccessible_projects.sort_by(|left, right| {
+        left.project_name
+            .cmp(&right.project_name)
+            .then(left.project_id.cmp(&right.project_id))
+    });
+    Ok(Json(DuplicateBacklinkResponse {
+        backlinks,
+        inaccessible_projects,
     }))
 }
 async fn update_checkout_ticket(
@@ -3547,11 +3864,15 @@ async fn update_checkout_ticket(
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<UpdateReq>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
     if source.provider != "git" {
         return Ok(Json(ResolvedTicket {
             store: source.connection_id.clone(),
-            ticket: do_provider_update(&state, &source.connection_id, &native_id, req)?,
+            ticket: contextualize_api_ticket(
+                do_provider_update(&state, &source.connection_id, &native_id, req)?,
+                &settings,
+            )?,
         }));
     }
     let entry = state.host.get(&source.connection_id).ok_or_else(|| {
@@ -3562,7 +3883,7 @@ async fn update_checkout_ticket(
     })?;
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: do_update(&state, &entry, &native_id, req)?,
+        ticket: contextualize_api_ticket(do_update(&state, &entry, &native_id, req)?, &settings)?,
     }))
 }
 
@@ -3592,6 +3913,7 @@ async fn batch_update_checkout_tickets(
             "bulk update requires at least one ticket",
         ));
     }
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let mut resolved = Vec::with_capacity(req.updates.len());
     for item in req.updates {
         let entry = checkout_entry_for_ticket(&state, &reference, &item.id)?;
@@ -3614,7 +3936,10 @@ async fn batch_update_checkout_tickets(
     for (entry, item) in resolved {
         updated.push(ResolvedTicket {
             store: multistore::store_url_id(&entry.store),
-            ticket: do_update(&state, &entry, &item.id, item.update)?,
+            ticket: contextualize_api_ticket(
+                do_update(&state, &entry, &item.id, item.update)?,
+                &settings,
+            )?,
         });
     }
     Ok(Json(updated))
@@ -3623,6 +3948,7 @@ async fn delete_checkout_ticket_note(
     State(state): State<AppState>,
     Path((reference, id, note_id)): Path<(String, String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let note_id = Ulid::from_string(&note_id)
@@ -3631,7 +3957,7 @@ async fn delete_checkout_ticket_note(
     state.changed_in(&entry, "updated", &updated);
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: api_ticket(&entry, &updated)?,
+        ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
     }))
 }
 async fn close_checkout_ticket(
@@ -3639,10 +3965,56 @@ async fn close_checkout_ticket(
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<CloseReq>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
-    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    let checkout = state
+        .checkout_registry
+        .resolve(&reference)
+        .map_err(|error| ApiError::new(StatusCode::NOT_FOUND, error.to_string()))?;
+    let source_project = checkout.id.clone();
+    let settings = checkout.settings();
+    let (source, native_id) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        let duplicate_of = match req.duplicate_of {
+            Some(DuplicateOfReq::Legacy(reference)) => Some(reference),
+            Some(DuplicateOfReq::Qualified(reference)) => {
+                let target = resolve_project_ticket_ref(&state, reference)?;
+                if target.project_id == source_project
+                    && target.connection_id == source.connection_id
+                    && target.native_id == native_id
+                {
+                    return Err(ApiError::new(
+                        StatusCode::BAD_REQUEST,
+                        "a ticket cannot be a duplicate of itself",
+                    ));
+                }
+                Some(target.qualified())
+            }
+            None => None,
+        };
+        let ticket = provider_for(&state, &source.connection_id)?
+            .close(
+                &native_id,
+                now(),
+                opt_parse(Some(&req.reason))?.expect("required close reason"),
+                duplicate_of,
+            )
+            .map_err(provider_transfer_error)?;
+        return Ok(Json(ResolvedTicket {
+            store: source.connection_id,
+            ticket: contextualize_api_ticket(ticket, &settings)?,
+        }));
+    }
+    let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            "checkout links an unhosted git source",
+        )
+    })?;
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: do_close(&state, &entry, &id, req)?,
+        ticket: contextualize_api_ticket(
+            do_close(&state, &entry, &native_id, Some(&source_project), req)?,
+            &settings,
+        )?,
     }))
 }
 async fn assign_checkout_ticket(
@@ -3650,10 +4022,11 @@ async fn assign_checkout_ticket(
     Path((reference, id)): Path<(String, String)>,
     Json(req): Json<AssignReq>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: do_assign(&state, &entry, &id, req)?,
+        ticket: contextualize_api_ticket(do_assign(&state, &entry, &id, req)?, &settings)?,
     }))
 }
 
@@ -3663,6 +4036,7 @@ async fn add_checkout_ticket_attachment(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<(StatusCode, Json<ResolvedTicket>), ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let filename = attachment_filename(&headers)?;
@@ -3680,7 +4054,7 @@ async fn add_checkout_ticket_attachment(
         StatusCode::CREATED,
         Json(ResolvedTicket {
             store: multistore::store_url_id(&entry.store),
-            ticket: api_ticket(&entry, &updated)?,
+            ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
         }),
     ))
 }
@@ -3922,6 +4296,7 @@ async fn delete_checkout_ticket_attachment(
     State(state): State<AppState>,
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let attachment_id =
@@ -3939,7 +4314,7 @@ async fn delete_checkout_ticket_attachment(
     state.changed_in(&entry, "attachment_removed", &updated);
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: api_ticket(&entry, &updated)?,
+        ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
     }))
 }
 
@@ -3978,6 +4353,7 @@ async fn update_checkout_ticket_attachment_metadata(
             Ok(parsed)
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let updated =
@@ -3987,7 +4363,7 @@ async fn update_checkout_ticket_attachment_metadata(
     state.changed_in(&entry, "attachment_metadata_updated", &updated);
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: api_ticket(&entry, &updated)?,
+        ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
     }))
 }
 
@@ -4007,6 +4383,7 @@ async fn rename_checkout_ticket_attachment(
             "filename is required",
         ));
     }
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let attachment_id = Ulid::from_string(&attachment_id)
@@ -4018,7 +4395,7 @@ async fn rename_checkout_ticket_attachment(
     state.changed_in(&entry, "attachment_renamed", &updated);
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: api_ticket(&entry, &updated)?,
+        ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
     }))
 }
 
@@ -4032,6 +4409,7 @@ async fn update_checkout_ticket_attachment_annotations(
     Path((reference, id, attachment_id)): Path<(String, String, String)>,
     Json(body): Json<UpdateAttachmentAnnotationsBody>,
 ) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
     let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let attachment_id =
@@ -4067,7 +4445,7 @@ async fn update_checkout_ticket_attachment_annotations(
     state.changed_in(&entry, "attachment_annotations_updated", &updated);
     Ok(Json(ResolvedTicket {
         store: multistore::store_url_id(&entry.store),
-        ticket: api_ticket(&entry, &updated)?,
+        ticket: api_ticket_with_settings(&entry, &updated, &settings)?,
     }))
 }
 
@@ -4093,23 +4471,41 @@ async fn list_commands(
     Json(state.commands.definitions())
 }
 
-async fn save_commands(
-    State(state): State<AppState>,
-    Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
-) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+fn validate_command_definitions(
+    definitions: &[hotsheet_ticketing::commands::CommandDefinition],
+) -> Result<(), ApiError> {
+    use hotsheet_ticketing::commands::CommandKind;
     use std::collections::HashSet;
     let mut ids = HashSet::new();
     if definitions.iter().any(|definition| {
         definition.id.trim().is_empty()
             || definition.title.trim().is_empty()
-            || definition.program.trim().is_empty()
+            || match definition.kind {
+                CommandKind::Program => definition.program.trim().is_empty(),
+                CommandKind::Shell => definition
+                    .command
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty()),
+                CommandKind::Ai => definition
+                    .prompt
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty()),
+            }
             || !ids.insert(definition.id.as_str())
     }) {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
-            "commands require unique non-empty id, title, and program values",
+            "commands require unique non-empty ids and titles plus their kind-specific executable content",
         ));
     }
+    Ok(())
+}
+
+async fn save_commands(
+    State(state): State<AppState>,
+    Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
+) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+    validate_command_definitions(&definitions)?;
     Settings::new(state.store.root())
         .set(
             "commands",
@@ -4119,6 +4515,59 @@ async fn save_commands(
         )
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     state.commands.replace_definitions(definitions.clone());
+    Ok(Json(definitions))
+}
+
+fn checkout_settings(
+    state: &AppState,
+    reference: &str,
+) -> Result<(hotsheet_ticketing::checkouts::Checkout, Settings), ApiError> {
+    let checkout = state
+        .checkout_registry
+        .resolve(reference)
+        .map_err(|error| {
+            let status = match error {
+                hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => StatusCode::NOT_FOUND,
+                hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => StatusCode::CONFLICT,
+                _ => StatusCode::BAD_REQUEST,
+            };
+            ApiError::new(status, error.to_string())
+        })?;
+    let settings = checkout.settings();
+    Ok((checkout, settings))
+}
+
+async fn list_checkout_commands(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
+    let definitions = hotsheet_ticketing::commands::from_settings(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    state
+        .commands
+        .replace_project(checkout.id, checkout.root.into(), definitions.clone());
+    Ok(Json(definitions))
+}
+
+async fn save_checkout_commands(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(definitions): Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>,
+) -> Result<Json<Vec<hotsheet_ticketing::commands::CommandDefinition>>, ApiError> {
+    validate_command_definitions(&definitions)?;
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
+    settings
+        .set(
+            "commands",
+            serde_json::to_value(&definitions)
+                .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?,
+            hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    state
+        .commands
+        .replace_project(checkout.id, checkout.root.into(), definitions.clone());
     Ok(Json(definitions))
 }
 
@@ -4152,6 +4601,40 @@ async fn save_custom_views(
     Ok(Json(views))
 }
 
+async fn list_checkout_custom_views(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<custom_views::CustomView>>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    custom_views::from_settings(&settings)
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))
+}
+
+async fn save_checkout_custom_views(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(views): Json<Vec<custom_views::CustomView>>,
+) -> Result<Json<Vec<custom_views::CustomView>>, ApiError> {
+    custom_views::validate(&views)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
+    custom_views::replace(&settings, &views)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    state.emit(ChangeEvent {
+        cursor: None,
+        store: checkout.id,
+        kind: "views_updated".into(),
+        id: String::new(),
+        slug: String::new(),
+        message: None,
+        activity: None,
+        assignment: None,
+        turn: None,
+    });
+    Ok(Json(views))
+}
+
 async fn run_command(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -4163,8 +4646,33 @@ async fn run_command(
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e))
 }
 
+async fn run_checkout_command(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<(StatusCode, Json<commands::CommandRun>), ApiError> {
+    let (checkout, settings) = checkout_settings(&state, &reference)?;
+    let definitions = hotsheet_ticketing::commands::from_settings(&settings)
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    state
+        .commands
+        .replace_project(checkout.id.clone(), checkout.root.into(), definitions);
+    state
+        .commands
+        .start_for(&checkout.id, &id)
+        .map(|run| (StatusCode::ACCEPTED, Json(run)))
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))
+}
+
 async fn list_command_runs(State(state): State<AppState>) -> Json<Vec<commands::CommandRun>> {
     Json(state.commands.list())
+}
+
+async fn list_checkout_command_runs(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<Vec<commands::CommandRun>>, ApiError> {
+    let (checkout, _) = checkout_settings(&state, &reference)?;
+    Ok(Json(state.commands.list_for(&checkout.id)))
 }
 
 #[derive(Deserialize)]
@@ -4185,6 +4693,19 @@ async fn get_command_run(
         .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "unknown command run"))
 }
 
+async fn get_checkout_command_run(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+    Query(query): Query<RunOutputQuery>,
+) -> Result<Json<commands::CommandRun>, ApiError> {
+    let (checkout, _) = checkout_settings(&state, &reference)?;
+    state
+        .commands
+        .get_for(&checkout.id, &id, query.after)
+        .map(Json)
+        .ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "unknown command run"))
+}
+
 async fn cancel_command_run(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -4194,6 +4715,18 @@ async fn cancel_command_run(
         .cancel(&id)
         .map(Json)
         .map_err(|e| ApiError::new(StatusCode::CONFLICT, e))
+}
+
+async fn cancel_checkout_command_run(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<Json<commands::CommandRun>, ApiError> {
+    let (checkout, _) = checkout_settings(&state, &reference)?;
+    state
+        .commands
+        .cancel_for(&checkout.id, &id)
+        .map(Json)
+        .map_err(|error| ApiError::new(StatusCode::CONFLICT, error))
 }
 
 #[derive(Deserialize)]
@@ -4529,16 +5062,39 @@ fn do_close(
     state: &AppState,
     entry: &StoreEntry,
     id: &str,
+    source_project_id: Option<&str>,
     req: CloseReq,
 ) -> Result<ApiTicket, ApiError> {
     let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
     let reason: CloseReason = opt_parse(Some(req.reason.as_str()))?.expect("reason present");
     let dup = match req.duplicate_of {
-        Some(d) => Some(
-            ops::resolve(&entry.store, &d)?
-                .ok_or_else(|| ApiError::not_found(&d))?
-                .id,
-        ),
+        Some(DuplicateOfReq::Legacy(reference)) => {
+            let target = ops::resolve(&entry.store, &reference)?
+                .ok_or_else(|| ApiError::not_found(&reference))?;
+            if target.id == ticket.id {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "a ticket cannot be a duplicate of itself",
+                ));
+            }
+            Some(target.id.to_string())
+        }
+        Some(DuplicateOfReq::Qualified(reference)) => {
+            let target = resolve_project_ticket_ref(state, reference)?;
+            // Checkout routes compare the full project/connection/native identity. The
+            // legacy default/store routes have no project identity, so they intentionally
+            // fall back to same-underlying-store semantics.
+            if source_project_id.is_none_or(|project_id| target.project_id == project_id)
+                && target.connection_id == multistore::store_url_id(&entry.store)
+                && target.native_id == ticket.id.to_string()
+            {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "a ticket cannot be a duplicate of itself",
+                ));
+            }
+            Some(target.qualified())
+        }
         None => None,
     };
     let closed = ops::close(&entry.store, &ticket.id, now(), reason, dup)?;
@@ -4759,7 +5315,13 @@ async fn close_ticket(
     Path(id): Path<String>,
     Json(req): Json<CloseReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
-    Ok(Json(do_close(&state, &state.default_entry(), &id, req)?))
+    Ok(Json(do_close(
+        &state,
+        &state.default_entry(),
+        &id,
+        None,
+        req,
+    )?))
 }
 
 /// `POST /batch` — apply the same field update to many tickets (HS2-86). One bad id doesn't
@@ -5280,6 +5842,7 @@ async fn send_drive_turn(
     let thread_state = state.clone();
     let thread_store = state.store.clone();
     let tool = info.tool.clone();
+    let activity_project = info.project.clone();
     let prompt = request.content;
     let thread_id = id.clone();
     std::thread::spawn(move || {
@@ -5322,7 +5885,7 @@ async fn send_drive_turn(
                     };
                     if let Some(mut activity) = mapped {
                         activity.session = Some(thread_id.clone());
-                        activity.project = Some(thread_store.root().display().to_string());
+                        activity.project = Some(activity_project.clone());
                         let _ = thread_state.record_activity(&thread_store, activity);
                     }
                     event.clone()
@@ -5413,7 +5976,11 @@ struct TerminalSettings {
 }
 
 fn read_terminal_settings(state: &AppState) -> Result<TerminalSettings, ApiError> {
-    let inherit_global_shell_history = Settings::new(state.store.root())
+    read_terminal_settings_from(&Settings::new(state.store.root()))
+}
+
+fn read_terminal_settings_from(settings: &Settings) -> Result<TerminalSettings, ApiError> {
+    let inherit_global_shell_history = settings
         .get(
             INHERIT_GLOBAL_SHELL_HISTORY_SETTING,
             hotsheet_ticketing::Scope::Local,
@@ -5437,6 +6004,30 @@ async fn put_terminal_settings(
     Json(value): Json<TerminalSettings>,
 ) -> Result<Json<TerminalSettings>, ApiError> {
     Settings::new(state.store.root())
+        .set(
+            INHERIT_GLOBAL_SHELL_HISTORY_SETTING,
+            serde_json::Value::Bool(value.inherit_global_shell_history),
+            hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(value))
+}
+
+async fn get_checkout_terminal_settings(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<TerminalSettings>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    Ok(Json(read_terminal_settings_from(&settings)?))
+}
+
+async fn put_checkout_terminal_settings(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(value): Json<TerminalSettings>,
+) -> Result<Json<TerminalSettings>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    settings
         .set(
             INHERIT_GLOBAL_SHELL_HISTORY_SETTING,
             serde_json::Value::Bool(value.inherit_global_shell_history),
@@ -6596,7 +7187,7 @@ async fn close_store_ticket(
     Json(req): Json<CloseReq>,
 ) -> Result<Json<ApiTicket>, ApiError> {
     let entry = scoped_entry(&state, &store_id)?;
-    Ok(Json(do_close(&state, &entry, &id, req)?))
+    Ok(Json(do_close(&state, &entry, &id, None, req)?))
 }
 
 async fn assign_store_ticket(
@@ -7035,7 +7626,14 @@ struct BatchError {
 #[derive(Debug, Deserialize)]
 struct CloseReq {
     reason: String,
-    duplicate_of: Option<String>,
+    duplicate_of: Option<DuplicateOfReq>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum DuplicateOfReq {
+    Legacy(String),
+    Qualified(ProjectTicketRef),
 }
 
 #[derive(Debug, Deserialize)]
@@ -7752,6 +8350,81 @@ mod activity_distillation_tests {
         assert_eq!(ticket.notes[0].kind, NoteKind::Activity);
         assert!(ticket.notes[0].text.starts_with("Recorded a decision"));
         assert!(!ticket.notes[0].text.contains("private decision text"));
+    }
+
+    #[test]
+    fn project_activity_distillation_uses_explicit_checkout_settings_for_a_shared_store() {
+        let root = tempfile::tempdir().unwrap();
+        let store_root = root.path().join("shared.hs2");
+        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let ticket_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAA").unwrap();
+        ops::create(
+            &store,
+            ticket_id,
+            "HS",
+            Timestamp::new("2026-09-02T00:00:00Z"),
+            NewTicket::default(),
+        )
+        .unwrap();
+        let first_root = root.path().join("first");
+        let second_root = root.path().join("second");
+        std::fs::create_dir(&first_root).unwrap();
+        std::fs::create_dir(&second_root).unwrap();
+        let registry_path = root.path().join("home/checkouts.json");
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+        let first = registry
+            .register(&first_root, Some("first"), None, vec![store_root.clone()])
+            .unwrap();
+        let second = registry
+            .register(&second_root, Some("second"), None, vec![store_root])
+            .unwrap();
+        first
+            .settings()
+            .set(
+                "activity_distillation",
+                json!({"enabled":true,"adapter":"deterministic"}),
+                Scope::Local,
+            )
+            .unwrap();
+        second
+            .settings()
+            .set(
+                "activity_distillation",
+                json!({"enabled":false,"adapter":"deterministic"}),
+                Scope::Local,
+            )
+            .unwrap();
+        let state = AppState::new(store.clone(), "secret".into())
+            .unwrap()
+            .with_checkout_registry(registry_path);
+
+        let mut first_event = ActivityEvent::new(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "2026-09-02T01:00:00Z",
+            "codex",
+            ActivityKind::Decision,
+            json!({"text":"first private decision"}),
+        );
+        first_event.ticket = Some(ticket_id.to_string());
+        first_event.session = Some("first-session".into());
+        first_event.project = Some(first.id);
+        state.record_activity(&store, first_event).unwrap();
+
+        let mut second_event = ActivityEvent::new(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+            "2026-09-02T01:01:00Z",
+            "codex",
+            ActivityKind::Decision,
+            json!({"text":"second private decision"}),
+        );
+        second_event.ticket = Some(ticket_id.to_string());
+        second_event.session = Some("second-session".into());
+        second_event.project = Some(second.id);
+        state.record_activity(&store, second_event).unwrap();
+
+        let ticket = store.read_ticket(&ticket_id).unwrap();
+        assert_eq!(ticket.notes.len(), 1);
+        assert!(ticket.notes[0].text.starts_with("Recorded a decision"));
     }
 
     #[test]

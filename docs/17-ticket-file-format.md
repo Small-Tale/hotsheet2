@@ -41,7 +41,7 @@ fields) + a **Markdown body** (`details`) + an optional `## Notes` section. See
 | **Close outcome** ([02](02-ticket-storage.md) §2.6a) | | | | |
 | `closed_at` | RFC3339 \| null | no | shared | |
 | `close_reason` | `completed\|not_planned\|duplicate\|obsolete` \| null | no | shared | **Optional**, orthogonal to `status`. HS2-24/61 |
-| `duplicate_of` | ULID \| null | cond. | shared | Required iff `close_reason == duplicate`; resolves globally |
+| `duplicate_of` | ticket reference \| null | cond. | shared | Required iff `close_reason == duplicate`; legacy bare ULID or exact `@project/connection:native-id` |
 | **Coordination** ([05](05-ai-tool-plugins.md) §5.7) — omitted when unclaimed | | | | |
 | `claimed_by` | string (worker id) \| null | no | shared | Ephemeral; lease-expiring |
 | `claim_lease_expires_at` | RFC3339 \| null | no | shared | |
@@ -147,7 +147,11 @@ case-insensitive comparison. A collision preserves the requested stem and extens
 adds the first available numeric suffix (`proof.png`, `proof (2).png`, …), including
 when several files with the same name arrive in one atomic evidence batch. This keeps
 human-authored `attachment:filename` references unambiguous while the ULID remains the
-durable storage identity.
+durable storage identity. Bare attachment ULIDs are not note-reference syntax: Git-backed
+note writes conservatively replace an unambiguous prose occurrence with the same-ticket or
+cross-ticket filename reference. Code spans/blocks, URL and path segments, and ambiguous or
+currently unrepresentable filename ids stay byte-for-byte literal so documentation of storage
+identities is not rewritten (HS2-H2PTVZ tracks backtick-filename syntax).
 
 HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
 human-authored `batch_label`, `actor` (`identity`, `display_name`, and

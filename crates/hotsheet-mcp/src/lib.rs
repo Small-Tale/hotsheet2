@@ -569,6 +569,10 @@ mod core_backend {
     /// through injected closures so tests can be deterministic.
     pub struct CoreBackend {
         store: FsStore,
+        /// Explicit project identity for checkout-scoped calls. Store-only/serverless
+        /// calls leave this absent and retain legacy store-owned settings behavior.
+        checkout: Option<hotsheet_ticketing::checkouts::Checkout>,
+        checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
         now: Box<dyn Fn() -> Timestamp>,
         mint: Box<dyn Fn() -> Ulid>,
     }
@@ -583,9 +587,34 @@ mod core_backend {
         pub fn new(store: FsStore) -> Self {
             Self {
                 store,
+                checkout: None,
+                checkout_registry: checkout_registry(),
                 now: Box::new(default_now),
                 mint: Box::new(Ulid::new),
             }
+        }
+
+        fn for_checkout(
+            &self,
+            store: FsStore,
+            checkout: hotsheet_ticketing::checkouts::Checkout,
+        ) -> Self {
+            Self {
+                checkout: Some(checkout),
+                checkout_registry: self.checkout_registry.clone(),
+                store,
+                now: Box::new(default_now),
+                mint: Box::new(Ulid::new),
+            }
+        }
+
+        #[cfg(test)]
+        pub(crate) fn with_checkout_registry(
+            mut self,
+            checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
+        ) -> Self {
+            self.checkout_registry = checkout_registry;
+            self
         }
 
         /// Override the clock + minter (deterministic tests).
@@ -612,21 +641,33 @@ mod core_backend {
         }
 
         fn api(&self, ticket: &Ticket) -> Result<Value, BackendError> {
-            api_for(&self.store, ticket)
+            api_for_settings(&self.store, ticket, &self.settings())
         }
 
-        fn checkout_stores(&self, reference: &str) -> Result<Vec<FsStore>, BackendError> {
-            let checkout = checkout_registry()
+        fn settings(&self) -> Settings {
+            self.checkout
+                .as_ref()
+                .map(hotsheet_ticketing::checkouts::Checkout::settings)
+                .unwrap_or_else(|| Settings::new(self.store.root()))
+        }
+
+        fn checkout_context(
+            &self,
+            reference: &str,
+        ) -> Result<(hotsheet_ticketing::checkouts::Checkout, Vec<FsStore>), BackendError> {
+            let checkout = self
+                .checkout_registry
                 .resolve(reference)
                 .map_err(checkout_err)?;
             if checkout.stores.is_empty() {
                 return Err(bad_request("checkout has no linked ticket stores"));
             }
-            checkout
+            let stores = checkout
                 .stores
                 .iter()
                 .map(|p| FsStore::open(Path::new(p)).map_err(store_err))
-                .collect()
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((checkout, stores))
         }
     }
 
@@ -642,18 +683,19 @@ mod core_backend {
                 return Ok(to_value(&vec![descriptor]));
             }
             if path == "/checkouts" {
-                return checkout_registry()
+                return self
+                    .checkout_registry
                     .list()
                     .map(|v| to_value(&v))
                     .map_err(checkout_err);
             }
             if let Some(reference) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = reference.split_once("/tickets") {
-                    let stores = self.checkout_stores(checkout)?;
+                    let (checkout, stores) = self.checkout_context(checkout)?;
                     if suffix.is_empty() {
                         let mut all = Vec::new();
                         for store in stores {
-                            let backend = CoreBackend::new(store.clone());
+                            let backend = self.for_checkout(store.clone(), checkout.clone());
                             if let Value::Array(rows) = backend.get("/tickets", query)? {
                                 for mut row in rows {
                                     if let Some(obj) = row.as_object_mut() {
@@ -671,10 +713,11 @@ mod core_backend {
                         return Ok(Value::Array(all));
                     }
                     let id = suffix.trim_start_matches('/');
+                    let settings = checkout.settings();
                     let mut found = Vec::new();
                     for store in stores {
                         if let Some(ticket) = ops::resolve(&store, id).map_err(store_err)? {
-                            found.push(api_for(&store, &ticket)?);
+                            found.push(api_for_settings(&store, &ticket, &settings)?);
                         }
                     }
                     return match found.as_slice() {
@@ -686,7 +729,8 @@ mod core_backend {
                         }),
                     };
                 }
-                return checkout_registry()
+                return self
+                    .checkout_registry
                     .resolve(reference)
                     .map(|v| to_value(&v))
                     .map_err(checkout_err);
@@ -694,7 +738,7 @@ mod core_backend {
             if path == "/tickets" {
                 let q = build_query(query, self.store.root())?;
                 let compact = wants_compact(query);
-                let contexts = auto_context::effective(&Settings::new(self.store.root()))
+                let contexts = auto_context::effective(&self.settings())
                     .map_err(|e| bad_request(e.to_string()))?;
                 let rows: Vec<TicketRow> = ops::query(&self.store, &q)
                     .map_err(store_err)?
@@ -726,7 +770,7 @@ mod core_backend {
         fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
             if let Some(rest) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = rest.split_once("/tickets") {
-                    let stores = self.checkout_stores(checkout)?;
+                    let (checkout, stores) = self.checkout_context(checkout)?;
                     if method == "POST" && (suffix.is_empty() || suffix.starts_with('?')) {
                         let requested = suffix.split_once("store=").map(|(_, v)| v);
                         let store = match requested {
@@ -744,7 +788,9 @@ mod core_backend {
                                 });
                             }
                         };
-                        return CoreBackend::new(store).send("POST", "/tickets", body);
+                        return self
+                            .for_checkout(store, checkout)
+                            .send("POST", "/tickets", body);
                     }
                     let tail = suffix.trim_start_matches('/');
                     let (id, action) = tail
@@ -773,7 +819,9 @@ mod core_backend {
                         "assign" => format!("/tickets/{id}/assign"),
                         _ => format!("/tickets/{id}"),
                     };
-                    return CoreBackend::new(store).send(method, &target, body);
+                    return self
+                        .for_checkout(store, checkout)
+                        .send(method, &target, body);
                 }
             }
             match method {
@@ -816,7 +864,7 @@ mod core_backend {
                         .and_then(Value::as_str)
                         .filter(|s| !s.is_empty())
                     {
-                        Some(d) => Some(self.resolve(d)?.id),
+                        Some(d) => Some(self.resolve(d)?.id.to_string()),
                         None => None,
                     };
                     let closed = ops::close(&self.store, &t.id, (self.now)(), reason, dup)
@@ -1325,8 +1373,15 @@ mod core_backend {
     }
 
     fn api_for(store: &FsStore, ticket: &Ticket) -> Result<Value, BackendError> {
-        let contexts = auto_context::effective(&Settings::new(store.root()))
-            .map_err(|e| bad_request(e.to_string()))?;
+        api_for_settings(store, ticket, &Settings::new(store.root()))
+    }
+
+    fn api_for_settings(
+        store: &FsStore,
+        ticket: &Ticket,
+        settings: &Settings,
+    ) -> Result<Value, BackendError> {
+        let contexts = auto_context::effective(settings).map_err(|e| bad_request(e.to_string()))?;
         Ok(to_value(&ApiTicket::with_provider_auto_context(
             ticket,
             &hotsheet_ticketing::git_connection_id(store),
@@ -1747,6 +1802,80 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
         (dir, CoreBackend::new(store))
+    }
+
+    #[test]
+    fn corebackend_checkout_routes_isolate_auto_context_for_a_shared_store() {
+        let root = tempfile::tempdir().unwrap();
+        let store_root = root.path().join("tickets.hs2");
+        let store = FsStore::init(&store_root, &StoreMetadata::new("HS")).unwrap();
+        let first_root = root.path().join("first");
+        let second_root = root.path().join("second");
+        std::fs::create_dir(&first_root).unwrap();
+        std::fs::create_dir(&second_root).unwrap();
+        let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(
+            root.path().join("home/checkouts.json"),
+        );
+        let first = registry
+            .register(&first_root, Some("first"), None, vec![store_root.clone()])
+            .unwrap();
+        let second = registry
+            .register(&second_root, Some("second"), None, vec![store_root])
+            .unwrap();
+        for (checkout, text) in [(&first, "first project"), (&second, "second project")] {
+            checkout
+                .settings()
+                .set(
+                    "auto_context",
+                    json!([{"type":"category","key":"issue","text":text}]),
+                    hotsheet_ticketing::Scope::Shared,
+                )
+                .unwrap();
+        }
+        hotsheet_ticketing::Settings::new(store.root())
+            .set(
+                "auto_context",
+                json!([{"type":"category","key":"issue","text":"legacy store"}]),
+                hotsheet_ticketing::Scope::Shared,
+            )
+            .unwrap();
+        let ticket = ops::create(
+            &store,
+            hotsheet_model::Ulid::new(),
+            "HS",
+            hotsheet_model::Timestamp::new("2026-09-11T00:00:00Z"),
+            hotsheet_ticketing::NewTicket {
+                title: "shared".into(),
+                category: "issue".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let backend = CoreBackend::new(store).with_checkout_registry(registry);
+
+        let first_ticket = backend
+            .get(
+                &format!("/checkouts/{}/tickets/{}", first.id, ticket.slug),
+                &[],
+            )
+            .unwrap();
+        let second_ticket = backend
+            .send(
+                "PATCH",
+                &format!("/checkouts/{}/tickets/{}", second.id, ticket.slug),
+                &json!({"up_next":true}),
+            )
+            .unwrap();
+        let store_ticket = backend
+            .get(&format!("/tickets/{}", ticket.slug), &[])
+            .unwrap();
+
+        assert_eq!(
+            first_ticket["auto_context"][0]["text"], "first project",
+            "{first_ticket}"
+        );
+        assert_eq!(second_ticket["auto_context"][0]["text"], "second project");
+        assert_eq!(store_ticket["auto_context"][0]["text"], "legacy store");
     }
 
     /// Call a tool and return the parsed JSON the agent would see (or the error text).

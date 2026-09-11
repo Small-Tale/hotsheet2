@@ -20,6 +20,20 @@ test("accepts a coherent double-covered feature", () => {
   assert.deepEqual(validateMatrix(root, fixture()), { count: 1, failures: [] });
 });
 
+test("accepts semicolon-separated requirement documents", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
+  for (const file of ["req.md", "client.md", "unit.rs", "e2e.rs"]) fs.writeFileSync(path.join(root, file), "");
+  const matrix = fixture().replace("req.md", "req.md; client.md");
+  assert.deepEqual(validateMatrix(root, matrix), { count: 1, failures: [] });
+});
+
+test("accepts a Hot Sheet ticket slug for externally attached manual evidence", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
+  for (const file of ["req.md", "unit.rs", "e2e.rs"]) fs.writeFileSync(path.join(root, file), "");
+  const matrix = fixture().replace("| — | double-covered |", "| HS2-ABC123 # attached evidence | double-covered |");
+  assert.deepEqual(validateMatrix(root, matrix), { count: 1, failures: [] });
+});
+
 test("rejects a dishonest double-covered status", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
   for (const file of ["req.md", "unit.rs"]) fs.writeFileSync(path.join(root, file), "");

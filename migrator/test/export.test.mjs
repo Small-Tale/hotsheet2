@@ -2,12 +2,20 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';
 import { PGlite as PGliteOld } from 'pglite-old';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { exportFromDb, exportDatadir } from '../src/export.mjs';
+import { exportFromDb, exportDatadir, resolveCustomCommands } from '../src/export.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..');
@@ -122,6 +130,66 @@ describe('exportFromDb', () => {
   });
 });
 
+describe('HS1 custom command settings', () => {
+  it('resolves shared/local tree deltas including overrides, additions, and orphan groups', () => {
+    const shared = [
+      { id: 'hidden', name: 'Hidden', prompt: 'old' },
+      { id: 'kept', name: 'Kept', prompt: 'old' },
+      {
+        type: 'group',
+        id: 'build',
+        name: 'Build',
+        children: [{ id: 'test', name: 'Test', prompt: 'npm test', target: 'shell' }],
+      },
+    ];
+    const local = {
+      hidden: ['hidden'],
+      overrides: { kept: { prompt: 'new' }, test: { name: 'Test all' } },
+      childAdded: {
+        build: {
+          group: { id: 'build', name: 'Build' },
+          children: [{ id: 'lint', name: 'Lint', prompt: 'npm run lint', target: 'shell' }],
+        },
+        removed: {
+          group: { id: 'removed', name: 'Local survivors' },
+          children: [{ id: 'fix', name: 'Fix', prompt: 'Fix the queue' }],
+        },
+      },
+      added: [{ id: 'review', name: 'Review', prompt: 'Review the diff' }],
+    };
+
+    expect(resolveCustomCommands(shared, local)).toEqual([
+      { id: 'kept', name: 'Kept', prompt: 'new' },
+      {
+        type: 'group',
+        id: 'build',
+        name: 'Build',
+        children: [
+          { id: 'test', name: 'Test all', prompt: 'npm test', target: 'shell' },
+          { id: 'lint', name: 'Lint', prompt: 'npm run lint', target: 'shell' },
+        ],
+      },
+      { id: 'review', name: 'Review', prompt: 'Review the diff' },
+      {
+        type: 'group',
+        id: 'removed',
+        name: 'Local survivors',
+        children: [{ id: 'fix', name: 'Fix', prompt: 'Fix the queue' }],
+      },
+    ]);
+  });
+
+  it('treats a local array as a whole replacement and an empty delta as shared', () => {
+    const shared = JSON.stringify([{ id: 'shared', name: 'Shared', prompt: 'one' }]);
+    expect(resolveCustomCommands(shared, {})).toEqual([
+      { id: 'shared', name: 'Shared', prompt: 'one' },
+    ]);
+    expect(
+      resolveCustomCommands(shared, [{ id: 'local', name: 'Local', prompt: 'two' }]),
+    ).toEqual([{ id: 'local', name: 'Local', prompt: 'two' }]);
+  });
+});
+
 // Cross-language conformance (docs/07 §7.2.1, docs/12 §12.7): the real Rust importer
 // must ingest what the exporter produced. Skips when the CLI hasn't been built.
 describe('conformance: Rust hotsheet import parses the export', () => {
@@ -163,16 +231,55 @@ describe('one-command migrate via hotsheet-migrate', () => {
   run(
     '`hotsheet-migrate` exports + imports in one step',
     async () => {
-      const hs = await makeDatadir(
+      const generatedHs = await makeDatadir(
         PGlite,
         OLD_TICKETS_DDL,
         `insert into tickets (ticket_number, title, status)
          values ('HS-1', 'one-step migrate', 'started');`,
       );
+      const project = mkdtempSync(join(tmpdir(), 'hs1-project-'));
+      const hs = join(project, '.hotsheet');
+      renameSync(generatedHs, hs);
       const work = mkdtempSync(join(tmpdir(), 'hs2-migrate-'));
       const store = join(work, 'store');
       const exporter = join(REPO_ROOT, 'migrator', 'src', 'export.mjs');
       try {
+        writeFileSync(
+          join(hs, 'settings.json'),
+          JSON.stringify({
+            appName: 'HS',
+            ticketPrefix: 'HS',
+            ai_tool: 'claude',
+            custom_commands: [
+              { id: 'review', name: 'Review', prompt: 'Review this project', icon: 'send', color: '#3b82f6' },
+              {
+                type: 'group',
+                id: 'checks',
+                name: 'Checks',
+                children: [
+                  { id: 'test', name: 'Test', prompt: 'npm test', target: 'shell' },
+                ],
+              },
+            ],
+          }),
+        );
+        writeFileSync(
+          join(hs, 'settings.local.json'),
+          JSON.stringify({
+            custom_commands: {
+              hidden: ['test'],
+              overrides: { review: { prompt: 'Review the local tree' } },
+              childAdded: {
+                checks: {
+                  group: { id: 'checks', name: 'Checks' },
+                  children: [
+                    { id: 'lint', name: 'Lint', prompt: 'npm run lint', target: 'shell' },
+                  ],
+                },
+              },
+            },
+          }),
+        );
         const out = execFileSync(migrateBin, [hs, '-C', store, '--migrator', exporter], {
           encoding: 'utf8',
         });
@@ -180,8 +287,31 @@ describe('one-command migrate via hotsheet-migrate', () => {
         // The live CLI then lists what landed.
         const listed = execFileSync(hotsheetBin, ['-C', store, 'ls'], { encoding: 'utf8' });
         expect(listed).toContain('one-step migrate');
+        const localSettings = JSON.parse(
+          readFileSync(join(hs, 'settings.local.json'), 'utf8'),
+        );
+        expect(localSettings.commands).toHaveLength(2);
+        expect(localSettings.commands[0]).toMatchObject({
+          title: 'Review',
+          kind: 'ai',
+          prompt: 'Review the local tree',
+          tool: 'claude',
+          icon: 'send',
+          color: '#3b82f6',
+        });
+        expect(localSettings.commands[0]).not.toHaveProperty('program');
+        expect(localSettings.commands[0]).not.toHaveProperty('args');
+        expect(localSettings.commands[0]).not.toHaveProperty('cwd');
+        expect(localSettings.commands[1]).toMatchObject({
+          title: 'Lint',
+          kind: 'shell',
+          command: 'npm run lint',
+          group: 'Checks',
+        });
+        expect(localSettings.commands[1]).not.toHaveProperty('program');
+        expect(localSettings.commands[1]).not.toHaveProperty('cwd');
       } finally {
-        rmSync(hs, { recursive: true, force: true });
+        rmSync(project, { recursive: true, force: true });
         rmSync(work, { recursive: true, force: true });
       }
     },
