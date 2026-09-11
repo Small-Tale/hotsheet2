@@ -32,6 +32,18 @@ export function keyboardReorderDrawerTabIds(ids:readonly string[],sourceId:strin
   return reorderDrawerTabIds(ids,sourceId,ids[targetIndex],direction==='left'?'before':'after');
 }
 
+export type DrawerTabCloseAction='close'|'close-others'|'close-right'|'close-left'|'close-all';
+
+export function drawerTabCloseIds(ids:readonly string[],activeId:string,action:DrawerTabCloseAction):string[]{
+  const index=ids.indexOf(activeId);
+  if(index<0)return[];
+  if(action==='close')return[activeId];
+  if(action==='close-others')return ids.filter(id=>id!==activeId);
+  if(action==='close-right')return ids.slice(index+1);
+  if(action==='close-left')return ids.slice(0,index);
+  return[...ids];
+}
+
 export function drawerTabSelectionAfterClose(ids:readonly string[],selectedId:string,closingIds:readonly string[]):string{
   const closing=new Set(closingIds);
   if(!closing.has(selectedId))return selectedId;

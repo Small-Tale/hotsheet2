@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {drawerTabOrderStorageKey,drawerTabSelectionAfterClose,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,parseDrawerTabOrder,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
+import {drawerTabCloseIds,drawerTabOrderStorageKey,drawerTabSelectionAfterClose,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,parseDrawerTabOrder,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
 
 describe('drawer tab ordering',()=>{
   it('applies one remembered order across terminal and AI-chat tabs and appends new tabs',()=>{
@@ -20,6 +20,16 @@ describe('drawer tab ordering',()=>{
     expect(drawerTabSelectionAfterClose(ids,'terminal-b',['terminal-b','chat-b'])).toBe('chat-a');
     expect(drawerTabSelectionAfterClose(ids,'chat-a',['terminal-a','chat-a','terminal-b','chat-b'])).toBe('grid');
     expect(drawerTabSelectionAfterClose(ids,'terminal-a',['chat-a'])).toBe('terminal-a');
+  });
+
+  it('targets every relative close action across one mixed terminal and chat order',()=>{
+    const ids=['terminal-a','chat-a','terminal-b','chat-b'];
+    expect(drawerTabCloseIds(ids,'chat-a','close')).toEqual(['chat-a']);
+    expect(drawerTabCloseIds(ids,'chat-a','close-others')).toEqual(['terminal-a','terminal-b','chat-b']);
+    expect(drawerTabCloseIds(ids,'chat-a','close-left')).toEqual(['terminal-a']);
+    expect(drawerTabCloseIds(ids,'chat-a','close-right')).toEqual(['terminal-b','chat-b']);
+    expect(drawerTabCloseIds(ids,'chat-a','close-all')).toEqual(ids);
+    expect(drawerTabCloseIds(ids,'missing','close-all')).toEqual([]);
   });
 
   it('persists a deduplicated device-local order and tolerates invalid data',()=>{

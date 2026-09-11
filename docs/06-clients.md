@@ -1082,8 +1082,10 @@ xterm viewport receives focus as soon as it
 mounts, allowing immediate typing without an extra click; this is a one-shot request that
 does not make later refreshes steal focus. Project and terminal tabs share one pill-tab primitive, with
 the close button before the label and optional leading/trailing state icons. Right-clicking
-either tab kind offers Close Tab, Close Other Tabs, Close Tabs to the Right, and Close All
-Tabs; terminal tabs additionally offer Rename. Human-readable defaults replace generated
+project, terminal, and AI-chat tabs offer Close Tab, Close Other Tabs, directional close,
+and Close All Tabs. Drawer close ranges use the complete remembered mixed order, so each
+action closes both terminal and AI-chat targets; terminal tabs additionally offer Rename.
+Human-readable defaults replace generated
 ids, and device-local rename overrides survive refresh/reopen without renaming the PTY
 identity. Project tabs reorder among projects; terminal and AI-chat tabs reorder together in
 one mixed drawer strip by dragging across either kind. Project order is stored with the

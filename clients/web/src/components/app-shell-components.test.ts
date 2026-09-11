@@ -121,9 +121,11 @@ describe('application shell components', () => {
   it('shares context-menu actions across project and terminal tabs with Option reversing direction',()=>{
     const project=String(AppTabContextMenu({kind:'project',id:'one',x:10,y:20}));
     const terminal=String(AppTabContextMenu({kind:'terminal',id:'term',x:10,y:20,direction:'left'}));
+    const chat=String(AppTabContextMenu({kind:'ai-chat',id:'chat',x:10,y:20}));
     for(const label of ['Close Tab','Close Other Tabs','Close Tabs to the Right','Close All Tabs'])expect(project).toContain(label);
     expect(project).toContain('aria-label="Project tab actions"');expect(project).toContain('data-action="project-tab-context-action"');
     expect(project).not.toContain('Rename…');expect(terminal).toContain('aria-label="Terminal tab actions"');expect(terminal).toContain('Rename…');expect(terminal).toContain('data-tab-action="rename"');expect(terminal).toContain('Close Tabs to the Left');expect(terminal).toContain('data-action="terminal-tab-context-action"');
+    expect(chat).toContain('aria-label="AI chat tab actions"');expect(chat).toContain('data-chat-id="chat"');expect(chat).toContain('data-action="terminal-tab-context-action"');expect(chat).not.toContain('Rename…');
   });
 
   it('clamps and projects accessible splitters in both axes', () => {
