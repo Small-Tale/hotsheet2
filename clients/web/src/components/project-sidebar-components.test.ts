@@ -9,7 +9,7 @@ import { MenuItem } from './menu-item';
 import { ProjectSidebar } from './project-sidebar';
 import { aggregateAlignedChartValues, chartDomainMaximum, ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
-import { ViewNavigation } from './view-navigation';
+import { SavedViewContextMenu, ViewNavigation } from './view-navigation';
 
 describe('ProjectSidebar component slice', () => {
   it('uses one stable menu-item grid for icon, label, trailing content, and selection', () => {
@@ -92,8 +92,13 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).not.toContain('disabled');
     const custom=String(ViewNavigation({ selectedId: 'custom:docs', items: [{ id: 'custom:docs', label: 'Needs docs', icon: 'custom', manageable:true }] }));
     expect(custom).toContain('data-lucide="search"');
-    expect(custom).toContain('aria-label="Rename Needs docs"');
-    expect(custom).toContain('aria-label="Delete Needs docs"');
+    expect(custom).toContain('aria-label="More actions for Needs docs"');
+    expect(custom).not.toContain('aria-label="Rename Needs docs"');
+    expect(custom).not.toContain('aria-label="Delete Needs docs"');
+    const menu=String(SavedViewContextMenu({id:'custom:docs',label:'Needs docs',x:20,y:30}));
+    expect(menu).toContain('aria-label="Needs docs view actions"');
+    expect(menu).toContain('data-action="edit-saved-view"');
+    expect(menu).toContain('data-action="delete-saved-view"');
   });
 
   it('gives parsing errors a distinct shared navigation item', () => {

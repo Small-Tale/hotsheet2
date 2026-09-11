@@ -3,3 +3,8 @@
 .saved-view-dialog__form > p { margin:0; color:var(--wa-color-neutral-on-quiet); line-height:1.45; }
 .saved-view-dialog__form footer { display:flex; justify-content:flex-end; gap:var(--wa-space-xs); }
 .saved-view-dialog__error { color:var(--wa-color-danger-on-quiet) !important; }
+.saved-view-dialog__query { display:grid; gap:var(--wa-space-2xs); font-weight:var(--wa-font-weight-semibold); }
+.saved-view-dialog__query > span sup { color:var(--wa-color-danger-on-quiet); }
+.saved-view-dialog__query-field { width:100%; font-weight:var(--wa-font-weight-normal); }
+.saved-view-dialog__query-field .workspace-header__search { min-width:0; }
+.saved-view-dialog__query > small { color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); font-weight:var(--wa-font-weight-normal); line-height:1.35; }

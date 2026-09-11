@@ -3,11 +3,16 @@
 .view-navigation li { margin: 0; }
 .view-navigation__item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
 .view-navigation .menu-item { width: 100%; }
-.view-navigation__actions { display:inline-flex; gap:var(--wa-space-3xs); padding-inline-start:var(--wa-space-3xs); }
-.view-navigation__actions button { display:grid; width:1.75rem; height:1.75rem; padding:0; border:0; border-radius:var(--wa-border-radius-s); color:var(--wa-color-neutral-on-quiet); background:transparent; cursor:pointer; place-items:center; }
-.view-navigation__actions button:hover { color:var(--wa-color-neutral-on-normal); background:var(--wa-color-neutral-fill-quiet); }
-.view-navigation__actions button:focus-visible { outline:var(--wa-focus-ring); outline-offset:1px; }
-.view-navigation__actions svg { width:.9rem; height:.9rem; }
+.view-navigation__meta { display:inline-flex; padding-inline-start:var(--wa-space-3xs); align-items:center; gap:var(--wa-space-3xs); }
+.view-navigation__meta:empty { display:none; }
+.view-navigation__more { display:grid; width:1.75rem; height:1.75rem; padding:0; border:0; border-radius:var(--wa-border-radius-s); color:var(--wa-color-neutral-on-quiet); background:transparent; cursor:pointer; place-items:center; }
+.view-navigation__more:hover { color:var(--wa-color-neutral-on-normal); background:var(--wa-color-neutral-fill-quiet); }
+.view-navigation__more:focus-visible { outline:var(--wa-focus-ring); outline-offset:1px; }
+.view-navigation__more svg { width:.9rem; height:.9rem; }
+.saved-view-context-menu { position:fixed; z-index:1001; display:grid; width:12rem; padding:var(--wa-space-2xs); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-m); background:var(--wa-color-surface-default); box-shadow:var(--wa-shadow-l); }
+.saved-view-context-menu wa-dropdown-item { cursor:pointer; }
+.saved-view-context-menu [slot="icon"] { display:inline-flex; color:var(--wa-color-neutral-on-quiet); }
+.saved-view-context-menu svg { width:1rem; height:1rem; }
 .view-navigation .menu-item--errors { color: var(--wa-color-danger-on-quiet); }
 .view-navigation .menu-item--errors:hover { background: var(--wa-color-danger-fill-quiet); }
 .view-navigation .menu-item--errors[aria-current="page"] { color: var(--wa-color-danger-on-normal); background: var(--wa-color-danger-fill-normal); }

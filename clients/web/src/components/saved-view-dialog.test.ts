@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
+import {tokenFromRaw} from '../inline-search';
 import { SavedViewDeleteDialog, SavedViewDialog } from './saved-view-dialog';
 
 describe('SavedViewDialog', () => {
-  it('collects a shared view name and ordinary search query', () => {
-    const markup = String(SavedViewDialog({ open: true, name: 'Needs docs', query: 'tag:docs AND NOT status:completed' }));
+  it('collects a shared view name in the standard tokenized query editor', () => {
+    const markup = String(SavedViewDialog({ open: true, name: 'Needs docs', query: ' AND NOT status:completed', queryTokens:[tokenFromRaw('tag:docs')!] }));
     expect(markup).toContain('data-component="saved-view-dialog"');
     expect(markup).toContain('name="saved-view-name"');
     expect(markup).toContain('name="saved-view-query"');
+    expect(markup).toContain('data-saved-view-query="true"');
+    expect(markup).toContain('data-component="filter-chip"');
+    expect(markup).toContain('tag:docs');
     expect(markup).toContain('Everyone using this ticket store will see it.');
     expect(markup).toContain('data-action="save-saved-view"');
   });
@@ -20,11 +24,12 @@ describe('SavedViewDialog', () => {
     expect(markup).toContain('Creating…');
   });
 
-  it('renames without exposing or changing the saved query',()=>{
-    const markup=String(SavedViewDialog({open:true,mode:'rename',name:'Needs docs',query:'tag:docs'}));
-    expect(markup).toContain('label="Rename View"');
-    expect(markup).toContain('Its search query stays the same.');
-    expect(markup).not.toContain('name="saved-view-query"');
+  it('edits both the shared view name and tokenized query',()=>{
+    const markup=String(SavedViewDialog({open:true,mode:'rename',name:'Needs docs',query:'',queryTokens:[tokenFromRaw('tag:docs')!]}));
+    expect(markup).toContain('label="Edit View"');
+    expect(markup).toContain('Change the shared view name or search query.');
+    expect(markup).toContain('name="saved-view-query"');
+    expect(markup).toContain('data-action="edit-saved-view-query-token"');
   });
 
   it('confirms shared deletion without implying tickets are removed',()=>{
