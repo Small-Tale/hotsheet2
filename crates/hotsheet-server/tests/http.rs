@@ -1515,6 +1515,51 @@ async fn opening_project_discovers_hosts_and_links_parallel_hs2_store() {
 }
 
 #[tokio::test]
+async fn opening_project_recovers_a_concurrently_duplicated_checkout_registry_suffix() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry_home = tempfile::tempdir().unwrap();
+    let registry_path = registry_home.path().join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path);
+    registry
+        .register(&checkout, None, None, vec![ticket_store])
+        .unwrap();
+    let valid = std::fs::read_to_string(&registry_path).unwrap();
+    let suffix = valid.rfind("\n    }\n  ]\n}").unwrap() + 1;
+    let corrupt = format!("{valid}{}", &valid[suffix..]);
+    std::fs::write(&registry_path, &corrupt).unwrap();
+
+    let response = app(st.with_checkout_registry(&registry_path))
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(&serde_json::json!({"root": checkout}).to_string()),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    assert_eq!(body_json(response).await["checkout"]["alias"], "app");
+    serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(&registry_path).unwrap())
+        .unwrap();
+    let backups = std::fs::read_dir(registry_home.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("checkouts.json.corrupt-")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(backups.len(), 1);
+    assert_eq!(std::fs::read_to_string(backups[0].path()).unwrap(), corrupt);
+}
+
+#[tokio::test]
 async fn opening_project_without_ticket_sources_keeps_the_checkout_usable() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

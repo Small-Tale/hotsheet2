@@ -44,9 +44,10 @@ http-body-util = "0.1"
 ureq = "2"
 rpassword = "7.5"
 security-framework = "3.7"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Credentials", "Win32_Storage_FileSystem", "Win32_System_IO"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 sha2 = "0.10"
+libc = "0.2"
 notify = "6"
 toml = "0.8"
 include_dir = "0.7"

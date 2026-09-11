@@ -23,6 +23,36 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn concurrent_checkout_register_processes_preserve_every_entry() {
+    let root = tempfile::tempdir().unwrap();
+    let home = root.path().join("home");
+    std::fs::create_dir(&home).unwrap();
+    let binary = assert_cmd::cargo::cargo_bin("hotsheet-cli");
+    let children = (0..24)
+        .map(|index| {
+            let checkout = root.path().join(format!("project-{index}"));
+            std::fs::create_dir(&checkout).unwrap();
+            std::process::Command::new(&binary)
+                .env("HOTSHEET_HOME", &home)
+                .args(["checkout", "register"])
+                .arg(checkout)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    for child in children {
+        assert!(child.wait_with_output().unwrap().status.success());
+    }
+
+    let path = home.join("checkouts.json");
+    let registry = hotsheet_ticketing::checkouts::CheckoutRegistry::new(&path);
+    assert_eq!(registry.list().unwrap().len(), 24);
+    serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(path).unwrap()).unwrap();
+}
+
+#[test]
 fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     let root = tempfile::tempdir().unwrap();
     let store = root.path().join("tickets.hs2");

@@ -84,6 +84,15 @@ register|list|resolve`, authenticated server `/checkouts` routes, MCP list/resol
 and `setup` registration share this registry. Only server instance records contain a
 bearer token; those files are user-readable only on Unix.
 
+Registry mutations take an operating-system file lock across CLI and server processes,
+then replace the JSON through a uniquely named, flushed temporary file. This preserves
+every checkout when project opens overlap and prevents one writer from continuing through
+another writer's renamed temporary file. On read, Hot Sheet can recognize the older
+writer's narrow corruption signature—a complete registry followed by an exact duplicated
+suffix—back up the original bytes beside the registry as
+`checkouts.json.corrupt-<ULID>`, and restore the complete document automatically. Other
+malformed trailing data remains an explicit error rather than being discarded.
+
 Checkout-qualified `/checkouts/{id}/tickets` routes aggregate reads across every linked
 hosted store. Get/update/close require the ticket to resolve uniquely; create selects the
 only linked store or requires an explicit store id when several are linked. MCP ticket

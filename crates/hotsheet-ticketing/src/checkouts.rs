@@ -2,6 +2,8 @@
 //! ticket-store identity: several checkouts may share one repository and each checkout
 //! may use several ticket stores (and vice versa).
 
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -64,6 +66,81 @@ const CHECKOUT_REGISTRY_SCHEMA_VERSION: u64 = 2;
 const fn registry_schema_version() -> u64 {
     CHECKOUT_REGISTRY_SCHEMA_VERSION
 }
+
+#[derive(Debug)]
+struct RegistryLock {
+    file: File,
+}
+
+impl Drop for RegistryLock {
+    fn drop(&mut self) {
+        unlock_file(&self.file);
+    }
+}
+
+#[cfg(unix)]
+fn lock_file(file: &File) -> io::Result<()> {
+    use std::os::fd::AsRawFd;
+
+    // SAFETY: flock only borrows this live file descriptor for the duration of the call.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(unix)]
+fn unlock_file(file: &File) {
+    use std::os::fd::AsRawFd;
+
+    // SAFETY: the descriptor remains live until RegistryLock is dropped.
+    let _ = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
+}
+
+#[cfg(target_os = "windows")]
+fn lock_file(file: &File) -> io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{LOCKFILE_EXCLUSIVE_LOCK, LockFileEx};
+    use windows_sys::Win32::System::IO::OVERLAPPED;
+
+    // SAFETY: the handle is live and OVERLAPPED is initialized for a synchronous byte-range lock.
+    let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+    let result = unsafe {
+        LockFileEx(
+            file.as_raw_handle(),
+            LOCKFILE_EXCLUSIVE_LOCK,
+            0,
+            u32::MAX,
+            u32::MAX,
+            &mut overlapped,
+        )
+    };
+    if result != 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn unlock_file(file: &File) {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::UnlockFileEx;
+    use windows_sys::Win32::System::IO::OVERLAPPED;
+
+    // SAFETY: this unlocks the same live handle and byte range acquired by lock_file.
+    let mut overlapped: OVERLAPPED = unsafe { std::mem::zeroed() };
+    let _ = unsafe { UnlockFileEx(file.as_raw_handle(), 0, u32::MAX, u32::MAX, &mut overlapped) };
+}
+
+#[cfg(not(any(unix, target_os = "windows")))]
+fn lock_file(_file: &File) -> io::Result<()> {
+    Ok(())
+}
+
+#[cfg(not(any(unix, target_os = "windows")))]
+fn unlock_file(_file: &File) {}
 
 impl Default for RegistryFile {
     fn default() -> Self {
@@ -152,6 +229,21 @@ impl CheckoutRegistry {
         Ok(entries)
     }
 
+    fn acquire_lock(&self) -> Result<RegistryLock, CheckoutError> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let path = self.path.with_extension("json.lock");
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(path)?;
+        lock_file(&file)?;
+        Ok(RegistryLock { file })
+    }
+
     pub fn register(
         &self,
         root: &Path,
@@ -184,6 +276,18 @@ impl CheckoutRegistry {
     }
 
     pub fn register_sources(
+        &self,
+        root: &Path,
+        alias: Option<&str>,
+        repository: Option<String>,
+        sources: Vec<TicketSource>,
+        default_source: Option<String>,
+    ) -> Result<Checkout, CheckoutError> {
+        let _lock = self.acquire_lock()?;
+        self.register_sources_locked(root, alias, repository, sources, default_source)
+    }
+
+    fn register_sources_locked(
         &self,
         root: &Path,
         alias: Option<&str>,
@@ -236,35 +340,97 @@ impl CheckoutRegistry {
             sources,
             default_source,
         };
-        let mut file = self.read()?;
+        let mut file = self.read_locked()?;
         if let Some(existing) = file.checkouts.iter_mut().find(|c| c.id == id) {
             *existing = entry.clone();
         } else {
             file.checkouts.push(entry.clone());
         }
-        self.write(&file)?;
+        self.write_locked(&file)?;
         Ok(entry)
     }
 
     pub fn resolve(&self, reference: &str) -> Result<Checkout, CheckoutError> {
-        let canonical = Path::new(reference).canonicalize().ok();
-        let entries = self.list()?;
-        let matches: Vec<_> = entries
-            .into_iter()
-            .filter(|c| {
-                c.id == reference
-                    || c.id.starts_with(reference)
-                    || c.alias == reference
-                    || canonical
-                        .as_ref()
-                        .is_some_and(|p| c.root == p.to_string_lossy())
-            })
-            .collect();
-        match matches.as_slice() {
-            [one] => Ok(one.clone()),
-            [] => Err(CheckoutError::NotFound(reference.to_owned())),
-            _ => Err(CheckoutError::Ambiguous(reference.to_owned())),
+        resolve_checkout(self.list()?, reference)
+    }
+
+    fn resolve_locked(&self, reference: &str) -> Result<Checkout, CheckoutError> {
+        let mut entries = self.read_locked()?.checkouts;
+        entries.sort_by(|a, b| a.alias.cmp(&b.alias).then(a.id.cmp(&b.id)));
+        resolve_checkout(entries, reference)
+    }
+
+    fn read(&self) -> Result<RegistryFile, CheckoutError> {
+        let text = match std::fs::read_to_string(&self.path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(RegistryFile::default());
+            }
+            Err(error) => return Err(error.into()),
+        };
+        match serde_json::from_str(&text) {
+            Ok(file) => normalize_registry(file),
+            Err(_) => {
+                // A writer may already be repairing or replacing this file. Serialize the
+                // recovery attempt, then reread the latest bytes while holding the lock.
+                let _lock = self.acquire_lock()?;
+                self.read_locked()
+            }
         }
+    }
+
+    fn read_locked(&self) -> Result<RegistryFile, CheckoutError> {
+        let text = match std::fs::read_to_string(&self.path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                return Ok(RegistryFile::default());
+            }
+            Err(error) => return Err(error.into()),
+        };
+        match serde_json::from_str(&text) {
+            Ok(file) => normalize_registry(file),
+            Err(error) => {
+                let Some(file) = recover_duplicated_suffix(&text) else {
+                    return Err(CheckoutError::Invalid(error.to_string()));
+                };
+                let file = normalize_registry(file)?;
+                self.back_up_corrupt_registry(text.as_bytes())?;
+                self.write_locked(&file)?;
+                Ok(file)
+            }
+        }
+    }
+
+    fn back_up_corrupt_registry(&self, contents: &[u8]) -> Result<PathBuf, CheckoutError> {
+        let backup = self
+            .path
+            .with_extension(format!("json.corrupt-{}", ulid::Ulid::new()));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&backup)?;
+        file.write_all(contents)?;
+        file.sync_all()?;
+        Ok(backup)
+    }
+
+    fn write_locked(&self, file: &RegistryFile) -> Result<(), CheckoutError> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let tmp = self
+            .path
+            .with_extension(format!("json.{}.tmp", ulid::Ulid::new()));
+        let result = (|| -> Result<(), io::Error> {
+            let mut output = OpenOptions::new().write(true).create_new(true).open(&tmp)?;
+            output.write_all(&serde_json::to_vec_pretty(file).expect("serializable registry"))?;
+            output.sync_all()?;
+            std::fs::rename(&tmp, &self.path)
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        result.map_err(CheckoutError::Io)
     }
 
     pub fn add_source(
@@ -273,7 +439,8 @@ impl CheckoutRegistry {
         source: TicketSource,
         make_default: bool,
     ) -> Result<Checkout, CheckoutError> {
-        let mut checkout = self.resolve(reference)?;
+        let _lock = self.acquire_lock()?;
+        let mut checkout = self.resolve_locked(reference)?;
         checkout
             .sources
             .retain(|item| item.connection_id != source.connection_id);
@@ -282,7 +449,7 @@ impl CheckoutRegistry {
         if make_default {
             checkout.default_source = Some(source_id);
         }
-        self.register_sources(
+        self.register_sources_locked(
             Path::new(&checkout.root),
             Some(&checkout.alias),
             checkout.repository,
@@ -296,7 +463,8 @@ impl CheckoutRegistry {
         reference: &str,
         connection_id: &str,
     ) -> Result<Checkout, CheckoutError> {
-        let mut checkout = self.resolve(reference)?;
+        let _lock = self.acquire_lock()?;
+        let mut checkout = self.resolve_locked(reference)?;
         let before = checkout.sources.len();
         checkout
             .sources
@@ -307,7 +475,7 @@ impl CheckoutRegistry {
         if checkout.default_source.as_deref() == Some(connection_id) {
             checkout.default_source = None;
         }
-        self.register_sources(
+        self.register_sources_locked(
             Path::new(&checkout.root),
             Some(&checkout.alias),
             checkout.repository,
@@ -321,8 +489,9 @@ impl CheckoutRegistry {
         reference: &str,
         connection_id: Option<&str>,
     ) -> Result<Checkout, CheckoutError> {
-        let checkout = self.resolve(reference)?;
-        self.register_sources(
+        let _lock = self.acquire_lock()?;
+        let checkout = self.resolve_locked(reference)?;
+        self.register_sources_locked(
             Path::new(&checkout.root),
             Some(&checkout.alias),
             checkout.repository,
@@ -330,43 +499,56 @@ impl CheckoutRegistry {
             connection_id.map(str::to_owned),
         )
     }
+}
 
-    fn read(&self) -> Result<RegistryFile, CheckoutError> {
-        let text = match std::fs::read_to_string(&self.path) {
-            Ok(v) => v,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(RegistryFile::default());
-            }
-            Err(e) => return Err(e.into()),
-        };
-        let file: RegistryFile =
-            serde_json::from_str(&text).map_err(|e| CheckoutError::Invalid(e.to_string()))?;
-        if file.schema_version > CHECKOUT_REGISTRY_SCHEMA_VERSION {
-            return Err(CheckoutError::UpgradeRequired {
-                found: file.schema_version,
-                supported: CHECKOUT_REGISTRY_SCHEMA_VERSION,
-            });
-        }
-        let mut file = file;
-        file.schema_version = CHECKOUT_REGISTRY_SCHEMA_VERSION;
-        for checkout in &mut file.checkouts {
-            migrate_checkout(checkout);
-        }
-        Ok(file)
+fn resolve_checkout(entries: Vec<Checkout>, reference: &str) -> Result<Checkout, CheckoutError> {
+    let canonical = Path::new(reference).canonicalize().ok();
+    let matches: Vec<_> = entries
+        .into_iter()
+        .filter(|checkout| {
+            checkout.id == reference
+                || checkout.id.starts_with(reference)
+                || checkout.alias == reference
+                || canonical
+                    .as_ref()
+                    .is_some_and(|path| checkout.root == path.to_string_lossy())
+        })
+        .collect();
+    match matches.as_slice() {
+        [one] => Ok(one.clone()),
+        [] => Err(CheckoutError::NotFound(reference.to_owned())),
+        _ => Err(CheckoutError::Ambiguous(reference.to_owned())),
     }
+}
 
-    fn write(&self, file: &RegistryFile) -> Result<(), CheckoutError> {
-        if let Some(parent) = self.path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let tmp = self.path.with_extension("json.tmp");
-        std::fs::write(
-            &tmp,
-            serde_json::to_vec_pretty(file).expect("serializable registry"),
-        )?;
-        std::fs::rename(tmp, &self.path)?;
-        Ok(())
+fn normalize_registry(mut file: RegistryFile) -> Result<RegistryFile, CheckoutError> {
+    if file.schema_version > CHECKOUT_REGISTRY_SCHEMA_VERSION {
+        return Err(CheckoutError::UpgradeRequired {
+            found: file.schema_version,
+            supported: CHECKOUT_REGISTRY_SCHEMA_VERSION,
+        });
     }
+    file.schema_version = CHECKOUT_REGISTRY_SCHEMA_VERSION;
+    for checkout in &mut file.checkouts {
+        migrate_checkout(checkout);
+    }
+    Ok(file)
+}
+
+/// Recover only the race signature produced by an older shared-temp writer: one complete
+/// registry followed by an exact duplicated suffix of that same document. Any unrelated
+/// trailing bytes remain a hard error so recovery cannot silently discard new data.
+fn recover_duplicated_suffix(text: &str) -> Option<RegistryFile> {
+    let mut values = serde_json::Deserializer::from_str(text).into_iter::<RegistryFile>();
+    let file = values.next()?.ok()?;
+    let offset = values.byte_offset();
+    let complete = text.get(..offset)?.trim_end();
+    let trailing = text.get(offset..)?.trim();
+    (trailing.len() >= 4
+        && trailing.contains(']')
+        && trailing.ends_with('}')
+        && complete.ends_with(trailing))
+    .then_some(file)
 }
 
 fn legacy_default_source(root: &Path, sources: &[TicketSource]) -> Option<String> {
@@ -473,6 +655,98 @@ mod tests {
         let error = registry.list().unwrap_err().to_string();
         assert!(error.contains("newer version of Hot Sheet 2"));
         assert!(error.contains("Update Hot Sheet 2"));
+    }
+
+    #[test]
+    fn recovers_a_duplicated_writer_suffix_and_preserves_the_corrupt_bytes() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        std::fs::create_dir(&checkout).unwrap();
+        let path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&path);
+        let saved = registry
+            .register(&checkout, None, None, Vec::new())
+            .unwrap();
+        let valid = std::fs::read_to_string(&path).unwrap();
+        let suffix = valid.rfind("\n    }\n  ]\n}").unwrap() + 1;
+        let corrupt = format!("{valid}{}", &valid[suffix..]);
+        std::fs::write(&path, &corrupt).unwrap();
+
+        assert_eq!(registry.list().unwrap(), vec![saved]);
+        let repaired = std::fs::read_to_string(&path).unwrap();
+        serde_json::from_str::<RegistryFile>(&repaired).unwrap();
+        let backups = std::fs::read_dir(temp.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("checkouts.json.corrupt-")
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(backups.len(), 1);
+        assert_eq!(std::fs::read_to_string(backups[0].path()).unwrap(), corrupt);
+    }
+
+    #[test]
+    fn refuses_to_discard_unrelated_trailing_registry_data() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("checkouts.json");
+        let corrupt = r#"{"schemaVersion":2,"checkouts":[]} unrelated"#;
+        std::fs::write(&path, corrupt).unwrap();
+        let registry = CheckoutRegistry::new(&path);
+
+        assert!(
+            registry
+                .list()
+                .unwrap_err()
+                .to_string()
+                .contains("trailing")
+        );
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), corrupt);
+        assert!(
+            std::fs::read_dir(temp.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .all(|entry| !entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("checkouts.json.corrupt-"))
+        );
+    }
+
+    #[test]
+    fn concurrent_registry_writers_preserve_every_checkout_and_valid_json() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("checkouts.json");
+        let registry = CheckoutRegistry::new(&path);
+        let count = 24;
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(count));
+        let roots = (0..count)
+            .map(|index| {
+                let root = temp.path().join(format!("project-{index}"));
+                std::fs::create_dir(&root).unwrap();
+                root
+            })
+            .collect::<Vec<_>>();
+        let handles = roots
+            .into_iter()
+            .map(|root| {
+                let registry = registry.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    registry.register(&root, None, None, Vec::new()).unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        assert_eq!(registry.list().unwrap().len(), count);
+        serde_json::from_str::<RegistryFile>(&std::fs::read_to_string(path).unwrap()).unwrap();
     }
 
     #[test]
