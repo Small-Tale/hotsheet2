@@ -46,6 +46,9 @@ describe('WorkspaceHeader', () => {
     const headerCss=readFileSync(resolve(import.meta.dirname,'workspace-header.css'),'utf8'),shellCss=readFileSync(resolve(import.meta.dirname,'app-shell.css'),'utf8');
     expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(48rem, 100%); max-width:100%; height:auto; overflow:visible;border-radius:1.5428125rem;');
     expect(headerCss).toContain('.workspace-header__search { min-width: 7rem; min-height: 1.5rem;');
+    expect(headerCss).toContain('padding-block: .25rem 0;');
+    expect(headerCss).toContain('.workspace-header__search-icon { display: inline-flex; width: 1rem; height: 1rem; margin-block-start: .375rem;');
+    expect(headerCss).toContain('.workspace-header__search-end { margin-block-start: .325rem; }');
     expect(headerCss).toContain('white-space: pre-wrap; overflow-wrap: anywhere;');
     expect(headerCss).toContain('.workspace-header__search-token{display:inline-flex;');
     expect(headerCss).toContain('height:1.25rem;min-height:1.25rem;');

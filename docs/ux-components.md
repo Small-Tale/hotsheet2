@@ -519,8 +519,10 @@ without a clear place in the product.
   such as `4h ago` resolve at search time, and ISO 8601 input remains portable and always
   accepted. Complete uncommitted filters already affect results; an explicit space or Enter
   commits a chip, while incomplete bare or quoted values survive incidental focus movement.
-  Compact chips preserve the single-line field height, and real editable boundaries keep a
-  keyboard caret reachable before, between, and after chips. Its concise placeholder remains
+  Compact chips preserve the single-line field height; the magnifier, help, and conditional
+  clear controls remain vertically centered on the field's first text line when content wraps.
+  Real editable boundaries keep a keyboard caret reachable before, between, and after chips.
+  Its concise placeholder remains
   ordinary search guidance while a help button
   exposes the complete syntax.
 - Search suggestions — **built**: typing `tag:` offers readable matching project tags

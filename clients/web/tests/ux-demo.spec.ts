@@ -865,6 +865,34 @@ test('organizes search syntax help in the WorkspaceHeader demo',async({page})=>{
   await expect(help).toHaveCount(0);
 });
 
+test('centers search controls on the first line while the query wraps',async({page})=>{
+  await page.setViewportSize({width:1000,height:600});
+  await page.goto('/ux-demo?component=workspace-header');
+  const header=page.locator('[data-component="workspace-header"]');
+  await header.getByRole('button',{name:'Search tickets'}).click();
+  const search=header.getByRole('textbox',{name:'Search tickets'}),group=header.locator('.workspace-header__search-group');
+  await expect.poll(()=>group.evaluate(node=>node.getBoundingClientRect().width)).toBeGreaterThan(300);
+  const geometry=async()=>group.evaluate(node=>{
+    const box=(selector:string)=>{const element=node.querySelector<HTMLElement>(selector)!,rect=element.getBoundingClientRect(),style=getComputedStyle(element);return{top:rect.top,bottom:rect.bottom,height:rect.height,center:(rect.top+rect.bottom)/2,paddingTop:Number.parseFloat(style.paddingTop),lineHeight:Number.parseFloat(style.lineHeight)}};
+    const group=node.getBoundingClientRect();
+    return{group:{top:group.top,bottom:group.bottom,height:group.height,center:(group.top+group.bottom)/2},search:box('.workspace-header__search'),icon:box('.workspace-header__search-icon'),clear:node.querySelector('.workspace-header__search-clear')?box('.workspace-header__search-clear'):undefined,help:box('.workspace-header__search-help-button')};
+  });
+  const centered=async(expectedGroupCenter:boolean)=>{const measured=await geometry(),firstLineCenter=measured.search.top+measured.search.paddingTop+measured.search.lineHeight/2;expect(measured.icon.center).toBeCloseTo(firstLineCenter,1);expect(measured.help.center).toBeCloseTo(firstLineCenter,1);if(measured.clear)expect(measured.clear.center).toBeCloseTo(firstLineCenter,1);if(expectedGroupCenter)expect(firstLineCenter).toBeCloseTo(measured.group.center,1);return measured};
+  await search.fill('client');
+  await header.getByRole('button',{name:'Clear search'}).click();
+  await expect(search).toHaveText('');
+  await expect(header.getByRole('button',{name:'Clear search'})).toHaveCount(0);
+  const blank=await centered(true),blankBox=await group.boundingBox();
+  await page.screenshot({path:'/private/tmp/hs2-dyzbf4-search-single-line-after.png',clip:{x:Math.max(0,blankBox!.x-8),y:Math.max(0,blankBox!.y-8),width:Math.min(1000,blankBox!.width+16),height:blankBox!.height+16}});
+  await search.fill('client');
+  await expect(header.getByRole('button',{name:'Clear search'})).toBeVisible();
+  await centered(true);
+  await search.fill('This intentionally long ordinary search query wraps across multiple lines while its peer controls stay aligned with the first line of editable text');
+  const wrapped=await centered(false),wrappedBox=await group.boundingBox();
+  expect(wrapped.group.height).toBeGreaterThan(blank.group.height+wrapped.search.lineHeight);
+  await page.screenshot({path:'/private/tmp/hs2-dyzbf4-search-wrapped-after.png',clip:{x:Math.max(0,wrappedBox!.x-8),y:Math.max(0,wrappedBox!.y-8),width:Math.min(1000,wrappedBox!.width+16),height:wrappedBox!.height+16}});
+});
+
 test('shows the ToolbarControlGroup variants with shared geometry', async ({ page }) => {
   await page.goto('/ux-demo?component=toolbar-control-group');
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
