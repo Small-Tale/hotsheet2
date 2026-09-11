@@ -23,8 +23,8 @@ import { composerCategory, composerDetails, composerExpanded, composerTitle, com
 
 const initialTabs: ProjectTabProps[] = [
   { id: 'hotsheet', name: 'Hot Sheet 2', location: 'local', selected: true },
-  { id: 'website', name: 'Small Tale Website', location: 'remote', busy: true },
-  { id: 'api', name: 'Internal API', location: 'remote', attention: true },
+  { id: 'website', name: 'Small Tale Website', location: 'remote', upNextCount: 3, activeTicketCount: 1 },
+  { id: 'api', name: 'Internal API', location: 'remote', attention: true, upNextCount: 128 },
   { id: 'archive', name: 'Legacy Archive', location: 'local', disconnected: true },
 ];
 
@@ -111,11 +111,15 @@ export function ProjectTabDemo() {
       <ProjectTab id="selected" name="Selected local" location="local" selected />
       <ProjectTab id="remote" name="Remote project" location="remote" />
       <ProjectTab id="busy" name="Busy project" location="local" busy />
+      <ProjectTab id="active" name="Active queue" location="local" upNextCount={3} activeTicketCount={2} />
+      <ProjectTab id="working" name="Active work" location="local" activeTicketCount={1} />
+      <ProjectTab id="three" name="Three active" location="local" activeTicketCount={3} />
+      <ProjectTab id="four" name="Four active" location="local" activeTicketCount={4} />
       <ProjectTab id="attention" name="Needs attention" location="remote" attention />
       <ProjectTab id="offline" name="Disconnected" location="remote" disconnected />
-      <ProjectTab id="fixed" name="Not closable" location="local" closable={false} />
+      <ProjectTab id="fixed" name="Not closable" location="local" closable={false} upNextCount={100} />
     </div>
-    <p class="component-stage__event">Selected, remote, busy, attention, disconnected, and fixed states.</p>
+    <p class="component-stage__event">Selected, remote, busy, active queue, active work, attention, disconnected, and fixed states.</p>
   </section>;
 }
 

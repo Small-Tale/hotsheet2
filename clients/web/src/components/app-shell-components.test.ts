@@ -6,7 +6,7 @@ import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resi
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
 import { PageHeader } from './page-header';
-import { ProjectTab } from './project-tab';
+import { ProjectTab,projectTabActivityDash } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
 import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from './resizable-region';
@@ -73,6 +73,25 @@ describe('application shell components', () => {
     expect(notificationMarkup).not.toContain('data-lucide="folder-git-2"');
     expect(notificationMarkup).toContain('aria-label="2 pending notifications"');
     expect(notificationMarkup).toContain('data-lucide="bell"');
+    expect(String(ProjectTab({ id: 'empty', name: 'Empty', location: 'local' }))).not.toContain('project-tab__work');
+    const queuedMarkup=String(ProjectTab({ id: 'queued', name: 'Queued', location: 'local', upNextCount: 99 }));
+    expect(queuedMarkup).toContain('aria-label="99 Up Next tickets"');
+    expect(queuedMarkup).toContain('>99</span>');
+    expect(queuedMarkup).not.toContain('project-tab__activity-ring');
+    const cappedActiveMarkup=String(ProjectTab({ id: 'active', name: 'Active', location: 'local', notificationCount: 1, upNextCount: 125, activeTicketCount: 2 }));
+    expect(cappedActiveMarkup).toContain('aria-label="125 Up Next tickets, 2 active tickets"');
+    expect(cappedActiveMarkup).toContain('>2</span>');
+    expect(cappedActiveMarkup).toContain('project-tab__activity-ring');
+    expect(cappedActiveMarkup).toContain('data-segments="2"');
+    expect(cappedActiveMarkup).toContain('stroke-dasharray="21.2058 7.0686"');
+    expect(cappedActiveMarkup).toContain('aria-label="1 pending notification"');
+    const activeOnlyMarkup=String(ProjectTab({id:'working',name:'Working',location:'local',activeTicketCount:1}));
+    expect(activeOnlyMarkup).toContain('aria-label="1 active ticket"');
+    expect(activeOnlyMarkup).toContain('project-tab__activity-ring');
+    expect(activeOnlyMarkup).toContain('data-segments="1"');
+    expect(activeOnlyMarkup).toContain('>1</span>');
+    expect(projectTabActivityDash(1)).toBe('42.4115 14.1372');
+    expect(projectTabActivityDash(3)).toBe('14.1372 4.7124');
   });
 
   it('draws tab-selection focus around the complete compound pill', () => {

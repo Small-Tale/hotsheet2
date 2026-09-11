@@ -1518,15 +1518,21 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
 test('exercises the application-shell component slice and responsive composition', async ({ page }) => {
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-component="project-tab"]');
-  await expect(tabStates).toHaveCount(6);
+  await expect(tabStates).toHaveCount(10);
   const selectedLocal = tabStates.filter({ hasText: 'Selected local' });
   await expect(selectedLocal).toHaveAttribute('data-selected', 'true');
   await expect(selectedLocal.locator('[data-lucide="folder-git-2"]')).toHaveCount(0);
   await expect(tabStates.filter({ hasText: 'Remote project' }).locator('[data-lucide="cloud"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .loading-spinner')).toHaveCount(1);
+  const activeQueue=tabStates.filter({hasText:'Active queue'});await expect(activeQueue.locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 2 active tickets');await expect(activeQueue.locator('.project-tab__activity-ring')).toBeVisible();await expect(activeQueue.locator('.project-tab__work-count')).toHaveText('2');
+  const activeQueueCenters=await activeQueue.locator('.project-tab__work').evaluate(node=>{const outer=node.getBoundingClientRect(),count=node.querySelector('.project-tab__work-count')!.getBoundingClientRect(),ring=node.querySelector('svg')!.getBoundingClientRect();return{countX:Math.abs(outer.x+outer.width/2-count.x-count.width/2),countY:Math.abs(outer.y+outer.height/2-count.y-count.height/2),ringX:Math.abs(outer.x+outer.width/2-ring.x-ring.width/2),ringY:Math.abs(outer.y+outer.height/2-ring.y-ring.height/2)}});expect(Math.max(...Object.values(activeQueueCenters))).toBeLessThan(1);
+  const activeWork=tabStates.filter({hasText:'Active work'});await expect(activeWork.locator('.project-tab__work')).toHaveAttribute('aria-label','1 active ticket');await expect(activeWork.locator('.project-tab__work-count')).toHaveText('1');
+  for(const [label,segments,dash] of [['Active work','1','42.4115 14.1372'],['Active queue','2','21.2058 7.0686'],['Three active','3','14.1372 4.7124'],['Four active','4','10.6029 3.5343']] as const){const ring=tabStates.filter({hasText:label}).locator('.project-tab__activity-ring');await expect(ring).toHaveAttribute('data-segments',segments);await expect(ring.locator('.project-tab__activity-segments')).toHaveAttribute('stroke-dasharray',dash)}
+  await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-duration','1.7s');
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Disconnected' }).locator('[data-lucide="wifi-off"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Not closable' }).getByRole('button', { name: /Close/ })).toHaveCount(0);
+  await expect(tabStates.filter({hasText:'Not closable'}).locator('.project-tab__work-count')).toHaveText('99+');
   for (const [label, selector] of [['Busy project', '.project-tab__busy'], ['Needs attention', '.project-tab__state--attention'], ['Disconnected', '.project-tab__state']] as const) {
     const tab = tabStates.filter({ hasText: label });
     const geometry = await tab.evaluate((node, stateSelector) => {
@@ -1538,6 +1544,7 @@ test('exercises the application-shell component slice and responsive composition
     expect(geometry.rightInset).toBeGreaterThan(7);
     expect(geometry.labelGap).toBeGreaterThan(0);
   }
+  await page.setViewportSize({width:1280,height:720});await page.locator('.project-tab-demo__surface').screenshot({path:'/private/tmp/hs2-9b7z7j-project-tab-segments-wide.png'});await page.setViewportSize({width:560,height:844});await expect.poll(()=>page.locator('.project-tab-demo__surface').evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.locator('.project-tab-demo__surface').screenshot({path:'/private/tmp/hs2-9b7z7j-project-tab-segments-narrow.png'});
 
   await page.goto('/ux-demo?component=app-tab');
   const sharedTabs=page.locator('[data-component$="-tab"]');await expect(sharedTabs).toHaveCount(2);await expect(page.getByRole('tab',{name:/Project tab/})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'Close Terminal tab'})).toBeAttached();
@@ -1548,6 +1555,9 @@ test('exercises the application-shell component slice and responsive composition
   await page.setViewportSize({ width: 1600, height: 900 });
   const tabBar = page.locator('[data-component="project-tab-bar"]');
   await expect(tabBar.getByRole('tab')).toHaveCount(4);
+  await expect(tabBar.getByRole('tab',{name:/Hot Sheet 2/}).locator('.project-tab__work')).toHaveCount(0);
+  await expect(tabBar.getByRole('tab',{name:/Small Tale Website/}).locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 1 active ticket');
+  await expect(tabBar.getByRole('tab',{name:/Internal API/}).locator('.project-tab__work-count')).toHaveText('99+');
   await expect(tabBar.locator('[data-component="project-tab"]').first()).toHaveCSS('border-radius', '999px');
   const firstClose = tabBar.getByRole('button', { name: 'Close Hot Sheet 2' });
   await expect(firstClose).toHaveCSS('opacity', '0');
