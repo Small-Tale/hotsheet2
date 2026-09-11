@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 
 import {describe,expect,it} from 'vitest';
 
-import {AttachmentGallery,attachmentGalleryAnnotationTolerance,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGallerySwipeDirection,attachmentGallerySwipeGesture,attachmentGalleryZoomModel,attachmentGalleryZoomStops,releaseAttachmentGalleryVideo} from './attachment-gallery';
+import {AttachmentGallery,attachmentGalleryAnnotationTolerance,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGalleryShiftUrl,attachmentGallerySwipeDirection,attachmentGallerySwipeGesture,attachmentGalleryZoomModel,attachmentGalleryZoomStops,releaseAttachmentGalleryVideo} from './attachment-gallery';
 
 describe('AttachmentGallery',()=>{
   const images=[{id:'a',name:'a.png',url:'/a.png'},{id:'b',name:'b.svg',url:'/b.svg'}];
@@ -16,6 +16,13 @@ describe('AttachmentGallery',()=>{
     expect(markup).toContain('role="dialog"');expect(markup).toContain('Image 2 of 2: b.svg');
     expect(markup).toContain('data-action="previous-gallery-image"');expect(markup).toContain('data-action="next-gallery-image"');expect(markup).toContain('src="/b.svg"');
     expect(markup).toContain('data-action="open-gallery-attachment-menu"');expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);expect(markup.match(/data-tone="dark"/g)).toHaveLength(4);
+  });
+  it('cycles previous and next from canonical URLs and aliases',()=>{
+    const aliased=[images[0],{...images[1],aliases:['/tickets/HS2-DEMO/attachments/by-name/b.svg']}];
+    expect(attachmentGalleryShiftUrl(aliased,'/b.svg',-1)).toBe('/a.png');
+    expect(attachmentGalleryShiftUrl(aliased,'/a.png',1)).toBe('/b.svg');
+    expect(attachmentGalleryShiftUrl(aliased,'/tickets/HS2-DEMO/attachments/by-name/b.svg',1)).toBe('/a.png');
+    expect(attachmentGalleryShiftUrl(aliased,'/missing.png',1)).toBeUndefined();
   });
   it('selects an attachment through its Markdown by-name URL alias',()=>{
     const aliased=[images[0],{...images[1],aliases:['/tickets/HS2-DEMO/attachments/by-name/b.svg']}];

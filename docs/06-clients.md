@@ -624,7 +624,9 @@ cleanup of the old live HS1 data; backups are never removed.
   resolves that id (then ticket plus filename) before consulting potentially shared
   by-name URL aliases. Each image in a multi-image note therefore opens the media item
   the user actually selected; button, keyboard-arrow, and horizontal-swipe navigation
-  continue from that item.
+  continue from that item. Each cyclic navigation commits the new media identity and all
+  per-item gallery reset state in one batched render, so refreshes or intermediate reset
+  signals cannot restore the image that was just left.
   Swipe navigation arms only from a primary-pointer gesture on non-interactive media-stage
   space while markup and horizontal zoom panning are inactive. It follows one pointer and
   requires a 48px horizontal-dominant movement; controls, scrubbers, vertical motion, and

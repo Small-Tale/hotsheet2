@@ -25,6 +25,12 @@ export function attachmentGalleryImageIndex(images:readonly AttachmentGalleryIma
   return images.findIndex(image=>image.url===activeUrl||image.aliases?.includes(activeUrl));
 }
 
+/** Resolves cyclic gallery navigation from the same immutable image projection used to render it. */
+export function attachmentGalleryShiftUrl(images:readonly AttachmentGalleryImage[],activeUrl:string,delta:number):string|undefined {
+  const index=attachmentGalleryImageIndex(images,activeUrl);
+  return index<0||images.length===0?undefined:images[(index+delta%images.length+images.length)%images.length].url;
+}
+
 /** Resolves an opened thumbnail by durable identity before consulting potentially shared URL aliases. */
 export function attachmentGallerySelectionUrl(images:readonly AttachmentGalleryImage[],selection:AttachmentGallerySelection):string|undefined {
   const byId=selection.attachmentId?images.find(image=>image.attachmentId===selection.attachmentId):undefined;
