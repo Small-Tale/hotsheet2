@@ -34,7 +34,9 @@ describe('ticket metadata controls and inspector panels', () => {
   it('renders inspector sections independently of the inspector shell', () => {
     const info = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }));
     expect(info).toContain('data-component="ticket-info-panel"');
-    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(3);
+    expect(info.match(/ticket-inspector__section-header/g)).toHaveLength(2);
+    expect(info).toContain('<header class="menu-header" data-component="menu-header"><h2>Tags</h2>');
+    expect(info).toContain('data-action="open-ticket-tag-popover" popoverTarget="ticket-tag-popover" aria-haspopup="dialog" aria-controls="ticket-tag-popover" aria-label="Add tag"');
     expect(info).toContain('data-action="edit-blocked-reason"');
     expect(info).toContain('Block ticket');
     expect(info).not.toContain('<h2>Blocked reason</h2>');
@@ -45,7 +47,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(blocked).toContain('aria-label="Edit blocked reason"');
     expect(blocked).not.toContain('ticket-inspector__text-action');
     expect(blocked).toContain('Waiting');
-    expect(blocked.match(/ticket-inspector__section-header/g)).toHaveLength(4);
+    expect(blocked.match(/ticket-inspector__section-header/g)).toHaveLength(3);
     expect(info).toContain('data-component="ticket-notes"');
     const timeline = String(TicketTimeline({ entries: [{ id: 'one', time: 'Now', title: 'One event', subtitle: 'Optional detail' }] }));
     expect(timeline.match(/<li/g)).toHaveLength(1);

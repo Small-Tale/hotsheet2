@@ -27,6 +27,8 @@ describe('ProjectSidebar component slice', () => {
     const toggle = String(MenuHeader({ label: 'Commands', action: 'toggle', actionIcon: Plus, actionIconName: 'plus', expanded: false, toggle: true }));
     expect(action).toContain('data-component="menu-header"');
     expect(action).toContain('aria-label="Add view"');
+    const popoverAction = String(MenuHeader({ label: 'Tags', action: 'add', actionLabel: 'Add tag', actionIcon: Plus, actionIconName: 'plus', actionPopoverTarget: 'tag-popover' }));
+    expect(popoverAction).toContain('popoverTarget="tag-popover" aria-haspopup="dialog" aria-controls="tag-popover"');
     expect(toggle).toContain('aria-expanded="false"');
     const disabled = String(MenuHeader({ label: 'Views', action: 'add', actionLabel: 'Add view', actionIcon: Plus, actionIconName: 'plus', actionDisabled: true, disabledReason: 'Not available yet.' }));
     expect(disabled).toContain('disabled');

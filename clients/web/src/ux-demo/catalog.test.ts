@@ -24,6 +24,7 @@ describe('UX demo catalog', () => {
     expect(demosUsing('fixed-aspect-terminal-card').map(entry=>entry.id)).toEqual(['terminal-dashboard']);
     expect(demosUsing('project-tab').map(entry => entry.id)).toEqual(['project-tabs']);
     expect(findDemo('ticket-inspector')?.uses).toEqual(['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'note-card', 'note-composer']);
+    expect(findDemo('ticket-info-panel')?.uses).toContain('menu-header');
     expect(findDemo('ticket-reader')?.uses).toEqual(['ticket-inspector']);
     expect(findDemo('repository-status-popover')?.uses).toEqual(['dialog-header','value-table','menu-item','menu-header','ticket-code-review']);
     expect(findDemo('change-evidence-dialog')?.uses).toEqual(['dialog-header','menu-item','menu-header']);

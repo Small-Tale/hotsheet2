@@ -39,7 +39,7 @@ export const demoCatalog: DemoCategory[] = [
   { id: 'inspector', name: 'Ticket inspector', children: [
     { id: 'metadata', name: 'Metadata', demos: [
       demo('ticket-inspector', 'TicketInspector', 'Trailing ticket detail and editing surface.', 'feature-floor', true, ['toolbar', 'toolbar-text', 'toolbar-control-group', 'ticket-info-panel', 'ticket-timeline', 'ticket-code-review', 'ticket-attachments', 'note-card', 'note-composer']),
-      demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, tags, notes, and provenance.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'markdown-editor', 'tag-chip', 'note-card', 'note-composer']),
+      demo('ticket-info-panel', 'TicketInfoPanel', 'Ticket metadata, details, tags, notes, and provenance.', 'feature-floor', true, ['ticket-category-select', 'ticket-priority-select', 'ticket-status-menu', 'markdown-editor', 'tag-chip', 'menu-header', 'note-card', 'note-composer']),
       demo('ticket-timeline', 'TicketTimeline', 'Chronological ticket activity inspector section.', 'feature-floor', true),
       demo('ticket-code-review', 'TicketCodeReview', 'Ticket-associated commits and configured diff-tool actions.', 'feature-floor', true),
       demo('ticket-attachments', 'TicketAttachments', 'Ticket attachment inspector section.', 'feature-floor', true, ['attachment-gallery']),

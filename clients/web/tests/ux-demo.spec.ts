@@ -1934,7 +1934,7 @@ test('projects the feedback-needed indicator through list and board compositions
   })).toEqual({ background: 'rgba(0, 0, 0, 0)', width: 'auto' });
 });
 
-test('dims finished tickets in the list and keeps the add-tag trigger compact', async ({ page }) => {
+test('dims finished tickets in the list and uses the shared Tags menu header', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-list');
   const list = page.getByRole('listbox', { name: 'Example ticket list' });
   // Completed/verified rows are dimmed in list mode; active rows are not (HS2-AMBE59).
@@ -1942,13 +1942,12 @@ test('dims finished tickets in the list and keeps the add-tag trigger compact', 
   await expect(list.locator('[data-ticket-slug="HS2-RPVFA4"]')).toHaveCSS('opacity', '0.55');
   await expect(list.locator('[data-ticket-slug="HS2-R76MMW"]')).toHaveCSS('opacity', '1');
 
-  // The current Add tag contract is a discrete intrinsic-width trigger for its popover.
+  // Tags uses the same section-header primitive and trailing action as Views.
   await page.goto('/ux-demo?component=ticket-info-panel');
-  const [add, editor] = await Promise.all([
-    page.locator('.ticket-tag-editor__add').boundingBox(),
-    page.locator('.ticket-tag-editor').boundingBox(),
-  ]);
-  expect(add!.width).toBeLessThan(editor!.width);
+  const tagsHeader = page.locator('[data-component="ticket-info-panel"] [data-component="menu-header"]').filter({ hasText: 'Tags' });
+  await expect(tagsHeader).toHaveCount(1);
+  await expect(tagsHeader.getByRole('button', { name: 'Add tag' }).locator('[data-lucide="plus"]')).toBeVisible();
+  await expect(page.locator('.ticket-tag-editor__add')).toHaveCount(0);
 });
 
 test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ page }) => {

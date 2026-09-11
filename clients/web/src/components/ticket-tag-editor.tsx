@@ -1,8 +1,5 @@
 import './ticket-tag-editor.css';
 
-import { Plus } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
 import { TagChip } from './tag-chip';
 
 export interface TicketTagEditorProps {
@@ -30,6 +27,6 @@ export function TicketTagEditor({ tags, suggestions = [], editable = true, popov
   const titleId = `${popoverId}-title`;
   return <div class="ticket-tag-editor" data-component="ticket-tag-editor" data-editable={String(editable)}>
     <div class="ticket-tag-editor__chips">{tags.map(tag => TagChip({ id: tag, label: tag, removable: editable }))}</div>
-    {editable && <><button type="button" class="ticket-tag-editor__add" popoverTarget={popoverId} aria-haspopup="dialog" aria-controls={popoverId}><LucideIcon icon={Plus} name="plus" /><span>Add tag</span></button><div id={popoverId} class="ticket-tag-editor__popover" data-component="ticket-tag-popover" popover="auto" role="dialog" aria-labelledby={titleId}><strong id={titleId}>Add tag</strong><label><span>Tag name</span><input name="ticket-tag-input" list={`${popoverId}-suggestions`} autocomplete="off" placeholder="Search or create a tag" autofocus /></label><small>Press Enter to add</small><datalist id={`${popoverId}-suggestions`}>{available.map(tag => <option value={tag}></option>)}</datalist></div></>}
+    {editable && <div id={popoverId} class="ticket-tag-editor__popover" data-component="ticket-tag-popover" popover="auto" role="dialog" aria-labelledby={titleId}><strong id={titleId}>Add tag</strong><label><span>Tag name</span><input name="ticket-tag-input" list={`${popoverId}-suggestions`} autocomplete="off" placeholder="Search or create a tag" autofocus /></label><small>Press Enter to add</small><datalist id={`${popoverId}-suggestions`}>{available.map(tag => <option value={tag}></option>)}</datalist></div>}
   </div>;
 }

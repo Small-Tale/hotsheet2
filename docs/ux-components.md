@@ -190,7 +190,8 @@ does not introduce polling or another network request.
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.
 - `MenuHeader` — **demo built**: shared section-label alignment with MenuItem icons,
-  including optional trailing action and whole-header disclosure variants.
+  including optional trailing actions, popover-targeted actions, and whole-header
+  disclosure variants.
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
   action, and controlled selection through `MenuItem`.
   - section heading and add-view action
@@ -597,8 +598,9 @@ the canonical ticket instead of relying on a freeform explanatory note.
   provenance. Its intrinsic-width boundaries keep both metadata columns, long
   unbroken details, and long note bodies inside the inspector at narrow widths;
   wide Markdown tables and code blocks scroll within their own content surface.
-  Editable tags use a discrete Add tag trigger and uniquely targeted anchored popover
-  in sidebar and reader instances. The popover contains a labeled autocomplete field,
+  Editable tags use the shared `MenuHeader` with a trailing icon-only Add tag action,
+  matching the Views header, and a uniquely targeted anchored popover in sidebar and
+  reader instances. The popover contains a labeled autocomplete field,
   supports repeated Enter/comma additions, dismisses with Escape while restoring trigger
   focus, and remains within the narrow viewport.
   An unblocked ticket exposes a full-width dashed `Block ticket` action without an
