@@ -171,6 +171,14 @@ fn opencode_declares_acp_setup_drive_and_metrics() {
     assert_eq!(p.manifest.mcp.format, "opencode-json");
     assert_eq!(p.manifest.mcp.target, "opencode.json");
     assert_eq!(p.manifest.drive.as_ref().unwrap().transport, "acp");
+    assert_eq!(
+        p.manifest.drive.as_ref().unwrap().model_catalog_args,
+        ["models"]
+    );
+    assert_eq!(
+        p.manifest.drive.as_ref().unwrap().session_options,
+        ["model"]
+    );
     assert_eq!(p.manifest.metrics.as_ref().unwrap().source, "acp");
 }
 
@@ -185,6 +193,10 @@ fn antigravity_is_a_spawn_resume_plugin() {
     assert_eq!(drive.transport, "spawn");
     assert_eq!(drive.program, "agy");
     assert_eq!(drive.resume_flag.as_deref(), Some("--conversation"));
+    assert_eq!(drive.model_catalog_args, ["models"]);
+    assert_eq!(drive.model_flag.as_deref(), Some("--model"));
+    assert_eq!(drive.effort_flag.as_deref(), Some("--effort"));
+    assert_eq!(drive.runtime_effort_levels, ["low", "medium", "high"]);
 }
 
 #[test]

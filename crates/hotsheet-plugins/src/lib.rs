@@ -174,6 +174,20 @@ pub struct DriveSpec {
     /// Optional live-session selections supported by this transport: `model`, `effort`.
     #[serde(default)]
     pub session_options: Vec<String>,
+    /// Optional runtime command arguments that print one model per line. A tab separates
+    /// the stable id from its display label; an id-only line uses the id as its label.
+    #[serde(default)]
+    pub model_catalog_args: Vec<String>,
+    /// Spawn transport flags used to apply the selected model/effort to the next turn.
+    #[serde(default)]
+    pub model_flag: Option<String>,
+    #[serde(default)]
+    pub effort_flag: Option<String>,
+    /// Effort values shared by models discovered from `model_catalog_args`.
+    #[serde(default)]
+    pub runtime_effort_levels: Vec<String>,
+    #[serde(default)]
+    pub runtime_default_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize, PartialEq, Eq)]

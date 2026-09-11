@@ -178,6 +178,28 @@ fn spawn_drive_reports_the_exact_command_and_completes() {
 }
 
 #[test]
+fn spawn_drive_applies_runtime_model_and_effort_before_the_prompt() {
+    let spawner = FakeSpawner::new(0);
+    let mut selected = ctx(&spawner, "/work");
+    selected.model = Some("gemini-3.1-pro-high".into());
+    selected.effort = Some("high".into());
+    let _turn = SpawnDrive::agy()
+        .run(&Target::default(), "work", &selected)
+        .unwrap();
+    assert_eq!(
+        spawner.last().args,
+        [
+            "--print",
+            "--model",
+            "gemini-3.1-pro-high",
+            "--effort",
+            "high",
+            "work"
+        ]
+    );
+}
+
+#[test]
 fn a_nonzero_exit_is_failed() {
     let spawner = FakeSpawner::new(3);
     let mut turn = SpawnDrive::codex()
@@ -207,6 +229,9 @@ fn content_via_stdin_and_absent_interrupt_cap() {
         content: ContentMode::Stdin,
         interrupt: false,
         resume_flag: None,
+        model_flag: None,
+        effort_flag: None,
+        model_catalog: None,
     });
     // absence is the signal
     assert!(!drive.supports_interrupt());

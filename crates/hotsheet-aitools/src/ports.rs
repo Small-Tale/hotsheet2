@@ -43,6 +43,17 @@ pub trait AcpClient {
         cwd: &Path,
         content: &str,
     ) -> Result<Box<dyn crate::drive::TurnHandle>, crate::drive::DriveError>;
+
+    fn start_turn_with_options(
+        &self,
+        resume: Option<&str>,
+        cwd: &Path,
+        content: &str,
+        _model: Option<&str>,
+        _effort: Option<&str>,
+    ) -> Result<Box<dyn crate::drive::TurnHandle>, crate::drive::DriveError> {
+        self.start_turn(resume, cwd, content)
+    }
 }
 
 // ---- codex app-server (persistent daemon) ----------------------------------------

@@ -8,6 +8,7 @@ use std::path::Path;
 use crate::drive::{
     DoneReason, Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle,
 };
+use crate::model_catalog::{CommandModelCatalog, RuntimeModelCatalogSource};
 use crate::ports::{SpawnSpec, SpawnedProcess};
 
 /// How a spawn-shape tool turns a prompt into a command. Data-driven — later sourced
@@ -25,6 +26,9 @@ pub struct SpawnConfig {
     /// the same conversation** rather than start a fresh one (agy `--conversation`). The
     /// best a spawn tool can do for continuity without a daemon (`docs/13` §13.0).
     pub resume_flag: Option<String>,
+    pub model_flag: Option<String>,
+    pub effort_flag: Option<String>,
+    pub model_catalog: Option<CommandModelCatalog>,
 }
 
 /// Where the prompt goes in the spawned command.
@@ -55,6 +59,9 @@ impl SpawnDrive {
             content: ContentMode::Arg,
             interrupt: true,
             resume_flag: None,
+            model_flag: None,
+            effort_flag: None,
+            model_catalog: None,
         })
     }
 
@@ -67,17 +74,45 @@ impl SpawnDrive {
             content: ContentMode::Arg,
             interrupt: true,
             resume_flag: Some("--conversation".into()),
+            model_flag: Some("--model".into()),
+            effort_flag: Some("--effort".into()),
+            model_catalog: Some(CommandModelCatalog::new(
+                "agy".into(),
+                vec!["models".into()],
+                vec!["low".into(), "medium".into(), "high".into()],
+                Some("medium".into()),
+            )),
         })
     }
 
     /// The exact command this drive would run for `content`, resuming `resume` if the
     /// config declares a resume flag (§13.7 asserts this).
     pub fn spec(&self, content: &str, cwd: &Path, resume: Option<&str>) -> SpawnSpec {
+        self.spec_with_options(content, cwd, resume, None, None)
+    }
+
+    fn spec_with_options(
+        &self,
+        content: &str,
+        cwd: &Path,
+        resume: Option<&str>,
+        model: Option<&str>,
+        effort: Option<&str>,
+    ) -> SpawnSpec {
         let mut args = self.cfg.args.clone();
         // Resume an existing conversation when both a flag and a session id are present.
         if let (Some(flag), Some(id)) = (&self.cfg.resume_flag, resume) {
             args.push(flag.clone());
             args.push(id.to_string());
+        }
+        for (flag, value) in [
+            (self.cfg.model_flag.as_deref(), model),
+            (self.cfg.effort_flag.as_deref(), effort),
+        ] {
+            if let (Some(flag), Some(value)) = (flag, value) {
+                args.push(flag.to_string());
+                args.push(value.to_string());
+            }
         }
         let stdin = match self.cfg.content {
             ContentMode::Arg => {
@@ -107,13 +142,26 @@ impl Drive for SpawnDrive {
         self.cfg.interrupt
     }
 
+    fn model_catalog(&self) -> Option<&dyn RuntimeModelCatalogSource> {
+        self.cfg
+            .model_catalog
+            .as_ref()
+            .map(|catalog| catalog as &dyn RuntimeModelCatalogSource)
+    }
+
     fn run(
         &self,
         target: &Target,
         content: &str,
         ctx: &DriveCtx,
     ) -> Result<Box<dyn TurnHandle>, DriveError> {
-        let mut spec = self.spec(content, &ctx.cwd, target.0.as_deref());
+        let mut spec = self.spec_with_options(
+            content,
+            &ctx.cwd,
+            target.0.as_deref(),
+            ctx.model.as_deref(),
+            ctx.effort.as_deref(),
+        );
         // Thread the host's env (HS2-103 safety PATH shim + any --env pairs) into the
         // spawned process — the stream transports get theirs at spawn time (HS2-0TWTZ4).
         spec.env = ctx.env.clone();

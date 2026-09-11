@@ -545,6 +545,10 @@ global Hot Sheet 2 settings file.
 
 The bundled Codex manifest therefore remains a useful offline fallback, while a reachable
 Codex app-server supplies its current paginated `model/list` catalog at runtime.
+OpenCode and Antigravity declare their installed-runtime catalog commands (`opencode models`
+and `agy models`) instead of freezing account/configuration-dependent ids in the registry.
+OpenCode applies a selected model through ACP `session/set_config_option`; Antigravity passes
+the selected model and effort through its declared `--model`/`--effort` spawn flags.
 Connection creation accepts optional model/effort selections. A live turn may override
 them only when the descriptor advertises `change_model` and/or `change_effort`. Interactive
 AI terminals use the same plugin declarations to expand model/effort launch arguments.

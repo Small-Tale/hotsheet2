@@ -24,6 +24,8 @@ program = "opencode"
 args = ["acp"]
 content = "arg"
 interrupt = true
+model_catalog_args = ["models"]
+session_options = ["model"]
 
 [launch]
 program = "opencode"

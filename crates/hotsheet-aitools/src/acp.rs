@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::drive::{DoneReason, PermReq, TurnEvent};
 use crate::drive::{Drive, DriveCtx, DriveError, DriveInfo, Target, Transport, TurnHandle, Usage};
+use crate::model_catalog::{CommandModelCatalog, RuntimeModelCatalogSource};
 use crate::ports::{AcpClient, RpcReader, RpcTransport, RpcWriter};
 use crate::procio::StreamChild;
 
@@ -243,6 +244,17 @@ impl AcpClient for AcpSession {
         cwd: &Path,
         content: &str,
     ) -> Result<Box<dyn TurnHandle>, DriveError> {
+        self.start_turn_with_options(resume, cwd, content, None, None)
+    }
+
+    fn start_turn_with_options(
+        &self,
+        resume: Option<&str>,
+        cwd: &Path,
+        content: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+    ) -> Result<Box<dyn TurnHandle>, DriveError> {
         let session = match resume {
             Some(id) => {
                 self.inner.request(
@@ -259,6 +271,14 @@ impl AcpClient for AcpSession {
                 .ok_or_else(|| DriveError::Protocol("ACP session/new omitted sessionId".into()))?
                 .to_owned(),
         };
+        for (config_id, value) in [("model", model), ("effort", effort)] {
+            if let Some(value) = value {
+                self.inner.request(
+                    "session/set_config_option",
+                    json!({"sessionId":session,"configId":config_id,"value":value}),
+                )?;
+            }
+        }
         let cursor = self.inner.notes.lock().unwrap().len();
         let done = Arc::new(Mutex::new(None));
         let response = Arc::new(Mutex::new(None));
@@ -327,7 +347,18 @@ fn map_update(v: &Value) -> Option<TurnEvent> {
     }
 }
 
-pub struct AcpDrive;
+#[derive(Default)]
+pub struct AcpDrive {
+    model_catalog: Option<CommandModelCatalog>,
+}
+
+impl AcpDrive {
+    pub fn with_model_catalog(model_catalog: CommandModelCatalog) -> Self {
+        Self {
+            model_catalog: Some(model_catalog),
+        }
+    }
+}
 
 impl Drive for AcpDrive {
     fn info(&self) -> DriveInfo {
@@ -340,6 +371,12 @@ impl Drive for AcpDrive {
         true
     }
 
+    fn model_catalog(&self) -> Option<&dyn RuntimeModelCatalogSource> {
+        self.model_catalog
+            .as_ref()
+            .map(|catalog| catalog as &dyn RuntimeModelCatalogSource)
+    }
+
     fn run(
         &self,
         target: &Target,
@@ -349,7 +386,13 @@ impl Drive for AcpDrive {
         let client = ctx
             .acp
             .ok_or_else(|| DriveError::NotConnected("ACP agent is not connected".into()))?;
-        client.start_turn(target.0.as_deref(), &ctx.cwd, content)
+        client.start_turn_with_options(
+            target.0.as_deref(),
+            &ctx.cwd,
+            content,
+            ctx.model.as_deref(),
+            ctx.effort.as_deref(),
+        )
     }
 }
 
@@ -453,7 +496,9 @@ mod tests {
             channel: None,
             acp: Some(&FakeAcp),
         };
-        let mut turn = AcpDrive.run(&Target::default(), "work", &ctx).unwrap();
+        let mut turn = AcpDrive::default()
+            .run(&Target::default(), "work", &ctx)
+            .unwrap();
         assert_eq!(turn.wait(), DoneReason::Completed);
     }
 
@@ -508,6 +553,24 @@ mod tests {
                             .to_string(),
                     );
                 }
+                Some("session/set_config_option") => {
+                    assert_eq!(
+                        v.pointer("/params/sessionId").and_then(Value::as_str),
+                        Some("sess-1")
+                    );
+                    let config = v
+                        .pointer("/params/configId")
+                        .and_then(Value::as_str)
+                        .unwrap();
+                    let value = v.pointer("/params/value").and_then(Value::as_str).unwrap();
+                    assert!(matches!(
+                        (config, value),
+                        ("model", "provider/model") | ("effort", "high")
+                    ));
+                    let _ = self.0.send(
+                        json!({"jsonrpc":"2.0","id":id,"result":{"configOptions":[]}}).to_string(),
+                    );
+                }
                 Some("session/prompt") => {
                     let _=self.0.send(json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess-1","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"hello"}}}}).to_string());
                     let _=self.0.send(json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"end_turn","usage":{"inputTokens":4,"outputTokens":2}}}).to_string());
@@ -527,7 +590,15 @@ mod tests {
     #[test]
     fn live_client_negotiates_creates_session_streams_and_finishes() {
         let client = AcpSession::connect(Box::new(ScriptedAcp)).unwrap();
-        let mut turn = client.start_turn(None, Path::new("/tmp"), "work").unwrap();
+        let mut turn = client
+            .start_turn_with_options(
+                None,
+                Path::new("/tmp"),
+                "work",
+                Some("provider/model"),
+                Some("high"),
+            )
+            .unwrap();
         assert_eq!(turn.next_event(), Some(TurnEvent::Output("hello".into())));
         assert_eq!(
             turn.next_event(),

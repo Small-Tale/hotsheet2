@@ -11,6 +11,7 @@ use crate::acp::AcpDrive;
 use crate::appserver::AppServerDrive;
 use crate::claude::ClaudeChannelDrive;
 use crate::drive::{Drive, DriveCtx, DriveError, Target, TurnHandle};
+use crate::model_catalog::CommandModelCatalog;
 use crate::registry::{Connection, ConnectionRegistry, Role};
 use crate::spawn::{ContentMode, SpawnConfig, SpawnDrive};
 
@@ -36,8 +37,27 @@ pub fn drive_for(plugin: &Plugin) -> Option<Box<dyn Drive>> {
             },
             interrupt: spec.interrupt,
             resume_flag: spec.resume_flag.clone(),
+            model_flag: spec.model_flag.clone(),
+            effort_flag: spec.effort_flag.clone(),
+            model_catalog: (!spec.model_catalog_args.is_empty()).then(|| {
+                CommandModelCatalog::new(
+                    spec.program.clone(),
+                    spec.model_catalog_args.clone(),
+                    spec.runtime_effort_levels.clone(),
+                    spec.runtime_default_effort.clone(),
+                )
+            }),
         }))),
-        "acp" => Some(Box::new(AcpDrive)),
+        "acp" => Some(if spec.model_catalog_args.is_empty() {
+            Box::new(AcpDrive::default())
+        } else {
+            Box::new(AcpDrive::with_model_catalog(CommandModelCatalog::new(
+                spec.program.clone(),
+                spec.model_catalog_args.clone(),
+                spec.runtime_effort_levels.clone(),
+                spec.runtime_default_effort.clone(),
+            )))
+        }),
         _ => None,
     }
 }

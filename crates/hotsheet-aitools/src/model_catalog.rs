@@ -7,6 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use hotsheet_plugins::{AiToolDescriptor, ModelSpec, Plugin};
 
@@ -34,6 +35,102 @@ pub trait RuntimeModelCatalogSource {
     fn version(&self) -> Result<String, String>;
     /// Query the installed runtime's current catalog.
     fn discover(&self, cwd: &Path) -> Result<RuntimeModelCatalog, String>;
+}
+
+/// A plugin-declared CLI catalog such as `opencode models` or `agy models`.
+#[derive(Debug, Clone)]
+pub struct CommandModelCatalog {
+    program: String,
+    args: Vec<String>,
+    effort_levels: Vec<String>,
+    default_effort: Option<String>,
+}
+
+impl CommandModelCatalog {
+    pub fn new(
+        program: String,
+        args: Vec<String>,
+        effort_levels: Vec<String>,
+        default_effort: Option<String>,
+    ) -> Self {
+        Self {
+            program,
+            args,
+            effort_levels,
+            default_effort,
+        }
+    }
+
+    fn output(&self, args: &[String], cwd: Option<&Path>) -> Result<String, String> {
+        let mut command = Command::new(&self.program);
+        command
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(cwd) = cwd {
+            command.current_dir(cwd);
+        }
+        let output = command
+            .output()
+            .map_err(|error| format!("starting '{}': {error}", self.program))?;
+        if !output.status.success() {
+            return Err(format!(
+                "'{} {}' exited with {}",
+                self.program,
+                args.join(" "),
+                output.status
+            ));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+}
+
+impl RuntimeModelCatalogSource for CommandModelCatalog {
+    fn version(&self) -> Result<String, String> {
+        let args = vec!["--version".to_string()];
+        let value = self.output(&args, None)?.trim().to_string();
+        (!value.is_empty())
+            .then_some(value)
+            .ok_or_else(|| format!("'{} --version' returned no version", self.program))
+    }
+
+    fn discover(&self, cwd: &Path) -> Result<RuntimeModelCatalog, String> {
+        let output = self.output(&self.args, Some(cwd))?;
+        Ok(parse_command_catalog(
+            &output,
+            &self.effort_levels,
+            self.default_effort.as_deref(),
+        ))
+    }
+}
+
+fn parse_command_catalog(
+    output: &str,
+    effort_levels: &[String],
+    default_effort: Option<&str>,
+) -> RuntimeModelCatalog {
+    RuntimeModelCatalog {
+        models: output
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                if line.is_empty() {
+                    return None;
+                }
+                let (id, label) = line
+                    .split_once('\t')
+                    .map_or((line, line), |(id, label)| (id.trim(), label.trim()));
+                (!id.is_empty()).then(|| RuntimeModelSpec {
+                    id: id.to_string(),
+                    label: if label.is_empty() { id } else { label }.to_string(),
+                    effort_levels: effort_levels.to_vec(),
+                    default_effort: default_effort.map(str::to_string),
+                    is_default: false,
+                })
+            })
+            .collect(),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -263,6 +360,28 @@ mod tests {
             default_effort: Some("medium".into()),
             actions: vec!["change_model".into()],
         }
+    }
+
+    #[test]
+    fn command_catalog_accepts_id_only_and_tab_labeled_runtime_rows() {
+        let catalog = parse_command_catalog(
+            "provider/first\nprovider/second\tSecond model\n\n",
+            &["low".into(), "high".into()],
+            Some("high"),
+        );
+        assert_eq!(
+            catalog
+                .models
+                .iter()
+                .map(|model| (model.id.as_str(), model.label.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("provider/first", "provider/first"),
+                ("provider/second", "Second model"),
+            ]
+        );
+        assert_eq!(catalog.models[0].effort_levels, ["low", "high"]);
+        assert_eq!(catalog.models[0].default_effort.as_deref(), Some("high"));
     }
 
     fn catalog(model: &str, default: bool) -> RuntimeModelCatalog {

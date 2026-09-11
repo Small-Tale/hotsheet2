@@ -35,6 +35,12 @@ args = ["--print"]
 content = "arg"
 interrupt = true
 resume_flag = "--conversation"
+model_catalog_args = ["models"]
+model_flag = "--model"
+effort_flag = "--effort"
+runtime_effort_levels = ["low", "medium", "high"]
+runtime_default_effort = "medium"
+session_options = ["model", "effort"]
 
 [launch]
 program = "agy"
