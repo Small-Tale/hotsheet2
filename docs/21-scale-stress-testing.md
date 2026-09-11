@@ -34,6 +34,7 @@ npm run stress:scale -- --counts 10000,100000,1000000
 npm run stress:scale -- --counts 1000 --skip-web --timeout-ms 60000
 npm run stress:scale -- --counts 10000,100000 --skip-web --assert-cli-budgets
 npm run stress:scale -- --counts 10000,100000 --skip-web --assert-cli-mutation-budgets
+npm run stress:scale -- --counts 100000 --assert-web-100k
 npm run stress:scale -- --keep --output /private/tmp/hotsheet-scale.json
 ```
 
@@ -50,3 +51,8 @@ exploratory capacity test, not a stable timing assertion. The opt-in
 to use the focused unit, integration, browser, and interaction-budget gates. The separate
 `--assert-cli-mutation-budgets` gate caps create/edit at 5 seconds for 10K and 30 seconds
 for 100K, including path-scoped Git durability and index-backed worklist refresh.
+The opt-in `--assert-web-100k` acceptance gate keeps each first/continuation server page
+at exactly 200 rows, at most 1 MB, and under 60 seconds on the stressed debug harness;
+requires production Chromium to reach a populated Queue within 120 seconds and stay below
+192 MB JavaScript heap; and caps Queue/Backlog/Archive view switches at 2 seconds. It is a
+manual release/capacity gate, not ordinary CI.

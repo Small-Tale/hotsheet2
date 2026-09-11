@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertCliMutationBudgets, assertCliReadBudgets, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
+import { assertCliMutationBudgets, assertCliReadBudgets, assertWeb100kAcceptance, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
 
 describe('scale stress harness', () => {
   it('normalizes incremental scale milestones', () => {
@@ -9,8 +9,8 @@ describe('scale stress harness', () => {
   });
 
   it('accepts repeatable-run switches', () => {
-    expect(parseArguments(['--counts', '25,10', '--skip-web', '--assert-cli-budgets', '--assert-cli-mutation-budgets', '--keep', '--timeout-ms=4000', '--output', '/tmp/result.json'])).toMatchObject({
-      counts: [10, 25], keep: true, skipWeb: true, assertCliBudgets: true, assertCliMutationBudgets: true, timeoutMs: 4_000, output: '/tmp/result.json',
+    expect(parseArguments(['--counts', '25,10', '--skip-web', '--assert-cli-budgets', '--assert-cli-mutation-budgets', '--assert-web-100k', '--keep', '--timeout-ms=4000', '--output', '/tmp/result.json'])).toMatchObject({
+      counts: [10, 25], keep: true, skipWeb: true, assertCliBudgets: true, assertCliMutationBudgets: true, assertWeb100k: true, timeoutMs: 4_000, output: '/tmp/result.json',
     });
   });
 
@@ -27,6 +27,16 @@ describe('scale stress harness', () => {
     expect(() => assertCliReadBudgets(10_000, { ...within, show_ticket: { wall_ms: 2_001 } })).toThrow('show_ticket');
     expect(() => assertCliReadBudgets(100_000, { ...within, full_text_query: { error: 'timeout' } })).toThrow('full_text_query');
     expect(() => assertCliReadBudgets(1_000, {})).not.toThrow();
+  });
+
+  it('enforces the opt-in 100K browser and bounded-page acceptance thresholds', () => {
+    const page = {wall_ms:59_999,response_bytes:999_999,item_count:200,has_next_cursor:true};
+    const server = {scenarios:{list_compact:page,list_compact_next:page}};
+    const web = {scenarios:{initial_load:{wall_ms:119_999},switch_backlog:{wall_ms:1_999},switch_archive:{wall_ms:1_999},switch_queue:{wall_ms:1_999},browser_heap_mb:191.9}};
+    expect(() => assertWeb100kAcceptance(100_000,server,web)).not.toThrow();
+    expect(() => assertWeb100kAcceptance(100_000,{scenarios:{...server.scenarios,list_compact:{...page,response_bytes:1_000_001}}},web)).toThrow('bounded-page');
+    expect(() => assertWeb100kAcceptance(100_000,server,{scenarios:{...web.scenarios,browser_heap_mb:193}})).toThrow('initial load/heap');
+    expect(() => assertWeb100kAcceptance(10_000,{},{})).not.toThrow();
   });
 
   it('generates unique canonical ticket fixtures across every shipped view', () => {

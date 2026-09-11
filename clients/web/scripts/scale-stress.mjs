@@ -41,6 +41,7 @@ export function parseArguments(argv) {
     skipWeb: argv.includes('--skip-web'),
     assertCliBudgets: argv.includes('--assert-cli-budgets'),
     assertCliMutationBudgets: argv.includes('--assert-cli-mutation-budgets'),
+    assertWeb100k: argv.includes('--assert-web-100k'),
     output: optionValue(argv, '--output', join(tmpdir(), `hotsheet-scale-${Date.now()}.json`)),
     timeoutMs: Number(optionValue(argv, '--timeout-ms', '300000')),
   };
@@ -74,6 +75,25 @@ export function assertCliMutationBudgets(count, scenarios) {
     const result = scenarios[name];
     if (!result || result.error || result.timed_out || result.wall_ms > budget) {
       throw new Error(`CLI ${name} at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
+    }
+  }
+}
+
+export function assertWeb100kAcceptance(count, server, web) {
+  if (count !== 100_000) return;
+  for (const name of ['list_compact', 'list_compact_next']) {
+    const page = server?.scenarios?.[name];
+    if (!page || page.error || page.item_count !== 200 || !page.has_next_cursor || page.response_bytes > 1_000_000 || page.wall_ms > 60_000) {
+      throw new Error(`100K server ${name} exceeded the bounded-page acceptance threshold: ${JSON.stringify(page)}`);
+    }
+  }
+  const scenarios = web?.scenarios;
+  if (!scenarios || !scenarios.initial_load || scenarios.initial_load.wall_ms > 120_000 || scenarios.browser_heap_mb == null || scenarios.browser_heap_mb > 192) {
+    throw new Error(`100K web initial load/heap exceeded acceptance thresholds: ${JSON.stringify(scenarios)}`);
+  }
+  for (const name of ['switch_backlog', 'switch_archive', 'switch_queue']) {
+    if (!scenarios[name] || scenarios[name].wall_ms > 2_000) {
+      throw new Error(`100K web ${name} exceeded 2000ms: ${JSON.stringify(scenarios[name])}`);
     }
   }
 }
@@ -405,7 +425,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.help) {
-    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--assert-cli-mutation-budgets] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
+    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--assert-cli-mutation-budgets] [--assert-web-100k] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
     return;
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
@@ -470,6 +490,16 @@ async function main() {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           run.cli_mutation_budget = { passed: false, error: message };
+          cliBudgetErrors.push(message);
+        }
+      }
+      if (options.assertWeb100k) {
+        try {
+          assertWeb100kAcceptance(count, run.server, run.web);
+          if (count === 100_000) run.web_100k_acceptance = { passed: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          run.web_100k_acceptance = { passed: false, error: message };
           cliBudgetErrors.push(message);
         }
       }
