@@ -4,6 +4,7 @@ import type { ConversationMessage } from './ai-conversation';
 import {
   buildConversationExportRequest,
   conversationExportBundleEntries,
+  conversationExportScopeAfterMessagePick,
   conversationExportValidation,
   conversationSummaryMarkdown,
   conversationTranscriptMarkdown,
@@ -24,6 +25,15 @@ describe('conversation export contract', () => {
     expect(selectedConversationMessages(messages, { kind: 'range', startMessageId: 'message-2', endMessageId: 'message-3' }).map(message => message.id)).toEqual(['message-2', 'message-3']);
     expect(selectedConversationMessages(messages, { kind: 'range', startMessageId: 'message-3', endMessageId: 'message-2' })).toEqual([]);
     expect(selectedConversationMessages(messages, { kind: 'range', startMessageId: 'missing', endMessageId: 'message-4' })).toEqual([]);
+  });
+
+  it('builds a visual range with two message picks and starts over on the third',()=>{
+    const first=conversationExportScopeAfterMessagePick(messages,{kind:'all'},'message-3');
+    expect(first).toEqual({kind:'range',startMessageId:'message-3',endMessageId:'message-3'});
+    const second=conversationExportScopeAfterMessagePick(messages,first,'message-1');
+    expect(second).toEqual({kind:'range',startMessageId:'message-1',endMessageId:'message-3'});
+    expect(conversationExportScopeAfterMessagePick(messages,second,'message-2')).toEqual({kind:'range',startMessageId:'message-2',endMessageId:'message-2'});
+    expect(conversationExportScopeAfterMessagePick(messages,second,'missing')).toEqual(second);
   });
 
   it('describes a portable bundle without inventing individual attachment paths', () => {

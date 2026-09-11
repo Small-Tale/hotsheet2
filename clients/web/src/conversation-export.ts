@@ -152,6 +152,25 @@ export function selectedConversationMessages(
   return messages.slice(startIndex, endIndex + 1);
 }
 
+/** Two-click visual range selection: the first pick anchors, the second completes an ordered range, and a third starts over. */
+export function conversationExportScopeAfterMessagePick(
+  messages: readonly ConversationMessage[],
+  scope: ConversationExportScope,
+  messageId: string,
+): ConversationExportScope {
+  const picked = messages.findIndex(message => message.id === messageId);
+  if (picked < 0) return scope;
+  if (scope.kind === 'all') return { kind: 'range', startMessageId: messageId, endMessageId: messageId };
+  const start = messages.findIndex(message => message.id === scope.startMessageId);
+  const end = messages.findIndex(message => message.id === scope.endMessageId);
+  if (start < 0 || end < 0 || start !== end || picked === start) return { kind: 'range', startMessageId: messageId, endMessageId: messageId };
+  return {
+    kind: 'range',
+    startMessageId: messages[Math.min(start, picked)].id,
+    endMessageId: messages[Math.max(start, picked)].id,
+  };
+}
+
 export function conversationExportValidation(
   messages: readonly ConversationMessage[],
   draft: ConversationExportDraft,

@@ -237,10 +237,12 @@ does not introduce polling or another network request.
   - composer: multiline free-form input plus an explicit Send action; Enter sends while
     Shift+Enter inserts a line break; sending is disabled for blank input and while the same
     connection is busy, with the reason exposed accessibly
-  - save/reopen: the header Save action opens `ConversationExportDialog` for an inclusive range,
-    host-selected `.hotsheet-chat` folder, optional local summary/attachments/original media,
-    and explicit collision handling; `TerminalDrawer` can open a saved bundle read-only or resume
-    its original session when the saved range ends at the conversation tail
+  - save/reopen: the header Save action opens a compact three-step `ConversationExportDialog`:
+    choose all messages or a contiguous range from a visual transcript, choose optional local
+    summary/attachments/original media, then review and invoke the host `.hotsheet-chat` folder
+    picker from the final Save action; nested popup hide events do not close the wizard and existing
+    destinations receive explicit collision handling; `TerminalDrawer` can open a saved bundle
+    read-only or resume its original session when the saved range ends at the conversation tail
   - state: Kerf owns per-connection transcript/draft/open state; the existing replay-safe
     WebSocket/long-poll stream is the only live update source, and no conversation timer
     issues network requests
