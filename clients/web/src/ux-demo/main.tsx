@@ -146,6 +146,7 @@ import {
 import {
   AiToolSettingsDemo,
   clampProjectSidebarHeight,
+  collapsedCommandGroups,
   commandGroupExpanded,
   CommandNavigationDemo,
   DriveControlDemo,
@@ -962,6 +963,12 @@ delegate(root, 'click', '[data-action="toggle-command-group"]', () => {
   sidebarEvent.value = commandGroupExpanded.value
     ? 'Command group expanded.'
     : 'Command group collapsed.';
+});
+delegate(root, 'click', '[data-action="toggle-command-section"]', (_event, target) => {
+  const group = target.closest<HTMLElement>('[data-command-group]')?.dataset.commandGroup;
+  if (!group) return;
+  collapsedCommandGroups.value = collapsedCommandGroups.value.includes(group) ? collapsedCommandGroups.value.filter(item => item !== group) : [...collapsedCommandGroups.value, group];
+  sidebarEvent.value = collapsedCommandGroups.value.includes(group) ? `${group} collapsed.` : `${group} expanded.`;
 });
 delegate(root, 'click', '[data-action="run-command"]', (_event, target) => {
   const id = (target as HTMLElement).dataset.itemId!;

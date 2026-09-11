@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_WORKSPACE_PREFERENCES, loadWorkspacePreferences, saveWorkspacePreferences } from './workspace-preferences';
+import { DEFAULT_WORKSPACE_PREFERENCES, loadWorkspacePreferences, saveWorkspacePreferences,toggleCollapsedCommandGroup } from './workspace-preferences';
 
 describe('workspace preferences', () => {
   it('loads defaults when storage is missing or malformed', () => {
@@ -19,6 +19,7 @@ describe('workspace preferences', () => {
       sidebarVisible: false,
       inspectorVisible: false,
       commandGroupExpanded: false,
+      commandGroupsCollapsed: {},
     });
     const invalid = JSON.stringify({ viewMode: 'grid', sort: 'random', sortDirection: 'sideways', sidebarVisible: 'no' });
     expect(loadWorkspacePreferences({ getItem: () => invalid })).toEqual(DEFAULT_WORKSPACE_PREFERENCES);
@@ -35,6 +36,7 @@ describe('workspace preferences', () => {
       sidebarVisible: false,
       inspectorVisible: true,
       commandGroupExpanded: false,
+      commandGroupsCollapsed: {project:['Quality','Git']},
     });
     expect(loadWorkspacePreferences({ getItem: key => values.get(key) ?? null })).toEqual({
       viewMode: 'settings',
@@ -45,7 +47,18 @@ describe('workspace preferences', () => {
       sidebarVisible: false,
       inspectorVisible: true,
       commandGroupExpanded: false,
+      commandGroupsCollapsed: {project:['Quality','Git']},
     });
+  });
+
+  it('validates and independently toggles remembered named command groups per project',()=>{
+    const stored=JSON.stringify({commandGroupsCollapsed:{alpha:[' Quality ','Quality',3,''],beta:['Git'],empty:'bad'}});
+    const loaded=loadWorkspacePreferences({getItem:()=>stored}).commandGroupsCollapsed;
+    expect(loaded).toEqual({alpha:['Quality'],beta:['Git']});
+    const collapsed=toggleCollapsedCommandGroup(loaded,'alpha','Release');
+    expect(collapsed).toEqual({alpha:['Quality','Release'],beta:['Git']});
+    expect(toggleCollapsedCommandGroup(collapsed,'alpha','Quality')).toEqual({alpha:['Release'],beta:['Git']});
+    expect(toggleCollapsedCommandGroup(collapsed,'beta','Git')).toEqual({alpha:['Quality','Release'],beta:[]});
   });
 
   it('replaces obsolete status sorting for columns without changing list sorting', () => {

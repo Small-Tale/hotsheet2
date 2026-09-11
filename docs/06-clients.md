@@ -807,7 +807,8 @@ cleanup of the old live HS1 data; backups are never removed.
 
   Workspace chrome preferences are device-local browser state. The client restores the
   last view mode, sort field and direction, project-sidebar and inspector visibility,
-  project-command group expansion, and independently clamped sidebar/inspector widths
+  outer project-command expansion, each named command group's independent per-project
+  collapsed state, and independently clamped sidebar/inspector widths
   across reloads. Missing, partial, malformed, or unknown enum values fall back per
   field to safe defaults rather than preventing project open. Selecting a ticket still
   reopens the inspector and persists that explicit state transition. List or column mode

@@ -17,7 +17,7 @@ import { TicketInspectorPlaceholder } from '../components/ticket-inspector-place
 import { TicketList } from '../components/ticket-list';
 import { WorkspaceControls, WorkspaceIdentity } from '../components/workspace-header';
 import { editingNoteId, markdownMode, markdownSavedValue, markdownValue, noteDraft, readerNotes } from './content-components-demo';
-import { commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
+import { collapsedCommandGroups,commandGroupExpanded, driveRunning, runningCommandId, selectedViewId, sidebarCommands, sidebarViews } from './project-sidebar-demo';
 import { collectionTickets } from './ticket-collections-demo';
 import { composerCategory, composerDetails, composerExpanded, composerTitle, composerUpNext,filteredWorkspaceTickets, inspectorCodeReview, inspectorOpen, inspectorTab, workspaceColumns, workspaceMode, workspaceSearchOpen, workspaceSearchQuery, workspaceSort  } from './workspace-components-demo';
 
@@ -154,7 +154,7 @@ export function ConnectionStateBannerDemo() {
 }
 
 function ShellSidebar() {
-  return <ProjectSidebar completedToday={6} inProgress={3} completionTrend={[3, 0, 2, 5, 4, 7, 6]} branch="feature/client-shell" unpushed={2} uncommitted={1} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} driveRunning={driveRunning.value} driveTool="codex" openCount={17} upNextCount={4} activeCount={2} collapseControl />;
+  return <ProjectSidebar completedToday={6} inProgress={3} completionTrend={[3, 0, 2, 5, 4, 7, 6]} branch="feature/client-shell" unpushed={2} uncommitted={1} views={sidebarViews} selectedViewId={selectedViewId.value} commandGroupLabel="Project commands" commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} commandGroupExpanded={commandGroupExpanded.value} collapsedCommandGroups={collapsedCommandGroups.value} driveRunning={driveRunning.value} driveTool="codex" openCount={17} upNextCount={4} activeCount={2} collapseControl />;
 }
 
 function ShellTerminalOperations() {

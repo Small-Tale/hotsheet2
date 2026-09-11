@@ -1421,6 +1421,8 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   const commands = page.locator('[data-component="command-navigation"]');
   const heading = commands.getByRole('button', { name: /Project commands/ });
   await expect(heading).toHaveAttribute('aria-expanded', 'true');
+  const qualityGroup=commands.getByRole('button',{name:'Quality'}),releaseGroup=commands.getByRole('button',{name:'Release'});
+  await expect(qualityGroup).toHaveAttribute('aria-expanded','true');await expect(releaseGroup).toHaveAttribute('aria-expanded','true');
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('background-color', 'rgb(20, 184, 166)');
   await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS('background-color', 'rgb(249, 115, 22)');
   await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS('background-color', 'rgb(139, 92, 246)');
@@ -1428,6 +1430,7 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(commands.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
   await commands.getByRole('button', { name: /Running Verify project/ }).click();
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveAttribute('aria-pressed', 'false');
+  await qualityGroup.click();await expect(qualityGroup).toHaveAttribute('aria-expanded','false');await expect(commands.getByRole('button',{name:'Verify project'})).toHaveCount(0);await expect(commands.getByRole('button',{name:'Publish preview'})).toBeVisible();await qualityGroup.click();await expect(commands.getByRole('button',{name:'Verify project'})).toBeVisible();
   await heading.click();
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCount(0);
   await expect(heading).toHaveAttribute('aria-expanded', 'false');

@@ -857,7 +857,10 @@ capability-aware sections when their underlying features and data contracts land
 
 - `CommandNavigation` groups locally configured commands and projects running state
   from the server event stream. A normal activation starts the command; activating a
-  running command opens an explicit stop confirmation.
+  running command opens an explicit stop confirmation. Each named group is an accessible
+  independent disclosure whose per-project collapsed state survives reload; ungrouped
+  commands remain directly visible, and the outer Project Commands disclosure still
+  controls the entire section (HS2-J963JF).
 - Press-and-hold opens the latest bounded output/history view. The button hover title
   exposes the latest run outcome without adding permanent sidebar chrome.
 - A context or overflow menu owns alternate actions: “Run in new terminal” for shell

@@ -117,7 +117,17 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-lucide="test-tube-2"');
     expect(markup).toContain('data-command-color="#3b82f6"');
     expect(markup).toContain('data-command-group="Checks"');
+    expect(markup).toContain('data-action="toggle-command-section"');
     expect(markup).toContain('Last run: completed (exit 0). Press and hold for output.');
+  });
+
+  it('collapses named command groups independently without hiding ungrouped commands',()=>{
+    const markup=String(CommandNavigation({label:'Commands',expanded:true,collapsedGroups:['Quality'],commands:[{id:'test',label:'Test',color:'blue',icon:'test',group:'Quality'},{id:'ship',label:'Ship',color:'purple',icon:'send',group:'Release'},{id:'status',label:'Status',color:'green',icon:'build'}]}));
+    expect(markup).toMatch(/data-command-group="Quality"[^]*aria-expanded="false"/);
+    expect(markup).not.toContain('data-item-id="test"');
+    expect(markup).toMatch(/data-command-group="Release"[^]*aria-expanded="true"/);
+    expect(markup).toContain('data-item-id="ship"');
+    expect(markup).toContain('data-item-id="status"');
   });
 
   it('falls back to the HS1 neutral command color with dark contrast', () => {

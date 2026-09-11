@@ -6,6 +6,7 @@ export interface WorkspacePreferences {
   sidebarVisible: boolean;
   inspectorVisible: boolean;
   commandGroupExpanded: boolean;
+  commandGroupsCollapsed: Record<string,string[]>;
 }
 
 export type SortableWorkspaceViewMode = 'list' | 'board';
@@ -21,6 +22,7 @@ export const DEFAULT_WORKSPACE_PREFERENCES: WorkspacePreferences = {
   sidebarVisible: true,
   inspectorVisible: true,
   commandGroupExpanded: true,
+  commandGroupsCollapsed: {},
 };
 
 const STORAGE_KEY = 'hotsheet.layout.workspace-preferences.v1';
@@ -44,6 +46,21 @@ function validatedSortPreference(value: unknown, fallback: WorkspaceSortPreferen
   };
 }
 
+function validatedCollapsedCommandGroups(value:unknown):Record<string,string[]>{
+  if(!value||typeof value!=='object'||Array.isArray(value))return{};
+  return Object.fromEntries(Object.entries(value).flatMap(([projectId,groups])=>{
+    if(!projectId.trim()||!Array.isArray(groups))return[];
+    return[[projectId,[...new Set(groups.flatMap(group=>typeof group==='string'&&group.trim()?[group.trim()]:[]))]]];
+  }));
+}
+
+export function toggleCollapsedCommandGroup(state:Readonly<Record<string,string[]>>,projectId:string,group:string):Record<string,string[]>{
+  const normalized=group.trim();
+  if(!normalized)return Object.fromEntries(Object.entries(state).map(([id,groups])=>[id,[...groups]]));
+  const current=state[projectId]??[],collapsed=current.includes(normalized)?current.filter(item=>item!==normalized):[...current,normalized];
+  return{...state,[projectId]:collapsed};
+}
+
 export function loadWorkspacePreferences(storage: Pick<Storage, 'getItem'>): WorkspacePreferences {
   let value: unknown;
   try {
@@ -64,6 +81,7 @@ export function loadWorkspacePreferences(storage: Pick<Storage, 'getItem'>): Wor
     sidebarVisible: typeof record.sidebarVisible === 'boolean' ? record.sidebarVisible : DEFAULT_WORKSPACE_PREFERENCES.sidebarVisible,
     inspectorVisible: typeof record.inspectorVisible === 'boolean' ? record.inspectorVisible : DEFAULT_WORKSPACE_PREFERENCES.inspectorVisible,
     commandGroupExpanded: typeof record.commandGroupExpanded === 'boolean' ? record.commandGroupExpanded : DEFAULT_WORKSPACE_PREFERENCES.commandGroupExpanded,
+    commandGroupsCollapsed: validatedCollapsedCommandGroups(record.commandGroupsCollapsed),
   };
 }
 
