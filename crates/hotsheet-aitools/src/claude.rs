@@ -392,6 +392,17 @@ impl Drive for ClaudeChannelDrive {
 /// Live-only; unit tests inject a scripted fake instead.
 pub struct ClaudeStreamTransport(StreamChild);
 
+/// Optional arguments for a persistent Claude stream-json child.
+#[derive(Debug, Default)]
+pub struct ClaudeStreamSpawnOptions<'a> {
+    pub resume: Option<&'a str>,
+    pub mcp_config: Option<&'a Path>,
+    pub permission_mode: Option<&'a str>,
+    pub model: Option<&'a str>,
+    pub effort: Option<&'a str>,
+    pub env: &'a [(String, String)],
+}
+
 impl ClaudeStreamTransport {
     /// Spawn `program` as a stream-json channel in `cwd`. `resume` continues a prior
     /// session (`--resume <id>`); `mcp_config`, when set, is the only MCP config used
@@ -399,12 +410,7 @@ impl ClaudeStreamTransport {
     pub fn spawn(
         program: &str,
         cwd: &Path,
-        resume: Option<&str>,
-        mcp_config: Option<&Path>,
-        permission_mode: Option<&str>,
-        model: Option<&str>,
-        effort: Option<&str>,
-        env: &[(String, String)],
+        options: ClaudeStreamSpawnOptions<'_>,
     ) -> std::io::Result<Box<Self>> {
         let mut args: Vec<String> = [
             "-p",
@@ -418,32 +424,35 @@ impl ClaudeStreamTransport {
         .iter()
         .map(|s| s.to_string())
         .collect();
-        if let Some(id) = resume {
+        if let Some(id) = options.resume {
             args.push("--resume".into());
             args.push(id.to_string());
         }
-        if let Some(cfg) = mcp_config {
+        if let Some(cfg) = options.mcp_config {
             args.push("--strict-mcp-config".into());
             args.push("--mcp-config".into());
             args.push(cfg.display().to_string());
         }
         // Headless work needs a non-blocking permission mode so tools (edit/bash) don't
         // stall waiting for a prompt (`docs/05` §5.7; the real bridge is HS2-113).
-        if let Some(mode) = permission_mode {
+        if let Some(mode) = options.permission_mode {
             args.push("--permission-mode".into());
             args.push(mode.to_string());
         }
-        if let Some(model) = model {
+        if let Some(model) = options.model {
             args.push("--model".into());
             args.push(model.to_string());
         }
-        if let Some(effort) = effort {
+        if let Some(effort) = options.effort {
             args.push("--effort".into());
             args.push(effort.to_string());
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
         Ok(Box::new(Self(StreamChild::spawn(
-            program, &refs, cwd, env,
+            program,
+            &refs,
+            cwd,
+            options.env,
         )?)))
     }
 }

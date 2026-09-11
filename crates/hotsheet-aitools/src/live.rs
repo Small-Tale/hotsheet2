@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use hotsheet_plugins::Plugin;
 
 use crate::acp::{AcpSession, AcpStdio};
-use crate::claude::{ClaudeChannel, ClaudeStreamTransport};
+use crate::claude::{ClaudeChannel, ClaudeStreamSpawnOptions, ClaudeStreamTransport};
 use crate::codex::{
     CodexAppServer, StdioTransport, UdsWsTransport, codex_control_socket_path,
     ensure_codex_daemon_in,
@@ -112,12 +112,14 @@ pub fn run_trigger_controlled(
             let transport = ClaudeStreamTransport::spawn(
                 &program,
                 &t.cwd,
-                t.resume.as_deref(),
-                t.mcp_config.as_deref(),
-                t.permission_mode.as_deref(),
-                t.model.as_deref(),
-                t.effort.as_deref(),
-                &t.env,
+                ClaudeStreamSpawnOptions {
+                    resume: t.resume.as_deref(),
+                    mcp_config: t.mcp_config.as_deref(),
+                    permission_mode: t.permission_mode.as_deref(),
+                    model: t.model.as_deref(),
+                    effort: t.effort.as_deref(),
+                    env: &t.env,
+                },
             )
             .map_err(|source| LiveError::Launch {
                 program: program.clone(),

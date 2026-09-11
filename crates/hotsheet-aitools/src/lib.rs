@@ -28,7 +28,10 @@ pub mod system;
 
 pub use acp::{AcpDrive, AcpSession, AcpStdio, usage as acp_usage, validate_opencode_transcript};
 pub use appserver::AppServerDrive;
-pub use claude::{ClaudeChannel, ClaudeChannelDrive, ClaudeStreamTransport, claude_result_usage};
+pub use claude::{
+    ClaudeChannel, ClaudeChannelDrive, ClaudeStreamSpawnOptions, ClaudeStreamTransport,
+    claude_result_usage,
+};
 pub use codex::{
     CodexAppServer, CodexDaemonService, PermissionPolicy, ProxyTransport, StdioTransport,
     UdsWsTransport, codex_control_socket_path, ensure_codex_daemon, ensure_codex_daemon_in,

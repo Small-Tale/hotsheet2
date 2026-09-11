@@ -920,12 +920,10 @@ fn claude_live_turn_over_the_channel() {
     let transport = crate::claude::ClaudeStreamTransport::spawn(
         &program,
         &cwd,
-        None,
-        mcp,
-        None,
-        None,
-        None,
-        &[],
+        crate::claude::ClaudeStreamSpawnOptions {
+            mcp_config: mcp,
+            ..Default::default()
+        },
     )
     .expect("claude spawn");
     let ch = ClaudeChannel::connect(transport);
