@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 pub struct PrepareDrive {
     pub store_path: PathBuf,
+    pub source_id: String,
     pub project_path: PathBuf,
     pub tool: String,
     pub env: Vec<String>,
@@ -109,6 +110,7 @@ pub struct ClientConnectionInfo {
     pub id: String,
     pub tool: String,
     pub project: String,
+    pub source: String,
     pub role: String,
     pub busy: bool,
     pub actions: Vec<String>,
@@ -173,6 +175,8 @@ struct ClientConnection {
     id: String,
     tool: String,
     project: String,
+    source: String,
+    store_path: PathBuf,
     home_id: String,
     drive: Arc<dyn PreparedClientDrive>,
     model: Option<String>,
@@ -258,9 +262,10 @@ impl ClientDriveManager {
         if let Some(existing) = self.connection(&id)? {
             if existing.tool != request.tool
                 || existing.project != request.project_path.display().to_string()
+                || existing.source != request.source_id
             {
                 return Err(ClientDriveError::Conflict(format!(
-                    "connection '{id}' belongs to another project or tool"
+                    "connection '{id}' belongs to another project, source, or tool"
                 )));
             }
             return Ok(connection_info(&existing));
@@ -268,6 +273,8 @@ impl ClientDriveManager {
 
         let model = request.model.clone();
         let effort = request.effort.clone();
+        let source = request.source_id.clone();
+        let store_path = request.store_path.clone();
         let drive = self
             .backend
             .prepare(request)
@@ -277,6 +284,8 @@ impl ClientDriveManager {
             id: id.clone(),
             tool,
             project,
+            source,
+            store_path,
             home_id,
             drive,
             model,
@@ -569,6 +578,10 @@ pub struct ClientTurnJob {
 }
 
 impl ClientTurnJob {
+    pub fn store_path(&self) -> &std::path::Path {
+        &self.connection.store_path
+    }
+
     pub fn run(
         &self,
         prompt: &str,
@@ -599,6 +612,7 @@ fn connection_info(connection: &ClientConnection) -> ClientConnectionInfo {
         id: connection.id.clone(),
         tool: connection.tool.clone(),
         project: connection.project.clone(),
+        source: connection.source.clone(),
         role: "main".into(),
         busy: state.as_ref().is_some_and(|state| state.busy),
         actions,
@@ -672,6 +686,7 @@ mod tests {
     fn prepare(project: &str) -> PrepareDrive {
         PrepareDrive {
             store_path: PathBuf::from("/store"),
+            source_id: "git-store".into(),
             project_path: PathBuf::from(project),
             tool: "fake".into(),
             env: Vec::new(),

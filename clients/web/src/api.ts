@@ -39,7 +39,7 @@ export interface PermissionRequest {id:number;project?:string;connection:string;
 export interface AiModelDescriptor {id:string;label:string;effort_levels?:string[]}
 export interface AiToolDescriptor {id:string;display_name:string;models:AiModelDescriptor[];default_model?:string;default_effort?:string;actions?:Array<'change_model'|'change_effort'>}
 export interface AiToolDefaults {tool:string;model?:string;effort?:string}
-export interface ToolConnection {id:string;tool:string;project:string;role:'main'|'worker'|'drivespawned';busy:boolean;actions?:Array<'send_turn'|'interrupt'|'close'>;session_id?:string;last_error?:string;model?:string;effort?:string}
+export interface ToolConnection {id:string;tool:string;project:string;source?:string;role:'main'|'worker'|'drivespawned';busy:boolean;actions?:Array<'send_turn'|'interrupt'|'close'>;session_id?:string;last_error?:string;model?:string;effort?:string}
 export interface ToolSession {connection_id:string;tool:string;project:string;session_id:string;updated_at_ms:number}
 export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;link?:string;progress?:number}
 export interface TerminalSettings {inherit_global_shell_history:boolean}
@@ -116,7 +116,7 @@ export class Api {
   aiSettings=()=>this.request<AiToolDefaults>('/ai-settings');
   saveAiSettings=(value:AiToolDefaults)=>this.request<AiToolDefaults>('/ai-settings',{method:'PUT',body:JSON.stringify(value)});
   toolSessions=()=>this.request<ToolSession[]>('/drive/sessions');
-  createToolConnection=(value:{tool:string;checkout:string;connection_id?:string;session_id?:string;model?:string;effort?:string})=>this.request<ToolConnection>('/drive/connections',{method:'POST',body:JSON.stringify(value)});
+  createToolConnection=(value:{tool:string;checkout:string;source?:string;connection_id?:string;session_id?:string;model?:string;effort?:string})=>this.request<ToolConnection>('/drive/connections',{method:'POST',body:JSON.stringify(value)});
   sendToolTurn=(id:string,content:string,session_id?:string,selection?:{model?:string;effort?:string})=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/turns`,{method:'POST',body:JSON.stringify({content,...(session_id?{session_id}:{}),...selection})});
   interruptToolTurn=(id:string)=>this.request<ToolConnection>(`/drive/connections/${encodeURIComponent(id)}/interrupt`,{method:'POST'});
   deleteToolConnection=(checkout:string,id:string)=>this.request<void>(`/checkouts/${encodeURIComponent(checkout)}/drive/connections/${encodeURIComponent(id)}`,{method:'DELETE'});

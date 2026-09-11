@@ -834,7 +834,7 @@ impl AppState {
     fn emit_drive_updated(&self, info: &client_drive::ClientConnectionInfo) {
         self.emit(ChangeEvent {
             cursor: None,
-            store: multistore::store_url_id(&self.store),
+            store: info.source.clone(),
             kind: "drive_updated".into(),
             id: info.id.clone(),
             slug: info.tool.clone(),
@@ -5507,6 +5507,8 @@ struct ConnectionInfo {
     id: String,
     tool: String,
     project: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source: Option<String>,
     /// `main` | `worker`.
     role: String,
     /// Whether the connection is busy (a turn is actively streaming) right now.
@@ -5540,6 +5542,7 @@ async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionI
             id: c.id.clone(),
             tool: c.tool.clone(),
             project: c.project.clone(),
+            source: None,
             role: format!("{:?}", c.role).to_lowercase(),
             busy: reg.is_busy(&c.id, now),
             actions: Vec::new(),
@@ -5559,6 +5562,7 @@ async fn list_connections(State(state): State<AppState>) -> Json<Vec<ConnectionI
             id: client.id,
             tool: client.tool,
             project: client.project,
+            source: Some(client.source),
             role: client.role,
             busy: client.busy,
             actions: client.actions,
@@ -5581,6 +5585,8 @@ struct CreateDriveConnectionReq {
     effort: Option<String>,
     #[serde(default)]
     checkout: Option<String>,
+    #[serde(default)]
+    source: Option<String>,
     #[serde(default)]
     connection_id: Option<String>,
     #[serde(default)]
@@ -5666,26 +5672,51 @@ async fn create_drive_connection(
             .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error))?;
         }
     }
-    let project_path = if let Some(reference) = request.checkout.as_deref() {
-        let checkout = state
-            .checkout_registry
-            .resolve(reference)
-            .map_err(|error| {
-                let status = match error {
-                    hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => {
-                        StatusCode::NOT_FOUND
-                    }
-                    hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => {
-                        StatusCode::CONFLICT
-                    }
-                    _ => StatusCode::BAD_REQUEST,
-                };
-                ApiError::new(status, error.to_string())
+    let (project_path, source_id, drive_store) =
+        if let Some(reference) = request.checkout.as_deref() {
+            let checkout = state
+                .checkout_registry
+                .resolve(reference)
+                .map_err(|error| {
+                    let status = match error {
+                        hotsheet_ticketing::checkouts::CheckoutError::NotFound(_) => {
+                            StatusCode::NOT_FOUND
+                        }
+                        hotsheet_ticketing::checkouts::CheckoutError::Ambiguous(_) => {
+                            StatusCode::CONFLICT
+                        }
+                        _ => StatusCode::BAD_REQUEST,
+                    };
+                    ApiError::new(status, error.to_string())
+                })?;
+            let project_path = std::path::PathBuf::from(&checkout.root);
+            let source = checkout_source_for_create(&state, reference, request.source.as_deref())?;
+            if source.provider != "git" {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!(
+                        "ticket source '{}' does not support local client-drive activity",
+                        source.connection_id
+                    ),
+                ));
+            }
+            let entry = state.host.get(&source.connection_id).ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::CONFLICT,
+                    format!(
+                        "ticket source '{}' is not hosted by this server",
+                        source.connection_id
+                    ),
+                )
             })?;
-        std::path::PathBuf::from(checkout.root)
-    } else {
-        state.store.root().to_path_buf()
-    };
+            (project_path, source.connection_id, entry.store)
+        } else {
+            (
+                state.store.root().to_path_buf(),
+                multistore::store_url_id(&state.store),
+                state.store.clone(),
+            )
+        };
     let mut env = vec![format!("HOTSHEET_PROJECT={}", project_path.display())];
     if let Some(url) = state
         .terminal_server_url
@@ -5700,7 +5731,8 @@ async fn create_drive_connection(
         .client_drives
         .create_or_attach(
             client_drive::PrepareDrive {
-                store_path: state.store.root().to_path_buf(),
+                store_path: drive_store.root().to_path_buf(),
+                source_id,
                 project_path,
                 tool: request.tool,
                 env,
@@ -5840,7 +5872,7 @@ async fn send_drive_turn(
 
     let manager = state.client_drives.clone();
     let thread_state = state.clone();
-    let thread_store = state.store.clone();
+    let thread_store = FsStore::open(job.store_path()).map_err(ApiError::from)?;
     let tool = info.tool.clone();
     let activity_project = info.project.clone();
     let prompt = request.content;

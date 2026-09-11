@@ -24,7 +24,8 @@ const SECRET: &str = "test-secret";
 type RecordedClientTurns =
     Arc<Mutex<Vec<(String, Option<String>, Option<String>, Option<String>)>>>;
 type RecordedClientHomes = Arc<Mutex<Vec<Option<std::path::PathBuf>>>>;
-type RecordedClientPreparations = Arc<Mutex<Vec<(std::path::PathBuf, Vec<String>)>>>;
+type RecordedClientPreparations =
+    Arc<Mutex<Vec<(std::path::PathBuf, std::path::PathBuf, String, Vec<String>)>>>;
 
 fn state() -> (tempfile::TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
@@ -49,10 +50,12 @@ struct FakePreparedClientDrive {
 impl ClientDriveBackend for FakeClientDriveBackend {
     fn prepare(&self, request: PrepareDrive) -> Result<Arc<dyn PreparedClientDrive>, String> {
         self.homes.lock().unwrap().push(request.persistent_home);
-        self.preparations
-            .lock()
-            .unwrap()
-            .push((request.project_path, request.env));
+        self.preparations.lock().unwrap().push((
+            request.project_path,
+            request.store_path,
+            request.source_id,
+            request.env,
+        ));
         Ok(Arc::new(FakePreparedClientDrive {
             tool: request.tool,
             turns: self.turns.clone(),
@@ -141,6 +144,9 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
 async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store() {
     let (store_dir, base) = state();
     let checkout_dir = tempfile::tempdir().unwrap();
+    let linked_dir = tempfile::tempdir().unwrap();
+    let linked_store = FsStore::init(linked_dir.path(), &StoreMetadata::new("LINK")).unwrap();
+    let linked_source = hotsheet_ticketing::checkouts::TicketSource::git(linked_dir.path());
     let backend = Arc::new(FakeClientDriveBackend::default());
     let preparations = backend.preparations.clone();
     let router = app(base
@@ -151,10 +157,13 @@ async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store(
         .oneshot(authed(
             "POST",
             "/projects/open",
-            Some(&format!(
-                r#"{{"root":{},"sources":[]}}"#,
-                serde_json::to_string(checkout_dir.path()).unwrap()
-            )),
+            Some(
+                &serde_json::json!({
+                    "root": checkout_dir.path(),
+                    "sources": [linked_source.clone()]
+                })
+                .to_string(),
+            ),
         ))
         .await
         .unwrap();
@@ -165,6 +174,7 @@ async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store(
         .to_owned();
     let checkout_root = checkout_dir.path().canonicalize().unwrap();
     let created = router
+        .clone()
         .oneshot(authed(
             "POST",
             "/drive/connections",
@@ -176,16 +186,123 @@ async fn client_drive_prepares_the_requested_code_checkout_not_the_ticket_store(
         .await
         .unwrap();
     assert_eq!(created.status(), StatusCode::CREATED);
-    assert_eq!(
-        body_json(created).await["project"],
-        checkout_root.display().to_string()
-    );
-    let prepared = preparations.lock().unwrap();
-    assert_eq!(prepared[0].0, checkout_root);
+    let created = body_json(created).await;
+    assert_eq!(created["project"], checkout_root.display().to_string());
+    assert_eq!(created["source"], linked_source.connection_id);
+    {
+        let prepared = preparations.lock().unwrap();
+        assert_eq!(prepared[0].0, checkout_root);
+        assert_eq!(prepared[0].1, linked_dir.path().canonicalize().unwrap());
+        assert_eq!(prepared[0].2, linked_source.connection_id);
+        assert!(
+            prepared[0]
+                .3
+                .contains(&format!("HOTSHEET_PROJECT={}", checkout_root.display()))
+        );
+    }
+
+    let started = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections/checkout-drive/turns",
+            Some(r#"{"content":"complete"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(started.status(), StatusCode::ACCEPTED);
+    loop {
+        let listed = body_json(
+            router
+                .clone()
+                .oneshot(authed("GET", "/connections", None))
+                .await
+                .unwrap(),
+        )
+        .await;
+        if !listed[0]["busy"].as_bool().unwrap() {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    let linked_activity = hotsheet_ticketing::activity::read_recent(&linked_store).unwrap();
+    assert_eq!(linked_activity.len(), 1);
+    assert_eq!(linked_activity[0].summary, "codex ran `cargo test`");
     assert!(
-        prepared[0]
-            .1
-            .contains(&format!("HOTSHEET_PROJECT={}", checkout_root.display()))
+        hotsheet_ticketing::activity::read_recent(&FsStore::open(store_dir.path()).unwrap())
+            .unwrap()
+            .is_empty(),
+        "the unrelated server-default store must not receive checkout activity"
+    );
+}
+
+#[tokio::test]
+async fn client_drive_requires_an_explicit_source_for_an_ambiguous_checkout() {
+    let (store_dir, base) = state();
+    let checkout_dir = tempfile::tempdir().unwrap();
+    let first_dir = tempfile::tempdir().unwrap();
+    let second_dir = tempfile::tempdir().unwrap();
+    FsStore::init(first_dir.path(), &StoreMetadata::new("ONE")).unwrap();
+    FsStore::init(second_dir.path(), &StoreMetadata::new("TWO")).unwrap();
+    let first = hotsheet_ticketing::checkouts::TicketSource::git(first_dir.path());
+    let second = hotsheet_ticketing::checkouts::TicketSource::git(second_dir.path());
+    let backend = Arc::new(FakeClientDriveBackend::default());
+    let preparations = backend.preparations.clone();
+    let router = app(base
+        .with_checkout_registry(store_dir.path().join("checkouts.json"))
+        .with_client_drive_backend(backend));
+    let opened = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/projects/open",
+            Some(
+                &serde_json::json!({
+                    "root": checkout_dir.path(),
+                    "sources": [first.clone(), second]
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    let checkout_id = body_json(opened).await["checkout"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let ambiguous = router
+        .clone()
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(&format!(r#"{{"tool":"fake","checkout":"{checkout_id}"}}"#)),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ambiguous.status(), StatusCode::CONFLICT);
+
+    let selected = router
+        .oneshot(authed(
+            "POST",
+            "/drive/connections",
+            Some(
+                &serde_json::json!({
+                    "tool": "fake",
+                    "checkout": checkout_id,
+                    "source": first.connection_id.clone(),
+                    "connection_id": "selected-source"
+                })
+                .to_string(),
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(selected.status(), StatusCode::CREATED);
+    assert_eq!(body_json(selected).await["source"], first.connection_id);
+    assert_eq!(
+        preparations.lock().unwrap()[0].1,
+        first_dir.path().canonicalize().unwrap()
     );
 }
 
@@ -512,6 +629,7 @@ async fn client_drive_delete_is_authenticated_scoped_idempotent_and_interrupts()
     let (store_dir, base) = state();
     let checkout_a = tempfile::tempdir().unwrap();
     let checkout_b = tempfile::tempdir().unwrap();
+    let source = hotsheet_ticketing::checkouts::TicketSource::git(store_dir.path());
     let backend = Arc::new(FakeClientDriveBackend {
         supports_interrupt: true,
         ..FakeClientDriveBackend::default()
@@ -526,7 +644,10 @@ async fn client_drive_delete_is_authenticated_scoped_idempotent_and_interrupts()
             .oneshot(authed(
                 "POST",
                 "/projects/open",
-                Some(&serde_json::json!({"root": checkout.path(), "sources": []}).to_string()),
+                Some(
+                    &serde_json::json!({"root": checkout.path(), "sources": [source.clone()]})
+                        .to_string(),
+                ),
             ))
             .await
             .unwrap();

@@ -194,7 +194,11 @@ Responsibilities:
 - **Owns the filesystem watcher** (→ incremental reindex) and the **terminal/PTY
   manager** (both need a persistent host).
 - **Hosts client-owned AI connections.** `POST /drive/connections` prepares or attaches
-  a project/tool connection through the shared `SafeTrigger`; `POST
+  a project/tool connection through the shared `SafeTrigger`. Checkout drives bind to
+  the checkout's explicit default ticket source (or a requested `source`); an ambiguous
+  checkout must choose one, and providers without local activity persistence fail with an
+  explicit capability error. Native activity, usage, and turn events are then recorded and
+  identified against that linked source rather than the server's unrelated default store. `POST
   /drive/connections/{id}/turns` sends a free-form turn and resumes the retained tool
   session; and `/interrupt` exists as an advertised connection action only when the
   concrete drive implements interruption. `GET /connections` reports state, session,

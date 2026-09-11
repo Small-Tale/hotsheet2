@@ -275,6 +275,11 @@ The server resolves that checkout through its project registry and prepares the 
 the checkout's code root as both its process directory and `HOTSHEET_PROJECT`. The ticket
 store is deliberately not a substitute for the checkout: UI connections are scoped by
 checkout plus tool so Codex and Claude conversations cannot leak across either boundary.
+The connection also retains its selected linked ticket-source identity. The checkout default
+is used when present; otherwise the caller must provide `source`. A local Git source supplies
+the `SafeTrigger` store boundary and receives usage, native activity, and turn-event identity;
+non-local providers reject this activity capability explicitly instead of falling back to the
+machine server's default store.
 
 Connection changes emit replayable `drive_updated` events. Clients refresh from that
 signal over the existing WebSocket or long-poll fallback; simple periodic polling is not

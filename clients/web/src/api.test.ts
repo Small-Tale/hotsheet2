@@ -105,7 +105,7 @@ describe('client-owned AI drive transport',()=>{
     await api.aiTools(true);
     await api.aiSettings();
     await api.saveAiSettings({tool:'codex',model:'gpt-5.4',effort:'high'});
-    await api.createToolConnection({tool:'codex',checkout:'checkout-1',connection_id:'main/1',model:'gpt-5.4',effort:'high'});
+    await api.createToolConnection({tool:'codex',checkout:'checkout-1',source:'git-main',connection_id:'main/1',model:'gpt-5.4',effort:'high'});
     await api.sendToolTurn('main/1','Continue this work','thread/1',{model:'gpt-5.4',effort:'xhigh'});
     await api.interruptToolTurn('main/1');
     await api.deleteToolConnection('checkout/1','main/1');
@@ -114,7 +114,7 @@ describe('client-owned AI drive transport',()=>{
     expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/ai-tools?refresh=true',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/ai-settings',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(5,'/api/ai-settings',expect.objectContaining({method:'PUT',body:'{"tool":"codex","model":"gpt-5.4","effort":"high"}'}));
-    expect(fetchMock).toHaveBeenNthCalledWith(6,'/api/drive/connections',expect.objectContaining({method:'POST',body:'{"tool":"codex","checkout":"checkout-1","connection_id":"main/1","model":"gpt-5.4","effort":"high"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(6,'/api/drive/connections',expect.objectContaining({method:'POST',body:'{"tool":"codex","checkout":"checkout-1","source":"git-main","connection_id":"main/1","model":"gpt-5.4","effort":"high"}'}));
     expect(fetchMock).toHaveBeenNthCalledWith(7,'/api/drive/connections/main%2F1/turns',expect.objectContaining({method:'POST',body:'{"content":"Continue this work","session_id":"thread/1","model":"gpt-5.4","effort":"xhigh"}'}));
     expect(fetchMock).toHaveBeenNthCalledWith(8,'/api/drive/connections/main%2F1/interrupt',expect.objectContaining({method:'POST'}));
     expect(fetchMock).toHaveBeenNthCalledWith(9,'/api/checkouts/checkout%2F1/drive/connections/main%2F1',expect.objectContaining({method:'DELETE'}));
