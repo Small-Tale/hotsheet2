@@ -96,11 +96,12 @@ describe('application shell components', () => {
   });
 
   it('draws tab-selection focus around the complete compound pill', () => {
-    const css=readFileSync(new URL('./app-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
+    const css=readFileSync(new URL('./app-tab.css',import.meta.url),'utf8'),projectCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
     expect(css).toContain('.app-tab:has(.app-tab__select:focus-visible) { outline: var(--wa-focus-ring); outline-offset: -2px; }');
     expect(css).toContain('.app-tab__select:focus-visible { outline: none; }');
     expect(css).toContain('.app-tab__close:focus-visible { border-radius: var(--wa-border-radius-pill); outline: var(--wa-focus-ring); outline-offset: -2px; }');
     expect(css).not.toContain('.app-tab__select:focus-visible, .app-tab__close:focus-visible');
+    expect(projectCss).toContain('.project-tab:has(.project-tab__close) .project-tab__trailing:empty { min-width: calc(1.275rem - var(--wa-space-xs)); }');
     expect(barCss).toMatch(/\.project-tab-bar__tabs \{[^}]*margin: calc\(var\(--wa-space-2xs\) \* -1\);[^}]*padding: var\(--wa-space-2xs\);/);
   });
 
