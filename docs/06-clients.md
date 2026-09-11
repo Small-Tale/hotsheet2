@@ -580,8 +580,10 @@ cleanup of the old live HS1 data; backups are never removed.
   Safari and other media engines can discover duration and seek normally. The browser-native
   flow and server cache contract are identical on macOS, Linux, and Windows.
   A preview or inline image opens the same full-screen
-  media gallery; videos remain paused initially and show their cached/generated poster
-  before playback. They expose only Hot Sheet's custom play/pause, scrubber, time, and
+  media gallery; videos remain paused initially but preload and present their decoded
+  first frame rather than carrying the grid thumbnail poster into the full-screen player.
+  A paused scrub presents the decoded frame at the selected time without requiring a
+  play/pause cycle. They expose only Hot Sheet's custom play/pause, scrubber, time, and
   volume controls, never a second native browser control strip. The volume icon opens
   a click-persistent popup containing both the slider and mute action; only clicking
   outside that popup dismisses it. Playback ticks and scrub input update the live gallery
@@ -616,8 +618,8 @@ cleanup of the old live HS1 data; backups are never removed.
   the playhead, clamped at either media boundary. Rectangles appear over the media only while
   the playhead is inside their range or its review tolerance (the larger of one second or one
   percent of the media duration), while persistent
-  white wireframe-style ticks remain over the scrubber. The selected annotation's presence
-  indicator spans at least its complete time range. Selecting a visible annotation rectangle
+  white wireframe-style indicators spanning every point or range remain over the scrubber
+  regardless of selection. Selecting a visible annotation rectangle
   adds high-contrast white square-bracket range handles to the timeline; those endpoints can
   be dragged with a real pointer or adjusted with the arrow keys, replacing ambiguous toolbar chevrons. Only the
   selected annotation exposes adjustable range brackets, and clicking empty image or video

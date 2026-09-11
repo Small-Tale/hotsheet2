@@ -29,7 +29,7 @@ describe('AttachmentGallery',()=>{
     expect(attachmentGallerySelectionUrl(ambiguous,{url:'/shared.png',ticket:'HS2-DEMO',name:'b.svg'})).toBe('/b.svg');
     expect(attachmentGallerySelectionUrl(ambiguous,{url:'/shared.png'})).toBe('/a.png');
   });
-  it('renders videos paused by default with only the custom playback and volume controls',()=>{
+  it('renders the decoded first video frame while paused with only the custom playback and volume controls',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4',thumbnailUrl:'/walkthrough-poster.jpg'}],activeUrl:'/walkthrough.mp4'}));
     expect(markup).toContain('Video 1 of 1: walkthrough.mp4');
     expect(markup).toContain('<video');
@@ -38,7 +38,10 @@ describe('AttachmentGallery',()=>{
     expect(markup).toContain('data-gallery-media="true"');
     expect(markup).toContain('name="gallery-playhead"');
     expect(markup).toContain('data-action="toggle-gallery-playback"');
-    expect(markup).toContain('poster="/walkthrough-poster.jpg"');
+    expect(markup).toContain('src="/walkthrough.mp4"');
+    expect(markup).toContain('preload="auto"');
+    expect(markup).not.toContain('poster=');
+    expect(markup).not.toContain('data-video-poster-url');
     expect(markup).toContain('data-action="toggle-gallery-volume"');
     expect(markup).toContain('data-action="toggle-gallery-muted"');
     expect(markup).toContain('name="gallery-volume"');
@@ -131,6 +134,7 @@ describe('AttachmentGallery',()=>{
     expect(markup.match(/data-action="seek-gallery-annotation"/g)).toHaveLength(2);
     expect(markup).toContain('--annotation-start:25%');
     expect(markup).toContain('--annotation-start:50%;--annotation-end:70%');
+    expect(readFileSync(new URL('./attachment-gallery.css',import.meta.url),'utf8')).toContain('.attachment-gallery__timeline-annotation[data-has-range="true"]');
   });
   it('lays playback and zoom actions in a real footer so fit and cover measurement exclude it',()=>{
     const markup=String(AttachmentGallery({images:[{id:'video',name:'walkthrough.mp4',url:'/walkthrough.mp4'}],activeUrl:'/walkthrough.mp4'}));
