@@ -939,9 +939,9 @@ test('renders exactly once when the long poll announces a permission request',as
   await page.route('**/permissions',route=>route.fulfill({json:pending}));
   const polls:Array<import('@playwright/test').Route>=[];let cursor=0;
   await page.route('**/ws/poll*',route=>{const since=new URL(route.request().url()).searchParams.get('since');if(since===null)return route.fulfill({json:{cursor,events:[],overflow:false}});polls.push(route)});
-  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  await page.waitForTimeout(100);await resetRenderMetrics(page);pending=[{id:77,connection:'codex-session',tool:'Bash',action:'cargo test',always_allow_supported:true}];
-  await expect.poll(()=>polls.length).toBeGreaterThan(0);cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'',kind:'permission_asked',id:'77',slug:'Bash'}],overflow:false}});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-ticket-slug="HS2-DEMO01"]')).toBeVisible();await expect(page.locator('.app-loading')).toHaveCount(0);await expect.poll(()=>polls.length).toBeGreaterThan(0);
+  await resetRenderMetrics(page);await page.waitForTimeout(100);expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});pending=[{id:77,connection:'codex-session',tool:'Bash',action:'cargo test',always_allow_supported:true}];
+  cursor+=1;await polls.shift()!.fulfill({json:{cursor,events:[{store:'',kind:'permission_asked',id:'77',slug:'Bash'}],overflow:false}});
   await expect(page.locator('[data-component="permission-request-popup"]')).toBeVisible();
   const metrics=await renderMetrics(page);expect(metrics?.passes).toBe(1);expect(metrics?.mutations).toBeGreaterThan(0);
 });

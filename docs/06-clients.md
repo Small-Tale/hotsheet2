@@ -162,7 +162,10 @@ cleanup of the old live HS1 data; backups are never removed.
 - **Render budgets.** Development builds expose root render-pass and DOM-mutation
   counters to browser tests. Polling responses that do not change observable state
   must cause zero render passes and zero DOM mutations; tests also budget intentional
-  transitions and no-op interactions. In particular, activating an already-selected,
+  transitions and no-op interactions from an explicitly loaded, quiescent baseline so
+  late project initialization is not attributed to the event under test. A permission
+  request announced by long poll produces exactly one render with visible DOM mutations.
+  In particular, activating an already-selected,
   fully loaded ticket again performs no detail request, render pass, or DOM mutation;
   capture-phase pointer handling prevents the click from starting the editor's blur
   lifecycle, preserving focus plus draft state. This makes broad Kerf render
