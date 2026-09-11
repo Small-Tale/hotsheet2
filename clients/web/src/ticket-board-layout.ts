@@ -11,6 +11,7 @@ export function ticketBoardGroups(
   tickets: readonly TicketRow[],
   view: TicketView,
   hideVerified: boolean,
+  includeEveryLifecycle = false,
 ): TicketBoardGroup[] {
   if (view === 'backlog') return [{ id: 'backlog', title: 'Backlog', tickets: [...tickets] }];
   if (view === 'archive') return [{ id: 'archive', title: 'Archive', tickets: [...tickets] }];
@@ -24,6 +25,12 @@ export function ticketBoardGroups(
 
   if (!hideVerified) {
     groups.push({ id: 'verified', title: 'Verified', tickets: tickets.filter(ticket => ticket.status === 'verified') });
+  }
+  if (includeEveryLifecycle) {
+    groups.push(
+      { id: 'backlog', title: 'Backlog', tickets: tickets.filter(ticket => ticket.status === 'backlog') },
+      { id: 'archive', title: 'Archive', tickets: tickets.filter(ticket => ['archive', 'deleted', 'moved'].includes(ticket.status ?? '')) },
+    );
   }
   return groups;
 }

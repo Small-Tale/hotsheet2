@@ -513,7 +513,9 @@ always retain native clipboard behavior.
 - The real Queue board uses `Not Started`, `Started`, `Completed`, and `Verified`
   columns. A per-project setting can hide `Verified`, merging those tickets into
   `Completed`. Backlog and Archive views each use one eponymous column because the
-  selected view already supplies their grouping.
+  selected view already supplies their grouping. An active view-independent search adds
+  Backlog and Archive columns to the Queue board; the Archive column collects archived,
+  deleted, and moved matches so every indexed search result remains visible.
 - There is no separate `TicketCard`: narrow board columns activate `TicketRow`'s
   container-query card presentation while preserving identical markup and actions
 - keyboard and pointer movement between columns

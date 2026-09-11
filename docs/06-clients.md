@@ -400,7 +400,9 @@ and identity-less legacy entries remain conservatively blocking.
   Search semantics do not inherit the selected sidebar view: ordinary queries show every
   indexed match across Queue, Backlog, Archive, and Deleted lifecycle states. Explicit
   lifecycle expressions and filter chips narrow that complete result set rather than being
-  required to reveal it. Reference-mention matches say why
+  required to reveal it. List view renders that complete set directly; Columns view adds
+  Backlog and Archive columns for an active search so no matched lifecycle is discarded by
+  the Queue board's usual column set. Reference-mention matches say why
   they matched, every result names its provider, and the global overlay can hand its
   current query/scope/filter payload to the separately owned saved-view editor without
   replacing the compact workspace search. The overlay is available from the toolbar and

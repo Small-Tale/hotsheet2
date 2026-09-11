@@ -33,4 +33,17 @@ describe('ticketBoardGroups', () => {
       { id: 'archive', title: 'Archive', tickets: [{ status: 'archive' }, { status: 'deleted' }] },
     ]);
   });
+
+  it('gives every lifecycle a column for view-independent search results', () => {
+    const results = [...queue, 'backlog', 'archive', 'deleted', 'moved'].map(status =>
+      typeof status === 'string' ? ticket(status) : status,
+    );
+    const groups = ticketBoardGroups(results, 'all', false, true);
+    expect(groups.map(group => group.title)).toEqual([
+      'Not Started', 'Started', 'Completed', 'Verified', 'Backlog', 'Archive',
+    ]);
+    expect(groups.at(-2)?.tickets.map(item => item.status)).toEqual(['backlog']);
+    expect(groups.at(-1)?.tickets.map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
+    expect(groups.flatMap(group => group.tickets)).toHaveLength(results.length);
+  });
 });
