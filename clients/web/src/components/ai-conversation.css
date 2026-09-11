@@ -10,7 +10,7 @@
 .ai-conversation__embedded-header svg { width:1rem; height:1rem; }
 .ai-conversation__saved-notice { display:grid; padding:var(--wa-space-xs) var(--wa-space-s); margin:var(--wa-space-xs) var(--wa-space-m) 0; border-radius:var(--wa-border-radius-m); color:var(--wa-color-neutral-on-quiet); background:var(--wa-color-neutral-fill-quiet); gap:var(--wa-space-3xs); font-size:var(--wa-font-size-xs); line-height:1.4; }
 .ai-conversation__saved-notice strong { color:var(--wa-color-neutral-on-normal); }
-.ai-conversation__session-controls { display:flex; padding:var(--wa-space-xs) var(--wa-space-s); border-bottom:1px solid var(--wa-color-neutral-border-quiet); gap:var(--wa-space-xs); }
+.ai-conversation__session-controls { display:flex; padding:var(--wa-space-xs) var(--wa-space-s); border-bottom:1px solid var(--wa-color-neutral-border-quiet); align-items:end; gap:var(--wa-space-xs); }
 .ai-conversation__session-controls .select { width:min(14rem,40%); }
 .ai-conversation__header-action::part(base) { width: 2rem; height: 2rem; min-height: 2rem; padding: 0; border-radius: var(--wa-border-radius-pill); }
 .ai-conversation__header-action svg { width: 1rem; height: 1rem; }
@@ -22,6 +22,9 @@
 .ai-conversation__empty p { margin: 0; }
 .ai-conversation__message { width: fit-content; max-width: min(85%, 36rem); padding: .7rem .85rem; border-radius: .8rem; background: var(--wa-color-neutral-fill-quiet); }
 .ai-conversation__message--user { margin-left: auto; color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); }
+.ai-conversation__message--user>.markdown-preview, .ai-conversation__message--user>.markdown-preview :is(p,ul,ol,li,strong,em,a) { color: var(--wa-color-neutral-on-loud); }
+.ai-conversation__message--user>.markdown-preview a { text-decoration-color: currentcolor; }
+.ai-conversation__message--user .ai-conversation__usage { color: color-mix(in srgb,var(--wa-color-neutral-on-loud) 78%,transparent); }
 .ai-conversation__message>strong { display: block; margin-bottom: .2rem; font-size: var(--wa-font-size-xs); }
 .ai-conversation__message>strong .ai-content-label { color: inherit; }
 .ai-conversation__message>.markdown-preview { color: inherit; }
@@ -34,6 +37,7 @@
 .ai-conversation__activity { display: grid; padding: .7rem .8rem; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: .7rem; background: var(--wa-color-neutral-fill-quiet); gap: .5rem; }
 .ai-conversation__activity>header,.ai-conversation__activity>header>span { display: flex; align-items: center; }
 .ai-conversation__activity>header { justify-content: space-between; gap: .5rem; }
+.ai-conversation__activity-disclosure { display: none; }
 .ai-conversation__activity>header>span { gap: .3rem; }
 .ai-conversation__activity svg { width: .9rem; height: .9rem; }
 .ai-conversation__activity ol { display: grid; padding: 0; margin: 0; list-style: none; gap: .45rem; }

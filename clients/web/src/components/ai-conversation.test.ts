@@ -25,6 +25,8 @@ describe('AIConversation',()=>{
     expect(markup).toContain('data-component="dialog-header"');
     expect(markup).toContain('Enter to send · Shift+Enter for a new line');
     expect(markup).toContain('appearance="accent"');
+    expect(markup).toContain('Codex is working');
+    expect(markup).not.toContain('Session session-1');
   });
 
   it('hides stop when interruption is unavailable and exposes terminal failures',()=>{
@@ -52,5 +54,6 @@ describe('AIConversation',()=>{
     expect(saved).toContain('data-read-only="true"');expect(saved).toContain('Saved transcript');expect(saved).toContain('/Exports/review.hotsheet-chat');expect(saved).not.toContain('send-conversation-turn');expect(saved).not.toContain('conversation-model');
   });
   it('promotes a permission popup into the dialog top layer without duplicating its inline card',()=>{const markup=String(AIConversation({open:true,tool:'Codex',messages:[],draft:'',busy:true,interruptible:true,permissions:[permission],foreground:PermissionRequestPopup({item:permission})}));expect(markup).toContain('ai-conversation__foreground');expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1)});
-  it('offers model and effort changes only when the plugin declares support',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,model:'gpt',effort:'high',models:[{id:'gpt',label:'GPT'}],efforts:['medium','high'],canChangeModel:true,canChangeEffort:true}));expect(markup).toContain('name="conversation-model"');expect(markup).toContain('name="conversation-effort"');expect(markup).not.toContain('data-action="stop-conversation"')});
+  it('offers labeled model and effort changes only when the plugin declares support',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,model:'gpt',effort:'high',models:[{id:'gpt',label:'GPT'}],efforts:['medium','high'],canChangeModel:true,canChangeEffort:true}));expect(markup).toContain('name="conversation-model" label="Model"');expect(markup).toContain('name="conversation-effort" label="Effort"');expect(markup).not.toContain('data-action="stop-conversation"')});
+  it('keeps nested Markdown and usage legible on the loud user bubble',()=>{expect(css).toMatch(/\.ai-conversation__message--user>\.markdown-preview[^}]*color: var\(--wa-color-neutral-on-loud\)/);expect(css).toMatch(/\.ai-conversation__message--user \.ai-conversation__usage[^}]*color: color-mix/)});
 });

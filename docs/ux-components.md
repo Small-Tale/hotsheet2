@@ -220,12 +220,13 @@ does not introduce polling or another network request.
   conversation without running `$hotsheet`; Drive uses a separate stable connection and explicitly
   starts that workflow in the drawer. It keeps the ticket workspace visible behind a bounded, vertically
   scrollable transcript rather than replacing the project route.
-  - header: tool identity, persistent connection/session context, close action, and a Stop
+  - header: tool identity, ready/working/message-count context instead of an opaque session id,
+    conversation usage, close action, and a Stop
     action only while the active connection advertises `interrupt`; absence hides Stop
     rather than rendering an inert control
-  - session controls: model and effort choices appear only for plugin-declared live-change
+  - session controls: visibly labeled model and effort choices appear only for plugin-declared live-change
     capabilities and apply to subsequent turns without changing provider
-  - transcript: ordered user messages and one progressively appended assistant response per
+  - transcript: ordered, high-contrast user messages and one progressively appended assistant response per
     submitted turn; output chunks update that response in place, unknown additive events do
     not break it, and completed/failed/interrupted terminal state remains attached to the turn
   - working row: an icon plus specific live text (`Reviewing the project…`, `Responding…`,

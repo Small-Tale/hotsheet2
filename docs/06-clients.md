@@ -475,7 +475,11 @@ cleanup of the old live HS1 data; backups are never removed.
   stream's normalized activity events are session/connection matched into a bounded activity
   sequence with persistent AI/tool attribution and an accessible may-contain-errors cue. The
   dialog uses the shared compact dialog header instead of stacking a second application header
-  beneath the platform dialog title, and its full-width composer keeps the send action attached
+  beneath the platform dialog title. Its secondary line reports useful ready/working/message-count
+  state instead of continuously exposing the opaque session id. Plugin-provided model and effort
+  choices carry visible labels, user-authored Markdown keeps loud-surface contrast throughout its
+  nested content, and repeated activity-level disclaimers are shown only on their attributed rows.
+  Its full-width composer keeps the send action attached
   to the input at wide and narrow sizes. In the bottom drawer, the embedded conversation is a
   height-bounded column: header, session controls, and composer remain fixed while the transcript
   alone takes the remaining height and scrolls, so a long conversation cannot push the input below
