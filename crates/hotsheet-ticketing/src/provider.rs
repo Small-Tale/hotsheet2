@@ -1130,10 +1130,10 @@ pub fn copy_between(
         title: ticket.title,
         category: ticket.category,
         priority: ticket.priority,
-        status: ticket.status,
+        status: Status::NotStarted,
         details: ticket.details,
         tags: ticket.tags,
-        up_next: ticket.up_next && capabilities.up_next,
+        up_next: false,
         blocked_by: vec![],
         transfer: Some(TransferProvenance {
             operation_id: operation_id.into(),
@@ -1537,7 +1537,7 @@ mod tests {
                     title: "transfer me".into(),
                     category: "task".into(),
                     priority: Priority::Default,
-                    status: Status::NotStarted,
+                    status: Status::Started,
                     details: "body".into(),
                     tags: vec!["cross-provider".into()],
                     up_next: true,
@@ -1628,6 +1628,8 @@ mod tests {
         assert_eq!(copied.notes[0].created_at, "2026-08-26T01:00:10Z");
         assert_eq!(copied.notes[0].edited_at, "2026-08-26T01:00:15Z");
         assert_eq!(copied.assignees, ["dev@example.com"]);
+        assert_eq!(copied.status, Status::NotStarted);
+        assert!(!copied.up_next);
         let moved = move_between(
             &registry,
             source_ref.clone(),

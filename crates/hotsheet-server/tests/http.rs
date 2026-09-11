@@ -6284,7 +6284,7 @@ async fn provider_transfer_is_idempotent_and_move_closes_source_after_copy() {
         .oneshot(authed(
             "POST",
             "/tickets",
-            Some(r#"{"title":"portable provider ticket"}"#),
+            Some(r#"{"title":"portable provider ticket","status":"started","up_next":true}"#),
         ))
         .await
         .unwrap();
@@ -6330,14 +6330,13 @@ async fn provider_transfer_is_idempotent_and_move_closes_source_after_copy() {
         .await
         .unwrap();
     assert_eq!(body_json(retry).await["destination"], first_destination);
-    assert_eq!(
-        FsStore::open(dir2.path())
-            .unwrap()
-            .list_tickets()
-            .unwrap()
-            .len(),
-        1
-    );
+    let destination_tickets = FsStore::open(dir2.path())
+        .unwrap()
+        .list_tickets()
+        .unwrap();
+    assert_eq!(destination_tickets.len(), 1);
+    assert_eq!(destination_tickets[0].status, hotsheet_model::Status::NotStarted);
+    assert!(!destination_tickets[0].up_next);
 
     let moving = transfer.trim_end_matches('}').to_string() + r#", "confirm":true}"#;
     let moved = app

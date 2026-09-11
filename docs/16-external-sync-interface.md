@@ -223,6 +223,8 @@ explicit mapping and fields unsupported by the destination; and store
 destination and note ids make retries converge, while an operation lock prevents
 same-process collaborators from racing file updates. Move reports the already-created
 destination if closing the source fails, so retry can recover without duplication.
+Every copied or moved destination starts as Not Started and outside Up Next; workflow
+state belongs to the destination project and is never inherited from the source.
 The provider-neutral routes are `POST /provider-transfers/copy|move`; CLI and MCP expose
 `provider-copy|move` equivalents. The older git-store copy/move surfaces retain their
 same-ULID/tombstone compatibility semantics.
