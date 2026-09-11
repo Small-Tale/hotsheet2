@@ -470,13 +470,25 @@ impl FsStore {
     /// doesn't fail the op. The mutating `ops` all go through here; `write_ticket` stays
     /// bare for bulk writers (import) that do their own single commit.
     pub fn write_ticket_committing(&self, ticket: &Ticket) -> Result<PathBuf, StoreError> {
+        self.write_ticket_with_paths_committing(ticket, &[])
+    }
+
+    fn write_ticket_with_paths_committing(
+        &self,
+        ticket: &Ticket,
+        extra_paths: &[PathBuf],
+    ) -> Result<PathBuf, StoreError> {
         let path = self.write_ticket(ticket)?;
         let status = serde_json::to_value(ticket.status)
             .ok()
             .and_then(|v| v.as_str().map(str::to_string))
             .unwrap_or_else(|| "update".into());
         let msg = format!("{}: {status} — {}", ticket.slug, ticket.title);
-        if let Err(e) = self.autocommit(&msg) {
+        let mut paths = Vec::with_capacity(extra_paths.len() + 2);
+        paths.push(path.clone());
+        paths.push(self.root.join(".gitignore"));
+        paths.extend_from_slice(extra_paths);
+        if let Err(e) = self.autocommit_paths(&msg, &paths) {
             eprintln!("warning: hotsheet autocommit failed: {e}");
         }
         Ok(path)
@@ -487,29 +499,78 @@ impl FsStore {
     /// commit was actually made. Falls back to a bot identity when the repo has none
     /// configured, so a fresh/CI checkout still commits.
     pub fn autocommit(&self, message: &str) -> Result<bool, StoreError> {
+        self.autocommit_impl(message, None)
+    }
+
+    /// Commit only the paths touched by one bounded mutation. Unrelated working-tree
+    /// changes remain unstaged and do not force Git to inspect every ticket file.
+    pub fn autocommit_paths(&self, message: &str, paths: &[PathBuf]) -> Result<bool, StoreError> {
+        self.autocommit_impl(message, Some(paths))
+    }
+
+    fn autocommit_impl(
+        &self,
+        message: &str,
+        paths: Option<&[PathBuf]>,
+    ) -> Result<bool, StoreError> {
         if std::env::var_os("HOTSHEET_NO_AUTOCOMMIT").is_some() || !self.root.join(".git").exists()
         {
             return Ok(false);
         }
         self.ensure_managed_gitignore()?;
-        // Older clients may already have committed Finder's metadata. Remove only
-        // those exact generated paths from the index while leaving local files intact.
-        git(
-            &self.root,
-            &[
-                "rm",
-                "-q",
-                "-f",
-                "--cached",
-                "--ignore-unmatch",
-                "--",
-                FINDER_METADATA_FILE,
-                ":(glob)**/.DS_Store",
-            ],
-        )?;
-        git(&self.root, &["add", "-A"])?;
+        // An unborn repository has no baseline tree: its first mutation must also commit
+        // the store metadata/attributes. Once HEAD exists, path-scoped commits are safe.
+        let mut bounded_paths = if self.head_commit().is_some() {
+            paths.map(<[PathBuf]>::to_vec)
+        } else {
+            None
+        };
+        if bounded_paths.is_some() {
+            let has_tracked_finder_metadata = git_stdout(
+                &self.root,
+                &[
+                    "ls-files",
+                    "--",
+                    FINDER_METADATA_FILE,
+                    ":(glob)**/.DS_Store",
+                ],
+            )
+            .unwrap_or_default()
+            .lines()
+            .next()
+            .is_some();
+            if has_tracked_finder_metadata {
+                // This one-time legacy repair needs a repository-wide commit so Git
+                // records the cached deletion while leaving the ignored local file.
+                bounded_paths = None;
+            }
+        }
+        if let Some(paths) = &bounded_paths {
+            git_paths(&self.root, &["add", "-A", "--"], paths)?;
+        } else {
+            // Older clients may already have committed Finder's metadata. Remove only
+            // those exact generated paths from the index while leaving local files intact.
+            git(
+                &self.root,
+                &[
+                    "rm",
+                    "-q",
+                    "-f",
+                    "--cached",
+                    "--ignore-unmatch",
+                    "--",
+                    FINDER_METADATA_FILE,
+                    ":(glob)**/.DS_Store",
+                ],
+            )?;
+            git(&self.root, &["add", "-A"])?;
+        }
         // Nothing staged → nothing to commit (idempotent re-writes, no-op edits).
-        if git_ok(&self.root, &["diff", "--cached", "--quiet"]) {
+        let nothing_staged = match bounded_paths.as_deref() {
+            Some(paths) => git_ok_paths(&self.root, &["diff", "--cached", "--quiet", "--"], paths),
+            None => git_ok(&self.root, &["diff", "--cached", "--quiet"]),
+        };
+        if nothing_staged {
             return Ok(false);
         }
         let has_ident = git_stdout(&self.root, &["config", "user.email"])
@@ -527,7 +588,12 @@ impl FsStore {
         };
         let mut commit = ident.to_vec();
         commit.extend_from_slice(&["commit", "-q", "-m", message]);
-        git(&self.root, &commit)?;
+        if let Some(paths) = bounded_paths.as_deref() {
+            commit.extend_from_slice(&["--only", "--"]);
+            git_paths(&self.root, &commit, paths)?;
+        } else {
+            git(&self.root, &commit)?;
+        }
         // Remote publication must not hold a local mutation open for network latency.
         // Server-owned stores defer to their coalescing sync loop; headless callers launch
         // a child and a lightweight reaper. The child survives a short-lived CLI process.
@@ -673,7 +739,7 @@ impl FsStore {
             });
         }
         ticket.updated_at = created_at;
-        self.write_ticket_committing(&ticket)?;
+        self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
         Ok((ticket, path))
     }
 
@@ -808,9 +874,12 @@ impl FsStore {
             .ok()
             .and_then(|value| value.as_str().map(str::to_string))
             .unwrap_or_else(|| "update".into());
-        if let Err(error) =
-            self.autocommit(&format!("{}: {status} — {}", ticket.slug, ticket.title))
-        {
+        published.push(ticket_path);
+        published.push(self.root.join(".gitignore"));
+        if let Err(error) = self.autocommit_paths(
+            &format!("{}: {status} — {}", ticket.slug, ticket.title),
+            &published,
+        ) {
             eprintln!("warning: hotsheet autocommit failed: {error}");
         }
         Ok(normalized)
@@ -859,7 +928,7 @@ impl FsStore {
         fs::rename(source, dir.join(&name))?;
         attachment.filename = name;
         ticket.updated_at = now;
-        self.write_ticket_committing(&ticket)?;
+        self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
         Ok(ticket)
     }
 
@@ -921,7 +990,7 @@ impl FsStore {
             }
         }
         ticket.updated_at = now;
-        self.write_ticket_committing(&ticket)?;
+        self.write_ticket_with_paths_committing(&ticket, &[self.attachment_dir(ticket_id)])?;
         Ok(ticket)
     }
 
@@ -1253,6 +1322,28 @@ fn git(root: &Path, args: &[&str]) -> Result<(), StoreError> {
     }
 }
 
+fn git_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> Result<(), StoreError> {
+    let relative = paths
+        .iter()
+        .map(|path| path.strip_prefix(root).unwrap_or(path))
+        .collect::<Vec<_>>();
+    let status = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .args(&relative)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(StoreError::Git(format!(
+            "`git {}` failed for {} path(s)",
+            args.join(" "),
+            paths.len()
+        )))
+    }
+}
+
 /// True when `git -C root <args>` exits 0 (used for `diff --cached --quiet`).
 fn git_ok(root: &Path, args: &[&str]) -> bool {
     Command::new("git")
@@ -1261,6 +1352,21 @@ fn git_ok(root: &Path, args: &[&str]) -> bool {
         .args(args)
         .status()
         .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+fn git_ok_paths(root: &Path, args: &[&str], paths: &[PathBuf]) -> bool {
+    let relative = paths
+        .iter()
+        .map(|path| path.strip_prefix(root).unwrap_or(path))
+        .collect::<Vec<_>>();
+    Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .args(relative)
+        .status()
+        .map(|status| status.success())
         .unwrap_or(false)
 }
 
@@ -1681,6 +1787,70 @@ mod tests {
     }
 
     #[test]
+    fn attachment_mutations_commit_payload_paths_and_leave_the_store_clean() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        store
+            .write_ticket_committing(&Ticket::new(id, "HS-TEST", "test", "task", "t0", "t0"))
+            .unwrap();
+        let attachment_id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+        store
+            .write_attachment(
+                &id,
+                attachment_id,
+                Timestamp::new("2026-08-26T00:00:00Z"),
+                "proof.png",
+                b"PNGDATA",
+            )
+            .unwrap();
+        let original = format!("attachments/{id}/{attachment_id}/proof.png");
+        assert!(
+            git_stdout(dir.path(), &["ls-files"])
+                .unwrap()
+                .lines()
+                .any(|path| path == original)
+        );
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
+        );
+
+        store
+            .rename_attachment(
+                &id,
+                &attachment_id,
+                Timestamp::new("2026-08-26T01:00:00Z"),
+                "renamed.png",
+            )
+            .unwrap();
+        let tracked = git_stdout(dir.path(), &["ls-files"]).unwrap();
+        assert!(!tracked.lines().any(|path| path == original));
+        assert!(tracked.lines().any(|path| path.ends_with("/renamed.png")));
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
+        );
+
+        store
+            .remove_attachment(&id, &attachment_id, Timestamp::new("2026-08-26T02:00:00Z"))
+            .unwrap();
+        assert!(
+            !git_stdout(dir.path(), &["ls-files"])
+                .unwrap()
+                .lines()
+                .any(|path| path.contains(&attachment_id.to_string()))
+        );
+        assert!(
+            git_stdout(dir.path(), &["status", "--porcelain"])
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn attachment_filenames_are_unique_within_a_ticket() {
         let (_dir, store) = temp_store();
         let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV");
@@ -1952,6 +2122,9 @@ mod tests {
         );
         let count = git_stdout(dir.path(), &["rev-list", "--count", "HEAD"]).unwrap();
         assert_eq!(count.trim(), "1", "one commit for the mutation");
+        let tracked = git_stdout(dir.path(), &["ls-files"]).unwrap();
+        assert!(tracked.lines().any(|path| path == STORE_METADATA_FILE));
+        assert!(tracked.lines().any(|path| path == ".gitignore"));
 
         // Re-writing identical content stages nothing → no empty commit.
         store.write_ticket_committing(&t).unwrap();
@@ -1961,6 +2134,27 @@ mod tests {
             "1",
             "an unchanged re-write must not add a commit"
         );
+    }
+
+    #[test]
+    fn committing_write_leaves_unrelated_staged_files_out_of_the_commit() {
+        let (dir, store) = temp_store();
+        git(dir.path(), &["init", "-q"]).unwrap();
+        store
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
+            .unwrap();
+
+        fs::write(dir.path().join("unrelated.txt"), "user work").unwrap();
+        git(dir.path(), &["add", "unrelated.txt"]).unwrap();
+        store
+            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0")))
+            .unwrap();
+
+        let staged = git_stdout(dir.path(), &["diff", "--cached", "--name-only"]).unwrap();
+        assert_eq!(staged.trim(), "unrelated.txt");
+        let committed =
+            git_stdout(dir.path(), &["show", "--pretty=", "--name-only", "HEAD"]).unwrap();
+        assert!(!committed.lines().any(|path| path == "unrelated.txt"));
     }
 
     #[cfg(unix)]

@@ -40,6 +40,7 @@ export function parseArguments(argv) {
     keep: argv.includes('--keep'),
     skipWeb: argv.includes('--skip-web'),
     assertCliBudgets: argv.includes('--assert-cli-budgets'),
+    assertCliMutationBudgets: argv.includes('--assert-cli-mutation-budgets'),
     output: optionValue(argv, '--output', join(tmpdir(), `hotsheet-scale-${Date.now()}.json`)),
     timeoutMs: Number(optionValue(argv, '--timeout-ms', '300000')),
   };
@@ -54,6 +55,22 @@ export function assertCliReadBudgets(count, scenarios) {
   const budget = cliReadBudgetsMs.get(count);
   if (!budget) return;
   for (const name of ['list_first_100', 'full_text_query', 'show_ticket']) {
+    const result = scenarios[name];
+    if (!result || result.error || result.timed_out || result.wall_ms > budget) {
+      throw new Error(`CLI ${name} at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
+    }
+  }
+}
+
+const cliMutationBudgetsMs = new Map([
+  [10_000, 5_000],
+  [100_000, 30_000],
+]);
+
+export function assertCliMutationBudgets(count, scenarios) {
+  const budget = cliMutationBudgetsMs.get(count);
+  if (!budget) return;
+  for (const name of ['create_ticket', 'modify_ticket']) {
     const result = scenarios[name];
     if (!result || result.error || result.timed_out || result.wall_ms > budget) {
       throw new Error(`CLI ${name} at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
@@ -378,7 +395,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.help) {
-    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
+    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--assert-cli-mutation-budgets] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
     return;
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
@@ -433,6 +450,16 @@ async function main() {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           run.cli_budget = { passed: false, error: message };
+          cliBudgetErrors.push(message);
+        }
+      }
+      if (options.assertCliMutationBudgets) {
+        try {
+          assertCliMutationBudgets(count, run.cli);
+          run.cli_mutation_budget = { passed: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          run.cli_mutation_budget = { passed: false, error: message };
           cliBudgetErrors.push(message);
         }
       }

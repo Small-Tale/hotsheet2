@@ -2418,7 +2418,13 @@ fn cmd_reindex(path: &Path, index: Option<PathBuf>) -> Result<()> {
     };
     // Same store_id derivation the server uses (the store root), so the rebuilt file is
     // the one the server reconciles against.
-    let idx = hotsheet_index::Index::open(&index_path, store.root().display().to_string())?;
+    let store_id = store
+        .root()
+        .canonicalize()
+        .unwrap_or_else(|_| store.root().to_path_buf())
+        .display()
+        .to_string();
+    let idx = hotsheet_index::Index::open(&index_path, store_id)?;
     let n = idx.rebuild_from_store(&store)?;
     println!("reindexed {n} ticket(s) → {}", index_path.display());
     Ok(())
@@ -2712,18 +2718,52 @@ fn refresh_checkout_worklists(store_path: &Path, cwd: &Path) -> Result<()> {
         if matches {
             refreshed_current |= Path::new(&checkout.root).canonicalize().ok().as_ref()
                 == cwd.canonicalize().ok().as_ref();
-            hotsheet_ticketing::worklist::regenerate_checkout(&checkout)?;
+            let mut by_id: BTreeMap<Ulid, Ticket> = BTreeMap::new();
+            for root in &checkout.stores {
+                for ticket in indexed_up_next_tickets(&FsStore::open(root)?)? {
+                    match by_id.get(&ticket.id) {
+                        Some(existing) if existing.status != Status::Moved => {}
+                        _ => {
+                            by_id.insert(ticket.id, ticket);
+                        }
+                    }
+                }
+            }
+            hotsheet_ticketing::worklist::regenerate_checkout_from_tickets(
+                &checkout,
+                &by_id.into_values().collect::<Vec<_>>(),
+            )?;
         }
     }
     if !refreshed_current && FsStore::open(&store_path).is_ok() {
         let checkout_root = local_checkout_root(&store_path, cwd);
-        hotsheet_ticketing::worklist::regenerate_for_project(
-            &FsStore::open(&store_path)?,
-            &checkout_root,
+        let store = FsStore::open(&store_path)?;
+        let tickets = indexed_up_next_tickets(&store)?;
+        hotsheet_ticketing::worklist::regenerate_for_project_from_tickets(
+            &tickets,
             &checkout_root.join(hotsheet_ticketing::worklist::CHECKOUT_WORKLIST),
+            &checkout_root,
+            [store.root()],
         )?;
     }
     Ok(())
+}
+
+fn indexed_up_next_tickets(store: &FsStore) -> Result<Vec<Ticket>> {
+    let index = hotsheet_index::Index::open_reconciled(&default_index_path(store)?, store)?;
+    index
+        .query(&TicketQuery {
+            up_next_only: true,
+            open_only: true,
+            ..Default::default()
+        })?
+        .into_iter()
+        .map(|row| {
+            let id = Ulid::from_string(&row.id)
+                .with_context(|| format!("invalid indexed ticket id '{}'", row.id))?;
+            Ok(store.read_ticket(&id)?)
+        })
+        .collect()
 }
 
 fn local_checkout_root(store_path: &Path, cwd: &Path) -> PathBuf {
@@ -4126,7 +4166,16 @@ fn cmd_import(path: &Path, file: &Path, prefix: &str) -> Result<()> {
 
 /// Resolve a ticket by ULID or slug, erroring if there's no match.
 fn resolve(store: &FsStore, needle: &str) -> Result<Ticket> {
-    ops::resolve(store, needle)?.with_context(|| format!("no ticket matching '{needle}'"))
+    if let Ok(id) = Ulid::from_string(needle) {
+        return store
+            .read_ticket(&id)
+            .with_context(|| format!("no ticket matching '{needle}'"));
+    }
+    let index = hotsheet_index::Index::open_reconciled(&default_index_path(store)?, store)?;
+    let id = index
+        .resolve_id(needle)?
+        .with_context(|| format!("no ticket matching '{needle}'"))?;
+    Ok(store.read_ticket(&id)?)
 }
 
 fn parse_priority(s: &str) -> Result<Priority> {

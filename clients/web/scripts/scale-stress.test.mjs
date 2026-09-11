@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertCliReadBudgets, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
+import { assertCliMutationBudgets, assertCliReadBudgets, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
 
 describe('scale stress harness', () => {
   it('normalizes incremental scale milestones', () => {
@@ -9,9 +9,16 @@ describe('scale stress harness', () => {
   });
 
   it('accepts repeatable-run switches', () => {
-    expect(parseArguments(['--counts', '25,10', '--skip-web', '--assert-cli-budgets', '--keep', '--timeout-ms=4000', '--output', '/tmp/result.json'])).toMatchObject({
-      counts: [10, 25], keep: true, skipWeb: true, assertCliBudgets: true, timeoutMs: 4_000, output: '/tmp/result.json',
+    expect(parseArguments(['--counts', '25,10', '--skip-web', '--assert-cli-budgets', '--assert-cli-mutation-budgets', '--keep', '--timeout-ms=4000', '--output', '/tmp/result.json'])).toMatchObject({
+      counts: [10, 25], keep: true, skipWeb: true, assertCliBudgets: true, assertCliMutationBudgets: true, timeoutMs: 4_000, output: '/tmp/result.json',
     });
+  });
+
+  it('enforces opt-in bounded CLI mutation budgets at the 10K and 100K tiers', () => {
+    const within = { create_ticket: { wall_ms: 4_999 }, modify_ticket: { wall_ms: 4_999 } };
+    expect(() => assertCliMutationBudgets(10_000, within)).not.toThrow();
+    expect(() => assertCliMutationBudgets(10_000, { ...within, create_ticket: { wall_ms: 5_001 } })).toThrow('create_ticket');
+    expect(() => assertCliMutationBudgets(100_000, { ...within, modify_ticket: { timed_out: true } })).toThrow('modify_ticket');
   });
 
   it('enforces opt-in bounded CLI read budgets at the 10K and 100K tiers', () => {

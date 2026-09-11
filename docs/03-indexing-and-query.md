@@ -231,8 +231,9 @@ and "search efficiently" (FTS5).
 The worklist files HS1 generated for AI tools remain a derived contract, not a second
 source of truth. HS2 writes one machine-local `<checkout>/.hotsheet/worklist.md` per code
 checkout, aggregated from every git ticket store configured for that checkout; it never
-writes the projection into a ticket repository. CLI operations refresh affected local
-checkouts synchronously, project open/registration seeds it, and server watchers coalesce
+writes the projection into a ticket repository. CLI mutations refresh affected local
+checkouts synchronously from an index-bounded Up Next projection (then read only those
+result ticket files), project open/registration seeds it, and server watchers coalesce
 external/git changes. Registered and ad-hoc project projections always carry the explicit
 checkout/root into settings resolution, so two worklists backed by one shared store can
 apply different project guidance; the legacy store-only generator remains an explicit

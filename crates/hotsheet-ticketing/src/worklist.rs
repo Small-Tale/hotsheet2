@@ -154,10 +154,22 @@ pub fn regenerate_for_project(
     project_root: &Path,
     path: &Path,
 ) -> Result<usize, StoreError> {
-    regenerate_with_settings(
-        store,
+    let tickets = store.list_tickets()?;
+    regenerate_for_project_from_tickets(&tickets, path, project_root, [store.root()])
+}
+
+/// Regenerate an ad-hoc checkout from an already bounded ticket projection. This lets
+/// index-owning callers avoid a second full store scan after a mutation.
+pub fn regenerate_for_project_from_tickets<'a>(
+    tickets: &[Ticket],
+    path: &Path,
+    project_root: &Path,
+    legacy_stores: impl IntoIterator<Item = &'a Path>,
+) -> Result<usize, StoreError> {
+    regenerate_tickets_with_settings(
+        tickets,
         path,
-        &Settings::with_legacy_stores(project_root, [store.root()]),
+        &Settings::with_legacy_stores(project_root, legacy_stores),
     )
 }
 
@@ -167,6 +179,14 @@ fn regenerate_with_settings(
     settings: &Settings,
 ) -> Result<usize, StoreError> {
     let tickets = store.list_tickets()?;
+    regenerate_tickets_with_settings(&tickets, path, settings)
+}
+
+fn regenerate_tickets_with_settings(
+    tickets: &[Ticket],
+    path: &Path,
+    settings: &Settings,
+) -> Result<usize, StoreError> {
     let n = tickets
         .iter()
         .filter(|ticket| ticket.up_next && ticket.status.is_active())
@@ -194,9 +214,16 @@ pub fn regenerate_checkout(checkout: &Checkout) -> Result<usize, StoreError> {
             }
         }
     }
+    regenerate_checkout_from_tickets(checkout, &by_id.into_values().collect::<Vec<_>>())
+}
+
+/// Regenerate a registered checkout from an already deduplicated bounded projection.
+pub fn regenerate_checkout_from_tickets(
+    checkout: &Checkout,
+    tickets: &[Ticket],
+) -> Result<usize, StoreError> {
     let entries = auto_context::effective(&checkout.settings())
         .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
-    let tickets: Vec<Ticket> = by_id.into_values().collect();
     let n = tickets
         .iter()
         .filter(|ticket| ticket.up_next && ticket.status.is_active())

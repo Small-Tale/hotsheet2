@@ -405,7 +405,10 @@ background; server-owned stores defer publication to the server's kicked, coales
 loop. Thus a headless `work` run remains clean and shareable while browser/server writes
 return after local durability rather than waiting several seconds for a remote. The shared
 `ops` layer routes every mutation through `FsStore::write_ticket_committing`, so CLI + MCP
-+ server all commit. It's a no-op when the store isn't a git repo, and
++ server all commit. After the one-time legacy Finder-metadata cleanup, single-ticket and
+attachment mutations stage and commit only their exact touched paths, preserving unrelated staged/user work;
+the subsequent checkout worklist refresh queries only indexed active Up Next rows instead
+of scanning the store. It's a no-op when the store isn't a git repo, and
 `HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
 Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
 semantic merge driver (§2.7) resolves concurrent edits. Bounded `ls`/full-text reads and
