@@ -209,10 +209,11 @@ cross-invocation reuse is ever wanted.
 > so it reuses the injected `RpcTransport`/`StreamChild` plumbing: `ClaudeStreamTransport`
 > spawns real `claude`, tests inject a **scripted claude**. This is what forced the
 > `TurnHandle::next_event()` streaming view (additive; sync drives keep the default).
-> Claude may repeat an identical complete `assistant` record during one turn. The adapter
-> suppresses only an exact repeated text projection carrying the same provider message id;
-> distinct fragments under that id, identical prose from a different id, unidentified
-> events, and every other provider retain ordinary append semantics.
+> Claude may repeat an identical complete `assistant` record during one turn, including
+> retries that change or omit the provider message id. The adapter suppresses exact
+> consecutive text projections independent of that unstable identity, and also remembers
+> identified projections across the turn. Distinct fragments, repetition after intervening
+> different output, and every other provider retain ordinary append semantics.
 > **Live-verified (2026-08-21, isolated temp cwd + strict empty MCP config → nothing else
 > reachable):** a real turn streamed `Output("pong")` then `Done(Completed)` with the
 > session id captured and the HS1 dev instance untouched; gated ignored test

@@ -135,7 +135,7 @@ impl ClaudeChannelClient for ClaudeChannel {
             done: None,
             usage: None,
             pending: std::collections::VecDeque::new(),
-            seen_assistant_output: std::collections::HashSet::new(),
+            assistant_projection: AssistantProjection::default(),
         }))
     }
 }
@@ -151,11 +151,16 @@ struct ClaudeTurn {
     /// Token usage captured from the final `result` event, if it reported any (HS2-TJ8FGR).
     usage: Option<crate::drive::Usage>,
     pending: std::collections::VecDeque<TurnEvent>,
-    /// Claude may repeat the same complete `assistant` stream record (same provider
-    /// message id and text) within one turn. Remember exactly those projections so the
-    /// host sees each provider message fragment once without globally deduplicating
-    /// legitimate repeated prose from different messages or transports.
-    seen_assistant_output: std::collections::HashSet<(String, String)>,
+    /// Claude may repeat a complete `assistant` stream record while changing or omitting
+    /// its provider message id. Track both identified repeats and the immediately preceding
+    /// text projection so transport retries cannot duplicate prose in one host message.
+    assistant_projection: AssistantProjection,
+}
+
+#[derive(Default)]
+struct AssistantProjection {
+    seen_by_id: std::collections::HashSet<(String, String)>,
+    last_text: Option<String>,
 }
 
 /// Extract token usage from a Claude stream-json `result` event (`docs/14`, the
@@ -195,13 +200,10 @@ pub fn claude_result_usage(result: &Value) -> Option<crate::drive::Usage> {
 }
 
 /// Map one output event to zero or more user-visible/native [`TurnEvent`] values.
-fn map_events(
-    v: &Value,
-    seen_assistant_output: &mut std::collections::HashSet<(String, String)>,
-) -> Vec<TurnEvent> {
+fn map_events(v: &Value, assistant_projection: &mut AssistantProjection) -> Vec<TurnEvent> {
     match v.get("type").and_then(Value::as_str) {
         Some("assistant") => {
-            let text = assistant_text(v, seen_assistant_output);
+            let text = assistant_text(v, assistant_projection);
             let mut events = Vec::new();
             if !text.is_empty() {
                 events.push(TurnEvent::Output(text));
@@ -245,13 +247,11 @@ fn map_events(
     }
 }
 
-/// Concatenate the text blocks of an `assistant` message event, suppressing only an exact
-/// repeat carrying the same provider message id. Text from a distinct message id (or from
-/// an event without an id) is always preserved, even when the prose is identical.
-fn assistant_text(
-    v: &Value,
-    seen_assistant_output: &mut std::collections::HashSet<(String, String)>,
-) -> String {
+/// Concatenate the text blocks of an `assistant` message event. Suppress identified repeats
+/// anywhere in the turn and consecutive exact repeats even when Claude changes or omits the
+/// provider id. A different intervening projection remains a boundary, so later intentional
+/// repetition is preserved.
+fn assistant_text(v: &Value, projection: &mut AssistantProjection) -> String {
     let mut out = String::new();
     if let Some(blocks) = v
         .get("message")
@@ -266,17 +266,24 @@ fn assistant_text(
             }
         }
     }
-    let Some(message_id) = v
+    if out.is_empty() {
+        return out;
+    }
+    let repeated_consecutively = projection.last_text.as_deref() == Some(out.as_str());
+    projection.last_text = Some(out.clone());
+    let repeated_by_id = v
         .get("message")
         .and_then(|message| message.get("id"))
         .and_then(Value::as_str)
-    else {
-        return out;
-    };
-    if out.is_empty() || seen_assistant_output.insert((message_id.to_string(), out.clone())) {
-        out
-    } else {
+        .is_some_and(|message_id| {
+            !projection
+                .seen_by_id
+                .insert((message_id.to_string(), out.clone()))
+        });
+    if repeated_consecutively || repeated_by_id {
         String::new()
+    } else {
+        out
     }
 }
 
@@ -299,7 +306,7 @@ impl ClaudeTurn {
                 if ev.get("type").and_then(Value::as_str) == Some("result") {
                     self.usage = claude_result_usage(ev);
                 }
-                let mapped = map_events(ev, &mut self.seen_assistant_output);
+                let mapped = map_events(ev, &mut self.assistant_projection);
                 self.cursor += 1;
                 self.pending.extend(mapped);
                 if let Some(te) = self.pending.pop_front() {
@@ -546,8 +553,12 @@ pub(crate) mod scripted {
                     "session_id": "sess-abc" });
                 self.push(assistant.clone());
                 if matches!(self.mode, ClaudeMode::DuplicateOutput) {
-                    self.push(assistant.clone());
-                    self.push(assistant);
+                    let mut changed_id = assistant.clone();
+                    changed_id["message"]["id"] = Value::String("msg-scripted-retry".into());
+                    self.push(changed_id);
+                    let mut missing_id = assistant;
+                    missing_id["message"].as_object_mut().unwrap().remove("id");
+                    self.push(missing_id);
                 }
                 let (subtype, is_error, result) = match self.mode {
                     ClaudeMode::Success | ClaudeMode::DuplicateOutput | ClaudeMode::RichSuccess => {
@@ -619,7 +630,7 @@ mod usage_tests {
     }
 
     #[test]
-    fn assistant_text_deduplicates_only_the_same_provider_message_projection() {
+    fn assistant_text_suppresses_transport_retries_without_global_text_deduplication() {
         let event = |id: Option<&str>, text: &str| {
             let mut message = json!({
                 "role": "assistant",
@@ -630,22 +641,28 @@ mod usage_tests {
             }
             json!({ "type": "assistant", "message": message })
         };
-        let mut seen = std::collections::HashSet::new();
+        let mut projection = AssistantProjection::default();
 
         assert_eq!(
-            assistant_text(&event(Some("msg-a"), "same"), &mut seen),
+            assistant_text(&event(Some("msg-a"), "same"), &mut projection),
             "same"
         );
-        assert_eq!(assistant_text(&event(Some("msg-a"), "same"), &mut seen), "");
         assert_eq!(
-            assistant_text(&event(Some("msg-a"), " next"), &mut seen),
+            assistant_text(&event(Some("msg-b"), "same"), &mut projection),
+            ""
+        );
+        assert_eq!(assistant_text(&event(None, "same"), &mut projection), "");
+        assert_eq!(
+            assistant_text(&event(Some("msg-a"), " next"), &mut projection),
             " next"
         );
         assert_eq!(
-            assistant_text(&event(Some("msg-b"), "same"), &mut seen),
+            assistant_text(&event(Some("msg-c"), "same"), &mut projection),
             "same"
         );
-        assert_eq!(assistant_text(&event(None, "same"), &mut seen), "same");
-        assert_eq!(assistant_text(&event(None, "same"), &mut seen), "same");
+        assert_eq!(
+            assistant_text(&event(Some("msg-a"), "same"), &mut projection),
+            ""
+        );
     }
 }
