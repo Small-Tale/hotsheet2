@@ -19,7 +19,7 @@ pub fn run_setup(
     tool: Option<&str>,
     detect: bool,
 ) -> Result<Vec<SetupReport>> {
-    let enabled = enabled_plugin_ids(store_path);
+    let enabled = enabled_plugin_ids(project_dir);
     Ok(hotsheet_plugins::run_setup(
         store_path,
         project_dir,
@@ -32,9 +32,9 @@ pub fn run_setup(
 /// Migrate existing settings and refresh every detected or previously managed tool using
 /// the same core writers as explicit setup and bootstrap.
 pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<Vec<SetupReport>> {
-    let settings = hotsheet_ticketing::Settings::new(store_path);
+    let settings = hotsheet_ticketing::Settings::with_legacy_stores(project_dir, [store_path]);
     settings.migrate_existing()?;
-    let enabled = enabled_plugin_ids(store_path);
+    let enabled = enabled_plugin_ids(project_dir);
     Ok(hotsheet_plugins::refresh_setup_in(
         store_path,
         project_dir,
@@ -46,9 +46,9 @@ pub fn refresh_setup(store_path: &Path, project_dir: &Path) -> Result<Vec<SetupR
 /// The project's `enabled_plugins` shared setting as a set of ids, or `None` if unset (no
 /// restriction). A non-array or empty value is treated as "no restriction". (HS2-94 settings
 /// driving HS2-92/HS2-98 setup.)
-fn enabled_plugin_ids(store: &Path) -> Option<HashSet<String>> {
+fn enabled_plugin_ids(project: &Path) -> Option<HashSet<String>> {
     use hotsheet_ticketing::{Scope, Settings};
-    let value = Settings::new(store)
+    let value = Settings::for_project(project)
         .get("enabled_plugins", Scope::Shared)
         .ok()??;
     let set: HashSet<String> = value
@@ -87,6 +87,7 @@ mod tests {
         assert!(claude_md.contains("<!-- END hotsheet:claude -->"));
         assert!(claude_md.contains("hotsheet-cli ls --up-next"));
         assert!(claude_md.contains("Create every follow-up immediately, without asking"));
+        assert!(claude_md.contains("Write portable durable references"));
         assert!(claude_md.contains("`FEEDBACK NEEDED` is only"));
 
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
@@ -96,8 +97,9 @@ mod tests {
         assert!(skill.contains("Completion checklist"));
         assert!(skill.contains("attachment:filename"));
         assert!(skill.contains("FEEDBACK NEEDED is not deferred-work tracking"));
+        assert!(skill.contains("Never copy a developer-specific"));
         assert!(skill.contains("--note-file -"));
-        assert!(skill.contains("Activity notes are timeline history"));
+        assert!(skill.contains("Activity is timeline history"));
         assert!(skill.contains("CLI rejects likely escaped line breaks"));
         assert!(skill.contains("--allow-literal-backslash-n"));
 
@@ -169,6 +171,7 @@ mod tests {
         assert!(agents.contains("<!-- BEGIN hotsheet:codex -->"));
         assert!(agents.contains("hotsheet-cli ls --up-next"));
         assert!(agents.contains("Create every follow-up immediately, without asking"));
+        assert!(agents.contains("Write portable durable references"));
         assert!(agents.contains("`FEEDBACK NEEDED` is only"));
         assert!(!d.path().join(".claude").exists());
         assert!(reports[0].wrote.iter().all(|w| !w.contains("SKILL")));
@@ -215,7 +218,7 @@ mod tests {
         use hotsheet_ticketing::{Scope, Settings};
         let d = project();
         assert!(enabled_plugin_ids(d.path()).is_none());
-        Settings::new(d.path())
+        Settings::for_project(d.path())
             .set(
                 "enabled_plugins",
                 serde_json::json!(["claude"]),
@@ -224,7 +227,7 @@ mod tests {
             .unwrap();
         let set = enabled_plugin_ids(d.path()).unwrap();
         assert!(set.contains("claude") && !set.contains("codex"));
-        Settings::new(d.path())
+        Settings::for_project(d.path())
             .set("enabled_plugins", serde_json::json!([]), Scope::Shared)
             .unwrap();
         assert!(enabled_plugin_ids(d.path()).is_none());

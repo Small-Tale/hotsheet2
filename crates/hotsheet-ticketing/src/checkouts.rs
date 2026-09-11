@@ -52,6 +52,31 @@ impl Checkout {
             .iter()
             .find(|source| source.connection_id == connection_id)
     }
+
+    /// Project-owned settings with deterministic read-through compatibility for files
+    /// written beside this checkout's old git ticket stores. The default source wins a
+    /// legacy key conflict; remaining sources retain registry order. Provider-only and
+    /// source-free projects still get the same project settings location.
+    pub fn settings(&self) -> crate::Settings {
+        let mut stores = self
+            .default_source
+            .as_deref()
+            .and_then(|id| self.source(id))
+            .filter(|source| source.provider == "git")
+            .map(|source| PathBuf::from(&source.locator))
+            .into_iter()
+            .collect::<Vec<_>>();
+        stores.extend(
+            self.sources
+                .iter()
+                .filter(|source| source.provider == "git")
+                .filter(|source| {
+                    Some(source.connection_id.as_str()) != self.default_source.as_deref()
+                })
+                .map(|source| PathBuf::from(&source.locator)),
+        );
+        crate::Settings::with_legacy_stores(&self.root, stores)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

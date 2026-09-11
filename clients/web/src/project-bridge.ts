@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, readdir, readFile, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 
 import { assessCompatibility, type CompatibilityAssessment, type ServerCompatibility } from './compatibility';
 
@@ -114,8 +114,11 @@ function migratorScript() {
 }
 
 const HS1_MARKER='.hotsheet/db/PG_VERSION',HS1_RECEIPT='hotsheet-hs1-import.json';
+const HS1_CLEANUP_ENTRIES=new Set(['.db-content-marker.json','.db-created-empty.json','attachments','auth-devices.json','channel-port','channel-ports.d','codex-app-server.json','db','freeze.log','hotsheet.lock','mcp.log','mcp.log.old','open-tickets.md','secret.json','settings.json','settings.local.json','ticket-drafts','worklist.md']);
 export function hs1MigrationArgs(root:string,ticketStore:string,exporter:string):string[]{return[resolve(root,'.hotsheet'),'-C',ticketStore,'--migrator',exporter]}
-export function preserveHs1Entry(name:string):boolean{return name==='store'||/backup/i.test(name)}
+export function preserveHs1Entry(name:string):boolean{return!HS1_CLEANUP_ENTRIES.has(name)}
+export function isHs2SettingsValue(value:unknown):boolean{return typeof value==='object'&&value!==null&&Number.isSafeInteger((value as Record<string,unknown>).$hotsheetSchema)&&Number((value as Record<string,unknown>).$hotsheetSchema)>=1}
+async function isHs2SettingsFile(path:string):Promise<boolean>{try{return isHs2SettingsValue(JSON.parse(await readFile(path,'utf8')))}catch{return false}}
 
 async function receiptMatchesProject(store:string|undefined,root:string):Promise<boolean>{
   if(!store)return false;
@@ -158,17 +161,36 @@ export async function migrateHs1Project(rootInput:string,locationInput?:string,r
   return{ticketStore:canonicalStore,connectionId:gitTicketStoreConnectionId(canonicalStore),tickets,attachments,toolsConfigured};
 }
 
-export async function removeImportedHs1Data(projectId:string):Promise<string[]>{
-  const root=sessions.get(projectId)?.root;
-  if(!root)throw new Error('Project session is not open.');
-  const directory=resolve(root,'.hotsheet');
-  if(!await exists(resolve(directory,'db/PG_VERSION')))throw new Error('Hot Sheet 1 data is no longer present in this project.');
+type ProcessProbe=(pid:number)=>boolean;
+function processIsRunning(pid:number):boolean{try{process.kill(pid,0);return true}catch(error){return(error as NodeJS.ErrnoException).code==='EPERM'}}
+interface Hs1ChannelRegistration {pid:number;slug?:string}
+/** Mirror HS1's channelSlug identity contract for `<project>/.hotsheet`. */
+export function hs1ChannelSlug(directory:string):string{const name=basename(dirname(resolve(directory))),slug=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');return slug||'project'}
+async function hs1ChannelPids(directory:string):Promise<number[]>{
+  const paths=[resolve(directory,'channel-port')];
+  try{for(const entry of await readdir(resolve(directory,'channel-ports.d'),{withFileTypes:true}))if(entry.isFile()&&entry.name.endsWith('.json'))paths.push(resolve(directory,'channel-ports.d',entry.name))}catch{/* no per-process registry */}
+  const registrations=await Promise.all(paths.map(async path=>{try{const value=JSON.parse(await readFile(path,'utf8')) as {pid?:unknown;slug?:unknown};return typeof value.pid==='number'&&Number.isSafeInteger(value.pid)&&value.pid>0?{pid:value.pid,...(typeof value.slug==='string'&&value.slug?{slug:value.slug}:{})}:undefined}catch{return undefined}}));
+  const expectedSlug=hs1ChannelSlug(directory);
+  return [...new Set(registrations.filter((entry):entry is Hs1ChannelRegistration=>entry!==undefined&&(entry.slug===undefined||entry.slug===expectedSlug)).map(entry=>entry.pid))];
+}
+
+export async function removeHs1LiveData(directory:string,probe:ProcessProbe=processIsRunning):Promise<string[]>{
+  if(!await exists(resolve(directory,'db/PG_VERSION')))return[];
+  const running=(await hs1ChannelPids(directory)).filter(probe);
+  if(running.length)throw new Error(`Hot Sheet 1 is still running for this project (process${running.length===1?'':'es'} ${running.join(', ')}). Quit Hot Sheet 1 and its AI-tool channel sessions, then retry; no files were removed.`);
   const removed:string[]=[];
   for(const entry of await readdir(directory,{withFileTypes:true})){
     if(preserveHs1Entry(entry.name))continue;
+    if((entry.name==='settings.json'||entry.name==='settings.local.json')&&await isHs2SettingsFile(resolve(directory,entry.name)))continue;
     await rm(resolve(directory,entry.name),{recursive:true,force:true});removed.push(entry.name);
   }
-  return removed;
+  return removed.sort();
+}
+
+export async function removeImportedHs1Data(projectId:string):Promise<string[]>{
+  const root=sessions.get(projectId)?.root;
+  if(!root)throw new Error('Project session is not open.');
+  return removeHs1LiveData(resolve(root,'.hotsheet'));
 }
 
 export function localStoreInitArgs(path:string,standalone=false):string[]{
@@ -389,13 +411,21 @@ export async function proxyProjectRequest(projectId: string, path: string, reque
   headers.set('x-hotsheet-secret', target.secret);
   headers.delete('host');
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
-  const forward=async()=>{const response=await fetch(authenticatedServerUrl(target.url,path,target.secret),{method:request.method,headers,body,redirect:'manual'});return new Response(response.body,{status:response.status,headers:response.headers})};
+  const serverPath=projectScopedServerPath(projectId,path);
+  const forward=async()=>{const response=await fetch(authenticatedServerUrl(target.url,serverPath,target.secret),{method:request.method,headers,body,redirect:'manual'});return new Response(response.body,{status:response.status,headers:response.headers})};
   try{return await forward()}catch(error){
     if(!target.serverStore)throw error;
     await refreshSupervisedTarget(target);
     if(request.method!=='GET'&&request.method!=='HEAD')return Response.json({error:'The server restarted while this write was in flight. Its completion is unknown; refresh before retrying.'},{status:503});
     return forward();
   }
+}
+
+/** Route project-owned settings through checkout-scoped server APIs. Ticket and host-wide
+ * endpoints retain their existing paths; this boundary also works for source-free projects. */
+export function projectScopedServerPath(projectId:string,path:string):string{
+  const [pathname,...query]=path.split('?'),scoped=pathname==='/commands'||pathname==='/command-runs'||pathname==='/views'||pathname==='/terminal-settings'||/^\/commands\/[^/]+\/run$/.test(pathname)||/^\/command-runs\/[^/]+(?:\/cancel)?$/.test(pathname);
+  return `${scoped?`/checkouts/${encodeURIComponent(projectId)}`:''}${pathname}${query.length?`?${query.join('?')}`:''}`;
 }
 
 async function refreshSupervisedTarget(target:SessionTarget):Promise<void>{

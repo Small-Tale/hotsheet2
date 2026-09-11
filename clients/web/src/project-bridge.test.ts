@@ -1,11 +1,11 @@
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectServerPlan, projectSessionRegistry, refreshLocalProjectSetup, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1ChannelSlug,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectScopedServerPath,projectServerPlan, projectSessionRegistry, refreshLocalProjectSetup, removeHs1LiveData, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -52,6 +52,19 @@ describe('authenticatedServerUrl', () => {
   it('does not put secrets into ordinary upstream request URLs', () => {
     expect(authenticatedServerUrl('http://127.0.0.1:55560', '/tickets?text=one', 'secret'))
       .toBe('http://127.0.0.1:55560/tickets?text=one');
+  });
+});
+
+describe('projectScopedServerPath',()=>{
+  it('scopes project settings independently of ticket sources and leaves host APIs alone',()=>{
+    expect(projectScopedServerPath('project one','/commands')).toBe('/checkouts/project%20one/commands');
+    expect(projectScopedServerPath('project one','/commands/review/run?confirm=true')).toBe('/checkouts/project%20one/commands/review/run?confirm=true');
+    expect(projectScopedServerPath('project one','/command-runs/run-1?after=3')).toBe('/checkouts/project%20one/command-runs/run-1?after=3');
+    expect(projectScopedServerPath('project one','/command-runs/run-1/cancel')).toBe('/checkouts/project%20one/command-runs/run-1/cancel');
+    expect(projectScopedServerPath('project one','/views')).toBe('/checkouts/project%20one/views');
+    expect(projectScopedServerPath('project one','/terminal-settings')).toBe('/checkouts/project%20one/terminal-settings');
+    expect(projectScopedServerPath('project one','/ai-settings')).toBe('/ai-settings');
+    expect(projectScopedServerPath('project one','/checkouts/project%20one/tickets')).toBe('/checkouts/project%20one/tickets');
   });
 });
 
@@ -150,10 +163,63 @@ describe('native folder chooser',()=>{
 });
 
 describe('Hot Sheet 1 project import bridge',()=>{
-  it('uses argument arrays for the standalone migrator and preserves backups plus the HS2 link',()=>{
+  it('derives the same normalized project identity stored by HS1 channels',()=>{expect(hs1ChannelSlug('/work/Kerf Project/.hotsheet')).toBe('kerf-project')});
+  it('uses argument arrays for the standalone migrator and preserves backups, snapshots, unknown files, and the HS2 link',()=>{
     expect(hs1MigrationArgs('/work/demo','/tickets/demo.hs2','/app/migrator/export.mjs')).toEqual(['/work/demo/.hotsheet','-C','/tickets/demo.hs2','--migrator','/app/migrator/export.mjs']);
     expect(['db','attachments','settings.json'].filter(preserveHs1Entry)).toEqual([]);
-    expect(['store','db.hs1-backup','Backup-2026'].filter(preserveHs1Entry)).toEqual(['store','db.hs1-backup','Backup-2026']);
+    expect(['store','db.hs1-backup','Backup-2026','snapshot.tar.gz','notes.txt'].filter(preserveHs1Entry)).toEqual(['store','db.hs1-backup','Backup-2026','snapshot.tar.gz','notes.txt']);
+  });
+  it('removes only explicit live HS1 entries and keeps every backup and unknown file',async()=>{
+    const parent=await mkdtemp(resolve(tmpdir(),'hotsheet-hs1-cleanup-')),directory=resolve(parent,'.hotsheet');
+    try{
+      await mkdir(resolve(directory,'db'),{recursive:true});await writeFile(resolve(directory,'db/PG_VERSION'),'17');
+      await mkdir(resolve(directory,'attachments'));await writeFile(resolve(directory,'settings.json'),'{}');await writeFile(resolve(directory,'worklist.md'),'generated');
+      await mkdir(resolve(directory,'backups'));await writeFile(resolve(directory,'backups/keep.tar.gz'),'backup');await writeFile(resolve(directory,'snapshot.tar.gz'),'backup');await writeFile(resolve(directory,'notes.txt'),'unknown');await writeFile(resolve(directory,'store'),'/tickets/demo.hs2');
+      await expect(removeHs1LiveData(directory,()=>false)).resolves.toEqual(['attachments','db','settings.json','worklist.md']);
+      expect((await readdir(directory)).sort()).toEqual(['backups','notes.txt','snapshot.tar.gz','store']);
+      await expect(removeHs1LiveData(directory,()=>false)).resolves.toEqual([]);
+    }finally{await rm(parent,{recursive:true,force:true})}
+  });
+  it('preserves schema-marked HS2 project settings while removing unmarked HS1 settings',async()=>{
+    const parent=await mkdtemp(resolve(tmpdir(),'hotsheet-hs2-settings-cleanup-')),directory=resolve(parent,'.hotsheet');
+    try{
+      await mkdir(resolve(directory,'db'),{recursive:true});await writeFile(resolve(directory,'db/PG_VERSION'),'17');
+      await writeFile(resolve(directory,'settings.json'),'{"$hotsheetSchema":1,"views":[]}');await writeFile(resolve(directory,'settings.local.json'),'{"$hotsheetSchema":2,"commands":[]}');
+      await expect(removeHs1LiveData(directory,()=>false)).resolves.toEqual(['db']);
+      expect((await readdir(directory)).sort()).toEqual(['settings.json','settings.local.json']);
+      await mkdir(resolve(directory,'db'),{recursive:true});await writeFile(resolve(directory,'db/PG_VERSION'),'17');await writeFile(resolve(directory,'settings.local.json'),'{"custom_commands":[]}');
+      await expect(removeHs1LiveData(directory,()=>false)).resolves.toEqual(['db','settings.local.json']);
+      expect((await readdir(directory)).sort()).toEqual(['settings.json']);
+    }finally{await rm(parent,{recursive:true,force:true})}
+  });
+  it('refuses partial cleanup while a registered HS1 channel is still live',async()=>{
+    const parent=await mkdtemp(resolve(tmpdir(),'hotsheet-hs1-running-')),directory=resolve(parent,'.hotsheet');
+    try{
+      await mkdir(resolve(directory,'db'),{recursive:true});await writeFile(resolve(directory,'db/PG_VERSION'),'17');await writeFile(resolve(directory,'settings.json'),'{}');
+      await mkdir(resolve(directory,'channel-ports.d'));await writeFile(resolve(directory,'channel-ports.d/42.json'),JSON.stringify({pid:42,slug:hs1ChannelSlug(directory)}));
+      await expect(removeHs1LiveData(directory,pid=>pid===42)).rejects.toThrow(/still running.*42.*no files were removed/i);
+      expect((await readdir(directory)).sort()).toEqual(['channel-ports.d','db','settings.json']);
+    }finally{await rm(parent,{recursive:true,force:true})}
+  });
+  it('keeps identity-less legacy channel registrations conservatively blocking',async()=>{
+    const parent=await mkdtemp(resolve(tmpdir(),'hotsheet-hs1-legacy-running-')),directory=resolve(parent,'.hotsheet');
+    try{
+      await mkdir(resolve(directory,'db'),{recursive:true});await writeFile(resolve(directory,'db/PG_VERSION'),'17');
+      await mkdir(resolve(directory,'channel-ports.d'));await writeFile(resolve(directory,'channel-ports.d/43.json'),'{"pid":43}');
+      await expect(removeHs1LiveData(directory,pid=>pid===43)).rejects.toThrow(/still running.*43.*no files were removed/i);
+      expect((await readdir(directory)).sort()).toEqual(['channel-ports.d','db']);
+    }finally{await rm(parent,{recursive:true,force:true})}
+  });
+  it('ignores live channel registrations that explicitly belong to another HS1 project',async()=>{
+    const parent=await mkdtemp(resolve(tmpdir(),'kerf-hs1-cleanup-')),directory=resolve(parent,'.hotsheet'),probe=vi.fn(()=>true);
+    try{
+      await mkdir(resolve(directory,'db'),{recursive:true});await writeFile(resolve(directory,'db/PG_VERSION'),'17');await writeFile(resolve(directory,'settings.json'),'{}');
+      await mkdir(resolve(directory,'channel-ports.d'));await writeFile(resolve(directory,'channel-port'),'{"port":50312,"pid":31807,"slug":"hotsheet"}');await writeFile(resolve(directory,'channel-ports.d/31807.json'),'{"port":50312,"pid":31807,"slug":"hotsheet","warm":true}');await writeFile(resolve(directory,'channel-ports.d/68568.json'),'{"port":64567,"pid":68568,"slug":"hotsheet","warm":true}');
+      expect(hs1ChannelSlug(directory)).not.toBe('hotsheet');
+      await expect(removeHs1LiveData(directory,probe)).resolves.toEqual(['channel-port','channel-ports.d','db','settings.json']);
+      expect(probe).not.toHaveBeenCalled();
+      expect(await readdir(directory)).toEqual([]);
+    }finally{await rm(parent,{recursive:true,force:true})}
   });
   it('exposes explicit import and cleanup actions only through the local bridge',async()=>{
     const migrate=vi.fn().mockResolvedValue({ticketStore:'/tickets/demo.hs2',connectionId:'source',tickets:12,attachments:3,toolsConfigured:true}),remove=vi.fn().mockResolvedValue(['db','settings.json']),app=createDevApp(true,undefined,undefined,undefined,undefined,undefined,migrate,remove);

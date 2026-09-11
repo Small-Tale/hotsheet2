@@ -139,15 +139,39 @@ fn status_label(s: Status) -> &'static str {
     }
 }
 
-/// Regenerate a checkout-local worklist from one store. This is useful for an ad-hoc
-/// checkout that has not entered the machine registry yet.
+/// Regenerate a worklist from one store without a code-project identity. This legacy,
+/// store-only compatibility API intentionally reads legacy settings beside the store.
+/// Project-aware callers should use [`regenerate_for_project`] or [`regenerate_checkout`].
 pub fn regenerate_to(store: &FsStore, path: &Path) -> Result<usize, StoreError> {
+    regenerate_with_settings(store, path, &Settings::new(store.root()))
+}
+
+/// Regenerate an ad-hoc checkout's local worklist from one store while reading settings
+/// owned by the explicit code-project root. This avoids guessing when one store is shared
+/// by several checkouts that have different project settings.
+pub fn regenerate_for_project(
+    store: &FsStore,
+    project_root: &Path,
+    path: &Path,
+) -> Result<usize, StoreError> {
+    regenerate_with_settings(
+        store,
+        path,
+        &Settings::with_legacy_stores(project_root, [store.root()]),
+    )
+}
+
+fn regenerate_with_settings(
+    store: &FsStore,
+    path: &Path,
+    settings: &Settings,
+) -> Result<usize, StoreError> {
     let tickets = store.list_tickets()?;
     let n = tickets
         .iter()
         .filter(|ticket| ticket.up_next && ticket.status.is_active())
         .count();
-    let entries = auto_context::effective(&Settings::new(store.root()))
+    let entries = auto_context::effective(settings)
         .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
     let body = render_with_auto_context(&tickets, &entries);
     write_worklist(path, &body)?;
@@ -159,7 +183,6 @@ pub fn regenerate_to(store: &FsStore, path: &Path) -> Result<usize, StoreError> 
 /// machine-local and lives under the code checkout.
 pub fn regenerate_checkout(checkout: &Checkout) -> Result<usize, StoreError> {
     let mut by_id: BTreeMap<hotsheet_model::Ulid, Ticket> = BTreeMap::new();
-    let mut entries = Vec::new();
     for root in &checkout.stores {
         let store = FsStore::open(root)?;
         for ticket in store.list_tickets()? {
@@ -170,11 +193,9 @@ pub fn regenerate_checkout(checkout: &Checkout) -> Result<usize, StoreError> {
                 }
             }
         }
-        entries.extend(
-            auto_context::effective(&Settings::new(store.root()))
-                .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?,
-        );
     }
+    let entries = auto_context::effective(&checkout.settings())
+        .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
     let tickets: Vec<Ticket> = by_id.into_values().collect();
     let n = tickets
         .iter()
@@ -431,6 +452,59 @@ mod tests {
         assert!(body.contains("from second"));
         assert!(!first.root().join("worklist.md").exists());
         assert!(!second.root().join("worklist.md").exists());
+    }
+
+    #[test]
+    fn explicit_project_worklists_do_not_leak_across_a_shared_store() {
+        let root = tempfile::tempdir().unwrap();
+        let store = FsStore::init(
+            root.path().join("shared.hs2"),
+            &crate::store::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        create(
+            &store,
+            Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5AAF").unwrap(),
+            "HS",
+            ts("0"),
+            NewTicket {
+                title: "shared ticket".into(),
+                category: "issue".into(),
+                up_next: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let first = root.path().join("first");
+        let second = root.path().join("second");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&second).unwrap();
+        for (project, text) in [(&first, "first guidance"), (&second, "second guidance")] {
+            Settings::for_project(project)
+                .set(
+                    "auto_context",
+                    serde_json::json!([{
+                        "type":"category",
+                        "key":"issue",
+                        "text":text
+                    }]),
+                    crate::Scope::Shared,
+                )
+                .unwrap();
+        }
+
+        let first_path = first.join(CHECKOUT_WORKLIST);
+        let second_path = second.join(CHECKOUT_WORKLIST);
+        regenerate_for_project(&store, &first, &first_path).unwrap();
+        regenerate_for_project(&store, &second, &second_path).unwrap();
+
+        let first_body = std::fs::read_to_string(first_path).unwrap();
+        let second_body = std::fs::read_to_string(second_path).unwrap();
+        assert!(first_body.contains("first guidance"));
+        assert!(!first_body.contains("second guidance"));
+        assert!(second_body.contains("second guidance"));
+        assert!(!second_body.contains("first guidance"));
+        assert!(!store.root().join(".hotsheet/settings.json").exists());
     }
 
     #[test]
