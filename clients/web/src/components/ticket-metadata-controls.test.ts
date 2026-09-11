@@ -149,6 +149,9 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(css).toContain('.ticket-attachments__batch[data-drag-over="true"] { outline: var(--wa-focus-ring)');
     expect(css).toContain('.ticket-attachments__batch-title {');
     expect(css).toContain('font-size: var(--wa-font-size-m)');
+    expect(css).toContain('height: auto');
+    expect(css).toContain('overflow-wrap: anywhere');
+    expect(css).toContain('white-space: normal');
     expect(css).toContain('.ticket-attachments__batch > header select { width: auto');
     expect(css).toContain('field-sizing: content');
   });
