@@ -668,7 +668,7 @@ mod tests {
             .register(&checkout, None, None, Vec::new())
             .unwrap();
         let valid = std::fs::read_to_string(&path).unwrap();
-        let suffix = valid.rfind("\n    }\n  ]\n}").unwrap() + 1;
+        let suffix = valid.rfind("\n    }\n  ]").unwrap() + 1;
         let corrupt = format!("{valid}{}", &valid[suffix..]);
         std::fs::write(&path, &corrupt).unwrap();
 
