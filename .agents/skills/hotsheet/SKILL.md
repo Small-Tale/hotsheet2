@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 44 -->
+<!-- hotsheet-skill-version: 45 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -52,6 +52,13 @@ docs; scan for placeholders, TODO/FIXME comments, stubs/mock returns, documented
 unimplemented behavior, open questions, and known gaps; immediately create tickets for
 every incomplete item; include result, verification, and all follow-up slugs in the
 completing note.
+
+Write durable ticket text, notes, completion summaries, and documentation so another
+developer can understand them from a different clone. Never copy a developer-specific
+home directory, username, Desktop/Documents path, or absolute clone location when a
+repository-relative path, stable repository name/URL, or placeholder such as
+`<repo-root>/path` will work. Keep an exact local path only when the path itself is
+indispensable machine-local diagnostic evidence, and label it as local context.
 
 For user-visible UI work, liberally capture and attach a representative set of real-browser
 screenshots covering the changed components, screens, states, and meaningful wide/narrow

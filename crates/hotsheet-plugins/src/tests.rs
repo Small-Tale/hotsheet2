@@ -36,6 +36,19 @@ fn claude_exposes_nonempty_setup_artifacts() {
 }
 
 #[test]
+fn every_builtin_teaches_portable_durable_references() {
+    for plugin in all_plugins(&[]) {
+        assert!(
+            plugin
+                .instructions_body()
+                .contains("Write portable durable references"),
+            "{} instructions must not teach machine-local paths as shared context",
+            plugin.id()
+        );
+    }
+}
+
+#[test]
 fn codex_is_a_second_first_party_plugin_with_no_skills() {
     let p = find_in("codex", &[]).expect("codex plugin present");
     assert_eq!(p.manifest.product_name, "Codex CLI");
