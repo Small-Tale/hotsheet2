@@ -1874,6 +1874,18 @@ test('persists and restores per-project permission automation settings',async({p
   await expect.poll(()=>page.evaluate(()=>localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'))).toBe('{"action":"deny","delayMs":120000}');await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Permissions'}).click();await expect(action).toHaveJSProperty('value','deny');await expect(delay).toHaveJSProperty('value','120000');
 });
 
+test('keeps settings category and command drafts scoped to each project',async({page})=>{
+  const demoCommands=[{id:'demo-command',title:'Demo checks',program:'npm',args:['test']}],otherCommands=[{id:'other-command',title:'Other checks',program:'cargo',args:['test']}];
+  await mockProject(page);
+  await page.route('**/__hotsheet/projects/open',route=>{const root=route.request().postDataJSON().root as string;return route.fulfill({status:201,json:root==='/work/other'?{...project,id:'other-checkout',root,name:'other',apiPath:'/__hotsheet/project-api/other-checkout'}:project})});
+  await page.route('**/__hotsheet/folders/choose',route=>route.fulfill({json:{path:'/work/other'}}));
+  await page.route('**/__hotsheet/project-api/*/commands',route=>route.request().method()==='GET'?route.fulfill({json:new URL(route.request().url()).pathname.includes('/other-checkout/')?otherCommands:demoCommands}):route.fallback());
+  await page.route('**/__hotsheet/project-api/*/command-runs',route=>route.request().method()==='GET'?route.fulfill({json:[]}):route.fallback());
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();const draft=page.locator('textarea[name="command-settings"]');await expect(draft).toHaveValue(/Demo checks/);await draft.fill('[{"id":"demo-draft","title":"Unsaved demo draft","program":"npm","args":["run","check"]}]');
+  await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('region',{name:'Ticket sources settings'})).toBeVisible();await expect(page.getByRole('button',{name:'Ticket sources'})).toHaveAttribute('aria-current','page');await page.getByRole('button',{name:'Commands',exact:true}).click();await expect(draft).toHaveValue(/Other checks/);await expect(draft).not.toHaveValue(/Unsaved demo draft/);await page.screenshot({path:'/private/tmp/hs2-g9fmqj-other-project-settings-wide.png',fullPage:true});
+  await page.getByRole('tab',{name:'demo'}).click();await expect(page.getByRole('region',{name:'Commands settings'})).toBeVisible();await expect(page.getByRole('button',{name:'Commands',exact:true})).toHaveAttribute('aria-current','page');await expect(draft).toHaveValue(/Unsaved demo draft/);await expect(draft).not.toHaveValue(/Other checks/);await page.setViewportSize({width:1024,height:640});await page.screenshot({path:'/private/tmp/hs2-g9fmqj-demo-project-settings-narrow.png',fullPage:true});
+});
+
 test('live project visual review',async({page})=>{
   test.skip(!process.env.HOTSHEET_LIVE_PROJECT,'opt-in local visual review');
   const pageErrors:string[]=[];page.on('pageerror',error=>pageErrors.push(error.message));

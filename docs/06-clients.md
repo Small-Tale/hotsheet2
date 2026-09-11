@@ -261,6 +261,11 @@ cleanup of the old live HS1 data; backups are never removed.
   heading, and the right region uses the same divider-free empty inspector placeholder
   as Notifications. Entering Settings preserves the ticket selection for returning to
   list/board, but that retained selection never changes the Settings placeholder semantics.
+  The selected category, unsaved Commands JSON draft, and its validation result belong to
+  the active project rather than the shared shell: a newly opened project starts on Ticket
+  sources, while returning to another project restores that project's category and draft.
+  Project activation refreshes the visible settings data and ignores late provider responses
+  from a project that is no longer selected.
   Right-sidebar toolbars are divider-free in every state—ticket, loading, multi-selection,
   Settings, and Notifications—so content sections, not the shell toolbar, own separators.
 
