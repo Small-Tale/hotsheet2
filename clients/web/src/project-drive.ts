@@ -5,6 +5,21 @@ export const PROJECT_CHAT_CONNECTION_ID = 'hotsheet-project-chat';
 export const SIDEBAR_DRIVE_PROMPT = '$hotsheet';
 export type ProjectDriveTool = string;
 
+export interface DrawerAIChat {
+  id:string;
+  connectionId:string;
+  tool:ProjectDriveTool;
+  name:string;
+  model?:string;
+  effort?:string;
+  drive?:boolean;
+  readOnly?:boolean;
+  localOnly?:boolean;
+  savedSource?:string;
+  sourceConversationId?:string;
+  sourceSessionId?:string;
+}
+
 type ProjectDriveClient = Pick<Api, 'createToolConnection' | 'sendToolTurn'>;
 
 export interface ProjectDriveControlState {
@@ -20,6 +35,24 @@ export function sidebarDriveConnectionId(checkout: string, tool: ProjectDriveToo
 
 export function projectChatConnectionId(checkout:string,tool:ProjectDriveTool):string{
   return `${PROJECT_CHAT_CONNECTION_ID}-${tool}-${checkout}`;
+}
+
+function drawerConnectionKind(connection:ToolConnection,checkout:string):'chat'|'drive'|'saved'|undefined{
+  if(connection.role!=='main')return;
+  if(connection.id===sidebarDriveConnectionId(checkout,connection.tool))return'drive';
+  if(connection.id.startsWith('hotsheet-drawer-chat-'))return'chat';
+  if(connection.id.startsWith('hotsheet-saved-chat-'))return'saved';
+}
+
+export function restoreDrawerAIChats(connections:readonly ToolConnection[],checkout:string,current:readonly DrawerAIChat[]=[],toolLabel:(tool:string)=>string=tool=>`${tool.slice(0,1).toUpperCase()}${tool.slice(1)}`):DrawerAIChat[]{
+  const restored=[...current];
+  for(const connection of connections){
+    const kind=drawerConnectionKind(connection,checkout);
+    if(!kind)continue;
+    const index=restored.findIndex(chat=>chat.connectionId===connection.id),previous=index>=0?restored[index]:undefined,label=toolLabel(connection.tool),chat:DrawerAIChat={...(previous??{}),id:`ai-chat:${connection.id}`,connectionId:connection.id,tool:connection.tool,name:previous?.name??`${label} ${kind==='drive'?'Drive':kind==='saved'?'saved chat':'chat'}`,model:connection.model??previous?.model,effort:connection.effort??previous?.effort,drive:kind==='drive'||undefined,readOnly:connection.actions?.includes('send_turn')?false:previous?.readOnly};
+    if(index>=0)restored[index]=chat;else restored.push(chat);
+  }
+  return restored;
 }
 
 export function projectDriveConnection(connections: readonly ToolConnection[], checkout: string, tool: ProjectDriveTool = 'codex'): ToolConnection | undefined {

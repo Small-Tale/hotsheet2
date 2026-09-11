@@ -893,9 +893,13 @@ Closing a project tab first inventories its live terminals and AI chats. When an
 running, a confirmation dialog uses the shared menu navigation to select an item and
 shows either its live, read-only terminal renderer or the AI provider, model, effort,
 and latest Markdown activity without duplicating the selected item's title.
-**Keep Running** removes only the local project tab and explicitly explains
-that terminals return when the project is reopened while server-side AI sessions do not
-yet reopen as tabs (tracked by HS2-D34C2V). **Stop & Close** explicitly deletes
+**Keep Running** removes only the local project tab. Reopening the project reconciles
+eligible drawer Chat, Drive, and resumed-saved-chat connection ids from the server into
+their original AI-chat tabs, including provider, model, effort, busy, action, and session
+state (HS2-D34C2V). Transcript state already received in the same app window remains keyed
+to that connection and returns with the tab; after an app restart, the live server session
+continues but earlier messages are not retrospectively reconstructed. The close dialog
+states that boundary explicitly. **Stop & Close** explicitly deletes
 every listed terminal and AI connection before removing the tab. Cancel and native
 dialog dismissal preserve both the project and all resources. Multi-tab close actions
 apply the same decision project by project instead of silently terminating background

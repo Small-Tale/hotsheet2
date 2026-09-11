@@ -22,7 +22,7 @@ describe('ProjectCloseDialog',()=>{
 
   it('names the keep-running and stop-all consequences explicitly with busy states',()=>{
     const ready=String(ProjectCloseDialog({state:{projectId:'demo',projectName:'Demo',resources}}));for(const action of ['cancel-project-close','close-all-project-resources','confirm-close-project'])expect(ready).toContain(`data-action="${action}"`);
-    expect(ready).toContain('Stop &amp; Close');expect(ready).toContain('Keep Running');expect(ready).toContain('Terminals return when reopened');expect(ready).toContain('AI sessions remain on the server but do not reopen as tabs');
+    expect(ready).toContain('Stop &amp; Close');expect(ready).toContain('Keep Running');expect(ready).toContain('Terminals and AI chat tabs return when reopened');expect(ready).toContain('the restored server session continues without reconstructing earlier messages');
     const busy=String(ProjectCloseDialog({state:{projectId:'demo',projectName:'Demo',resources,operation:'closing-all',error:'Could not close Server.'}}));expect(busy).toContain('aria-busy="true"');expect(busy).toContain('Stopping…');expect(busy).toContain('role="alert"');expect(busy).toContain('Could not close Server.');expect(busy.match(/disabled/g)?.length).toBeGreaterThanOrEqual(6);
   });
 
