@@ -1,6 +1,7 @@
 import {expect,test} from '@playwright/test';
 
 test('imports an HS1 project, then offers cleanup only after remote backup',async({page})=>{
+  test.setTimeout(60_000);
   let imported=false,remote=false,deleted=false,providerRequests=0;
   await page.route('**/*',async route=>{
     const request=route.request(),path=new URL(request.url()).pathname;

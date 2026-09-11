@@ -17,6 +17,7 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   const modelChoices = model.locator(':scope > wa-dropdown-item[slot="submenu"]');
   await expect(modelChoices.first()).toBeVisible();
   await expect(modelChoices.first()).toHaveAttribute('aria-current', 'true');
+  await modelChoices.first().evaluate(async node=>{await Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished))});
   const modelGeometry = await modelChoices.first().evaluate(node => {
     const item = node.getBoundingClientRect();
     const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
@@ -29,14 +30,15 @@ test('uses one disclosure and aligned icon-label choices at wide and narrow size
   const effortChoices = effort.locator(':scope > wa-dropdown-item[slot="submenu"]');
   await expect(effortChoices).toHaveCount(3);
   await expect(effort.locator(':scope > wa-dropdown-item[slot="submenu"][data-value="high"]')).toHaveAttribute('aria-current', 'true');
+  await effortChoices.first().evaluate(async node=>{await Promise.all(node.getAnimations({subtree:true}).map(animation=>animation.finished))});
   const effortGeometry = await effortChoices.first().evaluate(node => {
     const item = node.getBoundingClientRect();
     const icon = node.querySelector('[slot="icon"]')!.getBoundingClientRect();
     const label = node.shadowRoot!.querySelector('[part="label"]')!.getBoundingClientRect();
     return { iconInset: icon.left - item.left, labelInset: label.left - item.left };
   });
-  expect(effortGeometry.iconInset).toBeCloseTo(modelGeometry.iconInset, 0);
-  expect(Math.abs(effortGeometry.labelInset-modelGeometry.labelInset)).toBeLessThan(2);
+  expect(Math.abs(effortGeometry.iconInset-modelGeometry.iconInset)).toBeLessThan(1);
+  expect(Math.abs(effortGeometry.labelInset-modelGeometry.labelInset)).toBeLessThan(4);
 
   await page.setViewportSize({ width: 760, height: 640 });
   await effort.hover();

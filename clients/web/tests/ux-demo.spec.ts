@@ -1241,7 +1241,7 @@ test('styles and edits attachment group labels while preserving drag regrouping'
   await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeVisible();
   await expect(first.getByRole('button',{name:'Edit batch label Human review evidence'})).toBeFocused();
   await page.locator('h2').first().click();
-  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => { resolve(); })));
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => { resolve(); }))));
   const dragged=surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id]').first();
   await dragged.evaluate(node=>node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:new DataTransfer()})));
   const activeTarget=groups.nth(1);
