@@ -883,13 +883,16 @@ view layer is new work.
 - Search (FTS) and filtered views.
 
 Closing a project tab first inventories its live terminals and AI chats. When any are
-running, a confirmation dialog lets the user inspect terminal working directory,
-progress, and recent scrollback or AI provider, model, session, and latest activity.
-**Close Project** removes only the local project tab and leaves those server-owned
-resources running; **Close All** explicitly deletes every listed terminal and AI
-connection before removing the tab. Cancel and native dialog dismissal preserve both
-the project and all resources. Multi-tab close actions apply the same decision project
-by project instead of silently terminating background work.
+running, a confirmation dialog uses the shared menu navigation to select an item and
+shows either its live, read-only terminal renderer or the AI provider, model, effort,
+and latest Markdown activity without duplicating the selected item's title.
+**Keep Running** removes only the local project tab and explicitly explains
+that terminals return when the project is reopened while server-side AI sessions do not
+yet reopen as tabs (tracked by HS2-D34C2V). **Stop & Close** explicitly deletes
+every listed terminal and AI connection before removing the tab. Cancel and native
+dialog dismissal preserve both the project and all resources. Multi-tab close actions
+apply the same decision project by project instead of silently terminating background
+work.
 
 The web client now implements the permission portion of that floor for Claude and
 Codex. Every open project has a replay-safe long poll; a `permission_asked` event

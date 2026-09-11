@@ -983,7 +983,7 @@ delegate(document.body,'click','[data-action="open-saved-conversation"]',()=>{vo
 document.addEventListener('pointerdown',event=>{if(terminalDrawerCreateMenuOpen.value&&!(event.target as Element).closest('.terminal-drawer__create-wrap'))terminalDrawerCreateMenuOpen.value=false},{capture:true});
 delegate(document.body,'click','[data-action="create-project-terminal"]',()=>{void createProjectTerminal()});
 delegate(document.body,'click','[data-action="close-project-tab"]',(event,target)=>{event.stopPropagation();requestProjectClose([data(target).projectId!])});
-delegate(document.body,'click','[data-action="select-project-close-resource"]',(_event,target)=>{const state=projectCloseDialog.value,key=data(target).resourceKey;if(state&&key)projectCloseDialog.value={...state,selectedKey:key,error:''}});
+delegate(document.body,'click','[data-action="select-project-close-resource"]',(_event,target)=>{const state=projectCloseDialog.value,key=data(target).itemId;if(state&&key)projectCloseDialog.value={...state,selectedKey:key,error:''}});
 delegate(document.body,'click','[data-action="cancel-project-close"]',()=>{cancelProjectClose()});
 delegateCapture(document.body,'wa-hide','[data-component="project-close-dialog"]',()=>{if(!projectCloseDialog.value?.operation)cancelProjectClose()});
 delegate(document.body,'click','[data-action="confirm-close-project"]',()=>{confirmProjectClose()});

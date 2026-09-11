@@ -5,6 +5,9 @@ import './project-close-dialog.css';
 import {CircleAlert,MessageSquare,SquareTerminal} from 'lucide';
 
 import {LucideIcon} from './lucide-icon';
+import {MarkdownPreview} from './markdown-preview';
+import {MenuHeader} from './menu-header';
+import {MenuItem} from './menu-item';
 
 interface ProjectCloseResourceBase {
   id:string;
@@ -47,14 +50,19 @@ export function projectCloseRunningSummary(resources:readonly ProjectCloseResour
   return parts.length?`${parts.join(' and ')} will stay active unless you close them first.`:'No terminals or AI chats are currently running for this project.';
 }
 
-function ResourceDetail({resource}:{resource:ProjectCloseResource}){
-  const terminal=resource.kind==='terminal',preview=resource.preview?.trim();
-  return <section class="project-close-dialog__detail" aria-label={`${resource.name} details`}>
-    <header><span class="project-close-dialog__detail-icon"><LucideIcon icon={terminal?SquareTerminal:MessageSquare} name={terminal?'square-terminal':'message-square'}/></span><div><p>{terminal?'Terminal':'AI chat'} · {resource.busy?'Busy':'Running'}</p><h3>{resource.name}</h3></div></header>
-    <dl aria-label={`${resource.name} metadata`}>
-      {terminal?<><div><dt>Working directory</dt><dd><code>{resource.cwd||'Not reported'}</code></dd></div><div><dt>Progress</dt><dd>{resource.progress===undefined?'Not reported':`${resource.progress}%`}</dd></div></>:<><div><dt>Provider</dt><dd>{resource.tool}</dd></div><div><dt>Model</dt><dd>{resource.model||'Provider default'}</dd></div><div><dt>Effort</dt><dd>{resource.effort||'Provider default'}</dd></div><div><dt>Session</dt><dd><code>{resource.sessionId||'Not started'}</code></dd></div></>}
+function ResourceDetail({resource,projectId}:{resource:ProjectCloseResource;projectId:string}){
+  if(resource.kind==='terminal')return <section class="project-close-dialog__detail project-close-dialog__terminal" aria-label={`${resource.name} terminal preview`}>
+    <div class="terminal-tile__viewport-frame"><div class="terminal-viewport terminal-viewport--scaled-preview" data-key={`project-close:${resource.id}`} data-morph-skip data-component="terminal-viewport" data-project-id={projectId} data-terminal-id={resource.id} data-display-mode="scaled-preview" data-grid-policy="dashboard-80x24" data-geometry-ready="false" aria-hidden="true"></div></div>
+    <p class="project-close-dialog__preview-fallback">Connecting to the live terminal…</p>
+  </section>;
+  const preview=resource.preview?.trim();
+  return <section class="project-close-dialog__detail project-close-dialog__chat" aria-label={`${resource.name} chat preview`}>
+    <dl aria-label="AI chat session">
+      <div><dt>Provider</dt><dd>{resource.tool}</dd></div>
+      <div><dt>Model</dt><dd>{resource.model||'Provider default'}</dd></div>
+      <div><dt>Effort</dt><dd>{resource.effort||'Provider default'}</dd></div>
     </dl>
-    <section class="project-close-dialog__preview"><h4>{terminal?'Recent output':'Latest activity'}</h4><pre aria-label={`${resource.name} preview`}>{preview||`No recent ${terminal?'terminal output':'chat activity'} available.`}</pre></section>
+    <section class="project-close-dialog__chat-activity" aria-label={`${resource.name} latest activity`}>{preview?<MarkdownPreview source={preview}/>:<p>No chat activity is available yet.</p>}</section>
   </section>;
 }
 
@@ -64,10 +72,11 @@ export function ProjectCloseDialog({state}:{state?:ProjectCloseDialogState}){
   return <wa-dialog class="project-close-dialog" data-component="project-close-dialog" data-project-id={state.projectId} label={`Close ${state.projectName}?`} aria-describedby="project-close-dialog-summary" open>
     <div class="project-close-dialog__intro"><span><LucideIcon icon={CircleAlert} name="circle-alert"/></span><p id="project-close-dialog-summary">{projectCloseRunningSummary(state.resources)}</p></div>
     <div class="project-close-dialog__layout" aria-busy={String(busy)}>
-      <aside aria-label="Running terminals and AI chats"><header><strong>Running items</strong><span>{state.resources.length}</span></header>{state.resources.length?<ul>{state.resources.map(resource=>{const key=projectCloseResourceKey(resource),terminal=resource.kind==='terminal',active=resource===selected;return <li data-key={key}><button type="button" data-action="select-project-close-resource" data-resource-key={key} data-selected={String(active)} aria-pressed={String(active)} disabled={busy}><LucideIcon icon={terminal?SquareTerminal:MessageSquare} name={terminal?'square-terminal':'message-square'}/><span><strong>{resource.name}</strong><small>{terminal?'Terminal':resource.tool} · {resource.busy?'Busy':'Running'}</small></span></button></li>})}</ul>:<p class="project-close-dialog__empty">Nothing is running.</p>}</aside>
-      {selected?<ResourceDetail resource={selected}/>:<section class="project-close-dialog__detail project-close-dialog__detail--empty"><p>Select Close Project to remove the project from this window.</p></section>}
+      <aside aria-label="Running terminals and AI chats"><MenuHeader label="Running items"/>{state.resources.length?<nav>{state.resources.map(resource=>{const key=projectCloseResourceKey(resource),terminal=resource.kind==='terminal';return <MenuItem action="select-project-close-resource" itemId={key} selected={resource===selected} disabled={busy} icon={<LucideIcon icon={terminal?SquareTerminal:MessageSquare} name={terminal?'square-terminal':'message-square'}/>} label={resource.name} trailing={<small class="menu-item__count">{terminal?'Terminal':resource.tool} · {resource.busy?'Busy':'Running'}</small>}/>})}</nav>:<p class="project-close-dialog__empty">Nothing is running.</p>}</aside>
+      {selected?<ResourceDetail resource={selected} projectId={state.projectId}/>:<section class="project-close-dialog__detail project-close-dialog__detail--empty"><p>Close this project tab?</p></section>}
     </div>
+    <p class="project-close-dialog__consequences"><strong>Keep running</strong> closes only this tab. Terminals return when reopened; AI sessions remain on the server but do not reopen as tabs. <strong>Stop all</strong> ends every item, then closes the tab.</p>
     <p class="project-close-dialog__error" role="alert">{state.error}</p>
-    <div slot="footer" class="project-close-dialog__actions"><wa-button type="button" appearance="outlined" data-action="cancel-project-close" disabled={busy}>Cancel</wa-button><wa-button type="button" appearance="outlined" variant="danger" data-action="close-all-project-resources" data-project-id={state.projectId} disabled={busy||state.resources.length===0}>{closingAll?'Closing all…':'Close All'}</wa-button><wa-button type="button" variant="danger" data-action="confirm-close-project" data-project-id={state.projectId} disabled={busy}>{closingProject?'Closing project…':'Close Project'}</wa-button></div>
+    <div slot="footer" class="project-close-dialog__actions"><wa-button type="button" size="small" appearance="outlined" data-action="cancel-project-close" disabled={busy}>Cancel</wa-button><wa-button type="button" size="small" appearance="outlined" data-action="confirm-close-project" data-project-id={state.projectId} disabled={busy}>{closingProject?'Closing…':'Keep Running'}</wa-button><wa-button type="button" size="small" variant="danger" data-action="close-all-project-resources" data-project-id={state.projectId} disabled={busy||state.resources.length===0}>{closingAll?'Stopping…':'Stop & Close'}</wa-button></div>
   </wa-dialog>;
 }
