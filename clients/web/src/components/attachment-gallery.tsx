@@ -16,6 +16,7 @@ export interface AttachmentGalleryZoomModel {stops:number[];index:number;fitInde
 export type AttachmentGalleryKeyboardAction={kind:'toggle-playback'}|{kind:'seek';playheadMs:number};
 export interface AttachmentGallerySwipeGesture {pointerId:number;startX:number;startY:number}
 export interface AttachmentGallerySwipeStart {pointerId:number;clientX:number;clientY:number;button:number;markup:boolean;stage:boolean;interactive:boolean;horizontallyScrollable:boolean}
+export interface AttachmentGalleryVideoResource {srcObject:MediaProvider|null;pause():void;removeAttribute(name:string):void;load():void}
 
 const validDimension=(value:number)=>Number.isFinite(value)&&value>0;
 const sameScale=(left:number,right:number)=>Math.abs(left-right)<.0001;
@@ -66,6 +67,8 @@ export function attachmentGalleryDefaultRange(playheadMs:number,durationMs:numbe
 export function attachmentGalleryKeyboardAction(key:string,playheadMs:number,durationMs:number,shiftKey=false):AttachmentGalleryKeyboardAction|undefined {const normalized=key.toLowerCase();if(key===' '||normalized==='k')return{kind:'toggle-playback'};const frame=1000/30,coarse=1000;let next:number|undefined;if(key==='ArrowLeft')next=playheadMs-(shiftKey?coarse:frame);else if(key==='ArrowRight')next=playheadMs+(shiftKey?coarse:frame);else if(normalized==='j')next=playheadMs-coarse;else if(normalized==='l')next=playheadMs+coarse;else if(key==='Home')next=0;else if(key==='End')next=durationMs;return next===undefined?undefined:{kind:'seek',playheadMs:Math.round(Math.max(0,Math.min(Math.max(0,durationMs),next)))}}
 export function attachmentGallerySwipeGesture(start:AttachmentGallerySwipeStart):AttachmentGallerySwipeGesture|undefined {if(start.button!==0||start.markup||!start.stage||start.interactive||start.horizontallyScrollable)return undefined;return{pointerId:start.pointerId,startX:start.clientX,startY:start.clientY}}
 export function attachmentGallerySwipeDirection(gesture:AttachmentGallerySwipeGesture|undefined,pointerId:number,clientX:number,clientY:number):1|-1|undefined {if(!gesture||gesture.pointerId!==pointerId)return undefined;const horizontal=clientX-gesture.startX,vertical=clientY-gesture.startY;if(Math.abs(horizontal)<48||Math.abs(horizontal)<=Math.abs(vertical))return undefined;return horizontal<0?1:-1}
+/** Stops decoding and releases URL, stream, and buffered media resources before unmount. */
+export function releaseAttachmentGalleryVideo(video:AttachmentGalleryVideoResource){video.pause();video.removeAttribute('src');video.srcObject=null;video.load()}
 const annotationStyle=(annotation:MediaAnnotation)=>`left:${annotation.x/100}%;top:${annotation.y/100}%;width:${annotation.width/100}%;height:${annotation.height/100}%`;
 const formatTime=(milliseconds:number)=>{const seconds=Math.max(0,Math.floor(milliseconds/1000));return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`};
 const timelinePercent=(milliseconds:number|undefined,durationMs:number)=>durationMs>0?Math.max(0,Math.min(100,(milliseconds??0)*100/durationMs)):0;

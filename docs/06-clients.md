@@ -592,8 +592,9 @@ cleanup of the old live HS1 data; backups are never removed.
   in-progress scrub to `00:00`. When the video canvas has focus, Space or K toggles playback,
   Left/Right step one 30-fps frame, Shift+Left/Right and J/L jog one second, and Home/End seek
   to the media boundaries; video jogging never activates the image-gallery navigation path.
-  Closing or changing gallery media explicitly pauses
-  and releases the prior video resource. The playback footer occupies layout space below the media
+  Closing or changing gallery media explicitly pauses the prior video, removes its URL,
+  clears any stream source, and reloads the source-free element before unmount so decoding,
+  network, and media events cannot survive repeated gallery sessions. The playback footer occupies layout space below the media
   stage, so both contain and cover scales are calculated from the space that remains.
   Full-screen media preserves the source image or video's square outer geometry: the
   gallery does not add corner rounding to either the media or its sizing wrapper.

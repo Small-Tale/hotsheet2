@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 
 import {describe,expect,it} from 'vitest';
 
-import {AttachmentGallery,attachmentGalleryAnnotationTolerance,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGallerySwipeDirection,attachmentGallerySwipeGesture,attachmentGalleryZoomModel,attachmentGalleryZoomStops} from './attachment-gallery';
+import {AttachmentGallery,attachmentGalleryAnnotationTolerance,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGallerySwipeDirection,attachmentGallerySwipeGesture,attachmentGalleryZoomModel,attachmentGalleryZoomStops,releaseAttachmentGalleryVideo} from './attachment-gallery';
 
 describe('AttachmentGallery',()=>{
   const images=[{id:'a',name:'a.png',url:'/a.png'},{id:'b',name:'b.svg',url:'/b.svg'}];
@@ -122,6 +122,12 @@ describe('AttachmentGallery',()=>{
     expect(attachmentGallerySwipeDirection(gesture,7,140,170)).toBeUndefined();
     expect(attachmentGallerySwipeDirection(gesture,8,140,102)).toBeUndefined();
     for(const disabled of [{interactive:true},{markup:true},{stage:false},{horizontallyScrollable:true},{button:2}])expect(attachmentGallerySwipeGesture({...start,...disabled})).toBeUndefined();
+  });
+  it('releases every video resource in deterministic browser cleanup order',()=>{
+    const calls:string[]=[],resource={srcObject:{} as MediaProvider|null,pause(){calls.push('pause')},removeAttribute(name:string){calls.push(`remove:${name}`)},load(){calls.push('load')}};
+    releaseAttachmentGalleryVideo(resource);
+    expect(calls).toEqual(['pause','remove:src','load']);
+    expect(resource.srcObject).toBeNull();
   });
   it('uses the same point/range controls for animated SVG annotations',()=>{
     const markup=String(AttachmentGallery({images:[{id:'svg',name:'animated.svg',url:'/animated.svg'}],activeUrl:'/animated.svg',markup:true,playheadMs:500,durationMs:2000,annotations:[{id:'point',x:100,y:100,width:1000,height:1000,start_ms:500,end_ms:500,text:''}],selectedAnnotation:'point'}));
