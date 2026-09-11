@@ -3267,15 +3267,7 @@ fn cmd_attach(
             .find(|attachment| attachment.id == attachment_id)
             .map(|attachment| attachment.filename.as_str())
             .unwrap_or(filename);
-        match ops::attachment_reference(None, filename) {
-            Some(reference) => println!("Attached {reference}"),
-            None => {
-                println!("Attached {filename}");
-                eprintln!(
-                    "warning: attachment filename contains a backtick and cannot yet be used in an attachment: note reference; rename it before referencing it"
-                );
-            }
-        }
+        println!("Attached {}", ops::attachment_reference(None, filename));
         println!(
             "Durable attachment id: {attachment_id} ({})",
             written.display()

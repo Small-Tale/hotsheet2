@@ -19,15 +19,17 @@ describe('attachment references',()=>{
   });
 
   it('expands code and standard Markdown references while retaining a discoverable list',()=>{
-    const source='See attachment:diagram.svg, `attachment:report.pdf`, `attachment:[HS2-OTHER]screen shot.png`, [compact image link](attachment:diagram.svg), and [raw file](attachment:data.json).';
+    const source='See attachment:diagram.svg, `attachment:report.pdf`, `attachment:[HS2-OTHER]screen shot.png`, ``attachment:proof`quote.png``, `` attachment:ends-in-tick` ``, [compact image link](attachment:diagram.svg), and [raw file](attachment:data.json).';
     const expanded=expandAttachmentReferences(source,context);
     expect(expanded).toContain('[report.pdf](/project-api/demo/checkouts/checkout%20one/tickets/HS2-LOCAL/attachments/by-name/report.pdf "attachment:report.pdf")');
     expect(expanded).toContain('![diagram.svg](/project-api/demo/checkouts/checkout%20one/tickets/HS2-LOCAL/attachments/by-name/diagram.svg');
     expect(expanded).toContain('![screen shot.png](/project-api/demo/checkouts/checkout%20one/tickets/HS2-OTHER/attachments/by-name/screen%20shot.png');
+    expect(expanded).toContain('[proof\\`quote.png](/project-api/demo/checkouts/checkout%20one/tickets/HS2-LOCAL/attachments/by-name/proof%60quote.png');
+    expect(expanded).toContain('[ends-in-tick\\`](/project-api/demo/checkouts/checkout%20one/tickets/HS2-LOCAL/attachments/by-name/ends-in-tick%60');
     expect(expanded).toContain('[compact image link](/project-api/demo/checkouts/checkout%20one/tickets/HS2-LOCAL/attachments/by-name/diagram.svg');
     expect(expanded).not.toContain('![compact image link]');
     expect(expanded).toContain('[raw file](/project-api/demo/checkouts/checkout%20one/tickets/HS2-LOCAL/attachments/by-name/data.json');
-    expect(attachmentReferences(source)).toEqual([{filename:'diagram.svg'},{filename:'report.pdf'},{ticket:'HS2-OTHER',filename:'screen shot.png'},{filename:'data.json'}]);
+    expect(attachmentReferences(source)).toEqual([{filename:'diagram.svg'},{filename:'report.pdf'},{ticket:'HS2-OTHER',filename:'screen shot.png'},{filename:'proof`quote.png'},{filename:'ends-in-tick`'},{filename:'data.json'}]);
   });
 
   it('uses the longest matching real filename and leaves trailing sentence punctuation alone',()=>{

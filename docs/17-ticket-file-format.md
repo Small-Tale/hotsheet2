@@ -150,8 +150,9 @@ human-authored `attachment:filename` references unambiguous while the ULID remai
 durable storage identity. Bare attachment ULIDs are not note-reference syntax: Git-backed
 note writes conservatively replace an unambiguous prose occurrence with the same-ticket or
 cross-ticket filename reference. Code spans/blocks, URL and path segments, and ambiguous or
-currently unrepresentable filename ids stay byte-for-byte literal so documentation of storage
-identities is not rewritten (HS2-H2PTVZ tracks backtick-filename syntax).
+ambiguous ids stay byte-for-byte literal so documentation of storage identities is not rewritten.
+Filenames containing backticks use a CommonMark code-span delimiter longer than any backtick run
+in the filename, so every valid attachment filename has a canonical note reference.
 
 HS2-6FP1KT adds four optional, backward-compatible provenance fields: opaque `batch_id`,
 human-authored `batch_label`, `actor` (`identity`, `display_name`, and

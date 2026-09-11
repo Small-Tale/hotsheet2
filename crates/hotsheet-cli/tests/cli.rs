@@ -2128,9 +2128,8 @@ fn attach_prints_a_note_reference_and_edit_repairs_a_bare_attachment_id() {
         .arg(&unrepresentable)
         .assert()
         .success()
-        .stdout(predicate::str::contains("Attached proof`quote.png"))
-        .stderr(predicate::str::contains(
-            "cannot yet be used in an attachment: note reference",
+        .stdout(predicate::str::contains(
+            "Attached ``attachment:proof`quote.png``",
         ));
 
     let store = hotsheet_ticketing::FsStore::open(p).unwrap();

@@ -775,7 +775,10 @@ pub fn canonicalize_attachment_id_references(
                 continue;
             }
             for attachment in ticket.attachments {
-                let reference = attachment_reference(Some(&ticket.slug), &attachment.filename);
+                let reference = Some(attachment_reference(
+                    Some(&ticket.slug),
+                    &attachment.filename,
+                ));
                 references
                     .entry(attachment.id.to_string())
                     .and_modify(|existing| *existing = None)
@@ -786,29 +789,38 @@ pub fn canonicalize_attachment_id_references(
     for attachment in &owner.attachments {
         references.insert(
             attachment.id.to_string(),
-            attachment_reference(None, &attachment.filename),
+            Some(attachment_reference(None, &attachment.filename)),
         );
     }
 
     replace_prose_attachment_ids(text, &references)
 }
 
-/// Canonical note syntax for one attachment filename. Whitespace-bearing filenames use an
-/// inline-code reference because the bare Markdown form intentionally ends at whitespace.
-/// The current grammar cannot safely represent a filename containing a backtick.
-pub fn attachment_reference(ticket: Option<&str>, filename: &str) -> Option<String> {
-    if filename.contains('`') {
-        return None;
-    }
+/// Canonical note syntax for one attachment filename. Whitespace- or backtick-bearing filenames
+/// use a CommonMark code span whose delimiter is longer than any backtick run in the filename.
+pub fn attachment_reference(ticket: Option<&str>, filename: &str) -> String {
     let raw = format!(
         "attachment:{}{filename}",
         ticket.map(|slug| format!("[{slug}]")).unwrap_or_default()
     );
-    Some(if filename.chars().any(char::is_whitespace) {
-        format!("`{raw}`")
+    if filename
+        .chars()
+        .any(|character| character.is_whitespace() || character == '`')
+    {
+        let delimiter = "`".repeat(longest_backtick_run(&raw) + 1);
+        let padding = if raw.ends_with('`') { " " } else { "" };
+        format!("{delimiter}{padding}{raw}{padding}{delimiter}")
     } else {
         raw
-    })
+    }
+}
+
+fn longest_backtick_run(value: &str) -> usize {
+    value
+        .split(|character| character != '`')
+        .map(str::len)
+        .max()
+        .unwrap_or(0)
 }
 
 fn contains_prose_ulid(text: &str) -> bool {
@@ -933,6 +945,11 @@ pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str
     for (start, _) in text.match_indices("attachment:") {
         let suffix = &text[start..];
         let mut tail = &suffix["attachment:".len()..];
+        let code_delimiter_len = text[..start]
+            .bytes()
+            .rev()
+            .take_while(|byte| *byte == b'`')
+            .count();
         let mut target = owner.clone();
         let mut ticket_label = owner.slug.clone();
         if let Some(after_open) = tail.strip_prefix('[') {
@@ -965,7 +982,7 @@ pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str
         if matched.is_some() {
             continue;
         }
-        let candidate = attachment_reference_candidate(tail);
+        let candidate = attachment_reference_candidate(tail, code_delimiter_len);
         if candidate.is_empty() {
             continue;
         }
@@ -986,12 +1003,16 @@ pub fn attachment_reference_warnings(store: &FsStore, owner: &Ticket, text: &str
     warnings
 }
 
-fn attachment_reference_candidate(tail: &str) -> &str {
-    let end = tail
-        .char_indices()
-        .find_map(|(index, character)| character.is_whitespace().then_some(index))
-        .unwrap_or(tail.len());
-    tail[..end].trim_end_matches(|character: char| {
+fn attachment_reference_candidate(tail: &str, code_delimiter_len: usize) -> &str {
+    let code_end = (code_delimiter_len > 0)
+        .then(|| tail.find(&"`".repeat(code_delimiter_len)))
+        .flatten();
+    let end = code_end.unwrap_or_else(|| {
+        tail.char_indices()
+            .find_map(|(index, character)| character.is_whitespace().then_some(index))
+            .unwrap_or(tail.len())
+    });
+    tail[..end].trim().trim_end_matches(|character: char| {
         matches!(character, '.' | ',' | ';' | ':' | '!' | '?' | ')' | ']')
     })
 }
@@ -2125,6 +2146,10 @@ mod tests {
         // The note is accepted before its payload exists; after upload the same text resolves.
         let note = "Upload follows: attachment:later.png.";
         assert_eq!(attachment_reference_warnings(&store, &owner, note).len(), 1);
+        let backtick_note = "Upload follows: ``attachment:later`proof.png``.";
+        let backtick_warnings = attachment_reference_warnings(&store, &owner, backtick_note);
+        assert_eq!(backtick_warnings.len(), 1);
+        assert!(backtick_warnings[0].contains("attachment:later`proof.png"));
         let (owner, _) = store
             .write_attachment(
                 &id,
@@ -2135,6 +2160,16 @@ mod tests {
             )
             .unwrap();
         assert!(attachment_reference_warnings(&store, &owner, note).is_empty());
+        let (owner, _) = store
+            .write_attachment(
+                &id,
+                Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB9").unwrap(),
+                ts("2026-08-19T00:01:04Z"),
+                "later`proof.png",
+                b"later quoted",
+            )
+            .unwrap();
+        assert!(attachment_reference_warnings(&store, &owner, backtick_note).is_empty());
     }
 
     #[test]
@@ -2231,8 +2266,15 @@ mod tests {
             other.slug
         )));
         assert!(text.contains(&format!("ambiguous: {duplicate_id}")));
-        assert!(text.contains(&format!("unrepresentable: {unrepresentable_attachment}")));
-        assert_eq!(attachment_reference(None, "proof`quote.png"), None);
+        assert!(text.contains("unrepresentable: ``attachment:proof`quote.png``"));
+        assert_eq!(
+            attachment_reference(None, "proof`quote.png"),
+            "``attachment:proof`quote.png``"
+        );
+        assert_eq!(
+            attachment_reference(None, "proof`.png`"),
+            "`` attachment:proof`.png` ``"
+        );
         assert!(text.contains(&format!("`{owner_attachment}`")));
         assert!(text.contains(&format!("``{other_attachment}``")));
         assert!(text.contains(&format!("/attachments/{owner_attachment}")));

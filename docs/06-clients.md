@@ -584,6 +584,8 @@ and identity-less legacy entries remain conservatively blocking.
 
   Notes resolve `attachment:filename` and cross-ticket
   `attachment:[TICKET-SLUG]filename` references. Inline-code references preserve spaces;
+  their CommonMark delimiter expands beyond the longest run when a filename contains backticks,
+  so every valid attachment filename remains representable.
   ordinary no-space references and standard Markdown link/image destinations are also
   accepted. Matching prefers the longest real attachment filename and leaves any trailing
   sentence punctuation in the prose, so `attachment:proof.png.` resolves `proof.png`.
@@ -596,7 +598,7 @@ and identity-less legacy entries remain conservatively blocking.
   this filename syntax rather than its opaque storage id. Git-backed
   note writes also translate unambiguous bare attachment ids in ordinary prose into resolvable
   same-ticket or cross-ticket references, while retaining literal ids in code, URLs/paths, and
-  ambiguous or currently unrepresentable filename cases (HS2-H2PTVZ). Browser-compatible bare
+  ambiguous filename cases. Browser-compatible bare
   references and explicit image destinations render inline; explicit Markdown links
   remain compact links even when their target is an image, while other references
   ask the host to open the file with its default application. Right-click actions can
