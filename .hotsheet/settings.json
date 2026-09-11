@@ -1,12 +1,13 @@
 {
+  "$hotsheetSchema": 1,
   "appName": "Hot Sheet 2",
-  "ticketPrefix": "HS2",
   "terminals": [
     {
-      "id": "claude",
-      "name": "AI",
       "command": "{{aiCommand}}",
-      "lazy": false
+      "id": "claude",
+      "lazy": false,
+      "name": "AI"
     }
-  ]
+  ],
+  "ticketPrefix": "HS2"
 }
