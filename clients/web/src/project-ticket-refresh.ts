@@ -1,4 +1,4 @@
-import type { Api, CheckoutTicketCounts, CorruptTicket, TicketRow } from './api';
+import type { Api, CheckoutTicketCounts, CheckoutTicketQuery, CorruptTicket, TicketRow } from './api';
 
 export interface ProjectTicketRefresh {
   corruptTickets?: CorruptTicket[];
@@ -12,9 +12,9 @@ export interface ProjectTicketRefresh {
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 
 /** Load healthy and corrupt ticket indexes without either request suppressing the other. */
-export async function loadProjectTicketRefresh(client: Pick<Api, 'checkoutCorruptTickets'|'checkoutTicketPage'>, checkout: string): Promise<ProjectTicketRefresh> {
+export async function loadProjectTicketRefresh(client: Pick<Api, 'checkoutCorruptTickets'|'checkoutTicketPage'>, checkout: string, query:CheckoutTicketQuery={collection:'queue'}): Promise<ProjectTicketRefresh> {
   const [tickets, corruptTickets] = await Promise.allSettled([
-    client.checkoutTicketPage(checkout),
+    client.checkoutTicketPage(checkout,200,undefined,query),
     client.checkoutCorruptTickets(checkout),
   ]);
   const diagnostics=corruptTickets.status === 'fulfilled' ? corruptTickets.value : undefined;

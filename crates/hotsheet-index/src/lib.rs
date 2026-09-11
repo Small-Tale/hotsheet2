@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use hotsheet_model::{Ticket, Ulid, parse_file};
-use hotsheet_ticketing::{FsStore, SortKey, TicketQuery};
+use hotsheet_ticketing::{FsStore, SortKey, TicketCollection, TicketQuery};
 use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use sha2::{Digest, Sha256};
 
@@ -626,6 +626,14 @@ impl Index {
             wheres.push("t.status = ?".into());
             args.push(Box::new(enum_str(&s)));
         }
+        if let Some(collection) = q.collection {
+            wheres.push(match collection {
+                TicketCollection::Queue => {
+                    "t.status <> 'backlog' AND t.status NOT IN ('archive','deleted','moved')".into()
+                }
+                TicketCollection::Archive => "t.status IN ('archive','deleted','moved')".into(),
+            });
+        }
         if let Some(p) = q.priority {
             wheres.push("t.priority = ?".into());
             args.push(Box::new(enum_str(&p)));
@@ -644,7 +652,9 @@ impl Index {
         }
         // Moved tombstones are hidden from lists unless the caller explicitly asks for them
         // via `status = moved` (docs/03 §3.5, HS2-T84F9F).
-        if q.status.map(|s| enum_str(&s)).as_deref() != Some("moved") {
+        if q.status.map(|s| enum_str(&s)).as_deref() != Some("moved")
+            && q.collection != Some(TicketCollection::Archive)
+        {
             wheres.push("t.status IS NOT 'moved'".into());
         }
         if let Some(r) = q.close_reason {

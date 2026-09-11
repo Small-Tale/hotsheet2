@@ -7725,6 +7725,8 @@ async fn poll_events(
 #[derive(Debug, Clone, Default, Deserialize)]
 struct ListParams {
     status: Option<String>,
+    /// Built-in multi-status client collection (`queue` or `archive`).
+    collection: Option<String>,
     priority: Option<String>,
     category: Option<String>,
     /// Comma-separated; a ticket must carry all of them.
@@ -7838,6 +7840,7 @@ impl ListParams {
         };
         Ok(TicketQuery {
             status: opt_parse(self.status.as_deref())?,
+            collection: opt_parse(self.collection.as_deref())?,
             priority: opt_parse(self.priority.as_deref())?,
             category: self.category,
             tags: self

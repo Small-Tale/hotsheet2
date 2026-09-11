@@ -6,12 +6,14 @@ describe('loadProjectTicketRefresh', () => {
   const counts = {total:1,queued:1,backlog:0,archive:0,open:1,up_next:0,active:0,started:0,completed_today:0};
   it('keeps healthy tickets when the corrupt-ticket index fails', async () => {
     const ticket = { id: '01', slug: 'HS2-OK', title: 'Healthy', tags: [] };
+    const checkoutTicketPage=vi.fn().mockResolvedValue({items:[ticket],counts});
     const result = await loadProjectTicketRefresh({
-      checkoutTicketPage: vi.fn().mockResolvedValue({items:[ticket],counts}),
+      checkoutTicketPage,
       checkoutCorruptTickets: vi.fn().mockRejectedValue(new Error('index unavailable')),
     }, 'checkout');
 
     expect(result).toEqual({ tickets: [ticket], ticketCounts:counts, nextCursor:undefined, corruptTicketsError: 'index unavailable' });
+    expect(checkoutTicketPage).toHaveBeenCalledWith('checkout',200,undefined,{collection:'queue'});
   });
 
   it('keeps corrupt entries available when the healthy-ticket index fails', async () => {

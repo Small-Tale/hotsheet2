@@ -3,14 +3,14 @@ import {existsSync,readFileSync} from 'node:fs';
 import { expect, type Locator,test } from '@playwright/test';
 
 import type {ConversationMessage} from '../src/ai-conversation';
-import type {MediaAnnotation} from '../src/api';
+import type {MediaAnnotation,TicketRow} from '../src/api';
 import type {ConversationExportPayload} from '../src/conversation-export';
 import { expectResponsiveFeedbackRectangle, measureFeedbackRectangle } from './dev-review-performance';
 
 test.use({video:process.env.HOTSHEET_MEDIA_RECORD_VIDEO==='1'?'on':'off'});
 
 const project = { id:'demo-checkout', root:'/work/demo', name:'demo', stores:['/work/demo.hs2'], apiPath:'/__hotsheet/project-api/demo-checkout' };
-const row = { connection_id:'git-local', native_id:'01', qualified_id:'git-local:01', id:'01', slug:'HS2-DEMO01', title:'Use real project tickets', category:'feature', priority:'high', status:'started', up_next:true, tags:['client'], blocked_by:[], claim_count:0, created_at:'2026-08-30T00:00:00Z', updated_at:'2026-08-30T01:00:00Z' };
+const row = { connection_id:'git-local', native_id:'01', qualified_id:'git-local:01', id:'01', slug:'HS2-DEMO01', title:'Use real project tickets', category:'feature', priority:'high', status:'started', up_next:true, feedback_needed:false, tags:['client'], blocked_by:[], claim_count:0, created_at:'2026-08-30T00:00:00Z', updated_at:'2026-08-30T01:00:00Z' };
 const backlogRow = { ...row, native_id:'03', qualified_id:'git-local:03', id:'03', slug:'HS2-BACK01', title:'Deferred backlog ticket', status:'backlog', up_next:false };
 const archiveRow = { ...row, native_id:'04', qualified_id:'git-local:04', id:'04', slug:'HS2-ARCH01', title:'Archived ticket', status:'archive', up_next:false };
 const deletedRow = { ...row, native_id:'12', qualified_id:'git-local:12', id:'12', slug:'HS2-DEL001', title:'Deleted ticket', status:'deleted', up_next:false };
@@ -27,7 +27,7 @@ const full = { ...row, details:'The real ticket body. [Project guide](/docs/proj
 function normalizedCreatedTicket(body:Record<string,unknown>){const original=(typeof body.title==='string'?body.title:'').trim();let title=original,tags=Array.isArray(body.tags)?body.tags.filter((tag):tag is string=>typeof tag==='string'):[];if(original.startsWith('\\['))title=original.slice(1);else{let rest=original;const found:string[]=[];while(rest.startsWith('[')){const close=rest.indexOf(']'),content=close<0?'':rest.slice(1,close);if(close<0||!content.trim()||content.includes('['))break;found.push(content.trim().replaceAll(/\s+/g,'-'));rest=rest.slice(close+1).trimStart()}if(found.length&&rest){title=rest.trim();tags=[...new Set([...tags,...found])]}}return{title,tags}}
 
 async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded: boolean | 'choices' | 'details' = false, ticketLoadDelay = 0, batchResponseDelay = 0, patchResponseDelay = 0, emptyAtFirst = false, terminalCount = 2, eventDuringBatch = false, hs1Migration = false, atomicBatch = true) {
-  let rows = [{...row,feedback_needed:Boolean(primaryFeedbackNeeded)},backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
+  let rows:TicketRow[] = [{...row,feedback_needed:Boolean(primaryFeedbackNeeded)},backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
   let selectedFull = primaryFeedbackNeeded==='details'
     ? {...full,details:'FEEDBACK NEEDED: Which implementation?\n\nCHOICE:\n- Keep the **current behavior**\n- Use `attachment:proof.png`\n\nExplain another direction if needed.',notes:[full.notes[0]]}
     : primaryFeedbackNeeded
@@ -107,7 +107,21 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/tickets/01/code-review')&&request.method()==='POST'){patches.push({operation:'code-review',...request.postDataJSON()});return route.fulfill({status:204})}
     if(path.endsWith('/corrupt-tickets')&&request.method()==='GET') return route.fulfill({json:[]});
     if(path.endsWith('/batch')&&request.method()==='POST'){const updates=request.postDataJSON().updates as Array<Record<string,unknown>&{id:string}>;for(const update of updates)patches.push(Object.fromEntries(Object.entries(update).filter(([key])=>key!=='id')));if(eventDuringBatch)for(const {id} of updates)pushDriveEvent({kind:'ticket_updated',id,slug:rows.find(item=>item.id===id)?.slug??id});if(batchResponseDelay)await new Promise(resolve=>setTimeout(resolve,batchResponseDelay));rows=rows.map(item=>{const update=updates.find(value=>value.id===item.id);return update?{...item,...update,updated_at:'2026-08-30T02:00:00Z'}:item});const changed=updates.map(({id})=>{const ticket=rows.find(item=>item.id===id)!;return{store:'git-local',...ticket,details:'',blocked_reason:null,notes:[],attachments:evidenceByTicket.get(id)??[],concurrency_token:`next-${id}`}});return route.fulfill({json:changed})}
-    if(path.endsWith('/tickets')&&request.method()==='GET'){if(!ticketSourceConfigured)return route.fulfill({json:[]});const text=url.searchParams.get('text');if(text==='QQRY00'||text==='HS2-QQRY00'){await new Promise(resolve=>setTimeout(resolve,150));return route.fulfill({json:[{...searchSlugRow,details:'',notes:[]},{...searchDetailsRow,details:'Related work references HS2-QQRY00.',notes:[]}]})}if(text==='HS2-ARCH01')return route.fulfill({json:[{...archiveRow,details:'Archived exact-slug result.',notes:[]}]});return route.fulfill({json:rows})}
+    if(path.endsWith('/tickets')&&request.method()==='GET'){
+      const pageSize=url.searchParams.get('page_size');
+      if(!ticketSourceConfigured)return route.fulfill({json:pageSize?{items:[],counts:{total:0,queued:0,backlog:0,archive:0,open:0,up_next:0,active:0,started:0,completed_today:0}}:[]});
+      const text=url.searchParams.get('text');
+      let result=text==='QQRY00'||text==='HS2-QQRY00'?[{...searchSlugRow,details:'',notes:[]},{...searchDetailsRow,details:'Related work references HS2-QQRY00.',notes:[]}]:text==='HS2-ARCH01'?[{...archiveRow,details:'Archived exact-slug result.',notes:[]}]:rows;
+      if(text==='QQRY00'||text==='HS2-QQRY00')await new Promise(resolve=>setTimeout(resolve,150));
+      const collection=url.searchParams.get('collection'),status=url.searchParams.get('status'),archived=(item:TicketRow)=>['archive','deleted','moved'].includes(item.status??''),queued=(item:TicketRow)=>item.status!=='backlog'&&!archived(item);
+      if(collection==='queue')result=result.filter(queued);
+      if(collection==='archive')result=result.filter(archived);
+      if(status)result=result.filter(item=>item.status===status);
+      if(!pageSize)return route.fulfill({json:result});
+      const size=Number(pageSize),offset=Number(url.searchParams.get('cursor')??0),items=result.slice(offset,offset+size),next=offset+size<result.length?String(offset+size):undefined,now=Date.now();
+      const counts={total:rows.length,queued:rows.filter(queued).length,backlog:rows.filter(item=>item.status==='backlog').length,archive:rows.filter(archived).length,open:rows.filter(item=>['not_started','started'].includes(item.status??'not_started')).length,up_next:rows.filter(item=>item.up_next&&['not_started','started'].includes(item.status??'not_started')).length,active:rows.filter(item=>item.claim_lease_expires_at&&Date.parse(item.claim_lease_expires_at)>now).length,started:rows.filter(item=>item.status==='started').length,completed_today:0};
+      return route.fulfill({json:{items,counts,...next?{next_cursor:next}:{}}});
+    }
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON(),normalized=normalizedCreatedTicket(body);const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:normalized.title,tags:normalized.tags,category:body.category,status:body.status??'not_started',up_next:Boolean(body.up_next),created_at:'2026-08-30T02:00:00Z',updated_at:'2026-08-30T02:00:00Z'};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:body.details??'',notes:[],attachments:[]}})}
     if(path.endsWith('/provider-attachments/copy')&&request.method()==='POST'){const destination=rows.find(item=>item.native_id===request.postDataJSON().destination.native_id)!;return route.fulfill({status:201,json:{...destination,details:'',notes:[],attachments:[{id:'A-COPY',filename:'proof.png',created_at:'2026-08-30T01:15:00Z'}]}})}
     if(path.endsWith('/tickets/01')&&request.method()==='GET'){if(ticketLoadDelay)await new Promise(resolve=>setTimeout(resolve,ticketLoadDelay));return route.fulfill({json:{store:'git-local',...selectedFull}})}
@@ -1525,6 +1539,18 @@ test('keeps backlog and archived tickets out of the active Queue',async({page})=
   await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.getByText('Archived ticket')).toHaveCount(0);
   await page.getByRole('button',{name:/Backlog/}).click();const backlog=page.locator('[data-ticket-slug="HS2-BACK01"]'),menu=page.getByRole('menu',{name:'Ticket actions'});await expect(backlog).toBeVisible();await backlog.click({button:'right'});await expect(menu.locator('[data-context-action="Move to Backlog"]')).toHaveAttribute('disabled','');await expect(menu.locator('[data-context-action="Archive ticket"]')).not.toHaveAttribute('disabled','');await page.keyboard.press('Escape');await expect(page.getByText('Use real project tickets')).toHaveCount(0);await page.getByRole('button',{name:'New ticket…'}).click();await page.getByRole('textbox',{name:'Ticket title'}).fill('Created directly in backlog');await page.getByRole('button',{name:'Create ticket'}).click();const created=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-NEW001"]');await expect(created).toBeVisible();await expect(created).toHaveAttribute('data-status','backlog');
   await page.getByRole('button',{name:/Archive/}).click();for(const slug of ['HS2-ARCH01','HS2-DEL001','HS2-MOVED1']){const archived=page.locator(`[data-ticket-slug="${slug}"]`);await expect(archived).toBeVisible();await archived.click({button:'right'});await expect(menu.locator('[data-context-action="Archive ticket"]')).toHaveAttribute('disabled','');await expect(menu.locator('[data-context-action="Move to Backlog"]')).not.toHaveAttribute('disabled','');await page.keyboard.press('Escape')}await expect(page.getByText('Deferred backlog ticket')).toHaveCount(0);await expect(page.locator('[data-component="quick-ticket-composer"]')).toHaveCount(0);
+});
+
+test('loads all 138 Queue tickets before mixed-status pagination is applied',async({page})=>{
+  await mockProject(page);
+  const queued=Array.from({length:138},(_,index)=>({...row,id:`queue-${index}`,native_id:`queue-${index}`,qualified_id:`git-local:queue-${index}`,slug:`HS2-Q${String(index).padStart(5,'0')}`,title:`Queue ticket ${index+1}`,status:'not_started',up_next:false}));
+  const mixed=[...Array.from({length:240},(_,index)=>({...backlogRow,id:`backlog-${index}`,native_id:`backlog-${index}`,qualified_id:`git-local:backlog-${index}`,slug:`HS2-B${String(index).padStart(5,'0')}`})),...queued];
+  const collectionRequests:string[]=[];
+  await page.route('**/tickets*',async route=>{const request=route.request(),url=new URL(request.url());if(request.method()!=='GET'||!url.pathname.endsWith('/tickets'))return route.fallback();collectionRequests.push(url.searchParams.get('collection')??'');const items=url.searchParams.get('collection')==='queue'?queued:mixed.slice(0,200);return route.fulfill({json:{items,counts:{total:mixed.length,queued:queued.length,backlog:240,archive:0,open:queued.length,up_next:0,active:0,started:0,completed_today:0}}})});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(138);
+  expect(collectionRequests).toContain('queue');
+  await page.screenshot({path:'/private/tmp/hs2-cs8agd-queue-138.png',fullPage:true});
 });
 
 test('stores the shell-history inheritance opt-out locally and applies it only to new terminals',async({page})=>{

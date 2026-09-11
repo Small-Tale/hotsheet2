@@ -1,4 +1,4 @@
-import type { TicketRow } from './api';
+import type { CheckoutTicketQuery, TicketRow } from './api';
 
 export type BuiltInTicketView = 'all' | 'backlog' | 'archive' | 'errors';
 export type TicketView = BuiltInTicketView | `custom:${string}`;
@@ -9,6 +9,13 @@ export const customTicketViewKey = (view: TicketView): string | undefined => vie
 export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'errors'].includes(view);
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' => view === 'backlog' ? 'backlog' : 'not_started';
 export const newTicketCreationPlacement = (view: TicketView, upNext: boolean) => ({status:upNext?'not_started' as const:newTicketStatusForView(view),up_next:upNext});
+
+/** Match a built-in collection on the server before its page size is applied. */
+export function ticketViewQuery(view: TicketView): CheckoutTicketQuery {
+  if (view === 'backlog') return { status: 'backlog' };
+  if (view === 'archive') return { collection: 'archive' };
+  return { collection: 'queue' };
+}
 
 export function isOpenTicket(ticket: TicketRow): boolean {
   return ['not_started', 'started'].includes(ticket.status ?? 'not_started');

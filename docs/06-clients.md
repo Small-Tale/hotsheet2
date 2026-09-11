@@ -818,11 +818,12 @@ and identity-less legacy entries remain conservatively blocking.
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
   Its chosen height is a device-local preference that survives controlled-value rerenders,
   cancellation/reopening, and later new-ticket sessions.
-  Switching among Queue, Backlog, and Archive is a client-only projection over the
-  already-loaded compact ticket collection; it does not fetch full ticket bodies or wait
-  on the database. The selected sidebar item and the first progressive row tranche commit
-  in one batched Kerf render, avoiding an intermediate rerender of the previous view. Large
-  views initially render 80 rows and continue in idle chunks while exposing loading state.
+  Switching among Queue, Backlog, and Archive requests a bounded compact page scoped to that
+  collection before pagination; it never fetches full ticket bodies or filters an arbitrary
+  mixed-status page in the browser. The selected sidebar item commits immediately while the
+  collection refresh reconciles the first progressive row tranche. Large views initially
+  render 80 rows, continue in idle chunks, and expose an explicit continuation control when
+  the selected collection exceeds the server page size.
   Column presentation leaves idle TicketRows borderless, including the wide
   single-column Backlog and Archive boards, while selection supplies the rounded blue
   outline. Pointer preview never changes the row fill: a quiet temporary blue outline

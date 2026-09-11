@@ -105,6 +105,9 @@ Browser collection reads opt into a bounded envelope with `page_size=1..500` and
 with the opaque `next_cursor`; the response contains `items`, `next_cursor`, and SQL-backed
 project `counts`. The cursor walks linked stores without concatenating their complete row
 sets, while the aggregate counts keep Queue/Backlog/Archive and project-tab summaries exact.
+Paged clients may pass `collection=queue|archive` for the built-in multi-status collections;
+the lifecycle predicate is applied by each source index before the page cap, so a mixed-status
+first page cannot make the browser show fewer rows than the selected collection contains.
 Omitting `page_size` preserves the legacy array response for existing integrations.
 
 Checkout corrupt diagnostics also expose a safe repair-ticket action. It revalidates the

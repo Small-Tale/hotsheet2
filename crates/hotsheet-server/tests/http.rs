@@ -2389,6 +2389,34 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
             StatusCode::CREATED
         );
     }
+    let fourth = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets"),
+                Some(r#"{"title":"Fourth","status":"not_started"}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "PATCH",
+                &format!(
+                    "/checkouts/{checkout_id}/tickets/{}",
+                    fourth["id"].as_str().unwrap()
+                ),
+                Some(r#"{"status":"archive"}"#),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::OK
+    );
 
     let first = body_json(
         router
@@ -2403,13 +2431,16 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
     )
     .await;
     assert_eq!(first["items"].as_array().unwrap().len(), 2);
-    assert_eq!(first["counts"]["total"], 3);
+    assert_eq!(first["counts"]["total"], 4);
     assert_eq!(first["counts"]["open"], 2);
     assert_eq!(first["counts"]["up_next"], 1);
     assert_eq!(first["counts"]["backlog"], 1);
+    assert_eq!(first["counts"]["queued"], 2);
+    assert_eq!(first["counts"]["archive"], 1);
     let cursor = first["next_cursor"].as_str().unwrap();
     let second = body_json(
         router
+            .clone()
             .oneshot(authed(
                 "GET",
                 &format!("/checkouts/{checkout_id}/tickets?page_size=2&cursor={cursor}"),
@@ -2419,7 +2450,7 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
             .unwrap(),
     )
     .await;
-    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert_eq!(second["items"].as_array().unwrap().len(), 2);
     assert!(second.get("next_cursor").is_none());
     let ids = first["items"]
         .as_array()
@@ -2428,7 +2459,28 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
         .chain(second["items"].as_array().unwrap())
         .map(|row| row["id"].as_str().unwrap())
         .collect::<std::collections::HashSet<_>>();
-    assert_eq!(ids.len(), 3);
+    assert_eq!(ids.len(), 4);
+
+    let queue = body_json(
+        router
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?page_size=2&collection=queue"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(queue["items"].as_array().unwrap().len(), 2);
+    assert!(queue.get("next_cursor").is_none());
+    assert!(
+        queue["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| { matches!(row["status"].as_str(), Some("not_started" | "started")) })
+    );
 }
 
 #[tokio::test]

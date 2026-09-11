@@ -73,10 +73,32 @@ impl FromStr for SortKey {
     }
 }
 
+/// A built-in client collection whose lifecycle membership spans multiple statuses.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TicketCollection {
+    Queue,
+    Archive,
+}
+
+impl FromStr for TicketCollection {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s {
+            "queue" => Ok(Self::Queue),
+            "archive" => Ok(Self::Archive),
+            other => Err(format!("invalid collection '{other}'")),
+        }
+    }
+}
+
 /// Filters + sort for a ticket query. Empty/`None` fields don't constrain.
 #[derive(Debug, Clone, Default)]
 pub struct TicketQuery {
     pub status: Option<Status>,
+    /// Built-in multi-status collection filter used before paginating client rows.
+    pub collection: Option<TicketCollection>,
     pub priority: Option<Priority>,
     pub category: Option<String>,
     /// A ticket must carry every one of these tags.
@@ -145,6 +167,15 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
         .collect();
     tickets.retain(|t| {
         q.status.is_none_or(|s| t.status == s)
+            && q.collection.is_none_or(|collection| match collection {
+                TicketCollection::Queue => {
+                    t.status != Status::Backlog
+                        && !matches!(t.status, Status::Archive | Status::Deleted | Status::Moved)
+                }
+                TicketCollection::Archive => {
+                    matches!(t.status, Status::Archive | Status::Deleted | Status::Moved)
+                }
+            })
             && q.priority.is_none_or(|p| t.priority == p)
             && q.category.as_deref().is_none_or(|c| t.category == c)
             // Defensive read-side enforcement for legacy or hand-edited files: Up Next is
@@ -152,7 +183,9 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
             && (!q.up_next_only || (t.up_next && t.status.is_active()))
             && (!q.open_only || is_open(t))
             // Moved tombstones are hidden from lists unless explicitly asked for (docs/03 §3.5).
-            && (q.status == Some(Status::Moved) || t.status != Status::Moved)
+            && (q.status == Some(Status::Moved)
+                || q.collection == Some(TicketCollection::Archive)
+                || t.status != Status::Moved)
             && q.close_reason.is_none_or(|r| t.close_reason == Some(r))
             && q.closed.is_none_or(|want| t.close_reason.is_some() == want)
             && q.assignee

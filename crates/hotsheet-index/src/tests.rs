@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 
 use hotsheet_model::{Priority, Status, Timestamp, Ulid};
-use hotsheet_ticketing::{FsStore, NewTicket, StoreMetadata, TicketPatch, TicketQuery, ops};
+use hotsheet_ticketing::{
+    FsStore, NewTicket, StoreMetadata, TicketCollection, TicketPatch, TicketQuery, ops,
+};
 
 use super::*;
 
@@ -131,6 +133,14 @@ fn structured_filters_match_the_file_scan() {
         },
         TicketQuery {
             open_only: true,
+            ..Default::default()
+        },
+        TicketQuery {
+            collection: Some(TicketCollection::Queue),
+            ..Default::default()
+        },
+        TicketQuery {
+            collection: Some(TicketCollection::Archive),
             ..Default::default()
         },
         // A cap must pick the same rows on both paths (both order by id, then cap).

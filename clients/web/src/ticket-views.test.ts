@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView } from './ticket-views';
+import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView, ticketViewQuery } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -22,6 +22,12 @@ describe('ticket views', () => {
     expect(ticketsForView(tickets, 'backlog').map(item => item.status)).toEqual(['backlog']);
     expect(ticketsForView(tickets, 'archive').map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
     expect(ticketsForView(tickets, 'errors')).toEqual([]);
+  });
+
+  it('scopes each built-in collection before server pagination', () => {
+    expect(ticketViewQuery('all')).toEqual({collection:'queue'});
+    expect(ticketViewQuery('backlog')).toEqual({status:'backlog'});
+    expect(ticketViewQuery('archive')).toEqual({collection:'archive'});
   });
 
   it('creates into the visible active destination and disables creation for Archive', () => {
