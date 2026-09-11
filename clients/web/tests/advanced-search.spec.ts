@@ -85,7 +85,7 @@ test('keeps the project identity readable beside expanded search at 680px',async
   await page.getByRole('button',{name:'Search tickets'}).click();
   const search=page.getByRole('textbox',{name:'Search tickets'});
   await search.fill('a wrapped production search query that leaves the project identity readable');
-  await search.evaluate(node=>(node as HTMLElement).blur());
+  await search.evaluate(node=>{(node as HTMLElement).blur()});
   await page.evaluate(()=>{scrollTo(0,0)});
   await expect.poll(()=>page.evaluate(()=>scrollX)).toBe(0);
   const geometry=await page.locator('.app-shell__main > .toolbar').evaluate(toolbar=>{const bounds=(selector:string)=>{const node=toolbar.querySelector<HTMLElement>(selector)!,rect=node.getBoundingClientRect();return{top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right,width:rect.width,clientWidth:node.clientWidth,scrollWidth:node.scrollWidth}},identity=toolbar.querySelector<HTMLElement>('[data-component="workspace-identity"]')!,toolbarRect=toolbar.getBoundingClientRect();return{toolbar:{top:toolbarRect.top,bottom:toolbarRect.bottom,left:toolbarRect.left,right:toolbarRect.right,width:toolbarRect.width},leading:bounds('.toolbar__leading'),trailing:bounds('.toolbar__trailing'),identity:bounds('[data-component="workspace-identity"]'),search:bounds('.workspace-header__search-group'),identityText:identity.textContent}});

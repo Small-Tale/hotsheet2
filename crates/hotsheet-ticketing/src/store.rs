@@ -1155,6 +1155,43 @@ impl FsStore {
         ids.dedup();
         Ok(ids)
     }
+
+    /// Ticket ULIDs changed in the index or working tree relative to `HEAD`.
+    ///
+    /// `--no-renames` makes both sides of a rename appear independently, which lets
+    /// the index reconcile the old deletion and the new file without parsing Git's
+    /// rename display syntax. Untracked ticket files are included so direct editor or
+    /// script writes become visible without a full store walk.
+    pub fn changed_ticket_ids_in_worktree(&self) -> Result<Vec<Ulid>, StoreError> {
+        let out = git_stdout(
+            &self.root,
+            &[
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "--no-renames",
+                "--",
+                "tickets",
+            ],
+        )
+        .ok_or_else(|| StoreError::Git("`git status --porcelain tickets` failed".into()))?;
+
+        let mut ids = Vec::new();
+        for line in out.lines() {
+            // Porcelain v1 prefixes each path with two status columns and a space.
+            let path = line.get(3..).unwrap_or_default().trim_matches('"');
+            if let Some(id) = Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .and_then(|s| Ulid::from_string(s).ok())
+            {
+                ids.push(id);
+            }
+        }
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
 }
 
 // ---- resilient-enumeration helpers -------------------------------------------------

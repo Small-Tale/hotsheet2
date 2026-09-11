@@ -750,7 +750,7 @@ enum KeyCmd {
     Delete { provider: String },
 }
 
-/// Filters + sort for `ls` (an in-memory scan; the SQLite/FTS index arrives with HS2-5).
+/// Filters + sort for index-backed `ls`.
 #[derive(Args)]
 struct LsFilters {
     /// Only this status.
@@ -846,6 +846,9 @@ fn main() -> Result<()> {
             | Cmd::Checkout { .. }
             | Cmd::Launch { .. }
             | Cmd::Serve { .. }
+            | Cmd::Ls { .. }
+            | Cmd::Show { .. }
+            | Cmd::Reindex { .. }
     );
     let result = match cli.command {
         Cmd::Init {
@@ -1712,6 +1715,7 @@ fn cmd_new(
 
 fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
     let store = FsStore::open(path)?;
+    let index = hotsheet_index::Index::open_reconciled(&default_index_path(&store)?, &store)?;
     // `me` in a person filter → this store's git user.email; an unresolvable `me` errors
     // rather than silently matching everyone (HS2-TCDTCH, docs/10 §10.3).
     let resolve_person = |v: &Option<String>| -> Result<Option<String>> {
@@ -1727,9 +1731,9 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
     };
     let page_after = match &f.page_after {
         Some(s) => Some(
-            ops::resolve(&store, s)?
-                .ok_or_else(|| anyhow::anyhow!("page-after: no ticket '{s}'"))?
-                .id,
+            index
+                .resolve_id(s)?
+                .ok_or_else(|| anyhow::anyhow!("page-after: no ticket '{s}'"))?,
         ),
         None => None,
     };
@@ -1758,7 +1762,7 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
         page_after,
         ..Default::default()
     };
-    let tickets = ops::query(&store, &query)?;
+    let tickets = index.query(&query)?;
 
     if tickets.is_empty() {
         println!("(no tickets)");
@@ -1768,15 +1772,22 @@ fn cmd_ls(path: &PathBuf, f: &LsFilters) -> Result<()> {
     let overlay = hotsheet_ticketing::LocalOverlay::new(path.clone());
     for t in &tickets {
         let up = if t.up_next { "*" } else { " " };
-        let unread = if overlay.is_unread(t).unwrap_or(false) {
-            "●"
-        } else {
-            " "
-        };
+        let is_unread =
+            Ulid::from_string(&t.id)
+                .ok()
+                .is_some_and(|id| match overlay.last_read(&id) {
+                    Ok(None) => true,
+                    Ok(Some(read_at)) => t
+                        .updated_at
+                        .as_deref()
+                        .is_none_or(|updated_at| updated_at > read_at.as_str()),
+                    Err(_) => false,
+                });
+        let unread = if is_unread { "●" } else { " " };
         println!(
             "{up}{unread} {:<12} {:<12} {}",
             t.slug,
-            status_str(t.status),
+            t.status.as_deref().unwrap_or_default(),
             t.title
         );
     }
@@ -3200,7 +3211,15 @@ fn cmd_renew(path: &PathBuf, id: &str, worker: &str, lease_minutes: i64) -> Resu
 
 fn cmd_show(path: &PathBuf, needle: &str) -> Result<()> {
     let store = FsStore::open(path)?;
-    let ticket = resolve(&store, needle)?;
+    let ticket = if let Ok(id) = Ulid::from_string(needle) {
+        store.read_ticket(&id)?
+    } else {
+        let index = hotsheet_index::Index::open_reconciled(&default_index_path(&store)?, &store)?;
+        let id = index
+            .resolve_id(needle)?
+            .with_context(|| format!("no ticket matching '{needle}'"))?;
+        store.read_ticket(&id)?
+    };
     print!("{}", to_file_string(&ticket));
     Ok(())
 }
@@ -4119,13 +4138,6 @@ fn parse_priority(s: &str) -> Result<Priority> {
         "lowest" => Priority::Lowest,
         other => bail!("invalid priority '{other}' (highest|high|default|low|lowest)"),
     })
-}
-
-fn status_str(s: Status) -> String {
-    serde_json::to_value(s)
-        .ok()
-        .and_then(|v| v.as_str().map(str::to_string))
-        .unwrap_or_default()
 }
 
 fn now_ts() -> Timestamp {

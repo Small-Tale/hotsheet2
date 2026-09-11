@@ -190,6 +190,23 @@ impl Index {
             .optional()?)
     }
 
+    /// Resolve an exact ULID or case-insensitive slug from the indexed projection.
+    /// This is the bounded lookup used before reading one source ticket file.
+    pub fn resolve_id(&self, needle: &str) -> Result<Option<Ulid>, IndexError> {
+        if let Ok(id) = Ulid::from_string(needle) {
+            return Ok(self.content_hash(&id)?.is_some().then_some(id));
+        }
+        let value = self
+            .conn
+            .query_row(
+                "SELECT id FROM tickets WHERE store_id=?1 AND slug=?2 COLLATE NOCASE LIMIT 1",
+                params![self.store_id, needle],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(value.and_then(|id| Ulid::from_string(&id).ok()))
+    }
+
     /// Record the bytes currently present for an already-indexed ticket without
     /// replacing its last healthy searchable projection. This lets callers retain a
     /// usable stale row for an unparseable file while still detecting a later repair,
@@ -378,6 +395,7 @@ impl Index {
             self.upsert(&ticket, &path.display().to_string(), &hash_bytes(&bytes))?;
             count += 1;
         }
+        self.record_git_state(store)?;
         Ok(count)
     }
 
@@ -386,50 +404,55 @@ impl Index {
     /// `(upserted, deleted)`. Cheaper than a full rebuild on a warm index — this is
     /// what makes "restore from disk on launch" fast (`docs/03` §3.4).
     pub fn reconcile(&self, store: &FsStore) -> Result<(usize, usize), IndexError> {
-        // Git-aware fast path (docs/03 §3.4, HS2-90): when the working tree is clean, HEAD
-        // is a faithful identity for the store's state. If HEAD is unchanged since the last
-        // reconcile the index is already current; if HEAD only *moved* (a commit / pull /
-        // checkout with a clean tree) we reconcile just the diffed delta — O(changes), not
-        // O(tickets). Any uncommitted edit makes the tree dirty and falls back to the full
-        // hash-walk, which is always correct.
-        if store.is_working_tree_clean() {
-            if let Some(current) = store.head_commit() {
-                match self.get_meta("head")? {
-                    Some(stored) if stored == current => return Ok((0, 0)),
-                    Some(stored) => {
-                        let result = self.reconcile_head_move(store, &stored, &current)?;
-                        self.set_meta("head", &current)?;
-                        return Ok(result);
-                    }
-                    None => {} // no baseline yet — full walk below, then record HEAD
-                }
-            }
+        // Once an index has a Git baseline, reconcile the union of the committed HEAD
+        // delta, current worktree delta, and the previous worktree delta. The last set is
+        // essential when a dirty file is reverted or removed: it must be refreshed even
+        // though it no longer appears in the current status. This makes warm reads
+        // O(changed ticket files) instead of O(all ticket files), without hiding direct
+        // edits made outside Hot Sheet.
+        if let (Some(current), Some(stored)) = (store.head_commit(), self.get_meta("head")?) {
+            let mut ids = if stored == current {
+                Vec::new()
+            } else {
+                store
+                    .changed_ticket_ids_between(&stored, &current)
+                    .map_err(|e| IndexError::Store(e.to_string()))?
+            };
+            let current_dirty = store
+                .changed_ticket_ids_in_worktree()
+                .map_err(|e| IndexError::Store(e.to_string()))?;
+            ids.extend(current_dirty.iter().copied());
+            ids.extend(self.previous_dirty_ids()?);
+            ids.sort();
+            ids.dedup();
+
+            let result = self.reconcile_ids(store, ids)?;
+            self.set_meta("head", &current)?;
+            self.set_meta(
+                "dirty_ticket_ids",
+                &serde_json::to_string(
+                    &current_dirty
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap_or_else(|_| "[]".into()),
+            )?;
+            return Ok(result);
         }
         let result = self.reconcile_full(store)?;
-        if store.is_working_tree_clean() {
-            if let Some(current) = store.head_commit() {
-                self.set_meta("head", &current)?;
-            }
-        }
+        self.record_git_state(store)?;
         Ok(result)
     }
 
-    /// Reconcile exactly the ticket files that changed between two commits (the git-diff
-    /// fast path). Each changed ULID is re-read + upserted if its file still exists, or
-    /// deleted if it's gone. Hash-guarded so an unchanged blob (e.g. a path listed twice)
-    /// is a no-op.
-    fn reconcile_head_move(
+    fn reconcile_ids(
         &self,
         store: &FsStore,
-        old: &str,
-        new: &str,
+        ids: impl IntoIterator<Item = Ulid>,
     ) -> Result<(usize, usize), IndexError> {
         let mut upserted = 0;
         let mut deleted = 0;
-        for id in store
-            .changed_ticket_ids_between(old, new)
-            .map_err(|e| IndexError::Store(e.to_string()))?
-        {
+        for id in ids {
             let path = store.ticket_path(&id);
             if path.exists() {
                 let bytes = std::fs::read(&path)?;
@@ -457,6 +480,33 @@ impl Index {
             }
         }
         Ok((upserted, deleted))
+    }
+
+    fn previous_dirty_ids(&self) -> Result<Vec<Ulid>, IndexError> {
+        let values = self
+            .get_meta("dirty_ticket_ids")?
+            .and_then(|value| serde_json::from_str::<Vec<String>>(&value).ok())
+            .unwrap_or_default();
+        Ok(values
+            .into_iter()
+            .filter_map(|value| Ulid::from_string(&value).ok())
+            .collect())
+    }
+
+    fn record_git_state(&self, store: &FsStore) -> Result<(), IndexError> {
+        let Some(head) = store.head_commit() else {
+            return Ok(());
+        };
+        let dirty = store
+            .changed_ticket_ids_in_worktree()
+            .map_err(|e| IndexError::Store(e.to_string()))?;
+        self.set_meta("head", &head)?;
+        self.set_meta(
+            "dirty_ticket_ids",
+            &serde_json::to_string(&dirty.iter().map(ToString::to_string).collect::<Vec<_>>())
+                .unwrap_or_else(|_| "[]".into()),
+        )?;
+        Ok(())
     }
 
     /// Full hash-walk reconcile: re-read every ticket file, upsert those whose content
@@ -653,7 +703,11 @@ impl Index {
         }
         let mut from = "tickets t".to_string();
         if let Some(text) = fts_query(q.text.as_deref()) {
-            from = "tickets t JOIN tickets_fts f ON f.rowid = t.rowid".to_string();
+            // Keep FTS as the outer loop. With an `id` sort SQLite otherwise prefers the
+            // `(store_id,id)` index and probes FTS once per ticket, turning a selective
+            // bounded search back into O(store size). The explicit CROSS JOIN preserves
+            // the FTS-first plan and sorts only its matches.
+            from = "tickets_fts f CROSS JOIN tickets t ON f.rowid = t.rowid".to_string();
             wheres.push("f.tickets_fts MATCH ?".into());
             args.push(Box::new(text));
         }

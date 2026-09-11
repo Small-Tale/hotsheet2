@@ -39,9 +39,26 @@ export function parseArguments(argv) {
     counts: parseScaleCounts(optionValue(argv, '--counts', '10000,100000,1000000')),
     keep: argv.includes('--keep'),
     skipWeb: argv.includes('--skip-web'),
+    assertCliBudgets: argv.includes('--assert-cli-budgets'),
     output: optionValue(argv, '--output', join(tmpdir(), `hotsheet-scale-${Date.now()}.json`)),
     timeoutMs: Number(optionValue(argv, '--timeout-ms', '300000')),
   };
+}
+
+const cliReadBudgetsMs = new Map([
+  [10_000, 2_000],
+  [100_000, 5_000],
+]);
+
+export function assertCliReadBudgets(count, scenarios) {
+  const budget = cliReadBudgetsMs.get(count);
+  if (!budget) return;
+  for (const name of ['list_first_100', 'full_text_query', 'show_ticket']) {
+    const result = scenarios[name];
+    if (!result || result.error || result.timed_out || result.wall_ms > budget) {
+      throw new Error(`CLI ${name} at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
+    }
+  }
 }
 
 function base32(value, width) {
@@ -361,7 +378,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.help) {
-    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
+    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
     return;
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
@@ -380,6 +397,7 @@ async function main() {
     runs: [],
   };
   let vite, browser, generated = 0, generatedBytes = 0;
+  const cliBudgetErrors = [];
   try {
     console.log(`Disposable scale workspace: ${root}`);
     report.bootstrap = summarizeProcess(await runMeasured(cli, ['bootstrap', '--project', projectRoot, '--store', store, '--prefix', 'ST'], { env, timeoutMs: options.timeoutMs }));
@@ -394,6 +412,9 @@ async function main() {
       generated = count;
       generatedBytes += generation.bytes;
       const run = { count, generation: { ...generation, total_bytes: generatedBytes } };
+      const stage = await runMeasured('git', ['-C', store, 'add', 'tickets'], { env, timeoutMs: options.timeoutMs });
+      const commit = await runMeasured('git', ['-C', store, '-c', 'user.name=Hot Sheet Scale', '-c', 'user.email=scale@hotsheet.local', 'commit', '-m', `Scale fixture ${count}`], { env, timeoutMs: options.timeoutMs });
+      run.fixture_commit = { stage: summarizeProcess(stage), commit: summarizeProcess(commit) };
       for (const [name, operation] of [
         ['cli', () => benchmarkCli(env, store, count, options.timeoutMs)],
         ['server', () => benchmarkServer(env, store, checkout, count, root, options.timeoutMs)],
@@ -404,6 +425,16 @@ async function main() {
       ]) {
         try { run[name] = await operation(); }
         catch (error) { run[name] = { error: error instanceof Error ? error.message : String(error) }; }
+      }
+      if (options.assertCliBudgets) {
+        try {
+          assertCliReadBudgets(count, run.cli);
+          run.cli_budget = { passed: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          run.cli_budget = { passed: false, error: message };
+          cliBudgetErrors.push(message);
+        }
       }
       report.runs.push(run);
       await mkdir(dirname(options.output), { recursive: true });
@@ -419,6 +450,7 @@ async function main() {
     if (!options.keep) await removeWorkspace(root);
   }
   console.log(`\nReport: ${options.output}`);
+  if (cliBudgetErrors.length) throw new Error(cliBudgetErrors.join('\n'));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

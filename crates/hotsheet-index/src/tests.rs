@@ -879,14 +879,14 @@ fn changed_ticket_ids_between_two_commits_lists_the_delta() {
 }
 
 #[test]
-fn dirty_tree_falls_back_to_the_full_walk() {
+fn dirty_tree_reconciles_only_changed_ticket_ids() {
     let (_dir, store) = git_store();
     commit_ticket(&store, "01ARZ3NDEKTSV4RRFFQ69G5FB0", "committed");
     let ix = Index::open_in_memory(store.root().display().to_string()).unwrap();
     assert_eq!(ix.reconcile(&store).unwrap(), (1, 0));
 
-    // Write a ticket WITHOUT committing — the tree is now dirty, so the fast path is
-    // skipped and the full hash-walk still picks up the uncommitted file.
+    // Write a ticket WITHOUT committing. Git identifies the new file, so reconciliation
+    // picks it up without walking every ticket in the store.
     let mut t = store
         .read_ticket(&ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0"))
         .unwrap();
@@ -902,9 +902,34 @@ fn dirty_tree_falls_back_to_the_full_walk() {
     assert_eq!(
         ix.reconcile(&store).unwrap(),
         (1, 0),
-        "full walk indexes the uncommitted add"
+        "dirty delta indexes the uncommitted add"
     );
     assert_eq!(ix.query(&TicketQuery::default()).unwrap().len(), 2);
+}
+
+#[test]
+fn reverting_a_dirty_ticket_refreshes_its_index_row() {
+    let (_dir, store) = git_store();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB0");
+    commit_ticket(&store, "01ARZ3NDEKTSV4RRFFQ69G5FB0", "committed");
+    let ix = Index::open_in_memory(store.root().display().to_string()).unwrap();
+    assert_eq!(ix.reconcile(&store).unwrap(), (1, 0));
+
+    let path = store.ticket_path(&id);
+    let committed = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, committed.replace("title: committed", "title: dirty")).unwrap();
+    assert_eq!(ix.reconcile(&store).unwrap(), (1, 0));
+    assert_eq!(ix.query(&TicketQuery::default()).unwrap()[0].title, "dirty");
+
+    // The current status is clean after restoring the committed bytes. The remembered
+    // previous dirty set still forces this ticket to refresh instead of leaving stale data.
+    std::fs::write(&path, committed).unwrap();
+    assert!(store.is_working_tree_clean());
+    assert_eq!(ix.reconcile(&store).unwrap(), (1, 0));
+    assert_eq!(
+        ix.query(&TicketQuery::default()).unwrap()[0].title,
+        "committed"
+    );
 }
 
 // ---- facet filters (HS2-89) -------------------------------------------------------

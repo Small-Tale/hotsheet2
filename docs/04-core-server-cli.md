@@ -408,14 +408,14 @@ return after local durability rather than waiting several seconds for a remote. 
 + server all commit. It's a no-op when the store isn't a git repo, and
 `HOTSHEET_NO_AUTOCOMMIT` disables it for batch work.
 Aggressive fetch/rebase/merge-on-conflict is the sync engine (`docs/03`; HS2-19); the
-semantic merge driver (§2.7) resolves concurrent edits. The CLI reads via a
-**direct store scan** — it does **not** touch the index; the index is the *server's*
-read cache, and there's no reader when no server runs. If a server is running, its
-watcher observes the file change and reindexes + broadcasts, so a CLI edit shows up
-live in every open client; if not, the server **reconciles** the index against the
-files on its next start (`Index::open_reconciled`), so offline CLI/git edits are
-picked up then. A manual rebuild is just deleting the index file — the server
-recreates it — so the CLI needs no SQLite dependency of its own.
+semantic merge driver (§2.7) resolves concurrent edits. Bounded `ls`/full-text reads and
+slug resolution for `show` use the same file-backed SQLite index as the server. Opening
+that index reconciles committed and uncommitted Git ticket deltas first, so direct external
+file edits remain visible while warm read cost follows changed files and result size rather
+than total store size. Exact-ULID `show` remains a direct one-file read. A missing, stale-
+schema, or corrupt index is disposable and rebuilt from the source files; `hotsheet
+reindex` performs the same explicit full rebuild. If a server is running, its watcher also
+observes CLI file changes and reindexes + broadcasts them live.
 
 **Ops / lifecycle:**
 ```

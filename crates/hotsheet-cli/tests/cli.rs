@@ -5,13 +5,20 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::path::Path;
+use std::sync::OnceLock;
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 fn hs(dir: &Path) -> Command {
+    static HOME: OnceLock<std::path::PathBuf> = OnceLock::new();
+    let home = HOME.get_or_init(|| {
+        let path = std::env::temp_dir().join(format!("hotsheet-cli-tests-{}", std::process::id()));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    });
     let mut cmd = Command::cargo_bin("hotsheet-cli").unwrap();
-    cmd.arg("-C").arg(dir);
+    cmd.env("HOTSHEET_HOME", home).arg("-C").arg(dir);
     cmd
 }
 
@@ -1007,6 +1014,7 @@ fn init_standalone_creates_git_store_links_project_and_sets_remote() {
     Command::cargo_bin("hotsheet-cli")
         .unwrap()
         .current_dir(&project)
+        .env("HOTSHEET_HOME", root.path().join("hotsheet-home"))
         .arg("ls")
         .assert()
         .success();

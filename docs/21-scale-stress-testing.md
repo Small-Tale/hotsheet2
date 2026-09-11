@@ -11,8 +11,9 @@ cargo build --workspace
 npm run stress:scale
 ```
 
-The harness creates one temporary checkout and sibling store, adds tickets incrementally at
-each configured milestone, and records:
+The harness creates one temporary checkout and sibling store, adds and commits tickets
+incrementally at each configured milestone (so Git delta reconciliation is measured under
+the same clean-store contract as normal auto-committed operation), and records:
 
 - generation time and dataset bytes;
 - CLI reindex, bounded list, full-text query, show, create, and edit wall time plus peak RSS;
@@ -30,6 +31,7 @@ Useful options:
 ```sh
 npm run stress:scale -- --counts 10000,100000,1000000
 npm run stress:scale -- --counts 1000 --skip-web --timeout-ms 60000
+npm run stress:scale -- --counts 10000,100000 --skip-web --assert-cli-budgets
 npm run stress:scale -- --keep --output /private/tmp/hotsheet-scale.json
 ```
 
@@ -39,6 +41,8 @@ deleted after the run. `--keep` retains that temporary workspace for profiling o
 inspection; remove it when finished. The harness never configures or contacts a remote.
 
 For comparable results, record the report's host metadata, run on an otherwise quiet
-machine, use the same build profile, and compare the same milestone. This is an exploratory
-capacity test, not a stable timing assertion: normal CI should continue to use the focused
-unit, integration, browser, and interaction-budget gates.
+machine, use the same build profile, and compare the same milestone. By default this is an
+exploratory capacity test, not a stable timing assertion. The opt-in
+`--assert-cli-budgets` mode fails if bounded list, full-text, or show exceeds 2 seconds at
+10K or 5 seconds at 100K; it intentionally remains outside normal CI. Normal CI continues
+to use the focused unit, integration, browser, and interaction-budget gates.

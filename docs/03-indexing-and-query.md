@@ -155,9 +155,13 @@ the same process. On change:
    reconnects after its cursor fell out of the ring receives `overflow` and performs
    an authoritative project refresh.
 
-**Git-aware fast path.** When a store is a git repo and HEAD moved (a commit,
-pull, checkout, or worktree switch), we diff `old-HEAD..new-HEAD` to get the exact
-changed paths instead of stat-walking the tree — O(changes), not O(tickets).
+**Git-aware fast path.** Once a store has an indexed HEAD baseline, reconciliation
+combines the `old-HEAD..new-HEAD` diff with Git's current ticket worktree delta. It also
+remembers the previous dirty-ticket set so reverting an external edit refreshes the stale
+projection even after the path disappears from `git status`. Warm server and CLI reads
+therefore parse only committed or uncommitted changed ticket files rather than stat-walking
+the tree — O(changes), not O(tickets). A missing baseline or non-Git store uses the safe
+full walk.
 
 **Full reindex** (`hotsheet reindex`, or automatic when `index_meta.schemaVersion`
 is stale, or when the index file is missing/corrupt): drop and rebuild from a full
