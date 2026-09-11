@@ -21,6 +21,14 @@ describe('application shell components', () => {
     expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.resizable-region[^{}]*display: none/);
   });
 
+  it('gives an expanded narrow search its own row below the project identity', () => {
+    const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
+    expect(css).toMatch(/@media \(max-width: 48rem\) \{[\s\S]*toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) \{ grid-template-columns: minmax\(0, 1fr\); row-gap: \.4rem;/);
+    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.toolbar__leading \{ padding-inline: \.5rem 0;/);
+    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: \.75rem 0; justify-content: stretch;/);
+    expect(css).toMatch(/\.workspace-header__search-group \{ width: auto; min-width: 11rem; flex: 1 1 auto;/);
+  });
+
   it('separates the terminal header from its lowered dashboard surface', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     expect(css).toMatch(/\.app-shell\[data-mode="terminals"\][^{]*\.project-tab-bar \{[^}]*border-bottom: 1px solid var\(--wa-color-surface-border\)/);

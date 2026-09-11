@@ -52,5 +52,12 @@ body[data-resizing-region] .app-shell > .resizable-region, body[data-resizing-re
   .app-shell__workspace { padding: .7rem; }
   .app-shell__composer { padding: .7rem; }
 }
+@media (max-width: 48rem) {
+  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { grid-template-columns: minmax(0, 1fr); row-gap: .4rem; }
+  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .toolbar__leading { padding-inline: .5rem 0; }
+  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .toolbar__trailing { grid-column: 1; width: 100%; padding-inline: .75rem 0; justify-content: stretch; }
+  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__actions { width: 100%; }
+  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__search-group { width: auto; min-width: 11rem; flex: 1 1 auto; }
+}
 .app-shell__work-area[data-has-composer="true"] > .app-shell__workspace { padding-top: 0; }
 @media (prefers-reduced-motion: reduce) { .app-shell .resizable-region, .app-shell .resizable-region .resizable-region__content { transition: none !important; } }

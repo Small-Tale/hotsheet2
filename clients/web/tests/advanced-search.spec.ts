@@ -65,3 +65,35 @@ test('evaluates is: filters and boolean expressions in the workspace search',asy
   await search.fill('is:duplicate ');await expect(page.locator('[data-component="filter-chip"][data-token-raw="is:duplicate"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-DUPLICATE"]')).toBeVisible();for(const slug of ['HS2-ACTIVE','HS2-DONE','HS2-VERIFIED','HS2-ARCHIVE'])await expect(page.locator(`[data-ticket-slug="${slug}"]`)).toHaveCount(0);expect(ticketQueries.at(-1)?.search).toBe('');await page.setViewportSize({width:680,height:720});await page.screenshot({path:'/private/tmp/hs2-m2zxjc-0y96fm-duplicate-narrow.png',fullPage:true});
   await page.getByRole('button',{name:'Search syntax help'}).click();const help=page.getByRole('dialog',{name:'Search syntax'});await expect(help.locator('dt')).toHaveText(['Tags','Content','Workflow','Dates']);await expect(help).toContainText('NOT binds before AND, and AND before OR');await expect(help).toContainText('is:active');await expect(help).toContainText('is:closed');await expect(help).toContainText('is:duplicate');await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-7efj3e-search-help-compact.png',fullPage:true});
 });
+
+test('keeps the project identity readable beside expanded search at 680px',async({page})=>{
+  await page.route('**/*',async route=>{const request=route.request(),path=new URL(request.url()).pathname;
+    if(!path.startsWith('/__hotsheet/'))return route.continue();
+    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:{id:'demo',root:'/work/demo',name:'Search demo',stores:['/work/demo.hs2'],apiPath:'/__hotsheet/project-api/demo',needsTicketSetup:false,needsHs1Migration:false,hs1ImportCompleted:false,hs1CleanupEligible:false}});
+    if(path.endsWith('/tickets')&&request.method()==='GET')return route.fulfill({json:rows});
+    if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git',provider:'git',display_name:'Hot Sheet git',locator:'/work/demo.hs2',default:true,capabilities:{create:true,update:true,notes:true,attachments:true,watch:true,query_fields:[]}}]});
+    if(path.endsWith('/connections')||path.endsWith('/permissions')||path.endsWith('/commands')||path.endsWith('/terminals')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
+    if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
+    if(path.endsWith('/terminal-settings'))return route.fulfill({json:{inherit_global_shell_history:false}});
+    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:0,events:[],overflow:false}});
+    return route.fulfill({status:404,json:{error:'not mocked'}});
+  });
+  await page.setViewportSize({width:680,height:720});
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Search tickets'}).click();
+  const search=page.getByRole('textbox',{name:'Search tickets'});
+  await search.fill('a wrapped production search query that leaves the project identity readable');
+  await page.evaluate(()=>{scrollTo(0,0)});
+  const geometry=await page.locator('.app-shell__main > .toolbar').evaluate(toolbar=>{const bounds=(selector:string)=>{const node=toolbar.querySelector<HTMLElement>(selector)!,rect=node.getBoundingClientRect();return{top:rect.top,bottom:rect.bottom,left:rect.left,right:rect.right,width:rect.width,clientWidth:node.clientWidth,scrollWidth:node.scrollWidth}},identity=toolbar.querySelector<HTMLElement>('[data-component="workspace-identity"]')!,toolbarRect=toolbar.getBoundingClientRect();return{toolbar:{top:toolbarRect.top,bottom:toolbarRect.bottom,left:toolbarRect.left,right:toolbarRect.right,width:toolbarRect.width},leading:bounds('.toolbar__leading'),trailing:bounds('.toolbar__trailing'),identity:bounds('[data-component="workspace-identity"]'),search:bounds('.workspace-header__search-group'),identityText:identity.textContent}});
+  expect(geometry.identityText).toBe('Search demo');
+  expect(geometry.identity.scrollWidth).toBeLessThanOrEqual(geometry.identity.clientWidth);
+  expect(geometry.identity.width).toBeGreaterThan(80);
+  expect(geometry.identity.left).toBeGreaterThanOrEqual(0);
+  expect(geometry.leading.bottom).toBeLessThanOrEqual(geometry.trailing.top);
+  expect(geometry.trailing.left).toBeGreaterThanOrEqual(geometry.toolbar.left);
+  expect(geometry.trailing.right).toBeLessThanOrEqual(geometry.toolbar.right);
+  expect(geometry.search.left).toBeGreaterThanOrEqual(3);
+  await page.screenshot({path:'/private/tmp/hs2-q0tg43-expanded-search-narrow-after.png',clip:{x:0,y:0,width:Math.min(680,geometry.toolbar.right),height:geometry.toolbar.bottom}});
+});

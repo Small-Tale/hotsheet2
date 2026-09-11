@@ -521,6 +521,8 @@ without a clear place in the product.
   commits a chip, while incomplete bare or quoted values survive incidental focus movement.
   Compact chips preserve the single-line field height; the magnifier, help, and conditional
   clear controls remain vertically centered on the field's first text line when content wraps.
+  At narrow browser widths, an expanded production search moves below the project identity so
+  the project name remains readable while the query retains the full main-column width.
   Real editable boundaries keep a keyboard caret reachable before, between, and after chips.
   Its concise placeholder remains
   ordinary search guidance while a help button
