@@ -3,7 +3,8 @@ import './terminal-dashboard.css';
 
 import { Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus } from 'lucide';
 
-import { terminalDrawerGridLayout, terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
+import { TERMINAL_TILE_HORIZONTAL_CHROME, TERMINAL_TILE_VERTICAL_CHROME, terminalDrawerGridLayout, terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
+import { terminalPhysicalScale } from '../terminal-viewport';
 import type { TerminalVisibilityGroup } from '../terminal-visibility';
 import { LucideIcon } from './lucide-icon';
 import { Select } from './select';
@@ -59,6 +60,8 @@ export interface TerminalDashboardProps {
 
 const keyFor = (session: TerminalDashboardSession) => `${session.projectId}:${session.id}`;
 const chatKeyFor = (chat: WorkspaceGridChat) => `${chat.projectId}:${chat.id}`;
+export const WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH=300;
+export const WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT=180;
 export function TerminalVisibilityControls({hiddenCount=0,groups=[],activeId='default',scope='dashboard'}:{hiddenCount?:number;groups?:readonly TerminalVisibilityGroup[];activeId?:string;scope?:string}){
   const choices=groups.map(group=>({value:group.id,label:group.name}));
   return <div class="terminal-dashboard-controls__visibility-group" data-visibility-scope={scope}><ToolbarControlGroup single><button type="button" class="terminal-dashboard-controls__visibility" data-action="open-terminal-visibility" aria-label="Manage terminal visibility" title="Show / Hide Terminals"><LucideIcon icon={Eye} name="eye" />{hiddenCount>0&&<span class="terminal-dashboard-controls__count" aria-hidden="true">{hiddenCount}</span>}</button></ToolbarControlGroup><ToolbarControlGroup single><Select className="terminal-dashboard-controls__visibility-select" name="terminal-visibility-group" ariaLabel="Terminal visibility group" value={activeId} choices={choices} renderSelected={choice=><span>{choice.label}</span>} /></ToolbarControlGroup></div>;
@@ -93,10 +96,10 @@ export function TerminalSession({ session }: {session:TerminalDashboardSession})
   </section>;
 }
 
-export function WorkspaceGridChatCard({chat}:{chat:WorkspaceGridChat}){
-  const key=chatKeyFor(chat),state=chat.busy?'Working':'Ready';
+export function WorkspaceGridChatCard({chat,previewScale=1}:{chat:WorkspaceGridChat;previewScale?:number}){
+  const key=chatKeyFor(chat),state=chat.busy?'Working':'Ready',scale=Math.max(0,previewScale);
   return <article class="terminal-tile workspace-chat-tile" data-key={key} data-component="workspace-chat-tile" data-chat-key={key} data-project-id={chat.projectId} data-chat-id={chat.id} data-busy={String(Boolean(chat.busy))} data-preview-only="true" data-action="open-grid-ai-chat" data-item-id={key} tabindex="0" aria-label={`Open ${chat.name} in ${chat.projectName}`}>
-    <div class="terminal-tile__preview workspace-chat-tile__preview"><LucideIcon icon={MessageSquare} name="message-square"/><div><strong>{chat.tool} AI chat</strong><p>{chat.summary||`Open ${chat.name} to continue the conversation.`}</p></div></div>
+    <div class="terminal-tile__preview workspace-chat-tile__preview"><div class="workspace-chat-tile__preview-surface" data-preview-scale={String(scale)} style={`--workspace-chat-preview-scale:${scale};--workspace-chat-preview-natural-width:${WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH}px;--workspace-chat-preview-natural-height:${WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT}px`}><LucideIcon icon={MessageSquare} name="message-square"/><div><strong>{chat.tool} AI chat</strong><p>{chat.summary||`Open ${chat.name} to continue the conversation.`}</p></div></div></div>
     <footer class="terminal-tile__footer"><span class="terminal-tile__state" aria-label={state} title={state}></span><button type="button" class="terminal-tile__identity" data-action="open-grid-ai-chat" data-item-id={key} data-project-id={chat.projectId} data-chat-id={chat.id} aria-label={`Open ${chat.name} in ${chat.projectName}`}><strong>{chat.projectName}<span aria-hidden="true"> › </span>{chat.name}</strong></button></footer>
   </article>;
 }
@@ -104,10 +107,10 @@ export function WorkspaceGridChatCard({chat}:{chat:WorkspaceGridChat}){
 type GridItem={kind:'terminal';session:TerminalDashboardSession}|{kind:'chat';chat:WorkspaceGridChat};
 
 function Grid({ sessions,chats=[],itemOrder=[], layout }: {sessions:TerminalDashboardSession[];chats?:WorkspaceGridChat[];itemOrder?:string[];layout:ReturnType<typeof terminalGridLayout>}) {
-  const style = `--terminal-tile-width:${layout.tileWidth}px;--terminal-tile-height:${layout.tileHeight}px;--terminal-grid-fit:${layout.fit}`;
+  const style = `--terminal-tile-width:${layout.tileWidth}px;--terminal-tile-height:${layout.tileHeight}px;--terminal-grid-fit:${layout.fit}`,chatPreviewScale=terminalPhysicalScale(WORKSPACE_CHAT_PREVIEW_NATURAL_WIDTH,WORKSPACE_CHAT_PREVIEW_NATURAL_HEIGHT,Math.max(1,layout.tileWidth-TERMINAL_TILE_HORIZONTAL_CHROME),Math.max(1,layout.tileHeight-TERMINAL_TILE_VERTICAL_CHROME));
   const rank=new Map(itemOrder.map((id,index)=>[id,index])),items:GridItem[]=[...sessions.map(session=>({kind:'terminal' as const,session})),...chats.map(chat=>({kind:'chat' as const,chat}))];
   if(itemOrder.length)items.sort((left,right)=>(rank.get(left.kind==='terminal'?left.session.id:left.chat.id)??Number.MAX_SAFE_INTEGER)-(rank.get(right.kind==='terminal'?right.session.id:right.chat.id)??Number.MAX_SAFE_INTEGER));
-  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{items.map(item=>item.kind==='terminal'?<FixedAspectTerminalCard session={item.session}/>:<WorkspaceGridChatCard chat={item.chat}/>)}</div>;
+  return <div class="terminal-grid" data-component="terminal-grid" data-basis={layout.basis} data-fit={String(layout.fit)} style={style}>{items.map(item=>item.kind==='terminal'?<FixedAspectTerminalCard session={item.session}/>:<WorkspaceGridChatCard chat={item.chat} previewScale={chatPreviewScale}/>)}</div>;
 }
 
 export function TerminalDashboard({ groups, width, height, fitAcross, fitHigh, grouping = 'flow',layoutMode='responsive', magnifiedKey, hiddenKeys = [], loading = false, message = '',contextMenu }: TerminalDashboardProps) {

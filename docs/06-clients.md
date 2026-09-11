@@ -924,7 +924,11 @@ always shows its project's terminals and has no visibility controls. Newly creat
 appear in Default and start hidden in existing named groups. The dashboard always uses one
 ungrouped flow, so there is no redundant project/none grouping selector. Terminal and AI-chat
 cards share that flow in both the cross-project Workspace grid and the drawer's **Project
-grid**. AI cards show provider, working/ready state, and the latest conversation summary,
+grid**. AI cards show provider, working/ready state, and the latest conversation summary.
+Their preview bodies use a fixed natural canvas and the terminal card's one-pass uniform
+scale, so increasing either grid's fit count shrinks the complete chat presentation instead of
+clipping normal-size typography inside a narrow tile. The shared footer remains ordinary card
+chrome, matching terminal cards. AI cards
 retain their mixed terminal/chat drawer order, and reopen the owning project and embedded
 conversation by click or keyboard. Both grid launchers use the Lucide `grid-3x3` icon; the
 broader name leaves room for browser and other workspace surfaces later.
