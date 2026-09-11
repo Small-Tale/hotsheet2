@@ -890,11 +890,12 @@ delegate(root, 'click', '[data-action="toggle-code-review-commit"]', (_event, ta
 delegate(root, 'click', '[data-action="refresh-repository-status"]', () => {
   repositoryDemoEvent.value = 'Repository status refreshed.';
 });
-const repositoryDemoFileSelector = '[data-action="open-repository-file-menu"],[data-action="open-ticket-file-menu"]';
+const repositoryDemoFileSelector = '[data-action="select-repository-file"]';
+const repositoryDemoFileMenuTrigger = '[data-action="open-repository-file-menu-trigger"]';
 function openRepositoryDemoFileMenu(target: Element, x: number, y: number) {
-  const element = target as HTMLElement;
+  const element = target.closest<HTMLElement>(repositoryDemoFileSelector) ?? target as HTMLElement;
   const path = element.dataset.itemId!;
-  const ticket = element.dataset.action === 'open-ticket-file-menu';
+  const ticket = (target as HTMLElement).dataset.fileMenuSource === 'ticket' || Boolean(target.closest('[data-component="change-evidence-dialog"]'));
   const view = repositoryDemoView.value;
   const diff = ticket ? 'ticket' : view === 'staged' || view === 'unstaged' ? view : view === 'conflicted' ? 'unstaged' : undefined;
   const width = 232;
@@ -912,11 +913,22 @@ function openRepositoryDemoFileMenu(target: Element, x: number, y: number) {
     y: Math.max(minimumY, Math.min(y, maximumY)),
   };
 }
-delegate(root, 'dblclick', repositoryDemoFileSelector, (_event, target) => {
+delegate(root, 'dblclick', repositoryDemoFileSelector, (event, target) => {
+  if ((event.target as Element).closest(repositoryDemoFileMenuTrigger)) return;
   repositoryDemoFileMenu.value = undefined;
   repositoryDemoEvent.value = `Would open ${(target as HTMLElement).dataset.itemId}.`;
 });
-delegate(root, 'click', repositoryDemoFileSelector, (_event, target) => {
+delegate(root, 'click', repositoryDemoFileMenuTrigger, (event, target) => {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  const box = target.getBoundingClientRect();
+  openRepositoryDemoFileMenu(target, box.right, box.bottom);
+});
+delegate(root, 'keydown', repositoryDemoFileMenuTrigger, (event, target) => {
+  const key = (event as KeyboardEvent).key;
+  if (key !== 'Enter' && key !== ' ') return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
   const box = target.getBoundingClientRect();
   openRepositoryDemoFileMenu(target, box.right, box.bottom);
 });
@@ -1010,7 +1022,7 @@ delegate(
     tabContextMenu.value = undefined;
   },
 );
-delegate(root, 'click', '[data-action="add-project"]', () => {
+delegate(root, 'click', '[data-action="add-project"], [data-action="choose-project"]', () => {
   addDemoProject();
 });
 delegate(root, 'click', '[data-action="toggle-project-sidebar"]', () => {
