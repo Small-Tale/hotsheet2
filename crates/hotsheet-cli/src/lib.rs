@@ -374,8 +374,26 @@ pub fn merge_driver_registered(store_path: &Path) -> bool {
 }
 
 /// Best-effort `git add -A && git commit` (warns on failure; files are already written).
+/// A clean index is the expected result of an idempotent operation, so it is not a
+/// commit failure and must not produce a warning.
 pub fn git_commit_all(path: &Path, message: &str) {
     run_git(path, &["add", "-A"]);
+    match Command::new("git")
+        .current_dir(path)
+        .args(["diff", "--cached", "--quiet", "--"])
+        .status()
+    {
+        Ok(status) if status.success() => return,
+        Ok(status) if status.code() == Some(1) => {}
+        Ok(status) => {
+            eprintln!("warning: git diff --cached --quiet -- exited with {status}");
+            return;
+        }
+        Err(err) => {
+            eprintln!("warning: could not run git diff --cached --quiet --: {err}");
+            return;
+        }
+    }
     run_git(path, &["commit", "--quiet", "-m", message]);
 }
 

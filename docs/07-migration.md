@@ -168,6 +168,10 @@ exporter against a copy of the old database and imports the result. It is a
 used, one-time, and needs Node + the bundled exporter, which the always-on ticket
 commands should not carry. (Under the hood it is the two-step `node
 migrator/src/export.mjs …` + `hotsheet import …`, which remain available separately.)
+Re-running the standalone migrator is a clean success: deterministic tickets and the
+completed-import receipt remain unchanged, no extra Git commit is created, and a clean
+index does not emit a failure-shaped `git commit` warning. Staging, index inspection,
+and real commit failures still retain the migrator's best-effort warning.
 
 ## 7.4 What is and isn't migrated
 
