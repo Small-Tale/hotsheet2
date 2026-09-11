@@ -1930,6 +1930,7 @@ mod tests {
     #[test]
     fn committing_write_does_not_wait_for_a_slow_remote_push() {
         use std::os::unix::fs::PermissionsExt;
+        use std::sync::mpsc;
         use std::time::{Duration, Instant};
 
         let (dir, store) = temp_store();
@@ -1947,25 +1948,55 @@ mod tests {
         .unwrap();
         git(dir.path(), &["push", "-q", "-u", "origin", "HEAD"]).unwrap();
 
+        let push_started = remote.path().join("push-started");
+        let allow_push = remote.path().join("allow-push");
         let hook = remote.path().join("hooks/pre-receive");
-        fs::write(&hook, "#!/bin/sh\nsleep 1\n").unwrap();
+        fs::write(
+            &hook,
+            r#"#!/bin/sh
+marker_dir="$(dirname "$0")/.."
+touch "$marker_dir/push-started"
+attempt=0
+while [ ! -f "$marker_dir/allow-push" ]; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -lt 3000 ] || exit 1
+    sleep 0.01
+done
+"#,
+        )
+        .unwrap();
         let mut permissions = fs::metadata(&hook).unwrap().permissions();
         permissions.set_mode(0o755);
         fs::set_permissions(&hook, permissions).unwrap();
 
-        let started = Instant::now();
-        store
-            .write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")))
-            .unwrap();
+        let (write_result_tx, write_result_rx) = mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            let result = store.write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")));
+            write_result_tx.send(result).unwrap();
+        });
+
+        let hook_deadline = Instant::now() + Duration::from_secs(15);
+        while !push_started.is_file() && Instant::now() < hook_deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let hook_started = push_started.is_file();
+        let write_result = write_result_rx.recv_timeout(Duration::from_secs(5));
+        // Always unblock the git child, including on an assertion failure below.
+        fs::write(&allow_push, b"").unwrap();
         assert!(
-            started.elapsed() < Duration::from_millis(750),
-            "a local mutation waited for remote publication"
+            hook_started,
+            "background push never reached the remote hook"
         );
+        write_result
+            .expect("a local mutation waited for the blocked remote publication")
+            .unwrap();
 
         let local_head = git_stdout(dir.path(), &["rev-parse", "HEAD"]).unwrap();
-        let deadline = Instant::now() + Duration::from_secs(4);
+        let branch = git_stdout(dir.path(), &["symbolic-ref", "--short", "HEAD"]).unwrap();
+        let remote_ref = format!("refs/heads/{}", branch.trim());
+        let deadline = Instant::now() + Duration::from_secs(5);
         loop {
-            let remote_head = git_stdout(remote.path(), &["rev-parse", "HEAD"]);
+            let remote_head = git_stdout(remote.path(), &["rev-parse", &remote_ref]);
             if remote_head.as_deref().map(str::trim) == Some(local_head.trim()) {
                 break;
             }
