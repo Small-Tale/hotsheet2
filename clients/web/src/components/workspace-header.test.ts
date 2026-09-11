@@ -74,6 +74,11 @@ describe('WorkspaceHeader', () => {
     expect(applyWorkspaceSortDirection(-3, 'descending')).toBe(3);
   });
 
+  it('keeps an editable caret boundary after a trailing filter chip', () => {
+    const markup=String(WorkspaceHeader({projectName:'Hot Sheet 2',mode:'list',searchOpen:true,searchTokens:[{kind:'tag',value:'client',raw:'tag:client',label:'tag:client',offset:0}]}));
+    expect(markup).toMatch(/data-token-raw="tag:client"[\s\S]*<\/span><span data-search-text="true" data-empty="true">\u200b<\/span><\/div>/);
+  });
+
   it('omits status sorting from column view while retaining it for list view', () => {
     expect(String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'board' }))).not.toContain('<wa-option value="status"');
     expect(String(WorkspaceHeader({ projectName: 'Hot Sheet 2', mode: 'list' }))).toContain('<wa-option value="status"');
