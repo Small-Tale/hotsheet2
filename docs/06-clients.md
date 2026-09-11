@@ -236,10 +236,10 @@ cleanup of the old live HS1 data; backups are never removed.
   reasons and ordinary notes do not add redundant per-item Edit buttons; their content
   surfaces support double-click plus Enter/Space keyboard entry instead.
 
-- **Active ticket work.** Ticket rows show a slow yellow two-dot activity animation
-  directly after status only while a worker holds a non-expired claim lease. Started
-  tickets without a lease remain visually idle, and old `claim_count` values never
-  imply presence. A local one-shot expiry timer removes stale indicators without issuing
+- **Ticket claims.** Ticket rows show a static yellow lock directly after status only
+  while a worker holds a non-expired claim lease. A claim communicates reservation, not
+  proof that an AI process is currently running. Started tickets without a lease remain
+  unclaimed, and old `claim_count` values never imply presence. A local one-shot expiry timer removes stale indicators without issuing
   polling requests; claim/release changes otherwise arrive through the shared live-update
   channel.
 
@@ -886,7 +886,8 @@ view layer is new work.
 - The AI-drive surface: launch/trigger a tool, the **permission popup**, the
   **busy indicator**, the connection count.
 - Multi-project tabs (local + remote), with pointer drag reordering and remembered
-  device-local project order.
+  device-local project order. A live claim uses a static segmented claim ring and a
+  “claimed” accessible label; it never presents a lease as proof of active AI execution.
 - Search (FTS) and filtered views.
 
 Closing a project tab first inventories its live terminals and AI chats. When any are

@@ -79,15 +79,16 @@ describe('application shell components', () => {
     expect(queuedMarkup).toContain('>99</span>');
     expect(queuedMarkup).not.toContain('project-tab__activity-ring');
     const cappedActiveMarkup=String(ProjectTab({ id: 'active', name: 'Active', location: 'local', notificationCount: 1, upNextCount: 125, activeTicketCount: 2 }));
-    expect(cappedActiveMarkup).toContain('aria-label="125 Up Next tickets, 2 active tickets"');
+    expect(cappedActiveMarkup).toContain('aria-label="125 Up Next tickets, 2 claimed tickets"');
     expect(cappedActiveMarkup).toContain('>2</span>');
     expect(cappedActiveMarkup).toContain('project-tab__activity-ring');
     expect(cappedActiveMarkup).toContain('data-segments="2"');
     expect(cappedActiveMarkup).toContain('stroke-dasharray="21.2058 7.0686"');
     expect(cappedActiveMarkup).toContain('aria-label="1 pending notification"');
     const activeOnlyMarkup=String(ProjectTab({id:'working',name:'Working',location:'local',activeTicketCount:1}));
-    expect(activeOnlyMarkup).toContain('aria-label="1 active ticket"');
+    expect(activeOnlyMarkup).toContain('aria-label="1 claimed ticket"');
     expect(activeOnlyMarkup).toContain('project-tab__activity-ring');
+    expect(readFileSync(new URL('./project-tab.css',import.meta.url),'utf8')).not.toContain('project-tab-activity-rotate');
     expect(activeOnlyMarkup).toContain('data-segments="1"');
     expect(activeOnlyMarkup).toContain('>1</span>');
     expect(projectTabActivityDash(1)).toBe('42.4115 14.1372');

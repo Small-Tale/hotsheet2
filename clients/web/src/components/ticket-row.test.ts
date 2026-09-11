@@ -113,20 +113,19 @@ describe('TicketRow', () => {
     expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-component="blocked-badge"'));
   });
 
-  it('shows slow yellow active work immediately after status without conflating started state', () => {
+  it('shows a static yellow claim lease without presenting it as live AI activity', () => {
     const inactive = String(TicketRow({ slug: 'HS2-STARTED', title: 'Started but idle', status: 'started', priority: 'default', category: 'task', tags: [], busy: false, agentName: 'Codex' }));
-    expect(inactive).not.toContain('ticket-list-row__active-work');
+    expect(inactive).not.toContain('ticket-list-row__claim');
     const active = String(TicketRow({ slug: 'HS2-ACTIVE', title: 'Being edited', status: 'not_started', priority: 'default', category: 'task', tags: [], busy: true, agentName: 'Codex' }));
-    expect(active).toContain('aria-label="Codex actively working"');
-    expect(active.indexOf('data-component="status-badge"')).toBeLessThan(active.indexOf('ticket-list-row__active-work'));
-    expect(active.indexOf('ticket-list-row__active-work')).toBeLessThan(active.indexOf('ticket-list-row__owner'));
+    expect(active).toContain('aria-label="Codex holds this ticket claim"');
+    expect(active.indexOf('data-component="status-badge"')).toBeLessThan(active.indexOf('ticket-list-row__claim'));
+    expect(active.indexOf('ticket-list-row__claim')).toBeLessThan(active.indexOf('ticket-list-row__owner'));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
-    expect(active).toContain('<filter id="ticket-active-work-HS2-ACTIVE"');
-    expect(active).toContain('ticket-list-row__active-work-goo');
+    expect(active).toContain('data-lucide="lock-keyhole"');
+    expect(active).not.toContain('actively working');
     expect(css).toContain('color: var(--hs-ticket-state-up-next)');
-    expect(css).toContain('animation: ticket-active-work-left 6s infinite');
-    expect(css).toContain('animation: ticket-active-work-rotate 2.25s linear infinite');
-    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(css).toContain('.ticket-list-row__claim');
+    expect(css).not.toContain('ticket-active-work');
   });
 
   it('marks completed and verified rows for readable title-only completion styling', () => {

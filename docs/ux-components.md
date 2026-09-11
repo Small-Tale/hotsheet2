@@ -450,8 +450,9 @@ always retain native clipboard behavior.
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets
   additionally show a compact `Blocked` pill immediately after their status. A live,
-  non-expired worker claim adds a slow yellow two-dot animation immediately after the
-  status badge; started-but-idle and previously claimed tickets do not show it.
+  non-expired worker claim adds a static yellow lock immediately after the status badge.
+  It indicates reservation rather than live AI presence; started-but-unclaimed and
+  previously claimed tickets do not show it.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.
     Neutral retains its pale fill swatch but uses a darker, still-lighter-than-gray icon
