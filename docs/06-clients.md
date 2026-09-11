@@ -1499,8 +1499,14 @@ phase durations for local profiling.
 Bulk mutations hold event-driven collection refreshes until their authoritative atomic
 batch or best-effort request sequence settles. Their optimistic rows therefore cannot
 disappear, reappear from an intermediate refresh, and disappear again while a multi-ticket
-status move is in flight. Attaching a ticket source, including after HS1 import, refreshes
-provider descriptors before exposing the imported tickets for mutation.
+status move is in flight. Back-to-back bulk actions for the same project also run in the
+order requested: each action derives its patch, inverse, and expected concurrency tokens
+only after the preceding action has committed or rolled back. A successful second action
+therefore uses the first response's fresh token, while a genuine external conflict still
+restores that action's captured rows, reports the error, and does not poison later queued
+work. Independent projects retain independent mutation queues. Attaching a ticket source,
+including after HS1 import, refreshes provider descriptors before exposing the imported
+tickets for mutation.
 
 Ticket creation follows the same immediate-authority rule: as soon as the create
 response returns, the new ticket is inserted, selected, and opened for Details editing.

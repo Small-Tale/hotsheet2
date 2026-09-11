@@ -8,6 +8,26 @@ export type BulkTicketAction =
   | { kind: 'remove-tag'; tag: string }
   | { kind: 'delete' };
 
+/**
+ * Runs bulk mutations in request order within a project. A later action starts only
+ * after the prior action has committed (or rolled back), so it reads the resulting
+ * concurrency tokens instead of the prior action's optimistic snapshot.
+ */
+export class BulkTicketMutationSequencer {
+  private readonly tails = new Map<string, Promise<void>>();
+
+  enqueue<T>(projectId: string, task: () => Promise<T>): Promise<T> {
+    const prior = this.tails.get(projectId) ?? Promise.resolve();
+    const result = prior.then(task, task);
+    const tail = result.then(() => undefined, () => undefined);
+    this.tails.set(projectId, tail);
+    void tail.then(() => {
+      if (this.tails.get(projectId) === tail) this.tails.delete(projectId);
+    });
+    return result;
+  }
+}
+
 /** Bulk editing is offered when every selected ticket's provider can update tickets. */
 export function canBulkUpdate(
   tickets: readonly TicketRow[],

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Capabilities, TicketRow } from './api';
-import { bulkTagChoices, bulkTicketPatch, canAtomicallyBulkUpdate, canBulkUpdate } from './ticket-bulk-operations';
+import { bulkTagChoices, BulkTicketMutationSequencer, bulkTicketPatch, canAtomicallyBulkUpdate, canBulkUpdate } from './ticket-bulk-operations';
 
 const ticket = (slug: string, connection_id = 'git', tags: string[] = []): TicketRow => ({
   connection_id, native_id: slug, qualified_id: `${connection_id}:${slug}`, id: slug, slug, title: slug,
@@ -36,5 +36,55 @@ describe('bulk ticket operations', () => {
 
   it('collects stable unique remove choices across a mixed selection', () => {
     expect(bulkTagChoices([ticket('ONE', 'git', ['zeta', 'client']), ticket('TWO', 'git', ['client', 'alpha'])])).toEqual(['alpha', 'client', 'zeta']);
+  });
+
+  it('starts a later same-project mutation after the prior commit exposes fresh tokens', async () => {
+    const sequencer = new BulkTicketMutationSequencer();
+    const events: string[] = [];
+    let token = 'before-verified';
+    let releaseVerified!: () => void;
+    const verifiedResponse = new Promise<void>(resolve => { releaseVerified = resolve; });
+    const verified = sequencer.enqueue('demo', async () => {
+      events.push(`verified:${token}`);
+      await verifiedResponse;
+      token = 'after-verified';
+      events.push('verified:committed');
+    });
+    const archived = sequencer.enqueue('demo', async () => {
+      events.push(`archive:${token}`);
+    });
+
+    await Promise.resolve();
+    expect(events).toEqual(['verified:before-verified']);
+    releaseVerified();
+    await Promise.all([verified, archived]);
+    expect(events).toEqual(['verified:before-verified', 'verified:committed', 'archive:after-verified']);
+  });
+
+  it('continues the queue after a genuine conflict rolls the prior action back', async () => {
+    const sequencer = new BulkTicketMutationSequencer();
+    const events: string[] = [];
+    const conflict = sequencer.enqueue('demo', async () => {
+      events.push('verified:conflict');
+      throw new Error('modified concurrently');
+    });
+    const archive = sequencer.enqueue('demo', async () => {
+      events.push('archive:attempted');
+      return true;
+    });
+
+    await expect(conflict).rejects.toThrow('modified concurrently');
+    await expect(archive).resolves.toBe(true);
+    expect(events).toEqual(['verified:conflict', 'archive:attempted']);
+  });
+
+  it('does not unnecessarily serialize independent projects', async () => {
+    const sequencer = new BulkTicketMutationSequencer();
+    let releaseDemo!: () => void;
+    const demoResponse = new Promise<void>(resolve => { releaseDemo = resolve; });
+    const demo = sequencer.enqueue('demo', () => demoResponse);
+    await expect(sequencer.enqueue('other', async () => 'ready')).resolves.toBe('ready');
+    releaseDemo();
+    await demo;
   });
 });
