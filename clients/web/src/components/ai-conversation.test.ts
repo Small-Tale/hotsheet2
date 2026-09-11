@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+
 import {describe,expect,it} from 'vitest';
 
 import type {PermissionItem} from '../permission-notifications';
@@ -5,6 +7,7 @@ import {AIConversation} from './ai-conversation';
 import {PermissionRequestPopup} from './permission-request-card';
 
 const permission:PermissionItem={id:1,connection:'connection-1',tool:'Bash',action:'npm test',key:'project:1',projectId:'project',projectName:'Project',agent:'Codex',role:'main worker',receivedAt:1,ignored:false,always_allow_supported:true};
+const css=readFileSync(new URL('./ai-conversation.css',import.meta.url),'utf8');
 
 describe('AIConversation',()=>{
   it('renders ordered Markdown turns, progress, and an inline permission request',()=>{
@@ -40,6 +43,7 @@ describe('AIConversation',()=>{
   });
 
   it('reuses the complete conversation surface as embedded drawer content',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'Ask about the project',busy:false,interruptible:false}));expect(markup).toContain('data-presentation="embedded"');expect(markup).toContain('ai-conversation--embedded');expect(markup).toContain('Conversation transcript');expect(markup).toContain('send-conversation-turn');expect(markup).not.toContain('wa-dialog')});
+  it('keeps the embedded composer fixed while the transcript owns bounded scrolling',()=>{expect(css).toMatch(/\.ai-conversation--embedded \{[^}]*display: flex[^}]*height: 100%[^}]*min-height: 0[^}]*overflow: hidden[^}]*flex-direction: column/);expect(css).toMatch(/\.ai-conversation--embedded > :not\(\.ai-conversation__transcript\) \{ flex: none; \}/);expect(css).toMatch(/\.ai-conversation--embedded > \.ai-conversation__transcript \{ flex: 1 1 0; \}/)});
   it('offers exports for completed transcripts and makes partial saved transcripts read-only',()=>{
     const message={id:'answer',role:'assistant' as const,content:'Saved result.',status:'completed' as const};
     const active=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[message],draft:'Continue',busy:false,interruptible:false}));

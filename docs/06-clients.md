@@ -473,7 +473,10 @@ cleanup of the old live HS1 data; backups are never removed.
   sequence with persistent AI/tool attribution and an accessible may-contain-errors cue. The
   dialog uses the shared compact dialog header instead of stacking a second application header
   beneath the platform dialog title, and its full-width composer keeps the send action attached
-  to the input at wide and narrow sizes. Retrying preserves the earlier transcript and activity
+  to the input at wide and narrow sizes. In the bottom drawer, the embedded conversation is a
+  height-bounded column: header, session controls, and composer remain fixed while the transcript
+  alone takes the remaining height and scrolls, so a long conversation cannot push the input below
+  the drawer viewport. Retrying preserves the earlier transcript and activity
   while clearing the stale failure. A launch failure is presented as a contained alert and keeps
   the underlying Codex daemon diagnostic, so failures such as an invalid control-socket path are
   actionable instead of collapsing to an unexplained exit status. Opening a populated transcript
