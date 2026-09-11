@@ -955,8 +955,10 @@ scale, so increasing either grid's fit count shrinks the complete chat presentat
 clipping normal-size typography inside a narrow tile. The shared footer remains ordinary card
 chrome, matching terminal cards. AI cards
 retain their mixed terminal/chat drawer order, and reopen the owning project and embedded
-conversation by click or keyboard. Both grid launchers use the Lucide `grid-3x3` icon; the
-broader name leaves room for browser and other workspace surfaces later.
+conversation by click or keyboard. The global Workspace grid launcher uses the Lucide
+`grid-3x3` icon, while the fixed Project grid tab in the bottom drawer keeps the distinct
+Lucide `layout-grid` icon. The broader name leaves room for browser and other workspace
+surfaces later.
 The dashboard keeps a resizable left operations sidebar open by default. It presents one
 `MenuHeader` and the shared seven-day `ProjectSummary` for every open project. With multiple
 projects, a leading `All projects` group sums each aligned trend day plus the completed-today
