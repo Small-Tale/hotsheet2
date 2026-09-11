@@ -7,6 +7,8 @@ describe('inline advanced-search tokens',()=>{
     expect(tokenFromRaw('tag:"needs design"')).toMatchObject({kind:'tag',value:'needs design'});
     expect(tokenFromRaw('attachment:*.png')).toMatchObject({kind:'attachment',value:'*.png'});
     expect(activeTagPrefix('words tag:"needs')).toBe('needs');
+    expect(tokenFromRaw('tag:"needs')).toBeUndefined();
+    expect(tokenFromRaw('attachment:"screen shot')).toBeUndefined();
   });
   it('only consumes complete trailing tokens and preserves ordinary text',()=>{
     expect(consumeSearchToken('parser tag:client ')).toMatchObject({text:'parser',token:{kind:'tag',value:'client'}});
@@ -23,6 +25,9 @@ describe('inline advanced-search tokens',()=>{
     expect(consumeSearchToken('updated-after:2026/09/07',true)).toMatchObject({text:'',token:{kind:'date',raw:'updated-after:2026/09/07'}});
     expect(effectiveSearch('parser has:commit',[])).toMatchObject({text:'parser',tokens:[{kind:'has',value:'commit'}]});
     expect(effectiveSearch('',[tokenFromRaw('is:active')!])).toMatchObject({text:'is:active',tokens:[{kind:'is',value:'active'}]});
+    expect(consumeSearchTokens('tag:h')).toMatchObject({text:'tag:h',tokens:[]});
+    expect(consumeSearchTokens('tag:"hello ')).toMatchObject({text:'tag:"hello ',tokens:[]});
+    expect(consumeSearchTokens('tag:"hello world" ')).toMatchObject({text:' ',tokens:[{kind:'tag',value:'hello world'}]});
   });
   it('keeps committed tokens ordered inside ordinary boolean text',()=>{
     expect(consumeSearchTokens('NOT tag:client',true)).toMatchObject({text:'NOT ',tokens:[{raw:'tag:client',offset:4}]});
@@ -37,6 +42,11 @@ describe('inline advanced-search tokens',()=>{
     expect(effectiveSearch(parsed.text,parsed.tokens).text).toBe('NOT tag:client AND hello');
     const simple=consumeSearchTokens('tag:client ',true);
     expect(effectiveSearch(simple.text,simple.tokens).text).toBe('');
+    expect(inlineSearchParts('',[{...tokenFromRaw('tag:client')!,offset:0}])).toEqual([
+      {kind:'text',value:''},
+      {kind:'token',token:expect.objectContaining({raw:'tag:client',offset:0})},
+      {kind:'text',value:''},
+    ]);
   });
   it('normalizes machine-local and ISO dates and rejects impossible dates',()=>{
     expect(parseSearchDate('09/01/2026 11:05 AM','en-US')).toMatch(/^2026-09-01T/);

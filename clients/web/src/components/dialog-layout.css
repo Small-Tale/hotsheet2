@@ -1,6 +1,6 @@
 .dialog-surface { box-sizing: border-box; padding: 0; overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-l); color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-xl); }
 .dialog-surface::backdrop { background: var(--wa-color-overlay-modal); }
-.dialog-header { display: grid; min-height: 4.9rem; padding: var(--wa-space-m) var(--wa-space-l); box-sizing: border-box; border-bottom: 1px solid var(--wa-color-surface-border); grid-template-columns: 2rem minmax(0,1fr) auto; align-items: start; gap: var(--wa-space-m); }
+.dialog-header { display: grid; min-height: 4.9rem; padding: var(--wa-space-m) var(--wa-space-l); box-sizing: border-box; border-bottom: 0; grid-template-columns: 2rem minmax(0,1fr) auto; align-items: start; gap: var(--wa-space-m); }
 .dialog-header[data-has-icon="false"] { grid-template-columns: minmax(0,1fr) auto; }
 .dialog-header__icon { display: grid; width: 2rem; height: 2rem; border-radius: var(--wa-border-radius-circle); color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); place-items: center; }
 .dialog-header__icon svg { width: 1.25rem; height: 1.25rem; }

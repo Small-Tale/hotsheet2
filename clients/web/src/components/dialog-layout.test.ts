@@ -17,7 +17,8 @@ describe('dialog layout primitives',()=>{
     expect(table).toContain('data-component="value-table"');
     expect(table).toContain('aria-label="Build metadata"');
     const css=readFileSync(resolve(import.meta.dirname,'dialog-layout.css'),'utf8');
-    expect(css).toMatch(/\.dialog-header \{[^}]*border-bottom:/);
+    expect(css).toMatch(/\.dialog-header \{[^}]*border-bottom: 0/);
+    expect(css).not.toMatch(/\.dialog-header \{[^}]*border-bottom: 1px/);
     expect(css).toMatch(/\.value-table \{[^}]*background:/);
     expect(css).not.toMatch(/\.value-table \{[^}]*border:/);
     expect(css).toMatch(/\.value-table > div \{[^}]*padding: var\(--wa-space-xs\) var\(--wa-space-m\);/);

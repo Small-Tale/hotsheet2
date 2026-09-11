@@ -20,8 +20,12 @@ describe('TerminalOperationsSidebar',()=>{
     expect(multiple).toContain('data-chart-tone="success"');
     expect(multiple.match(/data-chart-tone="brand"/g)).toHaveLength(2);
     expect(multiple.match(/data-component="project-summary"/g)).toHaveLength(3);
+    expect(multiple.match(/data-chart-maximum="6"/g)).toHaveLength(3);
+    expect(multiple).toContain('data-project-id="one"');
+    expect(multiple).toContain('--bar-height:33%');
     expect(single).not.toContain('All projects');
     expect(single.match(/data-component="project-summary"/g)).toHaveLength(1);
+    expect(single).toContain('data-chart-maximum="2"');
   });
 
   it('separates the multi-project aggregate from individual projects',()=>{

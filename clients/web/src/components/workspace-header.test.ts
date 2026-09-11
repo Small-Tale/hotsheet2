@@ -14,7 +14,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('data-view-mode="settings" aria-label="Settings view" aria-pressed="true"');
     expect(markup).toContain('data-workspace-search="true"');
     expect(markup).toContain('role="textbox" aria-label="Search tickets" aria-multiline="true" contenteditable="false"');
-    expect(markup).toMatch(/data-search-text="true">NOT <\/span><span class="workspace-header__search-token"[^>]*>.*tag:server.*data-search-text="true"> AND tag:cl<\/span>/s);
+    expect(markup).toMatch(/data-search-text="true" data-empty="false">NOT <\/span><span class="workspace-header__search-token"[^>]*>.*tag:server.*data-search-text="true" data-empty="false"> AND tag:cl<\/span>/s);
     expect(markup).toContain('aria-label="Edit tag server">tag:server</button>');
     expect(markup).toContain('aria-label="Remove tag server"');
     expect(markup).toContain('title="Double-click to edit"');
@@ -48,6 +48,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).toContain('.workspace-header__search { min-width: 7rem; min-height: 1.5rem;');
     expect(headerCss).toContain('white-space: pre-wrap; overflow-wrap: anywhere;');
     expect(headerCss).toContain('.workspace-header__search-token{display:inline-flex;');
+    expect(headerCss).toContain('height:1.25rem;min-height:1.25rem;');
     expect(headerCss).toContain('.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(26rem,100%);align-items:stretch;flex-direction:column;text-align:left}');
     expect(headerCss).toContain('.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;');
     expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }');

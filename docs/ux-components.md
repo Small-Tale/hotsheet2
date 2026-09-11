@@ -120,8 +120,9 @@ Supporting components:
   old-server, old-client, and unavailable-metadata state using the shared `DialogHeader`
   and `ValueTable` presentation. Safely recoverable details dismiss through the native
   popover light-dismiss behavior rather than a redundant Close action.
-- `DialogHeader` / `ValueTable` — **demo built**: shared dialog icon/title/subtitle/action
-  geometry and borderless static metadata cells with inset separators.
+- `DialogHeader` / `ValueTable` — **demo built**: shared divider-free dialog
+  icon/title/subtitle/action geometry and borderless static metadata cells with inset
+  separators.
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
   (HS2-R6P8MZ).
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.
@@ -151,16 +152,20 @@ does not introduce polling or another network request.
   percentage from the wireframe is intentionally omitted. Zero-completion days retain
   a one-pixel neutral baseline mark so all seven day positions remain visible. Production
   derives each bar from ticket completion timestamps in the corresponding local calendar
-  day. Brand and success chart-tone variants let an aggregate read separately from its
-  constituent projects, and both variants appear in the catalog. The whole summary is an accessible action that opens the selected project's
+  day. Its optional explicit chart maximum lets a comparison owner place several instances
+  on one shared numeric domain while retaining safe local scaling elsewhere. Brand and success
+  chart-tone variants let an aggregate read separately from its constituent projects, and both
+  variants appear in the catalog. The whole summary is an accessible action that opens the selected project's
   statistics surface; HS2-38RJMK owns the full charts behind the current placeholder.
   - `ProgressSparkline` / compact status histogram
   - completed and in-progress counts
 - `TerminalOperationsSidebar` — **demo built**: the Terminal Dashboard's left rail
   reuses `MenuHeader` and `ProjectSummary` for each open project. When two or more
   projects are open, an `All projects` group precedes them and sums aligned trend days,
-  completed-today counts, and in-progress counts; its success-green chart distinguishes
-  the aggregate from brand-blue project charts. Each summary opens statistics for
+  completed-today counts, and in-progress counts. The maximum summed daily value becomes the
+  shared scale for the aggregate and every constituent chart, making cross-project bar heights
+  directly comparable; its success-green chart distinguishes the aggregate from brand-blue
+  project charts. Each summary opens statistics for
   that project; the aggregate opens cross-project statistics. The component consumes
   the already-loaded ticket rows and does not introduce polling or network requests.
 - `RepositorySummary` — **production built**: one accessible branch/status action with
@@ -512,8 +517,11 @@ without a clear place in the product.
   attachment/media-annotation/commit presence, wildcard-filename, and lifecycle date/time
   tokens. Date chips and help examples use the client machine's locale, relative values
   such as `4h ago` resolve at search time, and ISO 8601 input remains portable and always
-  accepted. Complete uncommitted filters already affect results; space or blur commits a
-  chip. Its concise placeholder remains ordinary search guidance while a help button
+  accepted. Complete uncommitted filters already affect results; an explicit space or Enter
+  commits a chip, while incomplete bare or quoted values survive incidental focus movement.
+  Compact chips preserve the single-line field height, and real editable boundaries keep a
+  keyboard caret reachable before, between, and after chips. Its concise placeholder remains
+  ordinary search guidance while a help button
   exposes the complete syntax.
 - Search suggestions — **built**: typing `tag:` offers readable matching project tags
   in place, while lifecycle prefixes expose a native date and optional-time helper.
@@ -967,7 +975,9 @@ also discard only an exact leading reverse-video zsh partial-line marker from ea
 initial replay; normal `%` content and project-drawer streams remain byte-for-byte intact.
 
 The operations sidebar separates its aggregate `All projects` summary from individual projects
-with an inset divider. During remembered-project startup, the AppShell and terminal drawer remain
+with an inset divider and normalizes all displayed completion trends to the aggregate maximum.
+The aligned-series aggregation and explicit chart-domain contract are reusable for future
+cross-project statistics. During remembered-project startup, the AppShell and terminal drawer remain
 unmounted behind one stable restoration status until tickets, terminals, and the active-project
 selection are all ready, then appear together without a mixed intermediate layout.
 

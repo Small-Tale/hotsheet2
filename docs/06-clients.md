@@ -328,8 +328,8 @@ cleanup of the old live HS1 data; backups are never removed.
   dialog. It reports the running server application version, build revision, current local
   source revision, client revision, both protocol ranges, and server start time when the
   authenticated handshake supplied them. Missing values are labeled rather than guessed.
-  The dialog uses the same shared icon/title/subtitle header and borderless inset-separator
-  value table as repository status. Because this metadata is safely recoverable, the
+  The dialog uses the same shared divider-free icon/title/subtitle header and borderless
+  inset-separator value table as repository status. Because this metadata is safely recoverable, the
   native popover is dismissed by clicking outside or pressing Escape and has no redundant
   Close button. Every compatibility and recovery state is represented in `/ux-demo`.
   Recovery guidance distinguishes safe compatible skew, stale local source, old client,
@@ -929,8 +929,10 @@ broader name leaves room for browser and other workspace surfaces later.
 The dashboard keeps a resizable left operations sidebar open by default. It presents one
 `MenuHeader` and the shared seven-day `ProjectSummary` for every open project. With multiple
 projects, a leading `All projects` group sums each aligned trend day plus the completed-today
-and in-progress counts. An inset divider below that aggregate keeps it distinct from the
-individual project list. The project summaries open project statistics and the aggregate opens
+and in-progress counts. Every chart in that cross-project list uses the maximum of the summed
+`All projects` trend as its shared scale, so equal bar heights mean equal activity across the
+aggregate and each project; a single-project summary continues to use its own maximum. An inset
+divider below that aggregate keeps it distinct from the individual project list. The project summaries open project statistics and the aggregate opens
 cross-project statistics. These values derive from ticket collections already loaded for the
 open project tabs, so the sidebar adds no polling or network traffic. It remains usable beside
 the grid and ticket rail at the supported 1024×600 floor, and can be hidden and restored from
@@ -944,14 +946,16 @@ launcher share the second row. Activating search animates it onto a dedicated fu
 row, where tag-autocomplete options stretch across the popup with consistently left-aligned
 labels. This is the same advanced search surface and state as the main workspace, including chips,
 tag completion, attachment/presence filters, relative or local dates, and syntax help. A
-well-formed structured value becomes a chip as soon as an impossible
-continuation such as trailing whitespace is entered, or when the search field loses focus;
-this includes workflow `is:` values and relative, ISO, localized, or year-first slash dates.
-Committed chips stay at their exact positions inside the editable expression, so queries such
-as `NOT tag:client AND parser` retain readable boolean order. Ordinary text wraps at character
-boundaries while each chip wraps atomically; the toolbar grows downward without clipping or
-moving peer controls. A chip can return to editable text through its labeled edit action or a
-double-click, while removal leaves the search focused at its former position. The expanded
+well-formed structured value becomes a chip only after an explicit impossible continuation
+such as trailing whitespace or Enter; incidental focus loss never commits a partial value.
+Quoted filters also remain editable until the closing quote and explicit commit delimiter.
+Committed chips stay at their exact positions inside the editable expression, with caret stops
+before, between, and after them, so queries such as `NOT tag:client AND parser` retain readable
+boolean order. Compact 1.25rem chips do not make an otherwise single-line field taller or
+misalign its icons. Ordinary text wraps at character boundaries while each chip wraps atomically;
+the toolbar grows downward without clipping or moving peer controls. A chip can return to
+editable text through its labeled edit action or a double-click, while removal leaves the search
+focused at its former position. The expanded
 search field keeps its single-line 1.5428125rem corner radius as content wraps onto additional
 lines, instead of changing to a different radius. Both workspace and global
 ticket search also accept case-insensitive

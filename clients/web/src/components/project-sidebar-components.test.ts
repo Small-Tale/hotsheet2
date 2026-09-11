@@ -7,7 +7,7 @@ import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 import { ProjectSidebar } from './project-sidebar';
-import { ProjectSummary } from './project-summary';
+import { aggregateAlignedChartValues, chartDomainMaximum, ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
 import { ViewNavigation } from './view-navigation';
 
@@ -43,6 +43,23 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-project-id="demo"');
     expect(markup).toContain('aria-label="Open project statistics: 8 completed today, 2 in progress"');
     expect(markup.match(/data-bar=/g)).toHaveLength(2);
+  });
+
+  it('uses an explicit shared chart domain without allowing bars to overflow it', () => {
+    const shared = String(ProjectSummary({ completedToday: 4, inProgress: 1, trend: [1, 4], chartMaximum: 8 }));
+    expect(shared).toContain('data-chart-maximum="8"');
+    expect(shared).toContain('--bar-height:13%');
+    expect(shared).toContain('--bar-height:50%');
+    const undersized = String(ProjectSummary({ completedToday: 9, inProgress: 1, trend: [9], chartMaximum: 4 }));
+    expect(undersized).toContain('data-chart-maximum="9"');
+    expect(undersized).toContain('--bar-height:100%');
+  });
+
+  it('generalizes aligned aggregate domains across unequal chart series', () => {
+    const aggregate = aggregateAlignedChartValues([[2, 1, 4], [3, 5], []]);
+    expect(aggregate).toEqual([2, 4, 9]);
+    expect(chartDomainMaximum(aggregate)).toBe(9);
+    expect(chartDomainMaximum([], 0)).toBe(1);
   });
 
   it('renders zero-completion days as explicit baseline marks', () => {

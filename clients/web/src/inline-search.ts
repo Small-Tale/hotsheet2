@@ -61,9 +61,9 @@ export function tokenFromRaw(raw:string):InlineSearchToken|undefined{
   if(lifecycle){const value=lifecycle[1].toLowerCase() as SearchLifecycle;return{kind:'is',value,raw:`is:${value}`,label:`is:${value}`}}
   const presence=source.match(/^has:(attachment|media-annotation|commit)$/i);
   if(presence){const value=presence[1].toLowerCase() as SearchPresence;return{kind:'has',value,raw:`has:${value}`,label:`has ${value.replace('-',' ')}`}}
-  const tag=source.match(/^tag:("(?:\\.|[^"])*"|\S+)$/i);
+  const tag=source.match(/^tag:("(?:\\.|[^"])*"|[^"\s]\S*)$/i);
   if(tag){const value=unquote(tag[1]);return value?{kind:'tag',value,raw:`tag:${quoteIfNeeded(value)}`,label:`tag:${value}`}:undefined}
-  const attachment=source.match(/^attachment:("(?:\\.|[^"])*"|\S+)$/i);
+  const attachment=source.match(/^attachment:("(?:\\.|[^"])*"|[^"\s]\S*)$/i);
   if(attachment){const value=unquote(attachment[1]);return value?{kind:'attachment',value,raw:`attachment:${quoteIfNeeded(value)}`,label:`attachment:${value}`}:undefined}
   const date=source.match(new RegExp(`^(${dateFields.join('|')})-(before|after):(.+)$`,'i'));
   if(date){const value=parseSearchDate(date[3]);if(!value)return undefined;const field=date[1].toLowerCase() as SearchDateField,direction=date[2].toLowerCase() as SearchDateDirection;return{kind:'date',field,direction,value,raw:`${field}-${direction}:${date[3].trim()}`,label:`${field} ${direction} ${date[3].trim()}`}}
@@ -85,7 +85,7 @@ export function consumeSearchToken(input:string,force=false):{text:string;token?
 
 /** Consume every complete structured token, including tokens embedded in boolean text. */
 export function consumeSearchTokens(input:string,force=false):{text:string;tokens:InlineSearchToken[];removed:ReadonlyArray<{start:number;end:number}>}{
-  const pattern=/(?:^|[\s(])((?:is|tag|has|attachment):(?:"(?:\\.|[^"])*"|[^\s()]+)|(?:created|completed|started|verified|archived|updated)-(?:before|after):(?:"(?:\\.|[^"])*"|[^\s()]+(?:\s+ago)?))(?=$|[\s)])/gi,result:InlineSearchToken[]=[],removed:Array<{start:number;end:number}>=[];
+  const pattern=/(?:^|[\s(])((?:is|tag|has|attachment):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*)|(?:created|completed|started|verified|archived|updated)-(?:before|after):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*(?:\s+ago)?))(?=$|[\s)])/gi,result:InlineSearchToken[]=[],removed:Array<{start:number;end:number}>=[];
   let text='',cursor=0;
   for(const match of input.matchAll(pattern)){const raw=match[1],start=match.index+match[0].lastIndexOf(raw),end=start+raw.length;if(end===input.length&&!force&&!/\s$/.test(input))continue;const token=tokenFromRaw(raw);if(!token)continue;text+=input.slice(cursor,start);result.push({...token,offset:text.length});removed.push({start,end});cursor=end}
   text+=input.slice(cursor);return{text,tokens:result,removed};
@@ -107,8 +107,8 @@ export function activeDatePrefix(input:string):`${SearchDateField}-${SearchDateD
 export function inlineSearchParts(input:string,tokens:readonly InlineSearchToken[]):InlineSearchPart[]{
   const ordered=tokens.map((token,index)=>({token,index,offset:Math.max(0,Math.min(input.length,token.offset??input.length))})).sort((left,right)=>left.offset-right.offset||left.index-right.index),parts:InlineSearchPart[]=[];
   let cursor=0;
-  for(const {token,offset} of ordered){if(offset>cursor)parts.push({kind:'text',value:input.slice(cursor,offset)});parts.push({kind:'token',token:{...token,offset}});cursor=offset}
-  if(cursor<input.length||parts.length===0)parts.push({kind:'text',value:input.slice(cursor)});
+  for(const {token,offset} of ordered){parts.push({kind:'text',value:input.slice(cursor,offset)});parts.push({kind:'token',token:{...token,offset}});cursor=offset}
+  parts.push({kind:'text',value:input.slice(cursor)});
   return parts;
 }
 

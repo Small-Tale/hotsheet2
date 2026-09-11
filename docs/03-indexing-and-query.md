@@ -33,9 +33,11 @@ known identity is never hidden by view scope. The ordinary toolbar search accept
 field tokens without opening a separate advanced-search dialog. Typing `tag:` offers
 matching project tags, including quoted tags with spaces, and selecting or completing one
 turns it into a removable, double-click-to-edit chip. Complete filters take effect before
-the trailing space is typed; space or blur commits them as chips, and chips wrap below the
-input without truncating their values. The empty/single-line search keeps its compact pill
-shape. When chips make it taller, the toolbar grows downward while the other controls keep
+the trailing space is typed; an explicit space or Enter commits them as chips, while incomplete
+bare and quoted values remain editable through incidental focus movement. Real editable
+boundaries keep the keyboard caret reachable before, between, and after chips. Chips do not
+truncate their values and their compact height preserves the empty/single-line search pill.
+When wrapping makes the search taller, the toolbar grows downward while the other controls keep
 their original top alignment and the project tabs and work area move down intact. The same
 surface accepts `has:attachment`,
 `has:media-annotation`, `has:commit`, `attachment:<name-or-*-wildcard>`, and inclusive

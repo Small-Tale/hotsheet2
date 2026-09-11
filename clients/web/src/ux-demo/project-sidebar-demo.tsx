@@ -54,7 +54,8 @@ export function ProjectSidebarDemo() {
 }
 export function TerminalOperationsSidebarDemo() {
   return <section class="sidebar-component-demo"><div class="sidebar-component-demo__rail"><TerminalOperationsSidebar projects={[
-    { id: 'hotsheet', name: 'Hot Sheet', completedToday: 6, inProgress: 3, trend: [3, 0, 2, 5, 4, 7, 6] },
-    { id: 'docs', name: 'Documentation', completedToday: 2, inProgress: 1, trend: [0, 1, 0, 2, 1, 0, 2] },
+    { id: 'hotsheet2', name: 'HotSheet2', completedToday: 1, inProgress: 6, trend: [1, 1, 3, 2, 5, 4, 1] },
+    { id: 'best-in-manila', name: 'Best-in-Manila', completedToday: 0, inProgress: 0, trend: [0, 0, 0, 0, 0, 0, 0] },
+    { id: 'kerf', name: 'Kerf', completedToday: 1, inProgress: 1, trend: [1, 0, 2, 0, 0, 5, 1] },
   ]}/></div></section>;
 }
