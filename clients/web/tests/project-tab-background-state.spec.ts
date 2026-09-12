@@ -105,7 +105,7 @@ test('refreshes non-active project tab counts and live-work state while preservi
     row('BETA02', 'Beta'),
   ];
   await fixture.emit(projects.beta.id, 'claimed');
-  await expect(betaTab.locator('.project-tab__work')).toHaveAttribute('aria-label', '2 Up Next tickets, 1 claimed ticket');
+  await expect(betaTab.locator('.project-tab__work')).toHaveAttribute('aria-label', '2 Up Next tickets, 1 active ticket');
   await expect(betaTab.locator('.project-tab__activity-ring')).toBeVisible();
   await expect(alphaTab.getByRole('tab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-ALPHA1"]')).toBeVisible();

@@ -340,9 +340,8 @@ does not introduce polling or another network request.
   busy, offline, attention, and ticket-work state occupy that reserved balance space.
   Ticket-work state derives from each open project's already-cached ticket rows without
   adding requests: a yellow circle is absent at zero, shows 1–99, caps visible overflow
-  at `99+`, and changes to a yellow half-speed activity ring for any live claim. The ring
-  is static because a live lease proves reservation, not a currently running AI process.
-  It has one yellow segment per simultaneous claimed ticket and its center shows the claim
+  at `99+`, and changes to a rotating yellow half-speed activity ring for any live claim.
+  It has one yellow segment per simultaneous active claim and its center shows the active
   count, including `1`; the accessible label continues reporting both uncapped axes.
   Each project's replay-safe live-update connection authoritatively replaces that
   cache after ticket/claim events while the tab is inactive. Refresh coordination coalesces
@@ -464,8 +463,8 @@ always retain native clipboard behavior.
   needs review (purple), blocked (dark gray), then Up Next (yellow). Up Next also uses
   the familiar yellow Lucide star with an accessible add/remove name. Blocked tickets
   additionally show a compact `Blocked` pill immediately after their status. A live,
-  non-expired worker claim adds a static yellow lock immediately after the status badge.
-  It indicates reservation rather than live AI presence; started-but-unclaimed and
+  non-expired worker claim adds a yellow activity spinner immediately after the status badge;
+  started-but-unclaimed and
   previously claimed tickets do not show it.
   - category/type icon and color use a serializable Lucide name plus the HS1 custom
     command palette; a configured icon replaces category text and appears before the title.

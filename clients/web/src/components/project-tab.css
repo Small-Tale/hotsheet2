@@ -13,5 +13,7 @@
 .project-tab__work[data-active="true"] { color: var(--hs-ticket-state-up-next); background: transparent; }
 .project-tab__activity-ring { position:absolute; inset:0; width:100%; height:100%; overflow:visible; fill:none; stroke-width:4; }
 .project-tab__activity-track { stroke:var(--wa-color-neutral-fill-quiet); }
-.project-tab__activity-segments { stroke:currentColor; transform:rotate(-90deg); transform-origin:12px 12px; }
+.project-tab__activity-segments { stroke:currentColor; transform-origin:12px 12px; animation:project-tab-activity-rotate 1.7s linear infinite; }
 .project-tab__work-count { position: relative; z-index: 1; color: var(--wa-color-warning-on-normal); }
+@keyframes project-tab-activity-rotate { from { transform:rotate(-90deg); } to { transform:rotate(270deg); } }
+@media (prefers-reduced-motion:reduce) { .project-tab__activity-segments { animation:none; transform:rotate(-90deg); } }

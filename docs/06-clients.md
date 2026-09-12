@@ -241,9 +241,8 @@ and identity-less legacy entries remain conservatively blocking.
   reasons and ordinary notes do not add redundant per-item Edit buttons; their content
   surfaces support double-click plus Enter/Space keyboard entry instead.
 
-- **Ticket claims.** Ticket rows show a static yellow lock directly after status only
-  while a worker holds a non-expired claim lease. A claim communicates reservation, not
-  proof that an AI process is currently running. Started tickets without a lease remain
+- **Ticket claims.** Ticket rows show a yellow spinner directly after status only
+  while a worker holds a non-expired claim lease. Started tickets without a lease remain
   unclaimed, and old `claim_count` values never imply presence. A local one-shot expiry timer removes stale indicators without issuing
   polling requests; claim/release changes otherwise arrive through the shared live-update
   channel.
@@ -946,8 +945,8 @@ view layer is new work.
   device-local project order, and an accessible per-project Up Next count. The count
   is omitted at zero, shows its exact value through 99, and renders `99+` above that
   while retaining the full count for assistive technology. Any live ticket claim turns
-  the yellow count circle into a static claim ring split into one segment per
-  simultaneous claimed ticket, and the center switches to that claimed count (including
+  the yellow count circle into a half-speed rotating activity ring split into one segment per
+  simultaneous active claim, and the center switches to that active count (including
   a visible `1` when there is no Up Next count). Each open project's existing long-poll stream reconciles
   those cached rows after ticket, claim, renew, and release events even when the project is
   not selected; the indicator never waits for a tab activation to become current. A

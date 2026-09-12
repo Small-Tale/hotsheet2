@@ -113,16 +113,16 @@ describe('TicketRow', () => {
     expect(markup.indexOf('data-component="status-badge"')).toBeLessThan(markup.indexOf('data-component="blocked-badge"'));
   });
 
-  it('shows a static yellow claim lease without presenting it as live AI activity', () => {
+  it('shows an animated yellow activity indicator only for a live claim lease', () => {
     const inactive = String(TicketRow({ slug: 'HS2-STARTED', title: 'Started but idle', status: 'started', priority: 'default', category: 'task', tags: [], busy: false, agentName: 'Codex' }));
     expect(inactive).not.toContain('ticket-list-row__claim');
     const active = String(TicketRow({ slug: 'HS2-ACTIVE', title: 'Being edited', status: 'not_started', priority: 'default', category: 'task', tags: [], busy: true, agentName: 'Codex' }));
-    expect(active).toContain('aria-label="Codex holds this ticket claim"');
+    expect(active).toContain('aria-label="Codex is actively working on this ticket"');
     expect(active.indexOf('data-component="status-badge"')).toBeLessThan(active.indexOf('ticket-list-row__claim'));
     expect(active.indexOf('ticket-list-row__claim')).toBeLessThan(active.indexOf('ticket-list-row__owner'));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
-    expect(active).toContain('data-lucide="lock-keyhole"');
-    expect(active).not.toContain('actively working');
+    expect(active).toContain('data-component="loading-spinner"');
+    expect(active).not.toContain('data-lucide="lock-keyhole"');
     expect(css).toContain('color: var(--hs-ticket-state-up-next)');
     expect(css).toContain('.ticket-list-row__claim');
     expect(css).not.toContain('ticket-active-work');

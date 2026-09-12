@@ -1,8 +1,9 @@
 import './ticket-row.css';
 
-import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, LockKeyhole,Minus, Star } from 'lucide';
+import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, Minus, Star } from 'lucide';
 
 import { categoryAbbreviation, defaultCategoryPresentation, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
+import { LoadingSpinner } from './loading-spinner';
 import { LucideIcon } from './lucide-icon';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
@@ -54,10 +55,10 @@ export function ticketRowIndicator(props: Pick<TicketRowProps, 'feedbackNeeded' 
   return undefined;
 }
 
-function ClaimLeaseIndicator({ agentName = 'AI' }: { agentName?: string }) {
-  const label = `${agentName} holds this ticket claim`;
-  return <span class="ticket-list-row__claim" role="img" aria-label={label} title={`${label} until the claim lease expires`}>
-    <LucideIcon icon={LockKeyhole} name="lock-keyhole" />
+function ActiveClaimIndicator({ agentName = 'AI' }: { agentName?: string }) {
+  const label = `${agentName} is actively working on this ticket`;
+  return <span class="ticket-list-row__claim" title={`${label} while its claim lease remains live`}>
+    <LoadingSpinner label={label} />
   </span>;
 }
 
@@ -129,7 +130,7 @@ export function TicketRow(raw: TicketRowProps) {
             <div class="ticket-list-row__metadata">
               {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>}
               <StatusBadge status={props.status} compact />
-              {props.busy && <ClaimLeaseIndicator agentName={props.agentName} />}
+              {props.busy && <ActiveClaimIndicator agentName={props.agentName} />}
               {needsReview && <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-list-row__feedback-icon" />Needs review</span>}
               {props.blocked && <BlockedBadge compact />}
               <span class="ticket-list-row__owner" aria-label={props.agentName}>{props.agentName}</span>
