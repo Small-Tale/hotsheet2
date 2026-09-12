@@ -64,8 +64,18 @@ above the 1M budget when exercising both tiers.
 The opt-in `--assert-web-100k` acceptance gate keeps each first/continuation server page
 at exactly 200 rows, at most 1 MB, and under 60 seconds on the stressed debug harness;
 requires production Chromium to reach a populated Queue within 120 seconds and stay below
-192 MB JavaScript heap; and caps Queue/Backlog/Archive view switches at 2 seconds. It is a
-manual release/capacity gate, not ordinary CI.
+192 MB JavaScript heap; caps Queue/Backlog/Archive view switches at 2 seconds; requires the
+rapid round trip back to the already-loaded Queue to launch no redundant collection request;
+and separately caps the browser's 100K ticket-update interaction at 30 seconds. Rapid view
+intent is trailing-edge coalesced before expensive collection work begins. Locally acknowledged
+create and update events are consumed by exact event kind and ticket ID after the mutation
+barrier, so they do not contend with their own redundant full-project reconciliation; unmatched
+and concurrent external events still refresh normally. Project opening and server-owned ticket
+writes regenerate checkout worklists from the indexed, active Up Next projection instead of
+rescanning every ticket file. Exact short-lived server-write hashes suppress the corresponding
+filesystem-watcher echo. Unmarked external filesystem changes are reindexed from their exact
+changed paths before regenerating the same bounded projection. It is a manual release/capacity
+gate, not ordinary CI.
 
 The ordinary Rust suite separately protects asynchronous remote publication under sustained
 host pressure. Its focused store regression occupies the available CPU workers and performs

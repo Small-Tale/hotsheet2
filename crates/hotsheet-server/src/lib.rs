@@ -110,6 +110,9 @@ pub struct AppState {
     /// changes push promptly rather than waiting for the next interval. `None` until the
     /// loop is spawned (tests don't run it).
     sync_kick: Arc<Mutex<Option<std::sync::mpsc::Sender<()>>>>,
+    /// Recently indexed server writes, used to distinguish their filesystem echo from
+    /// an external edit that happens to match the current index hash.
+    local_write_hashes: LocalWriteHashes,
     /// The live permission bridge (HS2-9R9YZW): a driven tool blocks on it; a client answers
     /// over `GET/POST /permissions`. A `permission_asked` nudge rides the event bus so
     /// clients know to fetch + answer. Empty (headless auto-nothing) until seeded.
@@ -157,6 +160,9 @@ pub struct AppState {
     /// quiescence is checked, so no new write or process launch can race a safe restart.
     lifecycle: Arc<LifecycleControl>,
 }
+
+type LocalWriteKey = (String, String, String);
+type LocalWriteHashes = Arc<Mutex<std::collections::HashMap<LocalWriteKey, std::time::Instant>>>;
 
 #[derive(Default)]
 struct LifecycleControl {
@@ -261,6 +267,7 @@ impl AppState {
             instance_guards: Arc::new(Mutex::new(Vec::new())),
             writer_locks: Arc::new(Mutex::new(Vec::new())),
             sync_kick: Arc::new(Mutex::new(None)),
+            local_write_hashes: Default::default(),
             permissions,
             permission_rule_paths: Arc::new(Mutex::new(std::collections::HashMap::new())),
             // A generous busy window: a driven turn heartbeats via the local registry, but
@@ -624,6 +631,8 @@ impl AppState {
             WatchTarget {
                 entry,
                 store_id: id,
+                host: self.host.clone(),
+                local_write_hashes: self.local_write_hashes.clone(),
                 events: self.events.clone(),
                 event_log: self.event_log.clone(),
                 checkout_registry: self.checkout_registry.clone(),
@@ -795,12 +804,23 @@ impl AppState {
     fn changed_in(&self, entry: &StoreEntry, kind: &str, t: &Ticket) {
         let text = to_file_string(t);
         let path = entry.store.ticket_path(&t.id).display().to_string();
+        let store_id = multistore::store_url_id(&entry.store);
+        if let Ok(mut writes) = self.local_write_hashes.lock() {
+            writes.insert(
+                (
+                    store_id.clone(),
+                    t.id.to_string(),
+                    hash_bytes(text.as_bytes()),
+                ),
+                std::time::Instant::now(),
+            );
+        }
         if let Ok(index) = entry.index.lock() {
             let _ = index.upsert(t, &path, &hash_bytes(text.as_bytes()));
         }
         self.emit(ChangeEvent {
             cursor: None,
-            store: multistore::store_url_id(&entry.store),
+            store: store_id,
             kind: kind.to_string(),
             id: t.id.to_string(),
             slug: t.slug.clone(),
@@ -809,6 +829,18 @@ impl AppState {
             assignment: None,
             turn: None,
         });
+        if let Ok(checkouts) = self.checkout_registry.list() {
+            for checkout in checkouts.into_iter().filter(|checkout| {
+                checkout
+                    .stores
+                    .iter()
+                    .any(|root| same_path(FsPath::new(root), entry.store.root()))
+            }) {
+                if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
+                    eprintln!("worklist regenerate failed for {}: {error}", checkout.root);
+                }
+            }
+        }
         // A write is worth pushing promptly — wake the background sync loop (HS2-731C2X).
         self.kick_sync();
     }
@@ -2818,13 +2850,55 @@ fn schedule_setup_freshness(state: &AppState, checkout: &hotsheet_ticketing::che
 /// Keep the generated checkout projection fresh without making project opening wait for a
 /// full scan of every linked ticket store. The short delay also gives the client's initial
 /// ticket-index requests priority over this best-effort local projection refresh.
-fn schedule_worklist_regeneration(checkout: &hotsheet_ticketing::checkouts::Checkout) {
+fn regenerate_checkout_worklist_indexed(
+    host: &StoreHost,
+    checkout: &hotsheet_ticketing::checkouts::Checkout,
+) -> anyhow::Result<usize> {
+    let query = TicketQuery {
+        up_next_only: true,
+        open_only: true,
+        ..TicketQuery::default()
+    };
+    let mut tickets = std::collections::BTreeMap::new();
+    for source in checkout
+        .sources
+        .iter()
+        .filter(|source| source.provider == "git")
+    {
+        let entry = host.get(&source.connection_id).ok_or_else(|| {
+            anyhow::anyhow!("checkout links an unhosted store: {}", source.locator)
+        })?;
+        let rows = entry
+            .index
+            .lock()
+            .map_err(|_| anyhow::anyhow!("index lock poisoned"))?
+            .query(&query)?;
+        for row in rows {
+            let id = Ulid::from_string(&row.id)?;
+            if let std::collections::btree_map::Entry::Vacant(ticket) = tickets.entry(id) {
+                ticket.insert(entry.store.read_ticket(&id)?);
+            }
+        }
+    }
+    Ok(
+        hotsheet_ticketing::worklist::regenerate_checkout_from_tickets(
+            checkout,
+            &tickets.into_values().collect::<Vec<_>>(),
+        )?,
+    )
+}
+
+fn schedule_worklist_regeneration(
+    state: &AppState,
+    checkout: &hotsheet_ticketing::checkouts::Checkout,
+) {
     let checkout = checkout.clone();
+    let host = state.host.clone();
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         let root = checkout.root.clone();
         match tokio::task::spawn_blocking(move || {
-            hotsheet_ticketing::worklist::regenerate_checkout(&checkout)
+            regenerate_checkout_worklist_indexed(&host, &checkout)
         })
         .await
         {
@@ -2879,7 +2953,7 @@ async fn open_project(
         )
         .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))?;
     state.watch_checkout_repository(&checkout);
-    schedule_worklist_regeneration(&checkout);
+    schedule_worklist_regeneration(&state, &checkout);
     schedule_setup_freshness(&state, &checkout);
     Ok((
         StatusCode::CREATED,
@@ -8164,6 +8238,8 @@ enum RepositoryWatcherBackend {
 struct WatchTarget {
     entry: StoreEntry,
     store_id: String,
+    host: StoreHost,
+    local_write_hashes: LocalWriteHashes,
     events: broadcast::Sender<ChangeEvent>,
     event_log: Arc<Mutex<EventLog>>,
     checkout_registry: hotsheet_ticketing::checkouts::CheckoutRegistry,
@@ -8174,6 +8250,8 @@ pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
     let target = WatchTarget {
         entry: state.default_entry(),
         store_id: multistore::store_url_id(&state.store),
+        host: state.host.clone(),
+        local_write_hashes: state.local_write_hashes.clone(),
         events: state.events.clone(),
         event_log: state.event_log.clone(),
         checkout_registry: state.checkout_registry.clone(),
@@ -8408,8 +8486,12 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, targ
         if paths.is_empty() {
             continue;
         }
+        let mut index_changed = false;
         for path in &paths {
-            handle_path_change(&target, path);
+            index_changed |= handle_path_change(&target, path);
+        }
+        if !index_changed {
+            continue;
         }
         // Refresh each checkout-local projection that consumes this store. The store is
         // syncable authority; worklists remain local per checkout and may aggregate stores.
@@ -8420,7 +8502,7 @@ fn watch_loop(rx: std::sync::mpsc::Receiver<notify::Result<notify::Event>>, targ
                     .iter()
                     .any(|root| same_path(FsPath::new(root), target.entry.store.root()))
                 {
-                    if let Err(e) = hotsheet_ticketing::worklist::regenerate_checkout(&checkout) {
+                    if let Err(e) = regenerate_checkout_worklist_indexed(&target.host, &checkout) {
                         eprintln!("worklist regenerate failed for {}: {e}", checkout.root);
                     }
                 }
@@ -8457,14 +8539,14 @@ fn expand_ticket_files(paths: Vec<std::path::PathBuf>) -> Vec<std::path::PathBuf
     out
 }
 
-fn handle_path_change(target: &WatchTarget, path: &FsPath) {
+fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
     // The filename stem is the ticket ULID.
     let Some(id) = path
         .file_stem()
         .and_then(|s| s.to_str())
         .and_then(|s| Ulid::from_string(s).ok())
     else {
-        return;
+        return false;
     };
     let index = &target.entry.index;
     let emit = |kind: &str, id: String, slug: String| {
@@ -8490,21 +8572,29 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
             let _ = index.delete(&id);
         }
         emit("deleted", id.to_string(), String::new());
-        return;
+        return true;
     }
 
     let Ok(bytes) = std::fs::read(path) else {
-        return;
+        return false;
     };
     let hash = hash_bytes(&bytes);
+    let local_echo = target.local_write_hashes.lock().is_ok_and(|mut writes| {
+        writes.retain(|_, at| at.elapsed() <= Duration::from_secs(5));
+        writes.contains_key(&(target.store_id.clone(), id.to_string(), hash.clone()))
+    });
+    if local_echo {
+        return false;
+    }
 
-    // Unchanged since we last indexed it (incl. the server's own write) → skip.
+    // An unmarked event is external. Preserve its worklist invalidation even when its
+    // bytes happen to match the current index row.
     let already = index
         .lock()
         .ok()
         .and_then(|index| index.content_hash(&id).ok().flatten());
     if already.as_deref() == Some(hash.as_str()) {
-        return;
+        return true;
     }
 
     let Ok(ticket) = parse_file(&String::from_utf8_lossy(&bytes)) else {
@@ -8518,12 +8608,13 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) {
         // Keep the last healthy indexed row available, but wake every client so its
         // resilient refresh can replace that stale projection with recovery UI.
         emit("changed", id.to_string(), slug.unwrap_or_default());
-        return;
+        return true;
     };
     if let Ok(index) = index.lock() {
         let _ = index.upsert(&ticket, &path.display().to_string(), &hash);
     }
     emit("changed", ticket.id.to_string(), ticket.slug.clone());
+    true
 }
 
 #[cfg(test)]

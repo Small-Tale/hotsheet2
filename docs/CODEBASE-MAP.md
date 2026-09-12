@@ -49,6 +49,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/ux-demo/terminal-demo.ts # Deterministic ANSI-backed real-xterm fixtures for terminal component demos
     src/project-ticket-refresh.ts # Independent healthy/corrupt ticket loading so either result remains usable when the other request fails
     src/project-change-poll.ts # Replay-safe per-open-project long poll; ticket invalidation, overflow/reconnect recovery, and abortable lifecycle
+    src/local-ticket-changes.ts # Counted exact acknowledgements that consume only the stream echo already projected by a local ticket mutation
+    src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with active-project promotion
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
     src/not-working-workflow.ts # Input validation + one atomic provider Not Working report request

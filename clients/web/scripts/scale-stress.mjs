@@ -111,6 +111,13 @@ export function assertWeb100kAcceptance(count, server, web) {
       throw new Error(`100K web ${name} exceeded 2000ms: ${JSON.stringify(scenarios[name])}`);
     }
   }
+  if (scenarios.view_switch_refresh_requests !== 0) {
+    throw new Error(`100K rapid built-in view round trip launched redundant ticket refreshes: ${scenarios.view_switch_refresh_requests}`);
+  }
+  const mutation = scenarios.modify_ticket;
+  if (!mutation || mutation.error || typeof mutation.wall_ms !== 'number' || mutation.wall_ms > 30_000) {
+    throw new Error(`100K web modify_ticket interaction exceeded 30000ms: ${JSON.stringify(mutation)}`);
+  }
 }
 
 function base32(value, width) {
@@ -434,12 +441,19 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, all
     await page.getByRole('heading', { name: 'Queue' }).waitFor();
     await page.locator('[data-component="ticket-list-row"]').first().waitFor();
     scenarios.initial_load = { wall_ms: Math.round(performance.now() - loadStarted) };
+    let viewSwitchRefreshRequests = 0;
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (request.method() === 'GET' && /\/checkouts\/[^/]+\/tickets$/.test(url.pathname)) viewSwitchRefreshRequests += 1;
+    });
     for (const view of ['Backlog', 'Archive', 'Queue']) {
       scenarios[`switch_${view.toLowerCase()}`] = await measuredUiAction(
         () => page.getByRole('button', { name: new RegExp(view) }).click(),
         () => page.getByRole('heading', { name: view }).waitFor(),
       );
     }
+    await page.waitForTimeout(300);
+    scenarios.view_switch_refresh_requests = viewSwitchRefreshRequests;
     const first = page.locator('[data-component="ticket-list-row"]').first();
     const slug = await first.getAttribute('data-ticket-slug');
     scenarios.view_ticket = await measuredUiAction(() => first.click(), () => page.locator('[data-component="ticket-inspector"]').getByText(slug, { exact: true }).waitFor());

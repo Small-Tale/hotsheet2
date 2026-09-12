@@ -9,6 +9,7 @@ export interface ProjectChangePollOptions {
   client: Pick<Api, 'pollEvents'>;
   refresh(): Promise<void>;
   beforeRefresh?(): Promise<void>;
+  shouldRefresh?(response: PollResponse): boolean;
   onEvents?(response: PollResponse): Promise<void>;
   onError?(reason: unknown): void;
   retryMs?: number;
@@ -62,11 +63,14 @@ export function startProjectChangePoll(options: ProjectChangePollOptions): () =>
       const handshake = cursor === undefined;
       cursor = response.cursor;
       if (!handshake && response.events.length && options.onEvents) await options.onEvents(response).catch((reason: unknown) => { options.onError?.(reason); });
-      const reconcile = (handshake && reconnecting) || (!handshake && containsTicketChange(response));
+      const reconnect = handshake && reconnecting;
+      const candidate = reconnect || (!handshake && containsTicketChange(response));
       reconnecting = false;
-      if (reconcile) {
+      if (candidate) {
         await options.beforeRefresh?.().catch((reason: unknown) => { options.onError?.(reason); });
         if (wasAborted(controller.signal)) return;
+        const reconcile = reconnect || (options.shouldRefresh?.(response) ?? containsTicketChange(response));
+        if (!reconcile) continue;
         await options.refresh().catch((reason: unknown) => { options.onError?.(reason); });
       }
     }

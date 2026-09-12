@@ -40,10 +40,12 @@ describe('scale stress harness', () => {
   it('enforces the opt-in 100K browser and bounded-page acceptance thresholds', () => {
     const page = {wall_ms:59_999,response_bytes:999_999,item_count:200,has_next_cursor:true};
     const server = {scenarios:{list_compact:page,list_compact_next:page}};
-    const web = {scenarios:{initial_load:{wall_ms:119_999},switch_backlog:{wall_ms:1_999},switch_archive:{wall_ms:1_999},switch_queue:{wall_ms:1_999},browser_heap_mb:191.9}};
+    const web = {scenarios:{initial_load:{wall_ms:119_999},switch_backlog:{wall_ms:1_999},switch_archive:{wall_ms:1_999},switch_queue:{wall_ms:1_999},view_switch_refresh_requests:0,modify_ticket:{wall_ms:29_999},browser_heap_mb:191.9}};
     expect(() => assertWeb100kAcceptance(100_000,server,web)).not.toThrow();
     expect(() => assertWeb100kAcceptance(100_000,{scenarios:{...server.scenarios,list_compact:{...page,response_bytes:1_000_001}}},web)).toThrow('bounded-page');
     expect(() => assertWeb100kAcceptance(100_000,server,{scenarios:{...web.scenarios,browser_heap_mb:193}})).toThrow('initial load/heap');
+    expect(() => assertWeb100kAcceptance(100_000,server,{scenarios:{...web.scenarios,modify_ticket:{wall_ms:30_001}}})).toThrow('modify_ticket interaction');
+    expect(() => assertWeb100kAcceptance(100_000,server,{scenarios:{...web.scenarios,view_switch_refresh_requests:1}})).toThrow('redundant ticket refreshes');
     expect(() => assertWeb100kAcceptance(10_000,{},{})).not.toThrow();
   });
 

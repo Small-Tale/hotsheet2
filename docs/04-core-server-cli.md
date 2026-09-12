@@ -128,10 +128,13 @@ one source. An empty discovered source set remains valid at the core layer so a 
 client can present provider setup. Checkout ticket enumeration is also valid for that
 empty source set and returns an empty array; it must not turn a successful project-open
 transaction into a later conflict while the client presents source setup.
-The response path does not regenerate the checkout's complete local worklist. That
-all-store scan runs shortly afterward as best-effort blocking work, giving the client's
-initial ticket-index requests priority; store watchers keep the projection current after
-subsequent ticket changes.
+The response path does not regenerate the checkout's local worklist. That projection runs
+shortly afterward as best-effort blocking work over the already indexed active Up Next
+rows, giving the client's initial ticket-index requests priority without rescanning every
+ticket file. Server-owned writes update the same bounded projection synchronously; exact
+short-lived write hashes suppress their watcher echoes. Unmarked external filesystem changes
+are parsed into the index from their exact changed paths before regenerating the same bounded
+projection.
 
 ### Headless platform APIs
 

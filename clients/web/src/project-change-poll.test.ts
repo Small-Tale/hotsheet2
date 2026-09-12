@@ -113,6 +113,30 @@ describe('project change long polling', () => {
     pendingPoll.resolve(response(9));
   });
 
+  it('rechecks an invalidation after the local mutation barrier settles', async () => {
+    const pendingPoll = deferred<PollResponse>();
+    const projection = deferred<undefined>();
+    let locallyAcknowledged = false;
+    const pollEvents = vi.fn()
+      .mockResolvedValueOnce(response(8))
+      .mockResolvedValueOnce(response(9, 'updated'))
+      .mockReturnValueOnce(pendingPoll.promise);
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const stop = startProjectChangePoll({
+      client: { pollEvents },
+      refresh,
+      beforeRefresh: () => projection.promise,
+      shouldRefresh: () => !locallyAcknowledged,
+    });
+    await vi.waitFor(() => { expect(pollEvents).toHaveBeenCalledTimes(2); });
+    locallyAcknowledged = true;
+    projection.resolve(undefined);
+    await vi.waitFor(() => { expect(pollEvents).toHaveBeenCalledTimes(3); });
+    expect(refresh).not.toHaveBeenCalled();
+    stop();
+    pendingPoll.resolve(response(9));
+  });
+
   it('does not reconcile repeatedly while a polling outage continues', async () => {
     const pending = deferred<PollResponse>();
     const pollEvents = vi.fn()

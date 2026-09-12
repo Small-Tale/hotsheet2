@@ -1016,7 +1016,7 @@ test('naturally makes room before fading in a ticket created from the composer',
   await expect(ghost).toHaveCount(0);await expect(incoming).toHaveCSS('visibility','visible');
 });
 
-test('finishes local ticket creation motion before reconciling its long-poll event',async({page})=>{
+test('finishes local ticket creation motion without redundantly reconciling its acknowledged long-poll event',async({page})=>{
   await page.setViewportSize({width:1100,height:760});await page.emulateMedia({reducedMotion:'no-preference'});await mockProject(page);
   let authoritative=[row,backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow],cursor=0,ticketGets=0,eventDelivered=false,releaseCreate!:()=>void;
   const createResponse=new Promise<void>(resolve=>{releaseCreate=resolve}),polls:Array<import('@playwright/test').Route>=[];
@@ -1025,7 +1025,7 @@ test('finishes local ticket creation motion before reconciling its long-poll eve
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();await expect.poll(()=>polls.length).toBeGreaterThan(0);const readsBefore=ticketGets;
   await page.getByRole('button',{name:'New ticket…'}).click();await page.getByRole('textbox',{name:'Ticket title'}).fill('Created while watch event arrives');await page.getByRole('button',{name:'Create ticket'}).click();await expect.poll(()=>eventDelivered).toBe(true);await expect(page.locator('[data-ticket-slug="HS2-NEW001"]')).toHaveCount(0);expect(ticketGets).toBe(readsBefore);
   releaseCreate();const incoming=page.locator('[data-column-id="not-started"] [data-ticket-slug="HS2-NEW001"]').locator('..'),ghost=page.locator('[data-ticket-motion-ghost="incoming"][data-ticket-motion-slug="HS2-NEW001"]');await expect(ghost).toBeAttached();await expect(incoming).toHaveCSS('visibility','hidden');await page.waitForTimeout(285);expect(ticketGets).toBe(readsBefore);const opacity=Number.parseFloat(await ghost.evaluate(element=>getComputedStyle(element).opacity));expect(opacity).toBeGreaterThan(0);expect(opacity).toBeLessThan(1);await page.screenshot({path:'/private/tmp/hs2-jgwtjj-create-watch-race-after.png',fullPage:true});
-  await expect(ghost).toHaveCount(0);await expect(incoming).toHaveCSS('visibility','visible');await expect.poll(()=>ticketGets).toBe(readsBefore+1);await expect(incoming).toHaveCount(1);
+  await expect(ghost).toHaveCount(0);await expect(incoming).toHaveCSS('visibility','visible');await page.waitForTimeout(250);expect(ticketGets).toBe(readsBefore);await expect(incoming).toHaveCount(1);
 });
 
 test('runs grouped local commands, confirms stop, exposes history, and saves settings',async({page})=>{
