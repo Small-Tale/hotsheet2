@@ -244,6 +244,10 @@ does not introduce polling or another network request.
     picker from the final Save action; nested popup hide events do not close the wizard and existing
     destinations receive explicit collision handling; `TerminalDrawer` can open a saved bundle
     read-only or resume its original session when the saved range ends at the conversation tail
+  - read-only contexts: the same complete embedded component renders saved exports and live
+    project-close previews. Live previews retain the real transcript/activity/usage/error
+    projection, label why editing is unavailable, omit Save and composer actions, and use a
+    stable preview identity while users switch between terminal and chat resources
   - state: Kerf owns per-connection transcript/draft/open state; the existing replay-safe
     WebSocket/long-poll stream is the only live update source, and no conversation timer
     issues network requests. Reopening a locally closed project reconciles eligible

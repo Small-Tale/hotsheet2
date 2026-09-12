@@ -963,8 +963,12 @@ view layer is new work.
 
 Closing a project tab first inventories its live terminals and AI chats. When any are
 running, a confirmation dialog uses the shared menu navigation to select an item and
-shows either its live, read-only terminal renderer or the AI provider, model, effort,
-and latest Markdown activity without duplicating the selected item's title.
+shows either its live, read-only terminal renderer or the exact shared `AIConversation`
+in a live read-only mode. The chat preview carries the complete retained messages,
+activity, usage, progress, and error state without exposing its composer or Save action;
+provider/model/effort context remains visible. Stable per-resource preview identities and
+the absence of an unused asynchronous terminal-snapshot rewrite prevent terminal/chat
+remounts from leaving duplicated or ghosted transcript content in the wide dialog.
 **Keep Running** removes only the local project tab. Reopening the project reconciles
 eligible drawer Chat, Drive, and resumed-saved-chat connection ids from the server into
 their original AI-chat tabs, including provider, model, effort, busy, action, and session
@@ -972,8 +976,10 @@ state (HS2-D34C2V). Transcript state already received in the same app window rem
 to that connection and returns with the tab; after an app restart, the live server session
 continues but earlier messages are not retrospectively reconstructed. The close dialog
 states that boundary explicitly. **Stop & Close** explicitly deletes
-every listed terminal and AI connection before removing the tab. Cancel and native
-dialog dismissal preserve both the project and all resources. Multi-tab close actions
+every listed terminal and AI connection before removing the tab. Cancel and switching
+away from a borrowed terminal preview make the surviving interactive drawer terminal
+reclaim its fitted geometry after the preview disconnects. Cancel and native dialog
+dismissal preserve both the project and all resources. Multi-tab close actions
 apply the same decision project by project instead of silently terminating background
 work.
 

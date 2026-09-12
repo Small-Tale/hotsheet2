@@ -4,8 +4,9 @@ import './project-close-dialog.css';
 
 import {CircleAlert,MessageSquare,SquareTerminal} from 'lucide';
 
+import {type ConversationActivity,type ConversationMessage,type ConversationUsage} from '../ai-conversation';
+import {AIConversation} from './ai-conversation';
 import {LucideIcon} from './lucide-icon';
-import {MarkdownPreview} from './markdown-preview';
 import {MenuHeader} from './menu-header';
 import {MenuItem} from './menu-item';
 
@@ -28,6 +29,11 @@ export interface ProjectCloseAIChat extends ProjectCloseResourceBase {
   model?:string;
   effort?:string;
   sessionId?:string;
+  messages:ConversationMessage[];
+  activity?:ConversationActivity[];
+  progress?:string;
+  totalUsage?:ConversationUsage;
+  error?:string;
 }
 
 export type ProjectCloseResource=ProjectCloseTerminal|ProjectCloseAIChat;
@@ -51,18 +57,13 @@ export function projectCloseRunningSummary(resources:readonly ProjectCloseResour
 }
 
 function ResourceDetail({resource,projectId}:{resource:ProjectCloseResource;projectId:string}){
-  if(resource.kind==='terminal')return <section class="project-close-dialog__detail project-close-dialog__terminal" aria-label={`${resource.name} terminal preview`}>
+  const key=projectCloseResourceKey(resource);
+  if(resource.kind==='terminal')return <section class="project-close-dialog__detail project-close-dialog__terminal" data-key={`project-close-preview:${key}`} aria-label={`${resource.name} terminal preview`}>
     <div class="terminal-tile__viewport-frame"><div class="terminal-viewport terminal-viewport--scaled-preview" data-key={`project-close:${resource.id}`} data-morph-skip data-component="terminal-viewport" data-project-id={projectId} data-terminal-id={resource.id} data-display-mode="scaled-preview" data-grid-policy="dashboard-80x24" data-geometry-ready="false" aria-hidden="true"></div></div>
     <p class="project-close-dialog__preview-fallback">Connecting to the live terminal…</p>
   </section>;
-  const preview=resource.preview?.trim();
-  return <section class="project-close-dialog__detail project-close-dialog__chat" aria-label={`${resource.name} chat preview`}>
-    <dl aria-label="AI chat session">
-      <div><dt>Provider</dt><dd>{resource.tool}</dd></div>
-      <div><dt>Model</dt><dd>{resource.model||'Provider default'}</dd></div>
-      <div><dt>Effort</dt><dd>{resource.effort||'Provider default'}</dd></div>
-    </dl>
-    <section class="project-close-dialog__chat-activity" aria-label={`${resource.name} latest activity`}>{preview?<MarkdownPreview source={preview}/>:<p>No chat activity is available yet.</p>}</section>
+  return <section class="project-close-dialog__detail project-close-dialog__chat" data-key={`project-close-preview:${key}`} aria-label={`${resource.name} chat preview`}>
+    <AIConversation open presentation="embedded" tool={resource.tool} sessionId={resource.sessionId} messages={resource.messages} draft="" busy={Boolean(resource.busy)} progress={resource.progress} interruptible={false} activity={resource.activity} totalUsage={resource.totalUsage} error={resource.error} model={resource.model} effort={resource.effort} readOnly readOnlyContext="preview"/>
   </section>;
 }
 

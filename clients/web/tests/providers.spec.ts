@@ -517,6 +517,72 @@ test('previews running project resources with shared menus and explicit keep-run
   const deletes:string[]=[];page.on('request',request=>{if(request.method()==='DELETE')deletes.push(new URL(request.url()).pathname)});await page.setViewportSize({width:1280,height:800});await installFakeTerminalSockets(page,true);await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Show terminal drawer'}).click();const drawer=page.locator('[data-component="terminal-drawer"]'),projectTab=page.locator('[data-component="project-tab"]');await drawer.getByRole('button',{name:'New drawer item'}).click();await drawer.getByRole('menu',{name:'New drawer item'}).getByText('AI chat').click();await expect(drawer.getByRole('tab',{name:'Codex chat'})).toBeVisible();await projectTab.hover();await page.getByRole('button',{name:'Close demo'}).click();const dialog=page.locator('[data-component="project-close-dialog"]');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog).toContainText('2 running terminals and 1 AI chat');await expect(dialog.locator('[data-component="menu-header"]')).toHaveText('Running items');await expect(dialog.getByRole('button',{name:/Codex Main/})).toHaveAttribute('aria-current','page');const viewport=dialog.locator('[data-component="terminal-viewport"]');await expect(viewport).toHaveAttribute('data-connection','connected');await expect(viewport.locator('.xterm-rows')).toContainText('Live terminal ready');await expect(dialog).not.toContainText('Working directory');await expect(dialog).not.toContainText('Progress');await expect(dialog).toContainText('Terminals and AI chat tabs return when reopened');await expect(dialog.getByRole('button',{name:'Keep Running'})).toBeVisible();await expect(dialog.getByRole('button',{name:'Stop & Close'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-6c0wzn-project-close-wide-after.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(dialog).toHaveJSProperty('open',true);await expect.poll(()=>dialog.evaluate(element=>{const box=element.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth&&box.bottom<=innerHeight})).toBe(true);await expect(dialog.locator('.project-close-dialog__consequences')).toBeInViewport();await page.screenshot({path:'/private/tmp/hs2-6c0wzn-project-close-narrow-after.png',fullPage:true});await dialog.getByRole('button',{name:/Codex chat/}).click();await expect(dialog.getByRole('region',{name:'Codex chat chat preview'})).toContainText('gpt-6-astra');await expect(dialog.getByRole('region',{name:'Codex chat chat preview'})).toContainText('medium');await dialog.getByRole('button',{name:'Cancel'}).click();await expect(projectTab).toHaveCount(1);await projectTab.hover();await page.getByRole('button',{name:'Close demo'}).click();await dialog.getByRole('button',{name:'Keep Running'}).click();await expect(projectTab).toHaveCount(0);expect(deletes).toEqual([]);
 });
 
+test('reuses the read-only conversation and restores borrowed terminal geometry without ghosting',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});
+  await installFakeTerminalSockets(page,true);
+  await mockProject(page);
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Show terminal drawer'}).click();
+  const drawer=page.locator('[data-component="terminal-drawer"]'),projectTab=page.locator('[data-component="project-tab"]');
+  await drawer.getByRole('button',{name:'New drawer item'}).click();
+  await drawer.getByRole('menu',{name:'New drawer item'}).getByText('AI chat').click();
+  const liveConversation=drawer.locator('[data-component="ai-conversation"]');
+  await liveConversation.getByLabel('Message Codex').fill('What time is it in California?');
+  await liveConversation.getByLabel('Message Codex').press('Enter');
+  await expect(liveConversation).toContainText('The event stream remains authoritative.');
+  await drawer.getByRole('tab',{name:/Codex Main/}).click();
+  const drawerViewport=drawer.locator('[data-component="terminal-session"] [data-component="terminal-viewport"]');
+  await expect(drawerViewport).toHaveAttribute('data-connection','connected');
+  const initialGrid=await drawerViewport.getAttribute('data-grid-size');
+  const originalSocket=await page.evaluate(()=>{const sockets=(window as unknown as {__terminalSockets:Array<{url:string;readyState:number}>}).__terminalSockets;for(let index=sockets.length-1;index>=0;index-=1)if(sockets[index].url.includes('codex-main')&&sockets[index].readyState===WebSocket.OPEN)return index;return-1});
+  expect(originalSocket).toBeGreaterThanOrEqual(0);
+  const originalClaims=()=>page.evaluate(index=>{const socket=(window as unknown as {__terminalSockets:Array<{sent:unknown[]}>}).__terminalSockets[index],claims: Array<{cols:number;rows:number}>=[];for(const value of socket.sent){if(typeof value!=='string')continue;try{const parsed=JSON.parse(value) as {resize?:{cols:number;rows:number}};if(parsed.resize)claims.push(parsed.resize)}catch{/* terminal input */}}const last=claims.at(-1);return{count:claims.length,last:last?`${last.cols}x${last.rows}`:undefined}},originalSocket),beforeOpen=await originalClaims();
+
+  await projectTab.hover();
+  await page.getByRole('button',{name:'Close demo'}).click();
+  const dialog=page.locator('[data-component="project-close-dialog"]');
+  const terminalPreview=dialog.locator('[data-component="terminal-viewport"]');
+  await expect(terminalPreview).toHaveAttribute('data-grid-size','80x24');
+  await dialog.getByRole('button',{name:/Codex chat/}).click();
+  const preview=dialog.locator('[data-component="ai-conversation"]');
+  await expect(preview).toHaveAttribute('data-read-only','true');
+  await expect(preview.locator('[data-message-id]')).toHaveCount(2);
+  await expect(preview.getByLabel('Message Codex')).toHaveCount(0);
+  await expect(preview.getByRole('button',{name:'Save conversation'})).toHaveCount(0);
+  const answer=preview.locator('.ai-conversation__message--assistant .markdown-preview');
+  await expect(answer).toHaveText('I found the relevant client boundary. The event stream remains authoritative.');
+  for(let index=0;index<2;index+=1){await dialog.getByRole('button',{name:/Codex Main/}).click();await expect(terminalPreview).toHaveAttribute('data-connection','connected');await dialog.getByRole('button',{name:/Codex chat/}).click();await expect(answer).toHaveText('I found the relevant client boundary. The event stream remains authoritative.')}
+  await expect.poll(()=>preview.evaluate(element=>((element as HTMLElement).innerText.match(/event stream remains authoritative/g)??[]).length)).toBe(1);
+  await page.screenshot({path:'/private/tmp/hs2-6c0wzn-7se31f-close-chat-wide.png',fullPage:true});
+
+  await dialog.getByRole('button',{name:/Codex Main/}).click();
+  await expect(terminalPreview).toHaveAttribute('data-grid-size','80x24');
+  const beforeCancel=await originalClaims();
+  expect(beforeCancel.count).toBeGreaterThanOrEqual(beforeOpen.count);
+  await dialog.getByRole('button',{name:'Cancel'}).click();
+  await expect.poll(async()=>(await originalClaims()).count).toBeGreaterThan(beforeCancel.count);
+  await expect.poll(async()=>(await originalClaims()).last).toBe(initialGrid);
+  await page.waitForTimeout(250);
+  const unrelatedCreateViewDialog=page.getByRole('dialog',{name:'Create View'});
+  if(await unrelatedCreateViewDialog.isVisible()){
+    await unrelatedCreateViewDialog.getByRole('button',{name:'Cancel'}).click();
+    await expect(unrelatedCreateViewDialog).toBeHidden();
+  }
+  await page.screenshot({path:'/private/tmp/hs2-6c0wzn-terminal-restored-after-cancel.png',fullPage:true});
+
+  await projectTab.hover();
+  await page.getByRole('button',{name:'Close demo'}).click();
+  await dialog.getByRole('button',{name:/Codex chat/}).click();
+  await page.setViewportSize({width:390,height:844});
+  await expect(dialog).toHaveJSProperty('open',true);
+  await expect(preview).toBeVisible();
+  await expect(answer).toHaveText('I found the relevant client boundary. The event stream remains authoritative.');
+  await page.screenshot({path:'/private/tmp/hs2-6c0wzn-7se31f-close-chat-narrow.png',fullPage:true});
+  await dialog.getByRole('button',{name:'Cancel'}).click();
+});
+
 test('restores a kept-running AI chat tab and its live server session when the project reopens',async({page})=>{
   const turnBodies:Array<Record<string,unknown>>=[];
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/turns'))turnBodies.push(request.postDataJSON())});

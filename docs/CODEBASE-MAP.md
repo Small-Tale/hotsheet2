@@ -37,7 +37,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/conversation-export.ts # Portable .hotsheet-chat range, manifest, transcript, summary, collision-lineage, and resume contract
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary
     src/components/conversation-export-dialog.tsx # Save range/destination/contents/collision dialog shared by AI conversation presentations
-    src/components/project-close-dialog.tsx # Shared-menu running-resource inventory, live terminal/chat preview, and explicit keep-running versus stop-all project-tab dismissal
+    src/components/project-close-dialog.tsx # Shared-menu running-resource inventory, keyed live terminal/shared-read-only-AIConversation preview, and explicit keep-running versus stop-all project-tab dismissal
     src/context-menu-position.ts # Shared viewport-edge clamping for fixed context menus
     src/tab-order.ts         #   Stable same-strip drag reordering plus remembered project-order application
     src/terminal-grid-layout.ts # Pure workspace tile geometry: responsive global 1–10-across/1–3-high scales plus the drawer's full-height level 1 and width-driven levels 2–3
