@@ -106,7 +106,10 @@ with the opaque `next_cursor`; the response contains `items`, `next_cursor`, and
 project `counts`. When the client supplies eight local-day boundaries, those counts also
 include the exact seven-day completion trend across every linked source, independent of the
 selected collection or retained page. The cursor walks linked stores without concatenating
-their complete row sets, while the aggregate counts keep Queue/Backlog/Archive and project-tab summaries exact.
+their complete row sets. GitHub, GitLab, and Jira adapters return their own opaque native
+page cursors and aggregate summaries page by page, so the host never materializes a complete
+external-provider result merely to slice it or calculate navigation counts. The aggregate
+counts keep Queue/Backlog/Archive and project-tab summaries exact.
 Paged clients may pass `collection=queue|archive` for the built-in multi-status collections;
 the lifecycle predicate is applied by each source index before the page cap, so a mixed-status
 first page cannot make the browser show fewer rows than the selected collection contains.

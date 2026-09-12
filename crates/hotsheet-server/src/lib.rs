@@ -3451,6 +3451,25 @@ impl CheckoutTicketCounts {
             self.completion_trend[index] += count;
         }
     }
+
+    fn add_provider(&mut self, summary: hotsheet_ticketing::ProviderTicketSummary) {
+        self.total += summary.total;
+        self.queued += summary.queued;
+        self.backlog += summary.backlog;
+        self.archive += summary.archive;
+        self.open += summary.open;
+        self.up_next += summary.up_next;
+        self.active += summary.active;
+        self.started += summary.started;
+        self.completed_today += summary.completed_today;
+        if self.completion_trend.len() < summary.completion_trend.len() {
+            self.completion_trend
+                .resize(summary.completion_trend.len(), 0);
+        }
+        for (index, count) in summary.completion_trend.into_iter().enumerate() {
+            self.completion_trend[index] += count;
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -3472,85 +3491,6 @@ fn checkout_page_cursor(value: Option<&str>) -> Result<(usize, Option<String>), 
         .parse::<usize>()
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor"))?;
     Ok((source, (after != "-").then(|| after.to_owned())))
-}
-
-fn add_external_ticket_count(
-    counts: &mut CheckoutTicketCounts,
-    value: &serde_json::Value,
-    now: &str,
-    day_starts: &[String],
-) {
-    let status = value
-        .get("status")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("not_started");
-    if status == "moved" {
-        return;
-    }
-    counts.total += 1;
-    if status != "backlog" && !matches!(status, "archive" | "deleted" | "moved") {
-        counts.queued += 1;
-    }
-    if status == "backlog" {
-        counts.backlog += 1;
-    }
-    if matches!(status, "archive" | "deleted" | "moved") {
-        counts.archive += 1;
-    }
-    if matches!(status, "not_started" | "started") {
-        counts.open += 1;
-    }
-    if status == "started" {
-        counts.started += 1;
-    }
-    if value
-        .get("up_next")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-        && matches!(status, "not_started" | "started")
-    {
-        counts.up_next += 1;
-    }
-    if value
-        .get("claimed_by")
-        .and_then(serde_json::Value::as_str)
-        .is_some()
-        && value
-            .get("claim_lease_expires_at")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|expiry| expiry > now)
-        && matches!(status, "not_started" | "started")
-    {
-        counts.active += 1;
-    }
-    if value
-        .get("completed_at")
-        .and_then(serde_json::Value::as_str)
-        .is_some_and(|completed| {
-            day_starts
-                .get(day_starts.len().saturating_sub(2))
-                .zip(day_starts.last())
-                .is_some_and(|(today, tomorrow)| {
-                    completed >= today.as_str() && completed < tomorrow.as_str()
-                })
-        })
-    {
-        counts.completed_today += 1;
-    }
-    if let Some(completed) = value
-        .get("completed_at")
-        .and_then(serde_json::Value::as_str)
-    {
-        if counts.completion_trend.len() < day_starts.len().saturating_sub(1) {
-            counts.completion_trend.resize(day_starts.len() - 1, 0);
-        }
-        if let Some(index) = day_starts
-            .windows(2)
-            .position(|bounds| completed >= bounds[0].as_str() && completed < bounds[1].as_str())
-        {
-            counts.completion_trend[index] += 1;
-        }
-    }
 }
 
 fn completion_day_starts(
@@ -3631,16 +3571,11 @@ fn list_checkout_ticket_page(
         counts.add(summary);
     }
     for source in &external_sources {
-        let provider = provider_for(state, &source.connection_id)?;
-        for ticket in provider
-            .query(&TicketQuery::default())
-            .map_err(provider_transfer_error)?
-        {
-            let value = serde_json::to_value(ticket).map_err(|error| {
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-            })?;
-            add_external_ticket_count(&mut counts, &value, &now_text, &day_starts);
-        }
+        counts.add_provider(
+            provider_for(state, &source.connection_id)?
+                .summary(&now_text, &day_starts)
+                .map_err(provider_transfer_error)?,
+        );
     }
 
     let compact = params.compact.unwrap_or(true);
@@ -3712,7 +3647,11 @@ fn list_checkout_ticket_page(
         let source = external_sources[source_index - entries.len()];
         let provider = provider_for(state, &source.connection_id)?;
         let query = params.clone().into_query(state.store.root())?;
-        let mut rows = provider.query(&query).map_err(provider_transfer_error)?;
+        let page = provider
+            .query_page(&query, after.as_deref(), page_size - items.len())
+            .map_err(provider_transfer_error)?;
+        let provider_cursor = page.next_cursor;
+        let mut rows = page.items;
         if let Some(want) = params.has_commit {
             let slugs = rows
                 .iter()
@@ -3730,17 +3669,7 @@ fn list_checkout_ticket_page(
             ticket.auto_context =
                 auto_context::resolve_fields(&ticket.category, &ticket.tags, &contexts);
         }
-        let offset = after
-            .as_deref()
-            .unwrap_or("0")
-            .parse::<usize>()
-            .map_err(|_| {
-                ApiError::new(StatusCode::BAD_REQUEST, "invalid checkout ticket cursor")
-            })?;
-        let remaining = page_size - items.len();
-        let total = rows.len();
-        let end = (offset + remaining).min(total);
-        for ticket in rows.drain(offset.min(total)..end) {
+        for ticket in rows {
             let mut value = serde_json::to_value(ticket).map_err(|error| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             })?;
@@ -3749,8 +3678,21 @@ fn list_checkout_ticket_page(
             }
             items.push(value);
         }
-        if end < total {
-            next_cursor = Some(format!("{source_index}.{end}"));
+        if items.len() >= page_size {
+            if let Some(cursor) = provider_cursor {
+                next_cursor = Some(format!("{source_index}.{cursor}"));
+            } else {
+                source_index += 1;
+                after = None;
+            }
+        } else if let Some(cursor) = provider_cursor {
+            if after.as_deref() == Some(cursor.as_str()) {
+                return Err(ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "provider returned a non-advancing ticket cursor",
+                ));
+            }
+            after = Some(cursor);
         } else {
             source_index += 1;
             after = None;

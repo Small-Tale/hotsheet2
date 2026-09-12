@@ -285,6 +285,168 @@ pub struct ProviderPatch {
     pub blocked_reason: Option<Option<String>>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProviderTicketSummary {
+    pub total: u64,
+    pub queued: u64,
+    pub backlog: u64,
+    pub archive: u64,
+    pub open: u64,
+    pub up_next: u64,
+    pub active: u64,
+    pub started: u64,
+    pub completed_today: u64,
+    pub completion_trend: Vec<u64>,
+}
+
+impl ProviderTicketSummary {
+    pub fn add_ticket(&mut self, ticket: &ApiTicket, now: &str, day_starts: &[String]) {
+        if ticket.status == Status::Moved {
+            return;
+        }
+        self.total += 1;
+        if ticket.status != Status::Backlog
+            && !matches!(
+                ticket.status,
+                Status::Archive | Status::Deleted | Status::Moved
+            )
+        {
+            self.queued += 1;
+        }
+        if ticket.status == Status::Backlog {
+            self.backlog += 1;
+        }
+        if matches!(
+            ticket.status,
+            Status::Archive | Status::Deleted | Status::Moved
+        ) {
+            self.archive += 1;
+        }
+        if matches!(ticket.status, Status::NotStarted | Status::Started) {
+            self.open += 1;
+        }
+        if ticket.status == Status::Started {
+            self.started += 1;
+        }
+        if ticket.up_next && matches!(ticket.status, Status::NotStarted | Status::Started) {
+            self.up_next += 1;
+        }
+        if ticket.claimed_by.is_some()
+            && ticket
+                .claim_lease_expires_at
+                .as_ref()
+                .is_some_and(|expiry| expiry.as_str() > now)
+            && matches!(ticket.status, Status::NotStarted | Status::Started)
+        {
+            self.active += 1;
+        }
+        if let Some(completed) = ticket.completed_at.as_deref() {
+            if day_starts
+                .get(day_starts.len().saturating_sub(2))
+                .zip(day_starts.last())
+                .is_some_and(|(today, tomorrow)| completed >= today && completed < tomorrow)
+            {
+                self.completed_today += 1;
+            }
+            if self.completion_trend.len() < day_starts.len().saturating_sub(1) {
+                self.completion_trend.resize(day_starts.len() - 1, 0);
+            }
+            if let Some(index) = day_starts.windows(2).position(|bounds| {
+                completed >= bounds[0].as_str() && completed < bounds[1].as_str()
+            }) {
+                self.completion_trend[index] += 1;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ProviderTicketPage {
+    pub items: Vec<ApiTicket>,
+    pub next_cursor: Option<String>,
+}
+
+/// Apply provider-neutral filters to one bounded native page. Adapters remain responsible
+/// for rejecting fields their native records cannot represent and for requesting a stable
+/// native ordering before calling this helper.
+pub fn filter_provider_ticket_page(
+    mut tickets: Vec<ApiTicket>,
+    query: &TicketQuery,
+) -> Vec<ApiTicket> {
+    tickets.retain(|ticket| {
+        query.status.is_none_or(|value| ticket.status == value)
+            && query.collection.is_none_or(|collection| match collection {
+                crate::TicketCollection::Queue => !matches!(
+                    ticket.status,
+                    Status::Backlog | Status::Archive | Status::Deleted | Status::Moved
+                ),
+                crate::TicketCollection::Archive => {
+                    matches!(
+                        ticket.status,
+                        Status::Archive | Status::Deleted | Status::Moved
+                    )
+                }
+            })
+            && query.priority.is_none_or(|value| ticket.priority == value)
+            && query
+                .category
+                .as_deref()
+                .is_none_or(|value| ticket.category == value)
+            && query.tags.iter().all(|tag| ticket.tags.contains(tag))
+            && (!query.open_only || matches!(ticket.status, Status::NotStarted | Status::Started))
+            && query
+                .close_reason
+                .is_none_or(|value| ticket.close_reason == Some(value))
+            && query
+                .closed
+                .is_none_or(|value| ticket.close_reason.is_some() == value)
+            && query
+                .assignee
+                .as_deref()
+                .is_none_or(|value| ticket.assignees.iter().any(|assignee| assignee == value))
+            && query
+                .created_after
+                .as_deref()
+                .is_none_or(|value| ticket.created_at.as_str() >= value)
+            && query
+                .created_before
+                .as_deref()
+                .is_none_or(|value| ticket.created_at.as_str() <= value)
+            && query
+                .updated_after
+                .as_deref()
+                .is_none_or(|value| ticket.updated_at.as_str() >= value)
+            && query
+                .updated_before
+                .as_deref()
+                .is_none_or(|value| ticket.updated_at.as_str() <= value)
+    });
+    tickets.sort_by(|left, right| match query.sort {
+        crate::SortKey::Id => left.native_id.cmp(&right.native_id),
+        crate::SortKey::Created => left.created_at.cmp(&right.created_at),
+        crate::SortKey::Updated => left.updated_at.cmp(&right.updated_at),
+        crate::SortKey::Priority => {
+            provider_priority_rank(left.priority).cmp(&provider_priority_rank(right.priority))
+        }
+        crate::SortKey::Status => format!("{:?}", left.status).cmp(&format!("{:?}", right.status)),
+        crate::SortKey::Title => left.title.cmp(&right.title),
+    });
+    if let Some(limit) = query.limit {
+        tickets.truncate(limit);
+    }
+    tickets
+}
+
+fn provider_priority_rank(priority: Priority) -> u8 {
+    match priority {
+        Priority::Highest => 0,
+        Priority::High => 1,
+        Priority::Default => 2,
+        Priority::Low => 3,
+        Priority::Lowest => 4,
+    }
+}
+
 /// Caller-owned time/id inputs keep provider implementations deterministic in tests.
 /// `generated_id` is also the provider-neutral idempotency key: adapters must return the
 /// existing object when a create/note request with the same id is retried. Providers whose
@@ -354,6 +516,43 @@ pub trait TicketProvider: Send + Sync {
         self.descriptor().capabilities.note_delete
     }
     fn query(&self, query: &TicketQuery) -> Result<Vec<ApiTicket>, ProviderError>;
+    /// Return one bounded page. The cursor is provider-owned and opaque to the host.
+    fn query_page(
+        &self,
+        query: &TicketQuery,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<ProviderTicketPage, ProviderError> {
+        let mut unbounded = query.clone();
+        unbounded.limit = None;
+        unbounded.page_after = None;
+        let rows = self.query(&unbounded)?;
+        let offset =
+            cursor
+                .unwrap_or("0")
+                .parse::<usize>()
+                .map_err(|_| ProviderError::Conflict {
+                    ticket: self.descriptor().connection_id,
+                    message: "invalid provider page cursor".into(),
+                })?;
+        let end = offset.saturating_add(limit).min(rows.len());
+        Ok(ProviderTicketPage {
+            items: rows[offset.min(rows.len())..end].to_vec(),
+            next_cursor: (end < rows.len()).then(|| end.to_string()),
+        })
+    }
+    /// Aggregate navigation counts without requiring the host to retain provider rows.
+    fn summary(
+        &self,
+        now: &str,
+        day_starts: &[String],
+    ) -> Result<ProviderTicketSummary, ProviderError> {
+        let mut summary = ProviderTicketSummary::default();
+        for ticket in self.query(&TicketQuery::default())? {
+            summary.add_ticket(&ticket, now, day_starts);
+        }
+        Ok(summary)
+    }
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError>;
     fn get(&self, native_id: &str) -> Result<ApiTicket, ProviderError>;
     fn create(
@@ -1291,6 +1490,55 @@ mod tests {
             Some(reference)
         );
         assert!(ProjectTicketRef::from_qualified("01ARZ3NDEKTSV4RRFFQ69G5FC0").is_none());
+    }
+
+    #[test]
+    fn default_provider_pages_and_summaries_preserve_the_legacy_contract() {
+        let (_dir, provider) = git_provider();
+        for (index, status, up_next) in [
+            (1, Status::NotStarted, true),
+            (2, Status::Started, false),
+            (3, Status::Backlog, false),
+        ] {
+            provider
+                .create(
+                    ctx(Ulid::new(), &format!("2026-08-26T00:0{index}:00Z")),
+                    ProviderDraft {
+                        title: format!("ticket {index}"),
+                        category: "task".into(),
+                        priority: Priority::Default,
+                        status,
+                        details: String::new(),
+                        tags: vec![],
+                        up_next,
+                        blocked_by: vec![],
+                        transfer: None,
+                    },
+                )
+                .unwrap();
+        }
+        let first = provider
+            .query_page(&TicketQuery::default(), None, 2)
+            .unwrap();
+        assert_eq!(first.items.len(), 2);
+        assert_eq!(first.next_cursor.as_deref(), Some("2"));
+        let second = provider
+            .query_page(&TicketQuery::default(), first.next_cursor.as_deref(), 2)
+            .unwrap();
+        assert_eq!(second.items.len(), 1);
+        assert!(second.next_cursor.is_none());
+        let summary = provider.summary("2026-08-27T00:00:00Z", &[]).unwrap();
+        assert_eq!(
+            (
+                summary.total,
+                summary.queued,
+                summary.backlog,
+                summary.open,
+                summary.started,
+                summary.up_next
+            ),
+            (3, 2, 1, 2, 1, 1)
+        );
     }
 
     #[test]

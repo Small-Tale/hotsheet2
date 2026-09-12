@@ -3,8 +3,8 @@ use std::sync::Arc;
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, SortKey, TicketProvider,
-    TicketQuery,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderTicketPage,
+    ProviderTicketSummary, SortKey, TicketProvider, TicketQuery, filter_provider_ticket_page,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -154,24 +154,44 @@ impl GitLabProvider {
         self.json(response)
     }
 
+    fn issue_page(
+        &self,
+        cursor: Option<&str>,
+        updated_after: Option<&str>,
+        limit: usize,
+    ) -> Result<(Vec<GitLabIssue>, Option<String>), ProviderError> {
+        let page = cursor
+            .unwrap_or("1")
+            .parse::<u32>()
+            .map_err(|_| ProviderError::Conflict {
+                ticket: self.config.connection_id.clone(),
+                message: "invalid GitLab page cursor".into(),
+            })?;
+        let mut url = self.endpoint(&format!(
+            "issues?scope=all&order_by=created_at&sort=asc&per_page={}&page={page}",
+            limit.min(100)
+        ));
+        if let Some(after) = updated_after {
+            url.push_str("&updated_after=");
+            url.push_str(after);
+        }
+        let response = self.request("GET", &url, None)?;
+        let next = response
+            .headers
+            .get("x-next-page")
+            .filter(|value| !value.is_empty())
+            .cloned();
+        Ok((self.json::<Vec<GitLabIssue>>(response)?, next))
+    }
+
     fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitLabIssue>, ProviderError> {
-        let mut page = 1;
+        let mut cursor = None;
         let mut issues = Vec::new();
         loop {
-            let mut url = self.endpoint(&format!("issues?scope=all&per_page=100&page={page}"));
-            if let Some(after) = updated_after {
-                url.push_str("&updated_after=");
-                url.push_str(after);
-            }
-            let response = self.request("GET", &url, None)?;
-            let next = response
-                .headers
-                .get("x-next-page")
-                .filter(|value| !value.is_empty())
-                .and_then(|value| value.parse::<u32>().ok());
-            issues.extend(self.json::<Vec<GitLabIssue>>(response)?);
+            let (page, next) = self.issue_page(cursor.as_deref(), updated_after, 100)?;
+            issues.extend(page);
             let Some(next) = next else { break };
-            page = next;
+            cursor = Some(next);
         }
         Ok(issues)
     }
@@ -293,6 +313,7 @@ impl TicketProvider for GitLabProvider {
             || query.verified_after.is_some()
             || query.verified_before.is_some()
             || query.has_attachment.is_some()
+            || query.has_media_annotation.is_some()
             || !query.attachment_patterns.is_empty()
         {
             return self.unsupported("requested query filter");
@@ -364,6 +385,80 @@ impl TicketProvider for GitLabProvider {
             tickets.truncate(limit);
         }
         Ok(tickets)
+    }
+
+    fn query_page(
+        &self,
+        query: &TicketQuery,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<ProviderTicketPage, ProviderError> {
+        if query.text.is_some()
+            || query.review_requested.is_some()
+            || query.review_by.is_some()
+            || query.claimed.is_some()
+            || query.blocked.is_some()
+            || query.page_after.is_some()
+            || query.up_next_only
+            || query.completed_after.is_some()
+            || query.completed_before.is_some()
+            || query.verified_after.is_some()
+            || query.verified_before.is_some()
+            || query.has_attachment.is_some()
+            || query.has_media_annotation.is_some()
+            || !query.attachment_patterns.is_empty()
+        {
+            return self.unsupported("requested query filter");
+        }
+        if !matches!(query.sort, SortKey::Id | SortKey::Created) {
+            let mut unbounded = query.clone();
+            unbounded.limit = None;
+            unbounded.page_after = None;
+            let rows = self.query(&unbounded)?;
+            let offset =
+                cursor
+                    .unwrap_or("0")
+                    .parse::<usize>()
+                    .map_err(|_| ProviderError::Conflict {
+                        ticket: self.config.connection_id.clone(),
+                        message: "invalid provider page cursor".into(),
+                    })?;
+            let end = offset.saturating_add(limit).min(rows.len());
+            return Ok(ProviderTicketPage {
+                items: rows[offset.min(rows.len())..end].to_vec(),
+                next_cursor: (end < rows.len()).then(|| end.to_string()),
+            });
+        }
+        let (issues, next_cursor) =
+            self.issue_page(cursor, query.updated_after.as_deref(), limit)?;
+        Ok(ProviderTicketPage {
+            items: filter_provider_ticket_page(
+                issues
+                    .into_iter()
+                    .map(|issue| self.ticket(issue, vec![]))
+                    .collect(),
+                query,
+            ),
+            next_cursor,
+        })
+    }
+
+    fn summary(
+        &self,
+        now: &str,
+        day_starts: &[String],
+    ) -> Result<ProviderTicketSummary, ProviderError> {
+        let mut summary = ProviderTicketSummary::default();
+        let mut cursor = None;
+        loop {
+            let (issues, next) = self.issue_page(cursor.as_deref(), None, 100)?;
+            for issue in issues {
+                summary.add_ticket(&self.ticket(issue, vec![]), now, day_starts)
+            }
+            let Some(next) = next else { break };
+            cursor = Some(next)
+        }
+        Ok(summary)
     }
 
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError> {
@@ -804,6 +899,22 @@ mod tests {
                 .iter()
                 .any(|(k, v)| k == "PRIVATE-TOKEN" && v == "token")
         );
+    }
+
+    #[test]
+    fn native_page_returns_x_next_page_without_fetching_it() {
+        let mut first = response(200, json!([issue(1, "one")]));
+        first.headers.insert("x-next-page".into(), "2".into());
+        let fake = Arc::new(Fake {
+            responses: Mutex::new(vec![first].into()),
+            ..Default::default()
+        });
+        let page = provider(fake.clone())
+            .query_page(&TicketQuery::default(), None, 100)
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.next_cursor.as_deref(), Some("2"));
+        assert_eq!(fake.requests.lock().unwrap().len(), 1);
     }
 
     #[test]

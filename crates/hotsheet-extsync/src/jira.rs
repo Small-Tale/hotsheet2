@@ -3,8 +3,8 @@ use std::sync::Arc;
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, SortKey, TicketProvider,
-    TicketQuery,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderTicketPage,
+    ProviderTicketSummary, SortKey, TicketProvider, TicketQuery, filter_provider_ticket_page,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -142,31 +142,48 @@ impl JiraProvider {
         Ok(self.json::<JiraComments>(response)?.comments)
     }
 
+    fn issue_page(
+        &self,
+        cursor: Option<&str>,
+        updated_after: Option<&str>,
+        limit: usize,
+        sort: SortKey,
+    ) -> Result<(Vec<JiraIssue>, Option<String>), ProviderError> {
+        let order = match sort {
+            SortKey::Id => "key",
+            SortKey::Created => "created",
+            _ => "updated",
+        };
+        let mut jql = format!("project = {} ORDER BY {order} ASC", self.config.project_key);
+        if let Some(after) = updated_after {
+            jql = format!(
+                "project = {} AND updated >= \"{}\" ORDER BY {order} ASC",
+                self.config.project_key, after
+            )
+        }
+        let response=self.request("POST",&self.endpoint("search/jql"),Some(&json!({"jql":jql,"nextPageToken":cursor,"maxResults":limit.min(100),"fields":["summary","description","status","priority","issuetype","labels","assignee","created","updated","resolutiondate"]})))?;
+        let page: JiraSearch = self.json(response)?;
+        let next = if page.is_last {
+            None
+        } else {
+            page.next_page_token
+        };
+        Ok((page.issues, next))
+    }
+
     fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<JiraIssue>, ProviderError> {
         let mut next_page_token: Option<String> = None;
         let mut issues = Vec::new();
         loop {
-            let mut jql = format!("project = {} ORDER BY updated ASC", self.config.project_key);
-            if let Some(after) = updated_after {
-                jql = format!(
-                    "project = {} AND updated >= \"{}\" ORDER BY updated ASC",
-                    self.config.project_key, after
-                );
-            }
-            let response = self.request(
-                "POST",
-                &self.endpoint("search/jql"),
-                Some(&json!({
-                    "jql":jql,"nextPageToken":next_page_token,"maxResults":100,
-                    "fields":["summary","description","status","priority","issuetype","labels","assignee","created","updated","resolutiondate"]
-                })),
+            let (page, next) = self.issue_page(
+                next_page_token.as_deref(),
+                updated_after,
+                100,
+                SortKey::Updated,
             )?;
-            let page: JiraSearch = self.json(response)?;
-            issues.extend(page.issues);
-            if page.is_last || page.next_page_token.is_none() {
-                break;
-            }
-            next_page_token = page.next_page_token;
+            issues.extend(page);
+            let Some(next) = next else { break };
+            next_page_token = Some(next);
         }
         Ok(issues)
     }
@@ -278,6 +295,7 @@ impl TicketProvider for JiraProvider {
             || query.verified_after.is_some()
             || query.verified_before.is_some()
             || query.has_attachment.is_some()
+            || query.has_media_annotation.is_some()
             || !query.attachment_patterns.is_empty()
         {
             return self.unsupported("requested query filter");
@@ -344,6 +362,84 @@ impl TicketProvider for JiraProvider {
             tickets.truncate(limit);
         }
         Ok(tickets)
+    }
+
+    fn query_page(
+        &self,
+        query: &TicketQuery,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<ProviderTicketPage, ProviderError> {
+        if query.text.is_some()
+            || query.review_requested.is_some()
+            || query.review_by.is_some()
+            || query.claimed.is_some()
+            || query.blocked.is_some()
+            || query.page_after.is_some()
+            || query.up_next_only
+            || query.close_reason.is_some()
+            || query.completed_after.is_some()
+            || query.completed_before.is_some()
+            || query.verified_after.is_some()
+            || query.verified_before.is_some()
+            || query.has_attachment.is_some()
+            || query.has_media_annotation.is_some()
+            || !query.attachment_patterns.is_empty()
+        {
+            return self.unsupported("requested query filter");
+        }
+        if !matches!(
+            query.sort,
+            SortKey::Id | SortKey::Created | SortKey::Updated
+        ) {
+            let mut unbounded = query.clone();
+            unbounded.limit = None;
+            unbounded.page_after = None;
+            let rows = self.query(&unbounded)?;
+            let offset =
+                cursor
+                    .unwrap_or("0")
+                    .parse::<usize>()
+                    .map_err(|_| ProviderError::Conflict {
+                        ticket: self.config.connection_id.clone(),
+                        message: "invalid provider page cursor".into(),
+                    })?;
+            let end = offset.saturating_add(limit).min(rows.len());
+            return Ok(ProviderTicketPage {
+                items: rows[offset.min(rows.len())..end].to_vec(),
+                next_cursor: (end < rows.len()).then(|| end.to_string()),
+            });
+        }
+        let (issues, next_cursor) =
+            self.issue_page(cursor, query.updated_after.as_deref(), limit, query.sort)?;
+        Ok(ProviderTicketPage {
+            items: filter_provider_ticket_page(
+                issues
+                    .into_iter()
+                    .map(|issue| self.ticket(issue, vec![]))
+                    .collect(),
+                query,
+            ),
+            next_cursor,
+        })
+    }
+
+    fn summary(
+        &self,
+        now: &str,
+        day_starts: &[String],
+    ) -> Result<ProviderTicketSummary, ProviderError> {
+        let mut summary = ProviderTicketSummary::default();
+        let mut cursor = None;
+        loop {
+            let (issues, next) = self.issue_page(cursor.as_deref(), None, 100, SortKey::Updated)?;
+            for issue in issues {
+                summary.add_ticket(&self.ticket(issue, vec![]), now, day_starts)
+            }
+            let Some(next) = next else { break };
+            cursor = Some(next)
+        }
+        Ok(summary)
     }
 
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError> {
@@ -849,6 +945,17 @@ mod tests {
                 .contains("updated >=")
         );
         assert_eq!(requests[1].3.as_ref().unwrap()["nextPageToken"], "page-2");
+    }
+
+    #[test]
+    fn native_page_returns_jira_next_page_token_without_fetching_it() {
+        let fake=Arc::new(Fake{responses:Mutex::new(vec![response(200,json!({"nextPageToken":"page-2","isLast":false,"issues":[issue("ENG-1","one")]}))].into()),..Default::default()});
+        let page = provider(fake.clone())
+            .query_page(&TicketQuery::default(), None, 100)
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert_eq!(page.next_cursor.as_deref(), Some("page-2"));
+        assert_eq!(fake.requests.lock().unwrap().len(), 1);
     }
 
     #[test]

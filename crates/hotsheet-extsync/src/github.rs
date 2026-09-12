@@ -4,8 +4,8 @@ use std::sync::Arc;
 use hotsheet_model::{CloseReason, NoteKind, Priority, ReviewRequest, Status, Timestamp};
 use hotsheet_ticketing::{
     ApiNote, ApiTicket, MutationContext, ProviderCapabilities, ProviderConnection,
-    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, SortKey, TicketProvider,
-    TicketQuery,
+    ProviderDescriptor, ProviderDraft, ProviderError, ProviderPatch, ProviderTicketPage,
+    ProviderTicketSummary, SortKey, TicketProvider, TicketQuery, filter_provider_ticket_page,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -364,26 +364,54 @@ impl GitHubProvider {
         }
     }
 
-    fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
-        let mut url = self.endpoint("issues?state=all&per_page=100");
+    fn issue_page(
+        &self,
+        cursor: Option<&str>,
+        updated_after: Option<&str>,
+        limit: usize,
+    ) -> Result<(Vec<GitHubIssue>, Option<String>), ProviderError> {
+        let mut url = if let Some(cursor) = cursor {
+            let api_prefix = format!("{}/", self.config.api_base.trim_end_matches('/'));
+            if !cursor.starts_with(&api_prefix) || !cursor.contains("/issues?") {
+                return Err(ProviderError::Conflict {
+                    ticket: self.config.connection_id.clone(),
+                    message: "invalid GitHub page cursor".into(),
+                });
+            }
+            cursor.to_owned()
+        } else {
+            self.endpoint(&format!(
+                "issues?state=all&direction=asc&per_page={}",
+                limit.min(100)
+            ))
+        };
         if let Some(since) = updated_after {
-            url.push_str("&since=");
-            url.push_str(since);
+            if cursor.is_none() {
+                url.push_str("&since=");
+                url.push_str(since);
+            }
         }
+        let response = self.request("GET", &url, None)?;
+        let next = response
+            .headers
+            .get("link")
+            .and_then(|link| next_link(link));
+        let issues = self
+            .json::<Vec<GitHubIssue>>(response)?
+            .into_iter()
+            .filter(|issue| issue.pull_request.is_none())
+            .collect();
+        Ok((issues, next))
+    }
+
+    fn list_issues(&self, updated_after: Option<&str>) -> Result<Vec<GitHubIssue>, ProviderError> {
+        let mut cursor = None;
         let mut issues = Vec::new();
         loop {
-            let response = self.request("GET", &url, None)?;
-            let next = response
-                .headers
-                .get("link")
-                .and_then(|link| next_link(link));
-            let page: Vec<GitHubIssue> = self.json(response)?;
-            issues.extend(
-                page.into_iter()
-                    .filter(|issue| issue.pull_request.is_none()),
-            );
+            let (page, next) = self.issue_page(cursor.as_deref(), updated_after, 100)?;
+            issues.extend(page);
             let Some(next) = next else { break };
-            url = next;
+            cursor = Some(next);
         }
         Ok(issues)
     }
@@ -414,6 +442,7 @@ impl TicketProvider for GitHubProvider {
             || query.verified_after.is_some()
             || query.verified_before.is_some()
             || query.has_attachment.is_some()
+            || query.has_media_annotation.is_some()
             || !query.attachment_patterns.is_empty()
         {
             return Err(ProviderError::Unsupported {
@@ -491,6 +520,83 @@ impl TicketProvider for GitHubProvider {
             tickets.truncate(limit);
         }
         Ok(tickets)
+    }
+
+    fn query_page(
+        &self,
+        query: &TicketQuery,
+        cursor: Option<&str>,
+        limit: usize,
+    ) -> Result<ProviderTicketPage, ProviderError> {
+        if query.text.is_some()
+            || query.review_requested.is_some()
+            || query.review_by.is_some()
+            || query.claimed.is_some()
+            || query.blocked.is_some()
+            || query.page_after.is_some()
+            || query.up_next_only
+            || query.completed_after.is_some()
+            || query.completed_before.is_some()
+            || query.verified_after.is_some()
+            || query.verified_before.is_some()
+            || query.has_attachment.is_some()
+            || query.has_media_annotation.is_some()
+            || !query.attachment_patterns.is_empty()
+        {
+            return Err(ProviderError::Unsupported {
+                connection_id: self.config.connection_id.clone(),
+                capability: "requested query filter",
+            });
+        }
+        if !matches!(query.sort, SortKey::Id | SortKey::Created) {
+            let mut unbounded = query.clone();
+            unbounded.limit = None;
+            unbounded.page_after = None;
+            let rows = self.query(&unbounded)?;
+            let offset =
+                cursor
+                    .unwrap_or("0")
+                    .parse::<usize>()
+                    .map_err(|_| ProviderError::Conflict {
+                        ticket: self.config.connection_id.clone(),
+                        message: "invalid provider page cursor".into(),
+                    })?;
+            let end = offset.saturating_add(limit).min(rows.len());
+            return Ok(ProviderTicketPage {
+                items: rows[offset.min(rows.len())..end].to_vec(),
+                next_cursor: (end < rows.len()).then(|| end.to_string()),
+            });
+        }
+        let (issues, next_cursor) =
+            self.issue_page(cursor, query.updated_after.as_deref(), limit)?;
+        Ok(ProviderTicketPage {
+            items: filter_provider_ticket_page(
+                issues
+                    .into_iter()
+                    .map(|issue| self.api_ticket(issue, vec![]))
+                    .collect(),
+                query,
+            ),
+            next_cursor,
+        })
+    }
+
+    fn summary(
+        &self,
+        now: &str,
+        day_starts: &[String],
+    ) -> Result<ProviderTicketSummary, ProviderError> {
+        let mut summary = ProviderTicketSummary::default();
+        let mut cursor = None;
+        loop {
+            let (issues, next) = self.issue_page(cursor.as_deref(), None, 100)?;
+            for issue in issues {
+                summary.add_ticket(&self.api_ticket(issue, vec![]), now, day_starts);
+            }
+            let Some(next) = next else { break };
+            cursor = Some(next);
+        }
+        Ok(summary)
     }
 
     fn find_transfer(&self, operation_id: &str) -> Result<Option<ApiTicket>, ProviderError> {
@@ -1028,7 +1134,7 @@ mod tests {
         );
         first.headers.insert(
             "link".into(),
-            "<https://api.test/page2>; rel=\"next\"".into(),
+            "<https://api.test/repos/acme/widgets/issues?page2>; rel=\"next\"".into(),
         );
         let mut limited = response(403, json!({"message":"rate limit exceeded"}));
         limited
@@ -1056,6 +1162,41 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn native_page_returns_the_remote_cursor_without_materializing_following_pages() {
+        let mut first = response(200, json!([issue(1, "one", "")]));
+        first.headers.insert(
+            "link".into(),
+            "<https://api.test/repos/acme/widgets/issues?page2>; rel=\"next\"".into(),
+        );
+        let transport = FakeTransport::with(vec![first]);
+        let provider = provider(transport.clone());
+        assert!(
+            provider
+                .query_page(
+                    &TicketQuery::default(),
+                    Some("https://evil.test/issues?page=2"),
+                    100
+                )
+                .is_err()
+        );
+        let page = provider
+            .query_page(&TicketQuery::default(), None, 100)
+            .unwrap();
+        assert_eq!(
+            page.items
+                .iter()
+                .map(|ticket| ticket.native_id.as_str())
+                .collect::<Vec<_>>(),
+            ["1"]
+        );
+        assert_eq!(
+            page.next_cursor.as_deref(),
+            Some("https://api.test/repos/acme/widgets/issues?page2")
+        );
+        assert_eq!(transport.requests.lock().unwrap().len(), 1);
     }
 
     #[test]

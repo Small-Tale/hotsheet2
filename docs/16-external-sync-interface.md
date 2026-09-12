@@ -81,7 +81,9 @@ trait TicketProvider {
     fn descriptor(&self) -> ProviderDescriptor;
     fn capabilities(&self) -> ProviderCapabilities;
 
-    fn query(&self, query: &TicketQuery) -> Result<Page<Ticket>>;
+    fn query_page(&self, query: &TicketQuery, cursor: Option<&str>, limit: usize)
+        -> Result<ProviderTicketPage>;
+    fn summary(&self, now: &str, day_starts: &[String]) -> Result<ProviderTicketSummary>;
     fn get(&self, id: &NativeTicketId) -> Result<Ticket>;
     fn create(&self, draft: &TicketDraft) -> Result<Ticket>;
     fn update(&self, id: &NativeTicketId, patch: &TicketPatch) -> Result<Ticket>;
@@ -103,10 +105,12 @@ offline mutation, history, watch/webhooks, and provider-side idempotency. A
 conformance suite verifies both implemented behavior and honest rejection of absent
 capabilities.
 
-The host owns multi-provider routing, aggregation, pagination, normalized validation,
+The host owns multi-provider routing, aggregation, normalized validation,
 server/API/MCP presentation, caching, credential resolution, and capability-aware
-errors. Providers own remote calls, native mapping, concurrency tokens, rate-limit
-interpretation, and provider-specific durable metadata.
+errors. Providers own remote calls, opaque native page cursors, bounded page retrieval,
+streaming count summaries, native mapping, concurrency tokens, rate-limit interpretation,
+and provider-specific durable metadata. The built-in compatibility fallback may materialize
+a provider query, but GitHub, GitLab, and Jira implement the bounded contract directly.
 
 ## 16.5 Default git provider
 

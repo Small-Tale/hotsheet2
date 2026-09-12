@@ -7642,6 +7642,74 @@ async fn checkout_sources_aggregate_and_route_external_provider_mutations() {
 }
 
 #[tokio::test]
+async fn external_checkout_pages_use_provider_cursors_and_summaries() {
+    let (_dir, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let mut first_page = github_response(200, serde_json::json!([github_issue(1, "first")]));
+    first_page.headers.insert(
+        "link".into(),
+        "<https://api.github.com/repos/acme/repo/issues?page2>; rel=\"next\"".into(),
+    );
+    let transport = Arc::new(FakeGitHub {
+        responses: Mutex::new(
+            vec![
+                github_response(
+                    200,
+                    serde_json::json!([github_issue(1, "first"), github_issue(2, "second")]),
+                ),
+                first_page,
+                github_response(
+                    200,
+                    serde_json::json!([github_issue(1, "first"), github_issue(2, "second")]),
+                ),
+                github_response(200, serde_json::json!([github_issue(2, "second")])),
+            ]
+            .into(),
+        ),
+        requests: Mutex::new(Vec::new()),
+    });
+    let app = app(st
+        .with_checkout_registry(registry.path().join("checkouts.json"))
+        .with_ticket_provider(Arc::new(GitHubProvider::new(
+            GitHubConfig::new("github-page", "acme/repo", "fixture-token"),
+            transport,
+        ))));
+    let registration=serde_json::json!({"root":checkout.path(),"alias":"external-page","sources":[{"connection_id":"github-page","provider":"github","locator":"acme/repo"}],"default_source":"github-page"}).to_string();
+    app.clone()
+        .oneshot(authed("POST", "/checkouts", Some(&registration)))
+        .await
+        .unwrap();
+    let first = body_json(
+        app.clone()
+            .oneshot(authed(
+                "GET",
+                "/checkouts/external-page/tickets?page_size=1",
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(first["items"][0]["native_id"], "1");
+    assert_eq!(first["counts"]["total"], 2);
+    let cursor = first["next_cursor"].as_str().unwrap();
+    assert!(cursor.ends_with("issues?page2"));
+    let second = body_json(
+        app.oneshot(authed(
+            "GET",
+            &format!("/checkouts/external-page/tickets?page_size=1&cursor={cursor}"),
+            None,
+        ))
+        .await
+        .unwrap(),
+    )
+    .await;
+    assert_eq!(second["items"][0]["native_id"], "2");
+    assert!(second.get("next_cursor").is_none());
+}
+
+#[tokio::test]
 async fn direct_gitlab_and_jira_providers_run_through_the_same_server_contract() {
     let (dir, st) = state();
     let gitlab = GitLabProvider::new(
