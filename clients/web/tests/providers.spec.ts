@@ -164,6 +164,7 @@ async function installFakeTerminalSockets(page: import('@playwright/test').Page,
 const devReviewTestTitles=new Set([
   'activates Dev Review by default in development and honors the explicit false opt-out',
   'does not report intentional render bursts during remembered-project startup',
+  'suppresses interaction-bound render bursts but reports a storm that persists afterward',
   'keeps feedback rectangle input within its frame budget in the populated main app',
   'switches large ticket views without cloning every row into motion ghosts',
 ]);
@@ -186,6 +187,17 @@ test('activates Dev Review by default in development and honors the explicit fal
 
 test('opens a roomy project dialog with native browse controls and working cancel',async({page})=>{
   await page.setViewportSize({width:1100,height:760});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();const dialog=page.locator('[data-project-dialog]');await expect(dialog).toHaveJSProperty('open',true);expect((await dialog.boundingBox())!.width).toBeGreaterThan(700);await page.getByRole('button',{name:'Browse for project folder'}).click();await expect(page.locator('wa-input[name="project-root"]')).toHaveJSProperty('value','/picked/project');await expect(dialog).toHaveJSProperty('open',true);await page.getByRole('button',{name:'Browse for ticket store'}).click();await expect(page.locator('wa-input[name="ticket-store"]')).toHaveJSProperty('value','/picked/tickets.hs2');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog.locator('.project-dialog__error')).toBeEmpty();await expect(page.locator('.app-error')).toHaveCount(0);await page.screenshot({path:'/private/tmp/hs2-nvd50p-open-project-dialog.png',fullPage:true});await page.getByRole('button',{name:'Cancel'}).click();await expect(dialog).toHaveJSProperty('open',false);await expect(dialog).toBeHidden();await page.getByRole('button',{name:'Open project'}).click();await expect(dialog).toHaveJSProperty('open',true);
+});
+
+test('offers explicit identity-guarded recovery for an unresponsive local server',async({page})=>{
+  await page.setViewportSize({width:1100,height:760});await mockProject(page);
+  let failOpen=true,recoveryBody:unknown;
+  await page.route('**/__hotsheet/projects/open',route=>{if(failOpen){failOpen=false;return route.fulfill({status:400,json:{error:'The registered local server is not responding.',recovery:{store:'/work/demo.hs2',expected:{pid:4242,url:'http://127.0.0.1:8787',started_at:'2026-09-12T01:00:00Z'}}}})}return route.fallback()});
+  await page.route('**/__hotsheet/server/recover-unhealthy',route=>{recoveryBody=route.request().postDataJSON();return route.fulfill({json:{recovered:true}})});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const dialog=page.locator('[data-project-dialog]'),recovery=dialog.locator('.project-dialog__server-recovery');await expect(recovery).toBeVisible();await expect(recovery).toContainText('cannot verify active work');await expect(recovery).toContainText('process 4242');await page.screenshot({path:'/private/tmp/hs2-21e6g6-unhealthy-recovery-wide.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});await expect(recovery).toBeInViewport();await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-21e6g6-unhealthy-recovery-narrow.png',fullPage:true});
+  await recovery.getByRole('button',{name:'Stop server and retry'}).click();await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();expect(recoveryBody).toEqual({store:'/work/demo.hs2',expected:{pid:4242,url:'http://127.0.0.1:8787',started_at:'2026-09-12T01:00:00Z'}});
 });
 
 test('always confirms before closing a project without running resources',async({page})=>{

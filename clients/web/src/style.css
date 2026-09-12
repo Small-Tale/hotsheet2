@@ -22,6 +22,9 @@ wa-dialog[data-project-dialog] { --width: min(48rem, calc(100vw - 2rem)); }
 .project-dialog footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
 .project-dialog__error:empty { display: none; }
 .project-dialog__error { color: var(--wa-color-danger-on-quiet) !important; }
+.project-dialog__server-recovery { display:grid; gap:var(--wa-space-s); padding:var(--wa-space-m); border:1px solid var(--wa-color-warning-border-normal); border-radius:var(--wa-border-radius-m); color:var(--wa-color-warning-on-quiet); background:var(--wa-color-warning-fill-quiet); }
+.project-dialog__server-recovery p { margin:0; line-height:1.45; }
+.project-dialog__server-recovery wa-button { justify-self:start; }
 wa-dialog[data-ticket-source-setup-dialog] { --width: min(36rem, calc(100vw - 2rem)); }
 wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="label"], wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="footer"] { width:100%; }
 wa-dialog[data-ticket-source-setup-dialog] [data-transition-region="label"] { font:inherit; }

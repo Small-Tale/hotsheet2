@@ -23,6 +23,7 @@ export interface ProjectSession {
 }
 
 export interface InstanceInfo { pid:number; url:string; secret:string; started_at?:string }
+export interface UnhealthyServerRecovery {store:string;expected:{pid:number;url:string;started_at:string}}
 interface SessionTarget { url:string; secret:string; root?:string; serverStore?:string }
 interface CorruptDiagnostic { path:string }
 interface CliCompatibility {generation:string;store_schema:{min:number;max:number;creates:number};selected_store_schema?:number|null}
@@ -300,6 +301,10 @@ export interface ServerSupervisorPlatform {
   wait():Promise<void>;
 }
 
+export class UnhealthyManagedServerError extends Error {
+  constructor(readonly instance:InstanceInfo,readonly store?:string){super(`The Hot Sheet server process ${instance.pid} is registered but unhealthy. Active work was preserved; use the explicit local recovery action to stop this exact process before starting another server.`)}
+}
+
 function sameInstance(left:InstanceInfo|undefined,right:InstanceInfo|undefined):boolean{return Boolean(left&&right&&left.pid===right.pid&&left.url===right.url&&left.started_at===right.started_at)}
 
 /** Discover and health-check the machine server, launching only after its registered process
@@ -316,7 +321,7 @@ export async function superviseServer(platform:ServerSupervisorPlatform,maxAttem
     if(current&&await platform.probe(current))return current;
     if(!current&&!launched){await platform.launch();launched=true}
   }
-  if(first&&!launched)throw new Error(`The Hot Sheet server process ${first.pid} is registered but unhealthy. Active work was preserved; stop it explicitly before starting another server.`);
+  if(first&&!launched)throw new UnhealthyManagedServerError(first);
   throw new Error('Timed out waiting for a healthy Hot Sheet server.');
 }
 
@@ -334,7 +339,30 @@ function serverPlatform(store:string):ServerSupervisorPlatform{
   };
 }
 
-async function ensureServer(store:string):Promise<InstanceInfo>{return superviseServer(serverPlatform(store))}
+async function ensureServer(store:string):Promise<InstanceInfo>{try{return await superviseServer(serverPlatform(store))}catch(error){if(error instanceof UnhealthyManagedServerError)throw new UnhealthyManagedServerError(error.instance,store);throw error}}
+
+export interface UnhealthyServerRecoveryPlatform extends ServerSupervisorPlatform {terminate(instance:InstanceInfo,signal:'SIGTERM'|'SIGKILL'):Promise<void>}
+
+/** Explicit local-only recovery for a registered process whose health endpoint cannot
+ * answer. Never signal a replacement: every signal is preceded by the complete
+ * pid/url/start-identity check. */
+export async function recoverUnhealthyServer(recovery:UnhealthyServerRecovery,platform?:UnhealthyServerRecoveryPlatform,graceAttempts=20,killAttempts=20):Promise<InstanceInfo>{
+  const native=serverPlatform(recovery.store),host=platform??{...native,terminate:(instance,signal)=>{process.kill(instance.pid,signal);return Promise.resolve()}};
+  const expected=(value:InstanceInfo|undefined)=>Boolean(value&&value.pid===recovery.expected.pid&&value.url===recovery.expected.url&&value.started_at===recovery.expected.started_at);
+  const replacement=async()=>superviseServer(host);
+  let current=await host.discover();if(!expected(current))return replacement();
+  await host.terminate(current!,'SIGTERM');
+  for(let attempt=0;attempt<graceAttempts;attempt+=1){await host.wait();current=await host.discover();if(!expected(current))return replacement()}
+  current=await host.discover();if(!expected(current))return replacement();
+  await host.terminate(current!,'SIGKILL');
+  for(let attempt=0;attempt<killAttempts;attempt+=1){await host.wait();current=await host.discover();if(!expected(current))return replacement()}
+  throw new Error(`Hot Sheet server process ${recovery.expected.pid} remained registered after forced local recovery.`);
+}
+
+export function unhealthyServerRecovery(error:unknown):UnhealthyServerRecovery|undefined{
+  if(!(error instanceof UnhealthyManagedServerError)||!error.store||!error.instance.started_at)return undefined;
+  return{store:error.store,expected:{pid:error.instance.pid,url:error.instance.url,started_at:error.instance.started_at}};
+}
 
 export interface SafeRestartPlatform {
   request():Promise<void>;

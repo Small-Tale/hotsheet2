@@ -291,6 +291,12 @@ broker-hosted terminals may survive the process replacement. The client uses thi
 protocol or store-schema upgrades only when both capabilities are explicit, waits for the
 old registration to be relinquished, and then supervises the replacement. Ambiguous writes
 are never replayed across recovery. Remote restart remains a separately authorized concern.
+If a registered local process remains alive but cannot answer its health probe, automatic
+supervision preserves it instead of launching a duplicate. The local client may offer an
+explicit recovery action that rechecks the complete registered process identity, requests
+graceful termination, and escalates to a forced stop only while that exact process remains
+registered; it then supervises a healthy replacement. This action is never exposed by the
+remote server API.
 
 Protocol ranges assume unsynchronized rollout. A non-intersecting range stops project API
 use and identifies which side requires an update; exact build differences remain

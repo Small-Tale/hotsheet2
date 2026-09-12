@@ -6,9 +6,9 @@ import { Hono } from 'hono';
 import type { ConversationExportPayload } from './conversation-export';
 import { createConversationExportBridge } from './conversation-export-bridge';
 import { createCliDevReviewSubmitter, type DevReviewSubmitter, validateDevReviewSubmission } from './dev-review/server';
-import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, migrateHs1Project, openLocalProject, proxyProjectRequest, removeImportedHs1Data, revealCorruptTicket } from './project-bridge';
+import {chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore,gitTicketStoreConnectionId, migrateHs1Project, openLocalProject, proxyProjectRequest, recoverUnhealthyServer, removeImportedHs1Data, revealCorruptTicket, type UnhealthyServerRecovery,unhealthyServerRecovery } from './project-bridge';
 
-export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote,migrate:(root:string,location?:string)=>Promise<unknown>=migrateHs1Project,removeHs1:(project:string)=>Promise<string[]>=removeImportedHs1Data): Hono {
+export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, reveal = revealCorruptTicket,chooseFolder:()=>Promise<string|undefined>=()=>chooseLocalFolder(),setupGit:(root:string,location?:string)=>Promise<string>=createLocalGitTicketStore,connectRemote:(store:string,remote:string)=>Promise<void>=connectGitTicketStoreRemote,migrate:(root:string,location?:string)=>Promise<unknown>=migrateHs1Project,removeHs1:(project:string)=>Promise<string[]>=removeImportedHs1Data,recover:(value:UnhealthyServerRecovery)=>Promise<unknown>=recoverUnhealthyServer): Hono {
   const app = new Hono();
   const conversationExports=createConversationExportBridge(chooseFolder);
   app.post('/__hotsheet/projects/open', async context => {
@@ -17,8 +17,12 @@ export function createDevApp(dev = true, submitFeedback?: DevReviewSubmitter, re
       const body = await context.req.json<{root:string;ticketStore?:string}>();
       return context.json(await openLocalProject(body.root, body.ticketStore), 201);
     } catch (error) {
-      return context.json({ error: error instanceof Error ? error.message : 'Could not open project.' }, 400);
+      return context.json({ error: error instanceof Error ? error.message : 'Could not open project.',recovery:unhealthyServerRecovery(error) }, 400);
     }
+  });
+  app.post('/__hotsheet/server/recover-unhealthy',async context=>{
+    if(!dev)return context.notFound();
+    try{await recover(await context.req.json<UnhealthyServerRecovery>());return context.json({recovered:true})}catch(error){return context.json({error:error instanceof Error?error.message:'Could not recover the unresponsive server.'},409)}
   });
   app.post('/__hotsheet/folders/choose',async context=>{
     if(!dev)return context.notFound();

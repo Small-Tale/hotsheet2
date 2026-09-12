@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1ChannelSlug,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectScopedServerPath,projectServerPlan, projectSessionRegistry, refreshLocalProjectSetup, removeHs1LiveData, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1ChannelSlug,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectScopedServerPath,projectServerPlan, projectSessionRegistry, recoverUnhealthyServer, refreshLocalProjectSetup, removeHs1LiveData, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -287,6 +287,25 @@ describe('machine server supervision',()=>{
     const request=vi.fn(),supervise=vi.fn().mockResolvedValue(replacement),discover=vi.fn().mockResolvedValueOnce(running).mockResolvedValueOnce(undefined);
     await expect(safelyRestartServer(running,{request,discover,supervise,wait:vi.fn()},3)).resolves.toEqual(replacement);
     expect(request).toHaveBeenCalledOnce();expect(supervise).toHaveBeenCalledOnce();
+  });
+
+  it('recovers only the expected unhealthy instance and escalates when it ignores graceful termination',async()=>{
+    let current:typeof running|typeof replacement|undefined=running;const signals:string[]=[],launch=vi.fn();
+    const platform={discover:vi.fn(async()=>current),probe:vi.fn(async instance=>instance===replacement),launch,wait:vi.fn(async()=>undefined),terminate:vi.fn(async(_instance:typeof running,signal:'SIGTERM'|'SIGKILL')=>{signals.push(signal);if(signal==='SIGKILL')current=undefined})};
+    platform.launch.mockImplementation(async()=>{current=replacement});
+    await expect(recoverUnhealthyServer({store:'/tickets',expected:{pid:running.pid,url:running.url,started_at:running.started_at}},platform,2,2)).resolves.toEqual(replacement);
+    expect(signals).toEqual(['SIGTERM','SIGKILL']);expect(launch).toHaveBeenCalledOnce();
+
+    const protectedTerminate=vi.fn();
+    await expect(recoverUnhealthyServer({store:'/tickets',expected:{pid:running.pid,url:running.url,started_at:running.started_at}},{...platform,discover:vi.fn().mockResolvedValue(replacement),probe:vi.fn().mockResolvedValue(true),terminate:protectedTerminate},1,1)).resolves.toEqual(replacement);
+    expect(protectedTerminate).not.toHaveBeenCalled();
+  });
+
+  it('keeps unhealthy-server recovery behind the local bridge',async()=>{
+    const recover=vi.fn().mockResolvedValue(replacement),body={store:'/tickets',expected:{pid:running.pid,url:running.url,started_at:running.started_at}},request={method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)};
+    const response=await createDevApp(true,undefined,undefined,undefined,undefined,undefined,undefined,undefined,recover).request('/__hotsheet/server/recover-unhealthy',request);
+    expect(response.status).toBe(200);expect(await response.json()).toEqual({recovered:true});expect(recover).toHaveBeenCalledWith(body);
+    expect((await createDevApp(false,undefined,undefined,undefined,undefined,undefined,undefined,undefined,recover).request('/__hotsheet/server/recover-unhealthy',request)).status).toBe(404);
   });
 
   it('recognizes a hosted store schema that requires the current server build',()=>{

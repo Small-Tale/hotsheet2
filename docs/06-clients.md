@@ -324,7 +324,12 @@ and identity-less legacy entries remain conservatively blocking.
   GET/HEAD requests retry after recovery, while ambiguous writes return an explicit 503
   instead of risking duplicate mutation. Compatible old servers may be upgraded through
   their authenticated quiescence/restart capabilities; the bridge waits for the old
-  registration to disappear before starting or joining its replacement. The bridge keeps
+  registration to disappear before starting or joining its replacement. A live but
+  health-check-unresponsive local server is not replaced automatically. The project dialog
+  explains that active work cannot be verified and offers explicit recovery, which matches
+  the registered PID, URL, and start identity before each signal, tries graceful
+  termination, then force-stops only the still-matching process before reconnecting. This
+  route exists only in the local bridge. The bridge keeps
   the bearer credential out of browser state; Tauri will replace it with its native
   lifecycle layer.
   Creating a ticket selects it and immediately opens and focuses its Details editor so

@@ -8,6 +8,7 @@ describe('development server route boundary', () => {
     '/__hotsheet/folders/choose',
     '/__hotsheet/conversation-exports/open',
     '/__hotsheet/projects/open',
+    '/__hotsheet/server/recover-unhealthy',
     '/__hotsheet/project-api/project/tickets',
   ])('passes %s through to the Hono bridge', path => {
     expect(devServerRouteExclude.test(path)).toBe(false);
