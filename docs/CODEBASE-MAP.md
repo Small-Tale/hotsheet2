@@ -34,7 +34,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
     src/ai-conversation.ts   #   Per-connection multi-turn transcript transitions for streamed output, activity, permissions, and terminal outcomes
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
-    src/conversation-export.ts # Portable .hotsheet-chat range, manifest, transcript, summary, collision-lineage, and resume contract
+    src/conversation-export.ts # Portable .hotsheet-chat range, manifest, transcript, summary, selected structured assets, collision-lineage, and resume contract
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary
     src/components/conversation-export-dialog.tsx # Save range/destination/contents/collision dialog shared by AI conversation presentations
     src/components/project-close-dialog.tsx # Shared-menu running-resource inventory, keyed live terminal/shared-read-only-AIConversation preview, and explicit keep-running versus stop-all project-tab dismissal

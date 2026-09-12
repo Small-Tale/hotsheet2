@@ -1,9 +1,10 @@
-import type {ActivityEvent, ClientTurnEvent} from './api';
+import type {ActivityEvent, ClientFileReference, ClientTurnEvent} from './api';
 
 export type ConversationMessageRole = 'user' | 'assistant';
 export type ConversationMessageStatus = 'streaming' | 'completed' | 'failed' | 'interrupted';
 export interface ConversationUsage {tokensIn:number;tokensOut:number;costUsd?:number;model?:string}
-export interface ConversationMessage { id:string; role:ConversationMessageRole; content:string; status?:ConversationMessageStatus;usage?:ConversationUsage }
+export type ConversationFileReference=ClientFileReference;
+export interface ConversationMessage { id:string; role:ConversationMessageRole; content:string; status?:ConversationMessageStatus;usage?:ConversationUsage;files?:ConversationFileReference[] }
 export interface ConversationActivity {id:string;tool:string;kind:string;summary:string;importance:'low'|'normal'|'high'}
 export interface ConversationState { messages:ConversationMessage[]; activity?:ConversationActivity[]; activeAssistantId?:string; progress?:string; error?:string }
 
@@ -33,7 +34,7 @@ export function applyConversationEvent(state:ConversationState,event:ClientTurnE
   if(event.type==='output'){
     if(index<0)return state;
     const content=typeof event.content==='string'?event.content:'';
-    const messages=state.messages.map((message,messageIndex)=>messageIndex===index?{...message,content:`${message.content}${content}`,status:'streaming' as const}:message);
+    const incoming=Array.isArray(event.files)?event.files as ClientFileReference[]:[],messages=state.messages.map((message,messageIndex)=>{if(messageIndex!==index)return message;const files=new Map((message.files??[]).map(file=>[file.id,file]));for(const file of incoming)files.set(file.id,file);return{...message,content:`${message.content}${content}`,status:'streaming' as const,...(files.size?{files:[...files.values()]}:{})}});
     return{...state,messages,progress:'Responding…'};
   }
   if(event.type==='done'){

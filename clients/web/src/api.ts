@@ -51,8 +51,9 @@ export interface CustomView {id:string;name:string;query:string}
 export interface CommandOutputLine {seq:number;stream:string;text:string}
 export interface CommandRun {id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:CommandOutputLine[]}
 export interface ActivityEvent {id:string;ts:string;tool:string;project?:string;ticket?:string;session?:string;kind:string;summary:string;detail?:unknown;importance:'low'|'normal'|'high'}
+export interface ClientFileReference {id:string;filename:string;mime_type:string;kind:'attachment'|'media';url:string}
 export type ClientTurnEvent=
-  |{type:'output';content:string;truncated:boolean}
+  |{type:'output';content:string;truncated:boolean;files?:ClientFileReference[]}
   |{type:'permission_asked';tool:string;summary:string}
   |{type:'usage';model?:string;tokens_in:number;tokens_out:number;cost_usd?:number}
   |{type:'native_activity';source:string;payload:unknown}

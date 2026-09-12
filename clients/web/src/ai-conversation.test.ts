@@ -25,6 +25,13 @@ describe('AI conversation transcript',()=>{
     expect(retried.error).toBeUndefined();
   });
 
+  it('retains stable structured file references emitted with assistant output',()=>{
+    let state=beginConversationTurn(EMPTY_CONVERSATION,'turn-files','Inspect the files');
+    state=applyConversationEvent(state,{type:'output',content:'Attached.',truncated:false,files:[{id:'proof-1',filename:'proof.png',mime_type:'image/png',kind:'media',url:'/files/proof.png'}]});
+    state=applyConversationEvent(state,{type:'output',content:' Done.',truncated:false,files:[{id:'proof-1',filename:'proof.png',mime_type:'image/png',kind:'media',url:'/files/proof.png'}]});
+    expect(state.messages[1].files).toEqual([{id:'proof-1',filename:'proof.png',mime_type:'image/png',kind:'media',url:'/files/proof.png'}]);
+  });
+
   it('retains unknown events and gives interrupted empty turns a useful result',()=>{
     const started=beginConversationTurn(EMPTY_CONVERSATION,'turn-2','Stop soon.');
     expect(applyConversationEvent(started,{type:'future',value:1})).toBe(started);

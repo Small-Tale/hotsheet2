@@ -15,12 +15,13 @@ describe('ConversationExportDialog', () => {
     const markup = String(ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft() } }));
     expect(markup).toContain('data-component="conversation-export-dialog"');
     expect(markup).toContain('data-step="1"');
-    expect(markup).toContain('Step 1 of 3');
+    expect(markup).toContain('Step 1 of 2');
     expect(markup).toContain('Choose messages');
     expect(markup).toContain('data-action="submit-conversation-export"');
     expect(markup).toContain('name="conversation-export-scope" value="all" checked');
     expect(markup).toContain('name="conversation-export-scope" value="range"');
-    expect(markup.match(/data-action="pick-conversation-export-message"/g)).toHaveLength(3);
+    expect(markup.match(/class="ai-conversation__message/g)).toHaveLength(3);
+    expect(markup).toContain('class="markdown-preview"');
     expect(markup).toContain('Plan the release.');
     expect(markup).toContain('3 of 3 messages selected');
     expect(markup).toContain('data-action="next-conversation-export-step"');
@@ -43,12 +44,9 @@ describe('ConversationExportDialog', () => {
         writeMode: 'reexport',
         bundle: { ...defaultConversationExportDraft().bundle, includeSummary: true },
       },
-      step:3,
+      step:2,
     } }));
-    expect(markup).toContain('Step 3 of 3');
-    expect(markup).toContain('2 messages');
-    expect(markup).toContain('Selected transcript range');
-    expect(markup).toContain('/Users/me/Exports/release-review');
+    expect(markup).toContain('Step 2 of 2');
     expect(markup).toContain('Revision 4 of this conversation is already there.');
     expect(markup).toContain('name="conversation-export-write-mode" value="reexport" checked');
     expect(markup).toContain('name="conversation-export-write-mode" value="overwrite"');
@@ -60,7 +58,7 @@ describe('ConversationExportDialog', () => {
     const markup = String(ConversationExportDialog({ state: {
       source: { conversationId: 'conversation-1', tool: 'Codex' },
       messages,
-      step:3,
+      step:2,
       draft: {
         ...defaultConversationExportDraft(),
         destination: {
@@ -94,11 +92,11 @@ describe('ConversationExportDialog', () => {
   });
 
   it('defers destination choice to the final save action',()=>{
-    const markup=String(ConversationExportDialog({state:{source,messages,draft:defaultConversationExportDraft(),step:3}}));
-    expect(markup).toContain('Choose location when you save');
-    expect(markup).toContain('The final Save action opens the system folder picker.');
-    expect(markup).toContain('Choose destination and save');
+    const markup=String(ConversationExportDialog({state:{source,messages,draft:defaultConversationExportDraft(),step:2}}));
+    expect(markup).toContain('Step 2 of 2');
+    expect(markup).toContain('Save conversation');
     expect(markup).not.toContain('Choose where to save the conversation.');
-    expect(markup).not.toContain('disabled>Choose destination and save');
+    expect(markup).not.toContain('disabled>Save conversation');
+    expect(markup).not.toContain('manifest.json');
   });
 });

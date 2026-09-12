@@ -85,6 +85,12 @@ export interface ConversationExportAsset {
   dataBase64: string;
 }
 
+export function selectedConversationFileReferences(messages:readonly ConversationMessage[],scope:ConversationExportScope,options:ConversationExportBundleOptions){const files=new Map<string,NonNullable<ConversationMessage['files']>[number]>();for(const message of selectedConversationMessages(messages,scope))for(const file of message.files??[])if((file.kind==='attachment'&&options.includeAttachments)||(file.kind==='media'&&options.includeMedia))files.set(file.id,file);return[...files.values()]}
+
+function bytesToBase64(bytes:Uint8Array){let binary='';for(let offset=0;offset<bytes.length;offset+=0x8000)binary+=String.fromCharCode(...bytes.subarray(offset,offset+0x8000));return btoa(binary)}
+
+export async function conversationExportAssets(messages:readonly ConversationMessage[],draft:ConversationExportDraft,fetchFile:typeof fetch=fetch):Promise<ConversationExportAsset[]>{return Promise.all(selectedConversationFileReferences(messages,draft.scope,draft.bundle).map(async file=>{const response=await fetchFile(file.url);if(!response.ok)throw new Error(`Could not read ${file.filename} for export.`);return{id:file.id,filename:file.filename,mimeType:file.mime_type,kind:file.kind,dataBase64:bytesToBase64(new Uint8Array(await response.arrayBuffer()))}}))}
+
 export interface ConversationExportManifest {
   format: 'hotsheet-conversation-export';
   manifestVersion: typeof CONVERSATION_EXPORT_MANIFEST_VERSION;

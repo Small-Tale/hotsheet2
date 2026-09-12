@@ -238,11 +238,14 @@ does not introduce polling or another network request.
   - composer: multiline free-form input plus an explicit Send action; Enter sends while
     Shift+Enter inserts a line break; sending is disabled for blank input and while the same
     connection is busy, with the reason exposed accessibly
-  - save/reopen: the header Save action opens a compact three-step `ConversationExportDialog`:
-    choose all messages or a contiguous range from a visual transcript, choose optional local
-    summary/attachments/original media, then review and invoke the host `.hotsheet-chat` folder
-    picker from the final Save action; nested popup hide events do not close the wizard and existing
-    destinations receive explicit collision handling; `TerminalDrawer` can open a saved bundle
+  - save/reopen: the header Save action opens a compact two-step `ConversationExportDialog`:
+    choose all messages or a contiguous range from the same production message-bubble composition,
+    then choose a vertically stacked set of optional local summary/attachments/original-media
+    contents and invoke the host `.hotsheet-chat` folder picker from Save; nested popup hide events do
+    not close the wizard and existing
+    destinations receive explicit collision handling; structured per-message file references render
+    in both live/export transcripts and selected enabled assets retain bytes, MIME type, filename,
+    stable id, and range scoping; `TerminalDrawer` can open a saved bundle
     read-only or resume its original session when the saved range ends at the conversation tail
   - read-only contexts: the same complete embedded component renders saved exports and live
     project-close previews. Live previews retain the real transcript/activity/usage/error

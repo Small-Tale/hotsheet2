@@ -532,17 +532,21 @@ and identity-less legacy entries remain conservatively blocking.
   bottom, but never pulls them away from older messages they intentionally scrolled back to read.
 
   Completed transcripts can be saved from either conversation presentation. The compact,
-  three-step save wizard first previews the transcript so the user can keep everything or choose
-  a contiguous inclusive range directly from the messages, then chooses optional bundle contents,
-  and opens the host folder picker only from the final Save action. Popup lifecycle events from
+  two-step save wizard first renders the same message bubbles, Markdown, attribution, and file
+  references as the live chat so the user can keep everything or choose a contiguous inclusive
+  range directly from the transcript. Its second step presents optional bundle contents as one
+  vertical list and opens the host folder picker from Save, without a redundant review step or
+  internal bundle-file inventory. Popup lifecycle events from
   controls inside the wizard never dismiss the wizard itself. It creates a portable `.hotsheet-chat`
   directory bundle. Every bundle contains `manifest.json`, a
   readable `transcript.md`, and lossless `conversation.json`; optional `summary.md`, attachment,
-  and original-media entries are explicit. The browser receives only an opaque destination token,
+  and original-media entries are explicit. Structured file references emitted with assistant
+  messages retain stable ids, filenames, MIME types, and source URLs in conversation state; only
+  references from the selected message range and enabled bundle categories are fetched byte-for-byte
+  and sent to the already validated asset writer. The browser receives only an opaque destination token,
   while the trusted local bridge validates sizes and identities and owns all filesystem reads and
   writes. Selecting an existing bundle requires an explicit overwrite or same-conversation
-  re-export, with revision lineage recorded in the manifest. Reopen behavior is summarized quietly
-  on the review step instead of presented as a separate option. Saved conversation bundles reopen
+  re-export, with revision lineage recorded in the manifest. Saved conversation bundles reopen
   from the terminal-drawer New menu. A selection that ends before the live transcript tail opens
   read-only; a tail-ending selection with a compatible project/session reconnects to that session
   and can continue. Continued turns remain live-only until the user deliberately saves again.

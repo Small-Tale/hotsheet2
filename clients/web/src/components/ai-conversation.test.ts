@@ -44,6 +44,11 @@ describe('AIConversation',()=>{
     expect(String(AIConversation({open:true,tool:'Codex',messages:[message],draft:'',busy:false,interruptible:false,feedbackAvailable:true}))).toContain('data-ai-feedback-target="conversation:answer"');
   });
 
+  it('renders structured attachment and media references inside the shared message bubble',()=>{
+    const markup=String(AIConversation({open:true,tool:'Codex',messages:[{id:'answer',role:'assistant',content:'Files attached.',files:[{id:'doc',filename:'report.pdf',mime_type:'application/pdf',kind:'attachment',url:'/files/report'},{id:'image',filename:'proof.png',mime_type:'image/png',kind:'media',url:'/files/proof'}]}],draft:'',busy:false,interruptible:false}));
+    expect(markup).toContain('aria-label="Referenced files"');expect(markup).toContain('data-lucide="paperclip"');expect(markup).toContain('data-lucide="image"');expect(markup).toContain('href="/files/report" download="report.pdf"');
+  });
+
   it('reuses the complete conversation surface as embedded drawer content',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'Ask about the project',busy:false,interruptible:false}));expect(markup).toContain('data-presentation="embedded"');expect(markup).toContain('ai-conversation--embedded');expect(markup).toContain('Conversation transcript');expect(markup).toContain('send-conversation-turn');expect(markup).not.toContain('wa-dialog')});
   it('keeps the embedded composer fixed while the transcript owns bounded scrolling',()=>{expect(css).toMatch(/\.ai-conversation--embedded \{[^}]*display: flex[^}]*height: 100%[^}]*min-height: 0[^}]*overflow: hidden[^}]*flex-direction: column/);expect(css).toMatch(/\.ai-conversation--embedded > :not\(\.ai-conversation__transcript\) \{ flex: none; \}/);expect(css).toMatch(/\.ai-conversation--embedded > \.ai-conversation__transcript \{[^}]*padding-block: var\(--wa-space-s\)[^}]*flex: 1 1 0/);expect(css).toMatch(/\.ai-conversation__transcript \{[^}]*box-sizing: border-box/)});
   it('offers exports for completed transcripts and makes partial saved transcripts read-only',()=>{

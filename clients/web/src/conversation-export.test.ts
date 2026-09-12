@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import type { ConversationMessage } from './ai-conversation';
 import {
   buildConversationExportRequest,
+  conversationExportAssets,
   conversationExportBundleEntries,
   conversationExportScopeAfterMessagePick,
   conversationExportValidation,
   conversationSummaryMarkdown,
   conversationTranscriptMarkdown,
   defaultConversationExportDraft,
+  selectedConversationFileReferences,
   selectedConversationMessages,
   suggestedConversationExportName,
 } from './conversation-export';
@@ -118,6 +120,15 @@ describe('conversation export contract', () => {
       },
     });
     expect(suggestedConversationExportName('Claude Code', new Date('2026-09-10T05:00:00Z'))).toBe('claude-code-conversation-2026-09-10');
+  });
+
+  it('collects selected structured file references and preserves their original bytes',async()=>{
+    const withFiles:ConversationMessage[]=[{...messages[0],files:[{id:'document-1',filename:'report.pdf',mime_type:'application/pdf',kind:'attachment',url:'/files/report'}]},{...messages[1],files:[{id:'image-1',filename:'proof.png',mime_type:'image/png',kind:'media',url:'/files/proof'}]},{...messages[2],files:[{id:'outside',filename:'outside.txt',mime_type:'text/plain',kind:'attachment',url:'/files/outside'}]}];
+    const draft={...defaultConversationExportDraft(),scope:{kind:'range' as const,startMessageId:'message-1',endMessageId:'message-2'}};
+    expect(selectedConversationFileReferences(withFiles,draft.scope,draft.bundle).map(file=>file.id)).toEqual(['document-1','image-1']);
+    const assets=await conversationExportAssets(withFiles,draft,async input=>{const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;return new Response(url.endsWith('report')?new Uint8Array([0,1,2]):new Uint8Array([255,4]))});
+    expect(assets).toEqual([{id:'document-1',filename:'report.pdf',mimeType:'application/pdf',kind:'attachment',dataBase64:'AAEC'},{id:'image-1',filename:'proof.png',mimeType:'image/png',kind:'media',dataBase64:'/wQ='}]);
+    expect(selectedConversationFileReferences(withFiles,draft.scope,{...draft.bundle,includeMedia:false}).map(file=>file.id)).toEqual(['document-1']);
   });
 
   it('renders lossless readable Markdown and an explicitly local concise summary', () => {

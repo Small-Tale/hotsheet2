@@ -30,6 +30,11 @@
 .ai-conversation__message>.markdown-preview { color: inherit; }
 .ai-conversation__message>.markdown-preview :is(p,ul,ol,blockquote,pre,table) { margin-block: var(--wa-space-2xs); }
 .ai-conversation__message>p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-conversation__files { display:grid; padding:0; margin:var(--wa-space-xs) 0 0; list-style:none; gap:var(--wa-space-3xs); }
+.ai-conversation__files a { display:flex; width:fit-content; max-width:100%; padding:.25rem .45rem; border-radius:var(--wa-border-radius-s); color:inherit; background:color-mix(in srgb,currentcolor 10%,transparent); align-items:center; gap:.35rem; font-size:var(--wa-font-size-xs); text-decoration:none; }
+.ai-conversation__files a:hover { text-decoration:underline; }
+.ai-conversation__files svg { width:.8rem; height:.8rem; flex:none; }
+.ai-conversation__files span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .ai-conversation__message[data-status="failed"] { border: 1px solid var(--wa-color-danger-border-normal); }
 .ai-conversation__usage { display: flex; margin: .45rem 0 0; color: var(--wa-color-neutral-on-quiet); align-items: center; gap: .35rem; font-size: var(--wa-font-size-xs); }
 .ai-conversation__usage>span+span::before { margin-right: .35rem; content: '·'; }
