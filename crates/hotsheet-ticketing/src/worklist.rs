@@ -193,7 +193,7 @@ fn regenerate_tickets_with_settings(
         .count();
     let entries = auto_context::effective(settings)
         .map_err(|e| StoreError::Io(io::Error::new(io::ErrorKind::InvalidData, e)))?;
-    let body = render_with_auto_context(&tickets, &entries);
+    let body = render_with_auto_context(tickets, &entries);
     write_worklist(path, &body)?;
     Ok(n)
 }
@@ -228,7 +228,7 @@ pub fn regenerate_checkout_from_tickets(
         .iter()
         .filter(|ticket| ticket.up_next && ticket.status.is_active())
         .count();
-    let body = render_with_auto_context(&tickets, &entries);
+    let body = render_with_auto_context(tickets, &entries);
     write_worklist(
         &PathBuf::from(&checkout.root).join(CHECKOUT_WORKLIST),
         &body,
