@@ -1,6 +1,6 @@
 import './repository-setup.css';
 
-import { CircleCheck, GitBranch } from 'lucide';
+import { CircleCheck } from 'lucide';
 
 import { LucideIcon } from './lucide-icon';
 
@@ -15,7 +15,7 @@ export function RepositorySetup({step='initialize',busy=false,error=''}:{step?:R
   </form>;
 
   return <div class="repository-setup" data-component="repository-setup" data-step="initialize">
-    <div class="repository-setup__message"><span class="repository-setup__icon"><LucideIcon icon={GitBranch} name="git-branch"/></span><div><strong>This folder is not a Git repository</strong><p>Initialize Git here to enable branch, change, and commit status. Existing project files will remain untracked; Hot Sheet will not stage or commit them.</p></div></div>
+    <div class="repository-setup__message"><p>Initialize Git here to enable branch, change, and commit status. Existing project files will remain untracked; Hot Sheet will not stage or commit them.</p></div>
     {error&&<p class="repository-setup__error" role="alert">{error}</p>}
     <footer><wa-button appearance="accent" type="button" data-action="initialize-repository" disabled={busy}>{busy?'Initializing…':'Initialize Git repository'}</wa-button></footer>
   </div>;

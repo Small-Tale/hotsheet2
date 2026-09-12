@@ -9,7 +9,7 @@ describe('RepositorySetup',()=>{
   it('offers a bounded initialization action without promising to commit files',()=>{
     const markup=String(RepositorySetup({}));
     expect(markup).toContain('data-step="initialize"');
-    expect(markup).toContain('This folder is not a Git repository');
+    expect(markup).not.toContain('This folder is not a Git repository');
     expect(markup).toContain('data-action="initialize-repository"');
     expect(markup).toContain('Initialize Git repository');
     expect(markup).toContain('will not stage or commit');
@@ -32,5 +32,6 @@ describe('RepositorySetup',()=>{
     const css=readFileSync(resolve(import.meta.dirname,'repository-setup.css'),'utf8');
     expect(css).toMatch(/@media \(max-width: 32rem\)/);
     expect(css).toMatch(/width: min\(30rem, 100%\)/);
+    expect(css).toMatch(/data-step="initialize"[^}]*footer \{[^}]*align-items: center;[^}]*justify-content: center;/);
   });
 });

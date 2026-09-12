@@ -31,7 +31,8 @@ describe('RepositoryStatusPopover',()=>{
     const markup=String(RepositoryStatusPopover({status:status({branch:undefined,upstream:undefined,staged:0,unstaged:0,untracked:0,conflicted:0,files:[]}),initialized:false}));
     expect(markup).toContain('data-state="uninitialized"');
     expect(markup).toContain('data-setup-step="initialize"');
-    expect(markup).toContain('Git has not been initialized for this folder');
+    expect(markup).toContain('<h2 id="repository-status-title">This folder is not a Git repository</h2>');
+    expect(markup).not.toContain('<h2 id="repository-status-title">Repository Status</h2>');
     expect(markup).toContain('data-action="initialize-repository"');
     expect(markup).not.toContain('<dt>Branch</dt>');
     expect(markup).not.toContain('fatal: not a git repository');

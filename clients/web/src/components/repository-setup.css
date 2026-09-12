@@ -6,4 +6,6 @@
 .repository-setup__icon svg { width: 1.25rem; height: 1.25rem; }
 .repository-setup__error { margin: 0; padding: var(--wa-space-s); border-radius: var(--wa-border-radius-m); color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); overflow-wrap: anywhere; }
 .repository-setup footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--wa-space-s); }
+.repository-setup[data-step="initialize"] .repository-setup__message { display: block; text-align: center; }
+.repository-setup[data-step="initialize"] footer { min-height: 5rem; align-items: center; justify-content: center; }
 @media (max-width: 32rem) { .repository-setup { padding: var(--wa-space-l); } .repository-setup__message { grid-template-columns: 1fr; } .repository-setup footer wa-button { flex: 1; } }

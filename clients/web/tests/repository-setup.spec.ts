@@ -11,7 +11,7 @@ test('recovers a project folder without Git and optionally connects origin',asyn
     if(path.endsWith('/repository/status'))return route.fulfill({json:initialized?{initialized:true,branch:'master',ahead:0,behind:0,staged:0,unstaged:0,untracked:1,conflicted:0,clean:false,root:project.root,platform:'macos',commit_count:0,commits:[],ranges:[],files:[],truncated:false}:{initialized:false,ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true,root:project.root,platform:'macos',commit_count:0,commits:[],ranges:[],files:[],truncated:false}});
     if(path.endsWith('/repository/files'))return route.fulfill({json:{items:[{path:'existing.txt',unstaged:'untracked',untracked:true,conflicted:false}],next_cursor:null}});
     if(path.endsWith('/repository/commits'))return route.fulfill({json:{items:[],next_cursor:null}});
-    if(path.endsWith('/tickets'))return route.fulfill({json:[]});
+    if(path.endsWith('/tickets'))return route.fulfill({json:url.searchParams.has('page_size')?{items:[],counts:{total:0,queued:0,backlog:0,archive:0,open:0,up_next:0,active:0,started:0,completed_today:0}}:[]});
     if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:project.stores[0],default:true,capabilities:{create:true,update:true,notes:true,attachments:true,watch:true,query_fields:[]}}]});
     if(path.endsWith('/views')||path.endsWith('/connections')||path.endsWith('/permissions')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/terminals')||path.endsWith('/corrupt-tickets')||path.endsWith('/drive/sessions'))return route.fulfill({json:[]});
     if(path.endsWith('/ai-tools'))return route.fulfill({json:[]});
@@ -28,7 +28,9 @@ test('recovers a project folder without Git and optionally connects origin',asyn
   await page.locator('[data-action="open-repository-status"]').click();
   const dialog=page.locator('[data-component="repository-status-popover"]');
   await expect(dialog).toHaveAttribute('data-state','uninitialized');
-  await expect(dialog.getByText('This folder is not a Git repository')).toBeVisible();
+  await expect(dialog.getByRole('heading',{name:'This folder is not a Git repository'})).toBeVisible();
+  await expect(dialog.getByRole('heading',{name:'Repository Status'})).toHaveCount(0);
+  const initialize=dialog.locator('[data-action="initialize-repository"]');await expect.poll(()=>initialize.evaluate(node=>{const button=node.getBoundingClientRect(),footer=node.closest('footer')!.getBoundingClientRect();return Math.max(Math.abs(button.x+button.width/2-footer.x-footer.width/2),Math.abs(button.y+button.height/2-footer.y-footer.height/2))})).toBeLessThan(1);
   await expect(dialog.getByText(/will not stage or commit/)).toBeVisible();
   await dialog.screenshot({path:'/private/tmp/hs2-9r3w53-no-git-wide.png'});
   await page.setViewportSize({width:720,height:640});
