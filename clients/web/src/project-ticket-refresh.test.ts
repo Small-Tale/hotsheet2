@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { loadProjectTicketRefresh } from './project-ticket-refresh';
+import { appendUniqueTicketRows, loadProjectTicketRefresh } from './project-ticket-refresh';
 
 describe('loadProjectTicketRefresh', () => {
   const counts = {total:1,queued:1,backlog:0,archive:0,open:1,up_next:0,active:0,started:0,completed_today:0};
@@ -37,5 +37,13 @@ describe('loadProjectTicketRefresh', () => {
     }, 'checkout');
 
     expect(result).toEqual({ tickets: [healthy], ticketCounts:counts, nextCursor:'next', corruptTickets: [corrupt] });
+  });
+});
+
+describe('appendUniqueTicketRows',()=>{
+  const ticket=(connection_id:string,native_id:string)=>({connection_id,native_id,qualified_id:`${connection_id}:${native_id}`,id:native_id,slug:`HS2-${native_id}`,title:native_id,up_next:false,feedback_needed:false,tags:[],blocked_by:[],claim_count:0});
+  it('appends a continuation page without duplicating overlapping or repeated rows',()=>{
+    const first=ticket('local','1'),second=ticket('local','2');
+    expect(appendUniqueTicketRows([first],[first,second,second])).toEqual([first,second]);
   });
 });

@@ -9,6 +9,12 @@ export interface ProjectTicketRefresh {
   ticketsError?: string;
 }
 
+export function appendUniqueTicketRows(current:readonly TicketRow[],incoming:readonly TicketRow[]):TicketRow[]{
+  const known=new Set(current.map(ticket=>`${ticket.connection_id}:${ticket.native_id}`)),appended:TicketRow[]=[];
+  for(const ticket of incoming){const key=`${ticket.connection_id}:${ticket.native_id}`;if(known.has(key))continue;known.add(key);appended.push(ticket)}
+  return [...current,...appended];
+}
+
 const message = (reason: unknown) => reason instanceof Error ? reason.message : String(reason);
 
 /** Load healthy and corrupt ticket indexes without either request suppressing the other. */

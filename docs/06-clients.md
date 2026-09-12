@@ -397,8 +397,10 @@ and identity-less legacy entries remain conservatively blocking.
   fields accept only an existing keychain reference; secret values are never returned to
   browser JavaScript.
 
-  Workspace collection refreshes retain one bounded compact page and expose explicit
-  cursor continuation instead of downloading every ticket. SQL aggregate counts keep the
+  Workspace collection refreshes retain one bounded compact page and expose a visible
+  **Load more tickets** cursor continuation below list and board workspaces instead of
+  downloading every ticket. Continuation pages append without duplicating overlapping
+  provider rows, and the action disappears when the cursor is exhausted. SQL aggregate counts keep the
   sidebar and background project tabs authoritative even when most rows are not resident.
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
