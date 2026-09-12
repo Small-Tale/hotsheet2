@@ -1010,7 +1010,8 @@ view layer is new work.
 - Search (FTS) and filtered views.
 
 Closing a project tab always requires confirmation, including when no live resources are
-running; the empty-resource form is compact and names the destructive action directly.
+running; the empty-resource form is compact, names the destructive action directly, and
+does not present the absence of running resources as a warning.
 The close flow first inventories live terminals and AI chats. When any are running, the
 confirmation dialog uses the shared menu navigation to select an item and
 shows either its live, read-only terminal renderer or the exact shared `AIConversation`

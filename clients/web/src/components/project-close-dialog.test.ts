@@ -27,7 +27,7 @@ describe('ProjectCloseDialog',()=>{
   });
 
   it('asks for a compact explicit confirmation when nothing is running',()=>{
-    const markup=String(ProjectCloseDialog({state:{projectId:'demo',projectName:'Demo',resources:[]}}));expect(markup).toContain('data-has-resources="false"');expect(markup).toContain('No terminals or AI chats are currently running for this project.');expect(markup).toContain('Close this project tab? You can reopen it later.');expect(markup).toContain('Close Project');expect(markup).not.toContain('close-all-project-resources');expect(markup).not.toContain('Running items');
+    const markup=String(ProjectCloseDialog({state:{projectId:'demo',projectName:'Demo',resources:[]}}));expect(markup).toContain('data-has-resources="false"');expect(markup).toContain('Close this project tab? You can reopen it later.');expect(markup).toContain('Close Project');expect(markup).not.toContain('No terminals or AI chats');expect(markup).not.toContain('circle-alert');expect(markup).not.toContain('close-all-project-resources');expect(markup).not.toContain('Running items');
   });
 
   it('provides stable resource identity, selection, summary, and responsive two-column layout',()=>{
