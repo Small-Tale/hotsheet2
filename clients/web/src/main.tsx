@@ -136,9 +136,12 @@ const turnStreamEvents=(response:PollResponse)=>turnStreamReplayGuard.events(res
 let backgroundProjectRefresh=false;
 if(import.meta.env.DEV){
   const dev=await import('kerfjs/dev');dev.enableWarnings({valueOnlyRerender:true,listRebind:true,invariants:'throw'});
-  const [{installUiStabilityDiagnostics},devReview]=await Promise.all([import('./ui-stability-diagnostics'),devReviewRequested(location.href,true)?import('./dev-review'):Promise.resolve(undefined)]);
-  uiStabilityDiagnostics=installUiStabilityDiagnostics({onThrash:async diagnostic=>{await submitDevReview({notes:'UI stability diagnostics detected repeated unexpected control dismissal or render thrashing.',captures:[],attachments:[diagnostic],actorRole:'system',pageUrl:location.href,viewport:{width:innerWidth,height:innerHeight}})}});
-  if(devReview)devReview.installDevReview({submit:submitDevReview,diagnostics:()=>uiStabilityDiagnostics!.attachment()});
+  if(devReviewRequested(location.href,true)){
+    const [{installUiStabilityDiagnostics},devReview]=await Promise.all([import('./ui-stability-diagnostics'),import('./dev-review')]);
+    uiStabilityDiagnostics=installUiStabilityDiagnostics({onThrash:async diagnostic=>{await submitDevReview({notes:'UI stability diagnostics detected repeated unexpected control dismissal or render thrashing.',captures:[],attachments:[diagnostic],actorRole:'system',pageUrl:location.href,viewport:{width:innerWidth,height:innerHeight}})}});
+    devReview.installDevReview({submit:submitDevReview,diagnostics:()=>uiStabilityDiagnostics!.attachment()});
+  }
+  (window as typeof window&{__hotsheetUiStabilityDiagnostics?:UiStabilityDiagnostics}).__hotsheetUiStabilityDiagnostics=uiStabilityDiagnostics;
 }
 
 type Control = HTMLElement & { value:string; open?:boolean; show?():void; hide?():void };

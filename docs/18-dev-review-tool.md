@@ -63,7 +63,9 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   root renders within two seconds trigger an automatic diagnostic ticket. Reports are
   rate-limited to one per minute so a genuine thrash cannot create its own request
   storm. Those unattended uploads carry `actor.role: system`; captures and files submitted
-  through the person-operated feedback dialog carry `actor.role: human`.
+  through the person-operated feedback dialog carry `actor.role: human`. The explicit
+  `?dev-review=false` development opt-out disables both the visible overlay and this hidden
+  automatic recorder/reporter, so automated review sessions cannot file incidental tickets.
 - Either Close or Cancel returns to the still-active annotation session. Successful
   submission clears and exits the session.
 

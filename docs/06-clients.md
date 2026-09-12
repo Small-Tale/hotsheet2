@@ -188,7 +188,8 @@ and identity-less legacy entries remain conservatively blocking.
   diagnostic ticket automatically. A root render-storm signature creates at most one
   ticket per page lifecycle; quiet intervals clear stale pass history without rearming
   an already-reported signature. Dev Review is enabled by
-  default in development (`?dev-review=false` is the sole opt-out), and its ticket
+  default in development (`?dev-review=false` is the sole opt-out for both the overlay
+  and automatic stability-ticket reporting), and its ticket
   dialog offers a checked diagnostic-log attachment so a manually reported transient
   failure carries the same context. Automatic render-storm reporting remains suppressed while
   remembered projects are restoring, a foreground operation owns the app's loading
