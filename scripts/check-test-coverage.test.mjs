@@ -34,6 +34,13 @@ test("accepts a Hot Sheet ticket slug for externally attached manual evidence", 
   assert.deepEqual(validateMatrix(root, matrix), { count: 1, failures: [] });
 });
 
+test("accepts multiple semicolon-separated Hot Sheet evidence tickets", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
+  for (const file of ["req.md", "unit.rs", "e2e.rs"]) fs.writeFileSync(path.join(root, file), "");
+  const matrix = fixture().replace("| — | double-covered |", "| HS2-ABC123; HS2-DEF456 | double-covered |");
+  assert.deepEqual(validateMatrix(root, matrix), { count: 1, failures: [] });
+});
+
 test("rejects a dishonest double-covered status", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hs2-coverage-"));
   for (const file of ["req.md", "unit.rs"]) fs.writeFileSync(path.join(root, file), "");
