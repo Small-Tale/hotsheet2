@@ -405,7 +405,9 @@ and identity-less legacy entries remain conservatively blocking.
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
   Search is scoped to the selected sidebar view, so Queue, Backlog, and Archive results do
-  not bleed into one another. Once the selected view's indexed search completes, bounded
+  not bleed into one another. Column mode retains only that selected view's normal columns:
+  a Queue search does not append Backlog or Archive columns for results that its scoped
+  request cannot contain. Once the selected view's indexed search completes, bounded
   background searches update every other view count. Pending counts use a compact spinner;
   settled search-derived counts use a small magnifying-glass marker and remain inside the
   selected item's blue bounds. Explicit lifecycle expressions and filter chips narrow the

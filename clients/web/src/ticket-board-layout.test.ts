@@ -34,16 +34,12 @@ describe('ticketBoardGroups', () => {
     ]);
   });
 
-  it('gives every lifecycle a column for view-independent search results', () => {
+  it('keeps searched Queue results in Queue columns', () => {
     const results = [...queue, 'backlog', 'archive', 'deleted', 'moved'].map(status =>
       typeof status === 'string' ? ticket(status) : status,
     );
-    const groups = ticketBoardGroups(results, 'all', false, true);
-    expect(groups.map(group => group.title)).toEqual([
-      'Not Started', 'Started', 'Completed', 'Verified', 'Backlog', 'Archive',
-    ]);
-    expect(groups.at(-2)?.tickets.map(item => item.status)).toEqual(['backlog']);
-    expect(groups.at(-1)?.tickets.map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
-    expect(groups.flatMap(group => group.tickets)).toHaveLength(results.length);
+    const groups = ticketBoardGroups(results, 'all', false);
+    expect(groups.map(group => group.title)).toEqual(['Not Started', 'Started', 'Completed', 'Verified']);
+    expect(groups.flatMap(group => group.tickets)).toHaveLength(queue.length);
   });
 });
