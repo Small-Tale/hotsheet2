@@ -58,7 +58,7 @@ export function assertCliReadBudgets(count, scenarios) {
   if (!budget) return;
   for (const name of ['list_first_100', 'full_text_query', 'show_ticket']) {
     const result = scenarios[name];
-    if (!result || result.error || result.timed_out || result.wall_ms > budget) {
+    if (!result || result.error || result.timed_out || typeof result.wall_ms !== 'number' || result.wall_ms > budget) {
       throw new Error(`CLI ${name} at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
     }
   }
@@ -78,7 +78,7 @@ export function assertReindexBudgets(count, scenarios) {
   const budget = reindexBudgetsMs.get(count);
   if (!budget) return;
   const result = scenarios.reindex;
-  if (!result || result.error || result.timed_out || result.wall_ms > budget) {
+  if (!result || result.error || result.timed_out || typeof result.wall_ms !== 'number' || result.wall_ms > budget) {
     throw new Error(`CLI reindex at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
   }
 }
@@ -88,7 +88,7 @@ export function assertCliMutationBudgets(count, scenarios) {
   if (!budget) return;
   for (const name of ['create_ticket', 'modify_ticket']) {
     const result = scenarios[name];
-    if (!result || result.error || result.timed_out || result.wall_ms > budget) {
+    if (!result || result.error || result.timed_out || typeof result.wall_ms !== 'number' || result.wall_ms > budget) {
       throw new Error(`CLI ${name} at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
     }
   }
@@ -214,10 +214,24 @@ async function checkoutFor(env, store, projectRoot) {
 }
 
 function summarizeProcess(result) {
-  return { wall_ms: result.wall_ms, peak_rss_mb: Number((result.peak_rss_kb / 1024).toFixed(1)), ...(result.timed_out ? { timed_out: true } : {}) };
+  return { wall_ms: result.wall_ms, peak_rss_mb: Number((result.peak_rss_kb / 1024).toFixed(1)), ...(result.exit_code !== 0 ? { exit_code: result.exit_code } : {}), ...(result.timed_out ? { timed_out: true } : {}) };
 }
 
-async function benchmarkCli(env, store, count, timeoutMs) {
+function processFailure(error) { return { error: error instanceof Error ? error.message : String(error) }; }
+function processSucceeded(result) { return !result.error && !result.timed_out && (result.exit_code === undefined || result.exit_code === 0); }
+
+export async function commitFixtureTier({ store, count, env, timeoutMs, run = runMeasured }) {
+  let stage;
+  try { stage = summarizeProcess(await run('git', ['-C', store, 'add', 'tickets'], { env, timeoutMs, allowFailure: true })); }
+  catch (error) { stage = processFailure(error); }
+  if (!processSucceeded(stage)) return { stage, commit: { skipped: 'stage failed' }, mutations_safe: false };
+  let commit;
+  try { commit = summarizeProcess(await run('git', ['-C', store, '-c', 'user.name=Hot Sheet Scale', '-c', 'user.email=scale@hotsheet.local', 'commit', '-m', `Scale fixture ${count}`], { env, timeoutMs, allowFailure: true })); }
+  catch (error) { commit = processFailure(error); }
+  return { stage, commit, mutations_safe: processSucceeded(commit) };
+}
+
+async function benchmarkCli(env, store, count, timeoutMs, allowMutations = true) {
   const scenarios = {};
   const processOptions = { env, timeoutMs };
   const record = async (name, operation) => {
@@ -228,6 +242,11 @@ async function benchmarkCli(env, store, count, timeoutMs) {
   await record('list_first_100', () => runMeasured(cli, ['-C', store, 'ls', '--open', '--limit', '100'], processOptions));
   await record('full_text_query', () => runMeasured(cli, ['-C', store, 'ls', '--text', `needle-${count - 1}`, '--limit', '20'], processOptions));
   await record('show_ticket', () => runMeasured(cli, ['-C', store, 'show', syntheticTicket(count).slug], processOptions));
+  if (!allowMutations) {
+    scenarios.create_ticket = { skipped: 'fixture commit did not complete' };
+    scenarios.modify_ticket = { skipped: 'fixture commit did not complete' };
+    return scenarios;
+  }
   let created;
   try { created = await runMeasured(cli, ['-C', store, 'new', '--title', `CLI scale mutation ${count}`, '--category', 'task'], processOptions); }
   catch (error) {
@@ -305,7 +324,7 @@ async function startMeasuredServer(env, store, indexPath, timeoutMs) {
   };
 }
 
-async function benchmarkServer(env, store, checkout, count, root, timeoutMs) {
+async function benchmarkServer(env, store, checkout, count, root, timeoutMs, allowMutations = true) {
   const instance = await startMeasuredServer(env, store, join(root, `index-${count}.sqlite`), timeoutMs);
   try {
     const encodedCheckout = encodeURIComponent(checkout.id);
@@ -326,6 +345,11 @@ async function benchmarkServer(env, store, checkout, count, root, timeoutMs) {
       return { wall_ms: measured.wall_ms, response_bytes: measured.response_bytes, item_count: page.items.length, has_next_cursor: Boolean(page.next_cursor), total_count: page.counts.total };
     });
     await record('view_ticket', () => fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets/${syntheticTicket(count).slug}`, { timeoutMs }));
+    if (!allowMutations) {
+      scenarios.create_ticket = { skipped: 'fixture commit did not complete' };
+      scenarios.modify_ticket = { skipped: 'fixture commit did not complete' };
+      return { startup_ms: instance.startup_ms, peak_rss_mb: instance.peakRssMb(), scenarios };
+    }
     let created;
     try { created = await fetchMeasured(instance.url, instance.secret, `/checkouts/${encodedCheckout}/tickets`, { method: 'POST', body: JSON.stringify({ title: `Server scale mutation ${count}`, category: 'task', status: 'not_started' }), capture: true, timeoutMs }); }
     catch (error) {
@@ -395,7 +419,7 @@ async function measuredUiAction(action, ready) {
   return { wall_ms: Math.round(performance.now() - started) };
 }
 
-async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs) {
+async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs, allowMutations = true) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   page.setDefaultTimeout(timeoutMs);
@@ -419,6 +443,15 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs) {
     const first = page.locator('[data-component="ticket-list-row"]').first();
     const slug = await first.getAttribute('data-ticket-slug');
     scenarios.view_ticket = await measuredUiAction(() => first.click(), () => page.locator('[data-component="ticket-inspector"]').getByText(slug, { exact: true }).waitFor());
+    if (!allowMutations) {
+      scenarios.create_ticket = { skipped: 'fixture commit did not complete' };
+      scenarios.modify_ticket = { skipped: 'fixture commit did not complete' };
+      scenarios.browser_heap_mb = await page.evaluate(() => {
+        const memory = performance.memory;
+        return memory ? Number((memory.usedJSHeapSize / 1024 / 1024).toFixed(1)) : null;
+      });
+      return { scenarios };
+    }
     const title = `Web scale mutation ${count}-${Date.now()}`;
     scenarios.create_ticket = await measuredUiAction(async () => {
       await page.getByRole('button', { name: 'New ticket…' }).click();
@@ -474,14 +507,13 @@ async function main() {
       generated = count;
       generatedBytes += generation.bytes;
       const run = { count, generation: { ...generation, total_bytes: generatedBytes } };
-      const stage = await runMeasured('git', ['-C', store, 'add', 'tickets'], { env, timeoutMs: options.timeoutMs });
-      const commit = await runMeasured('git', ['-C', store, '-c', 'user.name=Hot Sheet Scale', '-c', 'user.email=scale@hotsheet.local', 'commit', '-m', `Scale fixture ${count}`], { env, timeoutMs: options.timeoutMs });
-      run.fixture_commit = { stage: summarizeProcess(stage), commit: summarizeProcess(commit) };
+      run.fixture_commit = await commitFixtureTier({ store, count, env, timeoutMs: options.timeoutMs });
+      const allowMutations = run.fixture_commit.mutations_safe;
       for (const [name, operation] of [
-        ['cli', () => benchmarkCli(env, store, count, options.timeoutMs)],
-        ['server', () => benchmarkServer(env, store, checkout, count, root, options.timeoutMs)],
+        ['cli', () => benchmarkCli(env, store, count, options.timeoutMs, allowMutations)],
+        ['server', () => benchmarkServer(env, store, checkout, count, root, options.timeoutMs, allowMutations)],
         ...(!options.skipWeb ? [['web', async () => {
-          try { return await benchmarkWeb(browser, vite.baseUrl, projectRoot, count, options.timeoutMs); }
+          try { return await benchmarkWeb(browser, vite.baseUrl, projectRoot, count, options.timeoutMs, allowMutations); }
           finally { await stopStoreServer(env, store); }
         }]] : []),
       ]) {

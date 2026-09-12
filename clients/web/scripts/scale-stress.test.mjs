@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { assertCliMutationBudgets, assertCliReadBudgets, assertReindexBudgets, assertWeb100kAcceptance, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
+import { assertCliMutationBudgets, assertCliReadBudgets, assertReindexBudgets, assertWeb100kAcceptance, commitFixtureTier, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
 
 describe('scale stress harness', () => {
   it('normalizes incremental scale milestones', () => {
@@ -25,6 +25,7 @@ describe('scale stress harness', () => {
     const within = { create_ticket: { wall_ms: 4_999 }, modify_ticket: { wall_ms: 4_999 } };
     expect(() => assertCliMutationBudgets(10_000, within)).not.toThrow();
     expect(() => assertCliMutationBudgets(10_000, { ...within, create_ticket: { wall_ms: 5_001 } })).toThrow('create_ticket');
+    expect(() => assertCliMutationBudgets(10_000, { ...within, create_ticket: { skipped: 'fixture commit did not complete' } })).toThrow('create_ticket');
     expect(() => assertCliMutationBudgets(100_000, { ...within, modify_ticket: { timed_out: true } })).toThrow('modify_ticket');
   });
 
@@ -53,5 +54,25 @@ describe('scale stress harness', () => {
     expect(tickets.map(ticket => ticket.body.match(/status: ([a-z_]+)/)?.[1])).toEqual(['archive', 'started', 'not_started', 'backlog']);
     expect(tickets[2].body).toContain('up_next: true');
     expect(tickets.every(ticket => ticket.body.includes('schema: hotsheet/v2-bounded-notes'))).toBe(true);
+  });
+
+  it('records a fixture-stage timeout and does not attempt an unsafe commit', async () => {
+    const run = vi.fn().mockResolvedValue({ wall_ms: 300_010, peak_rss_kb: 2048, exit_code: null, timed_out: true });
+    await expect(commitFixtureTier({ store: '/tmp/scale.hs2', count: 1_000_000, env: {}, timeoutMs: 300_000, run })).resolves.toEqual({
+      stage: { wall_ms: 300_010, peak_rss_mb: 2, exit_code: null, timed_out: true },
+      commit: { skipped: 'stage failed' },
+      mutations_safe: false,
+    });
+    expect(run).toHaveBeenCalledOnce();
+  });
+
+  it('records a fixture-commit failure and marks later mutation probes unsafe', async () => {
+    const run = vi.fn().mockResolvedValueOnce({ wall_ms: 10, peak_rss_kb: 1024, exit_code: 0, timed_out: false }).mockResolvedValueOnce({ wall_ms: 20, peak_rss_kb: 1024, exit_code: 1, timed_out: false });
+    await expect(commitFixtureTier({ store: '/tmp/scale.hs2', count: 10_000, env: {}, timeoutMs: 1_000, run })).resolves.toEqual({
+      stage: { wall_ms: 10, peak_rss_mb: 1 },
+      commit: { wall_ms: 20, peak_rss_mb: 1, exit_code: 1 },
+      mutations_safe: false,
+    });
+    expect(run).toHaveBeenCalledTimes(2);
   });
 });

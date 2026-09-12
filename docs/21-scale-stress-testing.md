@@ -24,8 +24,12 @@ the same clean-store contract as normal auto-committed operation), and records:
   creation, ticket mutation, and browser JavaScript heap.
 
 Every scenario records an error and continues to the next tier when it exceeds the timeout
-or exhausts a component's practical capacity. That makes bottlenecks visible in the JSON
-report instead of losing the earlier measurements.
+or exhausts a component's practical capacity. Fixture staging and commit are also tier
+results: a timeout or failure remains in `fixture_commit`, the generated ticket/byte totals
+are retained, and read-only CLI, server, and browser page probes continue. Mutation probes
+are explicitly skipped while the Git worktree may be partially staged, so the harness does
+not accidentally commit an incomplete fixture. That makes bottlenecks visible in the JSON
+report instead of losing the generated tier or earlier measurements.
 
 Useful options:
 
