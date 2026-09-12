@@ -24,13 +24,13 @@ The current architecture couples a checkout root to more than ticket display:
 - one checkout connects to one or more authoritative ticket sources, with one
   default source for creation;
 - project open starts repository watching, refreshes the checkout-local
-  `.hotsheet/worklist.md`, and schedules project setup/freshness work;
+  `.hotsheet2/worklist.md`, and schedules project setup/freshness work;
 - repository status, configured commands, terminals, and AI Drive sessions use
   the checkout root as their filesystem context;
 - the web client persists state and running resources by project/checkout id.
 
 Registering `kerf/ui` and `kerf/eslint-plugin` as ordinary projects would
-therefore create overlapping runtime ownership. Parent-walking `.hotsheet/store`
+therefore create overlapping runtime ownership. Parent-walking `.hotsheet2/store`
 resolution could also make both subroots silently reuse the same ticket store,
 despite appearing as separate projects.
 
@@ -151,7 +151,7 @@ authority boundary is real.
 ## 20.6 Persistence and sharing
 
 The current checkout registry is explicitly machine-local. Shared/local project settings
-are checkout-root-owned (`<project-root>/.hotsheet/settings.json` and
+are checkout-root-owned (`<project-root>/.hotsheet2/settings.json` and
 `settings.local.json`) and therefore already have one stable owner when a checkout uses
 zero, one, or several ticket sources. Scope definitions need an additional schema and
 sharing contract; they should build on that project-owned boundary rather than a ticket
@@ -200,7 +200,7 @@ summarize changes under a scope, but Git operations and repository identity do
 not move to the subdirectory.
 
 The checkout-local worklist has one writer and should remain at
-`.hotsheet/worklist.md` initially. Scope-specific files inside package directories
+`.hotsheet2/worklist.md` initially. Scope-specific files inside package directories
 would create multiple writers and additional AI-instruction discovery semantics;
 that requires a separate decision.
 

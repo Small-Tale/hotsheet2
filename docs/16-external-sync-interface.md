@@ -123,7 +123,7 @@ The existing implementation is extracted behind `TicketProvider` as the built-in
   claims remain git-provider capabilities;
 - Not Working stages evidence payloads and publishes the ticket metadata/status rename
   last, so readers observe either the completed ticket or the whole reopened report;
-- existing CLI flags and `.hotsheet/store` links keep working as shorthand for one
+- existing CLI flags and `.hotsheet2/store` links keep working as shorthand for one
   default git connection.
 
 This compatibility requirement makes the abstraction an extraction, not a rewrite of

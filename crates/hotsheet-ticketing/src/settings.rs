@@ -3,9 +3,9 @@
 //!
 //! - **Global** (`${HOTSHEET_HOME}/settings.json`): machine-wide, **not** tied to a
 //!   store — a person's cross-project defaults (default AI tool, editor…) they set once.
-//! - **Shared** (`<project>/.hotsheet/settings.json`): committed in the code project,
+//! - **Shared** (`<project>/.hotsheet2/settings.json`): committed in the code project,
 //!   independent of how many ticket sources that project uses.
-//! - **Local** (`<project>/.hotsheet/settings.local.json`): machine-local,
+//! - **Local** (`<project>/.hotsheet2/settings.local.json`): machine-local,
 //!   **gitignored**. `set --scope local` adds the path to the project's `.gitignore`.
 //!
 //! Each scope is a flat `key -> JSON value` map. The **effective** value of a key is
@@ -19,7 +19,8 @@ use serde_json::{Map, Value};
 
 const SETTINGS_SCHEMA_KEY: &str = "$hotsheetSchema";
 const SETTINGS_SCHEMA_VERSION: u64 = 1;
-const SETTINGS_DIR: &str = ".hotsheet";
+const SETTINGS_DIR: &str = ".hotsheet2";
+const LEGACY_PROJECT_SETTINGS_DIR: &str = ".hotsheet";
 const LEGACY_SHARED_FILE: &str = "hotsheet-settings.json";
 const LEGACY_LOCAL_FILE: &str = "hotsheet-settings.local.json";
 
@@ -61,7 +62,7 @@ pub enum Scope {
 
 impl Scope {
     /// The file name for this scope. Global lives under `${HOTSHEET_HOME}`; shared and
-    /// local live under the project root's `.hotsheet` directory.
+    /// local live under the project root's `.hotsheet2` directory.
     pub fn file_name(self) -> &'static str {
         match self {
             Scope::Global => "settings.json",
@@ -226,6 +227,21 @@ impl Settings {
             return Ok(Map::new());
         };
         let mut merged = Map::new();
+        // HS2 briefly shared HS1's `<project>/.hotsheet` directory. Only schema-marked
+        // files can be treated as HS2 compatibility input; an unmarked file belongs to
+        // HS1 and must not influence HS2 settings.
+        if self.project_owned {
+            let path = self
+                .project_root
+                .join(LEGACY_PROJECT_SETTINGS_DIR)
+                .join(scope.file_name());
+            if path.is_file()
+                && schema_marker_at(&path)?
+                && let Some(map) = self.read_map(&path, scope)?
+            {
+                merged.extend(map);
+            }
+        }
         for root in &self.legacy_roots {
             if let Some(map) = self.read_map(&root.join(file_name), scope)? {
                 for (key, value) in map {
@@ -294,6 +310,15 @@ impl Settings {
         let current = self.path(scope);
         if current.is_file() {
             return schema_marker_at(&current);
+        }
+        if self.project_owned {
+            let legacy_project = self
+                .project_root
+                .join(LEGACY_PROJECT_SETTINGS_DIR)
+                .join(scope.file_name());
+            if legacy_project.is_file() && schema_marker_at(&legacy_project)? {
+                return Ok(true);
+            }
         }
         if let Some(file_name) = scope.legacy_file_name() {
             for root in &self.legacy_roots {
@@ -449,15 +474,15 @@ mod tests {
             .unwrap();
 
         // shared file exists and is NOT in .gitignore
-        assert!(d.path().join(".hotsheet/settings.json").is_file());
+        assert!(d.path().join(".hotsheet2/settings.json").is_file());
         // local file exists AND is gitignored
-        assert!(d.path().join(".hotsheet/settings.local.json").is_file());
+        assert!(d.path().join(".hotsheet2/settings.local.json").is_file());
         let gi = std::fs::read_to_string(d.path().join(".gitignore")).unwrap();
         assert!(
             gi.lines()
-                .any(|line| line == ".hotsheet/settings.local.json")
+                .any(|line| line == ".hotsheet2/settings.local.json")
         );
-        assert!(!gi.lines().any(|line| line == ".hotsheet/settings.json"));
+        assert!(!gi.lines().any(|line| line == ".hotsheet2/settings.json"));
     }
 
     #[test]
@@ -465,14 +490,14 @@ mod tests {
         let d = root();
         std::fs::write(
             d.path().join(".gitignore"),
-            "target/\n.hotsheet/settings.local.json\n",
+            "target/\n.hotsheet2/settings.local.json\n",
         )
         .unwrap();
         let s = Settings::for_project(d.path());
         s.set("a", json!(1), Scope::Local).unwrap();
         s.set("b", json!(2), Scope::Local).unwrap();
         let gi = std::fs::read_to_string(d.path().join(".gitignore")).unwrap();
-        assert_eq!(gi.matches(".hotsheet/settings.local.json").count(), 1);
+        assert_eq!(gi.matches(".hotsheet2/settings.local.json").count(), 1);
         assert!(gi.contains("target/"), "existing entries preserved");
     }
 
@@ -499,7 +524,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_unversioned_settings_remain_readable_and_future_settings_require_upgrade() {
+    fn legacy_project_settings_require_an_hs2_marker_and_future_versions_require_upgrade() {
         let d = root();
         std::fs::create_dir(d.path().join(".hotsheet")).unwrap();
         std::fs::write(
@@ -508,6 +533,13 @@ mod tests {
         )
         .unwrap();
         let s = Settings::for_project(d.path());
+        assert_eq!(s.get("theme", Scope::Shared).unwrap(), None);
+
+        std::fs::write(
+            d.path().join(".hotsheet/settings.json"),
+            r#"{"$hotsheetSchema":1,"theme":"dark"}"#,
+        )
+        .unwrap();
         assert_eq!(s.get("theme", Scope::Shared).unwrap(), Some(json!("dark")));
 
         std::fs::write(
@@ -521,13 +553,51 @@ mod tests {
     }
 
     #[test]
+    fn migrate_existing_moves_schema_marked_project_settings_out_of_the_hs1_directory() {
+        let d = root();
+        std::fs::create_dir(d.path().join(LEGACY_PROJECT_SETTINGS_DIR)).unwrap();
+        let legacy_shared = d
+            .path()
+            .join(LEGACY_PROJECT_SETTINGS_DIR)
+            .join("settings.json");
+        let legacy_local = d
+            .path()
+            .join(LEGACY_PROJECT_SETTINGS_DIR)
+            .join("settings.local.json");
+        std::fs::write(&legacy_shared, r#"{"$hotsheetSchema":1,"theme":"dark"}"#).unwrap();
+        std::fs::write(&legacy_local, r#"{"$hotsheetSchema":1,"editor":"code"}"#).unwrap();
+
+        let settings = Settings::for_project(d.path());
+        settings.migrate_existing().unwrap();
+
+        assert_eq!(
+            settings.get("theme", Scope::Shared).unwrap(),
+            Some(json!("dark"))
+        );
+        assert_eq!(
+            settings.get("editor", Scope::Local).unwrap(),
+            Some(json!("code"))
+        );
+        assert!(d.path().join(".hotsheet2/settings.json").is_file());
+        assert!(d.path().join(".hotsheet2/settings.local.json").is_file());
+        assert!(
+            legacy_shared.is_file(),
+            "compatibility migration is non-destructive"
+        );
+        assert!(
+            legacy_local.is_file(),
+            "compatibility migration is non-destructive"
+        );
+    }
+
+    #[test]
     fn migrate_existing_versions_legacy_settings_and_is_byte_idempotent() {
         let d = root();
         let legacy_path = d.path().join("hotsheet-settings.json");
         std::fs::write(&legacy_path, r#"{"theme":"dark","user_key":7}"#).unwrap();
         let settings = Settings::for_project(d.path());
         settings.migrate_existing().unwrap();
-        let path = d.path().join(".hotsheet/settings.json");
+        let path = d.path().join(".hotsheet2/settings.json");
         let migrated = std::fs::read(&path).unwrap();
         let value: Value = serde_json::from_slice(&migrated).unwrap();
         assert_eq!(value[SETTINGS_SCHEMA_KEY], SETTINGS_SCHEMA_VERSION);
@@ -538,7 +608,7 @@ mod tests {
             std::fs::read_to_string(legacy_path).unwrap(),
             r#"{"theme":"dark","user_key":7}"#
         );
-        assert!(!d.path().join(".hotsheet/settings.local.json").exists());
+        assert!(!d.path().join(".hotsheet2/settings.local.json").exists());
     }
 
     #[test]
@@ -596,11 +666,11 @@ mod tests {
             .unwrap();
         settings.set("commands", json!([]), Scope::Local).unwrap();
 
-        assert!(project.path().join(".hotsheet/settings.json").is_file());
+        assert!(project.path().join(".hotsheet2/settings.json").is_file());
         assert!(
             project
                 .path()
-                .join(".hotsheet/settings.local.json")
+                .join(".hotsheet2/settings.local.json")
                 .is_file()
         );
         assert_eq!(
@@ -625,7 +695,7 @@ mod tests {
         // Global lives under ${HOTSHEET_HOME}, not the project settings directory.
         assert!(home.path().join("settings.json").is_file());
         assert!(!d.path().join("settings.json").exists());
-        assert!(d.path().join(".hotsheet/settings.json").is_file());
+        assert!(d.path().join(".hotsheet2/settings.json").is_file());
 
         // Precedence Global < Shared < Local: shared wins the shared key, global fills
         // the one only it sets.

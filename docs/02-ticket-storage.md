@@ -12,9 +12,13 @@
 For the built-in **`git` ticket provider**, tickets are plain files in git
 repositories. Git is that provider's single source of truth. Everything else—the
 SQLite index, checkout-local worklist Markdown, and UI—is derived and rebuildable.
-`<checkout>/.hotsheet/worklist.md` belongs to the code checkout, not a ticket store:
+`<checkout>/.hotsheet2/worklist.md` belongs to the code checkout, not a ticket store:
 it aggregates the checkout's configured sources and stays machine-local while those
 authoritative sources synchronize through their normal providers.
+
+The `.hotsheet2` checkout directory is HS2-owned. HS1 continues to own `.hotsheet`, so
+running both generations in one code checkout cannot overwrite either product's settings,
+store pointer, or generated worklist.
 
 Git storage is not required for every project. The provider-neutral architecture in
 [16](16-external-sync-interface.md) lets GitHub Issues, Jira, and other trackers be
@@ -55,8 +59,8 @@ A project references multiple stores because (per the ticket):
   private GitHub repo vs. a public one);
 - some tickets are **single-user and/or local-only** (never pushed anywhere).
 
-**Project config** (`~/.hotsheet/projects/<project-id>.json`, or a
-`.hotsheet/project.json` in the project root — see §2.8):
+**Project config** (`~/.hotsheet2/projects/<project-id>.json`, or a
+`.hotsheet2/project.json` in the project root — see §2.8):
 
 ```jsonc
 {
@@ -66,7 +70,7 @@ A project references multiple stores because (per the ticket):
     {
       "id": "main",                 // stable machine key (referenced by config + index)
       "name": "Team backlog",       // human label for the UI (optional)
-      "path": ".hotsheet/tickets",  // relative to project root, or absolute
+      "path": ".hotsheet2/tickets", // relative to project root, or absolute
       "visibility": "shared",       // "shared" | "local"
       "sync": { "mode": "git-remote", "remote": "origin", "branch": "main" },
       "default": true               // new tickets land here unless directed
@@ -81,7 +85,7 @@ A project references multiple stores because (per the ticket):
     {
       "id": "scratch",
       "name": "My scratch",
-      "path": ".hotsheet/local-tickets",
+      "path": ".hotsheet2/local-tickets",
       "visibility": "local",
       "sync": { "mode": "local-only" }  // still a git repo — just no remote configured
     }
@@ -514,7 +518,7 @@ silently bypassed.
 ## 2.8 Where a project's default store lives
 
 Two supported shapes — **both are git repos** (§2.1):
-1. **In-repo:** `.hotsheet/tickets/` inside the project's existing git repo —
+1. **In-repo:** `.hotsheet2/tickets/` inside the project's existing git repo —
    tickets versioned alongside code. The default store is committed; `local`
    stores are gitignored.
 2. **Standalone:** a dedicated tickets repo at any path, referenced by absolute
@@ -526,7 +530,7 @@ Two supported shapes — **both are git repos** (§2.1):
 flow for an active code project: it creates a new store (by default under
 `${HOTSHEET_HOME:-~/.hotsheet2}/stores/<project>/`), **runs `git init`**, installs the
 merge driver (§2.7), optionally adds `origin`, then writes the project's gitignored
-`.hotsheet/store` link. It refuses to overwrite an existing destination; use `hotsheet
+`.hotsheet2/store` link. It refuses to overwrite an existing destination; use `hotsheet
 link <store>` to adopt one. A local-only store is a perfectly normal repo that simply has
 no remote added. Plain `init` stays non-interactive and backward-compatible; onboarding
 clients may present the two shapes as a choice.
@@ -544,9 +548,10 @@ that references the store path (`.mcp.json`, the hooks command) is per-machine.
 
 **Finding the store without `-C`** (HS2-5CXKZ0/HS2-77YTS1): a code repo can point at its
 standalone store with `hotsheet-cli link <store>`, which writes a **gitignored**
-`.hotsheet/store` file holding the store's absolute path. Any later `hotsheet-cli`
+`.hotsheet2/store` file holding the store's absolute path. Any later `hotsheet-cli`
 run inside that repo resolves the store automatically: an explicit `-C` wins, else
-`$HOTSHEET_STORE`, else the nearest `.hotsheet/store` walking up from the cwd. A
+`$HOTSHEET_STORE`, else the nearest `.hotsheet2/store` walking up from the cwd, with
+read-only fallback to the legacy `.hotsheet/store` location. A
 standalone store also wants **aggressive auto commit+push** so its independent churn
 propagates without manual git — the ticket write auto-commit + the server's
 background sync loop cover this (§2.12).
@@ -590,8 +595,8 @@ differ per person or per device:
 
 **Where Tier B lives — the rule: on disk, gitignored, index is only a cache.**
 Local ticket overlays are stored in **gitignored files inside the store**, e.g.
-`.hotsheet/local/reads.json`, `.hotsheet/local/drafts/…`, keyed by ticket ULID.
-The `.gitignore` block ignores `.hotsheet/local/**` while the ticket files stay
+`.hotsheet2/local/reads.json`, `.hotsheet2/local/drafts/…`, keyed by ticket ULID.
+The `.gitignore` block ignores `.hotsheet2/local/**` while the ticket files stay
 committed. This follows the cardinal principle
 ([00-vision-and-principles.md](00-vision-and-principles.md) §0.4): **everything
 reconstructs from disk.** If local data lived *only* in the SQLite index and the
@@ -623,7 +628,7 @@ maps to exactly one tier:
 | **read state** (`last_read_at` / unread) | **B (local)** | `local/reads.json` (gitignored), keyed by ULID |
 | **feedback drafts** (notes of kind `feedback_draft`) | **B (local)** | dropped from the committed file today; overlay persistence is HS2-AWTHJE |
 | **UI / view state** (last view, scroll, drawer) | **B (local)** | overlay `local/…` — HS2-AWTHJE |
-| **machine preferences** | **B (local)** | `<project-root>/.hotsheet/settings.local.json` (gitignored, `Scope::Local`); unlike ticket overlays, project settings are not owned by a ticket store |
+| **machine preferences** | **B (local)** | `<project-root>/.hotsheet2/settings.local.json` (gitignored, `Scope::Local`); unlike ticket overlays, project settings are not owned by a ticket store |
 | a whole `visibility: local` store | C | its own git repo, no remote, gitignored from the project |
 
 **Built (HS2-21):** the Tier B **overlay mechanism** — `ticketing::LocalOverlay`

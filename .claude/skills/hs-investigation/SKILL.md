@@ -3,7 +3,7 @@ name: hs-investigation
 description: Create a new investigation ticket in Hot Sheet
 allowed-tools: Bash
 ---
-<!-- hotsheet-skill-version: 29 -->
+<!-- hotsheet-skill-version: 30 -->
 
 Create a new Hot Sheet **investigation** ticket. Items requiring research or analysis.
 
@@ -15,8 +15,8 @@ Create a new Hot Sheet **investigation** ticket. Items requiring research or ana
 Call the `hotsheet_create` tool with `{ "title": "<TITLE>", "category": "investigation", "up_next": <true|false> }`. The HS2 shim is schema-validated and works serverless against the configured git store.
 
 **Fallback (HS2 CLI):**
-Use `hotsheet-cli new --title "<TITLE>" --category <CATEGORY>` and add `--up-next` when requested. The CLI resolves `-C`, `HOTSHEET_STORE`, or the project's `.hotsheet/store` link and writes through the same HS2 engine; it does not need a server or secret. Replace `<CATEGORY>` with the category named above.
+Use `hotsheet-cli new --title "<TITLE>" --category <CATEGORY>` and add `--up-next` when requested. The CLI resolves `-C`, `HOTSHEET_STORE`, or the project's `.hotsheet2/store` link (with read-only legacy `.hotsheet/store` fallback) and writes through the same HS2 engine; it does not need a server or secret. Replace `<CATEGORY>` with the category named above.
 
-If a connected MCP does not identify itself as HS2, do not retry HS1 `.hotsheet` credentials. A direct `hotsheet-store.json` or `.hotsheet/store` link identifies HS2; `.hotsheet/db/PG_VERSION` identifies HS1. Use the explicit HS2 CLI store until the connector is corrected.
+If a connected MCP does not identify itself as HS2, do not retry HS1 `.hotsheet` credentials. A direct `hotsheet-store.json` or `.hotsheet2/store` link identifies HS2; `.hotsheet/db/PG_VERSION` identifies HS1. Use the explicit HS2 CLI store until the connector is corrected.
 
 Report the created ticket number and title to the user.

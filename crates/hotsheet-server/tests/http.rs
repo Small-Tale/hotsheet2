@@ -1769,11 +1769,11 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
     assert_eq!(commands.status(), StatusCode::OK);
 
     let shared: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(checkout.join(".hotsheet/settings.json")).unwrap(),
+        &std::fs::read_to_string(checkout.join(".hotsheet2/settings.json")).unwrap(),
     )
     .unwrap();
     let local: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(checkout.join(".hotsheet/settings.local.json")).unwrap(),
+        &std::fs::read_to_string(checkout.join(".hotsheet2/settings.local.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(shared["views"][0]["id"], "mine");
@@ -1783,9 +1783,9 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
         std::fs::read_to_string(checkout.join(".gitignore"))
             .unwrap()
             .lines()
-            .any(|line| line == ".hotsheet/settings.local.json")
+            .any(|line| line == ".hotsheet2/settings.local.json")
     );
-    assert!(!primary.path().join(".hotsheet/settings.json").exists());
+    assert!(!primary.path().join(".hotsheet2/settings.json").exists());
     assert!(!primary.path().join("hotsheet-settings.json").exists());
 }
 
@@ -2144,7 +2144,7 @@ args = ["--path", "{store}"]
             .as_ref()
     );
     let settings: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(checkout.join(".hotsheet/settings.json")).unwrap(),
+        &std::fs::read_to_string(checkout.join(".hotsheet2/settings.json")).unwrap(),
     )
     .unwrap();
     assert_eq!(settings["$hotsheetSchema"], 1);

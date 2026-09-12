@@ -195,16 +195,42 @@ fn import_settings(store: &FsStore, export: &ExportFile) -> Result<()> {
         .map(|root| Settings::with_legacy_stores(root, [store.root()]))
         .unwrap_or_else(|| Settings::new(store.root()));
     let local_was_hs2 = settings.is_schema_marked(Scope::Local)?;
+    let mut shared = settings.map(Scope::Shared)?;
+    let shared_source_exists = if let Some(root) = project_root {
+        let current = root.join(".hotsheet2/settings.json");
+        let hs1 = root.join(".hotsheet/settings.json");
+        if !current.is_file() && hs1.is_file() && !settings.is_schema_marked(Scope::Shared)? {
+            shared = read_hs1_settings_map(&hs1)?;
+        }
+        current.is_file() || hs1.is_file()
+    } else {
+        store.root().join("hotsheet-settings.json").is_file()
+    };
     for source_only_key in ["appName", "ticketPrefix", "custom_commands"] {
-        settings.unset(source_only_key, Scope::Shared)?;
+        shared.remove(source_only_key);
     }
     for (key, value) in &export.settings {
         if key != "appName" && key != "ticketPrefix" && key != "custom_commands" {
-            settings.set(key, value.clone(), Scope::Shared)?;
+            shared.insert(key.clone(), value.clone());
         }
+    }
+    if shared_source_exists || !shared.is_empty() {
+        settings.replace_scope(Scope::Shared, &shared)?;
     }
     import_custom_commands(store, export, &settings, local_was_hs2)?;
     Ok(())
+}
+
+/// The explicit HS1 import is the one boundary allowed to interpret unmarked files in
+/// HS1's directory. Normal HS2 settings reads deliberately ignore this path.
+fn read_hs1_settings_map(path: &Path) -> Result<Map<String, Value>> {
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("reading HS1 settings from {}", path.display()))?;
+    let value: Value = serde_json::from_str(&text)
+        .with_context(|| format!("parsing HS1 settings from {}", path.display()))?;
+    let mut map = value.as_object().cloned().unwrap_or_default();
+    map.remove("$hotsheetSchema");
+    Ok(map)
 }
 
 /// Translate HS1's ordered command tree into the flat typed HS2 command list.
@@ -795,7 +821,7 @@ mod tests {
         import(&store, &export, Path::new(".")).unwrap();
 
         let shared: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(project.path().join(".hotsheet/settings.json")).unwrap(),
+            &std::fs::read(project.path().join(".hotsheet2/settings.json")).unwrap(),
         )
         .unwrap();
         assert_eq!(shared["$hotsheetSchema"], 1);
@@ -804,14 +830,14 @@ mod tests {
         assert!(shared.get("appName").is_none());
         assert!(shared.get("ticketPrefix").is_none());
         let local: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(project.path().join(".hotsheet/settings.local.json")).unwrap(),
+            &std::fs::read(project.path().join(".hotsheet2/settings.local.json")).unwrap(),
         )
         .unwrap();
         assert_eq!(local["$hotsheetSchema"], 1);
         assert_eq!(local["commands"][0]["title"], "Check");
         assert!(local.get("custom_commands").is_none());
         assert!(local.get("hs1_only_machine_value").is_none());
-        assert!(!store.root().join(".hotsheet/settings.json").exists());
+        assert!(!store.root().join(".hotsheet2/settings.json").exists());
         assert!(!store.root().join("hotsheet-settings.json").exists());
     }
 

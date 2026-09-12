@@ -69,7 +69,7 @@ enum Cmd {
     },
     /// Link this directory (a code repo) to its **standalone** ticket store, so later
     /// `hotsheet-cli` calls here find it without `-C` (docs/02 §2.8, HS2-5CXKZ0). Writes a
-    /// gitignored `.hotsheet/store` pointing at the store's absolute path.
+    /// gitignored `.hotsheet2/store` pointing at the store's absolute path.
     Link {
         /// Path to the existing standalone ticket store.
         store: PathBuf,
@@ -425,7 +425,7 @@ enum Cmd {
     PermissionHook,
     /// Launch an interactive AI tool in this terminal with permission requests routed to
     /// the running Hot Sheet server. The ticket store is resolved from checkout sources,
-    /// a legacy `.hotsheet/store` link, or conservative sibling discovery.
+    /// a `.hotsheet2/store` link (with legacy `.hotsheet/store` fallback), or conservative sibling discovery.
     Launch {
         /// The tool to launch (currently `claude`; other tools require a native adapter).
         tool: String,
@@ -825,7 +825,7 @@ fn main() -> Result<()> {
     let mut cli = Cli::parse();
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Resolve which store to operate on: an explicit -C, else $HOTSHEET_STORE, else a
-    // `.hotsheet/store` link walked up from cwd — so a standalone store is found without -C
+    // `.hotsheet2/store` link walked up from cwd — so a standalone store is found without -C
     // (HS2-5CXKZ0). `init`/`link` operate on the literal path, not a resolved one.
     if !matches!(
         cli.command,

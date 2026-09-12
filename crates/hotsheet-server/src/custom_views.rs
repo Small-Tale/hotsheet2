@@ -77,7 +77,7 @@ mod tests {
         validate(&views).unwrap();
         replace(&settings, &views).unwrap();
         assert_eq!(from_settings(&settings).unwrap(), views);
-        assert!(root.path().join(".hotsheet/settings.json").exists());
+        assert!(root.path().join(".hotsheet2/settings.json").exists());
     }
 
     #[test]

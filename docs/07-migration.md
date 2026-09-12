@@ -125,10 +125,10 @@ rules (including hidden items, overrides, child additions, and orphan-group surv
 Other machine-local HS1 settings remain excluded.
 
 The imported shared settings and typed local commands are written back to the original
-code project's `.hotsheet/settings.json` and `settings.local.json`, now carrying HS2's
-`$hotsheetSchema` marker. This deliberately reuses HS1's filenames while changing their
-ownership to the HS2 project-settings contract. Post-import cleanup preserves recognized
-schema-marked HS2 files and still removes unmarked HS1 runtime settings. If an export lacks
+code project's `.hotsheet2/settings.json` and `settings.local.json`, carrying HS2's
+`$hotsheetSchema` marker without sharing HS1's directory. Post-import cleanup still
+recognizes schema-marked settings left by earlier HS2 releases and removes unmarked HS1
+runtime settings. If an export lacks
 an existing `sourceRoot` with an HS1 `.hotsheet` directory, the store-only import command
 retains the old beside-store settings paths instead of inventing
 `<ticket-store>/.hotsheet`; it never changes ticket-source discovery or ticket-store
@@ -194,7 +194,8 @@ may not have open at once):
    matching and identity-less legacy entries remain conservatively blocking.
    It removes only the explicit HS1 live-data/runtime allowlist (database, attachments,
    migrated settings, and generated runtime files); backups, snapshots, the HS2
-   `.hotsheet/store` link, and unknown files are preserved. Dismiss hides the reminder
+   legacy `.hotsheet/store` link, and unknown files are preserved. New HS2 links live at
+   `.hotsheet2/store`. Dismiss hides the reminder
    for that checkout and detected HS1 source identity across refreshes. Successful
    cleanup records the same dismissal so a stale or concurrently recreated marker does
    not make the banner recur.

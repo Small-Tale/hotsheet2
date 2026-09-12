@@ -244,7 +244,7 @@ The server's life is **decoupled from any client's** (maintainer requirement,
   This is the whole point of the separation and the direct reversal of HS1's
   Tauri-sidecar model, where the server died with the app.
 - **Join-don't-collide.** A per-project lock (index writer) + a global instance
-  file (`~/.hotsheet/instance.json`, holding the port) let a second launch — a CLI,
+  file (`${HOTSHEET_HOME:-~/.hotsheet2}/instances/<project-id>.json`, holding the port) lets a second launch — a CLI,
   another client, a second app window — **discover and join** the running server
   instead of starting a duplicate. Carried over from HS1's instance model, minus
   the DB-lock recycling complexity (there's no DB cluster to protect, only the
@@ -618,11 +618,11 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 
 ## 4.7 Project settings (shared / local / client) — core-owned
 
-> **Built (HS2-94, HS2-34, HS2-REF96F):** `hotsheet_ticketing::settings::Settings` — a flat
+> **Built (HS2-94, HS2-34, HS2-REF96F, HS2-48XDJR):** `hotsheet_ticketing::settings::Settings` — a flat
 > `key -> JSON` map per scope: **global** `${HOTSHEET_HOME}/settings.json`
 > (machine-wide and project-independent), **shared**
-> `<project-root>/.hotsheet/settings.json` (committed with the code project), and
-> **local** `<project-root>/.hotsheet/settings.local.json` (auto-added to the code
+> `<project-root>/.hotsheet2/settings.json` (committed with the code project), and
+> **local** `<project-root>/.hotsheet2/settings.local.json` (auto-added to the code
 > project's `.gitignore`). The effective value resolves in precedence **global < shared < local**
 > (most specific wins). Driven headless by `hotsheet-cli settings get|set|list
 > [--scope global|shared|local]`. Client/device-only settings still never enter core.
@@ -631,6 +631,14 @@ Rust crate boundary): **domain logic may not live outside `hotsheet-core`.** A
 > CLI-manageable**, not app-only. The client owns *only* device-specific settings.
 > Build: **HS2-94**.
 
+The `.hotsheet2` project directory is intentionally distinct from HS1's `.hotsheet`
+runtime directory. This lets both applications operate in one checkout without either
+rewriting the other's settings, store link, or generated worklist. On first setup or
+settings migration, HS2 reads schema-marked files from the former `.hotsheet` location
+and writes their values to `.hotsheet2`; it never treats an unmarked HS1 settings file as
+HS2 input and does not delete the compatibility source. The machine-wide default was
+already `${HOTSHEET_HOME:-~/.hotsheet2}` and is unchanged.
+
 Settings split by **scope**, which maps directly onto the already-decided
 shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ticket-storage.md)
 §2.11). Each scope has a clear owner and a clear on-disk home:
@@ -638,8 +646,8 @@ shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ti
 | Scope | Examples | On disk | Managed by |
 |---|---|---|---|
 | **Global** | cross-project personal defaults (default AI tool, editor) set once per machine | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store) | core → **CLI + server** |
-| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, enabled-plugin set for the *project* | **`<project-root>/.hotsheet/settings.json`**, committed with the code project and independent of its ticket sources | core → **CLI + server + client** |
-| **Local** | which tools are enabled *on this machine*, index location, machine paths | **`<project-root>/.hotsheet/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
+| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, enabled-plugin set for the *project* | **`<project-root>/.hotsheet2/settings.json`**, committed with the code project and independent of its ticket sources | core → **CLI + server + client** |
+| **Local** | which tools are enabled *on this machine*, index location, machine paths | **`<project-root>/.hotsheet2/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
 | **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7) | the client's own app storage | **client only — never enters core** |
 
 The dividing test: *does a headless CLI or the server ever need this value?* If yes,

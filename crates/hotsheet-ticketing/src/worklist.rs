@@ -1,7 +1,7 @@
 //! The **derived `worklist.md`** (`docs/03` §3.6, docs/05 §5.9, HS2-90). HS1 generates a
 //! Markdown worklist that any AI tool can read *without* the API; HS2 keeps that as a
 //! **derived output** — regenerated (debounced) from the tickets on change, never a second
-//! source of truth. It lives at `<checkout>/.hotsheet/worklist.md` and is **gitignored**.
+//! source of truth. It lives at `<checkout>/.hotsheet2/worklist.md` and is **gitignored**.
 //! A checkout may aggregate several stores; the stores sync normally while this local
 //! projection is rebuilt from them.
 //!
@@ -21,7 +21,7 @@ use crate::settings::Settings;
 use crate::store::{FsStore, StoreError};
 
 /// The local derived file, relative to a code checkout.
-pub const CHECKOUT_WORKLIST: &str = ".hotsheet/worklist.md";
+pub const CHECKOUT_WORKLIST: &str = ".hotsheet2/worklist.md";
 
 /// Render active Up Next tickets in worker priority order. The file deliberately omits the
 /// rest of the backlog: it is an executable queue, not a second ticket browser.
@@ -244,7 +244,7 @@ fn write_worklist(path: &Path, body: &str) -> io::Result<()> {
         let checkout = path
             .parent()
             .and_then(Path::parent)
-            .expect("checkout worklist always has .hotsheet parent");
+            .expect("checkout worklist always has .hotsheet2 parent");
         let Some(ignore) = local_git_exclude(checkout) else {
             return std::fs::write(path, body);
         };
@@ -405,7 +405,7 @@ mod tests {
         )
         .unwrap();
 
-        let output = checkout.path().join("project/.hotsheet/worklist.md");
+        let output = checkout.path().join("project/.hotsheet2/worklist.md");
         regenerate_to(&store, &output).unwrap();
         let body = std::fs::read_to_string(&output).unwrap();
         assert!(body.contains("alpha"));
@@ -531,7 +531,7 @@ mod tests {
         assert!(!first_body.contains("second guidance"));
         assert!(second_body.contains("second guidance"));
         assert!(!second_body.contains("first guidance"));
-        assert!(!store.root().join(".hotsheet/settings.json").exists());
+        assert!(!store.root().join(".hotsheet2/settings.json").exists());
     }
 
     #[test]

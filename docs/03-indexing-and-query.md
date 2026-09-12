@@ -6,7 +6,7 @@
 > from it (structured filter + FTS prefix search), and runs a **`notify` filesystem
 > watcher** (`spawn_watcher`, debounced) that reindexes changed files by content-hash
 > and broadcasts change events — so a CLI/git edit shows up live. The index is
-> **file-backed** at `~/.hotsheet/index/<hash>.sqlite` and **restored + reconciled on
+> **file-backed** at `${HOTSHEET_HOME:-~/.hotsheet2}/index/<hash>.sqlite` and **restored + reconciled on
 > launch** (`Index::open_reconciled`: keep valid rows, re-read only the changed delta,
 > rebuild if corrupt). Built: the `hotsheet-cli reindex` command, the git-diff
 > reconcile fast path (§3.4), the `blocked_by`/`assignees`/`reviews` facet tables, and
@@ -83,7 +83,7 @@ Why SQLite:
 - **Fast cold start.** On first run (or after `reindex`), we walk the store once
   and bulk-insert; thereafter only changed files are re-read (§3.4).
 
-Location: `~/.hotsheet/index/<project-id>.sqlite` (machine-local, gitignored,
+Location: `${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.sqlite` (machine-local, gitignored,
 disposable). Keyed so a project spanning multiple stores has one index.
 
 ## 3.3 Index schema (sketch)
@@ -234,7 +234,7 @@ and "search efficiently" (FTS5).
 ## 3.6 Derived outputs stay derived
 
 The worklist files HS1 generated for AI tools remain a derived contract, not a second
-source of truth. HS2 writes one machine-local `<checkout>/.hotsheet/worklist.md` per code
+source of truth. HS2 writes one machine-local `<checkout>/.hotsheet2/worklist.md` per code
 checkout, aggregated from every git ticket store configured for that checkout; it never
 writes the projection into a ticket repository. CLI mutations refresh affected local
 checkouts synchronously from an index-bounded Up Next projection (then read only those

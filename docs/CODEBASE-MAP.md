@@ -113,7 +113,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/commands.rs        #   typed program/shell/AI command schema plus portable presentation metadata
       src/overlay.rs         #   LocalOverlay: per-user Tier B data under gitignored <store>/local/ (read-tracking; docs/02 §2.11, HS2-21)
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary, ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
-      src/worklist.rs        #   checkout-local .hotsheet/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
+      src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
@@ -216,7 +216,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   global|shared|local), `key` (OS-keychain-backed set/get/list/delete),
   `import`, `doctor`, `claim`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":
   `launch <tool>` replaces itself with a hook-capable interactive tool in the caller's
-  terminal, discovering the store from `.hotsheet/store` and the permission route-back
+  terminal, discovering the store from `.hotsheet2/store` (legacy `.hotsheet/store` fallback) and the permission route-back
   from `${HOTSHEET_HOME}/instances` (Claude today — HS2-C46G58). `trigger` can
   drive a real AI tool for the project and stream one turn — HS2-109; HS2-103 launch
   safety baked in — HS2-117), `work` (the headless loop: `trigger` one turn at a time
@@ -252,8 +252,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   `ticketPrefix`, `idStrategy`, `shard`). The schema-3 string marker protects the
   random-suffix layout from stale prefix-shard writers. See
   `store.rs::StoreMetadata`.
-- **Project settings:** `<project-root>/.hotsheet/settings.json` (shared, committed) +
-  `<project-root>/.hotsheet/settings.local.json` (local, gitignored), plus **global**
+- **Project settings:** `<project-root>/.hotsheet2/settings.json` (shared, committed) +
+  `<project-root>/.hotsheet2/settings.local.json` (local, gitignored), plus **global**
   `${HOTSHEET_HOME}/settings.json` (machine-wide and project-independent) —
   version-guarded flat key→JSON maps (unversioned legacy remains readable), effective
   precedence global<shared<local. Old `hotsheet-settings*.json` files beside linked git

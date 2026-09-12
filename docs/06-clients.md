@@ -91,7 +91,7 @@ design (§112). A local tab's origin is simply `https?://127.0.0.1:<port>`. Ther
 no `dataDir`/embedded-core tab kind any more.
 
 **Auto-start + independence (the key behavior).** On launch a desktop client
-resolves the local server via `~/.hotsheet/instance.json`; if none is running it
+resolves the local server via `${HOTSHEET_HOME:-~/.hotsheet2}/instances/`; if none is running it
 **spawns one detached** and connects. The server then **keeps running after the
 client quits** (in-flight AI work and terminals survive). Full lifecycle:
 [04-core-server-cli.md](04-core-server-cli.md) §4.3.1.
@@ -251,7 +251,7 @@ and identity-less legacy entries remain conservatively blocking.
 - **Custom project commands.** The sidebar renders machine-local typed command
   definitions as collapsible groups with running feedback, stop confirmation, latest
   outcome, and press-and-hold output history. Definitions are edited in Project
-  Settings and persisted to `<project-root>/.hotsheet/settings.local.json`. Native
+  Settings and persisted to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time;
   `ai` definitions store only the prompt and tool selection, never a hard-coded Hot Sheet
@@ -366,7 +366,7 @@ and identity-less legacy entries remain conservatively blocking.
   old server, and unavailable metadata; it never offers automatic restart without the
   same explicit restart plus quiescence capability gate.
   Ticket-provider connections are not stored in project
-  `.hotsheet/settings.json` or `.hotsheet/settings.local.json`: those remain
+  `.hotsheet2/settings.json` or `.hotsheet2/settings.local.json`: those remain
   shared/local preferences. Git sources are
   checkout/store links in the machine registry, while external provider connections are
   non-secret records in the ticket store's `providers.json` (credentials remain keychain
@@ -1461,7 +1461,7 @@ separate `HISTFILE` paths under the Hot Sheet home, while fish uses a separate d
 `fish_history` session name. Project Settings → Terminals exposes the local-only **Use my
 global shell history** opt-out; it affects newly created terminals and persists as
 `terminal.inherit_global_shell_history` in
-`<project-root>/.hotsheet/settings.local.json` (HS2-A5V801).
+`<project-root>/.hotsheet2/settings.local.json` (HS2-A5V801).
 
 ## 6.8 Notes, reader mode & editing
 

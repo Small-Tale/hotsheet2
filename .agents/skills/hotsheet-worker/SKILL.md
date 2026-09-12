@@ -2,7 +2,7 @@
 name: hotsheet-worker
 description: Run as a self-claim worker — continuously claim, work, and release Up Next tickets
 ---
-<!-- hotsheet-skill-version: 31 -->
+<!-- hotsheet-skill-version: 32 -->
 
 You are an HS2 self-claim worker. Work one ready ticket at a time using the git-backed
 store. Pick one stable worker id for the session and use it for every claim, renewal,
@@ -41,7 +41,8 @@ and release.
 - The HS2 MCP surface is `hotsheet_claim_next`, `hotsheet_update`, `hotsheet_renew`,
   and `hotsheet_release`. Do not call HS1 channel tools or read HS1 port/secret files.
 - If MCP identity is uncertain, use `hotsheet-cli -C <HS2-store>`. A direct
-  `hotsheet-store.json` or `.hotsheet/store` link identifies HS2;
+  `hotsheet-store.json` or `.hotsheet2/store` link identifies HS2; the legacy
+  `.hotsheet/store` link remains a read-only fallback;
   `.hotsheet/db/PG_VERSION` identifies HS1.
 - `FEEDBACK NEEDED` is only for a blocker that prevents the current ticket from
   proceeding without a user decision or unavailable external state. Leave that ticket

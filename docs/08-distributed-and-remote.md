@@ -24,7 +24,7 @@ Keep two separable concerns apart:
 
 The model carried from HS1's shipped remote-client work (§112) already fits:
 
-- A client holds a **machine-global registry of remote servers** (`~/.hotsheet/
+- A client holds a **machine-global registry of remote servers** (`~/.hotsheet2/
   remotes.json`): `{ servers: [{ origin, label, deviceClientId, projects: [{ id,
   secret, name }] }] }`.
 - Each project tab carries a server `(origin, secret)` — a **local** project's

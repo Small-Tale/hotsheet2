@@ -349,7 +349,7 @@ generic "the tool needs a human decision" channel, not just tool-permissions.
 **External interactive terminals.** `hotsheet-cli launch <tool>` runs the plugin's
 interactive `[launch]` command in the caller's existing terminal after installing its
 setup artifacts and injecting the running server's `HOTSHEET_SERVER`/`HOTSHEET_SECRET`
-route-back. From a linked code checkout, the ordinary `.hotsheet/store` machine-local
+route-back. From a linked code checkout, the ordinary `.hotsheet2/store` machine-local
 link resolves the ticket store, so no `-C` is needed. This path is capability-gated:
 currently Claude's `PreToolUse` hook supports it; native interactive Codex is rejected
 until it has an adapter rather than being launched with misleading, unused environment.
@@ -505,13 +505,13 @@ search-path entry, and loaded by the exact same loader a third party's plugin us
 This is the §5.10 anti-drift discipline applied to the loader itself — our own tools
 ride the external interface, so it can't rot. **Third-party plugins are a
 post-release capability:** once HS2 ships, developers add their own plugins
-(machine `~/.hotsheet/plugins/` or project `.hotsheet/plugins/`) with no fork and no
+(machine `${HOTSHEET_HOME:-~/.hotsheet2}/plugins/` or project `.hotsheet2/plugins/`) with no fork and no
 recompile. So there is exactly one loader and one plugin shape; "first-party" is a
 provenance/trust label (§ trust gate), not a separate code path.
 
 **The loader lives in core** (`plugins`, [04](04-core-server-cli.md) §4.1) and reads
-a search path: **bundled built-ins → `~/.hotsheet/plugins/` (machine) → project
-`.hotsheet/plugins/`**. Both binaries load the same registry, which is what lets a
+a search path: **bundled built-ins → `${HOTSHEET_HOME:-~/.hotsheet2}/plugins/` (machine) → project
+`.hotsheet2/plugins/`**. Both binaries load the same registry, which is what lets a
 headless CLI set up a project for a plugin the user dropped in.
 
 **Trust gate (mandatory, not optional).** A manifest is inert data, but what it

@@ -33,7 +33,8 @@ use crate::import::{ExportFile, ImportSummary, SUPPORTED_EXPORT_VERSION, import}
 
 /// The per-machine link file a code repo drops to point at its **standalone** ticket store
 /// (`docs/02` §2.8, HS2-5CXKZ0). Gitignored — the store path is absolute + machine-local.
-pub const STORE_LINK: &str = ".hotsheet/store";
+pub const STORE_LINK: &str = ".hotsheet2/store";
+const LEGACY_STORE_LINK: &str = ".hotsheet/store";
 pub const HS1_IMPORT_RECEIPT: &str = "hotsheet-hs1-import.json";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,7 +119,8 @@ pub fn discover_launch_sources(
 /// inside a **code** repo finds its separate ticket store without `-C` every time:
 /// 1. an explicit `-C <path>` (anything but the default `.`) wins;
 /// 2. else `$HOTSHEET_STORE`;
-/// 3. else walk up from `cwd` for a [`STORE_LINK`] file (written by `hotsheet-cli link`);
+/// 3. else walk up from `cwd` for a [`STORE_LINK`] file (written by `hotsheet-cli link`),
+///    falling back to the legacy `.hotsheet/store` location;
 /// 4. else the requested path (`.`).
 pub fn resolve_store_path(requested: PathBuf, cwd: &Path) -> PathBuf {
     if requested != Path::new(".") {
@@ -129,10 +131,12 @@ pub fn resolve_store_path(requested: PathBuf, cwd: &Path) -> PathBuf {
     }
     let mut dir = Some(cwd);
     while let Some(d) = dir {
-        if let Ok(s) = std::fs::read_to_string(d.join(STORE_LINK)) {
-            let linked = s.trim();
-            if !linked.is_empty() {
-                return PathBuf::from(linked);
+        for link in [STORE_LINK, LEGACY_STORE_LINK] {
+            if let Ok(s) = std::fs::read_to_string(d.join(link)) {
+                let linked = s.trim();
+                if !linked.is_empty() {
+                    return PathBuf::from(linked);
+                }
             }
         }
         dir = d.parent();
@@ -141,14 +145,14 @@ pub fn resolve_store_path(requested: PathBuf, cwd: &Path) -> PathBuf {
 }
 
 /// Link the current directory (a code repo) to its standalone ticket `store`: verify the
-/// store, write its absolute path to `.hotsheet/store`, and gitignore that link (it's
+/// store, write its absolute path to `.hotsheet2/store`, and gitignore that link (it's
 /// machine-local). So later `hotsheet-cli` calls here resolve to the store with no `-C`.
 pub fn link_store(store: &Path, project_dir: &Path) -> Result<PathBuf> {
     let abs = store
         .canonicalize()
         .with_context(|| format!("store path does not exist: {}", store.display()))?;
     FsStore::open(&abs).with_context(|| format!("{} is not a Hot Sheet store", abs.display()))?;
-    let hs = project_dir.join(".hotsheet");
+    let hs = project_dir.join(".hotsheet2");
     std::fs::create_dir_all(&hs)?;
     std::fs::write(hs.join("store"), format!("{}\n", abs.display()))?;
     ensure_gitignored(project_dir, STORE_LINK)?;
@@ -451,6 +455,36 @@ mod store_link_tests {
         if std::env::var_os("HOTSHEET_STORE").is_none() {
             assert_eq!(resolve_store_path(PathBuf::from("."), &nested), abs);
         }
+    }
+
+    #[test]
+    fn canonical_store_link_wins_over_the_legacy_hs1_shared_location() {
+        if std::env::var_os("HOTSHEET_STORE").is_some() {
+            return;
+        }
+        let code = tempfile::tempdir().unwrap();
+        let canonical = code.path().join("canonical.hs2");
+        let legacy = code.path().join("legacy.hs2");
+        std::fs::create_dir_all(code.path().join(".hotsheet2")).unwrap();
+        std::fs::create_dir_all(code.path().join(".hotsheet")).unwrap();
+        std::fs::write(
+            code.path().join(STORE_LINK),
+            canonical.as_os_str().as_encoded_bytes(),
+        )
+        .unwrap();
+        std::fs::write(
+            code.path().join(LEGACY_STORE_LINK),
+            legacy.as_os_str().as_encoded_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            resolve_store_path(PathBuf::from("."), code.path()),
+            canonical
+        );
+
+        std::fs::remove_file(code.path().join(STORE_LINK)).unwrap();
+        assert_eq!(resolve_store_path(PathBuf::from("."), code.path()), legacy);
     }
 
     #[test]

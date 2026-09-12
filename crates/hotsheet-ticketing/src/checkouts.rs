@@ -735,7 +735,13 @@ fn legacy_default_source(root: &Path, sources: &[TicketSource]) -> Option<String
 }
 
 fn legacy_link_source(root: &Path) -> Option<TicketSource> {
-    let link = std::fs::read_to_string(root.join(".hotsheet/store")).ok()?;
+    let link = [".hotsheet2/store", ".hotsheet/store"]
+        .into_iter()
+        .find_map(|path| {
+            std::fs::read_to_string(root.join(path))
+                .ok()
+                .filter(|link| !link.trim().is_empty())
+        })?;
     let path = PathBuf::from(link.trim());
     let path = if path.is_absolute() {
         path
@@ -956,6 +962,37 @@ mod tests {
                 .unwrap()
                 .locator,
             store_b.canonicalize().unwrap().to_string_lossy()
+        );
+    }
+
+    #[test]
+    fn migrated_checkout_links_prefer_hs2_and_fall_back_from_an_empty_pointer() {
+        let temp = tempfile::tempdir().unwrap();
+        let checkout = temp.path().join("app");
+        let canonical = temp.path().join("canonical.hs2");
+        let legacy = temp.path().join("legacy.hs2");
+        std::fs::create_dir_all(checkout.join(".hotsheet2")).unwrap();
+        std::fs::create_dir_all(checkout.join(".hotsheet")).unwrap();
+        std::fs::write(
+            checkout.join(".hotsheet2/store"),
+            canonical.to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+        std::fs::write(
+            checkout.join(".hotsheet/store"),
+            legacy.to_string_lossy().as_bytes(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            legacy_link_source(&checkout).unwrap().locator,
+            canonical.to_string_lossy()
+        );
+
+        std::fs::write(checkout.join(".hotsheet2/store"), "\n").unwrap();
+        assert_eq!(
+            legacy_link_source(&checkout).unwrap().locator,
+            legacy.to_string_lossy()
         );
     }
 
@@ -1183,7 +1220,7 @@ mod tests {
         settings
             .set("theme", serde_json::json!("project"), crate::Scope::Shared)
             .unwrap();
-        assert!(project.join(".hotsheet/settings.json").is_file());
+        assert!(project.join(".hotsheet2/settings.json").is_file());
         assert!(!first.join(".hotsheet").exists());
         assert_eq!(
             settings.get("theme", crate::Scope::Shared).unwrap(),

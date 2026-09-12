@@ -100,7 +100,7 @@ fn setup_refresh_is_headless_and_idempotently_repairs_managed_artifacts() {
     assert!(String::from_utf8_lossy(&instructions).contains("User text."));
     assert!(String::from_utf8_lossy(&instructions).contains("hotsheet-cli ls --up-next"));
     let settings: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(project.join(".hotsheet/settings.json")).unwrap())
+        serde_json::from_slice(&std::fs::read(project.join(".hotsheet2/settings.json")).unwrap())
             .unwrap();
     assert_eq!(settings["$hotsheetSchema"], 1);
     assert_eq!(settings["user_key"], 7);
@@ -2272,9 +2272,9 @@ fn settings_shared_and_local_scopes() {
     let gi = std::fs::read_to_string(p.join(".gitignore")).unwrap();
     assert!(
         gi.lines()
-            .any(|line| line == ".hotsheet/settings.local.json")
+            .any(|line| line == ".hotsheet2/settings.local.json")
     );
-    assert!(p.join(".hotsheet/settings.json").is_file());
+    assert!(p.join(".hotsheet2/settings.json").is_file());
 
     // an unknown key errors
     hs(p)
@@ -2319,13 +2319,13 @@ fn settings_use_the_current_checkout_when_projects_share_a_store() {
     }
     let read = |project: &std::path::PathBuf| {
         serde_json::from_slice::<serde_json::Value>(
-            &std::fs::read(project.join(".hotsheet/settings.json")).unwrap(),
+            &std::fs::read(project.join(".hotsheet2/settings.json")).unwrap(),
         )
         .unwrap()
     };
     assert_eq!(read(&first)["categories"], serde_json::json!(["first"]));
     assert_eq!(read(&second)["categories"], serde_json::json!(["second"]));
-    assert!(!store.join(".hotsheet/settings.json").exists());
+    assert!(!store.join(".hotsheet2/settings.json").exists());
 }
 
 /// LIVE, gated: a real `hotsheet-cli trigger codex` drives codex in an auto-built,

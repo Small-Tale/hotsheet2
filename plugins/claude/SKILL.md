@@ -4,7 +4,7 @@ description: Plan and work through the complete Hot Sheet Up Next queue using pr
 allowed-tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-<!-- hotsheet-skill-version: 45 -->
+<!-- hotsheet-skill-version: 46 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -98,7 +98,7 @@ Notes:
 - The CLI (`hotsheet-cli …`) and `hotsheet_*` MCP tools use the same engine and work
   without a server.
 - Confirm HS2 generation before using connected MCP: `hotsheet-store.json` (directly
-  or through `.hotsheet/store`) identifies HS2; `.hotsheet/db/PG_VERSION` identifies
+  or through `.hotsheet2/store`) identifies HS2; `.hotsheet/db/PG_VERSION` identifies
   HS1. If uncertain, use `hotsheet-cli -C <HS2-store>`.
 - If a ticket is unclear, do not guess. Record the needed decision, continue independent
   tickets, and return if the answer becomes available.

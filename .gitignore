@@ -1,9 +1,10 @@
 # --- Hot Sheet local data ---
-# Ignore everything in .hotsheet/ (pglite db, snapshots, backups, telemetry,
-# logs, the lock, channel ports, and the secret.json sidecar) EXCEPT the
-# shareable project config. Mirrors Hot Sheet's own gitignore convention.
-/.hotsheet/*
-!/.hotsheet/settings.json
+# `.hotsheet/` belongs to HS1. HS2 keeps its checkout-local files separate so both
+# applications can operate in one repository without overwriting each other.
+/.hotsheet/
+# HS2 project metadata is local except for the shared project settings file.
+/.hotsheet2/*
+!/.hotsheet2/settings.json
 
 # --- Claude Code / AI-tool local + harness files ---
 /.claude/settings.local.json
@@ -56,8 +57,8 @@ Thumbs.db
 *~
 .idea/
 .vscode/
-.hotsheet/store
+.hotsheet2/store
 
 /.glassbox/*
 !/.glassbox/settings.json
-.hotsheet/settings.local.json
+.hotsheet2/settings.local.json
