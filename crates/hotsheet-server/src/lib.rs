@@ -4372,7 +4372,7 @@ async fn get_checkout_ticket_attachment(
         .find(|attachment| attachment.id == attachment_id)
         .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
     let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
-    Ok(media::attachment_file_response(
+    media::attachment_file_response(
         &attachment.filename,
         &path,
         headers.get("range").and_then(|value| value.to_str().ok()),
@@ -4384,7 +4384,7 @@ async fn get_checkout_ticket_attachment(
         } else {
             ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
         }
-    })?)
+    })
 }
 
 async fn get_checkout_ticket_attachment_by_name(
@@ -4400,7 +4400,7 @@ async fn get_checkout_ticket_attachment_by_name(
         .find(|attachment| attachment.id == attachment_id)
         .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
     let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
-    Ok(media::attachment_file_response(
+    media::attachment_file_response(
         &attachment.filename,
         &path,
         headers.get("range").and_then(|value| value.to_str().ok()),
@@ -4412,7 +4412,7 @@ async fn get_checkout_ticket_attachment_by_name(
         } else {
             ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
         }
-    })?)
+    })
 }
 
 async fn get_checkout_ticket_attachment_thumbnail(
