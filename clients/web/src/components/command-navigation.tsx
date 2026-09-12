@@ -1,15 +1,31 @@
 import './command-navigation.css';
 
-import { ChevronDown, Hammer, type IconNode,Send, TestTube2 } from 'lucide';
+import { ArrowLeftRight, Balloon, ChevronDown, CircleCheckBig, FileText, GitCompare, GitCompareArrows, Globe, Hammer, type IconNode,Send, SoapDispenserDroplet, TestTube2, Wand } from 'lucide';
 
 import { customizationContrastColor, resolveCustomizationColor } from './customization-palette';
 import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 
-export interface CommandNavigationItem { id: string; label: string; color: string; icon: 'send' | 'test' | 'build'; group?: string; running?: boolean; lastRun?: string }
+const icons = {
+  send: [Send, 'send'],
+  test: [TestTube2, 'test-tube-2'],
+  build: [Hammer, 'hammer'],
+  'file-text': [FileText, 'file-text'],
+  'arrow-left-right': [ArrowLeftRight, 'arrow-left-right'],
+  'soap-dispenser-droplet': [SoapDispenserDroplet, 'soap-dispenser-droplet'],
+  'circle-check-big': [CircleCheckBig, 'circle-check-big'],
+  balloon: [Balloon, 'balloon'],
+  'git-compare': [GitCompare, 'git-compare'],
+  'git-compare-arrows': [GitCompareArrows, 'git-compare-arrows'],
+  wand: [Wand, 'wand'],
+  globe: [Globe, 'globe'],
+} as const satisfies Record<string, readonly [IconNode, string]>;
+
+export type CommandNavigationIcon = keyof typeof icons;
+export function isCommandNavigationIcon(value: string): value is CommandNavigationIcon { return Object.hasOwn(icons, value); }
+export interface CommandNavigationItem { id: string; label: string; color: string; icon: CommandNavigationIcon; group?: string; running?: boolean; lastRun?: string }
 export interface CommandNavigationProps { label: string; commands: CommandNavigationItem[]; expanded: boolean; collapsedGroups?:readonly string[] }
-const icons: Record<CommandNavigationItem['icon'], [IconNode, string]> = { send: [Send, 'send'], test: [TestTube2, 'test-tube-2'], build: [Hammer, 'hammer'] };
 export function CommandNavigation({ label, commands, expanded,collapsedGroups=[] }: CommandNavigationProps) {
   const groups = commands.reduce<Map<string, CommandNavigationItem[]>>((result, command) => {
     const group = command.group?.trim() || '';

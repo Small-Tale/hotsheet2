@@ -201,6 +201,10 @@ does not introduce polling or another network request.
 - `CommandNavigation` — **demo built**: collapsible group of palette-colored,
   icon-bearing command actions with controlled running state. Colors are constrained
   to the exact shared HS1 custom-command palette, including contrast-aware neutral.
+  Configured HS1 Lucide names are preserved (`send`, `file-text`, `arrow-left-right`,
+  `soap-dispenser-droplet`, `circle-check-big`, `balloon`, `git-compare`,
+  `git-compare-arrows`, `wand`, and `globe`) instead of being replaced by the command-kind
+  fallback; missing or unsupported names still use the deterministic send/test/build fallback.
   - `CommandButton`
   - `CommandGroup` with collapsible heading
   - running, stopping, last-run, success, and failure states

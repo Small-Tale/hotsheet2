@@ -1,7 +1,7 @@
 import { Archive, Plus  } from 'lucide';
 import { describe, expect, it } from 'vitest';
 
-import { CommandNavigation } from './command-navigation';
+import { CommandNavigation, isCommandNavigationIcon } from './command-navigation';
 import { DriveControl } from './drive-control';
 import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
@@ -125,6 +125,13 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-command-group="Checks"');
     expect(markup).toContain('data-action="toggle-command-section"');
     expect(markup).toContain('Last run: completed (exit 0). Press and hold for output.');
+  });
+
+  it('renders every configured HS1 command icon instead of replacing it by command kind', () => {
+    const configured=['send','file-text','arrow-left-right','soap-dispenser-droplet','circle-check-big','balloon','git-compare','git-compare-arrows','wand','globe'] as const;
+    expect(configured.every(isCommandNavigationIcon)).toBe(true);
+    const markup=String(CommandNavigation({label:'Commands',expanded:true,commands:configured.map((icon,index)=>({id:String(index),label:icon,color:'blue',icon}))}));
+    for(const icon of configured)expect(markup).toContain(`data-lucide="${icon}"`);
   });
 
   it('collapses named command groups independently without hiding ungrouped commands',()=>{

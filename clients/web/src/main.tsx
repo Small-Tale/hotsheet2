@@ -41,6 +41,7 @@ import { ConnectionDetailsDialog } from './components/connection-details-dialog'
 import { ConnectionStateBanner, type ConnectionState } from './components/connection-state-banner';
 import {Hs1CleanupBanner,Hs1MigrationBanner,Hs1MigrationDialog} from './components/hs1-migration';
 import { CommandRunDialog } from './components/command-run-dialog';
+import {isCommandNavigationIcon,type CommandNavigationIcon} from './components/command-navigation';
 import { ContentTransition } from './components/content-transition';
 import {viewportSafeContextMenuPosition,viewportSafePointerPosition} from './context-menu-position';
 import { CorruptTicketInspector,corruptTicketKey, type CorruptTicketRecoveryState } from './components/corrupt-ticket-row';
@@ -838,7 +839,7 @@ function EmptyState(){return <section class="app-empty"><h1>Open a Hot Sheet pro
 function ProjectRestoreState(){return <section class="app-empty" data-component="project-restore-state" role="status" aria-busy="true"><h1>Opening Hot Sheet</h1><p>Restoring projects, tickets, and terminals…</p></section>}
 function commandRunFor(commandId:string){return commandRuns.value.find(run=>run.command_id===commandId)}
 function showCommandDialog(){queueMicrotask(()=>{const dialog=document.querySelector<HTMLDialogElement>('[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]');if(dialog&&!dialog.open)dialog.showModal()})}
-function commandIcon(command:CommandDefinition):'send'|'test'|'build'{return command.icon==='send'||command.icon==='test'||command.icon==='build'?command.icon:command.kind==='ai'||command.program?.includes('hotsheet')||command.args?.some(value=>value.includes('trigger'))?'send':command.id.includes('test')||command.title.toLowerCase().includes('test')?'test':'build'}
+function commandIcon(command:CommandDefinition):CommandNavigationIcon{return command.icon&&isCommandNavigationIcon(command.icon)?command.icon:command.kind==='ai'||command.program?.includes('hotsheet')||command.args?.some(value=>value.includes('trigger'))?'send':command.id.includes('test')||command.title.toLowerCase().includes('test')?'test':'build'}
 async function runCommand(commandId:string){const command=commandDefinitions.value.find(item=>item.id===commandId),current=project();if(!command||!current)return;const active=commandRunFor(commandId);if(active?.state==='running'){commandDialogId.value=commandId;commandStopConfirmation.value=true;showCommandDialog();return}if(command.confirmation&&!window.confirm(command.confirmation))return;try{const run=await new Api(current.apiPath).runCommand(commandId);if(project()?.id===current.id)commandRuns.value=[run,...commandRuns.value.filter(item=>item.id!==run.id)]}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
 async function openCommandHistory(commandId:string){const current=project(),run=commandRunFor(commandId);commandDialogId.value=commandId;commandStopConfirmation.value=false;showCommandDialog();if(!current||!run)return;try{const full=await new Api(current.apiPath).commandRun(run.id);if(project()?.id===current.id)commandRuns.value=commandRuns.value.map(item=>item.id===full.id?full:item)}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
 function Sidebar(){
