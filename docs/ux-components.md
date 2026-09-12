@@ -546,7 +546,9 @@ without a clear place in the product.
   clear controls remain vertically centered on the field's first text line when content wraps.
   At narrow browser widths, an expanded production search moves below the project identity so
   the project name remains readable while the query retains the full main-column width.
-  Real editable boundaries keep a keyboard caret reachable before, between, and after chips.
+  Real editable boundaries keep a keyboard caret reachable before, between, and after chips;
+  Right Arrow normalizes browser-native element and chip-descendant positions at the final chip
+  into its trailing editable text span.
   Its concise placeholder remains
   ordinary search guidance while a help button
   exposes the complete syntax.

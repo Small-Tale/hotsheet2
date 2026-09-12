@@ -1060,8 +1060,9 @@ well-formed structured value becomes a chip only after an explicit impossible co
 such as trailing whitespace or Enter; incidental focus loss never commits a partial value.
 Quoted filters also remain editable until the closing quote and explicit commit delimiter.
 Committed chips stay at their exact positions inside the editable expression, with caret stops
-before, between, and after them; pressing Right Arrow at the boundary before a trailing chip
-reaches its editable suffix instead of trapping the caret. Queries such as `NOT tag:client AND parser` retain readable
+before, between, and after them; pressing Right Arrow from Chromium's before-chip, element-boundary,
+or chip-descendant selection shapes reaches the trailing editable suffix instead of trapping the caret.
+Queries such as `NOT tag:client AND parser` retain readable
 boolean order. Compact 1.25rem chips do not make an otherwise single-line field taller or
 misalign its icons. Ordinary text wraps at character boundaries while each chip wraps atomically;
 the toolbar grows downward without clipping or moving peer controls. A chip can return to
