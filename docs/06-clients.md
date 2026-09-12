@@ -476,7 +476,11 @@ and identity-less legacy entries remain conservatively blocking.
   complete active-project reconciliation path. Closing a tab invalidates its pending work.
   Project-activation and request generations reject late A→B→A responses, including delayed
   workspace-session draft restoration, so cached immediacy cannot introduce cross-project
-  state or stale network writes. A first visit with no cache retains the normal loading state.
+  state or stale network writes. Opening a different project crosses this same activation
+  boundary before provider or ticket I/O begins, so its sidebar never renders with the prior
+  project's counts, completion history, view, or repository state. A first visit with no cache
+  uses an empty target projection during the normal loading state. Closing a project evicts its
+  rows, page cursor, and exact count summary so reopening cannot flash a stale snapshot.
 
   Drive is a production control, not demo-only state. Its split-button label reflects the
   machine-local default provider discovered from drivable plugin manifests. The arrow opens
