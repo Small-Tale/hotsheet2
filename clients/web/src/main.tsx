@@ -382,7 +382,7 @@ function projectCloseResources(projectId:string):ProjectCloseResource[]{
   return [...terminals,...chats];
 }
 function presentNextProjectClose(){
-  while(pendingProjectCloseIds.length){const projectId=pendingProjectCloseIds[0],target=projects.value.find(item=>item.id===projectId);if(!target){pendingProjectCloseIds.shift();continue}const resources=projectCloseResources(projectId);if(!resources.length){closeProjectIds([projectId]);pendingProjectCloseIds.shift();continue}projectCloseDialog.value={projectId,projectName:target.name,resources,selectedKey:projectCloseResourceKey(resources[0])};return}
+  while(pendingProjectCloseIds.length){const projectId=pendingProjectCloseIds[0],target=projects.value.find(item=>item.id===projectId);if(!target){pendingProjectCloseIds.shift();continue}const resources=projectCloseResources(projectId);projectCloseDialog.value={projectId,projectName:target.name,resources,selectedKey:resources[0]?projectCloseResourceKey(resources[0]):undefined};return}
   projectCloseDialog.value=undefined;
 }
 function requestProjectClose(ids:readonly string[]){pendingProjectCloseIds=[...new Set(ids)].filter(id=>projects.value.some(item=>item.id===id));projectCloseDialog.value=undefined;presentNextProjectClose()}

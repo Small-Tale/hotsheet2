@@ -980,8 +980,10 @@ view layer is new work.
   centered in the complete pill rather than balancing the close control twice.
 - Search (FTS) and filtered views.
 
-Closing a project tab first inventories its live terminals and AI chats. When any are
-running, a confirmation dialog uses the shared menu navigation to select an item and
+Closing a project tab always requires confirmation, including when no live resources are
+running; the empty-resource form is compact and names the destructive action directly.
+The close flow first inventories live terminals and AI chats. When any are running, the
+confirmation dialog uses the shared menu navigation to select an item and
 shows either its live, read-only terminal renderer or the exact shared `AIConversation`
 in a live read-only mode. The chat preview carries the complete retained messages,
 activity, usage, progress, and error state without exposing its composer or Save action;

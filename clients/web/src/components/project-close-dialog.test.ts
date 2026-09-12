@@ -26,12 +26,12 @@ describe('ProjectCloseDialog',()=>{
     const busy=String(ProjectCloseDialog({state:{projectId:'demo',projectName:'Demo',resources,operation:'closing-all',error:'Could not close Server.'}}));expect(busy).toContain('aria-busy="true"');expect(busy).toContain('Stopping…');expect(busy).toContain('role="alert"');expect(busy).toContain('Could not close Server.');expect(busy.match(/disabled/g)?.length).toBeGreaterThanOrEqual(6);
   });
 
-  it('handles an empty running set and keeps Close All unavailable',()=>{
-    const markup=String(ProjectCloseDialog({state:{projectId:'demo',projectName:'Demo',resources:[]}}));expect(markup).toContain('No terminals or AI chats are currently running for this project.');expect(markup).toContain('Nothing is running.');expect(markup).toMatch(/data-action="close-all-project-resources"[^>]*disabled/);expect(markup).toContain('Close this project tab?');
+  it('asks for a compact explicit confirmation when nothing is running',()=>{
+    const markup=String(ProjectCloseDialog({state:{projectId:'demo',projectName:'Demo',resources:[]}}));expect(markup).toContain('data-has-resources="false"');expect(markup).toContain('No terminals or AI chats are currently running for this project.');expect(markup).toContain('Close this project tab? You can reopen it later.');expect(markup).toContain('Close Project');expect(markup).not.toContain('close-all-project-resources');expect(markup).not.toContain('Running items');
   });
 
   it('provides stable resource identity, selection, summary, and responsive two-column layout',()=>{
     expect(projectCloseResourceKey(resources[2])).toBe('ai-chat:chat-one');expect(selectedProjectCloseResource(resources,'terminal:term-two')).toBe(resources[1]);expect(selectedProjectCloseResource(resources,'unknown')).toBe(resources[0]);expect(projectCloseRunningSummary([resources[2]])).toBe('1 AI chat will stay active unless you close them first.');
-    const css=readFileSync(resolve(import.meta.dirname,'project-close-dialog.css'),'utf8');expect(css).toMatch(/grid-template-columns:minmax\(14rem,18rem\) minmax\(0,1fr\)/);expect(css).toMatch(/@media \(max-width:42rem\)[\s\S]*grid-template-columns:1fr/);expect(css).toContain('background:var(--wa-color-surface-default)');expect(css).toContain('.project-close-dialog__terminal .terminal-viewport--scaled-preview');expect(css).toContain('.project-close-dialog__chat > .ai-conversation');
+    const css=readFileSync(resolve(import.meta.dirname,'project-close-dialog.css'),'utf8');expect(css).toContain('[data-has-resources="false"]');expect(css).toMatch(/grid-template-columns:minmax\(14rem,18rem\) minmax\(0,1fr\)/);expect(css).toMatch(/@media \(max-width:42rem\)[\s\S]*grid-template-columns:1fr/);expect(css).toContain('background:var(--wa-color-surface-default)');expect(css).toContain('.project-close-dialog__terminal .terminal-viewport--scaled-preview');expect(css).toContain('.project-close-dialog__chat > .ai-conversation');
   });
 });
