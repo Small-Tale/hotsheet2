@@ -787,6 +787,10 @@ and identity-less legacy entries remain conservatively blocking.
   same-ticket references prefer immutable attachment IDs, while
   `attachment:[HS2-…]filename` resolves through that explicitly named ticket.
 
+  AI turn events carry the server event-log cursor through every project long-poll stream.
+  The client applies each cursor-addressed turn event once globally, so multiple open
+  projects cannot append the same provider-independent assistant output repeatedly.
+
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. Live diagnostics supersede any stale indexed row with the same recovered
   slug, so selecting that visible ticket always opens recovery instead of retrying a doomed

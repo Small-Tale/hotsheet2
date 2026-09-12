@@ -1,6 +1,6 @@
 import { describe,expect,it,vi } from 'vitest';
 
-import { Api, encodeAttachmentFilename, turnStreamEvents } from './api';
+import { Api, encodeAttachmentFilename, turnStreamEvents,TurnStreamReplayGuard } from './api';
 
 describe('attachment filename transport',()=>{
   it('encodes macOS screenshot names as an ASCII-safe header value',()=>{
@@ -92,6 +92,15 @@ describe('change polling transport',()=>{
       {cursor:12,store:'s',kind:'turn_event',id:'c',slug:'codex',turn:{connection_id:'c',event:{type:'future_server_event',value:1}}},
     ]};
     expect(turnStreamEvents(response).map(item=>item.event.type)).toEqual(['output','future_server_event']);
+  });
+  it('delivers each cursor-addressed turn event once across duplicate project poll streams',()=>{
+    const guard=new TurnStreamReplayGuard(2),event={cursor:11,store:'s',kind:'turn_event',id:'c',slug:'codex',turn:{connection_id:'c',event:{type:'output',content:'hello',truncated:false}}},response={cursor:11,overflow:false,events:[event,event]};
+    expect(guard.events(response)).toHaveLength(1);
+    expect(guard.events(response)).toHaveLength(0);
+    expect(guard.events({cursor:12,overflow:false,events:[{...event,cursor:12}]})).toHaveLength(1);
+    expect(guard.events({cursor:13,overflow:false,events:[{...event,cursor:13}]})).toHaveLength(1);
+    expect(guard.events(response)).toHaveLength(1);
+    expect(guard.events({cursor:14,overflow:false,events:[{...event,cursor:undefined}]})).toHaveLength(1);
   });
 });
 

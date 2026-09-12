@@ -63,6 +63,22 @@ export interface TurnStreamEnvelope {connection_id:string;ticket?:string;event:C
 export interface ChangeEvent {cursor?:number;store:string;kind:string;id:string;slug:string;message?:string;activity?:ActivityEvent;turn?:TurnStreamEnvelope}
 export interface PollResponse {cursor:number;events:ChangeEvent[];overflow:boolean}
 export const turnStreamEvents=(response:PollResponse):TurnStreamEnvelope[]=>response.events.flatMap(event=>event.kind==='turn_event'&&event.turn?[event.turn]:[]);
+export class TurnStreamReplayGuard {
+  private readonly seen=new Set<string>();
+  private readonly order:string[]=[];
+  constructor(private readonly limit=2_048){}
+  events(response:PollResponse):TurnStreamEnvelope[]{
+    return response.events.flatMap(event=>{
+      if(event.kind!=='turn_event'||!event.turn)return[];
+      if(event.cursor===undefined)return[event.turn];
+      const key=`${event.store}\0${event.cursor}`;
+      if(this.seen.has(key))return[];
+      this.seen.add(key);this.order.push(key);
+      while(this.order.length>this.limit)this.seen.delete(this.order.shift()!);
+      return[event.turn];
+    });
+  }
+}
 export const encodeAttachmentFilename=(filename:string)=>encodeURIComponent(filename);
 export class Api {
   constructor(private origin='',private secret=''){}

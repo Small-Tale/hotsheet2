@@ -8,7 +8,7 @@ import './style.css';
 import { batch, delegate, delegateCapture, mount, signal } from 'kerfjs';
 import {Cable,ChevronLeft,ChevronRight,Ellipsis,GitBranch,PanelRightClose} from 'lucide';
 
-import { Api, type AiToolDefaults,type AiToolDescriptor,type AttachmentMetadata, type AttachmentPurpose, type Capabilities, type CheckoutTicketCounts, type CheckoutTicketQuery, type CodeReview, type CommandDefinition, type CommandRun, type CorruptTicket, type CustomView, type DuplicateBacklink, type FullTicket, type MediaAnnotation, type ProviderConnection, type RepositoryFile, type RepositoryStatus, revealCorruptTicketFile, type TicketCloseReason, type TicketRow as WireTicketRow, type ToolConnection, turnStreamEvents } from './api';
+import { Api, type AiToolDefaults,type AiToolDescriptor,type AttachmentMetadata, type AttachmentPurpose, type Capabilities, type CheckoutTicketCounts, type CheckoutTicketQuery, type CodeReview, type CommandDefinition, type CommandRun, type CorruptTicket, type CustomView, type DuplicateBacklink, type FullTicket, type MediaAnnotation, type PollResponse, type ProviderConnection, type RepositoryFile, type RepositoryStatus, revealCorruptTicketFile, type TicketCloseReason, type TicketRow as WireTicketRow, type ToolConnection, TurnStreamReplayGuard } from './api';
 import {applyConversationActivity,applyConversationEvent,beginConversationTurn,conversationUsage,EMPTY_CONVERSATION,type ConversationState} from './ai-conversation';
 import {syncConversationScroll} from './conversation-scroll';
 import {buildConversationExportRequest,conversationExportScopeAfterMessagePick,defaultConversationExportDraft,selectedConversationMessages,suggestedConversationExportName,type ConversationExportDestination,type ConversationExportDraft,type ConversationExportOpenResult,type ConversationExportWriteResult} from './conversation-export';
@@ -130,6 +130,8 @@ import {ensureVideoPoster,syncVideoPosters} from './video-posters';
 
 const submitDevReview=async(submission:DevReviewSubmission)=>{const response=await fetch('/__hotsheet/dev-review/tickets',{method:'POST',headers:{'content-type':'application/json','x-hotsheet-dev-review':'1'},body:JSON.stringify(submission)}),result=await response.json() as {slug?:string;error?:string};if(!response.ok||!result.slug)throw new Error(result.error??'Ticket creation failed.');return{slug:result.slug}};
 let uiStabilityDiagnostics:UiStabilityDiagnostics|undefined;
+const turnStreamReplayGuard=new TurnStreamReplayGuard();
+const turnStreamEvents=(response:PollResponse)=>turnStreamReplayGuard.events(response);
 let backgroundProjectRefresh=false;
 if(import.meta.env.DEV){
   const dev=await import('kerfjs/dev');dev.enableWarnings({valueOnlyRerender:true,listRebind:true,invariants:'throw'});
