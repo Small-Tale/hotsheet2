@@ -396,12 +396,12 @@ and identity-less legacy entries remain conservatively blocking.
   sidebar and background project tabs authoritative even when most rows are not resident.
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
-  Search semantics do not inherit the selected sidebar view: ordinary queries show every
-  indexed match across Queue, Backlog, Archive, and Deleted lifecycle states. Explicit
-  lifecycle expressions and filter chips narrow that complete result set rather than being
-  required to reveal it. List view renders that complete set directly; Columns view adds
-  Backlog and Archive columns for an active search so no matched lifecycle is discarded by
-  the Queue board's usual column set. Structured duplicate searches send
+  Search is scoped to the selected sidebar view, so Queue, Backlog, and Archive results do
+  not bleed into one another. Once the selected view's indexed search completes, bounded
+  background searches update every other view count. Pending counts use a compact spinner;
+  settled search-derived counts use a small magnifying-glass marker and remain inside the
+  selected item's blue bounds. Explicit lifecycle expressions and filter chips narrow the
+  selected collection. Structured duplicate searches send
   `close_reason=duplicate` to the provider before bounded pagination, rather than hoping
   duplicate rows happen to occur in the first unfiltered page. Reference-mention matches say why
   they matched, every result names its provider, and the global overlay can hand its
@@ -839,7 +839,8 @@ and identity-less legacy entries remain conservatively blocking.
   Switching among Queue, Backlog, and Archive requests a bounded compact page scoped to that
   collection before pagination; it never fetches full ticket bodies or filters an arbitrary
   mixed-status page in the browser. The selected sidebar item commits immediately while the
-  collection refresh reconciles the first progressive row tranche. Large views initially
+  collection refresh reconciles the first progressive row tranche. Counts render within
+  that same selectable item rather than outside its selected background. Large views initially
   render 80 rows, continue in idle chunks, and expose an explicit continuation control when
   the selected collection exceeds the server page size.
   Column presentation leaves idle TicketRows borderless, including the wide

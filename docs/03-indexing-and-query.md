@@ -26,10 +26,11 @@ providers will refresh the same normalized cache through their query/watch contr
 The UI never walks a store directory or calls a provider directly to draw a list; it
 queries the host.
 
-Search scope is independent of the currently selected sidebar view. An ordinary query
-searches the normal working lifecycle set even when the user opened it from a narrower
-view. Exact-slug lookup can surface a matching Backlog, Archive, or Deleted ticket so a
-known identity is never hidden by view scope. The ordinary toolbar search accepts inline
+Search scope follows the currently selected sidebar view. Queue, Backlog, and Archive
+apply their collection predicate before the bounded search page, including for exact-slug
+queries. After the selected view settles, the client performs bounded background searches
+for the other views so their sidebar counts describe the same query without delaying the
+primary results. The ordinary toolbar search accepts inline
 field tokens without opening a separate advanced-search dialog. Typing `tag:` offers
 matching project tags, including quoted tags with spaces, and selecting or completing one
 turns it into a removable, double-click-to-edit chip. Complete filters take effect before

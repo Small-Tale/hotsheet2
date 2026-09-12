@@ -91,7 +91,13 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-attention="true"');
     expect(markup).toContain('aria-label="Add view"');
+    expect(markup).toMatch(/aria-current="page"[\s\S]*class="menu-item__count"/);
     expect(markup).not.toContain('disabled');
+    const searching=String(ViewNavigation({selectedId:'all',items:[{id:'all',label:'Queue',countLoading:true,icon:'all'},{id:'archive',label:'Archive',count:3,searchCount:true,icon:'archive'}]}));
+    expect(searching).toContain('aria-label="Searching this view"');
+    expect(searching).toContain('data-lucide="loader-circle"');
+    expect(searching).toContain('aria-label="3 search results"');
+    expect(searching).toContain('data-lucide="search"');
     const custom=String(ViewNavigation({ selectedId: 'custom:docs', items: [{ id: 'custom:docs', label: 'Needs docs', icon: 'custom', manageable:true }] }));
     expect(custom).toContain('data-lucide="search"');
     expect(custom).toContain('aria-label="More actions for Needs docs"');
