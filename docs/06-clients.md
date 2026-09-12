@@ -873,8 +873,10 @@ and identity-less legacy entries remain conservatively blocking.
   Switching among Queue, Backlog, and Archive requests a bounded compact page scoped to that
   collection before pagination; it never fetches full ticket bodies or filters an arbitrary
   mixed-status page in the browser. The selected sidebar item commits immediately while the
-  loader also accepts the legacy bare ticket-array response from compatible older servers,
-  treating it as one complete page while pagination deployments converge.
+  workspace reports that exact view as loading until its request resolves. Only a successful
+  response may present authoritative “No tickets in…” feedback; a failed request names the
+  view it could not load instead. The loader also accepts the legacy bare ticket-array response
+  from compatible older servers, treating it as one complete page while pagination deployments converge.
   collection refresh reconciles the first progressive row tranche. Counts render within
   that same selectable item rather than outside its selected background. Large views initially
   render 80 rows, continue in idle chunks, and expose an explicit continuation control when
