@@ -18,7 +18,7 @@ async function openWithCompatibility(page: import('@playwright/test').Page, comp
 
 test('does not offer unsafe restart for an old server', async ({ page }) => {
   await openWithCompatibility(page, { kind: 'server_too_old', detail: 'Server protocol 0–0 is older.', revisionMismatch: false, sourceStale: false, canRestartServer: false });
-  const banner = page.locator('[data-component="connection-state-banner"]');
+  const banner = page.locator('[data-component="state-banner"]');
   await expect(banner).toContainText('Server update required');
   await expect(banner).toContainText('Safe restart is unavailable');
   await expect(banner.getByRole('button', { name: /Restart/ })).toHaveCount(0);
@@ -27,26 +27,26 @@ test('does not offer unsafe restart for an old server', async ({ page }) => {
 
 test('offers reload when the client is too old', async ({ page }) => {
   await openWithCompatibility(page, { kind: 'client_too_old', detail: 'Client protocol 1–1 is older.', revisionMismatch: false, sourceStale: false, canRestartServer: false });
-  await expect(page.locator('[data-component="connection-state-banner"]')).toContainText('Client update required');
+  await expect(page.locator('[data-component="state-banner"]')).toContainText('Client update required');
   await expect(page.getByRole('button', { name: 'Reload client' })).toBeVisible();
 });
 
 test('surfaces unavailable compatibility metadata without blocking project data', async ({ page }) => {
   await openWithCompatibility(page, { kind: 'unknown', detail: 'The server did not provide compatibility metadata.', revisionMismatch: false, sourceStale: false, canRestartServer: false });
-  await expect(page.locator('[data-component="connection-state-banner"]')).toContainText('Server compatibility unknown');
+  await expect(page.locator('[data-component="state-banner"]')).toContainText('Server compatibility unknown');
   await expect(page.getByRole('heading', { name: 'Queue' })).toBeVisible();
 });
 
 test('surfaces a compatible detached server from another development revision', async ({ page }) => {
   await openWithCompatibility(page, { kind: 'compatible', revisionMismatch: true, sourceStale: false, canRestartServer: false });
-  const banner = page.locator('[data-component="connection-state-banner"]');
+  const banner = page.locator('[data-component="state-banner"]');
   await expect(banner).toContainText('Different server build is running');
   await expect(banner).toContainText('protocol is compatible');
 });
 
 test('tells development users to restart a server built from older local source', async ({ page }) => {
   await openWithCompatibility(page, { kind: 'compatible', detail: 'The running server build differs from this checkout.', revisionMismatch: true, sourceStale: true, canRestartServer: false, clientProtocol: { min: 1, max: 1 }, clientRevision: 'source-sha256:client', server: { generation: 'hs2', application_version: '0.1.0', build_revision: 'source-sha256:old', source_revision: 'source-sha256:current', source_stale: true, protocol: { min: 1, max: 1 }, started_at: '2026-09-02T08:00:00Z' } });
-  const banner = page.locator('[data-component="connection-state-banner"]');
+  const banner = page.locator('[data-component="state-banner"]');
   await expect(banner).toContainText('Different server build is running');
   await expect(banner).toContainText('Rebuild if needed, then restart it to pick up your latest build');
   await banner.getByRole('button', { name: 'View details' }).click();

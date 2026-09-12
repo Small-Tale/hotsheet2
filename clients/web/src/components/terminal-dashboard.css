@@ -6,7 +6,7 @@
 .terminal-dashboard-controls__visibility-select { width:max-content; min-width:5.5rem; max-width:10rem; }
 .terminal-dashboard-controls__visibility-select::part(combobox) { position:relative; min-height:2rem; padding-inline:.65rem 1.25rem; border:0; border-radius:var(--wa-border-radius-pill); background:var(--wa-color-neutral-fill-normal); box-shadow:none; }
 .terminal-dashboard-controls__visibility-select::part(expand-icon) { position:absolute; inset-inline-end:.25rem; }
-.terminal-dashboard-controls__visibility-select .select__custom-selected { overflow:hidden; color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); font-weight:var(--wa-font-weight-semibold); text-overflow:ellipsis; white-space:nowrap; }
+.terminal-dashboard-controls__visibility-select .kui-select__custom-selected { overflow:hidden; color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); font-weight:var(--wa-font-weight-semibold); text-overflow:ellipsis; white-space:nowrap; }
 .terminal-dashboard button { border: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; }
 .terminal-dashboard button:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
 .terminal-dashboard button:disabled { cursor: not-allowed; opacity: .38; }

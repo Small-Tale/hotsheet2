@@ -1,10 +1,10 @@
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { PageHeader } from '@kerfjs/ui/page-header';
 import { signal } from 'kerfjs';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 
 import { AppShell } from '../components/app-shell';
 import { type ConnectionState,ConnectionStateBanner } from '../components/connection-state-banner';
-import { LucideIcon } from '../components/lucide-icon';
-import { PageHeader } from '../components/page-header';
 import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';

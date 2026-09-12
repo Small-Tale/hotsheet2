@@ -1,8 +1,7 @@
 import './status-badge.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, BadgeCheck, Circle, CircleCheck, Clock, Clock3, type IconNode } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
 
 export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive';
 export type StatusBadgeAppearance = 'filled' | 'plain';
@@ -33,7 +32,7 @@ export function statusPresentation(status: TicketStatus) {
 export function StatusBadge({ status, showIcon = true, appearance = 'filled', compact = false, interactive = false, actionLabel, slot }: StatusBadgeProps) {
   const value = statusPresentation(status);
   const className = `status-badge status-badge--${status} status-badge--${appearance}${compact ? ' status-badge--compact' : ''}${interactive ? ' status-badge--interactive' : ''}`;
-  const content = <>{showIcon && <LucideIcon class="status-badge__icon" icon={value.icon} name={value.iconName} />}<span>{value.label}</span></>;
+  const content = <>{showIcon && <LucideIcon className="status-badge__icon" icon={value.icon} name={value.iconName} />}<span>{value.label}</span></>;
   return interactive
     ? <button type="button" slot={slot} class={className} data-component="status-badge" data-status={status} data-appearance={appearance} aria-label={actionLabel}>{content}</button>
     : <span slot={slot} class={className} data-component="status-badge" data-status={status} data-appearance={appearance}>{content}</span>;

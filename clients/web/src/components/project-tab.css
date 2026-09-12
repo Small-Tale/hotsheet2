@@ -3,7 +3,7 @@
 .project-tab__name { overflow: visible; text-overflow: clip; }
 .project-tab:has(.project-tab__close) .project-tab__trailing:empty { min-width: calc(1.275rem - var(--wa-space-xs)); }
 .project-tab__busy { display: grid; width: 1rem; height: 1rem; place-items: center; }
-.project-tab__busy .loading-spinner { width: .8rem; height: .8rem; }
+.project-tab__busy .kui-loading-spinner { width: .8rem; height: .8rem; }
 .project-tab__state { color: var(--wa-color-neutral-on-quiet); }
 .project-tab__state--attention { color: var(--wa-color-danger-on-quiet); }
 .project-tab__indicators { display: flex; align-items: center; gap: var(--wa-space-2xs); }

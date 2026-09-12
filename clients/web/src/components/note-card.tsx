@@ -1,13 +1,13 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './note-card.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Activity, Check, CircleAlert, FilePenLine, MessageSquareText, RefreshCw, Trash2, X } from 'lucide';
 
 import type {AttachmentReferenceContext} from '../attachment-references';
 import { parseFeedbackChoices } from '../feedback-choices';
 import { type InlineFeedbackReply,splitFeedbackPrompt } from '../feedback-replies';
 import {AIContentLabel} from './ai-content-label';
-import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
 
 export type NoteKind = 'regular' | 'status' | 'feedback_needed' | 'feedback_draft' | 'activity';

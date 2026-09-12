@@ -1,8 +1,7 @@
 import './repository-setup.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CircleCheck } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
 
 export type RepositorySetupStep='initialize'|'remote';
 

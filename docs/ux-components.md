@@ -314,6 +314,13 @@ does not introduce polling or another network request.
   for overlay toolbars. Opt-in push buttons retain native `aria-pressed` semantics while
   giving a pressed single-button group the shared dark background, matching border, and
   inverse icon treatment. The demo covers resting and pressed push controls plus dark groups.
+
+These generic primitives, plus `LucideIcon`, `MenuItem`, `MenuHeader`, `AppTab`,
+`ResizableRegion`, `StateBanner`, `EmptyState`, `LoadingSpinner`, `DialogHeader`, and
+`ValueTable` use the published
+`@kerfjs/ui` implementations and styles. Hot Sheet-specific wrappers remain only where
+they translate domain state or stable application actions into that shared anatomy. The
+local Select wrapper is a temporary compatibility adapter pending KF-1JAT9F.
 - `ProjectHeading`
 - `ViewModeSwitcher` — **built for list, columns, notifications, and project settings**
   with accessible pressed state. The notifications mode projects its pending count in
@@ -1064,7 +1071,7 @@ directly in the UX catalog.
 - `Tooltip`
 - `ProgressIndicator`
 - `InlineError`
-- `EmptyState`
+- `EmptyState` — **built through `@kerfjs/ui`** with ticket-specific copy and states
 - `LoadingSkeleton`
 - `RelativeTime`
 - `CountBadge`

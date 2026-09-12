@@ -77,16 +77,16 @@ describe('TicketBoard', () => {
 
   it('shows one differentiated board-wide placeholder when every column is empty',()=>{
     const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[]},{id:'started',title:'Started',tickets:[]}],emptyState:{kind:'search',query:'missing'}}));
-    expect(markup.match(/data-component="ticket-empty-state"/g)).toHaveLength(1);expect(markup).toContain('No tickets match “missing”');expect(markup).not.toContain('No tickets in Started');
+    expect(markup.match(/data-component="empty-state"/g)).toHaveLength(1);expect(markup).toContain('No tickets match “missing”');expect(markup).not.toContain('No tickets in Started');
   });
 
   it('can retain empty board headings without premature unresolved-state copy',()=>{
     const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[]},{id:'started',title:'Started',tickets:[]}]}));
-    expect(markup).toContain('Not Started');expect(markup).toContain('Started');expect(markup).not.toContain('data-component="ticket-empty-state"');expect(markup).not.toContain('No tickets');
+    expect(markup).toContain('Not Started');expect(markup).toContain('Started');expect(markup).not.toContain('data-component="empty-state"');expect(markup).not.toContain('No tickets');
   });
 
   it('does not render a placeholder in an individual empty column',()=>{
     const markup=String(TicketBoard({columns:[{id:'not-started',title:'Not Started',tickets:[ticket]},{id:'verified',title:'Verified',tickets:[]}]}));
-    expect(markup).not.toContain('data-component="ticket-empty-state"');expect(markup).not.toContain('No tickets in Verified');
+    expect(markup).not.toContain('data-component="empty-state"');expect(markup).not.toContain('No tickets in Verified');
   });
 });

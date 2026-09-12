@@ -1,7 +1,7 @@
 .ticket-list { display: grid; width: 100%; overflow: hidden; border-radius: .65rem; background: var(--wa-color-surface-default); }
 .ticket-list[data-empty="true"] { height: 100%; min-height: 18rem; }
 .ticket-list__diagnostics, .ticket-list__tickets { display: grid; min-width: 0; min-height: 0; }
-.ticket-list__tickets:has(> .ticket-empty-state) { min-height: 18rem; }
+.ticket-list__tickets:has(> .kui-empty-state) { min-height: 18rem; }
 .ticket-list__diagnostics > .corrupt-ticket-row:first-child { border-start-start-radius: .65rem; border-start-end-radius: .65rem; }
 .ticket-list__diagnostics > .corrupt-ticket-row:last-child { border-end-start-radius: .65rem; border-end-end-radius: .65rem; }
 .ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row { border-radius: .65rem .65rem 0 0; }

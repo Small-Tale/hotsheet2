@@ -1,10 +1,10 @@
 import './ticket-notes.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Plus } from 'lucide';
 
 import type {AttachmentReferenceContext} from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 import { NoteCard, type NoteCardProps } from './note-card';

@@ -1,6 +1,6 @@
 .ticket-duplicate-backlinks { display: grid; margin: 0 .5rem .75rem; gap: var(--wa-space-2xs); }
 .ticket-duplicate-backlinks__items { display: grid; gap: var(--wa-space-3xs); }
-.ticket-duplicate-backlinks .menu-item__label { display: grid; gap: var(--wa-space-3xs); }
-.ticket-duplicate-backlinks .menu-item__label strong { color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-xs); }
-.ticket-duplicate-backlinks .menu-item__label > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); }
+.ticket-duplicate-backlinks .kui-menu-item__label { display: grid; gap: var(--wa-space-3xs); }
+.ticket-duplicate-backlinks .kui-menu-item__label strong { color: var(--wa-color-neutral-on-normal); font-size: var(--wa-font-size-xs); }
+.ticket-duplicate-backlinks .kui-menu-item__label > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); }
 .ticket-duplicate-backlinks__warning { margin: 0 .55rem; color: var(--wa-color-warning-on-quiet); font-size: var(--wa-font-size-2xs); line-height: 1.35; }

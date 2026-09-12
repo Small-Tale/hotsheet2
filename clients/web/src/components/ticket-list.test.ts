@@ -45,7 +45,7 @@ describe('TicketList', () => {
   it('can reserve an unresolved empty collection without projecting empty-state copy', () => {
     const markup = String(TicketList({ tickets: [] }));
     expect(markup).toContain('data-empty="true"');
-    expect(markup).not.toContain('data-component="ticket-empty-state"');
+    expect(markup).not.toContain('data-component="empty-state"');
     expect(markup).not.toContain('No tickets');
   });
 

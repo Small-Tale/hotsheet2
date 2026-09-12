@@ -1,10 +1,12 @@
 import './connection-details-dialog.css';
+import './dialog-layout.css';
 
+import { DialogHeader } from '@kerfjs/ui/dialog-header';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ValueTable } from '@kerfjs/ui/value-table';
 import { ServerCog } from 'lucide';
 
 import type { CompatibilityAssessment, CompatibilityRange } from '../compatibility';
-import { DialogHeader, ValueTable } from './dialog-layout';
-import { LucideIcon } from './lucide-icon';
 
 function range(value: CompatibilityRange | undefined): string {
   return value ? `${value.min}–${value.max}` : 'Not reported';

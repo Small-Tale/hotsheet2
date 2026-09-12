@@ -1,12 +1,12 @@
 import './ticket-code-review.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { CircleHelp, ExternalLink, FileCode2, FileText, FlaskConical, GitCommitHorizontal, GitCompare, GitCompareArrows } from 'lucide';
 
 import type { CodeReview, CodeReviewTarget } from '../api';
-import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
-import { Toolbar } from './toolbar';
-import { ToolbarControlGroup } from './toolbar-control-group';
 
 export interface CodeReviewComparison {
   active: boolean;

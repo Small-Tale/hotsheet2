@@ -1,9 +1,9 @@
 import './ticket-duplicate-backlinks.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CopyX } from 'lucide';
 
 import type { DuplicateBacklink } from '../api';
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 

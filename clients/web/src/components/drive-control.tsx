@@ -1,8 +1,7 @@
 import './drive-control.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Triangle } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
 
 export interface DriveControlProps { running: boolean; tool?: string; disabled?: boolean; disabledReason?: string; optionsOpen?: boolean; optionsDisabled?:boolean }
 export function DriveControl({ running, tool = 'AI tool', disabled = false, disabledReason, optionsOpen = false,optionsDisabled=false }: DriveControlProps) {

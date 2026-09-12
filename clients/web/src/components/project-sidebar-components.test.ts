@@ -1,9 +1,9 @@
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, Plus  } from 'lucide';
 import { describe, expect, it } from 'vitest';
 
 import { CommandNavigation, isCommandNavigationIcon } from './command-navigation';
 import { DriveControl } from './drive-control';
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 import { ProjectSidebar } from './project-sidebar';
@@ -87,11 +87,11 @@ describe('ProjectSidebar component slice', () => {
 
   it('projects current view, counts, and attention', () => {
     const markup = String(ViewNavigation({ selectedId: 'all', items: [{ id: 'all', label: 'All Tickets', count: 4, icon: 'all' }, { id: 'review', label: 'Review', count: 2, attention: true, icon: 'needs-review' }] }));
-    expect(markup.match(/class="menu-item__count"/g)).toHaveLength(2);
+    expect(markup.match(/class="kui-menu-item__count"/g)).toHaveLength(2);
     expect(markup).toContain('aria-current="page"');
     expect(markup).toContain('data-attention="true"');
     expect(markup).toContain('aria-label="Add view"');
-    expect(markup).toMatch(/aria-current="page"[\s\S]*class="menu-item__count"/);
+    expect(markup).toMatch(/aria-current="page"[\s\S]*class="kui-menu-item__count"/);
     expect(markup).not.toContain('disabled');
     const searching=String(ViewNavigation({selectedId:'all',items:[{id:'all',label:'Queue',countLoading:true,icon:'all'},{id:'archive',label:'Archive',count:3,searchCount:true,icon:'archive'}]}));
     expect(searching).toContain('aria-label="Searching this view"');

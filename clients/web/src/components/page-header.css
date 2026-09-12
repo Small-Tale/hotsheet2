@@ -1,3 +1,0 @@
-.page-header { display:flex; min-height:4.15rem; padding: .75rem 1rem; border-bottom: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); align-items:center; justify-content:space-between; gap:var(--wa-space-m); }
-.page-header h1 { margin: 0; font-size: clamp(var(--wa-font-size-l), 2.3vw, var(--wa-font-size-2xl)); letter-spacing: -.025em; }
-.page-header__action { flex:none; }

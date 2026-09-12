@@ -1,10 +1,9 @@
 import './ticket-inspector-placeholder.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { PanelRightClose } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
-import { Toolbar } from './toolbar';
-import { ToolbarControlGroup } from './toolbar-control-group';
 
 export function TicketInspectorPlaceholder({ selectionCount }: { selectionCount: number }) {
   return <aside class="ticket-inspector-placeholder" aria-label="Ticket inspector">

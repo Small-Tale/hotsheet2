@@ -1,13 +1,14 @@
 import './ai-conversation.css';
+import './dialog-layout.css';
 
+import {DialogHeader} from '@kerfjs/ui/dialog-header';
+import {LucideIcon} from '@kerfjs/ui/lucide-icon';
 import type {SafeHtml} from 'kerfjs/jsx-runtime';
 import {Activity,Bot,CircleAlert,Download,Image,MessageSquare,Paperclip,Send,Square} from 'lucide';
 
 import {type ConversationActivity,type ConversationMessage,type ConversationUsage,formatConversationCost,formatConversationTokens} from '../ai-conversation';
 import type { PermissionItem } from '../permission-notifications';
 import {AIContentLabel} from './ai-content-label';
-import {DialogHeader} from './dialog-layout';
-import {LucideIcon} from './lucide-icon';
 import {MarkdownPreview} from './markdown-preview';
 import {PermissionRequestCard} from './permission-request-card';
 import {Select} from './select';

@@ -1,9 +1,9 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './project-tab-bar.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChartNoAxesCombined, Grid3X3, Plus } from 'lucide';
 
-import { LucideIcon } from './lucide-icon';
 import { ProjectTab, type ProjectTabProps } from './project-tab';
 
 export interface ProjectTabBarProps {

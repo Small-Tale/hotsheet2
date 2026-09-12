@@ -1,12 +1,12 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './ticket-inspector-panel.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { CircleAlert, Plus } from 'lucide';
 
 import type {AttachmentReferenceContext} from '../attachment-references';
 import {DETAILS_FEEDBACK_ID,textRequestsFeedback} from '../feedback-needed';
 import type { InlineFeedbackReply } from '../feedback-replies';
-import { LucideIcon } from './lucide-icon';
 import { MarkdownEditor, type MarkdownEditorMode } from './markdown-editor';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';

@@ -3,10 +3,10 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ticket-row-context-menu.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, BadgeCheck, CircleDot, CircleX, Clock3, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Tags, Trash2, XCircle } from 'lucide';
 
 import { DEFAULT_TICKET_CATEGORIES } from './category-presentation';
-import { LucideIcon } from './lucide-icon';
 import type { TicketStatus } from './status-badge';
 import { getPriorityPresentation, type TicketPriority } from './ticket-row';
 import { TICKET_STATUS_CHOICES } from './ticket-status-menu';

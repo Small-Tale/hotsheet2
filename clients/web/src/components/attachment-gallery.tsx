@@ -1,13 +1,13 @@
 import './attachment-gallery.css';
 
+import {LucideIcon} from '@kerfjs/ui/lucide-icon';
+import {Toolbar} from '@kerfjs/ui/toolbar';
+import {ToolbarControlGroup} from '@kerfjs/ui/toolbar-control-group';
+import {ToolbarText} from '@kerfjs/ui/toolbar-text';
 import {ChevronLeft,ChevronRight,Eraser,Minus,MoreHorizontal,Pause,Pencil,Play,Plus,Scan,Volume2,VolumeX,X} from 'lucide';
 
 import type {MediaAnnotation} from '../api';
 import {isVideoAttachment} from '../attachment-references';
-import {LucideIcon} from './lucide-icon';
-import {Toolbar} from './toolbar';
-import {ToolbarControlGroup} from './toolbar-control-group';
-import {ToolbarText} from './toolbar-text';
 
 export interface AttachmentGalleryImage {id:string;name:string;url:string;thumbnailUrl?:string;aliases?:readonly string[];ticket?:string;attachmentId?:string}
 export interface AttachmentGallerySelection {url?:string;ticket?:string;name?:string;attachmentId?:string}

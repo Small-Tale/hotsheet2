@@ -1,3 +1,4 @@
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { signal } from 'kerfjs';
 import { GripHorizontal } from 'lucide';
 
@@ -5,7 +6,6 @@ import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
 import { DriveControl } from '../components/drive-control';
 import { type AiToolDescriptor,DriveOptionsMenu } from '../components/drive-options-menu';
-import { LucideIcon } from '../components/lucide-icon';
 import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectSummary } from '../components/project-summary';
 import { RepositorySummary } from '../components/repository-summary';

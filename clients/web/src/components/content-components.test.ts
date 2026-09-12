@@ -21,8 +21,8 @@ describe('content components', () => {
   it('offers the visible Add note action when the note list is empty', () => {
     const markup = String(TicketNotes({ notes: [] }));
     expect(markup).toContain('No notes added.');
-    expect(markup).toContain('class="menu-item ticket-notes__add"');
-    expect(markup).toContain('<span class="menu-item__label">Add note</span>');
+    expect(markup).toContain('class="kui-menu-item ticket-notes__add"');
+    expect(markup).toContain('<span class="kui-menu-item__label">Add note</span>');
   });
   it('places a focused new-note composer after existing notes', () => {
     const markup=String(TicketNotes({ notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Existing' }], composing: true }));

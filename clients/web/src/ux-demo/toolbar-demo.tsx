@@ -1,9 +1,8 @@
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { PanelLeftOpen, PanelRightOpen } from 'lucide';
-
-import { LucideIcon } from '../components/lucide-icon';
-import { Toolbar } from '../components/toolbar';
-import { ToolbarControlGroup } from '../components/toolbar-control-group';
-import { ToolbarText } from '../components/toolbar-text';
 
 export function ToolbarDemo() {
   return <section class="toolbar-demo" aria-label="Toolbar demo">

@@ -1,15 +1,15 @@
 import './project-sidebar.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { MessageSquare,PanelLeftClose } from 'lucide';
 
 import { CommandNavigation, type CommandNavigationItem } from './command-navigation';
 import { DriveControl } from './drive-control';
 import {type AiToolDescriptor,type AiToolSelection,DriveOptionsMenu} from './drive-options-menu';
-import { LucideIcon } from './lucide-icon';
 import { ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
-import { Toolbar } from './toolbar';
-import { ToolbarControlGroup } from './toolbar-control-group';
 import { ViewNavigation, type ViewNavigationItem } from './view-navigation';
 
 export interface ProjectSidebarProps {

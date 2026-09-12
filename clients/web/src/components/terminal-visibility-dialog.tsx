@@ -3,10 +3,10 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import './terminal-visibility-dialog.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Eye,EyeOff,Pencil,Plus,Trash2 } from 'lucide';
 
 import { DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,type TerminalVisibilityState } from '../terminal-visibility';
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 import type { TerminalDashboardGroup } from './terminal-dashboard';

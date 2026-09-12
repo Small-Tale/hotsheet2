@@ -5,35 +5,35 @@
    not sixty. The fixed-width content still slides (transform only, composited off the main
    thread, and clipped by .app-shell's overflow:hidden), so the collapse stays animated without
    touching layout. The pointer-drag resize path stays un-animated via the data-resizing-region guard. */
-.app-shell > .resizable-region[data-region-id="app-sidebar"] { border-right: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
-.app-shell > .resizable-region[data-region-id="app-sidebar"]::after { position: absolute; z-index: 2; top: 0; right: -1px; bottom: 0; width: 1px; background: var(--hs-shell-divider); content: ''; pointer-events: none; }
-.app-shell > .resizable-region[data-region-id="app-sidebar"][data-collapsed="true"]::after { display: none; }
-.app-shell > .resizable-region[data-collapsed="true"] { border-right-width: 0; }
-.app-shell > .resizable-region[data-collapsed="true"] .resizable-region__handle { display: none; }
-.app-shell > .resizable-region .project-sidebar,
-.app-shell > .resizable-region .terminal-operations-sidebar,
-.app-shell > .resizable-region .settings-navigation { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
-.app-shell > .resizable-region[data-region-id="app-sidebar"] .resizable-region__content { width: var(--resizable-region-expanded-size); min-width: var(--resizable-region-expanded-size); transition: transform .2s ease; }
-.app-shell > .resizable-region[data-region-id="app-sidebar"][data-collapsed="true"] .resizable-region__content { transform: translateX(-100%); }
+.app-shell > .kui-resizable-region[data-region-id="app-sidebar"] { border-right: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
+.app-shell > .kui-resizable-region[data-region-id="app-sidebar"]::after { position: absolute; z-index: 2; top: 0; right: -1px; bottom: 0; width: 1px; background: var(--hs-shell-divider); content: ''; pointer-events: none; }
+.app-shell > .kui-resizable-region[data-region-id="app-sidebar"][data-collapsed="true"]::after { display: none; }
+.app-shell > .kui-resizable-region[data-collapsed="true"] { border-right-width: 0; }
+.app-shell > .kui-resizable-region[data-collapsed="true"] .kui-resizable-region__handle { display: none; }
+.app-shell > .kui-resizable-region .project-sidebar,
+.app-shell > .kui-resizable-region .terminal-operations-sidebar,
+.app-shell > .kui-resizable-region .settings-navigation { width: 100%; height: 100%; border: 0; border-radius: 0; box-shadow: none; }
+.app-shell > .kui-resizable-region[data-region-id="app-sidebar"] .kui-resizable-region__content { width: var(--kui-resizable-region-expanded-size); min-width: var(--kui-resizable-region-expanded-size); transition: transform .2s ease; }
+.app-shell > .kui-resizable-region[data-region-id="app-sidebar"][data-collapsed="true"] .kui-resizable-region__content { transform: translateX(-100%); }
 .app-shell__main { position: relative; display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"] { border-top: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"]:has(.terminal-drawer__create-menu) { z-index: 5; }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"]:has(.terminal-drawer__create-menu) .resizable-region__content { overflow: visible; }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"][data-transitioning="true"] { overflow: hidden; transition: height .2s ease, flex-basis .2s ease; }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"][data-transitioning="true"] .resizable-region__content { transition: opacity .16s ease, transform .2s ease; }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"] .resizable-region__content { height: var(--resizable-region-expanded-size); min-height: var(--resizable-region-expanded-size); }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] { overflow: hidden; border-top: 0; }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .resizable-region__content { opacity: 0; transform: translateY(var(--wa-space-l)); }
-.app-shell__main > .resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .resizable-region__handle { display: none; }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"] { border-top: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"]:has(.terminal-drawer__create-menu) { z-index: 5; }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"]:has(.terminal-drawer__create-menu) .kui-resizable-region__content { overflow: visible; }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-transitioning="true"] { overflow: hidden; transition: height .2s ease, flex-basis .2s ease; }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-transitioning="true"] .kui-resizable-region__content { transition: opacity .16s ease, transform .2s ease; }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"] .kui-resizable-region__content { height: var(--kui-resizable-region-expanded-size); min-height: var(--kui-resizable-region-expanded-size); }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] { overflow: hidden; border-top: 0; }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__content { opacity: 0; transform: translateY(var(--wa-space-l)); }
+.app-shell__main > .kui-resizable-region[data-region-id="app-terminal-drawer"][data-collapsed="true"] .kui-resizable-region__handle { display: none; }
 .app-shell__terminal-drawer-restore { position: absolute; z-index: 4; right: var(--wa-space-m); bottom: var(--wa-space-m); display: grid; width: 2.5rem; height: 2.5rem; padding: 0; border: 0; border-radius: var(--wa-border-radius-circle); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-neutral-fill-loud); box-shadow: var(--wa-shadow-m); cursor: pointer; place-items: center; }
 .app-shell__terminal-drawer-restore svg { width: 1rem; height: 1rem; }
 .app-shell__terminal-drawer-restore:focus-visible { outline: var(--wa-focus-ring); outline-offset: 2px; }
 .app-shell__main > .project-tab-bar { border-bottom: 0; background: var(--wa-color-surface-default); }
 .app-shell[data-mode="terminals"] .app-shell__main > .project-tab-bar { border-bottom: 1px solid var(--wa-color-surface-border); }
-.app-shell__main > .toolbar .workspace-header { min-width: 0; align-items: center; }
-.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }
-.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header { align-items:start; }
-body[data-resizing-region] .app-shell > .resizable-region, body[data-resizing-region] .app-shell > .resizable-region .resizable-region__content { transition: none; }
+.app-shell__main > .kui-toolbar .workspace-header { min-width: 0; align-items: center; }
+.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }
+.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header { align-items:start; }
+body[data-resizing-region] .app-shell > .kui-resizable-region, body[data-resizing-region] .app-shell > .kui-resizable-region .kui-resizable-region__content { transition: none; }
 .app-shell__work-area { position: relative; display: flex; min-width: 0; min-height: 0; overflow: hidden; flex: 1; flex-direction: column; background: var(--wa-color-surface-lowered); outline: 0 solid transparent; outline-offset: -2px; transition: outline-color .12s ease; }
 .app-shell__work-area::after { position: absolute; z-index: 20; border: 2px solid transparent; content: ''; pointer-events: none; inset: 0; transition: border-color .12s ease; }
 .app-shell__work-area:focus, .app-shell__work-area:focus-within { z-index: 1; outline: 2px solid var(--wa-color-focus); }
@@ -43,21 +43,21 @@ body[data-resizing-region] .app-shell > .resizable-region, body[data-resizing-re
 .app-shell__composer { position: relative; z-index: 3; padding: .75rem 1rem; flex: none; }
 .app-shell__workspace { min-width: 0; min-height: 0; padding: 1rem; overflow: auto; overflow-anchor: none; flex: 1; background: var(--wa-color-surface-lowered); }
 .app-shell__workspace[data-presentation="edge-to-edge"] { padding: 1rem 0 0; overflow: hidden; }
-.app-shell > .resizable-region[data-region-id="app-inspector"] { border-left: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
-.app-shell > .resizable-region[data-region-id="app-inspector"] .resizable-region__content { width: var(--resizable-region-expanded-size); min-width: var(--resizable-region-expanded-size); transition: transform .2s ease; }
-.app-shell > .resizable-region[data-region-id="app-inspector"][data-collapsed="true"] { border-left-width: 0; }
-.app-shell > .resizable-region[data-region-id="app-inspector"][data-collapsed="true"] .resizable-region__content { transform: translateX(100%); }
-.app-shell > .resizable-region[data-region-id="app-inspector"] .ticket-inspector { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
+.app-shell > .kui-resizable-region[data-region-id="app-inspector"] { border-left: 1px solid var(--wa-color-surface-border); background: var(--wa-color-surface-default); }
+.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .kui-resizable-region__content { width: var(--kui-resizable-region-expanded-size); min-width: var(--kui-resizable-region-expanded-size); transition: transform .2s ease; }
+.app-shell > .kui-resizable-region[data-region-id="app-inspector"][data-collapsed="true"] { border-left-width: 0; }
+.app-shell > .kui-resizable-region[data-region-id="app-inspector"][data-collapsed="true"] .kui-resizable-region__content { transform: translateX(100%); }
+.app-shell > .kui-resizable-region[data-region-id="app-inspector"] .ticket-inspector { width: 100%; height: 100%; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
 @media (max-width: 42rem) {
   .app-shell__workspace { padding: .7rem; }
   .app-shell__composer { padding: .7rem; }
 }
 @media (max-width: 48rem) {
-  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { grid-template-columns: minmax(0, 1fr); row-gap: .4rem; }
-  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .toolbar__leading { padding-inline: .5rem 0; }
-  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .toolbar__trailing { grid-column: 1; width: 100%; padding-inline: .75rem 0; justify-content: stretch; }
-  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__actions { width: 100%; }
-  .app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__search-group { width: auto; min-width: 11rem; flex: 1 1 auto; }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { grid-template-columns: minmax(0, 1fr); row-gap: .4rem; }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .kui-toolbar__leading { padding-inline: .5rem 0; }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) > .kui-toolbar__trailing { grid-column: 1; width: 100%; padding-inline: .75rem 0; justify-content: stretch; }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__actions { width: 100%; }
+  .app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) .workspace-header__search-group { width: auto; min-width: 11rem; flex: 1 1 auto; }
 }
 .app-shell__work-area[data-has-composer="true"] > .app-shell__workspace { padding-top: 0; }
-@media (prefers-reduced-motion: reduce) { .app-shell .resizable-region, .app-shell .resizable-region .resizable-region__content { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .app-shell .kui-resizable-region, .app-shell .kui-resizable-region .kui-resizable-region__content { transition: none !important; } }

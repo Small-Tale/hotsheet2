@@ -1,10 +1,10 @@
 import './ticket-inspector-panel.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MoreHorizontal, Paperclip, Pencil, Plus, Upload } from 'lucide';
 
 import type { AttachmentActor,AttachmentPurpose } from '../api';
 import {isGalleryMediaAttachment,isVideoAttachment} from '../attachment-references';
-import { LucideIcon } from './lucide-icon';
 
 export interface TicketAttachmentItem { id:string;name:string;url?:string;thumbnailUrl?:string;manageVideoPoster?:boolean;annotationCount?:number;round?:number;batch_id?:string;batch_label?:string;actor?:AttachmentActor;purpose?:AttachmentPurpose }
 export interface AttachmentBatch {key:string;id?:string;label:string;explicitLabel?:string;actor?:AttachmentActor;purpose?:AttachmentPurpose;items:TicketAttachmentItem[]}

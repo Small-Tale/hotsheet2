@@ -1,12 +1,12 @@
 import './terminal-operations-sidebar.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { PanelLeftClose } from 'lucide';
 
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { aggregateAlignedChartValues, chartDomainMaximum, ProjectSummary } from './project-summary';
-import { Toolbar } from './toolbar';
-import { ToolbarControlGroup } from './toolbar-control-group';
 
 export interface TerminalProjectSummary {
   id: string;

@@ -1,8 +1,7 @@
 import './ai-content-label.css';
 
+import {LucideIcon} from '@kerfjs/ui/lucide-icon';
 import {Sparkles,ThumbsDown,ThumbsUp} from 'lucide';
-
-import {LucideIcon} from './lucide-icon';
 
 export interface AIContentLabelProps {
   tool?:string;

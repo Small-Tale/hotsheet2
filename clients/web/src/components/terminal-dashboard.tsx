@@ -1,14 +1,14 @@
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './terminal-dashboard.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { Ellipsis, ExternalLink, Eye, EyeOff, MessageSquare, Minus, Plus } from 'lucide';
 
 import { TERMINAL_TILE_HORIZONTAL_CHROME, TERMINAL_TILE_VERTICAL_CHROME, terminalDrawerGridLayout, terminalGridLayout, terminalPreviewText } from '../terminal-grid-layout';
 import { terminalPhysicalScale } from '../terminal-viewport';
 import type { TerminalVisibilityGroup } from '../terminal-visibility';
-import { LucideIcon } from './lucide-icon';
 import { Select } from './select';
-import { ToolbarControlGroup } from './toolbar-control-group';
 
 export interface TerminalDashboardSession {
   id: string;

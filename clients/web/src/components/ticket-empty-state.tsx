@@ -1,9 +1,6 @@
-import './ticket-empty-state.css';
-
+import { EmptyState } from '@kerfjs/ui/empty-state';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Inbox, ListX, Search, SearchX } from 'lucide';
-
-import { LoadingSpinner } from './loading-spinner';
-import { LucideIcon } from './lucide-icon';
 
 export type TicketEmptyStateKind='loading'|'project'|'view'|'searching'|'search';
 export interface TicketEmptyStateProps {kind:TicketEmptyStateKind;viewLabel?:string;query?:string}
@@ -17,4 +14,4 @@ export function ticketEmptyStateCopy({kind,viewLabel='this view',query=''}:Ticke
 }
 
 /** Shared empty feedback for ticket lists, boards, and individual board columns. */
-export function TicketEmptyState(props:TicketEmptyStateProps){const copy=ticketEmptyStateCopy(props);return <div class="ticket-empty-state" data-component="ticket-empty-state" data-kind={props.kind} role="status">{copy.icon?<LucideIcon icon={copy.icon} name={copy.iconName}/>:<LoadingSpinner label="Loading tickets"/>}<strong>{copy.title}</strong><span>{copy.detail}</span></div>}
+export function TicketEmptyState(props:TicketEmptyStateProps){const copy=ticketEmptyStateCopy(props);return <EmptyState className={`ticket-empty-state ticket-empty-state--${props.kind}`} title={copy.title} detail={copy.detail} busy={props.kind==='loading'} icon={copy.icon?<LucideIcon icon={copy.icon} name={copy.iconName}/>:undefined}/>}

@@ -1,9 +1,9 @@
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './view-navigation.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, Clock3, Ellipsis, FileWarning, type IconNode, Layers3, LoaderCircle, Pencil, Plus, Search, ShieldAlert, Trash2 } from 'lucide';
 
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 
@@ -16,7 +16,7 @@ const icons: Record<ViewNavigationItem['icon'], [IconNode, string]> = {
 export function ViewNavigation({ items, selectedId }: ViewNavigationProps) {
   return <nav class="view-navigation" data-component="view-navigation" aria-label="Ticket views">
     <MenuHeader label="Views" action="add-view" actionLabel="Add view" actionIcon={Plus} actionIconName="plus" />
-    <ul>{items.map(item => { const [icon, name] = icons[item.icon],count=item.countLoading||item.count!==undefined?<small class="menu-item__count" data-attention={String(Boolean(item.attention))} data-search-count={item.searchCount?'true':undefined} aria-label={item.countLoading?'Searching this view':item.searchCount?`${item.count} search results`:undefined}>{item.countLoading?<LucideIcon icon={LoaderCircle} name="loader-circle"/>:<>{item.searchCount&&<LucideIcon icon={Search} name="search"/>}{item.count}</>}</small>:undefined; return <li><div class="view-navigation__item" data-saved-view-id={item.manageable?item.id:undefined} data-saved-view-label={item.manageable?item.label:undefined}><MenuItem action="select-view" itemId={item.id} className={item.id==='errors'?'menu-item--errors':''} dropStatus={item.id === 'backlog' ? 'backlog' : item.id === 'archive' ? 'archive' : item.id === 'all' ? 'not_started' : undefined} selected={item.id === selectedId} icon={<LucideIcon icon={icon} name={name} />} label={item.label} trailing={count}/>{item.manageable&&<span class="view-navigation__meta"><button type="button" class="view-navigation__more" data-action="open-saved-view-menu" data-item-id={item.id} data-item-label={item.label} aria-label={`More actions for ${item.label}`} title={`More actions for ${item.label}`} aria-haspopup="menu"><LucideIcon icon={Ellipsis} name="ellipsis"/></button></span>}</div></li>; })}</ul>
+    <ul>{items.map(item => { const [icon, name] = icons[item.icon],count=item.countLoading||item.count!==undefined?<small class="kui-menu-item__count" data-attention={String(Boolean(item.attention))} data-search-count={item.searchCount?'true':undefined} aria-label={item.countLoading?'Searching this view':item.searchCount?`${item.count} search results`:undefined}>{item.countLoading?<LucideIcon icon={LoaderCircle} name="loader-circle"/>:<>{item.searchCount&&<LucideIcon icon={Search} name="search"/>}{item.count}</>}</small>:undefined; return <li><div class="view-navigation__item" data-saved-view-id={item.manageable?item.id:undefined} data-saved-view-label={item.manageable?item.label:undefined}><MenuItem action="select-view" itemId={item.id} className={item.id==='errors'?'menu-item--errors':''} dropStatus={item.id === 'backlog' ? 'backlog' : item.id === 'archive' ? 'archive' : item.id === 'all' ? 'not_started' : undefined} selected={item.id === selectedId} icon={<LucideIcon icon={icon} name={name} />} label={item.label} trailing={count}/>{item.manageable&&<span class="view-navigation__meta"><button type="button" class="view-navigation__more" data-action="open-saved-view-menu" data-item-id={item.id} data-item-label={item.label} aria-label={`More actions for ${item.label}`} title={`More actions for ${item.label}`} aria-haspopup="menu"><LucideIcon icon={Ellipsis} name="ellipsis"/></button></span>}</div></li>; })}</ul>
   </nav>;
 }
 

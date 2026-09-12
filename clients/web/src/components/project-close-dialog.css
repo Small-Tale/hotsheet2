@@ -8,8 +8,8 @@
 .project-close-dialog__layout { display:grid; min-width:0; min-height:22rem; max-height:min(34rem,calc(100vh - 18rem)); grid-template-columns:minmax(14rem,18rem) minmax(0,1fr); }
 .project-close-dialog__layout > aside { min-width:0; padding:var(--wa-space-s); overflow:auto; border-right:1px solid var(--wa-color-surface-border); background:var(--wa-color-surface-default); }
 .project-close-dialog__layout > aside nav { display:grid; gap:var(--wa-space-3xs); }
-.project-close-dialog__layout > aside .menu-item__trailing { max-width:8rem; }
-.project-close-dialog__layout > aside .menu-item__count { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.project-close-dialog__layout > aside .kui-menu-item__trailing { max-width:8rem; }
+.project-close-dialog__layout > aside .kui-menu-item__count { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .project-close-dialog__detail { min-width:0; padding:var(--wa-space-l); overflow:auto; }
 .project-close-dialog__terminal { position:relative; min-height:18rem; padding:var(--wa-space-l); background:var(--hs-terminal-background); }
 .project-close-dialog__terminal .terminal-tile__viewport-frame { position:absolute; inset:var(--wa-space-l); border-radius:var(--wa-border-radius-m); }

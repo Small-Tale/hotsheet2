@@ -1,9 +1,9 @@
 import './permission-request-card.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, Check, CircleAlert, Clock3, ExternalLink, Pause, ShieldCheck, X } from 'lucide';
 
 import type { PermissionHistoryItem, PermissionItem } from '../permission-notifications';
-import { LucideIcon } from './lucide-icon';
 
 export type PermissionRequestCardState = 'pending' | 'resolving' | 'failed' | 'disconnected';
 

@@ -1,12 +1,12 @@
 import './terminal-drawer.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import type {SafeHtml} from 'kerfjs/jsx-runtime';
 import { Bot, FolderOpen, LayoutGrid, MessageSquare, PanelBottomClose, Plus, SquareTerminal } from 'lucide';
 
 import {orderedDrawerTabIds} from '../drawer-tab-order';
 import { terminalGridContentSize } from '../terminal-grid-layout';
 import { AppTab } from './app-tab';
-import { LucideIcon } from './lucide-icon';
 import {MenuItem} from './menu-item';
 import { TerminalDashboard,type TerminalDashboardSession,TerminalSession } from './terminal-dashboard';
 

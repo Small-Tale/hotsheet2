@@ -1,10 +1,10 @@
 import './ticket-row.css';
 
+import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ChevronDown, ChevronsUp, ChevronUp, CircleAlert, type IconNode, Minus, Star } from 'lucide';
 
 import { categoryAbbreviation, defaultCategoryPresentation, resolveCategoryIcon, resolveCategoryIconColor } from './category-presentation';
-import { LoadingSpinner } from './loading-spinner';
-import { LucideIcon } from './lucide-icon';
 import { BlockedBadge, StatusBadge, type TicketStatus } from './status-badge';
 import { TagChip } from './tag-chip';
 
@@ -93,7 +93,7 @@ export function TicketRow(raw: TicketRowProps) {
   const categoryIcon = resolveCategoryIcon(props.categoryIcon);
   const priority = getPriorityPresentation(props.priority);
   const category = categoryIcon
-    ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} class="ticket-list-row__category-icon" /></span>
+    ? <span class="ticket-list-row__category" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`}><LucideIcon icon={categoryIcon} name={props.categoryIcon!} className="ticket-list-row__category-icon" /></span>
     : <span class="ticket-list-row__category ticket-list-row__category--label" style={`color: ${resolveCategoryIconColor(props.categoryColor)}`} aria-label={`${props.category} category`} title={props.category}>{categoryAbbreviation(props.category, props.categoryShortLabel)}</span>;
   return (
     <div class="ticket-list-row-container" data-key={`ticket:${props.slug}`} data-component="ticket-list-row-container">
@@ -123,15 +123,15 @@ export function TicketRow(raw: TicketRowProps) {
                 <span class="ticket-list-row__updated">{props.updatedLabel}</span>
                 {props.presentation === 'column' && category}
                 <span class="ticket-list-row__slug">{props.slug}</span>
-                <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} class="ticket-list-row__priority-icon" /></span>
+                <span class="ticket-list-row__priority" style={`color: ${priority.color}`} aria-label={`${props.priority} priority`} title={`${props.priority} priority`}><LucideIcon icon={priority.icon} name={priority.name} className="ticket-list-row__priority-icon" /></span>
                 <strong title={props.title}>{props.title}</strong>
               </div>
             </div>
             <div class="ticket-list-row__metadata">
-              {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" class="ticket-list-row__up-next-icon" /></button>}
+              {props.upNextEligible && <button type="button" class={`ticket-list-row__up-next${props.upNext ? ' ticket-list-row__up-next--active' : ''}`} data-action="toggle-row-up-next" aria-label={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'} title={props.upNext ? 'Remove from Up Next' : 'Add to Up Next'}><LucideIcon icon={Star} name="star" className="ticket-list-row__up-next-icon" /></button>}
               <StatusBadge status={props.status} compact />
               {props.busy && <ActiveClaimIndicator agentName={props.agentName} />}
-              {needsReview && <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-list-row__feedback-icon" />Needs review</span>}
+              {needsReview && <span class="ticket-list-row__feedback" aria-label="Needs review" title="Needs review"><LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-list-row__feedback-icon" />Needs review</span>}
               {props.blocked && <BlockedBadge compact />}
               <span class="ticket-list-row__owner" aria-label={props.agentName}>{props.agentName}</span>
               {props.tags.length > 0 && <div class="ticket-list-row__tags">{props.tags.map((tag, index) => TagChip({ id: `row-tag-${index}`, label: tag }))}</div>}

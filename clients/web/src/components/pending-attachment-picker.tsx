@@ -1,8 +1,7 @@
 import './pending-attachment-picker.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Paperclip, Plus, Trash2, Upload } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
 
 export interface PendingAttachment { id: string; name: string }
 

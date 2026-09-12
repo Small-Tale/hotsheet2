@@ -3,11 +3,10 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import '@awesome.me/webawesome/dist/components/option/option.js';
-import '@awesome.me/webawesome/dist/components/select/select.js';
 import '../theme.css';
 import './style.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import {
   Activity,
@@ -46,7 +45,6 @@ import {
 
 import { AppTab } from '../components/app-tab';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
-import { LucideIcon } from '../components/lucide-icon';
 import { MenuHeader } from '../components/menu-header';
 import { MenuItem } from '../components/menu-item';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
@@ -1204,11 +1202,11 @@ window.addEventListener('pointermove', (event) => {
   drag.frame = requestAnimationFrame(() => {
     drag.frame = undefined;
     drag.region.style.setProperty(
-      '--resizable-region-size',
+      '--kui-resizable-region-size',
       `${drag.pendingSize}px`,
     );
     drag.region.style.setProperty(
-      '--resizable-region-expanded-size',
+      '--kui-resizable-region-expanded-size',
       `${drag.pendingSize}px`,
     );
     drag.handle.setAttribute('aria-valuenow', String(drag.pendingSize));

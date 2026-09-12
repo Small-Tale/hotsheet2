@@ -1,9 +1,9 @@
 import './corrupt-ticket-row.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, FileWarning, FolderOpen, PanelRightClose, RefreshCw } from 'lucide';
 
 import type { CorruptTicket } from '../api';
-import { LucideIcon } from './lucide-icon';
 
 const filename = (path: string) => path.split(/[\\/]/).filter(Boolean).at(-1);
 
@@ -33,7 +33,7 @@ export function CorruptTicketRow({ ticket, recovery, selected = false }: { ticke
   const upgradeRequired = ticket.error_code === 'upgrade_required';
   const key = corruptTicketKey(ticket);
   return <article class={`ticket-list-row ticket-list-row--list corrupt-ticket-row${selected?' ticket-list-row--selected':''}`} data-component="corrupt-ticket-row" data-selected={String(selected)} role="group" aria-label={`Unreadable ticket ${identity}`}>
-    <LucideIcon icon={upgradeRequired ? RefreshCw : FileWarning} name={upgradeRequired ? 'refresh-cw' : 'file-warning'} class="corrupt-ticket-row__icon" />
+    <LucideIcon icon={upgradeRequired ? RefreshCw : FileWarning} name={upgradeRequired ? 'refresh-cw' : 'file-warning'} className="corrupt-ticket-row__icon" />
     <div class="corrupt-ticket-row__content">
       <button type="button" class="corrupt-ticket-row__select" data-action="select-corrupt-ticket" data-corrupt-key={key} aria-label={`Open recovery for ${identity}`}>
         <strong>{identity}</strong>

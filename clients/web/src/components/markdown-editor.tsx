@@ -1,9 +1,9 @@
 import './markdown-editor.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Maximize2, Minimize2 } from 'lucide';
 
 import type {AttachmentReferenceContext} from '../attachment-references';
-import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
 
 export type MarkdownEditorMode = 'write' | 'preview';

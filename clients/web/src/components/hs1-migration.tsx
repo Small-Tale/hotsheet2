@@ -1,9 +1,8 @@
 import './hs1-migration.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ValueTable } from '@kerfjs/ui/value-table';
 import { ArchiveRestore, Database, Trash2 } from 'lucide';
-
-import { ValueTable } from './dialog-layout';
-import { LucideIcon } from './lucide-icon';
 
 export interface Hs1MigrationDialogProps {
   projectName:string;

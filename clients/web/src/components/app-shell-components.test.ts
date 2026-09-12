@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 
+import { PageHeader } from '@kerfjs/ui/page-header';
 import { describe, expect, it } from 'vitest';
 
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resizeDemoWidth, selectProjectTab, setRegionSize, shellMode, shellStatsProjectName } from '../ux-demo/app-shell-demo';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
-import { PageHeader } from './page-header';
 import { ProjectTab,projectTabActivityDash } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
@@ -18,14 +18,14 @@ describe('application shell components', () => {
     expect(css).toMatch(/\.app-shell \{[^}]*min-width: 64rem/);
     expect(css).toMatch(/\.app-shell \{[^}]*min-height: 37\.5rem/);
     expect(productionCss).not.toMatch(/\.app-shell\[data-component="app-shell"\] \{[^}]*(?:min-width|min-height):/);
-    expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.resizable-region[^{}]*display: none/);
+    expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.kui-resizable-region[^{}]*display: none/);
   });
 
   it('gives an expanded narrow search its own row below the project identity', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     expect(css).toMatch(/@media \(max-width: 48rem\) \{[\s\S]*toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) \{ grid-template-columns: minmax\(0, 1fr\); row-gap: \.4rem;/);
-    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.toolbar__leading \{ padding-inline: \.5rem 0;/);
-    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: \.75rem 0; justify-content: stretch;/);
+    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__leading \{ padding-inline: \.5rem 0;/);
+    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: \.75rem 0; justify-content: stretch;/);
     expect(css).toMatch(/\.workspace-header__search-group \{ width: auto; min-width: 11rem; flex: 1 1 auto;/);
   });
 
@@ -98,11 +98,8 @@ describe('application shell components', () => {
   });
 
   it('draws tab-selection focus around the complete compound pill', () => {
-    const css=readFileSync(new URL('./app-tab.css',import.meta.url),'utf8'),projectCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
-    expect(css).toContain('.app-tab:has(.app-tab__select:focus-visible) { outline: var(--wa-focus-ring); outline-offset: -2px; }');
-    expect(css).toContain('.app-tab__select:focus-visible { outline: none; }');
-    expect(css).toContain('.app-tab__close:focus-visible { border-radius: var(--wa-border-radius-pill); outline: var(--wa-focus-ring); outline-offset: -2px; }');
-    expect(css).not.toContain('.app-tab__select:focus-visible, .app-tab__close:focus-visible');
+    const projectCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
+    expect(String(ProjectTab({id:'focus',name:'Focus',location:'local'}))).toContain('class="kui-app-tab project-tab"');
     expect(projectCss).toContain('.project-tab:has(.project-tab__close) .project-tab__trailing:empty { min-width: calc(1.275rem - var(--wa-space-xs)); }');
     expect(barCss).toMatch(/\.project-tab-bar__tabs \{[^}]*margin: calc\(var\(--wa-space-2xs\) \* -1\);[^}]*padding: var\(--wa-space-2xs\);/);
   });
@@ -164,6 +161,7 @@ describe('application shell components', () => {
   });
 
   it('renders all connection semantics and only valid actions', () => {
+    expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('data-component="state-banner"');
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).toContain('role="status"');
     expect(String(ConnectionStateBanner({ state: 'connecting' }))).not.toContain('<button');
     expect(String(ConnectionStateBanner({ state: 'offline' }))).toContain('data-action="retry-connection"');
@@ -190,8 +188,8 @@ describe('application shell components', () => {
     expect(markup).toContain('class="app-shell__composer">compose');
     expect(markup.indexOf('app-shell__composer')).toBeLessThan(markup.indexOf('Ticket workspace'));
     expect(markup).toContain('data-component="page-header"');
-    expect(markup).toContain('class="toolbar__leading">head');
-    expect(markup).toContain('class="toolbar__trailing">actions');
+    expect(markup).toContain('class="kui-toolbar__leading">head');
+    expect(markup).toContain('class="kui-toolbar__trailing">actions');
     expect(markup).toContain('data-component="toolbar" data-divider="false"');
     expect(markup.indexOf('data-component="project-tab-bar"')).toBeLessThan(markup.indexOf('overlay'));
     expect(markup.indexOf('overlay')).toBeLessThan(markup.indexOf('data-region-id="app-inspector"'));

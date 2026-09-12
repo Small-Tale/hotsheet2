@@ -1,13 +1,16 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './ticket-inspector.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { ALargeSmall, BookOpen, CircleAlert, CopyX, Info, ListTree, MessageSquareCode, PanelRightClose, Paperclip, Star, X } from 'lucide';
 
 import type { CodeReview, DuplicateBacklink, TicketCloseReason } from '../api';
 import type {AttachmentReferenceContext} from '../attachment-references';
 import type { InlineFeedbackReply } from '../feedback-replies';
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
-import { LucideIcon } from './lucide-icon';
 import type { MarkdownEditorMode } from './markdown-editor';
 import type { NoteCardProps } from './note-card';
 import type { TicketStatus } from './status-badge';
@@ -18,9 +21,6 @@ import { TicketFieldConflict } from './ticket-field-conflict';
 import { TicketInfoPanel } from './ticket-info-panel';
 import type { TicketPriority } from './ticket-row';
 import { TicketTimeline, type TicketTimelineEntry } from './ticket-timeline';
-import { Toolbar } from './toolbar';
-import { ToolbarControlGroup } from './toolbar-control-group';
-import { ToolbarText } from './toolbar-text';
 
 export type InspectorTab = 'info' | 'timeline' | 'code-review' | 'attachments';
 
@@ -96,7 +96,7 @@ export function TicketInspector({ slug, title, titleEditing = false, titleDraft 
       <Toolbar divider={false} center={<button type="button" class="ticket-inspector__slug" data-action="copy-ticket-slug" aria-label={`Copy ticket number ${slug}`} title="Copy ticket number"><ToolbarText text={slug} size="small" /></button>} trailing={actions} />
       {titleEditing ? <input class="ticket-inspector__title-input" name="ticket-title" aria-label="Ticket title" value={titleDraft} /> : <h1 data-action={canUpdate ? 'edit-ticket-title' : undefined} data-editable={String(canUpdate)} tabIndex={canUpdate ? 0 : undefined} title={canUpdate ? 'Double-click to edit title' : undefined}>{title}</h1>}
     </header>
-    {feedbackNeeded && <div class="ticket-inspector__feedback" role="status"><LucideIcon icon={CircleAlert} name="circle-alert" class="ticket-inspector__feedback-icon" /><span>Needs review</span></div>}
+    {feedbackNeeded && <div class="ticket-inspector__feedback" role="status"><LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-inspector__feedback-icon" /><span>Needs review</span></div>}
     {closeReason && <div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}>{closeReason === 'duplicate' && <LucideIcon icon={CopyX} name="copy-x" />}{closeReason === 'duplicate' ? <span>Duplicate of {duplicateTarget ? <button type="button" data-action="open-duplicate-target" data-target-id={duplicateTarget.id}>{duplicateTarget.label}</button> : 'another ticket'}</span> : <span>Closed as {closeReason === 'not_planned' ? 'not planned' : closeReason}</span>}</div>}
     <TicketDuplicateBacklinks backlinks={duplicateBacklinks} inaccessibleProjects={duplicateBacklinkInaccessibleProjects}/>
     {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}

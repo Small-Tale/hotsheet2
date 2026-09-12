@@ -3,5 +3,5 @@
 .ticket-status-menu::part(start) { margin: 0; }
 .ticket-status-menu::part(expand-icon) { display: none; }
 .ticket-status-menu wa-option::part(label) { font-weight: 400; }
-.ticket-status-menu .select__custom-selected { pointer-events: none; }
+.ticket-status-menu .kui-select__custom-selected { pointer-events: none; }
 .ticket-status-menu .status-badge { font-weight: 600; }

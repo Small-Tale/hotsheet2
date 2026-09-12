@@ -1,15 +1,17 @@
 import './repository-status-popover.css';
+import './dialog-layout.css';
 
+import { DialogHeader } from '@kerfjs/ui/dialog-header';
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
+import { ValueTable } from '@kerfjs/ui/value-table';
 import { ArrowDown, ArrowUp, CircleCheck, CircleHelp, Clipboard, Copy, Ellipsis, ExternalLink, FileCode2, FileText, FlaskConical, FolderOpen, GitBranch, GitCommitHorizontal, GitCompare, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
 
 import type { CodeReview, CodeReviewFile, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
-import { DialogHeader, ValueTable } from './dialog-layout';
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
 import { type CodeReviewComparison, TicketCodeReview } from './ticket-code-review';
-import { ToolbarControlGroup } from './toolbar-control-group';
 
 export type RepositoryStatusState='clean'|'dirty'|'ahead'|'behind'|'diverged'|'conflicted'|'uninitialized'|'error';
 export type RepositoryStatusView='staged'|'unstaged'|'untracked'|'conflicted'|'commits';
@@ -51,7 +53,7 @@ export function RepositoryStatusPopover({status,error='',initialized=true,setupS
     {status&&!recoveryStep&&<div class="repository-status-popover__layout"><aside>
       <ValueTable className="repository-status-popover__values" label="Repository identity"><div><dt>Branch</dt><dd>{branch}</dd></div><div><dt>Upstream</dt><dd>{upstream}</dd></div></ValueTable>
       <ValueTable className="repository-status-popover__values" label="Repository synchronization"><div><dt>Ahead</dt><dd><LucideIcon icon={ArrowUp} name="arrow-up"/>{status.ahead}</dd></div><div><dt>Behind</dt><dd><LucideIcon icon={ArrowDown} name="arrow-down"/>{status.behind}</dd></div></ValueTable>
-      <nav aria-label="Repository views"><MenuHeader label="Views"/>{viewDefinitions.map(item=><MenuItem action="select-repository-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'square-pen':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/>} label={item.label} trailing={<small class="menu-item__count">{repositoryViewCount(status,item.id)}</small>}/>)}</nav>
+      <nav aria-label="Repository views"><MenuHeader label="Views"/>{viewDefinitions.map(item=><MenuItem action="select-repository-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id==='commits'?'git-commit-horizontal':item.id==='untracked'?'square-pen':item.id==='conflicted'?'square-x':item.id==='staged'?'square-plus':'square-minus'}/>} label={item.label} trailing={<small class="kui-menu-item__count">{repositoryViewCount(status,item.id)}</small>}/>)}</nav>
     </aside><main class="repository-status-popover__detail" aria-live="polite">
       {view==='commits'?<TicketCodeReview embedded title="Commits" emptyMessage="No commits were found in this repository." loadingMessage="Finding commits…" action="open-repository-review" review={review} comparison={comparison} expandedCommits={expandedCommits} loading={detailLoading&&review?.commits.length===0}/>:<RepositoryFileList files={files} view={view} selectedFiles={selectedFiles} loading={detailLoading}/>}
       {detailError&&<p class="repository-status-popover__detail-error" role="alert">{detailError}</p>}
@@ -83,7 +85,7 @@ export function ChangeEvidenceDialog({review,view='docs',embedded=false,fileMenu
   const files=review?.files??[],visible=files.filter(file=>file.category===view);
   return <section popover={embedded?undefined:'auto'} id={embedded?undefined:'change-evidence-dialog'} class="dialog-surface repository-status-popover change-evidence-dialog" data-component="change-evidence-dialog" data-view={view} data-embedded={embedded?'true':undefined} role="dialog" aria-labelledby="change-evidence-title">
     <DialogHeader title="Change evidence" titleId="change-evidence-title" summary="Files changed across the ticket's complete commit range" iconClassName="repository-status-popover__icon" icon={<LucideIcon icon={GitCompare} name="git-compare"/>}/>
-    <div class="repository-status-popover__layout change-evidence-dialog__layout"><aside><nav aria-label="Change evidence views"><MenuHeader label="Views"/>{evidenceViews.map(item=><MenuItem action="select-change-evidence-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id}/>} label={item.label} trailing={<small class="menu-item__count">{files.filter(file=>file.category===item.id).length}</small>}/>)}</nav></aside>
+    <div class="repository-status-popover__layout change-evidence-dialog__layout"><aside><nav aria-label="Change evidence views"><MenuHeader label="Views"/>{evidenceViews.map(item=><MenuItem action="select-change-evidence-view" itemId={item.id} selected={view===item.id} icon={<LucideIcon icon={item.icon} name={item.id}/>} label={item.label} trailing={<small class="kui-menu-item__count">{files.filter(file=>file.category===item.id).length}</small>}/>)}</nav></aside>
       <main class="repository-status-popover__detail" aria-live="polite">{review&&!review.difftool&&<p class="ticket-code-review__notice" role="status">No Git diff tool is configured for this checkout. Set <code>diff.tool</code> to enable review actions.</p>}<CodeReviewFileList files={visible} view={view} selectedFiles={selectedFiles}/></main>
     </div>
     {fileMenu&&<RepositoryFileContextMenu menu={fileMenu} platform={platform}/>}

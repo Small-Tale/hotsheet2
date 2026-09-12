@@ -2,9 +2,8 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './project-tab-context-menu.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArrowLeft,ArrowRight, CircleX, type IconNode,Pencil,Trash2, X } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
 
 export type AppTabKind='project'|'terminal'|'ai-chat';
 export function AppTabContextMenu({kind,id,x,y,direction='right'}:{kind:AppTabKind;id:string;x:number;y:number;direction?:'left'|'right'}){

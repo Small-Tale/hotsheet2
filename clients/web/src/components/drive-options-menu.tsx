@@ -3,9 +3,8 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './drive-options-menu.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, Brain, Gauge, type IconNode, RotateCcw } from 'lucide';
-
-import { LucideIcon } from './lucide-icon';
 
 export interface AiToolModel { id:string; label:string; effort_levels?:readonly string[] }
 export interface AiToolDescriptor { id:string; display_name:string; models:readonly AiToolModel[]; default_model?:string; default_effort?:string; actions?:readonly ('change_model'|'change_effort')[] }

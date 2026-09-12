@@ -1,8 +1,8 @@
 import './attachment-context-menu.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Clipboard, Copy, Download, ExternalLink, FolderOpen, Pencil, Trash2 } from 'lucide';
 
-import { LucideIcon } from './lucide-icon';
 import { MenuItem } from './menu-item';
 
 export type AttachmentContextMenuKind = 'item' | 'host';

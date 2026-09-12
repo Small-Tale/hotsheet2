@@ -1,9 +1,9 @@
 import './command-navigation.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArrowLeftRight, Balloon, ChevronDown, CircleCheckBig, FileText, GitCompare, GitCompareArrows, Globe, Hammer, type IconNode,Send, SoapDispenserDroplet, TestTube2, Wand } from 'lucide';
 
 import { customizationContrastColor, resolveCustomizationColor } from './customization-palette';
-import { LucideIcon } from './lucide-icon';
 import { MenuHeader } from './menu-header';
 import { MenuItem } from './menu-item';
 

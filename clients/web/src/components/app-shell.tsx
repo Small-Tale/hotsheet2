@@ -1,16 +1,16 @@
 import './app-shell.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Toolbar } from '@kerfjs/ui/toolbar';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelBottomOpen, PanelLeftOpen, PanelRightOpen } from 'lucide';
 
 import { TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
-import { LucideIcon } from './lucide-icon';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
 import { ProjectTabBar } from './project-tab-bar';
 import { ResizableRegion } from './resizable-region';
-import { Toolbar } from './toolbar';
-import { ToolbarControlGroup } from './toolbar-control-group';
 
 export interface AppShellProps {
   tabs: ProjectTabProps[];

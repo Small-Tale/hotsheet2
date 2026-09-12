@@ -1,4 +1,4 @@
-import { ToolbarText } from '../components/toolbar-text';
+import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 
 export function ToolbarTextDemo() {
   return <section class="toolbar-text-demo" aria-label="ToolbarText demo">

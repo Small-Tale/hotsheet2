@@ -3,7 +3,7 @@
 .terminal-drawer__views { display: flex; min-width: 0; max-width: calc(100% - 7rem); align-items: center; flex: 0 1 auto; gap: var(--wa-space-xs); }
 .terminal-drawer__tabs { display: flex; min-width: 0; margin: calc(var(--wa-space-2xs) * -1); padding: var(--wa-space-2xs); align-items: center; overflow-x: auto; gap: var(--wa-space-xs); scrollbar-width: none; }
 .terminal-drawer__tabs::-webkit-scrollbar { display: none; }
-.terminal-drawer__tabs .app-tab { flex: none; }
+.terminal-drawer__tabs .kui-app-tab { flex: none; }
 .terminal-drawer__views > [role="tab"] { flex: none; }
 .terminal-drawer__rail > button, .terminal-drawer__views > button, .terminal-drawer__create, .terminal-drawer__actions > button { display: inline-flex; min-width: 2rem; height: 2rem; padding: 0 var(--wa-space-s); align-items: center; justify-content: center; border: 0; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; gap: var(--wa-space-xs); font: inherit; }
 .terminal-drawer__views > [role="tab"][aria-selected="true"] { color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-quiet); }
@@ -15,8 +15,8 @@
 .terminal-drawer__create-wrap { position: relative; flex: none; }
 .terminal-drawer__create { flex: none; }
 .terminal-drawer__create-menu { position: absolute; z-index: 30; bottom: calc(100% + var(--wa-space-2xs)); left: 0; display: grid; width: 14rem; padding: var(--wa-space-xs); border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-raised); box-shadow: var(--wa-shadow-l); gap: var(--wa-space-2xs); }
-.terminal-drawer__create-menu .menu-item { width: 100%; }
-.terminal-drawer__create-menu .menu-item__trailing svg { width: .8rem; height: .8rem; }
+.terminal-drawer__create-menu .kui-menu-item { width: 100%; }
+.terminal-drawer__create-menu .kui-menu-item__trailing svg { width: .8rem; height: .8rem; }
 .terminal-drawer__actions { display: flex; margin-left: auto; align-items: center; flex: none; gap: var(--wa-space-xs); }
 .terminal-drawer__actions button span { font-size: var(--wa-font-size-2xs); }
 .terminal-drawer__content { min-width: 0; min-height: 0; flex: 1; }

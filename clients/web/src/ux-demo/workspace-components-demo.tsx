@@ -1,7 +1,7 @@
+import { PageHeader } from '@kerfjs/ui/page-header';
 import { signal } from 'kerfjs';
 
 import type { CodeReview } from '../api';
-import { PageHeader } from '../components/page-header';
 import { QuickTicketComposer,QuickTicketLauncher } from '../components/quick-ticket-composer';
 import { TerminalTicketRail } from '../components/terminal-ticket-rail';
 import { TicketBoard, type TicketColumnProps } from '../components/ticket-board';

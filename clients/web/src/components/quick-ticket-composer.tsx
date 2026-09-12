@@ -4,9 +4,9 @@ import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
 import './quick-ticket-composer.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Paperclip, Plus, Star, Trash2, Upload } from 'lucide';
 
-import { LucideIcon } from './lucide-icon';
 import { TicketCategorySelect } from './ticket-category-select';
 
 export interface QuickTicketComposerProps {

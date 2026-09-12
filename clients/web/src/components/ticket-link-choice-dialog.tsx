@@ -2,10 +2,10 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './ticket-link-choice-dialog.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { ArrowRight, CircleDot, GitBranch } from 'lucide';
 
 import { ticketLinkMatchKey, type TicketLinkResolution } from '../ticket-link-resolution';
-import { LucideIcon } from './lucide-icon';
 
 export type TicketLinkChoice = Extract<TicketLinkResolution, { kind: 'choose' }>;
 

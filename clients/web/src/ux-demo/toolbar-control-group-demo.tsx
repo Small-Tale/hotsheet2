@@ -2,10 +2,9 @@ import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ArrowDownAZ, ChevronLeft, ChevronRight, Columns3, GitCompare, List, MoreHorizontal, PanelLeftOpen, Pin, Settings, Star } from 'lucide';
-
-import { LucideIcon } from '../components/lucide-icon';
-import { ToolbarControlGroup } from '../components/toolbar-control-group';
 
 export function ToolbarControlGroupDemo() {
   return <section class="toolbar-control-group-demo" aria-label="ToolbarControlGroup demo">

@@ -13,8 +13,8 @@
 .workspace-header__sort::part(combobox) { position: relative; min-height: 2rem; border: 0; border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-normal); box-shadow: none; }
 .workspace-header__sort::part(display-input) { position: absolute; width: 1px; overflow: hidden; clip-path: inset(50%); }
 .workspace-header__sort::part(expand-icon) { position: absolute; inset-inline-end: .2rem; }
-.workspace-header__sort .select__custom-selected { width: 1rem; height: 1rem; color: var(--toolbar-control-icon-color); flex: none; }
-.workspace-header__sort .select__custom-selected svg { width: 1rem; height: 1rem; }
+.workspace-header__sort .kui-select__custom-selected { width: 1rem; height: 1rem; color: var(--kui-toolbar-control-color); flex: none; }
+.workspace-header__sort .kui-select__custom-selected svg { width: 1rem; height: 1rem; }
 .workspace-header__search-group { position:relative; width: 2.525rem; overflow: hidden; transition: width .25s ease, background-color .2s ease, border-color .2s ease; }
 .workspace-header__search-group[data-expanded="true"] { width: min(48rem, 100%); max-width:100%; height:auto; overflow:visible;border-radius:1.5428125rem;background: var(--wa-color-surface-default);align-self:flex-start; }
 .workspace-header__search-group:focus-within { border-color: var(--wa-color-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
@@ -32,7 +32,7 @@
 .workspace-header__search-end { margin-block-start: .325rem; }
 @media (max-height: 44rem) { .workspace-header__search-help { max-height: calc(100vh - 23rem); } }
 @media (max-width: 48rem) { .workspace-header { grid-template-columns: 1fr; } .workspace-header__actions { flex-wrap: wrap; } }
-@container toolbar (max-width: 30rem) { .workspace-header__actions > .workspace-header__utility-group { display: none; } }
-@container toolbar (max-width: 26rem) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }
-@container toolbar (max-width: 14rem) { .workspace-header__actions > .workspace-header__search-group { display: none; } }
-@container toolbar (max-width: 11rem) { .workspace-header__actions > .view-mode-switcher { display: none; } }
+@container kui-toolbar (max-width: 30rem) { .workspace-header__actions > .workspace-header__utility-group { display: none; } }
+@container kui-toolbar (max-width: 26rem) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }
+@container kui-toolbar (max-width: 14rem) { .workspace-header__actions > .workspace-header__search-group { display: none; } }
+@container kui-toolbar (max-width: 11rem) { .workspace-header__actions > .view-mode-switcher { display: none; } }

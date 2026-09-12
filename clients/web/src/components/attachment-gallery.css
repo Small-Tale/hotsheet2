@@ -1,6 +1,6 @@
 .attachment-gallery { position: fixed; z-index: 1400; inset: 0; display: grid; overflow: hidden; background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 92%, transparent); grid-template-rows: auto minmax(0,1fr) auto; }
 .attachment-gallery__toolbar { z-index: 2; padding: var(--wa-space-s) var(--wa-space-m); color: var(--wa-color-neutral-on-loud); background: color-mix(in srgb, var(--wa-color-neutral-fill-loud) 72%, transparent); backdrop-filter: blur(.75rem); }
-.attachment-gallery__toolbar .toolbar__trailing { gap: var(--wa-space-s); }
+.attachment-gallery__toolbar .kui-toolbar__trailing { gap: var(--wa-space-s); }
 .attachment-gallery__toolbar .attachment-gallery__filename { max-width: min(42rem,55vw); overflow: hidden; color: var(--wa-color-neutral-on-loud); text-overflow: ellipsis; white-space: nowrap; }
 .attachment-gallery__count { display: inline-grid; min-width: 3.75rem; padding-inline: var(--wa-space-xs); place-items: center; font-variant-numeric: tabular-nums; }
 .attachment-gallery__toolbar [data-action="toggle-gallery-markup"] { position:relative; }

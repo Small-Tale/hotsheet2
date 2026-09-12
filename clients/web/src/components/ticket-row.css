@@ -34,7 +34,7 @@
 .ticket-list-row__feedback { display: inline-flex; align-items: center; gap: .25rem; flex: none; padding: .05rem .4rem; border: 1px solid var(--wa-color-warning-border-normal); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-warning-on-quiet); background: var(--wa-color-warning-fill-quiet); font-size: var(--wa-font-size-2xs); font-weight: 700; white-space: nowrap; }
 .ticket-list-row__feedback-icon { width: .8rem; height: .8rem; }
 .ticket-list-row__claim { display: inline-flex; width: 1.05rem; height: 1.05rem; color: var(--hs-ticket-state-up-next); flex: none; }
-.ticket-list-row__claim .loading-spinner { width: 100%; height: 100%; }
+.ticket-list-row__claim .kui-loading-spinner { width: 100%; height: 100%; }
 .ticket-list-row__owner { display: inline-flex; align-items: center; gap: .3rem; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); white-space: nowrap; }
 .ticket-list-row__up-next { position: relative; z-index: 2; display: inline-grid; flex: none; width: 1.5rem; height: 1.5rem; margin: -.25rem 0; padding: 0; border: 0; appearance: none; color: var(--wa-color-neutral-border-loud); background: transparent; cursor: pointer; font: inherit; outline: none; place-items: center; }
 .ticket-list-row__up-next:hover, .ticket-list-row__up-next:focus-visible { color: var(--hs-ticket-state-up-next); }

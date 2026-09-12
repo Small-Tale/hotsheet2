@@ -1,7 +1,7 @@
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { signal } from 'kerfjs';
 import { Eye } from 'lucide';
 
-import { LucideIcon } from '../components/lucide-icon';
 import { TerminalVisibilityDialog,TerminalVisibilityNameDialog,type TerminalVisibilityNamePrompt } from '../components/terminal-visibility-dialog';
 import { activeTerminalVisibilityGroup,addTerminalVisibilityGroup,initialTerminalVisibilityState,removeTerminalVisibilityGroup,renameTerminalVisibilityGroup,selectTerminalVisibilityGroup,setAllTerminalsVisibleInGroup,setTerminalVisibleInGroup } from '../terminal-visibility';
 

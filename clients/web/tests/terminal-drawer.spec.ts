@@ -11,7 +11,7 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
 
   const shadowGutter = await tabs.evaluate(node => {
     const scroller = node.getBoundingClientRect();
-    const selected = node.querySelector<HTMLElement>('.app-tab[data-selected="true"]')!.getBoundingClientRect();
+    const selected = node.querySelector<HTMLElement>('.kui-app-tab[data-selected="true"]')!.getBoundingClientRect();
     return { above: selected.top - scroller.top, below: scroller.bottom - selected.bottom };
   });
   expect(shadowGutter.above).toBeGreaterThanOrEqual(2);

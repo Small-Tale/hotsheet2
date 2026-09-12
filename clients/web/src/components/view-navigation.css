@@ -2,16 +2,16 @@
 .view-navigation ul { display: grid; margin: 0; padding: 0; gap: .15rem; list-style: none; }
 .view-navigation li { margin: 0; }
 .view-navigation__item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
-.view-navigation .menu-item { width: 100%; }
+.view-navigation .kui-menu-item { width: 100%; }
 .view-navigation__meta { display:inline-flex; padding-inline-start:var(--wa-space-3xs); align-items:center; gap:var(--wa-space-3xs); }
 .view-navigation__meta:empty { display:none; }
 .view-navigation__more { display:grid; width:1.75rem; height:1.75rem; padding:0; border:0; border-radius:var(--wa-border-radius-s); color:var(--wa-color-neutral-on-quiet); background:transparent; cursor:pointer; place-items:center; }
 .view-navigation__more:hover { color:var(--wa-color-neutral-on-normal); background:var(--wa-color-neutral-fill-quiet); }
 .view-navigation__more:focus-visible { outline:var(--wa-focus-ring); outline-offset:1px; }
 .view-navigation__more svg { width:.9rem; height:.9rem; }
-.view-navigation .menu-item__count { display:inline-flex; align-items:center; gap:.2rem; }
-.view-navigation .menu-item__count svg { width:.62rem; height:.62rem; }
-.view-navigation .menu-item__count[aria-label="Searching this view"] svg { animation:view-navigation-count-spin .8s linear infinite; }
+.view-navigation .kui-menu-item__count { display:inline-flex; align-items:center; gap:.2rem; }
+.view-navigation .kui-menu-item__count svg { width:.62rem; height:.62rem; }
+.view-navigation .kui-menu-item__count[aria-label="Searching this view"] svg { animation:view-navigation-count-spin .8s linear infinite; }
 @keyframes view-navigation-count-spin { to { transform:rotate(360deg); } }
 .saved-view-context-menu { position:fixed; z-index:1001; display:grid; width:12rem; padding:var(--wa-space-2xs); border:1px solid var(--wa-color-neutral-border-normal); border-radius:var(--wa-border-radius-m); background:var(--wa-color-surface-default); box-shadow:var(--wa-shadow-l); }
 .saved-view-context-menu wa-dropdown-item { cursor:pointer; }

@@ -420,7 +420,7 @@ and identity-less legacy entries remain conservatively blocking.
   replacing the compact workspace search. The overlay is available from the toolbar and
   the platform Search shortcut (`Command-K`/`Control-K`).
 
-  Empty ticket collections use the shared `TicketEmptyState` composition in both list
+  Empty ticket collections use the shared `TicketEmptyState` adapter in both list
   and board modes. A project with no tickets invites its first ticket, a populated
   project's empty view names that view, an in-flight search reports that it is still
   searching, and a settled empty search repeats the query and suggests changing it.
@@ -430,6 +430,14 @@ and identity-less legacy entries remain conservatively blocking.
   the same list/board content area instead shows a centered animated **Loading tickets**
   state beneath the retained column headings; it never flashes premature empty-project
   copy or duplicates the corner activity indicator.
+
+  Reusable web-client presentation primitives come from the published `@kerfjs/ui`
+  package through explicit subpath imports. Hot Sheet owns only domain adapters and
+  product behavior: connection-state mapping, ticket-specific empty-state copy,
+  menu action metadata, resize action wiring, tab identity, and the temporary Select
+  adapter tracked by KF-1JAT9F. The shared package owns their generic anatomy and CSS,
+  along with toolbars, toolbar text/control groups, page headers, loading indicators,
+  and Lucide rendering; the client does not carry local copies of those primitives.
 
   Ticket details and notes share one Markdown rendering boundary in the inspector, reader,
   and UX demos. Every link emitted by that renderer opens in a new browser tab and carries

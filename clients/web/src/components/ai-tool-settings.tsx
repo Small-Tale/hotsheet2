@@ -1,9 +1,9 @@
 import './ai-tool-settings.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Bot, Brain, Gauge } from 'lucide';
 
 import type { AiToolDescriptor, AiToolSelection } from './drive-options-menu';
-import { LucideIcon } from './lucide-icon';
 import { Select } from './select';
 
 export function AiToolSettings({tools,selection,loading=false,message=''}:{tools:readonly AiToolDescriptor[];selection:AiToolSelection;loading?:boolean;message?:string}){

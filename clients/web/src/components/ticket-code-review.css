@@ -19,9 +19,9 @@
 .ticket-code-review__compare-banner > button svg { width: .9rem; height: .9rem; }
 .ticket-code-review__compare-open { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); grid-column: 3; }
 .ticket-code-review__compare-open:disabled { opacity: .45; cursor: not-allowed; }
-.ticket-code-review__compare-banner .toolbar-control-group { width: max-content; height: 2.2rem; justify-self: start; }
-.ticket-code-review__compare-banner .toolbar-control-group > button { height: 1.7rem; }
-.ticket-code-review__compare-banner .toolbar-control-group > button[data-selected="true"] { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); }
+.ticket-code-review__compare-banner .kui-toolbar-control-group { width: max-content; height: 2.2rem; justify-self: start; }
+.ticket-code-review__compare-banner .kui-toolbar-control-group > button { height: 1.7rem; }
+.ticket-code-review__compare-banner .kui-toolbar-control-group > button[data-selected="true"] { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); }
 .ticket-code-review__range { display: flex; width: 100%; min-height: 2.4rem; padding: .5rem .65rem; border: 1px solid var(--wa-color-brand-border-normal); border-radius: .5rem; color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); cursor: pointer; align-items: center; gap: .45rem; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 650; }
 .ticket-code-review__range-item { display: block; min-width: 0; margin: var(--wa-space-xs) 0 var(--wa-space-2xs); padding: 0; list-style: none; }
 .ticket-code-review__range span { min-width: 0; flex: 1; text-align: left; }

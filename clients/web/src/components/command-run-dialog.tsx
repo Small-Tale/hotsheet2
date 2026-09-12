@@ -1,9 +1,9 @@
 import './command-run-dialog.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Square, X } from 'lucide';
 
 import type { CommandDefinition, CommandRun } from '../api';
-import { LucideIcon } from './lucide-icon';
 
 export function CommandRunDialog({ command, run, confirmStop = false }: { command?: CommandDefinition; run?: CommandRun; confirmStop?: boolean }) {
   if (!command) return null;

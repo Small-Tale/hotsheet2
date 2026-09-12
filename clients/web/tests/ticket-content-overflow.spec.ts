@@ -15,7 +15,7 @@ test('keeps details, metadata, and notes inside the ticket inspector at narrow a
     note.textContent = 'note/'.repeat(180);
     const contentRect = node.getBoundingClientRect();
     const surfaces = [
-      ...node.querySelectorAll('.ticket-inspector__metadata > .select, .ticket-inspector__details-surface, .note-card'),
+      ...node.querySelectorAll('.ticket-inspector__metadata > .kui-select, .ticket-inspector__details-surface, .note-card'),
     ];
     return {
       clientWidth: node.clientWidth,

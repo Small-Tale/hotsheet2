@@ -1,10 +1,10 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import './ticket-field-conflict.css';
 
+import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { GitMerge, RotateCcw } from 'lucide';
 
 import type { TicketFieldConflict as TicketFieldConflictState } from '../ticket-field-reconciliation';
-import { LucideIcon } from './lucide-icon';
 
 export interface TicketFieldConflictProps {
   conflict: TicketFieldConflictState;

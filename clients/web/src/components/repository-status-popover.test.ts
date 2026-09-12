@@ -67,9 +67,7 @@ describe('RepositoryStatusPopover',()=>{
     const css=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8'),shared=readFileSync(resolve(import.meta.dirname,'dialog-layout.css'),'utf8');
     expect(css).toMatch(/__layout \{[^}]*grid-template-columns:/);
     expect(css).toMatch(/__detail \{[^}]*overflow: auto;/);
-    expect(shared).toMatch(/\.value-table \{[^}]*background:/);
-    expect(shared).not.toMatch(/\.value-table \{[^}]*border:/);
-    expect(shared).toMatch(/\.value-table > div \+ div::before \{[^}]*left: var\(--wa-space-m\);/);
+    expect(shared).toMatch(/\.dialog-surface \.kui-dialog-header \{ border-bottom: 0; \}/);
   });
 
   it('uses the canonical Git status letter for every file change kind',()=>{
@@ -102,10 +100,8 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('aria-label="Compare two commits"');
     expect(markup).toContain('data-action="toggle-repository-comparison"');
     expect(markup).toMatch(/data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*toggle-repository-comparison/);
-    expect(markup).toMatch(/dialog-header__actions[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/);
+    expect(markup).toMatch(/kui-dialog-header__actions[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/);
     expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(2);
-    const controlsCss=readFileSync(resolve(import.meta.dirname,'toolbar-control-group.css'),'utf8');
-    expect(controlsCss).toContain('--toolbar-control-icon-color: var(--wa-color-neutral-on-quiet)');
     const popoverCss=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8');
     expect(popoverCss).not.toMatch(/repository-status-popover__refresh[^}]*color:/);
   });
@@ -117,7 +113,7 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).not.toContain('cancel-repository-comparison');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-code-review.css'),'utf8');
     expect(css).toMatch(/__compare-banner \{[^}]*grid-template-columns: auto minmax\(0,1fr\) auto/);
-    expect(css).toMatch(/__compare-banner \.toolbar-control-group \{[^}]*width: max-content/);
+    expect(css).toMatch(/__compare-banner \.kui-toolbar-control-group \{[^}]*width: max-content/);
     expect(css).toMatch(/__compare-open \{[^}]*grid-column: 3/);
   });
 

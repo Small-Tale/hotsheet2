@@ -31,13 +31,13 @@ test('navigates the catalog and preserves URL-addressable selection', async ({ p
   await expect(page.getByRole('complementary', { name: 'Component catalog' }).getByText('Uses')).toHaveCount(0);
   const relationships = page.locator('.demo-relationships');
   await expect(relationships).toBeVisible();
-  await expect(relationships.locator('.select__group').nth(0)).toHaveAttribute('aria-label', 'Used by');
-  await expect(relationships.locator('.select__group').nth(1)).toHaveAttribute('aria-label', 'Uses');
-  await expect(relationships.locator('.select__group').nth(1)).toHaveClass(/select__group--separated/);
+  await expect(relationships.locator('.kui-select__group').nth(0)).toHaveAttribute('aria-label', 'Used by');
+  await expect(relationships.locator('.kui-select__group').nth(1)).toHaveAttribute('aria-label', 'Uses');
+  await expect(relationships.locator('.kui-select__group').nth(1)).toHaveClass(/kui-select__group--separated/);
   await expect(relationships.locator('wa-option', { hasText: 'TagChip' })).toHaveCount(1);
   await relationships.evaluate((node: HTMLElement & { value: string }) => { node.value = 'tag-chip'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await expect(page).toHaveURL('/ux-demo?dev-review=false&component=tag-chip');
-  await expect(page.locator('.demo-relationships .select__group').nth(0)).toHaveAttribute('aria-label', 'Used by');
+  await expect(page.locator('.demo-relationships .kui-select__group').nth(0)).toHaveAttribute('aria-label', 'Used by');
   await expect(page.locator('.demo-relationships wa-option', { hasText: 'TicketRow' })).toHaveCount(1);
   await page.locator('.demo-relationships').evaluate((node: HTMLElement & { value: string }) => { node.value = 'ticket-row'; node.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.goBack();
@@ -115,7 +115,7 @@ test('represents the compact terminal ticket rail in the UX catalog',async({page
 });
 
 test('catalogs both FixedAspectTerminalCard variants and their dashboard relationship',async({page})=>{
-  await page.setViewportSize({width:1728,height:971});await page.goto('/ux-demo?component=fixed-aspect-terminal-card');const stage=page.getByRole('region',{name:'Fixed aspect terminal card variants'}),preview=stage.locator('[data-fixed-aspect-terminal-card="preview"]'),magnified=stage.locator('[data-fixed-aspect-terminal-card="magnified"]'),previewViewport=preview.locator('[data-display-mode="scaled-preview"]'),magnifiedViewport=magnified.locator('[data-display-mode="interactive"]');await expect(preview).toBeVisible();await expect(magnified).toBeVisible();for(const viewport of [previewViewport,magnifiedViewport]){await expect(viewport).toHaveAttribute('data-connection','connected');await expect(viewport).toHaveAttribute('data-grid-size','80x24');await expect(viewport).toHaveAttribute('data-renderer','dom');const rows=viewport.locator('.xterm-rows > div');await expect(rows).toHaveCount(24);await expect(rows.first()).toContainText('GNU nano 8.4');await expect(rows.nth(1)).toContainText('File: src/main.tsx');await expect(rows.nth(20)).toContainText('export { app };');await expect(rows.last()).toContainText('^X Exit');for(const bar of [rows.first(),rows.nth(1),rows.nth(21),rows.nth(22),rows.last()])expect(await bar.evaluate(node=>node.textContent.length)).toBe(80)}await expect(preview).toHaveCSS('border-width','0px');await expect(magnified).toHaveCSS('border-width','0px');const sizing=await stage.evaluate(element=>{const preview=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"]')!.getBoundingClientRect(),magnified=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="magnified"]')!.getBoundingClientRect(),row=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"] .xterm-rows > div')!;return{previewWidth:preview.width,magnifiedWidth:magnified.width,font:getComputedStyle(row).fontFamily}});expect(sizing.previewWidth).toBeLessThanOrEqual(352);expect(sizing.magnifiedWidth).toBeGreaterThan(sizing.previewWidth);expect(sizing.font).toContain('ui-monospace');const relationships=page.locator('.demo-relationships');await expect(relationships.locator('.select__group')).toHaveAttribute('aria-label','Used by');await expect(relationships.locator('wa-option',{hasText:'TerminalDashboard'})).toHaveCount(1);await relationships.click();await expect(relationships).toHaveJSProperty('open',true);await page.waitForTimeout(1_200);await expect(relationships).toHaveJSProperty('open',true);await page.keyboard.press('Escape');await page.screenshot({path:'/private/tmp/hs2-g4g95r-nano-fills-terminal.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(preview).toBeVisible();await expect(magnified).toBeVisible();await expect.poll(()=>stage.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-g4g95r-nano-fills-terminal-narrow.png',fullPage:true});
+  await page.setViewportSize({width:1728,height:971});await page.goto('/ux-demo?component=fixed-aspect-terminal-card');const stage=page.getByRole('region',{name:'Fixed aspect terminal card variants'}),preview=stage.locator('[data-fixed-aspect-terminal-card="preview"]'),magnified=stage.locator('[data-fixed-aspect-terminal-card="magnified"]'),previewViewport=preview.locator('[data-display-mode="scaled-preview"]'),magnifiedViewport=magnified.locator('[data-display-mode="interactive"]');await expect(preview).toBeVisible();await expect(magnified).toBeVisible();for(const viewport of [previewViewport,magnifiedViewport]){await expect(viewport).toHaveAttribute('data-connection','connected');await expect(viewport).toHaveAttribute('data-grid-size','80x24');await expect(viewport).toHaveAttribute('data-renderer','dom');const rows=viewport.locator('.xterm-rows > div');await expect(rows).toHaveCount(24);await expect(rows.first()).toContainText('GNU nano 8.4');await expect(rows.nth(1)).toContainText('File: src/main.tsx');await expect(rows.nth(20)).toContainText('export { app };');await expect(rows.last()).toContainText('^X Exit');for(const bar of [rows.first(),rows.nth(1),rows.nth(21),rows.nth(22),rows.last()])expect(await bar.evaluate(node=>node.textContent.length)).toBe(80)}await expect(preview).toHaveCSS('border-width','0px');await expect(magnified).toHaveCSS('border-width','0px');const sizing=await stage.evaluate(element=>{const preview=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"]')!.getBoundingClientRect(),magnified=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="magnified"]')!.getBoundingClientRect(),row=element.querySelector<HTMLElement>('[data-fixed-aspect-terminal-card="preview"] .xterm-rows > div')!;return{previewWidth:preview.width,magnifiedWidth:magnified.width,font:getComputedStyle(row).fontFamily}});expect(sizing.previewWidth).toBeLessThanOrEqual(352);expect(sizing.magnifiedWidth).toBeGreaterThan(sizing.previewWidth);expect(sizing.font).toContain('ui-monospace');const relationships=page.locator('.demo-relationships');await expect(relationships.locator('.kui-select__group')).toHaveAttribute('aria-label','Used by');await expect(relationships.locator('wa-option',{hasText:'TerminalDashboard'})).toHaveCount(1);await relationships.click();await expect(relationships).toHaveJSProperty('open',true);await page.waitForTimeout(1_200);await expect(relationships).toHaveJSProperty('open',true);await page.keyboard.press('Escape');await page.screenshot({path:'/private/tmp/hs2-g4g95r-nano-fills-terminal.png',fullPage:true});await page.setViewportSize({width:390,height:844});await expect(preview).toBeVisible();await expect(magnified).toBeVisible();await expect.poll(()=>stage.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);await page.screenshot({path:'/private/tmp/hs2-g4g95r-nano-fills-terminal-narrow.png',fullPage:true});
 });
 
 test('represents interactive terminal visibility groups in the UX catalog',async({page})=>{
@@ -199,7 +199,7 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await tool.getByRole('button', { name: 'New Ticket' }).click();
   const dialog = page.getByRole('dialog', { name: 'New Hot Sheet ticket' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('.dialog-header')).toHaveCSS('border-bottom-width', '0px');
+  await expect(dialog.locator('.kui-dialog-header')).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('footer')).toHaveCSS('border-top-width', '0px');
   expect(await dialog.evaluate(node => ({
     border: getComputedStyle(node).borderColor,
@@ -653,7 +653,7 @@ test('uses the identical responsive TicketRow in list and board compositions', a
   await expect(page).toHaveURL('/ux-demo?component=ticket-board');
   const board = page.getByRole('listbox', { name: 'Example status board' });
   await expect(board.locator('.ticket-board-column')).toHaveCount(3);
-  const emptyBoard=page.getByRole('listbox',{name:'Empty search board'});await expect(emptyBoard.locator('[data-component="ticket-empty-state"]')).toHaveCount(1);await expect(emptyBoard.getByText('No tickets match “parser”')).toBeVisible();
+  const emptyBoard=page.getByRole('listbox',{name:'Empty search board'});await expect(emptyBoard.locator('[data-component="empty-state"]')).toHaveCount(1);await expect(emptyBoard.getByText('No tickets match “parser”')).toBeVisible();
   expect(await board.locator('.ticket-board-column__header').evaluateAll(headers => headers.map(header => header.getBoundingClientRect().height))).toEqual([32, 32, 32]);
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(board.locator('.ticket-board-column').first()).toHaveCSS('padding', '0px');
@@ -757,7 +757,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await page.goto('/ux-demo?component=workspace-header');
   const header = page.locator('[data-component="workspace-header"]');
   await expect(header).toContainText('Hot Sheet 2');
-  const sortIcon=header.locator('.workspace-header__sort .select__custom-selected'),idleViewIcon=header.getByRole('button',{name:'Columns view'}),quietIconColor=await idleViewIcon.evaluate(node=>getComputedStyle(node).color);
+  const sortIcon=header.locator('.workspace-header__sort .kui-select__custom-selected'),idleViewIcon=header.getByRole('button',{name:'Columns view'}),quietIconColor=await idleViewIcon.evaluate(node=>getComputedStyle(node).color);
   expect(await sortIcon.evaluate(node=>getComputedStyle(node).color)).toBe(quietIconColor);
   const notificationBadge = header.locator('.view-mode-switcher__badge');
   await expect(notificationBadge).toHaveText('7');
@@ -807,25 +807,25 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await header.getByRole('button', { name: 'List view' }).click();
   const sortSelect = header.locator('wa-select[name="workspace-sort"]');
   await expect(sortSelect).toHaveAttribute('aria-label', 'Sort tickets: Recently updated, descending');
-  await expect(sortSelect.locator('.select__custom-selected [data-lucide="clock-arrow-down"]')).toBeVisible();
-  await expect(sortSelect.locator('.select__custom-selected')).toHaveCSS('color',quietIconColor);
-  const triggerGeometry=await sortSelect.evaluate(node=>{const root=node.shadowRoot!,combobox=root.querySelector<HTMLElement>('[part~="combobox"]')!,expand=root.querySelector<HTMLElement>('[part~="expand-icon"]')!,selected=node.querySelector<HTMLElement>('.select__custom-selected')!,outer=combobox.getBoundingClientRect(),icon=selected.getBoundingClientRect(),arrow=expand.getBoundingClientRect();return{width:outer.width,gap:arrow.left-icon.right,arrowOverflow:arrow.right-outer.right}});expect(triggerGeometry.width).toBeLessThanOrEqual(46);expect(triggerGeometry.gap).toBeLessThanOrEqual(8);expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
+  await expect(sortSelect.locator('.kui-select__custom-selected [data-lucide="clock-arrow-down"]')).toBeVisible();
+  await expect(sortSelect.locator('.kui-select__custom-selected')).toHaveCSS('color',quietIconColor);
+  const triggerGeometry=await sortSelect.evaluate(node=>{const root=node.shadowRoot!,combobox=root.querySelector<HTMLElement>('[part~="combobox"]')!,expand=root.querySelector<HTMLElement>('[part~="expand-icon"]')!,selected=node.querySelector<HTMLElement>('.kui-select__custom-selected')!,outer=combobox.getBoundingClientRect(),icon=selected.getBoundingClientRect(),arrow=expand.getBoundingClientRect();return{width:outer.width,gap:arrow.left-icon.right,arrowOverflow:arrow.right-outer.right}});expect(triggerGeometry.width).toBeLessThanOrEqual(46);expect(triggerGeometry.gap).toBeLessThanOrEqual(8);expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
   await sortSelect.click();
   await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="arrow-down"]')).toBeVisible();
-  await expect(sortSelect.locator('wa-option[value="priority"] .select__icon')).toBeVisible();
+  await expect(sortSelect.locator('wa-option[value="priority"] .kui-select__icon')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-0dcczk-sort-select-wide.png', fullPage: true });
   const prioritySort = sortSelect.locator('wa-option[value="priority"]');
   await prioritySort.click();
   await expect(page.getByText('Sorted by priority, ascending')).toBeVisible();
   await expect(sortSelect).toHaveJSProperty('value', 'priority');
-  await expect(sortSelect.locator('.select__custom-selected [data-lucide="arrow-up-narrow-wide"]')).toBeVisible();
+  await expect(sortSelect.locator('.kui-select__custom-selected [data-lucide="arrow-up-narrow-wide"]')).toBeVisible();
   const ascendingPriorities = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__priority').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')?.split(' ')[0]));
   expect(ascendingPriorities.map(value => ['low','default','high','urgent'].indexOf(value ?? ''))).toEqual([...ascendingPriorities].map(value => ['low','default','high','urgent'].indexOf(value ?? '')).sort((a,b)=>a-b));
   await page.screenshot({path:'/private/tmp/hs2-5avfng-priority-ascending.png',fullPage:true});
   await sortSelect.click();
   await prioritySort.click();
   await expect(page.getByText('Sorted by priority, descending')).toBeVisible();
-  await expect(sortSelect.locator('.select__custom-selected [data-lucide="arrow-down-wide-narrow"]')).toBeVisible();
+  await expect(sortSelect.locator('.kui-select__custom-selected [data-lucide="arrow-down-wide-narrow"]')).toBeVisible();
   const descendingPriorities = await page.getByRole('listbox', { name: 'Workspace tickets' }).locator('.ticket-list-row__priority').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')?.split(' ')[0]));
   expect(descendingPriorities.map(value => ['low','default','high','urgent'].indexOf(value ?? ''))).toEqual([...descendingPriorities].map(value => ['low','default','high','urgent'].indexOf(value ?? '')).sort((a,b)=>b-a));
   const statusOption=sortSelect.locator('wa-option[value="status"]');
@@ -837,7 +837,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   expect(ascendingStatuses.map(value=>['backlog','not_started','started','completed','verified','archive'].indexOf(value??''))).toEqual([...ascendingStatuses].map(value=>['backlog','not_started','started','completed','verified','archive'].indexOf(value??'')).sort((a,b)=>a-b));
   await page.screenshot({path:'/private/tmp/hs2-4penqq-status-ascending.png',fullPage:true});
   for (const [value,firstIcon,secondIcon] of [['title','arrow-down-a-z','arrow-up-a-z'],['updated','clock-arrow-down','clock-arrow-up']] as const) {
-    const option=sortSelect.locator(`wa-option[value="${value}"]`);await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.select__custom-selected [data-lucide="${firstIcon}"]`)).toBeVisible();await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.select__custom-selected [data-lucide="${secondIcon}"]`)).toBeVisible();
+    const option=sortSelect.locator(`wa-option[value="${value}"]`);await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.kui-select__custom-selected [data-lucide="${firstIcon}"]`)).toBeVisible();await sortSelect.click();await expect(option).toBeVisible();await option.click();await expect(option).not.toBeVisible();await expect(sortSelect.locator(`.kui-select__custom-selected [data-lucide="${secondIcon}"]`)).toBeVisible();
   }
   await page.setViewportSize({width:1024,height:600});await sortSelect.click();await page.screenshot({path:'/private/tmp/hs2-0dcczk-sort-select-floor.png',fullPage:true});await page.keyboard.press('Escape');
   await header.getByRole('button', { name: 'Settings view' }).click();
@@ -902,7 +902,7 @@ test('centers search controls on the first line while the query wraps',async({pa
 test('shows the ToolbarControlGroup variants with shared geometry', async ({ page }) => {
   await page.goto('/ux-demo?component=toolbar-control-group');
   const demo = page.getByRole('region', { name: 'ToolbarControlGroup demo' });
-  const groups = demo.locator('.toolbar-control-group');
+  const groups = demo.locator('.kui-toolbar-control-group');
   await expect(groups).toHaveCount(8);
   for (const icon of ['arrow-down-a-z', 'star', 'ellipsis', 'pin', 'panel-left-open']) await expect(demo.locator(`[data-lucide="${icon}"]`)).toBeVisible();
   const heights = await groups.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
@@ -1025,16 +1025,16 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await title.fill('Created from the UX demo');
   const details=form.getByRole('textbox',{name:'Details'});await details.fill('One-line details that can grow.');expect(await details.getAttribute('rows')).toBe('1');expect(await details.evaluate(node=>getComputedStyle(node).resize)).toBe('vertical');
   const category = form.locator('wa-select[name="new-ticket-category"]');
-  await expect(category.locator('.select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
+  await expect(category.locator('.kui-select__icon--selected [data-lucide="list-checks"]')).toBeVisible();
   await category.click();
   const selectedOption = category.locator('wa-option[value="task"]');
   await expect(selectedOption).toHaveCSS('background-color', 'color(srgb 0.84 0.925333 1)');
   await expect(selectedOption).toHaveCSS('color', 'rgb(30, 110, 244)');
-  await expect(selectedOption.locator('.select__icon')).toHaveCSS('color', 'rgb(20, 184, 166)');
+  await expect(selectedOption.locator('.kui-select__icon')).toHaveCSS('color', 'rgb(20, 184, 166)');
   await expect(category.locator('wa-option[value="bug"] [data-lucide="bug"]')).toBeVisible();
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(form.locator('.select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(form.locator('.kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
   await form.getByRole('button',{name:'Add new ticket to Up Next'}).click();
   await expect(form.getByRole('button',{name:'Remove new ticket from Up Next'})).toHaveAttribute('aria-pressed','true');
   await form.screenshot({path:'/private/tmp/hs2-new-ticket-details-up-next.png'});
@@ -1083,10 +1083,10 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('[data-component="status-badge"]')).toBeVisible();
   await expect(inspector.locator('wa-select[name="inspector-category"] [data-lucide="sparkles"]')).toHaveCount(2);
   await expect(inspector.locator('wa-select[name="inspector-priority"] [data-lucide="chevron-up"]')).toHaveCount(2);
-  await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="sparkles"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]')).toBeVisible();
   const selectedSpacing = await inspector.locator('wa-select[name="inspector-category"]').evaluate(node => {
-    const icon = node.querySelector<HTMLElement>('.select__icon--selected')!.getBoundingClientRect();
+    const icon = node.querySelector<HTMLElement>('.kui-select__icon--selected')!.getBoundingClientRect();
     const input = node.shadowRoot!.querySelector<HTMLElement>('[part~="display-input"]')!.getBoundingClientRect();
     return { actual: input.left - icon.right, expected: Number.parseFloat(getComputedStyle(document.documentElement).fontSize) * .5 };
   });
@@ -1115,18 +1115,18 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   }
   await page.keyboard.press('Escape');
   await category.evaluate((node: HTMLElement & { value: string }) => { node.value = 'bug'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-category-select .select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
+  await expect(inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="sparkles"]')).toHaveCount(0);
   const priority = inspector.locator('wa-select[name="inspector-priority"]');
   await priority.evaluate((node: HTMLElement & { value: string }) => { node.value = 'low'; node.dispatchEvent(new Event('change', { bubbles: true })); });
-  await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
-  await expect(inspector.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
+  await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
+  await expect(inspector.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-up"]')).toHaveCount(0);
   const star = inspector.getByRole('button', { name: 'Remove from Up Next' });
   await star.click();
   await expect(inspector.getByRole('button', { name: 'Add to Up Next' })).toBeVisible();
   const statusTrigger = inspector.locator('wa-select[name="inspector-status"]');
   await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Started');
-  await expect(statusTrigger.locator('.select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
+  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'started');
   await statusTrigger.click();
   await expect(statusTrigger.locator('wa-option [data-lucide]')).toHaveCount(6);
   await expect(statusTrigger.locator('wa-divider')).toHaveCount(1);
@@ -1136,7 +1136,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await statusTrigger.locator('wa-option[value="completed"]').click();
   await expect(inspector.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(statusTrigger).toHaveAttribute('aria-label', 'Change status, Completed');
-  await expect(statusTrigger.locator('.select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
+  await expect(statusTrigger.locator('.kui-select__custom-selected [data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(inspector.locator('[data-component="ticket-info-panel"]')).toBeVisible();
   const sectionRhythm = await inspector.locator('[data-component="ticket-info-panel"]').evaluate(node =>
     [...node.querySelectorAll<HTMLElement>('.ticket-inspector__section')].map(section => ({ gap: getComputedStyle(section).rowGap, headerHeight: section.querySelector('header')?.getBoundingClientRect().height })),
@@ -1194,8 +1194,8 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   const reopened = page.locator('[data-component="ticket-inspector"]');
   await expect(reopened).toBeVisible();
   await reopened.getByRole('button', { name: 'Info' }).click();
-  await expect(reopened.locator('.ticket-category-select .select__icon--selected [data-lucide="bug"]')).toBeVisible();
-  await expect(reopened.locator('.ticket-priority-select .select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
+  await expect(reopened.locator('.ticket-category-select .kui-select__icon--selected [data-lucide="bug"]')).toBeVisible();
+  await expect(reopened.locator('.ticket-priority-select .kui-select__icon--selected [data-lucide="chevron-down"]')).toBeVisible();
   await expect(reopened.locator('[data-component="status-badge"]')).toHaveAttribute('data-status', 'completed');
   await expect(reopened.getByRole('button', { name: 'Open ticket reader', exact: true })).toBeVisible();
   await reopened.getByRole('button', { name: 'Open ticket reader', exact: true }).click();
@@ -1468,14 +1468,14 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left-menuHeaderLefts[0])).toBeLessThan(1);
   const viewActionAlignment = await sidebar.evaluate(node => {
     const action = node.querySelector<HTMLElement>('.view-navigation [data-component="menu-header"] button')!.getBoundingClientRect();
-    const item = node.querySelector<HTMLElement>('.view-navigation .menu-item')!.getBoundingClientRect();
+    const item = node.querySelector<HTMLElement>('.view-navigation .kui-menu-item')!.getBoundingClientRect();
     return { actionRight: action.right, itemRight: item.right };
   });
   expect(Math.abs(viewActionAlignment.actionRight-viewActionAlignment.itemRight)).toBeLessThan(1);
-  const alignedRows = await sidebar.evaluate(node => ['.repository-summary .menu-item', '.view-navigation .menu-item', '.command-navigation .menu-item'].map(selector => node.querySelector(selector)!).map(item => {
+  const alignedRows = await sidebar.evaluate(node => ['.repository-summary .kui-menu-item', '.view-navigation .kui-menu-item', '.command-navigation .kui-menu-item'].map(selector => node.querySelector(selector)!).map(item => {
     const bounds = item.getBoundingClientRect();
-    const icon = item.querySelector('.menu-item__icon')!.getBoundingClientRect();
-    const label = item.querySelector('.menu-item__label')!.getBoundingClientRect();
+    const icon = item.querySelector('.kui-menu-item__icon')!.getBoundingClientRect();
+    const label = item.querySelector('.kui-menu-item__label')!.getBoundingClientRect();
     return { left: bounds.left, right: bounds.right, icon: icon.left, label: label.left };
   }));
   expect(alignedRows).toHaveLength(3);
@@ -1535,7 +1535,7 @@ test('exercises the application-shell component slice and responsive composition
   const standaloneLabelCenterOffset=async()=>selectedLocal.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.project-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(standaloneLabelCenterOffset).toBeLessThan(1);
   await expect(selectedLocal.locator('[data-lucide="folder-git-2"]')).toHaveCount(0);
   await expect(tabStates.filter({ hasText: 'Remote project' }).locator('[data-lucide="cloud"]')).toHaveCount(1);
-  await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .loading-spinner')).toHaveCount(1);
+  await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .kui-loading-spinner')).toHaveCount(1);
   const activeQueue=tabStates.filter({hasText:'Active queue'});await expect(activeQueue.locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 2 active tickets');await expect(activeQueue.locator('.project-tab__activity-ring')).toBeVisible();await expect(activeQueue.locator('.project-tab__work-count')).toHaveText('2');
   const activeQueueCenters=await activeQueue.locator('.project-tab__work').evaluate(node=>{const outer=node.getBoundingClientRect(),count=node.querySelector('.project-tab__work-count')!.getBoundingClientRect(),ring=node.querySelector('svg')!.getBoundingClientRect();return{countX:Math.abs(outer.x+outer.width/2-count.x-count.width/2),countY:Math.abs(outer.y+outer.height/2-count.y-count.height/2),ringX:Math.abs(outer.x+outer.width/2-ring.x-ring.width/2),ringY:Math.abs(outer.y+outer.height/2-ring.y-ring.height/2)}});expect(Math.max(...Object.values(activeQueueCenters))).toBeLessThan(1);
   const activeWork=tabStates.filter({hasText:'Active work'});await expect(activeWork.locator('.project-tab__work')).toHaveAttribute('aria-label','1 active ticket');await expect(activeWork.locator('.project-tab__work-count')).toHaveText('1');
@@ -1590,7 +1590,7 @@ test('exercises the application-shell component slice and responsive composition
   const firstTab=tabBar.locator('[data-component="project-tab"]').first(),firstSelect=firstTab.getByRole('tab');
   const naturalLabelCenterOffset=async()=>firstTab.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.project-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(naturalLabelCenterOffset).toBeLessThan(1);
   await firstSelect.focus();await expect(firstSelect).toBeFocused();
-  const focusPresentation=await firstTab.evaluate(node=>{const root=getComputedStyle(node),select=getComputedStyle(node.querySelector('.app-tab__select')!);return{rootOutlineStyle:root.outlineStyle,rootOutlineWidth:root.outlineWidth,rootOutlineOffset:root.outlineOffset,selectOutlineStyle:select.outlineStyle}});
+  const focusPresentation=await firstTab.evaluate(node=>{const root=getComputedStyle(node),select=getComputedStyle(node.querySelector('.kui-app-tab__select')!);return{rootOutlineStyle:root.outlineStyle,rootOutlineWidth:root.outlineWidth,rootOutlineOffset:root.outlineOffset,selectOutlineStyle:select.outlineStyle}});
   expect(focusPresentation).toMatchObject({rootOutlineStyle:'solid',rootOutlineWidth:'3px',rootOutlineOffset:'-2px',selectOutlineStyle:'none'});
   await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-wide.png'});
   await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-wide.png',fullPage:true});
@@ -1687,12 +1687,15 @@ test('exercises the application-shell component slice and responsive composition
   await expect(horizontal).toHaveAttribute('aria-valuenow', '250');
 
   await page.goto('/ux-demo?component=connection-state-banner');
-  const banners = page.locator('[data-component="connection-state-banner"]');
+  const banners = page.locator('[data-component="state-banner"]');
   await expect(banners).toHaveCount(5);
-  await expect(page.locator('[data-component="connection-state-banner"][data-state="connecting"]')).toHaveAttribute('role', 'status');
-  await expect(page.locator('[data-component="connection-state-banner"][data-state="offline"]')).toContainText('Working from offline data');
-  await expect(page.locator('[data-component="connection-state-banner"][data-state="incompatible"]')).toContainText('Server update required');
-  await expect(page.locator('[data-component="connection-state-banner"][data-state="authentication"]')).toContainText('Authentication required');
+  await expect(page.locator('.connection-state-banner--connecting')).toHaveAttribute('role', 'status');
+  await expect(page.locator('.connection-state-banner--offline')).toContainText('Working from offline data');
+  await expect(page.locator('.connection-state-banner--incompatible')).toContainText('Server update required');
+  await expect(page.locator('.connection-state-banner--authentication')).toContainText('Authentication required');
+  await page.screenshot({ path: '/private/tmp/hs2-hygwcm-shared-state-banners-wide.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/private/tmp/hs2-hygwcm-shared-state-banners-narrow.png', fullPage: true });
   await page.getByRole('button', { name: 'Reconnect' }).click();
   await expect(page.getByText('Connection retry requested.')).toBeVisible();
 
@@ -1700,17 +1703,17 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-shell');
   const shell = page.locator('[data-component="app-shell"]');
   await expect(shell).toBeVisible();
-  for (const component of ['project-sidebar', 'project-tab-bar', 'connection-state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
+  for (const component of ['project-sidebar', 'project-tab-bar', 'state-banner', 'workspace-identity', 'workspace-controls', 'quick-ticket-composer-launcher', 'ticket-list', 'ticket-inspector']) await expect(shell.locator(`[data-component="${component}"]`)).toHaveCount(1);
   const shellHierarchy = await shell.evaluate(node => {
     const shellRect = node.getBoundingClientRect();
     const toolbarNode = node.querySelector('.app-shell__main > [data-component="toolbar"]')!;
     const toolbar = toolbarNode.getBoundingClientRect();
-    const leading = toolbarNode.querySelector('.toolbar__leading')!.getBoundingClientRect();
-    const trailing = toolbarNode.querySelector('.toolbar__trailing')!.getBoundingClientRect();
+    const leading = toolbarNode.querySelector('.kui-toolbar__leading')!.getBoundingClientRect();
+    const trailing = toolbarNode.querySelector('.kui-toolbar__trailing')!.getBoundingClientRect();
     const identity = toolbarNode.querySelector('[data-component="workspace-identity"]')!.getBoundingClientRect();
     const controls = toolbarNode.querySelector('[data-component="workspace-controls"]')!.getBoundingClientRect();
     const tabs = node.querySelector('.project-tab-bar')!.getBoundingClientRect();
-    const pageHeader = node.querySelector('.page-header')!.getBoundingClientRect();
+    const pageHeader = node.querySelector('.kui-page-header')!.getBoundingClientRect();
     const inspector = node.querySelector('.ticket-inspector')!.getBoundingClientRect();
     return { shellTop: shellRect.top, toolbarTop: toolbar.top, toolbarBottom: toolbar.bottom, toolbarRight: toolbar.right, toolbarGap: getComputedStyle(toolbarNode).columnGap, leadingLeft: leading.left, identityLeft: identity.left, trailingRight: trailing.right, controlsRight: controls.right, tabsTop: tabs.top, tabsBottom: tabs.bottom, pageHeaderTop: pageHeader.top, inspectorTop: inspector.top };
   });
@@ -1773,12 +1776,12 @@ test('exercises the application-shell component slice and responsive composition
   await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await page.mouse.down();
   // While dragging, the resize guard suppresses even the content transform transition.
-  await expect(inspectorRegion.locator('.resizable-region__content')).toHaveCSS('transition-duration', '0s');
+  await expect(inspectorRegion.locator('.kui-resizable-region__content')).toHaveCSS('transition-duration', '0s');
   await page.mouse.move(inspectorHandleBox!.x - 32, inspectorHandleBox!.y + 80);
   await expect(shell.locator('[data-resize-stability="same-node"]')).toHaveCount(1);
   await page.mouse.up();
   // After the drag ends the content transition returns, but the region width stays un-animated.
-  await expect(inspectorRegion.locator('.resizable-region__content')).not.toHaveCSS('transition-duration', '0s');
+  await expect(inspectorRegion.locator('.kui-resizable-region__content')).not.toHaveCSS('transition-duration', '0s');
   await expect(inspectorRegion).toHaveCSS('transition-duration', '0s');
   await expect.poll(async () => Number(await inspectorHandle.getAttribute('aria-valuenow'))).toBeGreaterThan(352);
   await shell.getByRole('button', { name: 'Timeline' }).click();
@@ -1795,8 +1798,8 @@ test('exercises the application-shell component slice and responsive composition
   const collapsedInspector = shell.locator(':scope > [data-component="resizable-region"][data-region-id="app-inspector"]');
   await expect(collapsedInspector).toHaveAttribute('data-collapsed', 'true');
   await expect(collapsedInspector).toHaveCSS('width', '0px');
-  await expect(collapsedInspector.locator('.resizable-region__content')).toHaveCSS('width', `${inspectorExpandedWidth}px`);
-  await expect(collapsedInspector.locator('.resizable-region__content')).not.toHaveCSS('transform', 'none');
+  await expect(collapsedInspector.locator('.kui-resizable-region__content')).toHaveCSS('width', `${inspectorExpandedWidth}px`);
+  await expect(collapsedInspector.locator('.kui-resizable-region__content')).not.toHaveCSS('transform', 'none');
   await expect(showInspector.locator('[data-lucide="panel-right-open"]')).toHaveCount(1);
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="project-tab-bar"]')).toHaveCount(0);
   await expect(showInspector.locator('xpath=ancestor::*[@data-component="toolbar"]')).toHaveCount(1);
@@ -1828,7 +1831,7 @@ test('exercises the application-shell component slice and responsive composition
   await hideSidebar.click();
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveAttribute('data-collapsed', 'true');
   await expect(shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"]')).toHaveCSS('width', '0px');
-  const collapsedSidebarContent = shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"] .resizable-region__content');
+  const collapsedSidebarContent = shell.locator('[data-component="resizable-region"][data-region-id="app-sidebar"] .kui-resizable-region__content');
   await expect(collapsedSidebarContent).toHaveCSS('width', '288px');
   await expect(collapsedSidebarContent).not.toHaveCSS('transform', 'none');
   const showSidebar = shell.getByRole('button', { name: 'Show project sidebar' });
@@ -2003,7 +2006,7 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
     probe.remove();
     return matches;
   })).toBe(true);
-  const sidebarRegion = page.locator('.app-shell > .resizable-region[data-region-id="app-sidebar"]');
+  const sidebarRegion = page.locator('.app-shell > .kui-resizable-region[data-region-id="app-sidebar"]');
   expect(await sidebarRegion.evaluate(node => ({
     divider: getComputedStyle(node, '::after').backgroundColor,
     token: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),

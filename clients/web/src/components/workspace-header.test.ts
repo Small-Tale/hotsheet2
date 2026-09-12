@@ -23,7 +23,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
     expect(markup).toContain('<wa-option value="priority"');
     expect(markup).toContain('data-lucide="arrow-down"');
-    expect(markup).toContain('class="select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
+    expect(markup).toContain('class="kui-select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
     expect(markup).not.toContain('type="checkbox"');
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
     expect(markup).not.toContain('workspace-header__search-tokens');
@@ -54,7 +54,7 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).toContain('height:1.25rem;min-height:1.25rem;');
     expect(headerCss).toContain('.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(26rem,100%);align-items:stretch;flex-direction:column;text-align:left}');
     expect(headerCss).toContain('.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;');
-    expect(shellCss).toContain('.app-shell__main > .toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }');
+    expect(shellCss).toContain('.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }');
   });
 
   it.each([
@@ -118,21 +118,13 @@ describe('WorkspaceHeader', () => {
   });
 
   it('progressively removes lower-priority actions when its owning toolbar narrows', () => {
-    const toolbarCss = readFileSync(resolve(import.meta.dirname, 'toolbar.css'), 'utf8');
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
-    expect(toolbarCss).toContain('container: toolbar / inline-size');
     expect(headerCss).toContain('.workspace-header__sort { width: 2.75rem; }');
-    expect(headerCss).toContain('.workspace-header__sort .select__custom-selected { width: 1rem; height: 1rem; color: var(--toolbar-control-icon-color);');
-    expect(headerCss).toContain('@container toolbar (max-width: 30rem) { .workspace-header__actions > .workspace-header__utility-group { display: none; } }');
-    expect(headerCss).toContain('@container toolbar (max-width: 26rem) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }');
-    expect(headerCss).toContain('@container toolbar (max-width: 14rem) { .workspace-header__actions > .workspace-header__search-group { display: none; } }');
-    expect(headerCss).toContain('@container toolbar (max-width: 11rem) { .workspace-header__actions > .view-mode-switcher { display: none; } }');
+    expect(headerCss).toContain('.workspace-header__sort .kui-select__custom-selected { width: 1rem; height: 1rem; color: var(--kui-toolbar-control-color);');
+    expect(headerCss).toContain('@container kui-toolbar (max-width: 30rem) { .workspace-header__actions > .workspace-header__utility-group { display: none; } }');
+    expect(headerCss).toContain('@container kui-toolbar (max-width: 26rem) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }');
+    expect(headerCss).toContain('@container kui-toolbar (max-width: 14rem) { .workspace-header__actions > .workspace-header__search-group { display: none; } }');
+    expect(headerCss).toContain('@container kui-toolbar (max-width: 11rem) { .workspace-header__actions > .view-mode-switcher { display: none; } }');
     expect(headerCss).not.toContain('overflow: hidden; } .workspace-header__actions');
-  });
-
-  it('does not paint an uneven group hover ring behind the sort select', () => {
-    const groupCss = readFileSync(resolve(import.meta.dirname, 'toolbar-control-group.css'), 'utf8');
-    expect(groupCss).toContain('.toolbar-control-group[data-single="true"]:has(> :is(button, wa-button, wa-dropdown)):hover');
-    expect(groupCss).not.toContain('.toolbar-control-group[data-single="true"]:hover');
   });
 });
