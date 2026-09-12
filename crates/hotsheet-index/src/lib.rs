@@ -424,6 +424,7 @@ impl Index {
 
     /// Drop all rows and rebuild from a full store walk. Always safe (disposable).
     pub fn rebuild_from_store(&self, store: &FsStore) -> Result<usize, IndexError> {
+        let transaction = self.conn.unchecked_transaction()?;
         self.conn
             .execute_batch(
                 "DELETE FROM tickets; DELETE FROM tags; DELETE FROM assignees; DELETE FROM reviews; DELETE FROM tickets_fts;",
@@ -447,6 +448,7 @@ impl Index {
             count += 1;
         }
         self.record_git_state(store)?;
+        transaction.commit()?;
         Ok(count)
     }
 

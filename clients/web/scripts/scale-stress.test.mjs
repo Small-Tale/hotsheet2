@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertCliMutationBudgets, assertCliReadBudgets, assertWeb100kAcceptance, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
+import { assertCliMutationBudgets, assertCliReadBudgets, assertReindexBudgets, assertWeb100kAcceptance, parseArguments, parseScaleCounts, syntheticTicket } from './scale-stress.mjs';
 
 describe('scale stress harness', () => {
   it('normalizes incremental scale milestones', () => {
@@ -9,9 +9,16 @@ describe('scale stress harness', () => {
   });
 
   it('accepts repeatable-run switches', () => {
-    expect(parseArguments(['--counts', '25,10', '--skip-web', '--assert-cli-budgets', '--assert-cli-mutation-budgets', '--assert-web-100k', '--keep', '--timeout-ms=4000', '--output', '/tmp/result.json'])).toMatchObject({
-      counts: [10, 25], keep: true, skipWeb: true, assertCliBudgets: true, assertCliMutationBudgets: true, assertWeb100k: true, timeoutMs: 4_000, output: '/tmp/result.json',
+    expect(parseArguments(['--counts', '25,10', '--skip-web', '--assert-cli-budgets', '--assert-cli-mutation-budgets', '--assert-reindex-budgets', '--assert-web-100k', '--keep', '--timeout-ms=4000', '--output', '/tmp/result.json'])).toMatchObject({
+      counts: [10, 25], keep: true, skipWeb: true, assertCliBudgets: true, assertCliMutationBudgets: true, assertReindexBudgets: true, assertWeb100k: true, timeoutMs: 4_000, output: '/tmp/result.json',
     });
+  });
+
+  it('enforces opt-in full-reindex budgets at the 100K and 1M tiers', () => {
+    expect(() => assertReindexBudgets(100_000, { reindex: { wall_ms: 59_999 } })).not.toThrow();
+    expect(() => assertReindexBudgets(100_000, { reindex: { wall_ms: 60_001 } })).toThrow('reindex');
+    expect(() => assertReindexBudgets(1_000_000, { reindex: { timed_out: true } })).toThrow('reindex');
+    expect(() => assertReindexBudgets(10_000, {})).not.toThrow();
   });
 
   it('enforces opt-in bounded CLI mutation budgets at the 10K and 100K tiers', () => {

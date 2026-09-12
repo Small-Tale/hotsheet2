@@ -41,6 +41,7 @@ export function parseArguments(argv) {
     skipWeb: argv.includes('--skip-web'),
     assertCliBudgets: argv.includes('--assert-cli-budgets'),
     assertCliMutationBudgets: argv.includes('--assert-cli-mutation-budgets'),
+    assertReindexBudgets: argv.includes('--assert-reindex-budgets'),
     assertWeb100k: argv.includes('--assert-web-100k'),
     output: optionValue(argv, '--output', join(tmpdir(), `hotsheet-scale-${Date.now()}.json`)),
     timeoutMs: Number(optionValue(argv, '--timeout-ms', '300000')),
@@ -67,6 +68,20 @@ const cliMutationBudgetsMs = new Map([
   [10_000, 5_000],
   [100_000, 30_000],
 ]);
+
+const reindexBudgetsMs = new Map([
+  [100_000, 60_000],
+  [1_000_000, 600_000],
+]);
+
+export function assertReindexBudgets(count, scenarios) {
+  const budget = reindexBudgetsMs.get(count);
+  if (!budget) return;
+  const result = scenarios.reindex;
+  if (!result || result.error || result.timed_out || result.wall_ms > budget) {
+    throw new Error(`CLI reindex at ${count} tickets exceeded ${budget}ms: ${JSON.stringify(result)}`);
+  }
+}
 
 export function assertCliMutationBudgets(count, scenarios) {
   const budget = cliMutationBudgetsMs.get(count);
@@ -425,7 +440,7 @@ async function benchmarkWeb(browser, baseUrl, projectRoot, count, timeoutMs) {
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.help) {
-    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--assert-cli-mutation-budgets] [--assert-web-100k] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
+    console.log('Usage: npm run stress:scale -- [--counts 10000,100000,1000000] [--skip-web] [--assert-cli-budgets] [--assert-cli-mutation-budgets] [--assert-reindex-budgets] [--assert-web-100k] [--keep] [--timeout-ms 300000] [--output /path/report.json]');
     return;
   }
   if (!Number.isFinite(options.timeoutMs) || options.timeoutMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
@@ -490,6 +505,16 @@ async function main() {
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           run.cli_mutation_budget = { passed: false, error: message };
+          cliBudgetErrors.push(message);
+        }
+      }
+      if (options.assertReindexBudgets) {
+        try {
+          assertReindexBudgets(count, run.cli);
+          if (reindexBudgetsMs.has(count)) run.reindex_budget = { passed: true };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          run.reindex_budget = { passed: false, error: message };
           cliBudgetErrors.push(message);
         }
       }
