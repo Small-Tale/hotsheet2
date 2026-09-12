@@ -2,13 +2,14 @@ import './markdown-editor.css';
 
 import { Maximize2, Minimize2 } from 'lucide';
 
+import type {AttachmentReferenceContext} from '../attachment-references';
 import { LucideIcon } from './lucide-icon';
 import { MarkdownPreview } from './markdown-preview';
 
 export type MarkdownEditorMode = 'write' | 'preview';
-export interface MarkdownEditorProps { value: string; mode: MarkdownEditorMode; expanded?: boolean; dirty?: boolean; label?: string; appearance?: 'standalone' | 'embedded'; showExpand?: boolean; expandAction?: string; editable?: boolean }
+export interface MarkdownEditorProps { value: string; mode: MarkdownEditorMode; expanded?: boolean; dirty?: boolean; label?: string; appearance?: 'standalone' | 'embedded'; showExpand?: boolean; expandAction?: string; editable?: boolean;attachmentContext?:AttachmentReferenceContext }
 
-export function MarkdownEditor({ value, mode, expanded = false, label = 'Markdown content', appearance = 'standalone', showExpand = true, expandAction = 'toggle-markdown-expanded', editable = true }: MarkdownEditorProps) {
+export function MarkdownEditor({ value, mode, expanded = false, label = 'Markdown content', appearance = 'standalone', showExpand = true, expandAction = 'toggle-markdown-expanded', editable = true,attachmentContext }: MarkdownEditorProps) {
   const empty = !value.trim();
   return <section class={`${expanded ? 'markdown-editor markdown-editor--expanded' : 'markdown-editor'}${appearance === 'embedded' ? ' markdown-editor--embedded' : ''}`} data-component="markdown-editor" data-mode={mode} data-expanded={String(expanded)} data-appearance={appearance}>
     {(appearance === 'standalone' || showExpand) && <header class="markdown-editor__toolbar">
@@ -18,7 +19,7 @@ export function MarkdownEditor({ value, mode, expanded = false, label = 'Markdow
     <div class="markdown-editor__surface">
       {mode === 'write'
         ? <textarea name="markdown-source" aria-label={label} spellcheck="true">{value}</textarea>
-        : <div class="markdown-editor__preview" role={editable ? 'button' : undefined} tabIndex={editable ? 0 : undefined} data-action={editable ? 'edit-markdown' : undefined} data-empty={String(empty)} aria-label={editable ? `Edit ${label}` : label} title={editable ? empty ? 'Click to add Markdown' : 'Double-click to edit' : undefined}><MarkdownPreview source={value} emptyLabel={editable ? 'Click to add Markdown.' : 'No details.'} /></div>}
+        : <div class="markdown-editor__preview" role={editable ? 'button' : undefined} tabIndex={editable ? 0 : undefined} data-action={editable ? 'edit-markdown' : undefined} data-empty={String(empty)} aria-label={editable ? `Edit ${label}` : label} title={editable ? empty ? 'Click to add Markdown' : 'Double-click to edit' : undefined}><MarkdownPreview source={value} emptyLabel={editable ? 'Click to add Markdown.' : 'No details.'} attachmentContext={attachmentContext} /></div>}
     </div>
   </section>;
 }

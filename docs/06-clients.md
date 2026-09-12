@@ -783,6 +783,10 @@ and identity-less legacy entries remain conservatively blocking.
   healthy backlinks; the inspector names the project whose additional results could not
   be checked.
 
+  Attachment references in ticket details use the same owning-ticket context as notes:
+  same-ticket references prefer immutable attachment IDs, while
+  `attachment:[HS2-…]filename` resolves through that explicitly named ticket.
+
   Project refresh loads healthy tickets and checkout-scoped corrupt-ticket diagnostics
   independently. Live diagnostics supersede any stale indexed row with the same recovered
   slug, so selecting that visible ticket always opens recovery instead of retrying a doomed

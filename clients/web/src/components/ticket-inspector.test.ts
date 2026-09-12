@@ -84,6 +84,13 @@ describe('TicketInspector', () => {
     expect(markup).toContain('data-lucide="copy-x"');
   });
 
+  it('resolves same-ticket and cross-ticket attachment references in details', () => {
+    const markup=String(TicketInspector({...base,details:'Local `attachment:proof.png` and cross `attachment:[HS2-OTHER]report.pdf`.',attachments:[{id:'A1',name:'proof.png'}],attachmentContext:{baseUrl:'/project-api/demo',checkout:'checkout one',ticket:'HS2-TEST',attachments:[{id:'A1',filename:'proof.png'}]}}));
+    expect(markup).toContain('/project-api/demo/checkouts/checkout%20one/tickets/HS2-TEST/attachments/A1');
+    expect(markup).toContain('/project-api/demo/checkouts/checkout%20one/tickets/HS2-OTHER/attachments/by-name/report.pdf');
+    expect(markup).toContain('data-action="open-referenced-attachment"');
+  });
+
   it('renders project-qualified reverse duplicate backlinks and partial lookup status',()=>{
     const markup=String(TicketInspector({...base,duplicateBacklinks:[{reference:'@other/git-other:source',project_id:'other',project_name:'Other project',connection_id:'git-other',native_id:'source',qualified_id:'git-other:source',slug:'HS2-SAME',title:'Earlier report'}],duplicateBacklinkInaccessibleProjects:['Offline project']}));
     expect(markup).toContain('data-component="ticket-duplicate-backlinks"');expect(markup).toContain('Other project · HS2-SAME');expect(markup).toContain('data-item-id="@other/git-other:source"');expect(markup).toContain('Could not check Offline project for additional duplicates.');
