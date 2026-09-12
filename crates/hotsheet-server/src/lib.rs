@@ -8247,7 +8247,11 @@ struct WatchTarget {
 
 /// Watch the **default** store (back-compat entry point used by the server binary).
 pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
-    let target = WatchTarget {
+    spawn_watcher_for(default_watch_target(&state), WatcherBackend::Recommended)
+}
+
+fn default_watch_target(state: &AppState) -> WatchTarget {
+    WatchTarget {
         entry: state.default_entry(),
         store_id: multistore::store_url_id(&state.store),
         host: state.host.clone(),
@@ -8255,8 +8259,16 @@ pub fn spawn_watcher(state: AppState) -> anyhow::Result<WatchHandle> {
         events: state.events.clone(),
         event_log: state.event_log.clone(),
         checkout_registry: state.checkout_registry.clone(),
-    };
-    spawn_watcher_for(target, WatcherBackend::Recommended)
+    }
+}
+
+/// Start the default-store watcher with notify's deterministic polling backend.
+///
+/// This is a test seam for integration coverage that must coexist with other live macOS
+/// FSEvents streams. Production startup continues to use [`spawn_watcher`].
+#[doc(hidden)]
+pub fn spawn_polling_watcher_for_test(state: AppState) -> anyhow::Result<WatchHandle> {
+    spawn_watcher_for(default_watch_target(&state), WatcherBackend::Poll)
 }
 
 /// FSEvents can stop delivering changes when a process creates a second watcher for a

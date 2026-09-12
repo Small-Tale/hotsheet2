@@ -5476,7 +5476,10 @@ async fn watcher_regenerates_the_worklist() {
     let state = AppState::new(store.clone(), SECRET.into())
         .unwrap()
         .with_checkout_registry(&registry_path);
-    let _watch = hotsheet_server::spawn_watcher(state).unwrap();
+    // A second live FSEvents stream can suppress callbacks on macOS when another Hot Sheet
+    // server is already watching a sibling store. Polling keeps this integration assertion
+    // deterministic; watcher_reindexes_an_external_write retains native external-event coverage.
+    let _watch = hotsheet_server::spawn_polling_watcher_for_test(state).unwrap();
 
     ops::create(
         &store,
@@ -5501,7 +5504,7 @@ async fn watcher_regenerates_the_worklist() {
                 return;
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
     panic!("watcher did not regenerate worklist.md within 4s");
 }
