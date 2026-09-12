@@ -65,5 +65,6 @@ describe('inline advanced-search tokens',()=>{
     const tokens=[tokenFromRaw('has:attachment')!,tokenFromRaw('has:media-annotation')!,tokenFromRaw('has:commit')!,tokenFromRaw('attachment:*.png')!,tokenFromRaw('tag:"needs design"')!,tokenFromRaw('completed-after:2026-09-01')!];
     expect(tokenQuery(tokens)).toMatchObject({has_attachment:true,has_media_annotation:true,has_commit:true,attachment:'*.png',tags:'needs design',completed_after:parseSearchDate('2026-09-01')});
     expect(tokenQuery([tokenFromRaw('started-before:2026-09-01')!])).toMatchObject({status:'started',updated_before:expect.any(String)});
+    expect(tokenQuery([tokenFromRaw('is:duplicate')!])).toEqual({close_reason:'duplicate'});
   });
 });

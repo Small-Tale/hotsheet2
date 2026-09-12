@@ -135,6 +135,7 @@ export function tokenQuery(tokens:readonly InlineSearchToken[]){
   if(tokens.some(token=>token.kind==='has'&&token.value==='commit'))query.has_commit=true;
   const attachment=[...tokens].reverse().find((token):token is Extract<InlineSearchToken,{kind:'attachment'}>=>token.kind==='attachment');
   if(attachment)query.attachment=attachment.value;
+  if(tokens.some(token=>token.kind==='is'&&token.value==='duplicate'))query.close_reason='duplicate';
   for(const token of tokens){if(token.kind!=='date')continue;const field=token.field==='started'||token.field==='archived'?'updated':token.field;query[`${field}_${token.direction}`]=token.value;if(token.field==='started')query.status='started';if(token.field==='archived')query.status='archive'}
   return query;
 }

@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {addSearchFilter,filterAdvancedSearchResults,matchesSearchExpression,searchMatchLabel,usesAdvancedSearchExpression} from './advanced-search';
+import {addSearchFilter,filterAdvancedSearchResults,matchesSearchExpression,searchMatchLabel,usesAdvancedSearchExpression,usesBooleanSearchExpression} from './advanced-search';
 import type {TicketRow} from './api';
 
 const row=(slug:string,status='not_started',extra:Partial<TicketRow>={}):TicketRow=>({connection_id:'local',native_id:slug,qualified_id:`local:${slug}`,id:slug,slug,title:slug,status,up_next:false,feedback_needed:false,tags:[],blocked_by:[],claim_count:0,...extra});
@@ -28,7 +28,7 @@ describe('advanced search semantics',()=>{
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'"Parser docs" OR is:backlog'))).toEqual([rows[1],rows[2]]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'parser is:completed'))).toEqual([rows[1]]);
     expect(rows.filter(ticket=>matchesSearchExpression(ticket,'NOT tag:client AND parser'))).toEqual([rows[1]]);
-    expect(usesAdvancedSearchExpression('ordinary words')).toBe(false);expect(usesAdvancedSearchExpression('NOT (is:archived OR is:backlog)')).toBe(true);
+    expect(usesAdvancedSearchExpression('ordinary words')).toBe(false);expect(usesAdvancedSearchExpression('is:duplicate')).toBe(true);expect(usesBooleanSearchExpression('is:duplicate')).toBe(false);expect(usesBooleanSearchExpression('NOT (is:archived OR is:backlog)')).toBe(true);
   });
   it('safely rejects incomplete groups and unknown lifecycle aliases',()=>{
     const ticket=row('HS2-ONE','started',{title:'Parser repair'});

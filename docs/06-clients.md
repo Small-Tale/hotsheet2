@@ -402,7 +402,9 @@ and identity-less legacy entries remain conservatively blocking.
   lifecycle expressions and filter chips narrow that complete result set rather than being
   required to reveal it. List view renders that complete set directly; Columns view adds
   Backlog and Archive columns for an active search so no matched lifecycle is discarded by
-  the Queue board's usual column set. Reference-mention matches say why
+  the Queue board's usual column set. Structured duplicate searches send
+  `close_reason=duplicate` to the provider before bounded pagination, rather than hoping
+  duplicate rows happen to occur in the first unfiltered page. Reference-mention matches say why
   they matched, every result names its provider, and the global overlay can hand its
   current query/scope/filter payload to the separately owned saved-view editor without
   replacing the compact workspace search. The overlay is available from the toolbar and
