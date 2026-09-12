@@ -731,7 +731,7 @@ args = ["--path", "{store}"]
     }
 
     #[test]
-    fn bundled_claude_skill_matches_the_current_adapter_version() {
+    fn bundled_claude_skill_matches_the_canonical_skill_and_codex_adapter() {
         fn version(contents: &str) -> &str {
             contents
                 .lines()
@@ -739,9 +739,22 @@ args = ["--path", "{store}"]
                 .and_then(|line| line.strip_suffix(" -->"))
                 .expect("skill version marker")
         }
+        fn without_claude_tool_metadata(contents: &str) -> String {
+            contents
+                .lines()
+                .filter(|line| !line.starts_with("allowed-tools:"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        let bundled = include_str!("../../../plugins/claude/SKILL.md");
+        let canonical = include_str!("../../../.claude/skills/hotsheet/SKILL.md");
+        let adapter = include_str!("../../../.agents/skills/hotsheet/SKILL.md");
+
+        assert_eq!(bundled, canonical);
         assert_eq!(
-            version(include_str!("../../../plugins/claude/SKILL.md")),
-            version(include_str!("../../../.agents/skills/hotsheet/SKILL.md"))
+            without_claude_tool_metadata(bundled),
+            without_claude_tool_metadata(adapter)
         );
+        assert_eq!(version(bundled), version(adapter));
     }
 }

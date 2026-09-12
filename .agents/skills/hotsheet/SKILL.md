@@ -3,7 +3,7 @@ name: hotsheet
 description: Plan and work through the complete Hot Sheet Up Next queue using priority, overlap, dependencies, and safe parallelism. Works headless, with or without a server.
 ---
 
-<!-- hotsheet-skill-version: 46 -->
+<!-- hotsheet-skill-version: 47 -->
 
 Work the project's complete Hot Sheet Up Next queue. An invocation normally drains every
 actionable Up Next ticket; completing one ticket is not a stopping condition.
@@ -80,8 +80,8 @@ checks, and recapture; attach only evidence fit to hand off. An imperfect screen
 attached only as explicit `problem_evidence` in a `FEEDBACK NEEDED` blocker that names the
 real tradeoff or question—never as completion proof.
 
-When attaching several AI-generated evidence files from one verification operation, pass
-them in one command (`hotsheet-cli attach <ticket> --purpose correctness_evidence <files…>`)
+When attaching AI-generated evidence files from one verification operation, pass
+them in one command (`hotsheet-cli attach <ticket> --actor-role ai --actor-id <worker-id> --purpose correctness_evidence <files…>`)
 so they receive one durable batch identity and AI attribution. Use `problem_evidence` for
 captures demonstrating a defect, `reference` for supporting material, and `other` only
 when none of the semantic purposes fit. Do not run one attach command per file in a set.
@@ -97,7 +97,8 @@ Notes:
 - The CLI (`hotsheet-cli …`) and `hotsheet_*` MCP tools use the same engine and work
   without a server.
 - Confirm HS2 generation before using connected MCP: `hotsheet-store.json` (directly
-  or through `.hotsheet2/store`, with read-only legacy `.hotsheet/store` fallback) identifies HS2; `.hotsheet/db/PG_VERSION` identifies
+  or through `.hotsheet2/store`, with read-only legacy `.hotsheet/store` fallback)
+  identifies HS2; `.hotsheet/db/PG_VERSION` identifies
   HS1. If uncertain, use `hotsheet-cli -C <HS2-store>`.
 - If a ticket is unclear, do not guess. Record the needed decision, continue independent
   tickets, and return if the answer becomes available.
