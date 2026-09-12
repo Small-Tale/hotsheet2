@@ -1647,8 +1647,7 @@ async fn opening_project_recovers_a_concurrently_duplicated_checkout_registry_su
         .register(&checkout, None, None, vec![ticket_store])
         .unwrap();
     let valid = std::fs::read_to_string(&registry_path).unwrap();
-    let suffix = valid.rfind("\n    }\n  ]\n}").unwrap() + 1;
-    let corrupt = format!("{valid}{}", &valid[suffix..]);
+    let corrupt = format!("{valid}{}", valid.trim());
     std::fs::write(&registry_path, &corrupt).unwrap();
 
     let response = app(st.with_checkout_registry(&registry_path))

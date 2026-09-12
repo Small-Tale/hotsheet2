@@ -843,8 +843,7 @@ mod tests {
             .register(&checkout, None, None, Vec::new())
             .unwrap();
         let valid = std::fs::read_to_string(&path).unwrap();
-        let suffix = valid.rfind("\n    }\n  ]").unwrap() + 1;
-        let corrupt = format!("{valid}{}", &valid[suffix..]);
+        let corrupt = format!("{valid}{}", valid.trim());
         std::fs::write(&path, &corrupt).unwrap();
 
         assert_eq!(registry.list().unwrap(), vec![saved]);
