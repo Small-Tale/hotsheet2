@@ -401,7 +401,10 @@ and identity-less legacy entries remain conservatively blocking.
   background searches update every other view count. Pending counts use a compact spinner;
   settled search-derived counts use a small magnifying-glass marker and remain inside the
   selected item's blue bounds. Explicit lifecycle expressions and filter chips narrow the
-  selected collection. Structured duplicate searches send
+  selected collection. Boolean expressions that cannot be represented as one provider query
+  walk every compact cursor page for that collection, retain only client-side matches, and
+  cancel cleanly when the query changes, so matches after the first 200 rows remain discoverable.
+  Structured duplicate searches send
   `close_reason=duplicate` to the provider before bounded pagination, rather than hoping
   duplicate rows happen to occur in the first unfiltered page. Reference-mention matches say why
   they matched, every result names its provider, and the global overlay can hand its

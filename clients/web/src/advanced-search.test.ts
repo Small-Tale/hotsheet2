@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {addSearchFilter,filterAdvancedSearchResults,matchesSearchExpression,searchMatchLabel,usesAdvancedSearchExpression,usesBooleanSearchExpression} from './advanced-search';
+import {addSearchFilter,collectMatchingSearchPages,filterAdvancedSearchResults,matchesSearchExpression,searchMatchLabel,usesAdvancedSearchExpression,usesBooleanSearchExpression} from './advanced-search';
 import type {TicketRow} from './api';
 
 const row=(slug:string,status='not_started',extra:Partial<TicketRow>={}):TicketRow=>({connection_id:'local',native_id:slug,qualified_id:`local:${slug}`,id:slug,slug,title:slug,status,up_next:false,feedback_needed:false,tags:[],blocked_by:[],claim_count:0,...extra});
@@ -34,5 +34,15 @@ describe('advanced search semantics',()=>{
     const ticket=row('HS2-ONE','started',{title:'Parser repair'});
     expect(matchesSearchExpression(ticket,'(parser')).toBe(false);
     expect(matchesSearchExpression(ticket,'is:unknown')).toBe(false);
+  });
+  it('collects matches beyond the first page and rejects repeated cursors',async()=>{
+    const pages:Record<string,{items:number[];next_cursor?:string}>={second:{items:[201,202],next_cursor:'third'},third:{items:[301]}};
+    const load=async(cursor:string)=>pages[cursor];
+    await expect(collectMatchingSearchPages({items:[1,2],next_cursor:'second'},load,value=>value>200)).resolves.toEqual([201,202,301]);
+    await expect(collectMatchingSearchPages({items:[],next_cursor:'same'},async()=>({items:[],next_cursor:'same'}),()=>true)).rejects.toThrow('repeated cursor');
+  });
+  it('abandons paginated results when the active search changes',async()=>{
+    let active=true;
+    await expect(collectMatchingSearchPages({items:[1],next_cursor:'next'},async()=>{active=false;return{items:[2]}},()=>true,()=>active)).resolves.toBeUndefined();
   });
 });

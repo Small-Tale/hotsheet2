@@ -57,6 +57,16 @@ function evaluateSearchExpression(ticket:TicketRow,expression:SearchExpression,n
 export function usesBooleanSearchExpression(query:string){return /(?:^|[\s(])(?:AND|OR|NOT)(?=$|[\s)])|[()]/i.test(query)}
 export function usesAdvancedSearchExpression(query:string){return usesBooleanSearchExpression(query)||/(?:^|\s)is:(?:up-next|active|open|closed|duplicate|not-started|started|completed|verified|backlog|backlogged|archived)(?=$|\s|\))/i.test(query)}
 export function matchesSearchExpression(ticket:TicketRow,query:string,now=Date.now()){const expression=parseSearchExpression(query);return expression?evaluateSearchExpression(ticket,expression,now):ticketContains(ticket,query)}
+export async function collectMatchingSearchPages<T>(first:{items:T[];next_cursor?:string},load:(cursor:string)=>Promise<{items:T[];next_cursor?:string}>,matches:(item:T)=>boolean,current:()=>boolean=()=>true):Promise<T[]|undefined>{
+  const result:T[]=[],seen=new Set<string>();let page=first;
+  while(current()){
+    result.push(...page.items.filter(matches));
+    const cursor=page.next_cursor;if(!cursor)return result;
+    if(seen.has(cursor))throw new Error('Search pagination returned a repeated cursor.');
+    seen.add(cursor);page=await load(cursor);
+  }
+  return undefined;
+}
 export function isExactTicketSlug(ticket:TicketRow,query:string){const value=normalized(query);return [ticket.slug,ticket.native_id,ticket.qualified_id].some(id=>normalized(id)===value)}
 export function filterAdvancedSearchResults(rows:TicketRow[],query:string,scope:SearchScope,filters:readonly SearchFilter[],currentIds?:ReadonlySet<string>){
   const lifecycle=filters.find(filter=>filter.startsWith('status:'))?.slice(7),advanced=usesAdvancedSearchExpression(query);
