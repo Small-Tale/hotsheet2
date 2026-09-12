@@ -398,10 +398,13 @@ and identity-less legacy entries remain conservatively blocking.
   browser JavaScript.
 
   Workspace collection refreshes retain one bounded compact page and expose a visible
-  **Load more tickets** cursor continuation below list and board workspaces instead of
+  **Load more tickets** cursor continuation below lists and pinned inside column boards instead of
   downloading every ticket. Continuation pages append without duplicating overlapping
   provider rows, and the action disappears when the cursor is exhausted. SQL aggregate counts keep the
   sidebar and background project tabs authoritative even when most rows are not resident.
+  The aggregate also carries the exact Verified total, allowing Queue columns to derive
+  absolute Not Started, Started, Completed, and Verified counts rather than capping their
+  headings at the currently loaded page; Backlog and Archive use their absolute aggregates.
   Workspace search delegates to the checkout index rather than filtering Markdown bodies
   in the browser. It therefore matches slug, title, tags, Markdown details, and note text.
   Search is scoped to the selected sidebar view, so Queue, Backlog, and Archive results do

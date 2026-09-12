@@ -27,7 +27,7 @@ export function TicketBoardColumn({
     </header>
     <div class="ticket-board-column__tickets" data-key={`ticket-column-scroll:${id}`} data-ticket-scroll-owner={`column:${id}`} data-ticket-selection-root={selectionRoot ? 'true' : undefined} role={selectionRoot ? 'listbox' : 'group'} aria-label={`${title} tickets`} aria-multiselectable={selectionRoot ? 'true' : undefined}>
       {tickets.map(ticket => <TicketRow {...ticket} presentation="column" />)}
-      {totalCount>tickets.length&&<div class="ticket-board-column__progress" data-ticket-progressive-loading="true" role="status">Loading more…</div>}
+      {totalCount>tickets.length&&<div class="ticket-board-column__progress" data-ticket-progressive-loading="true" role="status">{tickets.length} of {totalCount} loaded</div>}
     </div>
   </section>;
 }

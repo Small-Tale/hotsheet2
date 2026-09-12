@@ -1,10 +1,22 @@
-import type { TicketRow } from './api';
+import type { CheckoutTicketCounts,TicketRow } from './api';
 import type { TicketView } from './ticket-views';
 
 export interface TicketBoardGroup {
   id: string;
   title: string;
   tickets: TicketRow[];
+}
+
+export function ticketBoardGroupTotal(id:string,loaded:number,view:TicketView,counts:CheckoutTicketCounts|undefined,hideVerified:boolean):number{
+  if(!counts)return loaded;
+  if(view==='backlog')return counts.backlog;
+  if(view==='archive')return counts.archive;
+  if(view!=='all')return loaded;
+  if(id==='not-started')return Math.max(0,counts.open-counts.started);
+  if(id==='started')return counts.started;
+  if(id==='completed')return hideVerified?Math.max(0,counts.queued-counts.open):counts.verified===undefined?loaded:Math.max(0,counts.queued-counts.open-counts.verified);
+  if(id==='verified')return counts.verified??loaded;
+  return loaded;
 }
 
 export function ticketBoardGroups(

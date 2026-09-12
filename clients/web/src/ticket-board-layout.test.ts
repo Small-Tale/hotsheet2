@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { ticketBoardGroups } from './ticket-board-layout';
+import { ticketBoardGroups,ticketBoardGroupTotal } from './ticket-board-layout';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -41,5 +41,15 @@ describe('ticketBoardGroups', () => {
     const groups = ticketBoardGroups(results, 'all', false);
     expect(groups.map(group => group.title)).toEqual(['Not Started', 'Started', 'Completed', 'Verified']);
     expect(groups.flatMap(group => group.tickets)).toHaveLength(queue.length);
+  });
+
+  it('derives absolute built-in column totals from the checkout summary',()=>{
+    const counts={total:390,queued:350,backlog:25,archive:15,open:270,up_next:4,active:1,started:120,verified:30,completed_today:2};
+    expect(['not-started','started','completed','verified'].map(id=>ticketBoardGroupTotal(id,10,'all',counts,false))).toEqual([150,120,50,30]);
+    expect(ticketBoardGroupTotal('completed',10,'all',counts,true)).toBe(80);
+    expect(ticketBoardGroupTotal('backlog',10,'backlog',counts,false)).toBe(25);
+    expect(ticketBoardGroupTotal('archive',10,'archive',counts,false)).toBe(15);
+    expect(ticketBoardGroupTotal('completed',10,'all',{...counts,verified:undefined},false)).toBe(10);
+    expect(ticketBoardGroupTotal('started',10,'custom:mine',counts,false)).toBe(10);
   });
 });

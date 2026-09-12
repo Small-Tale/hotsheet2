@@ -69,6 +69,13 @@ describe('TicketBoard', () => {
     const markup=String(TicketBoardColumn({id:'archive',title:'Archive',tickets:[ticket],totalCount:300}));
     expect(markup).toContain('aria-label="300 tickets"');
     expect(markup).toContain('data-ticket-progressive-loading="true"');
+    expect(markup).toContain('1 of 300 loaded');
+  });
+
+  it('keeps a continuation action inside the board workspace',()=>{
+    const markup=String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[ticket],totalCount:201}],continuation:{loading:false}}));
+    expect(markup).toContain('ticket-board__more');expect(markup).toContain('data-action="load-next-ticket-page"');expect(markup).toContain('Load more tickets');
+    expect(String(TicketBoard({columns:[],continuation:{loading:true}}))).toContain('Loading…');
   });
 
   it('maps the Not Started column id to the wire status used by ticket drops', () => {

@@ -2436,6 +2436,7 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
     assert_eq!(first["counts"]["backlog"], 1);
     assert_eq!(first["counts"]["queued"], 2);
     assert_eq!(first["counts"]["archive"], 1);
+    assert_eq!(first["counts"]["verified"], 0);
     assert_eq!(
         first["counts"]["completion_trend"]
             .as_array()

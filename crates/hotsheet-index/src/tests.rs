@@ -111,6 +111,7 @@ fn summary_aggregates_navigation_counts_without_loading_rows() {
     assert_eq!(summary.up_next, 1);
     assert_eq!(summary.active, 0);
     assert_eq!(summary.started, 0);
+    assert_eq!(summary.verified, 0);
     assert_eq!(summary.completed_today, 1);
     assert_eq!(summary.completion_trend, vec![0, 1]);
 }

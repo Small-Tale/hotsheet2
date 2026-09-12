@@ -3502,6 +3502,7 @@ struct CheckoutTicketCounts {
     up_next: u64,
     active: u64,
     started: u64,
+    verified: u64,
     completed_today: u64,
     completion_trend: Vec<u64>,
 }
@@ -3516,6 +3517,7 @@ impl CheckoutTicketCounts {
         self.up_next += summary.up_next;
         self.active += summary.active;
         self.started += summary.started;
+        self.verified += summary.verified;
         self.completed_today += summary.completed_today;
         if self.completion_trend.len() < summary.completion_trend.len() {
             self.completion_trend
@@ -3535,6 +3537,7 @@ impl CheckoutTicketCounts {
         self.up_next += summary.up_next;
         self.active += summary.active;
         self.started += summary.started;
+        self.verified += summary.verified;
         self.completed_today += summary.completed_today;
         if self.completion_trend.len() < summary.completion_trend.len() {
             self.completion_trend

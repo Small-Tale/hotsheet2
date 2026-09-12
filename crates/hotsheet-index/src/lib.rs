@@ -92,6 +92,7 @@ pub struct TicketSummary {
     pub up_next: u64,
     pub active: u64,
     pub started: u64,
+    pub verified: u64,
     pub completed_today: u64,
     pub completion_trend: Vec<u64>,
 }
@@ -120,6 +121,7 @@ impl Index {
              COALESCE(SUM(claimed_by IS NOT NULL AND claim_lease_expires_at > ?2
                           AND status IN ('not_started','started')),0),
              COALESCE(SUM(status = 'started'),0),
+             COALESCE(SUM(status = 'verified'),0),
              COALESCE(SUM(completed_at >= ?3 AND completed_at < ?4),0)
              FROM tickets WHERE store_id = ?1 AND status IS NOT 'moved'",
         )?;
@@ -134,7 +136,8 @@ impl Index {
                     up_next: row.get(5)?,
                     active: row.get(6)?,
                     started: row.get(7)?,
-                    completed_today: row.get(8)?,
+                    verified: row.get(8)?,
+                    completed_today: row.get(9)?,
                     completion_trend: Vec::new(),
                 })
             })

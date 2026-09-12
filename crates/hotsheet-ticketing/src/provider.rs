@@ -295,6 +295,7 @@ pub struct ProviderTicketSummary {
     pub up_next: u64,
     pub active: u64,
     pub started: u64,
+    pub verified: u64,
     pub completed_today: u64,
     pub completion_trend: Vec<u64>,
 }
@@ -327,6 +328,9 @@ impl ProviderTicketSummary {
         }
         if ticket.status == Status::Started {
             self.started += 1;
+        }
+        if ticket.status == Status::Verified {
+            self.verified += 1;
         }
         if ticket.up_next && matches!(ticket.status, Status::NotStarted | Status::Started) {
             self.up_next += 1;
@@ -1535,9 +1539,10 @@ mod tests {
                 summary.backlog,
                 summary.open,
                 summary.started,
+                summary.verified,
                 summary.up_next
             ),
-            (3, 2, 1, 2, 1, 1)
+            (3, 2, 1, 2, 1, 0, 1)
         );
     }
 
