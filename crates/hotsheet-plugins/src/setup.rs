@@ -272,6 +272,8 @@ fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String, Set
     let name = &p.manifest.mcp.server_name;
     let command = mcp_command(&p.manifest.mcp.command);
     let args = p.mcp_args(&store_abs.to_string_lossy());
+    let locally_owned =
+        !target.exists() || is_hotsheet_only_mcp_config(&target, &p.manifest.mcp.format, name);
 
     match p.manifest.mcp.format.as_str() {
         "claude-json" => write_mcp_json(&target, name, &command, &args)?,
@@ -284,11 +286,85 @@ fn write_mcp(project: &Path, store_abs: &Path, p: &Plugin) -> Result<String, Set
             });
         }
     }
+    if locally_owned {
+        ensure_local_git_exclude(project, rel)?;
+    }
     Ok(rel.clone())
 }
 
+fn is_hotsheet_only_mcp_config(target: &Path, format: &str, name: &str) -> bool {
+    let Ok(contents) = std::fs::read_to_string(target) else {
+        return false;
+    };
+    match format {
+        "claude-json" => serde_json::from_str::<serde_json::Value>(&contents)
+            .ok()
+            .and_then(|root| {
+                let object = root.as_object()?;
+                let servers = object.get("mcpServers")?.as_object()?;
+                Some(object.len() == 1 && servers.len() == 1 && servers.contains_key(name))
+            })
+            .unwrap_or(false),
+        "opencode-json" => serde_json::from_str::<serde_json::Value>(&contents)
+            .ok()
+            .and_then(|root| {
+                let object = root.as_object()?;
+                let servers = object.get("mcp")?.as_object()?;
+                Some(
+                    object.keys().all(|key| key == "$schema" || key == "mcp")
+                        && servers.len() == 1
+                        && servers.contains_key(name),
+                )
+            })
+            .unwrap_or(false),
+        "codex-toml" => toml::from_str::<toml::Table>(&contents)
+            .ok()
+            .and_then(|root| {
+                let servers = root.get("mcp_servers")?.as_table()?;
+                Some(root.len() == 1 && servers.len() == 1 && servers.contains_key(name))
+            })
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn project_git_dir(project: &Path) -> Option<std::path::PathBuf> {
+    let dot_git = project.join(".git");
+    if dot_git.is_dir() {
+        return Some(dot_git);
+    }
+    let pointer = std::fs::read_to_string(dot_git).ok()?;
+    let path = pointer.trim().strip_prefix("gitdir:")?.trim();
+    let path = std::path::PathBuf::from(path);
+    Some(if path.is_absolute() {
+        path
+    } else {
+        project.join(path)
+    })
+}
+
+/// Keep a wholly Hot Sheet-owned machine config out of this checkout without changing its
+/// shared `.gitignore`. Existing mixed/user-owned configs remain visible to git.
+fn ensure_local_git_exclude(project: &Path, rel: &str) -> Result<(), SetupError> {
+    let Some(git_dir) = project_git_dir(project) else {
+        return Ok(());
+    };
+    let target = git_dir.join("info/exclude");
+    let entry = format!("/{}", rel.replace('\\', "/"));
+    let existing = std::fs::read_to_string(&target).unwrap_or_default();
+    if existing.lines().any(|line| line == entry) {
+        return Ok(());
+    }
+    let separator = if existing.is_empty() || existing.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    write_file(&target, &format!("{existing}{separator}{entry}\n"))
+}
+
 /// Register the tool's permission hook (`docs/05` §5.7, HS2-YMR9HE) in its config, if it
-/// declares one. Claude's `.claude/settings.json` shape:
+/// declares one. Claude's `.claude/settings.local.json` shape:
 /// `{ "hooks": { "<event>": [ { "matcher": "*", "hooks": [ { "type": "command", "command": … } ] } ] } }`.
 /// Merge-safe + idempotent: an existing Hot Sheet hook (same resolved command) is not
 /// duplicated. Returns the written path when a hook was registered.
@@ -297,6 +373,7 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError>
         return Ok(None);
     };
     let target = project.join(&spec.target);
+    let locally_owned = spec.machine_local || !target.exists();
     let command = resolve_hook_command(&spec.command);
 
     let mut root: serde_json::Value = std::fs::read_to_string(&target)
@@ -334,6 +411,9 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError>
         &target,
         &(serde_json::to_string_pretty(&root).unwrap() + "\n"),
     )?;
+    if locally_owned {
+        ensure_local_git_exclude(project, &spec.target)?;
+    }
     Ok(Some(spec.target.clone()))
 }
 
@@ -620,6 +700,23 @@ args = ["--path", "{store}"]
         permissions.set_readonly(true);
         std::fs::set_permissions(&path, permissions).unwrap();
         write_file(&path, "same").unwrap();
+    }
+
+    #[test]
+    fn local_excludes_follow_a_worktree_gitdir_pointer() {
+        let root = tempfile::tempdir().unwrap();
+        let project = root.path().join("project");
+        let git_dir = root.path().join("worktree-git");
+        std::fs::create_dir(&project).unwrap();
+        std::fs::create_dir_all(git_dir.join("info")).unwrap();
+        std::fs::write(project.join(".git"), "gitdir: ../worktree-git\n").unwrap();
+
+        ensure_local_git_exclude(&project, ".codex/config.toml").unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(git_dir.join("info/exclude")).unwrap(),
+            "/.codex/config.toml\n"
+        );
     }
 
     #[test]

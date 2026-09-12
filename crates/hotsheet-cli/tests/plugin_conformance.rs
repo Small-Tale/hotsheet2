@@ -179,6 +179,8 @@ fn check_target_safety(p: &Plugin, id: &str) {
 fn check_headless_setup(p: &Plugin, id: &str) {
     let dir = tempfile::tempdir().unwrap();
     FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+    std::fs::create_dir_all(dir.path().join(".git/info")).unwrap();
+    std::fs::write(dir.path().join(".git/info/exclude"), "").unwrap();
 
     // Run setup twice — must be idempotent (managed blocks refreshed, not duplicated).
     for _ in 0..2 {
@@ -222,6 +224,12 @@ fn check_headless_setup(p: &Plugin, id: &str) {
         &p.manifest.mcp.format,
         &p.manifest.mcp.server_name,
         &mcp_text,
+    );
+    let exclude = std::fs::read_to_string(dir.path().join(".git/info/exclude")).unwrap();
+    let expected = format!("/{}", p.manifest.mcp.target.replace('\\', "/"));
+    assert!(
+        exclude.lines().any(|line| line == expected),
+        "[{id}] generated machine-local MCP config is not locally excluded: {expected}"
     );
 }
 

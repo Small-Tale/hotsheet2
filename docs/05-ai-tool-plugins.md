@@ -60,6 +60,10 @@ byte-level no-op, and managed instruction markers remain the boundary around con
 Hot Sheet may replace. Bundled skill versions are checked against the current shared
 adapter, and Windows detection honors command wrappers from `PATHEXT`, so freshness does
 not silently skip npm-installed tools or replace a newer workflow with an older bundle.
+Machine-specific integrations never alter the shared ignore policy: Claude's permission
+hook uses `.claude/settings.local.json`, and a newly created, wholly Hot Sheet-owned MCP
+config is added only to that checkout's `.git/info/exclude`. A pre-existing config with
+unrelated user content remains visible to git while the Hot Sheet entry is merged into it.
 
 All bundled instruction and ticket-workflow artifacts teach **portable durable
 references** (HS2-ERKA8N). AI-authored documentation, ticket text, notes, and completion

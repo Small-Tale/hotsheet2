@@ -68,6 +68,8 @@ mod tests {
     fn project() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
         FsStore::init(dir.path(), &StoreMetadata::new("HS")).unwrap();
+        std::fs::create_dir_all(dir.path().join(".git/info")).unwrap();
+        std::fs::write(dir.path().join(".git/info/exclude"), "").unwrap();
         dir
     }
 
@@ -119,20 +121,28 @@ mod tests {
     #[test]
     fn setup_claude_registers_the_permission_hook_idempotently() {
         let d = project();
-        // A user's own PreToolUse hook + settings should be preserved.
+        // A user's shared settings stay untouched; local hooks are merge-preserved.
         std::fs::create_dir_all(d.path().join(".claude")).unwrap();
         std::fs::write(
             d.path().join(".claude/settings.json"),
-            r#"{"model":"opus","hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-hook"}]}]}}"#,
+            r#"{"model":"opus"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            d.path().join(".claude/settings.local.json"),
+            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-hook"}]}]}}"#,
         )
         .unwrap();
 
         run_setup(d.path(), d.path(), Some("claude"), false).unwrap();
         run_setup(d.path(), d.path(), Some("claude"), false).unwrap(); // twice → no dupes
 
+        assert_eq!(
+            read(d.path(), ".claude/settings.json"),
+            r#"{"model":"opus"}"#
+        );
         let s: serde_json::Value =
-            serde_json::from_str(&read(d.path(), ".claude/settings.json")).unwrap();
-        assert_eq!(s["model"], "opus", "user settings kept");
+            serde_json::from_str(&read(d.path(), ".claude/settings.local.json")).unwrap();
         let pre = s["hooks"]["PreToolUse"].as_array().unwrap();
         // The user's own hook survives; exactly one Hot Sheet hook is registered.
         assert!(
@@ -157,7 +167,7 @@ mod tests {
             reports[0]
                 .wrote
                 .iter()
-                .all(|w| w != ".claude/settings.json")
+                .all(|w| w != ".claude/settings.local.json")
         );
     }
 
@@ -179,6 +189,11 @@ mod tests {
         let cfg: toml::Table = toml::from_str(&read(d.path(), ".codex/config.toml")).unwrap();
         let hs = cfg["mcp_servers"]["hotsheet"].as_table().unwrap();
         assert_eq!(hs["command"].as_str().unwrap(), "hotsheet-mcp");
+        assert!(
+            read(d.path(), ".git/info/exclude")
+                .lines()
+                .any(|line| line == "/.codex/config.toml")
+        );
     }
 
     #[test]
@@ -211,6 +226,12 @@ mod tests {
             "other server kept"
         );
         assert_eq!(mcp["mcpServers"]["hotsheet"]["command"], "hotsheet-mcp");
+        assert!(
+            !read(d.path(), ".git/info/exclude")
+                .lines()
+                .any(|line| line == "/.mcp.json"),
+            "a mixed user-owned config stays visible to git"
+        );
     }
 
     #[test]

@@ -63,7 +63,8 @@ source = "claude-usage"
 [hooks]
 # The PreToolUse permission hook (docs/05 §5.7, HS2-YMR9HE): Claude runs it before each
 # tool use; it asks the running Hot Sheet server for an allow/deny (else defers to Claude).
-target = ".claude/settings.json"
+target = ".claude/settings.local.json"
+machine_local = true
 event = "PreToolUse"
 command = "hotsheet-cli permission-hook"
 

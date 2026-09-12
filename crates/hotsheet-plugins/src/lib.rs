@@ -127,8 +127,11 @@ pub struct ActivitySpec {
 /// binary) routes the prompt to the Hot Sheet server.
 #[derive(Debug, Clone, Deserialize)]
 pub struct HooksSpec {
-    /// The tool config file the hook is written into (e.g. `.claude/settings.json`).
+    /// The tool config file the hook is written into (e.g. `.claude/settings.local.json`).
     pub target: String,
+    /// The whole target is machine-local and should be excluded from checkout status.
+    #[serde(default)]
+    pub machine_local: bool,
     /// The hook event to register on (e.g. `PreToolUse`).
     pub event: String,
     /// The command line to run (e.g. `hotsheet-cli permission-hook`); its first token is

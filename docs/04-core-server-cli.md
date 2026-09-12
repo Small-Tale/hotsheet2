@@ -481,6 +481,10 @@ compatible detached server built before the server hook existed. Bundled managed
 carry the same workflow version as the repository adapters, preventing a refresh from
 downgrading current instructions. Executable detection includes Windows `PATHEXT`
 wrappers such as `.cmd` as well as native binaries.
+Setup writes Claude's machine-specific permission hook to `settings.local.json`. When it
+creates a tool's project MCP config (or recognizes that the complete existing config is
+Hot Sheet-owned), it records only that exact path in the checkout-local `.git/info/exclude`;
+mixed user-owned configs remain visible, and the repository's shared `.gitignore` is not changed.
 
 `hotsheet ai-tools --json` reports detected drivable plugins and their effective
 model/effort catalogs. A drive may expose the optional runtime-catalog capability; when
