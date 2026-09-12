@@ -17,6 +17,20 @@ export interface DuplicateReference {
   native_id: string;
 }
 
+export interface DuplicateLookupProject {
+  id: string;
+  name: string;
+}
+
+export interface DuplicateLookupTicket {
+  id: string;
+  slug: string;
+  title: string;
+  connection_id: string;
+  native_id: string;
+  qualified_id: string;
+}
+
 export const TICKET_CLOSE_REASON_CHOICES: ReadonlyArray<{ value: TicketCloseReason; label: string }> = [
   { value: 'completed', label: 'Completed' },
   { value: 'not_planned', label: 'Not planned' },
@@ -40,6 +54,30 @@ export function parseDuplicateReference(value: string): DuplicateReference | und
   const separator = qualified.indexOf(':');
   if (separator < 1 || separator === qualified.length - 1) return undefined;
   return { project_id, connection_id: qualified.slice(0, separator), native_id: qualified.slice(separator + 1) };
+}
+
+function lookupTarget(project: DuplicateLookupProject, ticket: DuplicateLookupTicket): DuplicateTarget {
+  return { id: ticket.id, slug: ticket.slug, title: ticket.title, projectId: project.id, projectName: project.name, connectionId: ticket.connection_id, nativeId: ticket.native_id, qualifiedId: ticket.qualified_id };
+}
+
+export async function resolveDuplicateReferenceTarget(
+  value: string,
+  projects: readonly DuplicateLookupProject[],
+  load: (project: DuplicateLookupProject, id: string) => Promise<DuplicateLookupTicket>,
+): Promise<DuplicateTarget | undefined> {
+  const reference = parseDuplicateReference(value);
+  if (reference) {
+    const project = projects.find(item => item.id === reference.project_id);
+    if (!project) return undefined;
+    return lookupTarget(project, await load(project, `${reference.connection_id}:${reference.native_id}`));
+  }
+  const matches = (await Promise.allSettled(projects.map(async project => lookupTarget(project, await load(project, value)))))
+    .flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function duplicateOutcomeLabel(target: DuplicateTarget, sourceProjectId: string): string {
+  return `${target.slug}${target.projectId === sourceProjectId ? '' : ` · ${target.projectName}`}`;
 }
 
 export function validateTicketClose(reason: TicketCloseReason, source: DuplicateTarget, target?: DuplicateTarget): string {
