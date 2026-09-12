@@ -20,6 +20,7 @@ import {attachmentReferences,attachmentReferenceUrl,isGalleryMediaAttachment,isV
 import {attachmentRoundNumbers,attachmentUploadBatchId} from './attachment-grouping';
 import { loadWorkspacePreferences, saveWorkspacePreferences, sortableWorkspaceView,toggleCollapsedCommandGroup } from './workspace-preferences';
 import {drawerTabCloseIds,drawerTabSelectionAfterClose,type DrawerTabCloseAction,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
+import {terminalProjectOwner} from './terminal-project-scope';
 import {customViewNameAvailable,uniqueCustomViewId} from './saved-views';
 import { loadLastTicketCategory, saveLastTicketCategory } from './ticket-category-preference';
 import { compareWorkspaceTickets } from './workspace-ticket-sort';
@@ -368,7 +369,7 @@ async function refreshTerminalDashboard(){
   const generation=++terminalDashboardGeneration,openProjects=[...projects.value];
   terminalDashboardLoading.value=true;terminalDashboardMessage.value='';
   const results:Array<TerminalDashboardGroup|undefined>=await Promise.all(openProjects.map(async current=>{
-    try{const infos=await new Api(current.apiPath).terminals(),sessions=infos.map((session,index)=>({...session,scrollback:'',projectId:current.id,projectName:current.name,title:terminalNames.value[terminalNameKey(current.id,session.id)]??defaultTerminalName(session.id,index)}));return{projectId:current.id,projectName:current.name,sessions:applyRememberedTabOrder(sessions,item=>item.id,drawerTabOrder(current.id))} satisfies TerminalDashboardGroup}
+    try{const infos=await new Api(current.apiPath).terminals(),owned=infos.filter(session=>terminalProjectOwner(openProjects,session.cwd)===current.id),sessions=owned.map((session,index)=>({...session,scrollback:'',projectId:current.id,projectName:current.name,title:terminalNames.value[terminalNameKey(current.id,session.id)]??defaultTerminalName(session.id,index)}));return{projectId:current.id,projectName:current.name,sessions:applyRememberedTabOrder(sessions,item=>item.id,drawerTabOrder(current.id))} satisfies TerminalDashboardGroup}
     catch{return undefined}
   }));
   if(generation!==terminalDashboardGeneration)return;

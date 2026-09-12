@@ -1199,6 +1199,12 @@ project, have settled. The complete shell is then revealed in one render boundar
 therefore never exposes a partially restored board beside terminal content from a different
 stage of startup.
 
+The terminal service is host-wide, while drawers are project-specific. The client assigns
+each terminal to the most-specific open project root containing its reported working
+directory before it builds drawer tabs or the workspace grid. A terminal therefore appears
+once in the global grid and only in its owning project's drawer, including when several open
+projects share the same server process.
+
 The project terminal drawer occupies only the center AppShell column, leaving the project
 sidebar and ticket inspector at full height. Its compact rail switches between the decorated
 grid, one undecorated interactive xterm session, or one embedded AI conversation that fills
