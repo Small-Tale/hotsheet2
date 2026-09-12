@@ -60,7 +60,8 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(timeline).toContain('1 event total');
     const attachments = String(TicketAttachments({ attachments: [{ id: 'one', name: 'one.png',url:'/attachment/one',annotationCount:2 }] }));
     expect(attachments.match(/class="ticket-inspector__attachment"/g)).toHaveLength(1);
-    expect(attachments).toContain('1 attachment total');
+    expect(attachments).toContain('class="ticket-attachments__count" aria-label="1 attachment">1</span>');
+    expect(attachments).not.toContain('attachment total');
     expect(attachments).toContain('data-attachment-drop-target="true"');
     expect(attachments).toContain('aria-label="Browse and add attachments"');
     expect(attachments).toContain('aria-label="Drop or browse attachments"');
@@ -76,6 +77,7 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(attachments).toContain('data-lucide="pencil"');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
     expect(css).toMatch(/ticket-attachments__image-grid :is\(img,video\) \{[^}]*object-fit: contain/);
+    expect(css).toMatch(/ticket-attachments__count \{[^}]*background: var\(--wa-color-neutral-fill-quiet\)/);
     expect(attachments).toContain('aria-label="More actions for one.png" title="More actions for one.png"');
     expect(attachments).toContain('title="one.png — double-click to open"');
     expect(attachments).toContain('data-lucide="more-horizontal"');

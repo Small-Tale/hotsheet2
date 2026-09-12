@@ -639,8 +639,9 @@ projects that could not be searched without hiding results from accessible proje
     repository A/B comparison banner/labels. The catalog exposes configured,
     unconfigured, empty, loading, and error states; actions are disabled without a
     configured Git diff tool.
-  - `TicketAttachments` — **demo built**: attachment rows whose displayed total is
-    derived from the rendered collection, plus native browse and drop entry points.
+  - `TicketAttachments` — **demo built**: attachment rows with a subtle count badge beside
+    the aligned section heading, plus native browse and drop entry points; no redundant
+    total line is rendered below the collection.
     Open, download, copy-reference, and remove icon buttons have explicit accessible
     names, hover titles, and visible hover/focus states. Double-clicking the row uses
     the same Open action; action-button double-clicks do not bubble into the row action.
@@ -678,10 +679,11 @@ projects that could not be searched without hiding results from accessible proje
 - `TicketTagsSection` — **built**: controlled chips with capability-aware removal,
   duplicate-safe creation, and native autocomplete suggestions shared by inspector
   and reader
-- `TicketAttachmentsSection` — **built**: a single accessible Lucide ellipsis per file,
+- `TicketAttachmentsSection` — **built**: aligned inspector gutters, a subtle heading count,
+  a single accessible Lucide ellipsis per file,
   with click/right-click parity through the shared MenuItem-based Open, Download, Copy
   reference, and Remove context menu, plus a
-  responsive, wrapping 160px square contained image-preview grid feeding the shared full-screen
+  responsive, full-width square contained image-preview grid feeding the shared full-screen
   arrow/keyboard/swipe gallery
 - `AttachmentGallery` — **built**: square-cornered contained/covered image and video media,
   with a layout-owning playback footer, an initial video poster, custom play/scrub/time controls,

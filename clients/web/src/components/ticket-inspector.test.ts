@@ -140,8 +140,8 @@ describe('TicketInspector', () => {
   it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 \.5rem 1rem;/);
-    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 \.5rem \.5rem;/);
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 \.85rem 1rem;/);
+    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 \.85rem \.85rem;/);
   });
 
   it('hides the Up Next action for ineligible lifecycle states', () => {
