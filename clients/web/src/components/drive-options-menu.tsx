@@ -13,8 +13,8 @@ export interface AiToolSelection { tool?:string; model?:string; effort?:string }
 
 function choice(action:string,value:string,label:string,selected:boolean,icon:IconNode,iconName:string){return <wa-dropdown-item slot="submenu" aria-current={selected?'true':undefined} data-action={action} data-value={value} value={value}><span slot="icon"><LucideIcon icon={icon} name={iconName}/></span>{label}</wa-dropdown-item>}
 
-export function DriveOptionsMenu({tools,selection,defaultSelection}:{tools:readonly AiToolDescriptor[];selection:AiToolSelection;defaultSelection:AiToolSelection}){
-  if(!tools.length)return <div class="drive-options-menu" data-component="drive-options-menu" role="menu" aria-label="Drive provider, model, and effort options"><wa-dropdown open placement="top-start" distance={6}><span slot="trigger" class="drive-options-menu__anchor" aria-hidden="true"></span><wa-dropdown-item disabled>No AI tools detected</wa-dropdown-item></wa-dropdown></div>;
+export function DriveOptionsMenu({tools,selection,defaultSelection,loading=false,error}:{tools:readonly AiToolDescriptor[];selection:AiToolSelection;defaultSelection:AiToolSelection;loading?:boolean;error?:string}){
+  if(!tools.length)return <div class="drive-options-menu" data-component="drive-options-menu" role="menu" aria-label="Drive provider, model, and effort options"><wa-dropdown open placement="top-start" distance={6}><span slot="trigger" class="drive-options-menu__anchor" aria-hidden="true"></span><wa-dropdown-item disabled>{loading?'Detecting AI tools…':error||'No AI tools detected'}</wa-dropdown-item></wa-dropdown></div>;
   const activeTool=tools.find(tool=>tool.id===(selection.tool??defaultSelection.tool))??tools.at(0)!,activeModel=activeTool.models.find(model=>model.id===(selection.model??defaultSelection.model??activeTool.default_model))??activeTool.models.at(0),efforts=activeModel?.effort_levels??[];
   return <div class="drive-options-menu" data-component="drive-options-menu" role="menu" aria-label="Drive provider, model, and effort options">
     <wa-dropdown open placement="top-start" distance={6}>

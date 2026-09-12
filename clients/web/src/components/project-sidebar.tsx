@@ -35,6 +35,8 @@ export interface ProjectSidebarProps {
   driveDisabledReason?: string;
   driveOptionsOpen?: boolean;
   driveTools?: readonly AiToolDescriptor[];
+  driveToolsLoading?:boolean;
+  driveToolsError?:string;
   driveSelection?: AiToolSelection;
   driveDefaultSelection?: AiToolSelection;
   conversationOpen?: boolean;
@@ -59,7 +61,7 @@ export function ProjectSidebar(props: ProjectSidebarProps) {
       <p class="project-sidebar__work-summary" data-component="project-work-summary">{props.openCount} open, {props.upNextCount} up next, {props.activeCount} claimed</p>
       <div class="project-sidebar__drive-row">
         <DriveControl running={props.driveRunning} tool={driveToolLabel} disabled={props.driveDisabled} disabledReason={props.driveDisabledReason} optionsOpen={props.driveOptionsOpen} />
-        {props.driveOptionsOpen&&<DriveOptionsMenu tools={props.driveTools??[]} selection={props.driveSelection??{tool:props.driveTool}} defaultSelection={props.driveDefaultSelection??{tool:props.driveTool}}/>}
+        {props.driveOptionsOpen&&<DriveOptionsMenu tools={props.driveTools??[]} selection={props.driveSelection??{tool:props.driveTool}} defaultSelection={props.driveDefaultSelection??{tool:props.driveTool}} loading={props.driveToolsLoading} error={props.driveToolsError}/>}
         <button type="button" class="project-sidebar__conversation" data-action="open-conversation" aria-label={`Open ${driveToolLabel} conversation`} title="Open chat without starting the Hot Sheet workflow" aria-pressed={props.conversationOpen?'true':'false'} disabled={props.conversationDisabled}><LucideIcon icon={MessageSquare} name="message-square"/></button>
       </div>
     </footer>

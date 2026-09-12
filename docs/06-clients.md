@@ -462,6 +462,9 @@ and identity-less legacy entries remain conservatively blocking.
   Drive is a production control, not demo-only state. Its split-button label reflects the
   machine-local default provider discovered from drivable plugin manifests. The arrow opens
   hierarchical Default/provider/model/effort overrides without a client-owned provider table.
+  Project activation starts catalog discovery without blocking the rest of project startup. If
+  discovery is pending or fails, the arrow reports active discovery or the bounded error and retries
+  on its next opening instead of presenting a transient failure as a confirmed empty installation.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
   effort choices use aligned semantic icons plus one highlighted current value with compact
   submenu insets, including at the supported narrow width.
