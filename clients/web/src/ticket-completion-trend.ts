@@ -25,3 +25,12 @@ export function ticketCompletionTrend(tickets: readonly TicketCompletion[], now 
   }
   return counts;
 }
+
+export function completionDayStarts(now = new Date(), days = 7): string[] {
+  return Array.from({ length: days + 1 }, (_, index) => {
+    const day = new Date(now);
+    day.setHours(0, 0, 0, 0);
+    day.setDate(day.getDate() - (days - index - 1));
+    return day.toISOString();
+  });
+}

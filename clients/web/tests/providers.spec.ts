@@ -244,7 +244,7 @@ test('opens the native folder chooser directly from Add project and only onboard
   await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');expect(openedRoots).toEqual(['/Users/westphal/Documents/hotsheet2','/work/other']);await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const setup=page.locator('[data-ticket-source-setup-dialog]');await expect(setup).toHaveJSProperty('open',true);await expect(setup).toContainText('other is open, but it does not have a ticket source yet.');await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-gcbc3e-direct-add-project-wide.png',fullPage:true});await page.setViewportSize({width:390,height:844});await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-gcbc3e-direct-add-project-narrow.png',fullPage:true});
   await page.setViewportSize({width:1100,height:760});await setup.getByRole('button',{name:'Create a Hot Sheet 2 git ticket repository',exact:true}).click();await expect(setup.getByText('Back up this ticket repository')).toBeVisible();await setup.getByRole('button',{name:'Close'}).click();
-  const otherTab=page.locator('[data-component="project-tab"]').filter({has:page.getByRole('tab',{name:'other'})});await otherTab.hover();await otherTab.getByRole('button',{name:'Close other'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveCount(0);
+  const otherTab=page.locator('[data-component="project-tab"]').filter({has:page.getByRole('tab',{name:'other'})});await otherTab.hover();await otherTab.getByRole('button',{name:'Close other'}).click();await page.locator('[data-component="project-close-dialog"]').getByRole('button',{name:'Close Project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveCount(0);
   await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'other'})).toHaveAttribute('aria-selected','true');await expect(setup).toBeHidden();await expect(setup).toHaveJSProperty('open',false);await expect(page.locator('[data-project-dialog]')).toBeHidden();expect(openedRoots).toEqual(['/Users/westphal/Documents/hotsheet2','/work/other','/work/other']);
 });
 
@@ -1446,22 +1446,22 @@ test('retries a failed AI-tool discovery from Drive without showing a false empt
   await page.setViewportSize({width:1024,height:600});await expect(menu.locator('[data-action="select-drive-model"][data-value="openai/gpt-5.6"]')).toBeAttached();await page.screenshot({path:'/private/tmp/hs2-cx4xzr-discovery-retry-narrow.png',fullPage:true});
 });
 
-test('derives the seven-day completion chart and opens project-scoped statistics',async({page})=>{
-  const completedAt=(daysAgo:number)=>{const value=new Date();value.setHours(12,0,0,0);value.setDate(value.getDate()-daysAgo);return value.toISOString()};
-  const datedRows=[{...row,completed_at:completedAt(6)},{...backlogRow,completed_at:completedAt(3)},{...completedRow,completed_at:completedAt(0)},verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
+test('uses the exact seven-day completion chart beyond retained rows and opens project-scoped statistics',async({page})=>{
+  const exactTrend=[1,2,3,4,5,6,7];let summaryDays:string[]=[];
   await mockProject(page);
-  await page.route(/\/tickets(?:\?.*)?$/,route=>route.request().method()==='GET'?route.fulfill({json:datedRows}):route.fallback());
+  await page.route(/\/tickets(?:\?.*)?$/,route=>{if(route.request().method()!=='GET')return route.fallback();summaryDays=new URL(route.request().url()).searchParams.get('summary_days')?.split(',')??[];return route.fulfill({json:{items:[row,startedRow2,startedRow3],counts:{total:138,queued:97,backlog:13,archive:28,open:103,up_next:15,active:5,started:5,completed_today:7,completion_trend:exactTrend}}})});
   await page.setViewportSize({width:1280,height:800});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await expect(page.locator('[data-project-dialog]')).toBeHidden();
   const summary=page.locator('[data-component="project-summary"]'),chart=summary.locator('[role="img"]');
-  await expect(summary).toHaveAccessibleName('Open project statistics: 1 completed today, 5 in progress');
-  await expect(chart).toHaveAttribute('aria-label','Tickets completed over the last 7 days: 1, 0, 0, 1, 0, 0, 1');
-  await expect(summary.locator('[data-zero="false"]')).toHaveCount(3);
-  await page.screenshot({path:'/private/tmp/hs2-y51ehn-completion-chart-wide.png',fullPage:true});
+  await expect.poll(()=>summaryDays).toHaveLength(8);expect(summaryDays).toEqual([...summaryDays].sort());
+  await expect(summary).toHaveAccessibleName('Open project statistics: 7 completed today, 5 in progress');
+  await expect(chart).toHaveAttribute('aria-label','Tickets completed over the last 7 days: 1, 2, 3, 4, 5, 6, 7');
+  await expect(summary.locator('[data-zero="false"]')).toHaveCount(7);
+  await page.screenshot({path:'/private/tmp/hs2-q1y8z7-completion-chart-wide.png',fullPage:true});
   await summary.click();
   const shell=page.locator('[data-component="app-shell"]');await expect(shell).toHaveAttribute('data-mode','stats');await expect(page.getByRole('region',{name:'demo project statistics'})).toContainText('Detailed ticket-flow and usage charts are coming');
   await page.screenshot({path:'/private/tmp/hs2-y51ehn-project-stats-wide.png',fullPage:true});
   await page.getByRole('tab',{name:'demo'}).click();await expect(shell).toHaveAttribute('data-mode','project');
-  await page.setViewportSize({width:1024,height:600});await expect(summary).toBeVisible();await page.evaluate(()=>(document.activeElement as HTMLElement|null)?.blur());await page.mouse.move(1000,580);await expect(summary).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-y51ehn-completion-chart-narrow.png',fullPage:true});await summary.click();await expect(page.getByRole('region',{name:'demo project statistics'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-y51ehn-project-stats-narrow.png',fullPage:true});
+  await page.setViewportSize({width:1024,height:600});await expect(summary).toBeVisible();await page.evaluate(()=>(document.activeElement as HTMLElement|null)?.blur());await page.mouse.move(1000,580);await expect(summary).toHaveCSS('background-color','rgba(0, 0, 0, 0)');await page.screenshot({path:'/private/tmp/hs2-q1y8z7-completion-chart-narrow.png',fullPage:true});await summary.click();await expect(page.getByRole('region',{name:'demo project statistics'})).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-y51ehn-project-stats-narrow.png',fullPage:true});
   await page.getByRole('button',{name:'Cross-project stats'}).click();await expect(page.getByRole('heading',{name:'Cross-project stats'})).toBeVisible();
 });
 

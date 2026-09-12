@@ -93,6 +93,7 @@ pub struct TicketSummary {
     pub active: u64,
     pub started: u64,
     pub completed_today: u64,
+    pub completion_trend: Vec<u64>,
 }
 
 /// The index over one store.
@@ -103,7 +104,12 @@ pub struct Index {
 
 impl Index {
     /// Aggregate the counts needed by checkout navigation without loading ticket rows.
-    pub fn summary(&self, now: &str, today: &str) -> Result<TicketSummary, IndexError> {
+    pub fn summary(&self, now: &str, day_starts: &[String]) -> Result<TicketSummary, IndexError> {
+        let today = day_starts
+            .get(day_starts.len().saturating_sub(2))
+            .map(String::as_str)
+            .unwrap_or(now);
+        let tomorrow = day_starts.last().map(String::as_str).unwrap_or(now);
         let mut statement = self.conn.prepare(
             "SELECT COUNT(*),
              COALESCE(SUM(status <> 'backlog' AND status NOT IN ('archive','deleted','moved')),0),
@@ -114,11 +120,11 @@ impl Index {
              COALESCE(SUM(claimed_by IS NOT NULL AND claim_lease_expires_at > ?2
                           AND status IN ('not_started','started')),0),
              COALESCE(SUM(status = 'started'),0),
-             COALESCE(SUM(completed_at >= ?3),0)
+             COALESCE(SUM(completed_at >= ?3 AND completed_at < ?4),0)
              FROM tickets WHERE store_id = ?1 AND status IS NOT 'moved'",
         )?;
-        statement
-            .query_row(params![self.store_id, now, today], |row| {
+        let mut summary = statement
+            .query_row(params![self.store_id, now, today, tomorrow], |row| {
                 Ok(TicketSummary {
                     total: row.get(0)?,
                     queued: row.get(1)?,
@@ -129,9 +135,25 @@ impl Index {
                     active: row.get(6)?,
                     started: row.get(7)?,
                     completed_today: row.get(8)?,
+                    completion_trend: Vec::new(),
                 })
             })
-            .map_err(IndexError::from)
+            .map_err(IndexError::from)?;
+        drop(statement);
+        if day_starts.len() >= 2 {
+            let mut completed = self.conn.prepare(
+                "SELECT COUNT(*) FROM tickets WHERE store_id = ?1 AND status IS NOT 'moved' AND completed_at >= ?2 AND completed_at < ?3",
+            )?;
+            summary.completion_trend = day_starts
+                .windows(2)
+                .map(|bounds| {
+                    completed.query_row(params![self.store_id, bounds[0], bounds[1]], |row| {
+                        row.get(0)
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+        }
+        Ok(summary)
     }
 
     /// Open an in-memory index (for tests).

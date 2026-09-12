@@ -3429,6 +3429,7 @@ struct CheckoutTicketCounts {
     active: u64,
     started: u64,
     completed_today: u64,
+    completion_trend: Vec<u64>,
 }
 
 impl CheckoutTicketCounts {
@@ -3442,6 +3443,13 @@ impl CheckoutTicketCounts {
         self.active += summary.active;
         self.started += summary.started;
         self.completed_today += summary.completed_today;
+        if self.completion_trend.len() < summary.completion_trend.len() {
+            self.completion_trend
+                .resize(summary.completion_trend.len(), 0);
+        }
+        for (index, count) in summary.completion_trend.into_iter().enumerate() {
+            self.completion_trend[index] += count;
+        }
     }
 }
 
@@ -3470,7 +3478,7 @@ fn add_external_ticket_count(
     counts: &mut CheckoutTicketCounts,
     value: &serde_json::Value,
     now: &str,
-    today: &str,
+    day_starts: &[String],
 ) {
     let status = value
         .get("status")
@@ -3518,10 +3526,62 @@ fn add_external_ticket_count(
     if value
         .get("completed_at")
         .and_then(serde_json::Value::as_str)
-        .is_some_and(|completed| completed >= today)
+        .is_some_and(|completed| {
+            day_starts
+                .get(day_starts.len().saturating_sub(2))
+                .zip(day_starts.last())
+                .is_some_and(|(today, tomorrow)| {
+                    completed >= today.as_str() && completed < tomorrow.as_str()
+                })
+        })
     {
         counts.completed_today += 1;
     }
+    if let Some(completed) = value
+        .get("completed_at")
+        .and_then(serde_json::Value::as_str)
+    {
+        if counts.completion_trend.len() < day_starts.len().saturating_sub(1) {
+            counts.completion_trend.resize(day_starts.len() - 1, 0);
+        }
+        if let Some(index) = day_starts
+            .windows(2)
+            .position(|bounds| completed >= bounds[0].as_str() && completed < bounds[1].as_str())
+        {
+            counts.completion_trend[index] += 1;
+        }
+    }
+}
+
+fn completion_day_starts(
+    value: Option<&str>,
+    now: OffsetDateTime,
+) -> Result<Vec<String>, ApiError> {
+    if let Some(value) = value {
+        let starts = value.split(',').map(str::to_owned).collect::<Vec<_>>();
+        if starts.len() != 8
+            || starts
+                .iter()
+                .any(|start| OffsetDateTime::parse(start, &Rfc3339).is_err())
+            || starts.windows(2).any(|pair| pair[0] >= pair[1])
+        {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "summary_days must contain eight ascending RFC 3339 day boundaries",
+            ));
+        }
+        return Ok(starts);
+    }
+    let today = now.replace_time(time::Time::MIDNIGHT);
+    (0..=7)
+        .map(|index| {
+            (today - time::Duration::days(6 - index))
+                .format(&Rfc3339)
+                .map_err(|error| {
+                    ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+                })
+        })
+        .collect()
 }
 
 fn list_checkout_ticket_page(
@@ -3560,19 +3620,14 @@ fn list_checkout_ticket_page(
     let now_text = now
         .format(&Rfc3339)
         .map_err(|error| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))?;
-    let today = format!(
-        "{:04}-{:02}-{:02}T00:00:00Z",
-        now.year(),
-        u8::from(now.month()),
-        now.day()
-    );
+    let day_starts = completion_day_starts(params.summary_days.as_deref(), now)?;
     let mut counts = CheckoutTicketCounts::default();
     for (_, entry) in &entries {
         let summary = entry
             .index
             .lock()
             .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "index lock poisoned"))?
-            .summary(&now_text, &today)?;
+            .summary(&now_text, &day_starts)?;
         counts.add(summary);
     }
     for source in &external_sources {
@@ -3584,7 +3639,7 @@ fn list_checkout_ticket_page(
             let value = serde_json::to_value(ticket).map_err(|error| {
                 ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             })?;
-            add_external_ticket_count(&mut counts, &value, &now_text, &today);
+            add_external_ticket_count(&mut counts, &value, &now_text, &day_starts);
         }
     }
 
@@ -7786,6 +7841,8 @@ struct ListParams {
     page_size: Option<usize>,
     /// Opaque checkout-level cursor returned by a prior paged response.
     cursor: Option<String>,
+    /// Eight comma-separated RFC 3339 local-day boundaries for exact seven-day summaries.
+    summary_days: Option<String>,
     /// Keyset cursor (a ULID): return rows strictly after this one in `sort` order (HS2-TCDTCH).
     page_after: Option<String>,
     /// Omit the Markdown body from each row (default true). `compact=false` keeps it.

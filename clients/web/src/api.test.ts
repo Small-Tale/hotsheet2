@@ -195,7 +195,8 @@ describe('ticket search transport',()=>{
     const page={items:[],counts:{total:0,queued:0,backlog:0,archive:0,open:0,up_next:0,active:0,started:0,completed_today:0}};
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify(page),{status:200}));
     await expect(new Api('/api').checkoutTicketPage('folder with spaces',200,'0.01ARZ3NDEKTSV4RRFFQ69G5FAV',{open:true})).resolves.toEqual(page);
-    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/tickets?page_size=200&cursor=0.01ARZ3NDEKTSV4RRFFQ69G5FAV&open=true',expect.any(Object));
+    const target=fetchMock.mock.calls[0][0];expect(typeof target).toBe('string');if(typeof target!=='string')throw new Error('expected a string request target');const requested=new URL(target,'https://hotsheet.test');
+    expect(requested.pathname).toBe('/api/checkouts/folder%20with%20spaces/tickets');expect(requested.searchParams.get('page_size')).toBe('200');expect(requested.searchParams.get('cursor')).toBe('0.01ARZ3NDEKTSV4RRFFQ69G5FAV');expect(requested.searchParams.get('open')).toBe('true');expect(requested.searchParams.get('summary_days')?.split(',')).toHaveLength(8);
     fetchMock.mockRestore();
   });
   it('sends trimmed text through the comprehensive checkout query',async()=>{

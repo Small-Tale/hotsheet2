@@ -1076,8 +1076,9 @@ and in-progress counts. Every chart in that cross-project list uses the maximum 
 `All projects` trend as its shared scale, so equal bar heights mean equal activity across the
 aggregate and each project; a single-project summary continues to use its own maximum. An inset
 divider below that aggregate keeps it distinct from the individual project list. The project summaries open project statistics and the aggregate opens
-cross-project statistics. These values derive from ticket collections already loaded for the
-open project tabs, so the sidebar adds no polling or network traffic. It remains usable beside
+cross-project statistics. The same bounded ticket-page response carries an exact seven-day
+completion summary using browser-local calendar boundaries, so archived completions and rows
+beyond the retained page remain represented without another request or polling. It remains usable beside
 the grid and ticket rail at the supported 1024×600 floor, and can be hidden and restored from
 the leading edge of the dashboard toolbar.
 The dashboard keeps a resizable right ticket rail open by default and allows it to be hidden

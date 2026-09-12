@@ -2437,6 +2437,13 @@ async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() 
     assert_eq!(first["counts"]["backlog"], 1);
     assert_eq!(first["counts"]["queued"], 2);
     assert_eq!(first["counts"]["archive"], 1);
+    assert_eq!(
+        first["counts"]["completion_trend"]
+            .as_array()
+            .unwrap()
+            .len(),
+        7
+    );
     let cursor = first["next_cursor"].as_str().unwrap();
     let second = body_json(
         router

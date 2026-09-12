@@ -103,8 +103,10 @@ one ticket store shared by several checkouts never supplies an implicit project 
 Unqualified and `/stores/{id}` routes remain explicitly store-only compatibility APIs.
 Browser collection reads opt into a bounded envelope with `page_size=1..500` and resume
 with the opaque `next_cursor`; the response contains `items`, `next_cursor`, and SQL-backed
-project `counts`. The cursor walks linked stores without concatenating their complete row
-sets, while the aggregate counts keep Queue/Backlog/Archive and project-tab summaries exact.
+project `counts`. When the client supplies eight local-day boundaries, those counts also
+include the exact seven-day completion trend across every linked source, independent of the
+selected collection or retained page. The cursor walks linked stores without concatenating
+their complete row sets, while the aggregate counts keep Queue/Backlog/Archive and project-tab summaries exact.
 Paged clients may pass `collection=queue|archive` for the built-in multi-status collections;
 the lifecycle predicate is applied by each source index before the page cap, so a mixed-status
 first page cannot make the browser show fewer rows than the selected collection contains.

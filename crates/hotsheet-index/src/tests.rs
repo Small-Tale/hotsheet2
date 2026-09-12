@@ -94,7 +94,14 @@ fn rebuild_indexes_every_ticket() {
 fn summary_aggregates_navigation_counts_without_loading_rows() {
     let (_d, _s, ix) = seeded();
     let summary = ix
-        .summary("2026-08-19T12:00:00Z", "2026-08-19T00:00:00Z")
+        .summary(
+            "2026-08-19T12:00:00Z",
+            &[
+                "2026-08-18T00:00:00Z".into(),
+                "2026-08-19T00:00:00Z".into(),
+                "2026-08-20T00:00:00Z".into(),
+            ],
+        )
         .unwrap();
     assert_eq!(summary.total, 3);
     assert_eq!(summary.queued, 3);
@@ -105,6 +112,7 @@ fn summary_aggregates_navigation_counts_without_loading_rows() {
     assert_eq!(summary.active, 0);
     assert_eq!(summary.started, 0);
     assert_eq!(summary.completed_today, 1);
+    assert_eq!(summary.completion_trend, vec![0, 1]);
 }
 
 #[test]
