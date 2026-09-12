@@ -846,6 +846,8 @@ and identity-less legacy entries remain conservatively blocking.
   Switching among Queue, Backlog, and Archive requests a bounded compact page scoped to that
   collection before pagination; it never fetches full ticket bodies or filters an arbitrary
   mixed-status page in the browser. The selected sidebar item commits immediately while the
+  loader also accepts the legacy bare ticket-array response from compatible older servers,
+  treating it as one complete page while pagination deployments converge.
   collection refresh reconciles the first progressive row tranche. Counts render within
   that same selectable item rather than outside its selected background. Large views initially
   render 80 rows, continue in idle chunks, and expose an explicit continuation control when
@@ -1276,7 +1278,9 @@ covered as a stable-resource lifecycle rather than allowing detached viewers to 
 The viewport renders ANSI/VT output with xterm, forwards typed input as terminal text, and
 sends `{viewer_id, cols, rows, focus, visible}` claims on connection, geometry/focus/
 visibility changes, and a five-second lease heartbeat. The heartbeat renews server state;
-it is not request polling. Disconnects retry with bounded exponential backoff, while
+it is not request polling. Scaled dashboard previews observe their untransformed viewport
+frame for visibility, so CSS scaling cannot turn an onscreen terminal into a false hidden
+sizing claim. Disconnects retry with bounded exponential backoff, while
 dispose closes the socket so the server removes that viewer and self-heals its chosen size.
 Client claims normalize transient non-finite geometry to bounded integer dimensions. The server
 drops any JSON frame carrying a malformed `resize` member instead of forwarding that protocol

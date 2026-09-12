@@ -50,7 +50,7 @@ export function mountTerminalViewportRuntime(element:HTMLElement,{url,viewerId,a
     current.addEventListener('close',disconnected);current.addEventListener('error',()=> { current.close(); });
   };
   const resize=new ResizeObserver(fitAndClaim);resize.observe(scaledPreview?element.parentElement??element:element);fitAndClaim();
-  const intersection=new IntersectionObserver(entries=>{const next=entries[0]?.isIntersecting??false;if(next!==visible){visible=next;claim()} });intersection.observe(element);
+  const visibilityTarget=scaledPreview?element.parentElement??element:element,intersection=new IntersectionObserver(entries=>{const next=entries[0]?.isIntersecting??false;if(next!==visible){visible=next;claim()} });intersection.observe(visibilityTarget);
   const focus=()=> {if(fixedDashboardGrid&&element.dataset.geometryReady!=='true')return;focusRequested=false;if(fixedDashboardGrid)claim();else applySettledGeometry() },focusTerminal=()=> { terminal.focus(); };if(!scaledPreview){element.addEventListener('click',focusTerminal);element.addEventListener('focusin',focus);element.addEventListener('focusout',focus)}
   const input=terminal.onData(value=>{if(!scaledPreview&&socket?.readyState===WebSocket.OPEN)socket.send(value)});
   connect();

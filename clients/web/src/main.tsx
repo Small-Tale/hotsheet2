@@ -445,6 +445,7 @@ const row = (ticket:WireTicketRow):TicketRowProps => ({slug:ticket.slug,title:ti
 
 function projectTabTicketRows(projectId:string){return projectId===selectedProjectId.value?tickets.value:ticketRowsByProject.value[projectId]??[]}
 function projectTicketCounts(projectId:string){const exact=ticketCountsByProject.value[projectId];if(exact)return exact;const rows=projectTabTicketRows(projectId),work=projectTabTicketState(rows);return{total:rows.length,queued:rows.filter(isQueuedTicket).length,backlog:rows.filter(ticket=>ticket.status==='backlog').length,archive:rows.filter(isArchivedTicket).length,open:rows.filter(isOpenTicket).length,up_next:work.upNextCount,active:work.activeTicketCount,started:rows.filter(ticket=>ticket.status==='started').length,completed_today:ticketCompletionTrend(rows).at(-1)??0}}
+function publishOptimisticTicketRows(projectId:string){ticketRowsByProject.value={...ticketRowsByProject.value,[projectId]:tickets.value};ticketCountsByProject.value=Object.fromEntries(Object.entries(ticketCountsByProject.value).filter(([id])=>id!==projectId))}
 function scheduleClaimLeaseExpiry(){if(claimLeaseExpiryTimer!==undefined)window.clearTimeout(claimLeaseExpiryTimer);claimLeaseExpiryTimer=undefined;const now=Date.now(),openProjectRows=projects.value.flatMap(item=>projectTabTicketRows(item.id));projectTabClaimClock.value=now;activeTicketCount.value=projectTicketCounts(selectedProjectId.value).active;const next=nextActiveTicketExpiry(openProjectRows,now);if(next!==undefined)claimLeaseExpiryTimer=window.setTimeout(()=>{claimLeaseExpiryTimer=undefined;scheduleClaimLeaseExpiry()},Math.max(1,next-now+25))}
 
 function visibleTickets(){let result:WireTicketRow[];if(searchQuery.value.trim()||searchTokens.value.length){const matches=searchMatchKeys.value,matched=matches?tickets.value.filter(ticket=>matches.has(ticketSearchKey(ticket))):[],effective=effectiveSearch(searchQuery.value,searchTokens.value),advanced=usesAdvancedSearchExpression(effective.text),tags=advanced?[]:effective.tokens.filter((token):token is Extract<InlineSearchToken,{kind:'tag'}>=>token.kind==='tag').map(token=>token.value.toLowerCase());result=filterAdvancedSearchResults(matched,effective.text,'all',[]).filter(ticket=>tags.every(tag=>ticket.tags.some(value=>value.toLowerCase()===tag)))}else result=ticketsForView(tickets.value,selectedView.value);const active=activeWorkspaceSort();return result.slice().sort((a,b)=>compareWorkspaceTickets(a,b,active.sort,active.sortDirection));}
@@ -598,6 +599,7 @@ async function applyTicketPatch(slug:string,patch:TicketPatch){
   let rollbackRow=ticket,rollbackSelected=selectedBefore;
   mutationGenerations.set(slug,generation);
   tickets.value=tickets.value.map(item=>item.slug===slug?projectTicketPatch(item,patch):item);
+  publishOptimisticTicketRows(current.id);
   if(selectedBefore)selectedTicket.value=projectTicketPatch(selectedBefore,patch);
   const optimistic=performance.now()-started;
   try{
@@ -611,6 +613,7 @@ async function applyTicketPatch(slug:string,patch:TicketPatch){
       rollbackRow=ticketRowFromFull(ticket,remote);rollbackSelected=remote;
       if(mutationGenerations.get(slug)!==generation)return true;
       tickets.value=tickets.value.map(item=>item.slug===slug?ticketRowFromFull(item,remote):item);
+      publishOptimisticTicketRows(current.id);
       if(selectedTicket.value?.slug===slug)reconcileRefreshedSelected(base,remote);
       const conflict=reconciled.conflicts[0];
       if(conflict){showFieldConflict(conflict);reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'rolled_back'});return false}
@@ -619,10 +622,11 @@ async function applyTicketPatch(slug:string,patch:TicketPatch){
     }
     if(mutationGenerations.get(slug)!==generation){reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'stale'});return true}
     tickets.value=tickets.value.map(item=>item.slug===slug?ticketRowFromFull(item,updated):item);
+    publishOptimisticTicketRows(current.id);
     if(selectedTicket.value?.slug===slug)selectedTicket.value=updated;
     recordCommittedDraftBases(patch);error.value=updated.warnings?.join('\n')??'';reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'committed'});return true;
   }catch(reason){
-    if(mutationGenerations.get(slug)===generation){tickets.value=tickets.value.map(item=>item.slug===slug?rollbackRow:item);if(rollbackSelected&&selectedTicket.value?.slug===slug)selectedTicket.value=rollbackSelected;error.value=reason instanceof Error?reason.message:String(reason);reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'rolled_back'})}
+    if(mutationGenerations.get(slug)===generation){tickets.value=tickets.value.map(item=>item.slug===slug?rollbackRow:item);publishOptimisticTicketRows(current.id);if(rollbackSelected&&selectedTicket.value?.slug===slug)selectedTicket.value=rollbackSelected;error.value=reason instanceof Error?reason.message:String(reason);reportMutationTiming({slug,optimistic_ms:optimistic,request_ms:performance.now()-started,outcome:'rolled_back'})}
     return false;
   }
 }

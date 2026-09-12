@@ -10,7 +10,7 @@ test('creates, renames, deletes, and shares a custom ticket view',async({page})=
     if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:project});
     if(path.endsWith('/views')&&request.method()==='PUT'){views=request.postDataJSON();return route.fulfill({json:views})}
     if(path.endsWith('/views'))return route.fulfill({json:views});
-    if(path.endsWith('/tickets')&&request.method()==='GET')return route.fulfill({json:rows});
+    if(path.endsWith('/tickets')&&request.method()==='GET'){const tags=url.searchParams.get('tags')?.split(' ').filter(Boolean)??[],items=tags.length?rows.filter(ticket=>tags.every(tag=>ticket.tags.includes(tag))):rows;return route.fulfill({json:url.searchParams.has('page_size')?{items,counts:{total:rows.length,queued:rows.length,backlog:0,archive:0,open:rows.length,up_next:rows.length,active:0,started:0,completed_today:0}}:items})}
     if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:project.stores[0],default:true,capabilities:{create:true,update:true,notes:true,attachments:true,watch:true,query_fields:[]}}]});
     if(path.endsWith('/connections')||path.endsWith('/permissions')||path.endsWith('/commands')||path.endsWith('/command-runs')||path.endsWith('/terminals')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
     if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});

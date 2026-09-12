@@ -1186,7 +1186,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   await expect(inspector.locator('[data-component="ticket-attachments"]')).toBeVisible();
   await expect(inspector.getByRole('heading', { name: 'Attachments' })).toBeVisible();
   await expect(inspector.locator('[data-attachment-id]')).toHaveCount(2);
-  await expect(inspector.getByText('2 attachments total')).toBeVisible();
+  await expect(inspector.getByLabel('2 attachments')).toBeVisible();
   await expect(inspector.locator('[data-action="toggle-inspector-up-next"]')).toHaveCount(0);
   await inspector.getByRole('button', { name: 'Hide inspector' }).click();
   await expect(inspector).toHaveCount(0);
@@ -1471,7 +1471,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
     const item = node.querySelector<HTMLElement>('.view-navigation .menu-item')!.getBoundingClientRect();
     return { actionRight: action.right, itemRight: item.right };
   });
-  expect(viewActionAlignment.actionRight).toBeGreaterThan(viewActionAlignment.itemRight);
+  expect(Math.abs(viewActionAlignment.actionRight-viewActionAlignment.itemRight)).toBeLessThan(1);
   const alignedRows = await sidebar.evaluate(node => ['.repository-summary .menu-item', '.view-navigation .menu-item', '.command-navigation .menu-item'].map(selector => node.querySelector(selector)!).map(item => {
     const bounds = item.getBoundingClientRect();
     const icon = item.querySelector('.menu-item__icon')!.getBoundingClientRect();

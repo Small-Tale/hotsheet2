@@ -19,8 +19,10 @@ export async function loadProjectTicketRefresh(client: Pick<Api, 'checkoutCorrup
   ]);
   const diagnostics=corruptTickets.status === 'fulfilled' ? corruptTickets.value : undefined;
   const corruptSlugs=new Set(diagnostics?.flatMap(item=>item.slug?[item.slug]:[])??[]);
+  const ticketPage=tickets.status==='fulfilled'?tickets.value:undefined;
+  const ticketRows:TicketRow[]=Array.isArray(ticketPage)?ticketPage as TicketRow[]:ticketPage?.items??[];
   return {
-    ...(tickets.status === 'fulfilled' ? { tickets: tickets.value.items.filter(ticket=>!corruptSlugs.has(ticket.slug)), ticketCounts:tickets.value.counts, nextCursor:tickets.value.next_cursor } : { ticketsError: message(tickets.reason) }),
+    ...(tickets.status === 'fulfilled' ? { tickets: ticketRows.filter(ticket=>!corruptSlugs.has(ticket.slug)), ...Array.isArray(ticketPage)?{}:{ticketCounts:ticketPage?.counts,nextCursor:ticketPage?.next_cursor} } : { ticketsError: message(tickets.reason) }),
     ...(corruptTickets.status === 'fulfilled' ? { corruptTickets: corruptTickets.value } : { corruptTicketsError: message(corruptTickets.reason) }),
   };
 }
