@@ -485,7 +485,9 @@ and identity-less legacy entries remain conservatively blocking.
   Every saved-view row exposes labeled rename and delete actions. Rename keeps the stable view
   identity and search query, including while selected; delete confirms that tickets are not
   affected and returns a deleted active view to Queue. Both mutations preserve shared-setting
-  ordering and reject case-insensitive name collisions.
+  ordering and reject case-insensitive name collisions. The delegated Views add action rejects
+  events whose composed path belongs to an editable control or open dialog, so submitting an AI
+  chat prompt cannot be retargeted into a latent Create View dialog during synchronous rendering.
 
   Search has one primary surface: the project toolbar. The former global search overlay and
   its separate scope, suggestions, result rows, and saved-view handoff were removed because

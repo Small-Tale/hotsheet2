@@ -537,10 +537,12 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   const drawer=page.locator('[data-component="terminal-drawer"]'),projectTab=page.locator('[data-component="project-tab"]');
   await drawer.getByRole('button',{name:'New drawer item'}).click();
   await drawer.getByRole('menu',{name:'New drawer item'}).getByText('AI chat').click();
-  const liveConversation=drawer.locator('[data-component="ai-conversation"]');
-  await liveConversation.getByLabel('Message Codex').fill('What time is it in California?');
-  await liveConversation.getByLabel('Message Codex').press('Enter');
+  const liveConversation=drawer.locator('[data-component="ai-conversation"]'),composer=liveConversation.getByLabel('Message Codex'),createViewDialog=page.getByRole('dialog',{name:'Create View'});
+  await composer.evaluate(node=>{node.setAttribute('data-action','add-view');node.dispatchEvent(new MouseEvent('click',{bubbles:true,composed:true}));node.removeAttribute('data-action')});await expect(createViewDialog).toBeHidden();
+  await composer.fill('What time is it in California?');
+  await composer.press('Enter');
   await expect(liveConversation).toContainText('The event stream remains authoritative.');
+  await expect(createViewDialog).toBeHidden();
   await drawer.getByRole('tab',{name:/Codex Main/}).click();
   const drawerViewport=drawer.locator('[data-component="terminal-session"] [data-component="terminal-viewport"]');
   await expect(drawerViewport).toHaveAttribute('data-connection','connected');
@@ -574,11 +576,7 @@ test('reuses the read-only conversation and restores borrowed terminal geometry 
   await expect.poll(async()=>(await originalClaims()).count).toBeGreaterThan(beforeCancel.count);
   await expect.poll(async()=>(await originalClaims()).last).toBe(initialGrid);
   await page.waitForTimeout(250);
-  const unrelatedCreateViewDialog=page.getByRole('dialog',{name:'Create View'});
-  if(await unrelatedCreateViewDialog.isVisible()){
-    await unrelatedCreateViewDialog.getByRole('button',{name:'Cancel'}).click();
-    await expect(unrelatedCreateViewDialog).toBeHidden();
-  }
+  await expect(createViewDialog).toBeHidden();
   await page.screenshot({path:'/private/tmp/hs2-6c0wzn-terminal-restored-after-cancel.png',fullPage:true});
 
   await projectTab.hover();
