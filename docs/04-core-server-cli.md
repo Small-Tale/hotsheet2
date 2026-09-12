@@ -411,7 +411,11 @@ repo, then publish without holding the user-facing mutation open for network lat
 (HS2-VJD1W4, HS2-0RDWSW). Headless CLI/MCP writes launch a reaped best-effort push in the
 background; server-owned stores defer publication to the server's kicked, coalescing sync
 loop. Thus a headless `work` run remains clean and shareable while browser/server writes
-return after local durability rather than waiting several seconds for a remote. The shared
+return after local durability rather than waiting several seconds for a remote. The
+headless nonblocking contract is regression-tested under deliberate CPU and filesystem-I/O
+saturation: deterministic child-spawn and remote-hook handshakes establish that the remote
+is blocked before the bounded local-return assertion, without relying on a startup-speed
+deadline. The shared
 `ops` layer routes every mutation through `FsStore::write_ticket_committing`, so CLI + MCP
 + server all commit. After the one-time legacy Finder-metadata cleanup, single-ticket and
 attachment mutations stage and commit only their exact touched paths, preserving unrelated staged/user work;

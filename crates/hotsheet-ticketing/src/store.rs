@@ -226,6 +226,15 @@ fn unique_attachment_filename<'a>(
 pub struct FsStore {
     root: PathBuf,
     push_after_commit: bool,
+    #[cfg(test)]
+    background_push_observer: Option<BackgroundPushObserver>,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct BackgroundPushObserver {
+    spawned: std::sync::Arc<std::sync::Barrier>,
+    finished: std::sync::Arc<std::sync::Barrier>,
 }
 
 impl FsStore {
@@ -239,6 +248,8 @@ impl FsStore {
         let store = Self {
             root,
             push_after_commit: true,
+            #[cfg(test)]
+            background_push_observer: None,
         };
         store.ensure_managed_gitignore()?;
         Ok(store)
@@ -253,6 +264,8 @@ impl FsStore {
         let store = Self {
             root,
             push_after_commit: true,
+            #[cfg(test)]
+            background_push_observer: None,
         };
         if let Err(error) = store.ensure_managed_gitignore() {
             eprintln!("warning: could not maintain store .gitignore: {error}");
@@ -265,6 +278,12 @@ impl FsStore {
     #[must_use]
     pub fn with_deferred_push(mut self) -> Self {
         self.push_after_commit = false;
+        self
+    }
+
+    #[cfg(test)]
+    fn with_background_push_observer(mut self, observer: BackgroundPushObserver) -> Self {
+        self.background_push_observer = Some(observer);
         self
     }
 
@@ -609,8 +628,18 @@ impl FsStore {
                 .stderr(Stdio::null())
                 .spawn()
             {
+                #[cfg(test)]
+                let observer = self.background_push_observer.clone();
+                #[cfg(test)]
+                if let Some(observer) = &observer {
+                    observer.spawned.wait();
+                }
                 std::thread::spawn(move || {
                     let _ = child.wait();
+                    #[cfg(test)]
+                    if let Some(observer) = observer {
+                        observer.finished.wait();
+                    }
                 });
             }
         }
@@ -1388,6 +1417,72 @@ mod tests {
     use super::*;
     use hotsheet_model::derive_slug;
 
+    #[cfg(unix)]
+    struct HostSaturation {
+        stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        workers: Vec<std::thread::JoinHandle<()>>,
+    }
+
+    #[cfg(unix)]
+    impl HostSaturation {
+        fn start(io_path: PathBuf) -> Self {
+            use std::io::{Seek, SeekFrom, Write};
+            use std::sync::atomic::Ordering;
+
+            let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let cpu_workers = std::thread::available_parallelism()
+                .map(std::num::NonZeroUsize::get)
+                .unwrap_or(2);
+            let mut workers = (0..cpu_workers)
+                .map(|_| {
+                    let stop = stop.clone();
+                    std::thread::spawn(move || {
+                        while !stop.load(Ordering::Relaxed) {
+                            std::hint::spin_loop();
+                        }
+                    })
+                })
+                .collect::<Vec<_>>();
+            let io_stop = stop.clone();
+            workers.push(std::thread::spawn(move || {
+                let mut file = fs::OpenOptions::new()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .open(io_path)
+                    .unwrap();
+                let block = [0x5a; 64 * 1024];
+                while !io_stop.load(Ordering::Relaxed) {
+                    file.write_all(&block).unwrap();
+                    file.sync_data().unwrap();
+                    file.seek(SeekFrom::Start(0)).unwrap();
+                }
+            }));
+            Self { stop, workers }
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for HostSaturation {
+        fn drop(&mut self) {
+            use std::sync::atomic::Ordering;
+
+            self.stop.store(true, Ordering::Relaxed);
+            for worker in self.workers.drain(..) {
+                worker.join().unwrap();
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn fifo(path: &Path) {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0);
+    }
+
     fn ulid(s: &str) -> Ulid {
         Ulid::from_string(s).unwrap()
     }
@@ -2160,9 +2255,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn committing_write_does_not_wait_for_a_slow_remote_push() {
+        use std::io::Read;
         use std::os::unix::fs::PermissionsExt;
-        use std::sync::mpsc;
-        use std::time::{Duration, Instant};
+        use std::sync::{Arc, Barrier, mpsc};
+        use std::time::Duration;
 
         let (dir, store) = temp_store();
         let remote = tempfile::tempdir().unwrap();
@@ -2181,12 +2277,13 @@ mod tests {
 
         let push_started = remote.path().join("push-started");
         let allow_push = remote.path().join("allow-push");
+        fifo(&push_started);
         let hook = remote.path().join("hooks/pre-receive");
         fs::write(
             &hook,
             r#"#!/bin/sh
 marker_dir="$(dirname "$0")/.."
-touch "$marker_dir/push-started"
+printf 'started\n' > "$marker_dir/push-started"
 attempt=0
 while [ ! -f "$marker_dir/allow-push" ]; do
     attempt=$((attempt + 1))
@@ -2200,39 +2297,38 @@ done
         permissions.set_mode(0o755);
         fs::set_permissions(&hook, permissions).unwrap();
 
+        let spawned = Arc::new(Barrier::new(2));
+        let finished = Arc::new(Barrier::new(2));
+        let store = store.with_background_push_observer(BackgroundPushObserver {
+            spawned: spawned.clone(),
+            finished: finished.clone(),
+        });
+        let _saturation = HostSaturation::start(dir.path().join("saturation-io"));
         let (write_result_tx, write_result_rx) = mpsc::sync_channel(1);
         std::thread::spawn(move || {
             let result = store.write_ticket_committing(&sample(ulid("01ARZ3NDEKTSV4RRFFQ69G5FAV")));
             write_result_tx.send(result).unwrap();
         });
 
-        let hook_deadline = Instant::now() + Duration::from_secs(15);
-        while !push_started.is_file() && Instant::now() < hook_deadline {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let hook_started = push_started.is_file();
+        spawned.wait();
+        let mut hook_signal = String::new();
+        fs::File::open(&push_started)
+            .unwrap()
+            .read_to_string(&mut hook_signal)
+            .unwrap();
         let write_result = write_result_rx.recv_timeout(Duration::from_secs(5));
         // Always unblock the git child, including on an assertion failure below.
         fs::write(&allow_push, b"").unwrap();
-        assert!(
-            hook_started,
-            "background push never reached the remote hook"
-        );
+        assert_eq!(hook_signal, "started\n");
         write_result
             .expect("a local mutation waited for the blocked remote publication")
             .unwrap();
 
+        finished.wait();
         let local_head = git_stdout(dir.path(), &["rev-parse", "HEAD"]).unwrap();
         let branch = git_stdout(dir.path(), &["symbolic-ref", "--short", "HEAD"]).unwrap();
         let remote_ref = format!("refs/heads/{}", branch.trim());
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            let remote_head = git_stdout(remote.path(), &["rev-parse", &remote_ref]);
-            if remote_head.as_deref().map(str::trim) == Some(local_head.trim()) {
-                break;
-            }
-            assert!(Instant::now() < deadline, "background push never published");
-            std::thread::sleep(Duration::from_millis(50));
-        }
+        let remote_head = git_stdout(remote.path(), &["rev-parse", &remote_ref]).unwrap();
+        assert_eq!(remote_head.trim(), local_head.trim());
     }
 }

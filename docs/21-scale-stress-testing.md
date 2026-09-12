@@ -56,3 +56,11 @@ at exactly 200 rows, at most 1 MB, and under 60 seconds on the stressed debug ha
 requires production Chromium to reach a populated Queue within 120 seconds and stay below
 192 MB JavaScript heap; and caps Queue/Backlog/Archive view switches at 2 seconds. It is a
 manual release/capacity gate, not ordinary CI.
+
+The ordinary Rust suite separately protects asynchronous remote publication under sustained
+host pressure. Its focused store regression occupies the available CPU workers and performs
+repeated synced filesystem writes, observes the background push child through an in-process
+handshake, and blocks the bare remote's receive hook through a FIFO handshake. Only the
+local-mutation return remains time-bounded; push startup and final remote observation are
+event-driven so a loaded host cannot consume an arbitrary startup allowance before the
+nonblocking assertion begins.
