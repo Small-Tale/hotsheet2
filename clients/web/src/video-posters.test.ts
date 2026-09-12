@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ensureVideoPoster } from './video-posters';
+import { ensureVideoPoster, releaseVideoPreviewSource } from './video-posters';
 
 afterEach(() => vi.restoreAllMocks());
 
 describe('portable video posters', () => {
+  it('drops the preview source and resets the media pipeline after a poster is ready', () => {
+    const video = { load: vi.fn(), removeAttribute: vi.fn() };
+    releaseVideoPreviewSource(video);
+    expect(video.removeAttribute).toHaveBeenCalledWith('src');
+    expect(video.load).toHaveBeenCalledOnce();
+  });
+
   it('short-circuits generation when the content-addressed poster exists', async () => {
     const poster = new Blob(['existing'], { type: 'image/jpeg' });
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(poster));

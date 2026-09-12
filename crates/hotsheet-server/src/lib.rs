@@ -4366,21 +4366,25 @@ async fn get_checkout_ticket_attachment(
     let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
     let attachment_id =
         Ulid::from_string(&attachment_id).map_err(|_| ApiError::not_found(&attachment_id))?;
-    let (attachment, bytes) = entry
-        .store
-        .read_attachment(&ticket.id, &attachment_id)
-        .map_err(|error| {
-            if error.is_io_kind(std::io::ErrorKind::NotFound) {
-                ApiError::not_found(&attachment_id.to_string())
-            } else {
-                error.into()
-            }
-        })?;
-    Ok(media::attachment_response(
+    let attachment = ticket
+        .attachments
+        .iter()
+        .find(|attachment| attachment.id == attachment_id)
+        .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    Ok(media::attachment_file_response(
         &attachment.filename,
-        bytes,
+        &path,
         headers.get("range").and_then(|value| value.to_str().ok()),
-    ))
+    )
+    .await
+    .map_err(|error| {
+        if matches!(&error, media::MediaError::Io(error) if error.kind() == std::io::ErrorKind::NotFound) {
+            ApiError::not_found(&attachment_id.to_string())
+        } else {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+        }
+    })?)
 }
 
 async fn get_checkout_ticket_attachment_by_name(
@@ -4390,12 +4394,25 @@ async fn get_checkout_ticket_attachment_by_name(
 ) -> Result<Response, ApiError> {
     let (entry, ticket, attachment_id) =
         checkout_attachment_by_name(&state, &reference, &id, &filename)?;
-    let (attachment, bytes) = entry.store.read_attachment(&ticket.id, &attachment_id)?;
-    Ok(media::attachment_response(
+    let attachment = ticket
+        .attachments
+        .iter()
+        .find(|attachment| attachment.id == attachment_id)
+        .ok_or_else(|| ApiError::not_found(&attachment_id.to_string()))?;
+    let path = attachment_disk_path(&entry, &ticket.id, &attachment_id, &attachment.filename);
+    Ok(media::attachment_file_response(
         &attachment.filename,
-        bytes,
+        &path,
         headers.get("range").and_then(|value| value.to_str().ok()),
-    ))
+    )
+    .await
+    .map_err(|error| {
+        if matches!(&error, media::MediaError::Io(error) if error.kind() == std::io::ErrorKind::NotFound) {
+            ApiError::not_found(&attachment_id.to_string())
+        } else {
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+        }
+    })?)
 }
 
 async fn get_checkout_ticket_attachment_thumbnail(

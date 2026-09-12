@@ -10,6 +10,7 @@ type PosterGenerator = (source: Blob) => Promise<Blob>;
 
 const posterTasks = new Map<string, Promise<VideoPosterResult>>();
 const assignedPosters = new WeakMap<HTMLVideoElement, string>();
+const localPosterUrls = new Map<HTMLVideoElement, string>();
 
 function waitForMedia(video: HTMLVideoElement, event: 'loadeddata' | 'seeked'): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -114,19 +115,37 @@ async function sourceBlob(url: string, fetcher: Fetcher): Promise<Blob> {
   return response.blob();
 }
 
+/** Keep poster-backed list previews from retaining a media element pipeline. */
+export function releaseVideoPreviewSource(video: Pick<HTMLVideoElement, 'load' | 'removeAttribute'>): void {
+  video.removeAttribute('src');
+  video.load();
+}
+
 /** Lazily backfill missing posters for video previews rendered by the real client. */
 export function syncVideoPosters(root: ParentNode, fetcher: Fetcher = fetch): void {
+  for (const [video, url] of localPosterUrls) {
+    if (!root.contains(video)) {
+      URL.revokeObjectURL(url);
+      localPosterUrls.delete(video);
+    }
+  }
   for (const video of root.querySelectorAll<HTMLVideoElement>('video[data-video-poster-url]')) {
     const posterUrl = video.dataset.videoPosterUrl;
     const videoUrl = video.dataset.videoSourceUrl;
-    if (!posterUrl || !videoUrl || assignedPosters.get(video) === posterUrl) continue;
+    if (!posterUrl || !videoUrl) continue;
+    if (assignedPosters.get(video) === posterUrl) {
+      if (localPosterUrls.has(video)) releaseVideoPreviewSource(video);
+      continue;
+    }
     assignedPosters.set(video, posterUrl);
     void ensureVideoPoster(posterUrl, () => sourceBlob(videoUrl, fetcher), fetcher).then(result => {
       if (!result.poster || !video.isConnected) return;
-      const previous = video.poster.startsWith('blob:') ? video.poster : undefined;
+      const previous = localPosterUrls.get(video);
       const localPoster = URL.createObjectURL(result.poster);
+      localPosterUrls.set(video, localPoster);
       video.poster = localPoster;
       if (previous) URL.revokeObjectURL(previous);
+      releaseVideoPreviewSource(video);
     });
   }
 }

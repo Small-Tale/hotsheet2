@@ -4,11 +4,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 
-use axum::body::Bytes;
+use axum::body::{Body, Bytes};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use futures_util::stream;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
 #[derive(Debug, Error)]
 pub enum MediaError {
@@ -20,14 +22,9 @@ pub enum MediaError {
 
 pub fn attachment_response(filename: &str, bytes: Vec<u8>, range: Option<&str>) -> Response {
     let len = bytes.len();
-    let mut headers = HeaderMap::new();
-    headers.insert(header::CONTENT_TYPE, content_type(filename));
-    headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
-    if let Ok(filename) = filename.parse() {
-        headers.insert("x-hotsheet-filename", filename);
-    }
+    let mut headers = attachment_headers(filename);
     if let Some(range) = range {
-        let Some((start, end)) = parse_byte_range(range, len) else {
+        let Some((start, end)) = parse_byte_range(range, len as u64) else {
             headers.insert(
                 header::CONTENT_RANGE,
                 HeaderValue::from_str(&format!("bytes */{len}")).expect("valid content range"),
@@ -46,7 +43,7 @@ pub fn attachment_response(filename: &str, bytes: Vec<u8>, range: Option<&str>) 
         return (
             StatusCode::PARTIAL_CONTENT,
             headers,
-            Bytes::copy_from_slice(&bytes[start..=end]),
+            Bytes::copy_from_slice(&bytes[start as usize..=end as usize]),
         )
             .into_response();
     }
@@ -55,6 +52,71 @@ pub fn attachment_response(filename: &str, bytes: Vec<u8>, range: Option<&str>) 
         HeaderValue::from_str(&len.to_string()).expect("valid content length"),
     );
     (headers, Bytes::from(bytes)).into_response()
+}
+
+/// Stream an attachment directly from disk, seeking before range reads so media probes
+/// never allocate or synchronously read the complete payload.
+pub async fn attachment_file_response(
+    filename: &str,
+    path: &Path,
+    range: Option<&str>,
+) -> Result<Response, MediaError> {
+    let len = tokio::fs::metadata(path).await?.len();
+    let mut headers = attachment_headers(filename);
+    let (status, start, body_len) = if let Some(range) = range {
+        let Some((start, end)) = parse_byte_range(range, len) else {
+            headers.insert(
+                header::CONTENT_RANGE,
+                HeaderValue::from_str(&format!("bytes */{len}")).expect("valid content range"),
+            );
+            return Ok((StatusCode::RANGE_NOT_SATISFIABLE, headers).into_response());
+        };
+        headers.insert(
+            header::CONTENT_RANGE,
+            HeaderValue::from_str(&format!("bytes {start}-{end}/{len}"))
+                .expect("valid content range"),
+        );
+        (StatusCode::PARTIAL_CONTENT, start, end - start + 1)
+    } else {
+        (StatusCode::OK, 0, len)
+    };
+    headers.insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&body_len.to_string()).expect("valid content length"),
+    );
+    let mut file = tokio::fs::File::open(path).await?;
+    if start > 0 {
+        file.seek(std::io::SeekFrom::Start(start)).await?;
+    }
+    let chunks = stream::try_unfold((file, body_len), |(mut file, remaining)| async move {
+        if remaining == 0 {
+            return Ok(None);
+        }
+        let mut chunk = vec![0; remaining.min(64 * 1024) as usize];
+        let read = file.read(&mut chunk).await?;
+        if read == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "attachment changed while it was being streamed",
+            ));
+        }
+        chunk.truncate(read);
+        Ok(Some((Bytes::from(chunk), (file, remaining - read as u64))))
+    });
+    let mut response = Response::new(Body::from_stream(chunks));
+    *response.status_mut() = status;
+    *response.headers_mut() = headers;
+    Ok(response)
+}
+
+fn attachment_headers(filename: &str) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, content_type(filename));
+    headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    if let Ok(filename) = filename.parse() {
+        headers.insert("x-hotsheet-filename", filename);
+    }
+    headers
 }
 
 pub fn is_video(filename: &str) -> bool {
@@ -178,24 +240,24 @@ fn extension(filename: &str) -> Option<String> {
         .map(str::to_ascii_lowercase)
 }
 
-fn parse_byte_range(value: &str, len: usize) -> Option<(usize, usize)> {
+fn parse_byte_range(value: &str, len: u64) -> Option<(u64, u64)> {
     let value = value.strip_prefix("bytes=")?;
     if value.contains(',') || len == 0 {
         return None;
     }
     let (start, end) = value.split_once('-')?;
     if start.is_empty() {
-        let suffix = end.parse::<usize>().ok()?.min(len);
+        let suffix = end.parse::<u64>().ok()?.min(len);
         return (suffix > 0).then_some((len - suffix, len - 1));
     }
-    let start = start.parse::<usize>().ok()?;
+    let start = start.parse::<u64>().ok()?;
     if start >= len {
         return None;
     }
     let end = if end.is_empty() {
         len - 1
     } else {
-        end.parse::<usize>().ok()?.min(len - 1)
+        end.parse::<u64>().ok()?.min(len - 1)
     };
     (start <= end).then_some((start, end))
 }
@@ -234,6 +296,7 @@ fn cache_root() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use http_body_util::BodyExt;
 
     #[test]
     fn parses_browser_byte_ranges() {
@@ -252,6 +315,50 @@ mod tests {
         assert_eq!(response.headers()[header::ACCEPT_RANGES], "bytes");
         assert_eq!(response.headers()[header::CONTENT_RANGE], "bytes 5-9/20");
         assert_eq!(response.headers()[header::CONTENT_LENGTH], "5");
+    }
+
+    #[tokio::test]
+    async fn streams_only_the_requested_file_span() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("large.mov");
+        let mut payload = vec![0x11; 256 * 1024];
+        payload[200_000..200_004].copy_from_slice(b"seek");
+        tokio::fs::write(&path, payload).await.unwrap();
+
+        let response = attachment_file_response("large.mov", &path, Some("bytes=200000-200003"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(response.headers()[header::CONTENT_LENGTH], "4");
+        assert_eq!(
+            response.headers()[header::CONTENT_RANGE],
+            "bytes 200000-200003/262144"
+        );
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            Bytes::from_static(b"seek")
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_an_unsatisfied_file_range_without_a_body() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("small.webm");
+        tokio::fs::write(&path, b"media").await.unwrap();
+        let response = attachment_file_response("small.webm", &path, Some("bytes=10-"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(response.headers()[header::CONTENT_RANGE], "bytes */5");
+        assert!(
+            response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .is_empty()
+        );
     }
 
     #[test]

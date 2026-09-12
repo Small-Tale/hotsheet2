@@ -631,8 +631,10 @@ and identity-less legacy entries remain conservatively blocking.
 
   The Attachments tab keeps the complete file list and adds a responsive, wrapping
   grid of 160px square contained previews for browser-compatible image and video
-  formats, including SVG, MP4, MOV, M4V, OGV, and WebM. Grid videos preload only
-  metadata and never autoplay. Their poster uses one predictable attachment `thumbnail`
+  formats, including SVG, MP4, MOV, M4V, OGV, and WebM. Grid videos do not preload
+  media and never autoplay; once their poster is ready, the client removes and reloads
+  their source so later application renders cannot leave a hidden decoder or request alive.
+  Their poster uses one predictable attachment `thumbnail`
   GET/PUT endpoint backed by a SHA-256 content-addressed host cache. Web clients seek and
   draw a frame with native video/canvas APIs and upload the JPEG during browser uploads;
   the first capable browser viewing an older or CLI-created video lazily backfills a
@@ -642,14 +644,17 @@ and identity-less legacy entries remain conservatively blocking.
   A headless host may opportunistically use an already-installed `ffmpeg` executable
   (`HOTSHEET_FFMPEG` can name one outside `PATH`), but HS2 neither requires nor bundles it
   for posters and its absence is only a cache miss, not a setup failure. The original video response uses its native media MIME type,
-  advertises byte-range support, and returns valid single-range `206` responses so
-  Safari and other media engines can discover duration and seek normally. The browser-native
+  advertises byte-range support, and streams only the bounded file span selected by a
+  valid single-range `206` response instead of loading the whole attachment into memory,
+  so Safari and other media engines can discover duration and seek normally. The browser-native
   flow and server cache contract are identical on macOS, Linux, and Windows.
   A preview or inline image opens the same full-screen
-  media gallery; videos remain paused initially but preload and present their decoded
+  media gallery; videos remain paused initially, preload only metadata, and explicitly
+  prime and present their decoded
   first frame rather than carrying the grid thumbnail poster into the full-screen player.
-  A paused scrub presents the decoded frame at the selected time without requiring a
-  play/pause cycle. They expose only Hot Sheet's custom play/pause, scrubber, time, and
+  A paused scrub coalesces rapid pointer updates behind the active seek, retains only the
+  latest target, and presents that decoded frame before accepting another expensive seek;
+  it does not require a play/pause cycle. They expose only Hot Sheet's custom play/pause, scrubber, time, and
   volume controls, never a second native browser control strip. The volume icon opens
   a click-persistent popup containing both the slider and mute action; only clicking
   outside that popup dismisses it. Playback ticks and scrub input update the live gallery

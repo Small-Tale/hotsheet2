@@ -46,7 +46,7 @@ describe('AttachmentGallery',()=>{
     expect(markup).toContain('name="gallery-playhead"');
     expect(markup).toContain('data-action="toggle-gallery-playback"');
     expect(markup).toContain('src="/walkthrough.mp4"');
-    expect(markup).toContain('preload="auto"');
+    expect(markup).toContain('preload="metadata"');
     expect(markup).not.toContain('poster=');
     expect(markup).not.toContain('data-video-poster-url');
     expect(markup).toContain('data-action="toggle-gallery-volume"');
