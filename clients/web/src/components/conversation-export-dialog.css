@@ -13,12 +13,6 @@
 .conversation-export-dialog__choice span { display: grid; min-width: 0; gap: var(--wa-space-3xs); }
 .conversation-export-dialog__choice small { color: var(--wa-color-neutral-on-quiet); line-height: 1.35; }
 .conversation-export-dialog__choice--danger:has(input:checked) { border-color: var(--wa-color-danger-border-normal); background: var(--wa-color-danger-fill-quiet); }
-.conversation-export-dialog__range-help,.conversation-export-dialog__selection-summary { margin:var(--wa-space-2xs) var(--wa-space-xs) 0; color:var(--wa-color-neutral-on-quiet); font-size:var(--wa-font-size-xs); line-height:1.4; }
-.conversation-export-dialog__messages { max-height:18rem; padding:var(--wa-space-xs); margin-top:var(--wa-space-xs); }
-.conversation-export-dialog__messages .ai-conversation__message[data-action] { cursor:pointer; }
-.conversation-export-dialog__messages .ai-conversation__message[data-selected="true"] { outline:2px solid var(--wa-color-brand-border-normal); outline-offset:1px; }
-.conversation-export-dialog__messages .ai-conversation__message[data-selected="false"] { opacity:.5; }
-.conversation-export-dialog__messages .ai-conversation__message[data-action]:focus-visible { outline:var(--wa-focus-ring); outline-offset:2px; }
 .conversation-export-dialog__collision { display: grid; padding: var(--wa-space-xs); border-radius: var(--wa-border-radius-m); background: var(--wa-color-warning-fill-quiet); gap: var(--wa-space-2xs); }
 .conversation-export-dialog__collision > wa-tag { justify-self: start; }
 .conversation-export-dialog__collision > p { margin: 0; color: var(--wa-color-warning-on-quiet); font-size: var(--wa-font-size-s); }

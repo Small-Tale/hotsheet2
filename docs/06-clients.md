@@ -572,12 +572,14 @@ and identity-less legacy entries remain conservatively blocking.
   starts at its latest message; streamed growth remains pinned while the reader is already at the
   bottom, but never pulls them away from older messages they intentionally scrolled back to read.
 
-  Completed transcripts can be saved from either conversation presentation. The compact,
-  two-step save wizard first renders the same message bubbles, Markdown, attribution, and file
-  references as the live chat so the user can keep everything or choose a contiguous inclusive
-  range directly from the transcript. Its second step presents optional bundle contents as one
-  vertical list and opens the host folder picker from Save, without a redundant review step or
-  internal bundle-file inventory. Popup lifecycle events from
+  Completed transcripts can be saved from either conversation presentation. Messages remain
+  directly selectable in the live transcript: one pick anchors a range, a second includes every
+  message between the boundaries, and the selected range can be copied to the system clipboard.
+  Save reuses that selection instead of asking for it again. With a selection, the compact wizard
+  first offers only Entire conversation or Selected range; with no selection it skips that scope
+  step because the full transcript is the only possible result. The bundle-contents step presents
+  optional contents as one vertical list and opens the host folder picker from Save, without a
+  redundant review step or internal bundle-file inventory. Popup lifecycle events from
   controls inside the wizard never dismiss the wizard itself. It creates a portable `.hotsheet-chat`
   directory bundle. Every bundle contains `manifest.json`, a
   readable `transcript.md`, and lossless `conversation.json`; optional `summary.md`, attachment,

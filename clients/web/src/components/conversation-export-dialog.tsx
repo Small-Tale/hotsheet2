@@ -6,15 +6,14 @@ import './conversation-export-dialog.css';
 import type { ConversationActivity, ConversationMessage } from '../ai-conversation';
 import {
   type ConversationExportDraft,
+  type ConversationExportScope,
   type ConversationExportSource,
   conversationExportValidation,
   selectedConversationMessages,
 } from '../conversation-export';
-import { ConversationMessages } from './ai-conversation';
 
 export interface ConversationExportDialogState {
   source: ConversationExportSource;
-  toolLabel?: string;
   messages: readonly ConversationMessage[];
   activity?: readonly ConversationActivity[];
   draft: ConversationExportDraft;
@@ -22,14 +21,16 @@ export interface ConversationExportDialogState {
   error?: string;
   summaryAvailable?: boolean;
   step?: 1|2;
+  selectedRange?: Extract<ConversationExportScope,{kind:'range'}>;
 }
 
 export function ConversationExportDialog({ state }: { state?: ConversationExportDialogState }) {
   if (!state) return <></>;
-  const { source, toolLabel=source.tool, messages, draft, busy = false, error = '', summaryAvailable = true, step = 1 } = state;
+  const { source, messages, draft, busy = false, error = '', summaryAvailable = true, step = 1, selectedRange } = state;
   const range = draft.scope.kind === 'range';
   const selectedMessages=selectedConversationMessages(messages,draft.scope);
-  const selectedIds=new Set(selectedMessages.map(message=>message.id));
+  const presetMessages=selectedRange?selectedConversationMessages(messages,selectedRange):[];
+  const hasScopeChoice=Boolean(selectedRange);
   const existing = draft.destination?.existing;
   const sameConversation = existing?.sourceConversationId === source.conversationId;
   const validation = conversationExportValidation(messages, draft, source);
@@ -39,7 +40,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
 
   return <wa-dialog class="conversation-export-dialog" data-component="conversation-export-dialog" data-step={step} label="Save conversation" open with-footer>
     <form class="conversation-export-dialog__form" data-action="submit-conversation-export">
-      <header class="conversation-export-dialog__header"><span>Step {step} of 2</span><strong>{step===1?'Choose messages':'Bundle contents'}</strong></header>
+      <header class="conversation-export-dialog__header"><span>{hasScopeChoice?`Step ${step} of 2`:'Save conversation'}</span><strong>{step===1?'Choose scope':'Bundle contents'}</strong></header>
 
       {step===1&&<fieldset class="conversation-export-dialog__section">
         <legend>Messages</legend>
@@ -49,11 +50,8 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
         </label>
         <label class="conversation-export-dialog__choice">
           <input type="radio" name="conversation-export-scope" value="range" checked={range} disabled={busy} />
-          <span><strong>Selected range</strong><small>Include both boundary messages and everything between them.</small></span>
+          <span><strong>Selected range</strong><small>{presetMessages.length} message{presetMessages.length===1?'':'s'} selected in the chat.</small></span>
         </label>
-        <p class="conversation-export-dialog__range-help">{range?'Pick one message to start a new range, then another to include everything between them.':'Switch to Selected range, then pick messages directly from the transcript.'}</p>
-        <div class="conversation-export-dialog__messages ai-conversation__transcript" role="listbox" aria-label="Conversation messages" aria-disabled={String(busy||!range)}><ConversationMessages tool={toolLabel} messages={messages} selectedIds={range?selectedIds:new Set(messages.map(message=>message.id))} selectable={range&&!busy}/></div>
-        <p class="conversation-export-dialog__selection-summary" role="status">{selectedMessages.length} of {messages.length} messages selected</p>
       </fieldset>}
 
       {step===2&&<fieldset class="conversation-export-dialog__section">
@@ -74,7 +72,7 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
       <p class="conversation-export-dialog__error" role="alert">{error || (summaryUnavailable ? 'Summary export is unavailable for this conversation.' : blockingValidation)}</p>
       <div slot="footer" class="conversation-export-dialog__actions">
         <button type="button" class="conversation-export-dialog__button" data-action="cancel-conversation-export" disabled={busy}>Cancel</button>
-        {step>1&&<button type="button" class="conversation-export-dialog__button" data-action="previous-conversation-export-step" disabled={busy}>Back</button>}
+        {step>1&&hasScopeChoice&&<button type="button" class="conversation-export-dialog__button" data-action="previous-conversation-export-step" disabled={busy}>Back</button>}
         <button type="button" class="conversation-export-dialog__button conversation-export-dialog__button--accent" data-action={step===1?'next-conversation-export-step':'finish-conversation-export'} disabled={busy||(step===1?selectedMessages.length===0:Boolean(blockingValidation)||summaryUnavailable)}>{step===1?'Continue':submitLabel}</button>
       </div>
     </form>

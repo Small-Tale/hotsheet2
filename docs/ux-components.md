@@ -239,7 +239,9 @@ does not introduce polling or another network request.
     capabilities and apply to subsequent turns without changing provider
   - transcript: ordered, high-contrast user messages and one progressively appended assistant response per
     submitted turn; output chunks update that response in place, unknown additive events do
-    not break it, and completed/failed/interrupted terminal state remains attached to the turn
+    not break it, and completed/failed/interrupted terminal state remains attached to the turn;
+    messages are always keyboard- and pointer-selectable as an inclusive range, with visible
+    selection state plus Copy and Clear actions that preserve ordinary text selection
   - working row: an icon plus specific live text (`Reviewing the project…`, `Responding…`,
     `Waiting for permission…`, or a bounded native-activity description), never a generic
     spinner without explanation
@@ -248,9 +250,10 @@ does not introduce polling or another network request.
   - composer: multiline free-form input plus an explicit Send action; Enter sends while
     Shift+Enter inserts a line break; sending is disabled for blank input and while the same
     connection is busy, with the reason exposed accessibly
-  - save/reopen: the header Save action opens a compact two-step `ConversationExportDialog`:
-    choose all messages or a contiguous range from the same production message-bubble composition,
-    then choose a vertically stacked set of optional local summary/attachments/original-media
+  - save/reopen: the header Save action reuses the live transcript selection. If a range exists,
+    a compact `ConversationExportDialog` offers Entire conversation or the already-selected range
+    without presenting another picker; if no range exists it skips directly to the vertically
+    stacked set of optional local summary/attachments/original-media
     contents and invoke the host `.hotsheet-chat` folder picker from Save; nested popup hide events do
     not close the wizard and existing
     destinations receive explicit collision handling; structured per-message file references render
