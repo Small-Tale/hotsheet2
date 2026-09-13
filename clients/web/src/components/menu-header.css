@@ -1,0 +1,2 @@
+.kui-menu-header h2,.kui-menu-header--toggle > span { display: inline-flex; min-width: 0; align-items: center; gap: var(--wa-space-xs); }
+.kui-menu-header__count { display: inline-grid; min-width: 1.35rem; height: 1.35rem; padding: 0 .35rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); place-items: center; font-size: var(--wa-font-size-3xs); font-weight: 700; letter-spacing: 0; }

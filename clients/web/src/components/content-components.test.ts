@@ -124,7 +124,9 @@ describe('content components', () => {
     const markup = String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'high', category: 'feature', tags: ['client'], details: 'Details', notes: [{ id: 'one', kind: 'regular', author: 'Codex', time: 'Now', body: 'Done' }] }));
     expect(markup).toContain('HS2-TEST');
     expect(markup).toContain('data-component="note-card"');
-    expect(markup).toContain('<h2>Notes 1</h2>');
+    expect(markup).toContain('<h2>Notes<span class="kui-menu-header__count" aria-label="1 note">1</span></h2>');
+    const menuHeaderCss=readFileSync(resolve(import.meta.dirname,'menu-header.css'),'utf8');
+    expect(menuHeaderCss).toMatch(/\.kui-menu-header__count \{[^}]*background: var\(--wa-color-neutral-fill-quiet\);/);
     expect(markup).toContain('role="dialog"');
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-large-text="false"');

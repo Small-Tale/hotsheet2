@@ -195,8 +195,9 @@ does not introduce polling or another network request.
   selection grid used by repository, view, and command actions. This keeps icons,
   labels, and interaction boundaries aligned across menu-like sidebar surfaces.
 - `MenuHeader` — **demo built**: shared section-label alignment with MenuItem icons,
-  including optional trailing actions, popover-targeted actions, and whole-header
-  disclosure variants.
+  including an optional subtle count badge, trailing actions, popover-targeted actions,
+  and whole-header disclosure variants. Notes uses the shared count slot instead of
+  concatenating a bare number into its label (HS2-FYCAZC).
 - `ViewNavigation` — **demo built**: icon-bearing views, counts, attention, add-view
   action, and controlled selection through `MenuItem`.
   - section heading and add-view action
