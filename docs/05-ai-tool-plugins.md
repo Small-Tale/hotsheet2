@@ -567,6 +567,10 @@ OpenCode and Antigravity declare their installed-runtime catalog commands (`open
 and `agy models`) instead of freezing account/configuration-dependent ids in the registry.
 OpenCode applies a selected model through ACP `session/set_config_option`; Antigravity passes
 the selected model and effort through its declared `--model`/`--effort` spawn flags.
+Bundled provider manifests also describe offline fallback catalogs. The Claude manifest
+tracks the CLI aliases (including `fable`) and advertises its supported effort levels so
+settings, Drive, conversations, and interactive terminal launches expose the same choices
+even though the channel transport does not provide a live model-catalog endpoint.
 Connection creation accepts optional model/effort selections. A live turn may override
 them only when the descriptor advertises `change_model` and/or `change_effort`. Interactive
 AI terminals use the same plugin declarations to expand model/effort launch arguments.

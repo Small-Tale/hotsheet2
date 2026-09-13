@@ -129,13 +129,35 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
     assert_eq!(cd.transport, "claude-channel");
     assert!(!cd.interrupt, "no channel interrupt in phase 1");
     assert_eq!(
-        find_in("claude", &[])
-            .unwrap()
+        cd.models
+            .iter()
+            .map(|model| model.id.as_str())
+            .collect::<Vec<_>>(),
+        ["fable", "opus", "sonnet", "haiku"]
+    );
+    assert_eq!(
+        cd.models[0].effort_levels,
+        ["low", "medium", "high", "xhigh", "max"]
+    );
+    assert_eq!(
+        cd.models[1].effort_levels,
+        ["low", "medium", "high", "xhigh", "max"]
+    );
+    assert_eq!(cd.default_effort.as_deref(), Some("medium"));
+    assert_eq!(cd.session_options, ["model", "effort"]);
+    let claude = find_in("claude", &[]).unwrap();
+    assert_eq!(
+        claude
             .manifest
             .launch
+            .as_ref()
             .expect("claude declares a launch")
             .program,
         "claude"
+    );
+    assert_eq!(
+        claude.launch_args(Some("fable"), Some("high")).unwrap(),
+        ["--model", "fable", "--effort", "high"]
     );
 }
 

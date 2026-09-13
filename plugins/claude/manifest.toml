@@ -43,17 +43,21 @@ args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"]
 content = "stdin"
 interrupt = false
 models = [
-  { id = "sonnet", label = "Sonnet" },
-  { id = "opus", label = "Opus" },
+  { id = "fable", label = "Fable", effort_levels = ["low", "medium", "high", "xhigh", "max"] },
+  { id = "opus", label = "Opus", effort_levels = ["low", "medium", "high", "xhigh", "max"] },
+  { id = "sonnet", label = "Sonnet", effort_levels = ["low", "medium", "high", "xhigh", "max"] },
   { id = "haiku", label = "Haiku" },
 ]
 default_model = "sonnet"
+default_effort = "medium"
+session_options = ["model", "effort"]
 
 [launch]
 # Interactive REPL; intentionally not the headless stream-json drive command above.
 program = "claude"
 args = []
 model_args = ["--model", "{model}"]
+effort_args = ["--effort", "{effort}"]
 
 [metrics]
 # Claude reports token usage on its stream-json `result` event; the host maps it to a
