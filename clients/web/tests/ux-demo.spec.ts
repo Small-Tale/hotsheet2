@@ -201,11 +201,10 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('.kui-dialog-header')).toHaveCSS('border-bottom-width', '0px');
   await expect(dialog.locator('footer')).toHaveCSS('border-top-width', '0px');
-  expect(await dialog.evaluate(node => ({
-    border: getComputedStyle(node).borderColor,
-    divider: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),
-    surface: getComputedStyle(node).backgroundColor,
-  }))).toEqual({ border: 'rgb(209, 209, 214)', divider: '#d1d1d6', surface: 'rgb(255, 255, 255)' });
+  expect(await dialog.evaluate(node => {
+    const probe=document.createElement('span');probe.style.background='var(--hs-shell-divider)';document.body.append(probe);
+    const result={border:getComputedStyle(node).borderColor,dividerMatches:getComputedStyle(node).borderColor===getComputedStyle(probe).backgroundColor,surface:getComputedStyle(node).backgroundColor};probe.remove();return result;
+  })).toEqual({ border: 'rgb(209, 209, 214)', dividerMatches: true, surface: 'rgb(255, 255, 255)' });
   await expect(dialog.getByRole('button', { name: 'Review captured region 1' })).toBeVisible();
   await expect(dialog.getByRole('button', { name: 'Review captured region 2' })).toBeVisible();
   await expect(dialog.getByRole('img', { name: 'Captured region 1 preview' })).toHaveAttribute('src', /^data:image\/png;base64,/);
@@ -1979,17 +1978,13 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
     const feedbackNode = node.querySelector('.ticket-list-row__feedback');
     const railNode = node.querySelector('.ticket-list-row__indicator--needs-review');
     return {
-      aliases: [
-        root.getPropertyValue('--hs-shell-divider').trim(),
-        root.getPropertyValue('--hs-ticket-state-needs-review').trim(),
-        root.getPropertyValue('--hs-ticket-state-up-next').trim(),
-      ],
+      aliases: [root.getPropertyValue('--hs-ticket-state-needs-review').trim(),root.getPropertyValue('--hs-ticket-state-up-next').trim()],
       reviewMatches: railNode !== null && getComputedStyle(railNode).backgroundColor === review,
       surfaceMatches: getComputedStyle(node).backgroundColor === surface,
       warningMatches: feedbackNode !== null && getComputedStyle(feedbackNode).backgroundColor === warning,
     };
   })).toEqual({
-    aliases: ['#d1d1d6', '#cb30e0', '#ffcc00'],
+    aliases: ['#cb30e0', '#ffcc00'],
     reviewMatches: true,
     surfaceMatches: true,
     warningMatches: true,
@@ -2007,10 +2002,10 @@ test('resolves the shared Web Awesome and Hot Sheet semantic theme', async ({ pa
     return matches;
   })).toBe(true);
   const sidebarRegion = page.locator('.app-shell > .kui-resizable-region[data-region-id="app-sidebar"]');
-  expect(await sidebarRegion.evaluate(node => ({
-    divider: getComputedStyle(node, '::after').backgroundColor,
-    token: getComputedStyle(document.documentElement).getPropertyValue('--hs-shell-divider').trim(),
-  }))).toEqual({ divider: 'rgb(209, 209, 214)', token: '#d1d1d6' });
+  expect(await sidebarRegion.evaluate(node => {
+    const probe=document.createElement('span');probe.style.background='var(--hs-shell-divider)';document.body.append(probe);
+    const result={divider:getComputedStyle(node,'::after').backgroundColor,dividerMatches:getComputedStyle(node,'::after').backgroundColor===getComputedStyle(probe).backgroundColor};probe.remove();return result;
+  })).toEqual({ divider: 'rgb(209, 209, 214)', dividerMatches: true });
   await page.screenshot({ path: '/private/tmp/hs2-66m88k-semantic-theme-wide.png', fullPage: true });
   await page.setViewportSize({ width: 940, height: 844 });
   await expect(sidebarRegion).toBeVisible();

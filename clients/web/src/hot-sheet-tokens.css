@@ -1,0 +1,12 @@
+/* Product-only semantic tokens. Generic palette and Web Awesome theming come from @kerfjs/ui. */
+:root {
+  --hs-shell-divider: var(--wa-color-neutral-border-normal);
+  --hs-ticket-state-needs-review: #cb30e0;
+  --hs-ticket-state-up-next: var(--wa-color-warning-fill-loud);
+  --hs-priority-high: #ff8d28;
+  --hs-priority-default: #8e8e93;
+  --hs-terminal-background: #000;
+  --hs-reader-font-size-s: calc(1.5 * var(--wa-font-size-s));
+  --hs-reader-font-size-m: calc(1.5 * var(--wa-font-size-m));
+  --hs-reader-font-size-l: calc(1.5 * var(--wa-font-size-l));
+}

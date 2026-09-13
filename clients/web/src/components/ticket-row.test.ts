@@ -48,7 +48,7 @@ describe('TicketRow', () => {
   });
 
   it('uses one semantic color token for every Up Next presentation', () => {
-    const tokenCss = readFileSync(resolve(import.meta.dirname, '../theme.css'), 'utf8');
+    const tokenCss = readFileSync(resolve(import.meta.dirname, '../hot-sheet-tokens.css'), 'utf8');
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     expect(tokenCss).toContain('--hs-ticket-state-up-next: var(--wa-color-warning-fill-loud)');
@@ -62,8 +62,8 @@ describe('TicketRow', () => {
       const presentation = getPriorityPresentation(priority);
       return [priority, [presentation.name, presentation.color]];
     }))).toEqual({
-      urgent: ['chevrons-up', 'var(--wa-color-danger-fill-loud)'], high: ['chevron-up', 'var(--wa-color-system-orange)'],
-      default: ['minus', 'var(--wa-color-system-gray)'], low: ['chevron-down', 'var(--wa-color-brand-fill-loud)'],
+      urgent: ['chevrons-up', 'var(--wa-color-danger-fill-loud)'], high: ['chevron-up', 'var(--hs-priority-high)'],
+      default: ['minus', 'var(--hs-priority-default)'], low: ['chevron-down', 'var(--wa-color-brand-fill-loud)'],
     });
   });
 

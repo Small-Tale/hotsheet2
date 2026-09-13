@@ -1,5 +1,5 @@
 import './connection-details-dialog.css';
-import './dialog-layout.css';
+import './native-popover-dialog.css';
 
 import { DialogHeader } from '@kerfjs/ui/dialog-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';

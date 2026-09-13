@@ -23,7 +23,7 @@ const status:RepositoryStatus={
     {path:'clients/web/src/main.tsx',unstaged:'modified',untracked:false,conflicted:false},
     {path:'docs/06-clients.md',unstaged:'modified',untracked:false,conflicted:false},
     {path:'notes/repository-review.md',untracked:true,conflicted:false},
-    {path:'clients/web/src/theme.css',staged:'unmerged',unstaged:'unmerged',untracked:false,conflicted:true},
+    {path:'clients/web/src/hot-sheet-tokens.css',staged:'unmerged',unstaged:'unmerged',untracked:false,conflicted:true},
   ],
   ranges:[{from:'aaa1111',to:'bbb2222',count:2}],
   commits:[

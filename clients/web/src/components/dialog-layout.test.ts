@@ -16,7 +16,7 @@ describe('dialog layout primitives',()=>{
     const table=String(ValueTable({label:'Build metadata',children:'<div><dt>Version</dt><dd>1</dd></div>' as never}));
     expect(table).toContain('data-component="value-table"');
     expect(table).toContain('aria-label="Build metadata"');
-    const css=readFileSync(resolve(import.meta.dirname,'dialog-layout.css'),'utf8');
+    const css=readFileSync(resolve(import.meta.dirname,'native-popover-dialog.css'),'utf8');
     expect(css).toMatch(/\.dialog-surface \.kui-dialog-header \{ border-bottom: 0; \}/);
   });
 });

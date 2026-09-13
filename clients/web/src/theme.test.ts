@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const sourceRoot = import.meta.dirname;
-const themePath = resolve(sourceRoot, 'theme.css');
+const tokenPath = resolve(sourceRoot, 'hot-sheet-tokens.css');
 const productionCss = [
   resolve(sourceRoot, 'style.css'),
   ...readdirSync(resolve(sourceRoot, 'components'))
@@ -22,35 +22,37 @@ function css(path: string): string {
 }
 
 describe('shared client theme', () => {
-  it('is loaded after Web Awesome by both production entry points', () => {
+  it('loads Kerf Web Awesome theming before product-only tokens in both entry points', () => {
     for (const entry of ['main.tsx', 'ux-demo/main.tsx']) {
       const source = css(resolve(sourceRoot, entry));
-      const expectedImport = entry === 'main.tsx' ? "import './theme.css';" : "import '../theme.css';";
+      const expectedImport = entry === 'main.tsx' ? "import './hot-sheet-tokens.css';" : "import '../hot-sheet-tokens.css';";
       expect(source).toContain(expectedImport);
-      expect(source.indexOf("import '@awesome.me/webawesome/dist/styles/webawesome.css';"))
+      expect(source.indexOf("import '@kerfjs/ui/webawesome.css';"))
         .toBeLessThan(source.indexOf(expectedImport));
+      expect(source).not.toContain("import '@awesome.me/webawesome/dist/styles/webawesome.css';");
     }
   });
 
   it('defines every required and referenced Hot Sheet semantic alias exactly once', () => {
-    const allCss = [themePath, ...clientCss].map(css).join('\n');
+    const allCss = [tokenPath, ...clientCss].map(css).join('\n');
     const definitions = [...allCss.matchAll(/(--hs-[\w-]+)\s*:/g)].map(match => match[1]);
     const references = [...allCss.matchAll(/var\((--hs-[\w-]+)\)/g)].map(match => match[1]);
-    const required = ['--hs-shell-divider', '--hs-terminal-background', '--hs-ticket-state-needs-review', '--hs-ticket-state-up-next', '--hs-reader-font-size-s', '--hs-reader-font-size-m', '--hs-reader-font-size-l'];
+    const required = ['--hs-shell-divider', '--hs-terminal-background', '--hs-ticket-state-needs-review', '--hs-ticket-state-up-next', '--hs-priority-high', '--hs-priority-default', '--hs-reader-font-size-s', '--hs-reader-font-size-m', '--hs-reader-font-size-l'];
+    const cssReferences = required.filter(token => !token.startsWith('--hs-priority-'));
 
     expect(new Set(definitions)).toEqual(new Set(required));
     expect(definitions).toHaveLength(required.length);
-    expect(new Set(references)).toEqual(new Set(required));
+    expect(new Set(references)).toEqual(new Set(cssReferences));
   });
 
   it('keeps every client-owned stylesheet on the shared semantic color palette', () => {
     for (const path of productionCss) {
       const source = css(path);
-      expect(source, `${path} contains a color literal outside theme.css`)
+      expect(source, `${path} contains a color literal outside hot-sheet-tokens.css`)
         .not.toMatch(/#[\da-f]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)/i);
     }
     for (const path of auxiliaryClientCss) {
-      expect(css(path), `${path} contains a color literal outside theme.css`)
+      expect(css(path), `${path} contains a color literal outside hot-sheet-tokens.css`)
         .not.toMatch(/#[\da-f]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)/i);
     }
     for (const token of [
@@ -61,28 +63,23 @@ describe('shared client theme', () => {
       '--wa-color-neutral-fill-quiet', '--wa-color-neutral-border-normal',
       '--wa-color-neutral-on-quiet', '--wa-color-focus', '--wa-shadow-l',
     ]) {
-      expect(css(themePath), `theme.css does not define ${token}`).toContain(`${token}:`);
       expect(clientCss.map(css).join('\n'), `client CSS does not consume ${token}`).toContain(`var(${token})`);
     }
-    const themeLiterals = [...css(themePath).matchAll(/#[\da-f]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)/gi)]
+    const themeLiterals = [...css(tokenPath).matchAll(/#[\da-f]{3,8}\b|(?:rgb|hsl)a?\([^)]*\)/gi)]
       .map(match => match[0].toLocaleLowerCase());
-    expect(new Set(themeLiterals).size, 'theme.css repeats a palette literal instead of aliasing its semantic source')
+    expect(new Set(themeLiterals).size, 'hot-sheet-tokens.css repeats a palette literal instead of aliasing its semantic source')
       .toBe(themeLiterals.length);
   });
 
-  it('maps common control and state semantics to the macOS Tahoe system palette', () => {
-    const source = css(themePath);
+  it('leaves generic palette ownership to Kerf and defines only product semantics locally', () => {
+    const source = css(tokenPath);
     for (const declaration of [
-      '--wa-color-brand-fill-loud: #0088ff',
-      '--wa-color-danger-fill-loud: #ff383c',
-      '--wa-color-warning-fill-loud: #ffcc00',
-      '--wa-color-success-fill-loud: #34c759',
-      '--wa-color-system-orange: #ff8d28',
-      '--wa-color-system-gray: #8e8e93',
+      '--hs-priority-high: #ff8d28',
+      '--hs-priority-default: #8e8e93',
       '--hs-ticket-state-needs-review: #cb30e0',
     ]) expect(source).toContain(declaration);
-    expect(source).toContain('--wa-color-focus: var(--wa-color-brand-fill-loud)');
     expect(source).toContain('--hs-shell-divider: var(--wa-color-neutral-border-normal)');
+    expect(source).not.toMatch(/--wa-[\w-]+\s*:/);
   });
 
   it('uses the Web Awesome typography scale instead of one-off font sizes', () => {
@@ -101,6 +98,6 @@ describe('shared client theme', () => {
     }
     expect(css(resolve(sourceRoot, 'components/workspace-header.css')))
       .toMatch(/view-mode-switcher__badge[^}]*font-size: var\(--wa-font-size-3xs\)/);
-    expect(css(themePath)).toContain('--hs-reader-font-size-s: calc(1.5 * var(--wa-font-size-s))');
+    expect(css(tokenPath)).toContain('--hs-reader-font-size-s: calc(1.5 * var(--wa-font-size-s))');
   });
 });

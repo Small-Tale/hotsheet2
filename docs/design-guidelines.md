@@ -153,7 +153,7 @@ clients unless labeled).
 claim) always pairs its color or rail with text or an icon. Every icon-only control
 has an accessible name and a tooltip. Toasts and notices never auto-dismiss without
 a close control. Web: enforce WCAG AA on every `--wa-color-*-on-*` pair in
-`clients/web/src/theme.css`, honor `prefers-reduced-motion`, `prefers-contrast`,
+`@kerfjs/ui/webawesome.css` plus `clients/web/src/hot-sheet-tokens.css`, honor `prefers-reduced-motion`, `prefers-contrast`,
 and `prefers-reduced-transparency`, keep `--wa-color-focus` rings visible, and give
 Web Awesome controls ≥ 20 px (prefer 28 px) hit targets (HS2-DKZG9S, HS2-A2A9GT).
 

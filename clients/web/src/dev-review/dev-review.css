@@ -1,4 +1,4 @@
-@import '../components/dialog-layout.css';
+@import '../components/native-popover-dialog.css';
 
 .hs-dev-review { position: fixed; z-index: 2147483647; inset: 0; pointer-events: none; font: var(--wa-font-size-xs)/1.35 system-ui, sans-serif; color: var(--wa-color-text-normal); }
 .hs-dev-review__toolbar { position: fixed; top: 6px; right: 6px; bottom: auto; left: auto; display: flex; width: max-content; margin: 0; padding: 3px; border: 1px solid color-mix(in srgb, var(--wa-color-neutral-on-quiet) 35%, transparent); border-radius: 8px; color: var(--wa-color-text-normal); background: color-mix(in srgb, var(--wa-color-surface-default) 94%, transparent); box-shadow: var(--wa-shadow-s); font: var(--wa-font-size-xs)/1.35 system-ui, sans-serif; gap: 3px; pointer-events: auto; backdrop-filter: blur(12px); }

@@ -1,4 +1,4 @@
-import '../components/dialog-layout.css';
+import '../components/native-popover-dialog.css';
 
 import { DialogHeader } from '@kerfjs/ui/dialog-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';

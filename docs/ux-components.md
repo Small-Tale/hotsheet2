@@ -777,15 +777,15 @@ meaning and each option uses the same evocative component icon as the catalog si
 Production web component CSS is colocated in `clients/web/src/components/` and imported
 by its component module. The `/ux-demo` stylesheet owns only catalog shell, inspector,
 and stage presentation, ensuring the demo exercises the same CSS the real app imports.
-Both the real app and `/ux-demo` load `clients/web/src/theme.css` after Web Awesome's
-theme. Generic surface, text, brand, success/warning/danger, spacing, radius, focus,
-and shadow concepts use Web Awesome's `--wa-*` vocabulary directly. The shared theme
-defines `--hs-*` only for Hot Sheet domain concepts that Web Awesome cannot name—today,
-the Up Next and Needs Review ticket-state rails plus the stronger shared shell divider.
+Both the real app and `/ux-demo` load `@kerfjs/ui/webawesome.css`, then
+`clients/web/src/hot-sheet-tokens.css`. Kerf owns the generic surface, text, brand,
+success/warning/danger, spacing, radius, focus, shadow, light/dark, and Web Awesome
+theme contracts. The local file defines `--hs-*` only for Hot Sheet domain concepts
+that Kerf cannot name: ticket-state rails, priority colors, terminal background,
+reader scaling, and the shell-divider alias.
 The production shell, UX-demo chrome, and local Dev Review overlay all consume this
-same contract; `#cfd3dc` is defined once as `--hs-shell-divider` rather than repeated
-at the app-sidebar and review-dialog boundaries. Raw CSS palette values are defined
-only in `theme.css`; component, demo, and development-tool styles select semantic
+same contract. Raw product palette values are defined only in
+`hot-sheet-tokens.css`; component, demo, and development-tool styles select semantic
 surface, text, border, status, focus, overlay, and shadow tokens. Translucent effects
 derive from those tokens with `color-mix()` instead of embedding a second palette.
 User/provider category colors remain local application data because they are persisted
@@ -793,7 +793,7 @@ choices, not component styling. Component font sizes likewise use Web Awesome's 
 `--wa-font-size-*` scale; components do not invent intermediate sizes. For example,
 the view-mode notification badge uses `--wa-font-size-3xs` rather than a one-off
 `.57rem`. Unit policy scans every client-owned stylesheet and rejects raw color values
-outside the theme or numeric component font sizes, so new variants cannot silently
+outside the product-token boundary or numeric component font sizes, so new variants cannot silently
 reintroduce either kind of drift. One-off layout geometry may remain local when it
 describes an actual component measurement rather than a reusable visual meaning.
 Actionable context-menu entries consistently pair their text with meaningful Lucide

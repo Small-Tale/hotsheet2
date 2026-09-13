@@ -64,7 +64,7 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).not.toContain('repository-status-popover__file-state');
     expect(markup).toContain('repository-status-popover__path');
     expect(markup).toContain('data-action="refresh-repository-status"');
-    const css=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8'),shared=readFileSync(resolve(import.meta.dirname,'dialog-layout.css'),'utf8');
+    const css=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8'),shared=readFileSync(resolve(import.meta.dirname,'native-popover-dialog.css'),'utf8');
     expect(css).toMatch(/__layout \{[^}]*grid-template-columns:/);
     expect(css).toMatch(/__detail \{[^}]*overflow: auto;/);
     expect(shared).toMatch(/\.dialog-surface \.kui-dialog-header \{ border-bottom: 0; \}/);

@@ -1,9 +1,9 @@
-import '@awesome.me/webawesome/dist/styles/webawesome.css';
+import '@kerfjs/ui/webawesome.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/checkbox/checkbox.js';
 import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
-import '../theme.css';
+import '../hot-sheet-tokens.css';
 import './style.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';

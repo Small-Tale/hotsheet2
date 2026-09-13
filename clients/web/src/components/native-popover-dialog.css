@@ -1,3 +1,4 @@
+/* Product popovers retain native top-layer ownership; Kerf supplies their internal primitives. */
 .dialog-surface { box-sizing: border-box; padding: 0; overflow: hidden; border: 1px solid var(--wa-color-surface-border); border-radius: var(--wa-border-radius-l); color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-xl); }
 .dialog-surface::backdrop { background: var(--wa-color-overlay-modal); }
 .dialog-surface .kui-dialog-header { border-bottom: 0; }
