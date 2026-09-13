@@ -11,7 +11,7 @@ export interface NotificationCenterProps {
   title?: string;
 }
 
-/** Global pending-permission queue and newest-first resolution history. */
+/** Project-scoped pending-permission queue and newest-first resolution history. */
 export function NotificationCenter({ pending, history, countdowns = {}, countdownAction = 'allow', title = 'Notifications' }: NotificationCenterProps) {
   const empty = pending.length === 0 && history.length === 0;
   return <section class="notification-center" data-component="notification-center" aria-label={title}>

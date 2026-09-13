@@ -1065,14 +1065,16 @@ The local Allow/Deny path has the same immediate behavior: it optimistically rem
 request and records the presumed decision before awaiting transport. Only a communication
 failure rolls that history back and restores the popup with an inline error, so network
 latency never invites repeated clicks.
-There is no fixed-interval network polling. Pending counts appear in the main segmented
-control and project tabs, and a non-modal popup appears even when another project is
-selected. When a standalone AI conversation is open, the active permission popup is
+There is no fixed-interval network polling. The main segmented control reflects only the
+selected project's pending count, while every project tab keeps its own badge; a non-modal
+popup can still surface an urgent request even when another project is selected. When a
+standalone AI conversation is open, the active permission popup is
 promoted into that dialog's top layer so it remains visible and interactive instead of
 being trapped beneath the modal; resolving it uses the same authoritative permission
 path. Standalone conversation dialogs use native light-dismiss and Escape behavior and
-do not duplicate that dismissal with a header close button. The global Notifications view
-keeps pending requests above newest-first machine-local client history; a request that
+do not duplicate that dismissal with a header close button. The Notifications view, its
+Pending/24 Hours/7 Days counts, and newest-first machine-local client history are scoped to
+the selected project and switch immediately with its tab; a request that
 disappears without this client resolving it is labeled “Decision made outside Hot
 Sheet.” Responded history cards retain the same full bottom inset when their action is
 empty and no decision-button footer is rendered, so the final summary cannot sit against
