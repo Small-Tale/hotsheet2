@@ -172,16 +172,19 @@ describe('terminal dashboard transport',()=>{
       .mockResolvedValueOnce(new Response(JSON.stringify([{id:'agent/1',alive:true,busy:false}]),{status:200}))
       .mockResolvedValueOnce(new Response(JSON.stringify({id:'agent/1',alive:true,busy:false,scrollback:'ready'}),{status:200}))
       .mockResolvedValueOnce(new Response(JSON.stringify({id:'terminal-2',alive:true,busy:false}),{status:200}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({id:'terminal-3',alive:true,busy:false}),{status:200}))
       .mockResolvedValueOnce(new Response(null,{status:204}));
     const api=new Api('/api');
     await expect(api.terminals()).resolves.toHaveLength(1);
     await expect(api.terminal('agent/1')).resolves.toMatchObject({scrollback:'ready'});
     await expect(api.createTerminal({cwd:'/project root',connect:'codex',model:'gpt-5.4',effort:'high'})).resolves.toMatchObject({id:'terminal-2'});
+    await expect(api.createTerminal({cwd:'/project root',shell_command:'npm run lint'})).resolves.toMatchObject({id:'terminal-3'});
     await expect(api.deleteTerminal('agent/1')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/terminals',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/terminals/agent%2F1',expect.any(Object));
     expect(fetchMock).toHaveBeenNthCalledWith(3,'/api/terminals',expect.objectContaining({method:'POST',body:'{"cwd":"/project root","connect":"codex","model":"gpt-5.4","effort":"high"}'}));
-    expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/terminals/agent%2F1',expect.objectContaining({method:'DELETE'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(4,'/api/terminals',expect.objectContaining({method:'POST',body:'{"cwd":"/project root","shell_command":"npm run lint"}'}));
+    expect(fetchMock).toHaveBeenNthCalledWith(5,'/api/terminals/agent%2F1',expect.objectContaining({method:'DELETE'}));
     fetchMock.mockRestore();
   });
 });

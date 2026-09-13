@@ -255,8 +255,10 @@ and identity-less legacy entries remain conservatively blocking.
   target fields, validation, and explicit save; raw command JSON is not exposed as the
   primary editing interface. Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
-  definitions store command text and resolve the current machine's shell only at run time;
-  `ai` definitions store only the prompt and tool selection, never a hard-coded Hot Sheet
+  definitions store command text and resolve the current machine's shell only at run time.
+  Running one creates a terminal named for the command, selects it, and opens the bottom
+  drawer so output and subsequent interaction remain visible. `ai` definitions store only
+  the prompt and tool selection, never a hard-coded Hot Sheet
   executable or CLI argv. Optional icon/color metadata controls the sidebar presentation.
   Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold

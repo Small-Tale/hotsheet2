@@ -6373,6 +6373,8 @@ fn now_ms() -> u64 {
 struct OpenTerminalReq {
     /// The program to spawn (e.g. `bash`, `codex`).
     command: Option<String>,
+    /// Command text for the user's default shell to execute.
+    shell_command: Option<String>,
     #[serde(default)]
     args: Vec<String>,
     /// Working directory (defaults to the served store root).
@@ -6519,8 +6521,9 @@ fn broker_err(resp: hotsheet_terminals::BrokerResponse) -> ApiError {
     }
 }
 
-/// `POST /terminals` `{command?, args?, cwd?, id?, connect?}` — open (or reattach to) a PTY.
-/// With neither `command` nor `connect`, the user's default shell is launched.
+/// `POST /terminals` `{command?, shell_command?, args?, cwd?, id?, connect?}` — open (or
+/// reattach to) a PTY. `shell_command` runs text through the user's default shell; with no
+/// launch field, that shell is opened interactively.
 async fn open_terminal(
     State(state): State<AppState>,
     Json(req): Json<OpenTerminalReq>,
@@ -6602,6 +6605,20 @@ fn terminal_launch(
     req: &OpenTerminalReq,
     terminal_id: &str,
 ) -> Result<PreparedTerminalLaunch, ApiError> {
+    if let Some(shell_command) = &req.shell_command {
+        if req.command.is_some() || req.connect.is_some() {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "shell_command cannot be combined with command or connect",
+            ));
+        }
+        let command = user_default_shell();
+        return Ok(PreparedTerminalLaunch {
+            args: shell_command_args(shell_command),
+            env: terminal_shell_history_env(state, req, terminal_id, &command)?,
+            command,
+        });
+    }
     if let Some(command) = &req.command {
         return Ok(PreparedTerminalLaunch {
             command: command.clone(),
@@ -6675,6 +6692,18 @@ fn user_default_shell() -> String {
         .filter(|value| !value.is_empty())
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_else(|| fallback.to_string())
+}
+
+fn shell_command_args(command: &str) -> Vec<String> {
+    #[cfg(windows)]
+    return vec![
+        "/D".to_string(),
+        "/S".to_string(),
+        "/C".to_string(),
+        command.to_string(),
+    ];
+    #[cfg(not(windows))]
+    return vec!["-lc".to_string(), command.to_string()];
 }
 
 const INHERIT_GLOBAL_SHELL_HISTORY_SETTING: &str = "terminal.inherit_global_shell_history";
@@ -6798,7 +6827,17 @@ fn terminal_shell_history_env(
 
 #[cfg(test)]
 mod terminal_history_tests {
-    use super::shell_history_environment;
+    use super::{shell_command_args, shell_history_environment};
+
+    #[test]
+    fn shell_command_uses_the_platform_shell_command_boundary() {
+        let args = shell_command_args("npm run lint");
+        #[cfg(windows)]
+        assert_eq!(args, ["/D", "/S", "/C", "npm run lint"]);
+        #[cfg(not(windows))]
+        assert_eq!(args, ["-lc", "npm run lint"]);
+    }
+
     #[test]
     fn isolates_bash_and_zsh_by_project_and_terminal_with_restart_stable_paths() {
         let home = tempfile::tempdir().unwrap();
