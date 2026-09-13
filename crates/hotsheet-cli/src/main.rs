@@ -913,6 +913,7 @@ fn main() -> Result<()> {
             let value = serde_json::json!({
                 "generation": "hs2",
                 "application_version": env!("CARGO_PKG_VERSION"),
+                "setup_assets_fingerprint": hotsheet_plugins::builtin_setup_assets_fingerprint(),
                 "store_schema": {
                     "min": 1,
                     "max": hotsheet_ticketing::STORE_SCHEMA_VERSION,

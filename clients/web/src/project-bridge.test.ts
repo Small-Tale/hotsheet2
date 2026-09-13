@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createDevApp } from './dev-server';
-import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,folderChooserCommand,hs1ChannelSlug,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectScopedServerPath,projectServerPlan, projectSessionRegistry, recoverUnhealthyServer, refreshLocalProjectSetup, removeHs1LiveData, requireCompatibleServer, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
+import { authenticatedServerUrl, authenticatedTerminalWebSocketUrl,chooseLocalFolder,connectGitTicketStoreRemote,createLocalGitTicketStore, describeGitRemoteFailure, developmentRepositoryRoot,developmentSetupAssetsFingerprint,folderChooserCommand,hs1ChannelSlug,hs1MigrationArgs,localStoreInitArgs,preserveHs1Entry,projectBootstrapArgs,projectScopedServerPath,projectServerPlan, projectSessionRegistry, recoverUnhealthyServer, refreshLocalProjectSetup, removeHs1LiveData, requireCompatibleServer, requireCurrentSetupAssets, requireReportedCorruptPath, requireStoreSchemaCompatibility, revealCommand, runGitCommand, safelyRestartServer, storeNeedsServerUpgrade, superviseServer } from './project-bridge';
 
 describe('projectSessionRegistry',()=>{
   it('shares project sessions across separately evaluated Vite module graphs',async()=>{
@@ -37,9 +37,20 @@ describe('project setup compatibility',()=>{
     expect(()=>{requireStoreSchemaCompatibility({...oldServer,store_schema:{min:1,max:3}},cli,'open')}).not.toThrow();
   });
   it('exposes the same setup refresh as a non-graphical CLI operation',async()=>{
-    const runner=vi.fn().mockResolvedValue('');
+    const fingerprint=await developmentSetupAssetsFingerprint(),runner=vi.fn().mockResolvedValueOnce(JSON.stringify({...cli,setup_assets_fingerprint:fingerprint})).mockResolvedValueOnce('');
     await refreshLocalProjectSetup('/work/code','/work/tickets.hs2',runner);
-    expect(runner).toHaveBeenCalledWith(expect.stringContaining('hotsheet-cli'),['-C','/work/tickets.hs2','setup','--refresh','--project','/work/code'],expect.any(String));
+    expect(runner).toHaveBeenNthCalledWith(1,expect.stringContaining('hotsheet-cli'),['-C','/work/tickets.hs2','compatibility','--json'],expect.any(String));
+    expect(runner).toHaveBeenNthCalledWith(2,expect.stringContaining('hotsheet-cli'),['-C','/work/tickets.hs2','setup','--refresh','--project','/work/code'],expect.any(String));
+  });
+  it('refuses missing or mismatched compiled setup assets with rebuild guidance before writing',async()=>{
+    const fingerprint=await developmentSetupAssetsFingerprint();
+    expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(()=>{requireCurrentSetupAssets(cli,fingerprint)}).toThrow(/does not report.*cargo build -p hotsheet-cli.*No setup files were changed/i);
+    expect(()=>{requireCurrentSetupAssets({...cli,setup_assets_fingerprint:'0'.repeat(64)},fingerprint)}).toThrow(/does not match.*cargo build -p hotsheet-cli/i);
+    expect(()=>{requireCurrentSetupAssets({...cli,setup_assets_fingerprint:fingerprint},fingerprint)}).not.toThrow();
+    const staleRunner=vi.fn().mockResolvedValue(JSON.stringify(cli));
+    await expect(refreshLocalProjectSetup('/work/code','/work/tickets.hs2',staleRunner)).rejects.toThrow(/No setup files were changed/i);
+    expect(staleRunner).toHaveBeenCalledOnce();
   });
 });
 
@@ -124,16 +135,18 @@ describe('native folder chooser',()=>{
 
   it('has the graphical bridge invoke the same headless bootstrap workflow on every setup',async()=>{
     const directory=await mkdtemp(resolve(tmpdir(),'hotsheet-client-bootstrap-')),project=resolve(directory,'project'),store=resolve(directory,'tickets.hs2'),calls:Array<{command:string;args:string[];cwd:string}>=[];
-    await mkdir(project);
-    const runner=async(command:string,args:string[],cwd:string)=>{calls.push({command,args,cwd});await mkdir(store,{recursive:true});return''};
+    await mkdir(project);const fingerprint=await developmentSetupAssetsFingerprint();
+    const runner=async(command:string,args:string[],cwd:string)=>{calls.push({command,args,cwd});if(args.includes('compatibility'))return JSON.stringify({generation:'hs2',setup_assets_fingerprint:fingerprint,store_schema:{min:1,max:3,creates:3}});await mkdir(store,{recursive:true});return''};
     try {
       const canonicalProject=await realpath(project);
       const first=await createLocalGitTicketStore(project,store,runner),canonicalStore=await realpath(store);
       expect(first).toBe(canonicalStore);
       await expect(createLocalGitTicketStore(project,store,runner)).resolves.toBe(canonicalStore);
-      expect(calls).toHaveLength(2);
-      expect(calls[0].args).toEqual(projectBootstrapArgs(canonicalProject,store));
-      expect(calls[1]).toEqual(calls[0]);
+      expect(calls).toHaveLength(4);
+      const bootstraps=calls.filter(call=>call.args.includes('bootstrap'));
+      expect(bootstraps).toHaveLength(2);
+      expect(bootstraps[0].args).toEqual(projectBootstrapArgs(canonicalProject,store));
+      expect(bootstraps[1]).toEqual(bootstraps[0]);
     } finally {
       await rm(directory,{recursive:true,force:true});
     }
@@ -141,7 +154,7 @@ describe('native folder chooser',()=>{
   it('preflights the active project server and leaves no store when its schema range is older',async()=>{
     const directory=await mkdtemp(resolve(tmpdir(),'hotsheet-client-schema-')),project=resolve(directory,'project'),store=resolve(directory,'tickets.hs2');
     await mkdir(project);
-    const canonicalProject=await realpath(project),sessions=projectSessionRegistry(),runner=vi.fn().mockResolvedValue(JSON.stringify({generation:'hs2',store_schema:{min:1,max:3,creates:3}}));
+    const canonicalProject=await realpath(project),sessions=projectSessionRegistry(),fingerprint=await developmentSetupAssetsFingerprint(),runner=vi.fn().mockResolvedValue(JSON.stringify({generation:'hs2',setup_assets_fingerprint:fingerprint,store_schema:{min:1,max:3,creates:3}}));
     sessions.set('schema-preflight',{url:'http://older-server.test',secret:'private',root:canonicalProject});
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({generation:'hs2',protocol:{min:1,max:1},store_schema:{min:1,max:2}}),{status:200,headers:{'content-type':'application/json'}})));
     try{

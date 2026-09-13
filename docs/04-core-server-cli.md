@@ -309,6 +309,14 @@ graceful termination, and escalates to a forced stop only while that exact proce
 registered; it then supervises a healthy replacement. This action is never exposed by the
 remote server API.
 
+The headless CLI's `compatibility --json` response also includes
+`setup_assets_fingerprint`, a SHA-256 digest of every embedded first-party plugin setup
+asset. The source-backed web development bridge calculates the same digest from its live
+`plugins/` tree before project-open refresh, bootstrap, or post-import setup. A missing or
+mismatched digest stops before any setup mutation and tells the developer to run
+`cargo build -p hotsheet-cli`; project open awaits this gate so the diagnostic is visible
+instead of being discarded by a background refresh (HS2-EK0B1Z).
+
 Protocol ranges assume unsynchronized rollout. A non-intersecting range stops project API
 use and identifies which side requires an update; exact build differences remain
 informational. Store attachment is also negotiated before mutation: a server validates

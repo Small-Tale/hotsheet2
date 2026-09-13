@@ -202,6 +202,10 @@ fn compatibility_reports_created_and_selected_store_schemas_headlessly() {
         value["selected_store_schema"],
         hotsheet_ticketing::STORE_SCHEMA_VERSION
     );
+    assert_eq!(
+        value["setup_assets_fingerprint"].as_str().unwrap().len(),
+        64
+    );
 }
 
 #[test]

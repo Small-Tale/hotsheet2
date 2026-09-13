@@ -26,7 +26,7 @@ export interface InstanceInfo { pid:number; url:string; secret:string; started_a
 export interface UnhealthyServerRecovery {store:string;expected:{pid:number;url:string;started_at:string}}
 interface SessionTarget { url:string; secret:string; root?:string; serverStore?:string }
 interface CorruptDiagnostic { path:string }
-interface CliCompatibility {generation:string;store_schema:{min:number;max:number;creates:number};selected_store_schema?:number|null}
+interface CliCompatibility {generation:string;setup_assets_fingerprint?:string;store_schema:{min:number;max:number;creates:number};selected_store_schema?:number|null}
 
 export type RevealLauncher = (command: string, args: string[]) => Promise<void>;
 export type FolderChooserRunner=(command:string,args:string[])=>Promise<string|undefined>;
@@ -140,11 +140,36 @@ async function cliCompatibility(store:string|undefined,runner:ProcessRunner):Pro
   return JSON.parse(await runner(toolBinary(),args,developmentRepositoryRoot())) as CliCompatibility;
 }
 
+export async function developmentSetupAssetsFingerprint(repositoryRoot=developmentRepositoryRoot()):Promise<string>{
+  const root=resolve(repositoryRoot,'plugins'),hash=createHash('sha256');
+  const byByteName=(a:{name:string},b:{name:string})=>a.name<b.name?-1:a.name>b.name?1:0;
+  const directories=(await readdir(root,{withFileTypes:true})).filter(entry=>entry.isDirectory()).sort(byByteName);
+  for(const directory of directories){
+    hash.update(directory.name);hash.update('\0');
+    const path=resolve(root,directory.name),files=(await readdir(path,{withFileTypes:true})).filter(entry=>entry.isFile()).sort(byByteName);
+    for(const file of files){hash.update(file.name);hash.update('\0');hash.update(await readFile(resolve(path,file.name)));hash.update('\0')}
+  }
+  return hash.digest('hex');
+}
+
+export function requireCurrentSetupAssets(cli:CliCompatibility,sourceFingerprint:string):void{
+  if(cli.setup_assets_fingerprint===sourceFingerprint)return;
+  const detail=cli.setup_assets_fingerprint?'does not match the current setup templates':'does not report a setup-template fingerprint';
+  throw new Error(`The development Hot Sheet CLI ${detail} and may overwrite newer project guidance. Run cargo build -p hotsheet-cli, then reopen the project. No setup files were changed.`);
+}
+
+async function requireCurrentSetupCli(store:string|undefined,runner:ProcessRunner):Promise<CliCompatibility>{
+  const [cli,sourceFingerprint]=await Promise.all([cliCompatibility(store,runner),developmentSetupAssetsFingerprint()]);
+  requireCurrentSetupAssets(cli,sourceFingerprint);
+  return cli;
+}
+
 function sessionForRoot(root:string):SessionTarget|undefined{return[...sessions.values()].find(target=>target.root===root)}
 
-/** Run current-app setup writers independently of the detached server's build. This is
- * fire-and-forget from project open so stale managed files never add visible latency. */
+/** Run current-app setup writers independently of the detached server's build, after a
+ * source/compiled-template handshake proves that the CLI cannot restore stale guidance. */
 export async function refreshLocalProjectSetup(root:string,store:string,runner:ProcessRunner=runProcess):Promise<void>{
+  await requireCurrentSetupCli(store,runner);
   await runner(toolBinary(),['-C',store,'setup','--refresh','--project',root],developmentRepositoryRoot());
 }
 
@@ -154,6 +179,7 @@ export async function migrateHs1Project(rootInput:string,locationInput?:string,r
   const ticketStore=locationInput?.trim()?resolve(locationInput.trim()):`${root}.hs2`,binary=migrateBinary(),exporter=migratorScript();
   if(!await exists(binary))throw new Error(`Hot Sheet migrator is not built at ${binary}. Run cargo build -p hotsheet-cli --bin hotsheet-migrate.`);
   if(!await exists(exporter))throw new Error(`Hot Sheet 1 exporter is not available at ${exporter}.`);
+  await requireCurrentSetupCli(undefined,runner);
   const output=await runner(binary,hs1MigrationArgs(root,ticketStore,exporter),developmentRepositoryRoot());
   const match=output.match(/Imported (\d+) ticket\(s\) \((\d+) attachment file\(s\)\), skipped (\d+)/),tickets=match?Number(match[1])+Number(match[3]):0,attachments=match?Number(match[2]):0;
   let toolsConfigured=true;
@@ -219,10 +245,10 @@ async function bootstrapStore():Promise<string>{
 export async function createLocalGitTicketStore(rootInput:string,locationInput?:string,runner:ProcessRunner=runProcess):Promise<string>{
   const root=await realpath(rootInput.trim()),path=locationInput?.trim()?resolve(locationInput.trim()):`${root}.hs2`,binary=toolBinary();
   if(!await exists(binary))throw new Error(`Hot Sheet CLI is not built at ${binary}. Run cargo build -p hotsheet-cli.`);
-  const target=sessionForRoot(root);
+  const cli=await requireCurrentSetupCli(await exists(path)?path:undefined,runner),target=sessionForRoot(root);
   if(target){
     const existing=await exists(resolve(path,'hotsheet-store.json'));
-    const [server,cli]=await Promise.all([serverRequest<ServerCompatibility>(target,'/compatibility').catch(()=>undefined),cliCompatibility(existing?path:undefined,runner)]);
+    const server=await serverRequest<ServerCompatibility>(target,'/compatibility').catch(()=>undefined);
     requireStoreSchemaCompatibility(server,cli,existing?'open':'create');
   }
   await runner(binary,projectBootstrapArgs(root,path),developmentRepositoryRoot());
@@ -409,7 +435,7 @@ async function serverRequest<T>(target: SessionTarget, path: string, init: Reque
 export async function openLocalProject(rootInput: string, ticketStoreInput?: string): Promise<ProjectSession> {
   const root = await realpath(rootInput.trim());
   const ticketStore = ticketStoreInput?.trim() ? await realpath(ticketStoreInput.trim()) : await suggestedTicketStore(root);
-  if(ticketStore)void refreshLocalProjectSetup(root,ticketStore).catch(()=>undefined);
+  if(ticketStore)await refreshLocalProjectSetup(root,ticketStore);
   const plan=projectServerPlan(await bootstrapStore(),root,ticketStore);
   let instance=await ensureServer(plan.serverStore),target:SessionTarget={url:instance.url,secret:instance.secret,root,serverStore:plan.serverStore};
   let metadata=await serverRequest<ServerCompatibility>(target,'/compatibility').catch(()=>undefined);

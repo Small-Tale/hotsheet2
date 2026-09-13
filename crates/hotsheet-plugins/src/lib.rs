@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 
 use include_dir::{Dir, include_dir};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 pub mod setup;
 pub use setup::{SetupError, SetupReport, mcp_command, refresh_setup_in, run_setup, run_setup_in};
@@ -458,6 +459,40 @@ pub fn builtin_plugins() -> Vec<Plugin> {
         .into_iter()
         .map(|d| Plugin::from_dir(d).expect("bundled first-party plugin must load"))
         .collect()
+}
+
+/// Stable digest of every file embedded in the first-party setup plugins. Development
+/// hosts compare this with their live `plugins/` tree before allowing a compiled CLI to
+/// write project guidance, preventing an older binary from restoring stale templates.
+pub fn builtin_setup_assets_fingerprint() -> String {
+    setup_assets_fingerprint(&builtin_plugins())
+}
+
+fn setup_assets_fingerprint(plugins: &[Plugin]) -> String {
+    let mut plugins = plugins.to_vec();
+    plugins.sort_by(|a, b| a.id().cmp(b.id()));
+    let mut hash = Sha256::new();
+    for plugin in plugins {
+        hash.update(plugin.id().as_bytes());
+        hash.update([0]);
+        for (name, contents) in &plugin.files {
+            hash.update(name.as_bytes());
+            hash.update([0]);
+            hash.update(contents.as_bytes());
+            hash.update([0]);
+        }
+    }
+    format!("{:x}", hash.finalize())
+}
+
+#[cfg(test)]
+#[test]
+fn embedded_setup_assets_match_the_source_plugin_tree() {
+    let source = load_dir(&PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../plugins"));
+    assert_eq!(
+        builtin_setup_assets_fingerprint(),
+        setup_assets_fingerprint(&source)
+    );
 }
 
 /// The full registry: built-ins first, then every plugin dir found under each search

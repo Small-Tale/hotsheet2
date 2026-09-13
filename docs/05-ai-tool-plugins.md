@@ -60,6 +60,11 @@ byte-level no-op, and managed instruction markers remain the boundary around con
 Hot Sheet may replace. Bundled skill versions are checked against the current shared
 adapter, and Windows detection honors command wrappers from `PATHEXT`, so freshness does
 not silently skip npm-installed tools or replace a newer workflow with an older bundle.
+In the source-backed web development bridge, the compiled CLI reports a digest of all
+embedded setup assets and the bridge independently hashes the live `plugins/` tree. A
+missing or mismatched digest refuses project setup with a rebuild command before any
+managed file can be written; this covers instruction and manifest changes in addition to
+the explicit skill-version check.
 Machine-specific integrations never alter the shared ignore policy: Claude's permission
 hook uses `.claude/settings.local.json`, and a newly created, wholly Hot Sheet-owned MCP
 config is added only to that checkout's `.git/info/exclude`. A pre-existing config with
