@@ -1671,7 +1671,10 @@ order requested: each action derives its patch, inverse, and expected concurrenc
 only after the preceding action has committed or rolled back. A successful second action
 therefore uses the first response's fresh token, while a genuine external conflict still
 restores that action's captured rows, reports the error, and does not poison later queued
-work. Attaching a ticket source, including after HS1 import, refreshes provider descriptors
+work. Each queued action retains its owning project and applies optimistic, authoritative,
+rollback, and undo state to that project's cached projection even if the user switches tabs
+before it starts or settles; another selected project never cancels the requested mutation or
+receives its error state. Attaching a ticket source, including after HS1 import, refreshes provider descriptors
 before exposing the imported tickets for mutation.
 
 Ticket creation follows the same immediate-authority rule: as soon as the create

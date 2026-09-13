@@ -1,6 +1,7 @@
 import { expect, type Page,test } from '@playwright/test';
 
 const project = {id:'demo-checkout',root:'/work/demo',name:'Bulk status demo',stores:['/work/demo.hs2'],apiPath:'/__hotsheet/project-api/demo-checkout',needsTicketSetup:false,needsHs1Migration:false,hs1ImportCompleted:false,hs1CleanupEligible:false};
+const otherProject = {...project,id:'other-checkout',root:'/work/other',name:'Other project',stores:['/work/other.hs2'],apiPath:'/__hotsheet/project-api/other-checkout'};
 const base = {connection_id:'git-local',category:'issue',priority:'default',status:'completed',up_next:false,feedback_needed:false,tags:['client'],blocked_by:[],claim_count:0,created_at:'2026-09-11T01:00:00Z',updated_at:'2026-09-11T01:00:00Z'};
 
 async function mockBulkProject(page:Page,{conflictFirst=false}:{conflictFirst?:boolean}={}) {
@@ -19,9 +20,10 @@ async function mockBulkProject(page:Page,{conflictFirst=false}:{conflictFirst?:b
   await page.route('**/*',async route=>{
     const request=route.request(),path=new URL(request.url()).pathname;
     if(!path.startsWith('/__hotsheet/'))return route.continue();
-    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:project});
+    if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:request.postDataJSON().root===otherProject.root?otherProject:project});
+    if(path==='/__hotsheet/folders/choose')return route.fulfill({json:{path:otherProject.root}});
     if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/work/demo.hs2',default:true,capabilities:{create:true,update:true,close:true,notes:true,attachments:true,up_next:true,atomic_batch:true,watch:true,query_fields:[]}}]});
-    if(path.endsWith('/tickets')&&request.method()==='GET')return route.fulfill({json:rows});
+    if(path.endsWith('/tickets')&&request.method()==='GET')return route.fulfill({json:path.includes('/other-checkout/')?[{...base,native_id:'other',qualified_id:'git-local:other',id:'other',slug:'HS2-OTHER1',title:'Other project ticket',status:'not_started'}]:rows});
     if(path.endsWith('/batch')&&request.method()==='POST'){
       const updates=request.postDataJSON().updates as Array<{id:string;status:string;expected_token?:string}>;
       batches.push(updates);
@@ -78,6 +80,13 @@ test('serializes rapid Verified then Archive batches onto fresh concurrency toke
   await page.screenshot({path:'/private/tmp/hs2-0k2zp3-sequenced-bulk-wide.png',fullPage:true});
   await page.setViewportSize({width:1024,height:720});
   await page.screenshot({path:'/private/tmp/hs2-0k2zp3-sequenced-bulk-narrow.png',fullPage:true});
+});
+
+test('finishes queued bulk changes for their owning project after a project switch',async({page})=>{
+  const mock=await mockBulkProject(page);await openBulkProject(page);await page.getByRole('button',{name:'Add project'}).click();await expect(page.getByRole('tab',{name:'Other project'})).toHaveAttribute('aria-selected','true');await page.getByRole('tab',{name:'Bulk status demo'}).click();await page.getByRole('button',{name:'Columns view'}).click();
+  const menu=page.getByRole('menu',{name:'Ticket actions'}),completed=page.locator('[data-column-id="completed"]'),first=completed.locator('[data-ticket-slug="HS2-FAST01"]'),second=completed.locator('[data-ticket-slug="HS2-FAST02"]');await first.click();await second.click({modifiers:['Meta']});await first.click({button:'right'});await menu.locator('[data-context-action="Verify ticket"]').click();await expect.poll(()=>mock.batches.length).toBe(1);
+  const verifiedFirst=page.locator('[data-column-id="verified"] [data-ticket-slug="HS2-FAST01"]');await verifiedFirst.click({button:'right'});await menu.locator('[data-context-action="Archive ticket"]').click();await page.getByRole('tab',{name:'Other project'}).click();await expect(page.locator('[data-ticket-slug="HS2-OTHER1"]')).toBeVisible();mock.releaseVerified();await expect.poll(()=>mock.batches.length).toBe(2);await expect.poll(()=>mock.getRows().map(row=>row.status)).toEqual(['archive','archive']);await expect(page.getByRole('alert').filter({hasText:'selected project changed'})).toHaveCount(0);
+  await page.getByRole('tab',{name:'Bulk status demo'}).click();await page.locator('[data-action="select-view"][data-item-id="archive"]').click();await expect(page.locator('[data-ticket-slug="HS2-FAST01"]')).toBeVisible();await expect(page.locator('[data-ticket-slug="HS2-FAST02"]')).toBeVisible();
 });
 
 test('rolls a genuine external atomic conflict back to the prior status',async({page})=>{
