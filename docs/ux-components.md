@@ -141,6 +141,11 @@ sidebar content offscreen while the main region resizes, avoiding compressed con
 and moves the restore control to the leading edge of the main toolbar. A
 direct horizontal resize handle changes the demo height by pointer or keyboard so the
 scrolling content region can be reviewed without moving the Drive control.
+All project-sidebar content follows two explicit rails: full-row highlight layers are
+inset 10px from each sidebar edge, while visible text and icon slots begin another 10px
+inside that layer. Transparent idle rows retain the same highlight geometry. Menu icons
+occupy a 24px slot, labels follow after 10px, and standalone toolbar/footer icons retain
+a 44px highlight target even when its background is hidden (HS2-2P8N8D).
 Immediately above Drive, a centered `M open, N up next` summary is derived from the
 already-loaded project tickets. Open is the active-work axis (exactly Not Started +
 Started; Backlog is excluded), while Up Next counts only workflow-open

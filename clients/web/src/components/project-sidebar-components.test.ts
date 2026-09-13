@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Archive, Plus  } from 'lucide';
 import { describe, expect, it } from 'vitest';
@@ -167,6 +169,15 @@ describe('ProjectSidebar component slice', () => {
     for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) expect(markup).toContain(`data-component="${component}"`);
     expect(markup).toContain('data-component="project-work-summary">7 open, 3 up next, 2 claimed');
     expect(markup.indexOf('project-work-summary')).toBeLessThan(markup.indexOf('data-component="drive-control"'));
+  });
+
+  it('defines one highlight gutter and one nested content rail for every sidebar row',()=>{
+    const css=readFileSync(new URL('./project-sidebar.css',import.meta.url),'utf8');
+    expect(css).toContain('--project-sidebar-highlight-gutter: .625rem');
+    expect(css).toContain('--project-sidebar-content-inset: .625rem');
+    expect(css).toMatch(/\.project-sidebar \.kui-menu-item \{[^}]*min-height: 2\.75rem;[^}]*padding: var\(--project-sidebar-content-inset\);[^}]*grid-template-columns: 1\.5rem minmax\(0, 1fr\) auto;[^}]*column-gap: var\(--project-sidebar-content-inset\)/);
+    expect(css).toMatch(/\.project-sidebar > \.kui-toolbar \.kui-toolbar-control-group \{[^}]*width: 2\.75rem;[^}]*height: 2\.75rem/);
+    expect(css).toMatch(/\.project-sidebar \.kui-menu-header:not\(\.kui-menu-header--toggle\) > button,.project-sidebar \.kui-menu-header__action-layer \{[^}]*width: 2\.75rem;[^}]*height: 2\.75rem/);
   });
 
   it('omits the command section when the project has no commands', () => {
