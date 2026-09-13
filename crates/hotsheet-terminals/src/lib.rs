@@ -10,8 +10,8 @@
 //! focus-follows, leased — HS2-BD7Q74), and env [`scrub_env`]. The server wires the HTTP
 //! routes (`/terminals` open/list, `/terminals/{id}` read/kill, `/terminals/{id}/input`) + the
 //! live WS attach (`/terminals/{id}/attach`, which carries size claims + streams size
-//! decisions) — HS2-A6R5QV/HS2-XTTTMV/HS2-BD7Q74. Follow-ons: the **detached broker** (survive
-//! server restart), and feeding busy → the connection registry (HS2-4M67VN).
+//! decisions) — HS2-A6R5QV/HS2-XTTTMV/HS2-BD7Q74. The detached broker keeps these sessions
+//! alive across server stops/restarts and feeds busy state into the connection registry.
 
 pub mod broker;
 pub mod busy;
@@ -23,8 +23,8 @@ pub mod terminal;
 
 pub use broker::{
     BrokerClient, BrokerStream, BrokerTermInfo, DEFAULT_IDLE_GRACE, Request as BrokerRequest,
-    Response as BrokerResponse, SocketCleanup, StreamIn, StreamOut, serve_broker,
-    serve_broker_with_idle,
+    Response as BrokerResponse, SocketCleanup, StreamIn, StreamOut, run_broker_process,
+    serve_broker, serve_broker_with_idle,
 };
 pub use busy::{Activity, BusyDetector, contains_spinner};
 pub use env::scrub_env;

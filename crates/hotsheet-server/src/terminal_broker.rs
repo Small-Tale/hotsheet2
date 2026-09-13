@@ -53,6 +53,32 @@ impl TerminalBroker {
         anyhow::bail!("terminal broker did not come up on {}", socket.display())
     }
 
+    /// Return the already-running broker for `store_path` without spawning one.
+    pub fn discover(store_path: &Path) -> Option<Self> {
+        let project = hotsheet_tls::project_id(store_path);
+        let socket = Self::socket_for(&project);
+        is_live(&socket).then_some(Self { socket, project })
+    }
+
+    /// Explicitly kill every terminal retained by this project's detached broker.
+    pub async fn kill_all(&self) -> anyhow::Result<usize> {
+        let terminals = match self.call(BrokerRequest::List).await? {
+            BrokerResponse::List { terminals } => terminals,
+            BrokerResponse::Err { message } => anyhow::bail!(message),
+            response => anyhow::bail!("unexpected terminal broker response: {response:?}"),
+        };
+        let mut count = 0;
+        for terminal in terminals {
+            match self.call(BrokerRequest::Kill { id: terminal.id }).await? {
+                BrokerResponse::Ok => count += 1,
+                BrokerResponse::NotFound => {}
+                BrokerResponse::Err { message } => anyhow::bail!(message),
+                response => anyhow::bail!("unexpected terminal broker response: {response:?}"),
+            }
+        }
+        Ok(count)
+    }
+
     /// Point at an explicit socket/project (tests, or an already-running broker).
     pub fn at(socket: impl Into<PathBuf>, project: impl Into<String>) -> Self {
         Self {
@@ -66,6 +92,56 @@ impl TerminalBroker {
     pub async fn call(&self, req: BrokerRequest) -> std::io::Result<BrokerResponse> {
         let mut client = BrokerClient::connect(&self.socket).await?;
         client.request(&req).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hotsheet_terminals::{
+        BrokerClient, BrokerRequest, BrokerResponse, TerminalManager, serve_broker,
+    };
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn kill_all_uses_the_existing_broker_protocol_and_removes_every_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        let mut client = BrokerClient::connect(&socket).await.unwrap();
+        for id in ["one", "two"] {
+            client
+                .request(&BrokerRequest::Open {
+                    id: id.into(),
+                    command: "cat".into(),
+                    args: vec![],
+                    cwd: None,
+                    env: vec![],
+                })
+                .await
+                .unwrap();
+        }
+        let broker = TerminalBroker::at(&socket, "proj");
+        assert_eq!(broker.kill_all().await.unwrap(), 2);
+        assert!(
+            matches!(broker.call(BrokerRequest::List).await.unwrap(),BrokerResponse::List { terminals } if terminals.is_empty())
+        );
+    }
+
+    #[test]
+    fn server_only_build_uses_the_server_as_its_broker_process_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = dir.path().join("hotsheet-server");
+        std::fs::write(&server, "").unwrap();
+        assert_eq!(broker_launch(Some(server.clone())), (server.clone(), true));
+        let sibling = dir.path().join("hotsheet-terminal-broker");
+        std::fs::write(&sibling, "").unwrap();
+        assert_eq!(broker_launch(Some(server)), (sibling, false));
     }
 }
 
@@ -98,20 +174,43 @@ fn is_live(socket: &Path) -> bool {
     )
 }
 
-/// Spawn `hotsheet-terminal-broker <socket> <project>` detached, with its stdio to null so it
-/// doesn't hold the server's. The binary resolves as a sibling of the current server exe.
+/// Spawn the broker detached with stdio disconnected from the server. Prefer the dedicated
+/// sibling binary; a server-only development build falls back to the server's hidden broker
+/// process mode so making detached hosting the default does not add a packaging footgun.
 fn spawn_broker(socket: &Path, project: &str) -> std::io::Result<()> {
-    let exe = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|d| d.join("hotsheet-terminal-broker")))
-        .filter(|p| p.exists())
-        .unwrap_or_else(|| PathBuf::from("hotsheet-terminal-broker"));
-    std::process::Command::new(&exe)
-        .arg(socket)
-        .arg(project)
+    let current = std::env::current_exe().ok();
+    let (executable, self_hosted) = broker_launch(current);
+    let mut command = std::process::Command::new(executable);
+    if self_hosted {
+        command
+            .arg("--terminal-broker-process")
+            .arg(socket)
+            .arg("--terminal-broker-project")
+            .arg(project);
+    } else {
+        command.arg(socket).arg(project);
+    }
+    command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()?; // not waited on → outlives this server (reparented on exit)
     Ok(())
+}
+
+fn broker_launch(current: Option<PathBuf>) -> (PathBuf, bool) {
+    let sibling = current
+        .as_ref()
+        .and_then(|path| {
+            path.parent()
+                .map(|dir| dir.join("hotsheet-terminal-broker"))
+        })
+        .filter(|path| path.exists());
+    if let Some(executable) = sibling {
+        (executable, false)
+    } else if let Some(exe) = current {
+        (exe, true)
+    } else {
+        (PathBuf::from("hotsheet-terminal-broker"), false)
+    }
 }

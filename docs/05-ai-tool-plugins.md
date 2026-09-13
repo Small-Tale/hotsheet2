@@ -182,7 +182,10 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   stream, tmux-style).
 - Survival across server restarts via a **detached PTY broker process** (carried
   from HS1 `src/terminals/broker/`) — terminals aren't killed when the server
-  recycles. The broker answers a protocol-level Ping/Pong health probe and exits
+  recycles or is explicitly stopped. Detached hosting is the server default; ordinary
+  `hotsheet serve --stop` preserves the project's terminals, while
+  `hotsheet serve --stop --kill-all-terminals` deliberately clears them. The broker
+  answers a protocol-level Ping/Pong health probe and exits
   cleanly (removing its socket) after a five-minute grace with no terminals and no
   connected clients; any activity resets the grace.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*` that leak into

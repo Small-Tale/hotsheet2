@@ -167,6 +167,25 @@ pub async fn serve_broker(listener: UnixListener, project: String, manager: Arc<
     serve_broker_with_idle(listener, project, manager, None).await;
 }
 
+/// Bind and run the detached broker process, removing its socket after idle shutdown.
+pub async fn run_broker_process(
+    socket: impl AsRef<std::path::Path>,
+    project: String,
+) -> std::io::Result<()> {
+    let socket = socket.as_ref();
+    let _ = std::fs::remove_file(socket);
+    let listener = UnixListener::bind(socket)?;
+    let _socket_cleanup = SocketCleanup::new(socket);
+    serve_broker_with_idle(
+        listener,
+        project,
+        Arc::new(TerminalManager::new()),
+        Some(DEFAULT_IDLE_GRACE),
+    )
+    .await;
+    Ok(())
+}
+
 /// Serve with an optional shutdown-when-empty grace period. `None` keeps the historical
 /// run-until-killed behavior used by embedded callers; the detached binary supplies a grace.
 pub async fn serve_broker_with_idle(

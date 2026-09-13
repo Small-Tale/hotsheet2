@@ -38,11 +38,34 @@ struct Cli {
     #[arg(long)]
     stop: bool,
 
-    /// **Opt-in** detached terminal broker (HS2-ERT00F): host terminals in a separate
-    /// `hotsheet-terminal-broker` process so they survive a server restart. Off by default
-    /// (terminals are in-process).
-    #[arg(long)]
+    /// With --stop, also kill every terminal retained by this project's detached broker.
+    #[arg(long, requires = "stop")]
+    kill_all_terminals: bool,
+
+    /// Deprecated compatibility flag; detached terminal hosting is now the default.
+    #[arg(long, hide = true)]
     terminal_broker: bool,
+
+    /// Host terminals in this server process instead of the default detached broker.
+    #[arg(long, conflicts_with = "terminal_broker")]
+    no_terminal_broker: bool,
+
+    /// Internal detached-broker socket used when no sibling broker binary is installed.
+    #[arg(
+        long,
+        hide = true,
+        value_name = "SOCKET",
+        requires = "terminal_broker_project"
+    )]
+    terminal_broker_process: Option<PathBuf>,
+    /// Internal detached-broker project identity.
+    #[arg(
+        long,
+        hide = true,
+        value_name = "PROJECT",
+        requires = "terminal_broker_process"
+    )]
+    terminal_broker_project: Option<String>,
 
     /// **Opt-in** distributed driving loop (HS2-1TY7GC): spawn this AI tool (plugin id,
     /// e.g. `codex`) on each self-claimed ticket across hosted stores that have a git
@@ -65,12 +88,42 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    if let Some(socket) = cli.terminal_broker_process.as_ref() {
+        let project = cli.terminal_broker_project.clone().unwrap_or_default();
+        return Ok(hotsheet_terminals::run_broker_process(socket, project).await?);
+    }
+
     // Explicit shutdown (HS2-59): signal the running server for this store and exit.
     if cli.stop {
-        if hotsheet_server::lifecycle::stop_instance(&cli.path) {
+        let stopped = hotsheet_server::lifecycle::stop_instance(&cli.path);
+        if stopped {
             println!("stopped the running server for {}", cli.path.display());
         } else {
             println!("no running server found for {}", cli.path.display());
+        }
+        if cli.kill_all_terminals {
+            if stopped {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                while hotsheet_server::lifecycle::find_instance(&cli.path).is_some()
+                    && std::time::Instant::now() < deadline
+                {
+                    tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                }
+                if hotsheet_server::lifecycle::find_instance(&cli.path).is_some() {
+                    anyhow::bail!(
+                        "server did not stop before terminal cleanup; retained terminals were preserved"
+                    );
+                }
+            }
+            let count = match hotsheet_server::terminal_broker::TerminalBroker::discover(&cli.path)
+            {
+                Some(broker) => broker.kill_all().await?,
+                None => 0,
+            };
+            println!(
+                "killed {count} retained terminal(s) for {}",
+                cli.path.display()
+            );
         }
         return Ok(());
     }
@@ -140,9 +193,10 @@ async fn main() -> Result<()> {
             drive_root.join("homes"),
         )?;
 
-    // Opt-in detached terminal broker (HS2-ERT00F): host terminals in a separate process so
-    // they survive a server restart. Spawns/discovers the broker for the primary store.
-    if cli.terminal_broker {
+    // Detached terminal hosting is the default: normal server stops/restarts disconnect from
+    // the broker without killing its PTYs. `--no-terminal-broker` is an explicit diagnostic
+    // escape hatch for environments where the sibling broker binary cannot run.
+    if terminal_broker_enabled(cli.no_terminal_broker) {
         state = state.with_terminal_broker()?;
         println!("terminals: detached broker (survives restart)");
     }
@@ -276,6 +330,10 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+fn terminal_broker_enabled(no_terminal_broker: bool) -> bool {
+    !no_terminal_broker
+}
+
 /// Resolve when the process is asked to stop: SIGTERM (the `--stop` path) or Ctrl-C.
 async fn shutdown_signal(state: AppState) {
     let ctrl_c = async {
@@ -311,6 +369,29 @@ fn git_email(path: &std::path::Path) -> Option<String> {
     }
     let email = String::from_utf8_lossy(&out.stdout).trim().to_string();
     (!email.is_empty()).then_some(email)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detached_terminal_broker_is_default_with_an_explicit_diagnostic_opt_out() {
+        let default = Cli::try_parse_from(["hotsheet-server", "-C", "store"]).unwrap();
+        assert!(terminal_broker_enabled(default.no_terminal_broker));
+        let disabled =
+            Cli::try_parse_from(["hotsheet-server", "-C", "store", "--no-terminal-broker"])
+                .unwrap();
+        assert!(!terminal_broker_enabled(disabled.no_terminal_broker));
+    }
+
+    #[test]
+    fn kill_all_terminals_requires_an_explicit_server_stop() {
+        assert!(Cli::try_parse_from(["hotsheet-server", "--kill-all-terminals"]).is_err());
+        let stop =
+            Cli::try_parse_from(["hotsheet-server", "--stop", "--kill-all-terminals"]).unwrap();
+        assert!(stop.stop && stop.kill_all_terminals);
+    }
 }
 
 /// `${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.sqlite`, keyed by a hash of the store's path

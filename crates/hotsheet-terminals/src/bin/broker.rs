@@ -5,14 +5,11 @@
 //! hotsheet-terminal-broker <socket-path> <project-id>
 //! ```
 //!
-//! Binds the Unix socket, hosts a `TerminalManager`, and serves the broker protocol until
-//! killed. The server spawns/discovers this per project and routes its `/terminals` ops here.
+//! Binds the Unix socket, hosts a `TerminalManager`, and serves the broker protocol until its
+//! empty idle grace expires. The server spawns/discovers this per project and routes its
+//! `/terminals` ops here.
 
-use std::sync::Arc;
-
-use hotsheet_terminals::{
-    DEFAULT_IDLE_GRACE, SocketCleanup, TerminalManager, serve_broker_with_idle,
-};
+use hotsheet_terminals::run_broker_process;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -23,19 +20,6 @@ async fn main() -> std::io::Result<()> {
     });
     let project = args.next().unwrap_or_default();
 
-    // A stale socket from a crashed broker would block the bind — remove it first. (The
-    // server's discovery only spawns a broker when no live one answers the socket.)
-    let _ = std::fs::remove_file(&socket);
-    let listener = tokio::net::UnixListener::bind(&socket)?;
-    let _socket_cleanup = SocketCleanup::new(&socket);
     eprintln!("hotsheet-terminal-broker: serving project '{project}' on {socket}");
-
-    serve_broker_with_idle(
-        listener,
-        project,
-        Arc::new(TerminalManager::new()),
-        Some(DEFAULT_IDLE_GRACE),
-    )
-    .await;
-    Ok(())
+    run_broker_process(socket, project).await
 }

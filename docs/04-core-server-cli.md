@@ -253,7 +253,9 @@ The server's life is **decoupled from any client's** (maintainer requirement,
   (restart it if it crashed, surface its health) but never *owns* it — any client
   can attach to a server another client started, and none closing it takes it down.
 - **Shutdown is explicit** — `hotsheet serve --stop` / a tray/menu "Quit server"
-  action / OS service stop — never an implicit side effect of a client exiting.
+  action / OS service stop — never an implicit side effect of a client exiting. Server
+  shutdown preserves broker-hosted terminals by default; the project-scoped destructive
+  variant is `hotsheet serve --stop --kill-all-terminals`.
 - **On iOS** there is no local server to auto-start (background-execution limits
   make an independent daemon impractical); iOS connects to a *remote* server on a
   Mac. See [06-clients.md](06-clients.md) §6.4.
@@ -270,7 +272,10 @@ guard on **graceful shutdown**: SIGTERM/Ctrl-C), and if a live server already se
 the store it **prints how to attach and exits** instead of duplicating. E2E-verified.
 `hotsheet-cli serve` resolves the sibling `hotsheet-server` first, falls back to PATH,
 requires its version to match the CLI, and forwards foreground/stop arguments with
-clear missing-binary and mismatch diagnostics. `hotsheet-cli serve --list` works without
+clear missing-binary and mismatch diagnostics. Detached broker terminal hosting is the
+normal server mode, so a stop or restart does not end PTYs; `--kill-all-terminals` is
+accepted only with `--stop` and clears the selected project's retained terminals through
+the existing broker protocol. `hotsheet-cli serve --list` works without
 selecting a store: it deduplicates registrations by server identity, health-checks live
 processes, labels stale/unhealthy/invalid records, lists every hosted store, and never
 prints bearer secrets. The Vite platform bridge supplies the client-side half: detached
@@ -457,6 +462,8 @@ hotsheet init --standalone [--at <path>] [--remote <url>]  # create/link a stand
 hotsheet bootstrap [--project <path>] [--store <path>] [--remote <url>] [--tool <id> ...]
                        # idempotently prepare store, link, tools/MCP, and remote
 hotsheet serve         # run the server
+hotsheet serve --stop  # stop the server; preserve detached terminals
+hotsheet serve --stop --kill-all-terminals  # stop it and explicitly clear project terminals
 hotsheet reindex       # drop + rebuild the index from disk
 hotsheet doctor --project .  # store health + read-only tool/HS1 onboarding guidance
 hotsheet merge-driver  # git-invoked semantic 3-way merge for ticket files (02-ticket-storage.md §2.7)

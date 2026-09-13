@@ -459,6 +459,9 @@ enum Cmd {
         /// Stop the running server for this store, then exit.
         #[arg(long, conflicts_with = "list")]
         stop: bool,
+        /// With --stop, also kill every terminal retained for this project.
+        #[arg(long, requires = "stop", conflicts_with = "list")]
+        kill_all_terminals: bool,
         /// List every registered machine server and its hosted stores. Registrations are
         /// deduplicated by server identity, health-checked, and never expose bearer secrets.
         #[arg(long, conflicts_with = "stop")]
@@ -1170,8 +1173,9 @@ fn main() -> Result<()> {
             bind,
             secret,
             stop,
+            kill_all_terminals,
             list,
-        } => cmd_serve(&cli.path, &bind, secret, stop, list),
+        } => cmd_serve(&cli.path, &bind, secret, stop, kill_all_terminals, list),
         Cmd::Cert { cmd } => cmd_cert(&cli.path, &cmd),
         Cmd::MergeDriver { base, ours, theirs } => cmd_merge_driver(&base, &ours, &theirs),
         Cmd::ClaimNext {
@@ -2784,6 +2788,7 @@ fn cmd_serve(
     bind: &str,
     secret: Option<String>,
     stop: bool,
+    kill_all_terminals: bool,
     list: bool,
 ) -> Result<()> {
     if list {
@@ -2794,7 +2799,13 @@ fn cmd_serve(
     verify_server_version(&exe)?;
 
     let mut cmd = std::process::Command::new(&exe);
-    cmd.args(server_args(path, bind, secret.as_deref(), stop));
+    cmd.args(server_args(
+        path,
+        bind,
+        secret.as_deref(),
+        stop,
+        kill_all_terminals,
+    ));
     let status = cmd.status().map_err(|e| {
         anyhow::anyhow!(
             "could not launch `{}`: {e} — is hotsheet-server installed alongside hotsheet-cli?",
@@ -3035,6 +3046,7 @@ fn server_args(
     bind: &str,
     secret: Option<&str>,
     stop: bool,
+    kill_all_terminals: bool,
 ) -> Vec<std::ffi::OsString> {
     let mut args = vec![
         "-C".into(),
@@ -3047,6 +3059,9 @@ fn server_args(
     }
     if stop {
         args.push("--stop".into());
+    }
+    if kill_all_terminals {
+        args.push("--kill-all-terminals".into());
     }
     args
 }
@@ -4279,7 +4294,13 @@ mod server_wrapper_tests {
             sibling
         );
         assert_eq!(
-            server_args(Path::new("store path"), "127.0.0.1:0", Some("secret"), true),
+            server_args(
+                Path::new("store path"),
+                "127.0.0.1:0",
+                Some("secret"),
+                true,
+                true
+            ),
             [
                 "-C",
                 "store path",
@@ -4287,7 +4308,8 @@ mod server_wrapper_tests {
                 "127.0.0.1:0",
                 "--secret",
                 "secret",
-                "--stop"
+                "--stop",
+                "--kill-all-terminals"
             ]
             .map(std::ffi::OsString::from)
         );
