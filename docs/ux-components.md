@@ -574,7 +574,8 @@ without a clear place in the product.
   the project name remains readable while the query retains the full main-column width.
   Real editable boundaries keep a keyboard caret reachable before, between, and after chips;
   Right Arrow normalizes browser-native element and chip-descendant positions at the final chip
-  into its trailing editable text span.
+  into its trailing editable text span. Backspace/Delete removes the immediately preceding chip,
+  while forward Delete removes the immediately following chip, at both middle and end boundaries.
   Its concise placeholder remains
   ordinary search guidance while a help button
   exposes the complete syntax.
