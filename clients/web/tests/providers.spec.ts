@@ -1047,6 +1047,25 @@ test('runs a portable shell command in a named terminal and opens the bottom dra
   await page.getByRole('button',{name:'Lint project'}).click();await expect.poll(()=>terminalRequests).toEqual([{shell_command:'npm run lint',cwd:'/work/demo/client'}]);const drawer=page.locator('[data-component="terminal-drawer"]');await expect(drawer).toBeVisible();await expect(drawer.getByRole('tab',{name:'Lint project'})).toHaveAttribute('aria-selected','true');await expect(drawer.locator('[data-component="terminal-session"] [data-component="terminal-viewport"]')).toHaveAttribute('data-connection','connected');await page.screenshot({path:'/private/tmp/hs2-etwewc-shell-command-terminal.png',fullPage:true});
 });
 
+test('queues a custom AI command as an urgent Up Next ticket and signals an available AI',async({page})=>{
+  const ticketCreates:Array<Record<string,unknown>>=[],commandRuns:string[]=[],turns:Array<{path:string;body:Record<string,unknown>}>=[];
+  await mockProject(page);
+  await page.route('**/__hotsheet/project-api/demo-checkout/commands',route=>route.request().method()==='GET'?route.fulfill({json:[{id:'review',title:'Review current changes',kind:'ai',prompt:'Inspect the current diff and resolve any problems.',tool:'codex',group:'Quality'}]}):route.fallback());
+  page.on('request',request=>{const path=new URL(request.url()).pathname;if(request.method()==='POST'&&path.endsWith('/tickets'))ticketCreates.push(request.postDataJSON());if(request.method()==='POST'&&path.endsWith('/commands/review/run'))commandRuns.push(path);if(request.method()==='POST'&&path.endsWith('/turns'))turns.push({path,body:request.postDataJSON()})});
+  await page.setViewportSize({width:1280,height:800});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:'Open Codex conversation'}).click();const conversation=page.locator('[data-component="ai-conversation"]'),dialog=conversation.getByRole('dialog');await expect(dialog).toBeVisible();await page.mouse.click(1,1);await expect(dialog).toBeHidden();
+  await page.getByRole('button',{name:'Review current changes'}).click();
+  await expect.poll(()=>ticketCreates).toEqual([{title:'Review current changes',details:'Inspect the current diff and resolve any problems.',category:'task',priority:'highest',up_next:true}]);
+  expect(commandRuns).toEqual([]);await expect.poll(()=>turns).toEqual([{path:'/__hotsheet/project-api/demo-checkout/drive/connections/hotsheet-project-chat-codex-demo-checkout/turns',body:{content:'$hotsheet'}}]);
+  const created=page.locator('[data-ticket-slug="HS2-NEW001"]');await expect(created).toContainText('Review current changes');await expect(page.locator('.app-toast')).toContainText('Queued HS2-NEW001 and notified Codex.');await created.screenshot({path:'/private/tmp/hs2-yxgh0c-ai-command-ticket.png'});
+});
+
+test('keeps a custom AI command ticket when no AI connection is available',async({page})=>{
+  const requests:Array<{path:string;body:Record<string,unknown>}>=[];await mockProject(page);await page.route('**/__hotsheet/project-api/demo-checkout/commands',route=>route.request().method()==='GET'?route.fulfill({json:[{id:'review',title:'Review without a live AI',kind:'ai',prompt:'Inspect the current diff.',tool:'claude'}]}):route.fallback());page.on('request',request=>{if(request.method()==='POST')requests.push({path:new URL(request.url()).pathname,body:request.postDataJSON()??{}})});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Review without a live AI'}).click();
+  await expect(page.locator('[data-ticket-slug="HS2-NEW001"]')).toContainText('Review without a live AI');await expect(page.locator('.app-toast')).toContainText('Queued HS2-NEW001.');expect(requests.filter(request=>request.path.endsWith('/tickets'))).toHaveLength(1);expect(requests.some(request=>request.path.endsWith('/turns')||request.path.endsWith('/commands/review/run'))).toBe(false);
+});
+
 test('creates, edits, reorders, deletes, and saves typed custom commands',async({page})=>{
   const writes:Array<Array<Record<string,unknown>>>=[];await mockProject(page);page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/commands'))writes.push(request.postDataJSON())});await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();const editor=page.locator('[data-component="command-settings-editor"]');
   await editor.getByRole('button',{name:'Add command'}).click();await editor.getByLabel('Button label').fill('Lint');await editor.getByLabel('Identifier').fill('lint');await editor.getByLabel('Group').fill('Quality');await editor.getByLabel('Shell command').fill('npm run lint');

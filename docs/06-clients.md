@@ -258,13 +258,17 @@ and identity-less legacy entries remain conservatively blocking.
   definitions store command text and resolve the current machine's shell only at run time.
   Running one creates a terminal named for the command, selects it, and opens the bottom
   drawer so output and subsequent interaction remain visible. `ai` definitions store only
-  the prompt and tool selection, never a hard-coded Hot Sheet
-  executable or CLI argv. Optional icon/color metadata controls the sidebar presentation.
+  the prompt and tool selection, never a hard-coded Hot Sheet executable or CLI argv.
+  Clicking one creates an urgent Up Next task whose title is the command label and whose
+  details are the configured prompt; it does not execute that prompt directly. When an
+  idle, sendable connection for the configured (or default) AI tool already exists, the
+  client also sends `$hotsheet` so that connection re-reads and works the prioritized
+  queue. Ticket creation remains the authoritative action and succeeds when no connection
+  is available or the optional signal fails. Optional icon/color metadata controls the sidebar presentation.
   Run transitions use the shared WebSocket/
   long-poll event channel and never introduce client interval polling. Press-and-hold
   remains reserved for output/history. A context or overflow menu will provide “Run in
-  new terminal” for shell commands and capability-aware “Create task from command” for
-  AI commands (HS2-NT3F3Q).
+  new terminal” for shell commands (HS2-NT3F3Q).
 
 - **Project settings navigation.** Entering Settings replaces the ticket-oriented
   project sidebar with a persistent category navigator, following the HS1 settings-tab

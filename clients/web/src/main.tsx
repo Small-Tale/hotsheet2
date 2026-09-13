@@ -11,6 +11,7 @@ import {Cable,ChevronLeft,ChevronRight,Ellipsis,GitBranch,PanelRightClose} from 
 import { Api, type AiToolDefaults,type AiToolDescriptor,type AttachmentMetadata, type AttachmentPurpose, type Capabilities, type CheckoutTicketCounts, type CheckoutTicketQuery, type CodeReview, type CommandDefinition, type CommandRun, type CorruptTicket, type CustomView, type DuplicateBacklink, type FullTicket, type MediaAnnotation, type PollResponse, type ProviderConnection, type RepositoryFile, type RepositoryStatus, revealCorruptTicketFile, type TicketCloseReason, type TicketRow as WireTicketRow, type ToolConnection, TurnStreamReplayGuard } from './api';
 import {applyConversationActivity,applyConversationEvent,beginConversationTurn,conversationUsage,EMPTY_CONVERSATION,type ConversationState} from './ai-conversation';
 import {syncConversationScroll} from './conversation-scroll';
+import {customAiCommandSignalConnection,customAiCommandTicket,HOTSHEET_SKILL_SIGNAL} from './custom-ai-command';
 import {buildConversationExportRequest,conversationExportAssets,conversationExportScopeAfterMessagePick,defaultConversationExportDraft,selectedConversationMessages,suggestedConversationExportName,type ConversationExportDestination,type ConversationExportDraft,type ConversationExportOpenResult,type ConversationExportWriteResult} from './conversation-export';
 import {collectMatchingSearchPages,filterAdvancedSearchResults,usesAdvancedSearchExpression,usesBooleanSearchExpression} from './advanced-search';
 import {activeDatePrefix,activeTagPrefix,consumeSearchTokens,dateTokenFromInput,effectiveSearch,type InlineSearchToken,orderedSearchText,tokenFromRaw,tokenQuery} from './inline-search';
@@ -854,7 +855,28 @@ function ProjectRestoreState(){return <section class="app-empty" data-component=
 function commandRunFor(commandId:string){return commandRuns.value.find(run=>run.command_id===commandId)}
 function showCommandDialog(){queueMicrotask(()=>{const dialog=document.querySelector<HTMLDialogElement>('[data-component="command-run-dialog"], [data-component="command-cancellation-dialog"]');if(dialog&&!dialog.open)dialog.showModal()})}
 function commandIcon(command:CommandDefinition):CommandNavigationIcon{return command.icon&&isCommandNavigationIcon(command.icon)?command.icon:command.kind==='ai'||command.program?.includes('hotsheet')||command.args?.some(value=>value.includes('trigger'))?'send':command.id.includes('test')||command.title.toLowerCase().includes('test')?'test':'build'}
-async function runCommand(commandId:string){const command=commandDefinitions.value.find(item=>item.id===commandId),current=project();if(!command||!current)return;const active=commandRunFor(commandId);if(active?.state==='running'){commandDialogId.value=commandId;commandStopConfirmation.value=true;showCommandDialog();return}if(command.confirmation&&!window.confirm(command.confirmation))return;if(command.kind==='shell'){await createShellCommandTerminal(command,current);return}try{const run=await new Api(current.apiPath).runCommand(commandId);if(project()?.id===current.id)commandRuns.value=[run,...commandRuns.value.filter(item=>item.id!==run.id)]}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
+async function queueAiCommand(command:CommandDefinition,current:Project){
+  if(!(defaultProvider()?.capabilities.create??true)){error.value='The default ticket source does not support ticket creation.';return}
+  const client=new Api(current.apiPath),finishLocalCreation=beginLocalTicketCreation();
+  try{
+    const created=await client.createCheckoutTicket(current.id,customAiCommandTicket(command));
+    localTicketChangeAcknowledgements.acknowledge(current.id,{store:created.connection_id,id:created.id,kind:'created'});
+    if(project()?.id===current.id){tickets.value=[created,...tickets.value.filter(ticket=>ticket.id!==created.id)];publishOptimisticTicketRows(current.id)}
+    const connection=customAiCommandSignalConnection(driveConnectionsByProject.value[current.id]??[],command.tool,aiDefaults.value.tool);
+    if(!connection){showToast(`Queued ${created.slug}.`);return}
+    beginConversation(connection.id,HOTSHEET_SKILL_SIGNAL);
+    try{
+      const updated=await client.sendToolTurn(connection.id,HOTSHEET_SKILL_SIGNAL,connection.session_id);
+      if(project()?.id===current.id)driveConnectionsByProject.value={...driveConnectionsByProject.value,[current.id]:(driveConnectionsByProject.value[current.id]??[]).filter(item=>item.id!==updated.id).concat(updated)};
+      showToast(`Queued ${created.slug} and notified ${aiToolLabel(connection.tool)}.`);
+    }catch(reason){
+      const message=reason instanceof Error?reason.message:String(reason);
+      updateConversation(connection.id,state=>({...state,activeAssistantId:undefined,progress:undefined,error:message,messages:state.messages.map(item=>item.id===state.activeAssistantId?{...item,status:'failed',content:item.content||'The Hot Sheet signal could not be sent.'}:item)}));
+      showToast(`Queued ${created.slug}; ${aiToolLabel(connection.tool)} could not be notified.`);
+    }
+  }catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}finally{await finishLocalCreation()}
+}
+async function runCommand(commandId:string){const command=commandDefinitions.value.find(item=>item.id===commandId),current=project();if(!command||!current)return;const active=commandRunFor(commandId);if(active?.state==='running'){commandDialogId.value=commandId;commandStopConfirmation.value=true;showCommandDialog();return}if(command.confirmation&&!window.confirm(command.confirmation))return;if(command.kind==='shell'){await createShellCommandTerminal(command,current);return}if(command.kind==='ai'){await queueAiCommand(command,current);return}try{const run=await new Api(current.apiPath).runCommand(commandId);if(project()?.id===current.id)commandRuns.value=[run,...commandRuns.value.filter(item=>item.id!==run.id)]}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
 async function openCommandHistory(commandId:string){const current=project(),run=commandRunFor(commandId);commandDialogId.value=commandId;commandStopConfirmation.value=false;showCommandDialog();if(!current||!run)return;try{const full=await new Api(current.apiPath).commandRun(run.id);if(project()?.id===current.id)commandRuns.value=commandRuns.value.map(item=>item.id===full.id?full:item)}catch(reason){error.value=reason instanceof Error?reason.message:String(reason)}}
 function Sidebar(){
   const current=project()!;
