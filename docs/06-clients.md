@@ -325,6 +325,9 @@ and identity-less legacy entries remain conservatively blocking.
   Forward and backward setup navigation uses the shared stable A/B `ContentTransition`:
   the outgoing and incoming content areas move together for an iOS-style push/pop, while
   crossfade and motion-free replacement remain reusable variants in the UX catalog.
+  Multi-screen dialogs use the same in-content chevron `FlowBackButton`; the conversation
+  save flow applies these conventions to push from message scope to bundle contents and
+  pop back without placing a competing Back action in the dialog footer.
   The Vite-only bridge discovers or detached-starts one bootstrap machine server and
   attaches every discovered or explicit project store through the server's multi-store
   open path; it never starts one server per project. Discovery is health checked and the

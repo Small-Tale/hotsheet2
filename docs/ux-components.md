@@ -1097,6 +1097,11 @@ A/B DOM sides and supports paired forward push, backward pop, crossfade, and no-
 replacement. Inactive content is inert and hidden after the transition. Its UX demo
 exposes every transition style and both visible sides.
 
+`FlowBackButton` is the corresponding in-content back affordance for multi-screen dialogs:
+a quiet brand-colored chevron and destination label at the start of the detail screen.
+Back belongs there rather than beside Cancel/Submit in the footer. Ticket-source setup and
+conversation save share this visual contract; save scope pushes forward and pops backward.
+
 ## 8. Setup, settings, and connection management
 
 ### 8.1 Initial client path

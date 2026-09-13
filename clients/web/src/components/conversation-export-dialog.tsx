@@ -11,6 +11,8 @@ import {
   conversationExportValidation,
   selectedConversationMessages,
 } from '../conversation-export';
+import { ContentTransition } from './content-transition';
+import { FlowBackButton } from './flow-back-button';
 
 export interface ConversationExportDialogState {
   source: ConversationExportSource;
@@ -21,12 +23,13 @@ export interface ConversationExportDialogState {
   error?: string;
   summaryAvailable?: boolean;
   step?: 1|2;
+  navigation?: 'none'|'push'|'pop';
   selectedRange?: Extract<ConversationExportScope,{kind:'range'}>;
 }
 
 export function ConversationExportDialog({ state }: { state?: ConversationExportDialogState }) {
   if (!state) return <></>;
-  const { source, messages, draft, busy = false, error = '', summaryAvailable = true, step = 1, selectedRange } = state;
+  const { source, messages, draft, busy = false, error = '', summaryAvailable = true, step = 1, navigation = 'none', selectedRange } = state;
   const range = draft.scope.kind === 'range';
   const selectedMessages=selectedConversationMessages(messages,draft.scope);
   const presetMessages=selectedRange?selectedConversationMessages(messages,selectedRange):[];
@@ -37,12 +40,10 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
   const blockingValidation=validation==='Choose where to save the conversation.'?undefined:validation;
   const summaryUnavailable = draft.bundle.includeSummary && !summaryAvailable;
   const submitLabel = busy ? 'Saving…' : draft.writeMode === 'reexport' ? 'Re-export conversation' : draft.writeMode === 'overwrite' ? 'Overwrite export' : 'Save conversation';
-
-  return <wa-dialog class="conversation-export-dialog" data-component="conversation-export-dialog" data-step={step} label="Save conversation" open with-footer>
-    <form class="conversation-export-dialog__form" data-action="submit-conversation-export">
-      <header class="conversation-export-dialog__header"><span>{hasScopeChoice?`Step ${step} of 2`:'Save conversation'}</span><strong>{step===1?'Choose scope':'Bundle contents'}</strong></header>
-
-      {step===1&&<fieldset class="conversation-export-dialog__section">
+  const active=step===1?'a':'b',transitionStyle=navigation==='none'?'none':'push',direction=navigation==='pop'?'backward':'forward';
+  const scopeScreen=<form class="conversation-export-dialog__form conversation-export-dialog__screen" data-action="submit-conversation-export">
+      <header class="conversation-export-dialog__header"><span>Step 1 of 2</span><strong>Choose scope</strong></header>
+      <fieldset class="conversation-export-dialog__section">
         <legend>Messages</legend>
         <label class="conversation-export-dialog__choice">
           <input type="radio" name="conversation-export-scope" value="all" checked={!range} disabled={busy} />
@@ -52,9 +53,13 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
           <input type="radio" name="conversation-export-scope" value="range" checked={range} disabled={busy} />
           <span><strong>Selected range</strong><small>{presetMessages.length} message{presetMessages.length===1?'':'s'} selected in the chat.</small></span>
         </label>
-      </fieldset>}
-
-      {step===2&&<fieldset class="conversation-export-dialog__section">
+      </fieldset>
+      <p class="conversation-export-dialog__error" role="alert">{step===1?error:''}</p>
+    </form>;
+  const bundleScreen=<form class="conversation-export-dialog__form conversation-export-dialog__screen" data-action="submit-conversation-export">
+      {hasScopeChoice&&<FlowBackButton action="previous-conversation-export-step" label="Message scope" disabled={busy}/>}
+      <header class="conversation-export-dialog__header"><span>{hasScopeChoice?'Step 2 of 2':'Save conversation'}</span><strong>Bundle contents</strong></header>
+      <fieldset class="conversation-export-dialog__section">
         <legend>Bundle contents</legend>
         <div class="conversation-export-dialog__options">
           <label class="conversation-export-dialog__choice"><input type="checkbox" name="conversation-export-attachments" checked={draft.bundle.includeAttachments} disabled={busy} /><span><strong>Attachments</strong><small>Copy non-media files referenced by the selected messages.</small></span></label>
@@ -67,14 +72,14 @@ export function ConversationExportDialog({ state }: { state?: ConversationExport
           {sameConversation&&<label class="conversation-export-dialog__choice"><input type="radio" name="conversation-export-write-mode" value="reexport" checked={draft.writeMode==='reexport'} disabled={busy}/><span><strong>Re-export as the next revision</strong><small>Keep lineage to revision {existing.revision} in the manifest.</small></span></label>}
           <label class="conversation-export-dialog__choice conversation-export-dialog__choice--danger"><input type="radio" name="conversation-export-write-mode" value="overwrite" checked={draft.writeMode==='overwrite'} disabled={busy}/><span><strong>Overwrite the existing bundle</strong><small>Replace its files in this destination.</small></span></label>
         </div>}
-      </fieldset>}
+      </fieldset>
+      <p class="conversation-export-dialog__error" role="alert">{step===2?(error || (summaryUnavailable ? 'Summary export is unavailable for this conversation.' : blockingValidation)):''}</p>
+    </form>;
+  const scopeActions=<><wa-button appearance="plain" type="button" data-action="cancel-conversation-export" disabled={busy}>Cancel</wa-button><wa-button appearance="accent" type="button" data-action="next-conversation-export-step" disabled={busy||selectedMessages.length===0}>Continue</wa-button></>;
+  const bundleActions=<><wa-button appearance="plain" type="button" data-action="cancel-conversation-export" disabled={busy}>Cancel</wa-button><wa-button appearance="accent" type="button" data-action="finish-conversation-export" disabled={busy||Boolean(blockingValidation)||summaryUnavailable}>{submitLabel}</wa-button></>;
 
-      <p class="conversation-export-dialog__error" role="alert">{error || (summaryUnavailable ? 'Summary export is unavailable for this conversation.' : blockingValidation)}</p>
-      <div slot="footer" class="conversation-export-dialog__actions">
-        <button type="button" class="conversation-export-dialog__button" data-action="cancel-conversation-export" disabled={busy}>Cancel</button>
-        {step>1&&hasScopeChoice&&<button type="button" class="conversation-export-dialog__button" data-action="previous-conversation-export-step" disabled={busy}>Back</button>}
-        <button type="button" class="conversation-export-dialog__button conversation-export-dialog__button--accent" data-action={step===1?'next-conversation-export-step':'finish-conversation-export'} disabled={busy||(step===1?selectedMessages.length===0:Boolean(blockingValidation)||summaryUnavailable)}>{step===1?'Continue':submitLabel}</button>
-      </div>
-    </form>
+  return <wa-dialog class="conversation-export-dialog" data-component="conversation-export-dialog" data-step={step} data-navigation={navigation} label="Save conversation" open with-footer>
+    <ContentTransition active={active} style={transitionStyle} direction={direction} label="Save conversation navigation" a={scopeScreen} b={bundleScreen}/>
+    <ContentTransition active={active} style="crossfade" direction={direction} region="footer" label="Save conversation actions" a={scopeActions} b={bundleActions}/>
   </wa-dialog>;
 }

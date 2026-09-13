@@ -15,10 +15,12 @@ describe('ConversationExportDialog', () => {
     const markup = String(ConversationExportDialog({ state: { source, messages, draft: defaultConversationExportDraft(),step:2 } }));
     expect(markup).toContain('data-component="conversation-export-dialog"');
     expect(markup).toContain('data-step="2"');
+    expect(markup).toContain('data-navigation="none"');
+    expect(markup).toContain('data-active-side="b"');
+    expect(markup).toContain('data-transition-style="none"');
     expect(markup).toContain('Save conversation');
     expect(markup).toContain('Bundle contents');
     expect(markup).toContain('data-action="submit-conversation-export"');
-    expect(markup).not.toContain('conversation-export-scope');
     expect(markup).not.toContain('previous-conversation-export-step');
   });
 
@@ -26,6 +28,7 @@ describe('ConversationExportDialog', () => {
     const selectedRange={kind:'range' as const,startMessageId:'message-2',endMessageId:'message-3'};
     const markup=String(ConversationExportDialog({state:{source,messages,draft:{...defaultConversationExportDraft(),scope:selectedRange},selectedRange,step:1}}));
     expect(markup).toContain('data-step="1"');
+    expect(markup).toContain('data-active-side="a"');
     expect(markup).toContain('Step 1 of 2');
     expect(markup).toContain('Choose scope');
     expect(markup).toContain('name="conversation-export-scope" value="all"');
@@ -35,6 +38,21 @@ describe('ConversationExportDialog', () => {
     expect(markup).not.toContain('class="ai-conversation__message');
     expect(markup).not.toContain('pick-conversation-export-message');
     expect(markup).toContain('data-action="next-conversation-export-step"');
+  });
+
+  it('pushes forward and pops backward with the shared in-content back affordance',()=>{
+    const selectedRange={kind:'range' as const,startMessageId:'message-2',endMessageId:'message-3'};
+    const forward=String(ConversationExportDialog({state:{source,messages,draft:{...defaultConversationExportDraft(),scope:selectedRange},selectedRange,step:2,navigation:'push'}}));
+    expect(forward).toContain('data-navigation="push"');
+    expect(forward).toContain('data-transition-style="push"');
+    expect(forward).toContain('data-transition-direction="forward"');
+    expect(forward).toContain('class="flow-back-button"');
+    expect(forward).toContain('data-action="previous-conversation-export-step"');
+    expect(forward).toContain('data-lucide="chevron-left"');
+    expect(forward).toContain('Message scope');
+    const backward=String(ConversationExportDialog({state:{source,messages,draft:{...defaultConversationExportDraft(),scope:selectedRange},selectedRange,step:1,navigation:'pop'}}));
+    expect(backward).toContain('data-navigation="pop"');
+    expect(backward).toContain('data-transition-direction="backward"');
   });
 
   it('reviews an inclusive range and a same-conversation re-export choice', () => {
