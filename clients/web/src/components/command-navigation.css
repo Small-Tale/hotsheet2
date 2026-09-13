@@ -5,6 +5,8 @@
 .command-navigation__items { display: grid; gap: .3rem; }
 .command-navigation__command { min-height: 2.5rem; color: var(--command-text-color); background: var(--command-color); font-weight: 650; }
 .command-navigation__command:hover { color: var(--command-text-color); background: var(--command-color); filter: brightness(.9); }
+.command-navigation__type { display: inline-flex; opacity: .5; }
+.command-navigation__type svg { width: 1rem; height: 1rem; }
 .command-navigation__command i { width: .5rem; height: .5rem; border: 2px solid color-mix(in srgb, var(--wa-color-neutral-on-loud) 45%, transparent); border-top-color: var(--wa-color-neutral-on-loud); border-radius: 50%; animation: command-spin .8s linear infinite; }
 @keyframes command-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .command-navigation__command i { animation: none; border-color: var(--wa-color-neutral-on-loud); } }

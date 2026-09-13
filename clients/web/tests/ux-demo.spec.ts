@@ -1425,6 +1425,11 @@ test('exercises the five ProjectSidebar component demos and their controlled tra
   await expect(commands.getByRole('button', { name: 'Verify project' })).toHaveCSS('background-color', 'rgb(20, 184, 166)');
   await expect(commands.getByRole('button', { name: 'Build clients' })).toHaveCSS('background-color', 'rgb(249, 115, 22)');
   await expect(commands.getByRole('button', { name: 'Publish preview' })).toHaveCSS('background-color', 'rgb(139, 92, 246)');
+  await expect(commands.getByRole('button',{name:'Build clients'}).getByLabel('Shell command')).toHaveCSS('opacity','0.5');
+  await expect(commands.getByRole('button',{name:'Build clients'}).locator('[data-lucide="square-terminal"]')).toBeVisible();
+  await expect(commands.getByRole('button',{name:'Publish preview'}).getByLabel('AI command')).toHaveCSS('opacity','0.5');
+  await expect(commands.getByRole('button',{name:'Publish preview'}).locator('[data-lucide="bot"]')).toBeVisible();
+  await commands.screenshot({path:'/private/tmp/hs2-a66p03-command-type-icons.png'});
   await commands.getByRole('button', { name: 'Verify project' }).click();
   await expect(commands.getByRole('button', { name: /Running Verify project/ })).toHaveAttribute('aria-pressed', 'true');
   await commands.getByRole('button', { name: /Running Verify project/ }).click();

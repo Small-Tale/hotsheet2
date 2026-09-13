@@ -129,6 +129,16 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('Last run: completed (exit 0). Press and hold for output.');
   });
 
+  it('shows half-opacity type icons for idle shell and AI commands',()=>{
+    const markup=String(CommandNavigation({label:'Commands',expanded:true,commands:[{id:'shell',label:'Shell',color:'blue',icon:'build',kind:'shell'},{id:'ai',label:'AI',color:'purple',icon:'send',kind:'ai'}]}));
+    expect(markup).toContain('aria-label="Shell command"');
+    expect(markup).toContain('data-lucide="square-terminal"');
+    expect(markup).toContain('aria-label="AI command"');
+    expect(markup).toContain('data-lucide="bot"');
+    const css=readFileSync(new URL('./command-navigation.css',import.meta.url),'utf8');
+    expect(css).toMatch(/\.command-navigation__type \{[^}]*opacity: \.5/);
+  });
+
   it('renders every configured HS1 command icon instead of replacing it by command kind', () => {
     const configured=['send','file-text','arrow-left-right','soap-dispenser-droplet','circle-check-big','balloon','git-compare','git-compare-arrows','wand','globe'] as const;
     expect(configured.every(isCommandNavigationIcon)).toBe(true);
