@@ -815,9 +815,11 @@ and identity-less legacy entries remain conservatively blocking.
   explicit canonical target, and sends its `(project_id, connection_id, native_id)` tuple.
   The server validates that tuple against the target checkout and persists it as
   `@project/connection:native-id`, so same-slug tickets cannot become ambiguous. The
-  inspector resolves the saved identity to a readable slug and project through an exact
-  ticket lookup rather than exposing its internal ID, then switches projects to open the
-  exact canonical target even when it is outside the current list filter or loaded page.
+  inspector resolves the saved identity through an exact ticket lookup rather than
+  exposing its internal ID. The forward “Duplicate of” relationship uses the same
+  project-plus-slug, title, icon, and full-row action treatment as reverse “Duplicates”
+  backlinks, then switches projects to open the exact canonical target even when it is
+  outside the current list filter or loaded page.
   Checkout-scoped self-reference
   rejection compares all three identity fields; compatibility provider/store routes lack
   a source project and intentionally treat the same connection/native pair as the same

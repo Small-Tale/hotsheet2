@@ -77,10 +77,12 @@ describe('TicketInspector', () => {
   });
 
   it('renders the structured duplicate outcome and canonical ticket action', () => {
-    const markup = String(TicketInspector({ ...base, status: 'completed', closeReason: 'duplicate', duplicateTarget: { id: 'target-id', label: 'HS2-TARGET' } }));
-    expect(markup).toContain('data-close-reason="duplicate"');
+    const markup = String(TicketInspector({ ...base, status: 'completed', closeReason: 'duplicate', duplicateTarget: { id: 'target-id', projectName:'Hot Sheet 2',slug:'HS2-TARGET',title:'Canonical ticket' } }));
+    expect(markup).toContain('data-component="ticket-duplicate-target"');
     expect(markup).toContain('Duplicate of');
-    expect(markup).toContain('data-action="open-duplicate-target" data-target-id="target-id"');
+    expect(markup).toContain('Hot Sheet 2 · HS2-TARGET');
+    expect(markup).toContain('Canonical ticket');
+    expect(markup).toContain('data-action="open-duplicate-target" data-item-id="target-id"');
     expect(markup).toContain('data-lucide="copy-x"');
   });
 

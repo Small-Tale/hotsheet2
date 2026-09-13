@@ -16,7 +16,7 @@ import type { NoteCardProps } from './note-card';
 import type { TicketStatus } from './status-badge';
 import { type TicketAttachmentItem,TicketAttachments } from './ticket-attachments';
 import { TicketCodeReview } from './ticket-code-review';
-import { TicketDuplicateBacklinks } from './ticket-duplicate-backlinks';
+import { type DuplicateTargetSummary,TicketDuplicateBacklinks,TicketDuplicateTarget } from './ticket-duplicate-backlinks';
 import { TicketFieldConflict } from './ticket-field-conflict';
 import { TicketInfoPanel } from './ticket-info-panel';
 import type { TicketPriority } from './ticket-row';
@@ -50,7 +50,7 @@ export interface TicketInspectorProps {
   /** The ticket has an unresolved `feedback_needed` note — it is waiting on the user. */
   feedbackNeeded?: boolean;
   closeReason?: TicketCloseReason;
-  duplicateTarget?: { id: string; label: string };
+  duplicateTarget?: DuplicateTargetSummary;
   duplicateBacklinks?: readonly DuplicateBacklink[];
   duplicateBacklinkInaccessibleProjects?: readonly string[];
   timelineEntries?: readonly TicketTimelineEntry[];
@@ -97,7 +97,8 @@ export function TicketInspector({ slug, title, titleEditing = false, titleDraft 
       {titleEditing ? <input class="ticket-inspector__title-input" name="ticket-title" aria-label="Ticket title" value={titleDraft} /> : <h1 data-action={canUpdate ? 'edit-ticket-title' : undefined} data-editable={String(canUpdate)} tabIndex={canUpdate ? 0 : undefined} title={canUpdate ? 'Double-click to edit title' : undefined}>{title}</h1>}
     </header>
     {feedbackNeeded && <div class="ticket-inspector__feedback" role="status"><LucideIcon icon={CircleAlert} name="circle-alert" className="ticket-inspector__feedback-icon" /><span>Needs review</span></div>}
-    {closeReason && <div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}>{closeReason === 'duplicate' && <LucideIcon icon={CopyX} name="copy-x" />}{closeReason === 'duplicate' ? <span>Duplicate of {duplicateTarget ? <button type="button" data-action="open-duplicate-target" data-target-id={duplicateTarget.id}>{duplicateTarget.label}</button> : 'another ticket'}</span> : <span>Closed as {closeReason === 'not_planned' ? 'not planned' : closeReason}</span>}</div>}
+    {closeReason&&closeReason!=='duplicate'&&<div class="ticket-inspector__close-outcome" role="status" data-close-reason={closeReason}><span>Closed as {closeReason === 'not_planned' ? 'not planned' : closeReason}</span></div>}
+    {closeReason==='duplicate'&&(duplicateTarget?<TicketDuplicateTarget target={duplicateTarget}/>:<div class="ticket-inspector__close-outcome" role="status" data-close-reason="duplicate"><LucideIcon icon={CopyX} name="copy-x"/><span>Duplicate of another ticket</span></div>)}
     <TicketDuplicateBacklinks backlinks={duplicateBacklinks} inaccessibleProjects={duplicateBacklinkInaccessibleProjects}/>
     {fieldConflict && <TicketFieldConflict conflict={fieldConflict} resolution={fieldConflictResolution} />}
     <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections">{tabs.map(tab => <button type="button" data-action="set-inspector-tab" data-inspector-tab={tab.id} aria-label={tab.id === 'attachments' && attachments?.length ? `${tab.label}, ${attachments.length}` : tab.label} aria-current={activeTab === tab.id ? 'page' : undefined}><LucideIcon icon={tab.icon} name={tab.iconName} /><span class="ticket-inspector__tab-label">{tab.label}</span>{tab.id === 'attachments' && Boolean(attachments?.length) && <span class="ticket-inspector__tab-count" aria-hidden="true">{attachments!.length}</span>}</button>)}</nav>
