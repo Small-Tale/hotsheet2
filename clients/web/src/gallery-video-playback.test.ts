@@ -33,6 +33,19 @@ describe('GalleryVideoPlaybackController',()=>{
     video.seeked();video.frame();expect(present).toHaveBeenCalledOnce();expect(present).toHaveBeenCalledWith(8000);expect(controller.busy).toBe(false);
   });
 
+  it('observes the decoded frame before seeked so paused scrubs do not stall',()=>{
+    const video=controlledVideo(),present=vi.fn(),controller=new GalleryVideoPlaybackController(video,present);
+    controller.seek(2500);
+    expect(video.frames.size).toBe(1);
+    video.frame();
+    expect(controller.busy).toBe(true);
+    video.seeked();
+    expect(present).toHaveBeenCalledWith(2500);
+    expect(controller.busy).toBe(false);
+    controller.seek(7000);
+    expect(video.assignments).toEqual([2.5,7]);
+  });
+
   it('replaces a target queued while the prior decoded frame is pending',()=>{
     const video=controlledVideo(),present=vi.fn(),controller=new GalleryVideoPlaybackController(video,present);
     controller.seek(2000);video.seeked();controller.seek(7000);video.frame();

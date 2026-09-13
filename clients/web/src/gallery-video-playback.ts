@@ -17,6 +17,8 @@ export class GalleryVideoPlaybackController {
   #pending:number|undefined;
   #target:number|undefined;
   #frame:number|undefined;
+  #framePresented=false;
+  #seekCompleted=false;
   #disposed=false;
 
   constructor(video:GalleryVideoPlaybackResource,present:(milliseconds:number)=>void){
@@ -55,20 +57,37 @@ export class GalleryVideoPlaybackController {
     this.#pending=undefined;
     this.#target=target;
     const seconds=prime&&target===0?Math.min(.001,Math.max(0,this.#video.duration)):target/1000;
+    this.#framePresented=false;
+    this.#seekCompleted=false;
+    this.#requestFrame(seconds);
     this.#video.currentTime=seconds;
+  }
+
+  #requestFrame(seconds:number){
+    const request=this.#video.requestVideoFrameCallback?.bind(this.#video);
+    if(!request)return;
+    const target=this.#target;
+    this.#frame=request((_now,metadata)=>{
+      this.#frame=undefined;
+      if(this.#disposed||target===undefined||this.#target!==target)return;
+      if(Math.abs(metadata.mediaTime-seconds)>.15){this.#requestFrame(seconds);return}
+      if(this.#pending!==undefined){this.#target=undefined;this.#issue();return}
+      this.#framePresented=true;
+      if(this.#seekCompleted)this.#finish();
+    });
   }
 
   #seeked=()=>{
     if(this.#disposed||this.#target===undefined)return;
-    if(this.#pending!==undefined){this.#target=undefined;this.#issue();return}
-    const request=this.#video.requestVideoFrameCallback?.bind(this.#video);
-    if(!request){this.#finish();return}
-    this.#frame=request(()=>{
+    if(this.#pending!==undefined){
+      if(this.#frame!==undefined)this.#video.cancelVideoFrameCallback?.(this.#frame);
       this.#frame=undefined;
-      if(this.#disposed)return;
-      if(this.#pending!==undefined){this.#target=undefined;this.#issue();return}
-      this.#finish();
-    });
+      this.#target=undefined;
+      this.#issue();
+      return;
+    }
+    this.#seekCompleted=true;
+    if(!this.#video.requestVideoFrameCallback||this.#framePresented)this.#finish();
   };
 
   #finish(){
