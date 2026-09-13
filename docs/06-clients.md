@@ -181,7 +181,11 @@ and identity-less legacy entries remain conservatively blocking.
   dependencies fail loudly instead of becoming
   focus, scroll, or animation regressions. Development builds enable Kerf's
   value-only-render and list-rebind warnings plus throwing list invariants. They also
-  keep a bounded, value-free UI-stability event log. Render events include cumulative
+  emit `hotsheet:interaction-timing` after the next painted frame for project/view/mode
+  navigation, ticket selection, Up Next and status changes, bulk changes, and permission
+  decisions. Each event reports state-update and painted-UI latency against a 100 ms
+  budget and is copied into the bounded, value-free UI-stability event log. The
+  138-ticket browser profile enforces that budget for the primary paths. Render events include cumulative
   counters plus per-pass deltas so a captured storm distinguishes reactive rerenders
   from unrelated DOM activity. Three unexpected quick select dismissals within ten
   seconds or twelve root renders within two seconds after startup create a rate-limited
@@ -483,7 +487,11 @@ and identity-less legacy entries remain conservatively blocking.
   corrupt-ticket diagnostics, and command state from memory within the next frame, without
   showing the global loading indicator. An authoritative refresh follows in the background,
   but is not started until a task after that first browser paint, so request setup cannot
-  delay the cached projection becoming visible.
+  delay the cached projection becoming visible. Project activation also resets the progressive
+  ticket-row boundary, preventing a previously expanded large project from rebuilding every
+  cached row before its first paint. Ticket-detail presentation batches all related editor,
+  inspector, duplicate, and code-review state into one reactive transition rather than
+  remounting the application once per field.
   Every open project's replay-safe live-update stream also refreshes its cached ticket rows,
   even while another project is selected. Project-tab Up Next counts and live-claim activity
   therefore remain authoritative without activating each tab. Repeated invalidations for one
@@ -897,7 +905,7 @@ and identity-less legacy entries remain conservatively blocking.
   from compatible older servers, treating it as one complete page while pagination deployments converge.
   collection refresh reconciles the first progressive row tranche. Counts render within
   that same selectable item rather than outside its selected background. Large views initially
-  render 80 rows, continue in idle chunks, and expose an explicit continuation control when
+  render 40 rows, continue in idle chunks, and expose an explicit continuation control when
   the selected collection exceeds the server page size.
   Column presentation leaves idle TicketRows borderless, including the wide
   single-column Backlog and Archive boards, while selection supplies the rounded blue

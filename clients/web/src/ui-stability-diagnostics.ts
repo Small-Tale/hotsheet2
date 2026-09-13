@@ -1,4 +1,5 @@
 import type { ReviewAttachment } from './dev-review';
+import type { InteractionTiming } from './interaction-performance';
 import type { RenderMetricsSnapshot } from './render-metrics';
 
 const QUICK_DISMISS_MS = 1_000;
@@ -190,12 +191,14 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
   observer.observe(doc.documentElement, { childList: true, subtree: true });
   const onError = (event: ErrorEvent) => { record('window-error', undefined, { message: event.message, filename: event.filename, line: event.lineno, column: event.colno }); };
   const onUnhandledRejection = (event: PromiseRejectionEvent) => { record('unhandled-rejection', undefined, { reason: event.reason instanceof Error ? event.reason.message : String(event.reason) }); };
+  const onInteractionTiming = (event: Event) => { const timing=(event as CustomEvent<InteractionTiming>).detail;record('interaction-timing',undefined,{...timing,...timing.detail?{detail:JSON.stringify(timing.detail)}:{}}) };
   doc.addEventListener('pointerdown', noteUserIntent, true);
   doc.addEventListener('keydown', noteUserIntent, true);
   doc.addEventListener('wa-show', onShow, true);
   doc.addEventListener('wa-hide', onHide, true);
   view.addEventListener('error', onError);
   view.addEventListener('unhandledrejection', onUnhandledRejection);
+  doc.addEventListener('hotsheet:interaction-timing',onInteractionTiming);
 
   return {
     attachment,
@@ -221,6 +224,7 @@ export function installUiStabilityDiagnostics(options: UiStabilityOptions = {}):
       doc.removeEventListener('wa-hide', onHide, true);
       view.removeEventListener('error', onError);
       view.removeEventListener('unhandledrejection', onUnhandledRejection);
+      doc.removeEventListener('hotsheet:interaction-timing',onInteractionTiming);
     },
   };
 }
