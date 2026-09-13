@@ -251,7 +251,9 @@ and identity-less legacy entries remain conservatively blocking.
 - **Custom project commands.** The sidebar renders machine-local typed command
   definitions as collapsible groups with running feedback, stop confirmation, latest
   outcome, and press-and-hold output history. Definitions are edited in Project
-  Settings and persisted to `<project-root>/.hotsheet2/settings.local.json`. Native
+  Settings through a responsive master-detail editor with add, reorder, delete, typed
+  target fields, validation, and explicit save; raw command JSON is not exposed as the
+  primary editing interface. Definitions persist to `<project-root>/.hotsheet2/settings.local.json`. Native
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time;
   `ai` definitions store only the prompt and tool selection, never a hard-coded Hot Sheet
@@ -270,7 +272,7 @@ and identity-less legacy entries remain conservatively blocking.
   heading, and the right region uses the same divider-free empty inspector placeholder
   as Notifications. Entering Settings preserves the ticket selection for returning to
   list/board, but that retained selection never changes the Settings placeholder semantics.
-  The selected category, unsaved Commands JSON draft, and its validation result belong to
+  The selected category, unsaved command-editor draft, selection, and validation result belong to
   the active project rather than the shared shell: a newly opened project starts on Ticket
   sources, while returning to another project restores that project's category and draft.
   Project activation refreshes the visible settings data and ignores late provider responses
