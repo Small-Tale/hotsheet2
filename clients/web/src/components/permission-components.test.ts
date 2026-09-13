@@ -66,6 +66,14 @@ describe('permission presentation components', () => {
     expect(markup).not.toContain('Always Allow');
   });
 
+  it('restores a failed decision as an actionable popup with its communication error',()=>{
+    const markup=String(PermissionRequestPopup({item:pending,state:'failed',error:'Could not send the permission decision. Bridge unavailable.'}));
+    expect(markup).toContain('data-state="failed"');
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain('Could not send the permission decision. Bridge unavailable.');
+    expect(markup).not.toContain('data-action="resolve-permission" data-decision="deny" data-scope="once" data-request-key="project:7" disabled');
+  });
+
   it('renders the selected notification slice without hiding external decisions', () => {
     const allowed: PermissionHistoryItem = { ...pending, key: 'project:8', id: 8, decision: 'allow', scope: 'once', resolvedAt: 30 };
     const markup = String(NotificationCenter({ pending: [pending], history: [allowed, history], countdowns: { 'project:7': '1:00' } }));

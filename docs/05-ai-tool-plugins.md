@@ -337,6 +337,13 @@ command:
    user allows/denies (with allow-once/always mapping onto persisted allow-rules).
 4. The answer routes back to the connection that raised it.
 
+The client applies a user's decision optimistically: the popup and its clickable actions
+disappear in the same render that begins the network request, preventing latency from
+looking like a missed click or allowing duplicate answers. The presumed history entry is
+kept when delivery succeeds. A communication failure removes that presumed history and
+restores the request with an inline retryable error; authoritative resolution still wins
+if another client answered while the request was in flight (HS2-66TBWX).
+
 Both enqueue and resolution publish replayable event nudges. Resolution nudges matter when
 another client or transport answers: every attached client refetches pending requests and
 retains the disappeared request in notification history, including generic tools such as

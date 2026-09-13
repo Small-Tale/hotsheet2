@@ -1061,6 +1061,10 @@ empty-action generic requests such as `ToolSearch` follow the same lifecycle. Th
 authoritative resolution immediately removes the popup even while this client's Allow or
 Deny HTTP response is still in flight; a delayed response is idempotent and cannot
 resurrect or duplicate the resolved request.
+The local Allow/Deny path has the same immediate behavior: it optimistically removes the
+request and records the presumed decision before awaiting transport. Only a communication
+failure rolls that history back and restores the popup with an inline error, so network
+latency never invites repeated clicks.
 There is no fixed-interval network polling. Pending counts appear in the main segmented
 control and project tabs, and a non-modal popup appears even when another project is
 selected. When a standalone AI conversation is open, the active permission popup is
