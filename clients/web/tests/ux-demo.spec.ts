@@ -1123,6 +1123,61 @@ test('expands, validates, creates, and cancels through QuickTicketComposer', asy
   await expect(page.getByRole('button',{name:'Add new ticket to Up Next'})).toHaveAttribute('aria-pressed','false');
 });
 
+test('keeps QuickTicketComposer modal focus and dismissal in Web Awesome lifecycle order', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/ux-demo?component=quick-ticket-composer');
+  const launcher = page.getByRole('button', { name: /New ticket/ });
+  const dialog = page.getByRole('dialog', { name: 'Create ticket' });
+  await launcher.click();
+  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(dialog.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
+  expect(await dialog.evaluate(node => node.shadowRoot?.querySelector('dialog')?.matches(':modal'))).toBe(true);
+
+  await page.evaluate(() => { const target = document.querySelector<HTMLElement>('.demo-master')!; target.tabIndex = -1; target.focus(); });
+  expect(await dialog.evaluate(host => host.contains(document.activeElement))).toBe(true);
+  await page.mouse.click(8, 8);
+  await expect(dialog).toHaveJSProperty('open', true);
+  await expect(launcher).not.toBeFocused();
+  const title = dialog.getByRole('textbox', { name: 'Ticket title' });
+  const close = dialog.getByRole('button', { name: 'Close' });
+  await title.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(title).toBeFocused();
+
+  const category = dialog.locator('wa-select[name="new-ticket-category"]');
+  await category.click();
+  await expect(category).toHaveJSProperty('open', true);
+  await page.keyboard.press('Escape');
+  await expect(category).toHaveJSProperty('open', false);
+  await page.waitForTimeout(200);
+  await expect(dialog).toHaveJSProperty('open', true);
+  await page.screenshot({ path: '/private/tmp/hs2-sq71gk-composer-modal-wide.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(launcher).toBeFocused();
+
+  await launcher.click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(launcher).toBeFocused();
+
+  await page.addStyleTag({ content: 'body{min-width:0}.demo-shell{display:block}.demo-master,.demo-detail__header,.demo-detail__footer,.settings-toggle{display:none}.demo-detail{min-height:0;padding:12px}' });
+  await launcher.click();
+  await expect.poll(() => dialog.evaluate(node => ({ nativeOpen: node.shadowRoot?.querySelector('dialog')?.open, runningAnimations: node.shadowRoot?.querySelector('dialog')?.getAnimations().filter(animation => animation.playState === 'running').length }))).toEqual({ nativeOpen: true, runningAnimations: 0 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog.getByRole('button', { name: 'Create ticket' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-sq71gk-composer-modal-390x844.png' });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width: 195, height: 422, deviceScaleFactor: 2, mobile: false });
+  await expect(dialog.getByRole('button', { name: 'Create ticket' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-sq71gk-composer-modal-200-percent.png' });
+
+  await page.goto('/ux-demo?component=ticket-row');
+  await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('wa-scroll-lock'))).toBe(false);
+});
+
 test('navigates, toggles, closes, and reopens TicketInspector', async ({ page }) => {
   await page.goto('/ux-demo?component=ticket-inspector');
   const inspector = page.locator('[data-component="ticket-inspector"]');

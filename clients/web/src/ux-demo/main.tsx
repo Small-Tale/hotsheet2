@@ -48,7 +48,7 @@ import { attachmentGalleryKeyboardAction } from '../components/attachment-galler
 import { MenuHeader } from '../components/menu-header';
 import { MenuItem } from '../components/menu-item';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
-import { focusQuickTicketComposerTitle } from '../components/quick-ticket-composer';
+import { showQuickTicketComposer } from '../components/quick-ticket-composer';
 import {
   clampRegionSize,
   type ResizableRegionEdge,
@@ -1437,13 +1437,14 @@ delegate(root, 'click', '[data-action="toggle-favorite"]', () => {
 delegate(root, 'click', '[data-action="more-workspace-actions"]', () => {
   recordCollectionEvent('Workspace actions requested');
 });
-delegate(root, 'click', '[data-action="expand-ticket-composer"]', () => {
+delegate(root, 'click', '[data-action="expand-ticket-composer"]', (_event, target) => {
+  if (document.activeElement !== target) (target as HTMLElement).focus({ preventScroll: true });
+  showQuickTicketComposer(root);
   composerExpanded.value = true;
-  queueMicrotask(() => {
-    focusQuickTicketComposerTitle(root);
-  });
+  requestAnimationFrame(() => showQuickTicketComposer(root));
 });
-delegate(root, 'click', '[data-action="cancel-ticket-composer"]', () => {
+delegateCapture(root, 'wa-after-hide', '[data-component="quick-ticket-composer"]', (event, target) => {
+  if (event.target !== target || !composerExpanded.value) return;
   composerExpanded.value = false;
   composerTitle.value = '';
   composerDetails.value = '';

@@ -446,7 +446,12 @@ always retain native clipboard behavior.
   the shared colored/iconic picker in both its selected and menu presentations;
   the star sends explicit Up Next placement and takes precedence over Backlog-view creation;
   created mock tickets derive their category icon/color from that same choice model.
-  Textual Cancel intentionally has no redundant icon.
+  Textual Cancel intentionally has no redundant icon. Production and catalog keep one
+  controlled Web Awesome dialog host mounted, call `show()` while the live launcher owns
+  focus, and let native modality confine Tab/Shift-Tab, order nested-control Escape, inert
+  the background, and restore the trigger after completed hide. The backdrop is not a
+  dismissal action; application state owns validation, drafts, create-in-flight veto,
+  disposal, and the successful create destination.
   - compact “New ticket…” entry
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities

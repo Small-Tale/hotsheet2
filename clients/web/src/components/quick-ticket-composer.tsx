@@ -1,4 +1,5 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/option/option.js';
 import '@awesome.me/webawesome/dist/components/select/select.js';
@@ -25,6 +26,23 @@ export interface QuickTicketComposerProps {
   submitting?: boolean;
 }
 
+export interface QuickTicketDialogElement extends HTMLElement {
+  open: boolean;
+  show(): Promise<void>;
+}
+
+export function showQuickTicketComposer(root: ParentNode): boolean {
+  const dialog = root.querySelector<QuickTicketDialogElement>(
+    '[data-component="quick-ticket-composer"]',
+  );
+  if (!dialog) return false;
+  const nativeDialog = dialog.shadowRoot?.querySelector('dialog');
+  if (nativeDialog) nativeDialog.setAttribute('role', 'presentation');
+  if (dialog.open && (!nativeDialog || nativeDialog.open)) return false;
+  void dialog.show();
+  return true;
+}
+
 export function focusQuickTicketComposerTitle(root: ParentNode): boolean {
   const input = root.querySelector<HTMLElement>('[name="new-ticket-title"]');
   if (!input) return false;
@@ -37,8 +55,7 @@ export function QuickTicketLauncher({attachmentsEnabled=true}:{attachmentsEnable
 }
 
 export function QuickTicketComposer({ expanded = false, title = '', details = '', category = 'task', upNext = false, providerName = 'Hot Sheet', canCreate = true, attachments = [], attachmentsEnabled = true, attachmentMessage = '', attachmentError = false, busy = false, submitting = false }: QuickTicketComposerProps) {
-  if(!expanded)return <></>;
-  return <div class="quick-ticket-dialog-backdrop"><section class="quick-ticket-dialog" data-component="quick-ticket-composer" role="dialog" aria-modal="true" aria-labelledby="quick-ticket-dialog-title"><h2 id="quick-ticket-dialog-title">Create ticket</h2><form class="quick-ticket-composer" data-action="create-ticket-form" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" data-submitting={String(submitting)}>
+  return <wa-dialog class="quick-ticket-dialog" data-component="quick-ticket-composer" data-key="quick-ticket-composer" label="Create ticket" role="dialog" aria-modal={expanded ? 'true' : undefined} aria-label="Create ticket" aria-hidden={expanded ? undefined : 'true'} inert={expanded ? undefined : true} open={expanded || undefined}>{expanded && <form class="quick-ticket-composer" data-action="create-ticket-form" data-new-ticket-drop-target="true" data-ticket-drop-action="duplicate" data-submitting={String(submitting)}>
     <wa-input name="new-ticket-title" label="Ticket title" value={title} autofocus required></wa-input>
     <div class="quick-ticket-composer__metadata"><TicketCategorySelect name="new-ticket-category" label="Category" value={category} /><button type="button" class="quick-ticket-composer__up-next" data-action="toggle-new-ticket-up-next" aria-pressed={String(upNext)} aria-label={upNext?'Remove new ticket from Up Next':'Add new ticket to Up Next'} title={upNext?'Remove from Up Next':'Add to Up Next'}><LucideIcon icon={Star} name="star" /></button></div>
     <label class="quick-ticket-composer__details"><span>Details</span><textarea name="new-ticket-details" rows={1}>{details}</textarea></label>
@@ -50,8 +67,8 @@ export function QuickTicketComposer({ expanded = false, title = '', details = ''
     </section>
     <div class="quick-ticket-composer__footer">
       <span>Creating in {providerName}</span>
-      <div><wa-button type="button" appearance="plain" data-action="cancel-ticket-composer" disabled={submitting}>Cancel</wa-button><wa-button type="submit" appearance="accent" disabled={!canCreate || busy || submitting}>{submitting ? 'Creating…' : 'Create ticket'}</wa-button></div>
+      <div><wa-button type="button" appearance="plain" data-dialog="close" data-action="cancel-ticket-composer" disabled={submitting}>Cancel</wa-button><wa-button type="submit" appearance="accent" disabled={!canCreate || busy || submitting}>{submitting ? 'Creating…' : 'Create ticket'}</wa-button></div>
     </div>
     {!canCreate && <p class="quick-ticket-composer__notice" role="status">This ticket provider does not support creating tickets.</p>}
-  </form></section></div>;
+  </form>}</wa-dialog>;
 }

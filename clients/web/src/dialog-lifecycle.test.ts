@@ -24,4 +24,13 @@ describe('dialog lifecycle event contracts', () => {
     expect(source).toMatch(/delegateCapture\(document\.body,'wa-after-hide','\[data-component="ticket-reader"\]'/);
     expect(source).not.toMatch(/delegate(?:Capture)?\(document\.body,'keydown','\[data-component="ticket-reader"\]'/);
   });
+
+  it('lets the persistent quick-ticket dialog own modality and Escape ordering', () => {
+    expect(source).toMatch(/expand-ticket-composer[^\n]*openTicketComposer/);
+    expect(source).toMatch(/delegateCapture\(document\.body,'wa-hide','\[data-component="quick-ticket-composer"\]'[^\n]*composerSubmitting\.value[^\n]*event\.preventDefault\(\)/);
+    expect(source).toMatch(/delegateCapture\(document\.body,'wa-after-hide','\[data-component="quick-ticket-composer"\]'[^\n]*resetTicketComposer\(\)/);
+    expect(source).not.toMatch(/if\(composerExpanded\.value\)resetTicketComposer\(\).*ticketContextMenu/);
+    expect(source).toMatch(/function closeProjectIds\([^\n]*resetTicketComposer\(\)/);
+    expect(source).toMatch(/function activateOpenProject\([^\n]*resetTicketComposer\(false\)/);
+  });
 });

@@ -926,7 +926,15 @@ and identity-less legacy entries remain conservatively blocking.
   Backlog and every terminal/archive status. Backlog and Archive are disjoint explicit
   views with counts derived from those same predicates. The new-ticket composer is
   available in Queue and Backlog but hidden in Archive; creation from Backlog defaults
-  the new ticket to backlog status. Its expanded first row keeps the title beside the
+  the new ticket to backlog status. A persistent Web Awesome dialog host opens from the
+  live New ticket trigger with native modality, focus confinement, topmost Escape ordering,
+  and trigger restoration. Nested selects consume their own Escape first, backdrop clicks
+  do not dismiss the composer, and an in-flight create vetoes dismissal. Cancel/Escape
+  reset drafts only after native hide completes; project disposal still clears staged work,
+  while successful creation moves focus into the new ticket's Details editor. Relaunch
+  restores saved draft fields and staged evidence but starts the composer closed, preventing
+  remembered projects from racing modal show/hide while the initial project set loads.
+  Its expanded first row keeps the title beside the
   category and an immediately trailing star toggle; the star creates directly in Up Next
   (and therefore overrides a Backlog-view default to active Not Started). A full-width
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
