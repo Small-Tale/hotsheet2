@@ -1498,6 +1498,34 @@ async fn providers_expose_capabilities_and_route_the_default_git_provider() {
         format!("{connection}:{}", created["id"].as_str().unwrap())
     );
 
+    let ticket_id = created["id"].as_str().unwrap();
+    for status in ["started", "deleted"] {
+        let updated = body_json(
+            app.clone()
+                .oneshot(authed(
+                    "PATCH",
+                    &format!("/providers/{connection}/tickets/{ticket_id}"),
+                    Some(&serde_json::json!({"status":status}).to_string()),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(updated["status"], status);
+    }
+    let restored = body_json(
+        app.clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/providers/{connection}/tickets/{ticket_id}/restore"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(restored["status"], "started");
+
     let listed = body_json(
         app.oneshot(authed(
             "GET",

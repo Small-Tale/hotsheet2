@@ -162,6 +162,15 @@ fn tools_list() -> Value {
             }, "required": ["id", "reason"] }
         },
         {
+            "name": "hotsheet_restore",
+            "description": "Restore a git-backed Trash ticket to its pre-deletion status.",
+            "inputSchema": { "type": "object", "properties": {
+                "id": str_prop("slug or ULID"),
+                "checkout": str_prop("optional checkout id/alias/path"),
+                "connection": str_prop("provider connection; non-git providers do not support Hot Sheet Trash")
+            }, "required": ["id"] }
+        },
+        {
             "name": "hotsheet_assign",
             "description": "Replace assignees and/or add review requests. Emits targeted assignment notifications when using a server.",
             "inputSchema": { "type": "object", "properties": {
@@ -362,6 +371,16 @@ fn dispatch(name: &str, args: &Value, backend: &dyn Backend) -> Result<Value, St
                     "POST",
                     &checkout_route(args, &format!("/tickets/{id}/close")),
                     &body,
+                )
+                .map_err(be_msg)
+        }
+        "hotsheet_restore" => {
+            let id = arg_str(args, "id")?;
+            backend
+                .send(
+                    "POST",
+                    &checkout_route(args, &format!("/tickets/{id}/restore")),
+                    &json!({}),
                 )
                 .map_err(be_msg)
         }
@@ -768,6 +787,20 @@ mod core_backend {
         }
 
         fn send(&self, method: &str, path: &str, body: &Value) -> Result<Value, BackendError> {
+            if method == "POST"
+                && let Some((connection, id)) = provider_restore_id(path)
+            {
+                let expected = hotsheet_ticketing::git_connection_id(&self.store);
+                if connection != expected {
+                    return Err(BackendError {
+                        status: Some(409),
+                        message: format!(
+                            "provider connection '{connection}' does not support git-backed Hot Sheet Trash restore"
+                        ),
+                    });
+                }
+                return self.send("POST", &format!("/tickets/{id}/restore"), body);
+            }
             if let Some(rest) = path.strip_prefix("/checkouts/") {
                 if let Some((checkout, suffix)) = rest.split_once("/tickets") {
                     let (checkout, stores) = self.checkout_context(checkout)?;
@@ -796,6 +829,7 @@ mod core_backend {
                     let (id, action) = tail
                         .strip_suffix("/close")
                         .map(|v| (v, "close"))
+                        .or_else(|| tail.strip_suffix("/restore").map(|v| (v, "restore")))
                         .or_else(|| tail.strip_suffix("/assign").map(|v| (v, "assign")))
                         .unwrap_or((tail, "update"));
                     let mut matched = Vec::new();
@@ -816,6 +850,7 @@ mod core_backend {
                     };
                     let target = match action {
                         "close" => format!("/tickets/{id}/close"),
+                        "restore" => format!("/tickets/{id}/restore"),
                         "assign" => format!("/tickets/{id}/assign"),
                         _ => format!("/tickets/{id}"),
                     };
@@ -870,6 +905,12 @@ mod core_backend {
                     let closed = ops::close(&self.store, &t.id, (self.now)(), reason, dup)
                         .map_err(op_err)?;
                     self.api(&closed)
+                }
+                "POST" if restore_id(path).is_some() => {
+                    let ticket = self.resolve(restore_id(path).unwrap())?;
+                    let restored =
+                        ops::restore(&self.store, &ticket.id, (self.now)()).map_err(op_err)?;
+                    self.api(&restored)
                 }
                 "POST" if assign_id(path).is_some() => {
                     let t = self.resolve(assign_id(path).unwrap())?;
@@ -1208,6 +1249,18 @@ mod core_backend {
     /// `/tickets/{id}/close` → the id.
     fn close_id(path: &str) -> Option<&str> {
         path.strip_prefix("/tickets/")?.strip_suffix("/close")
+    }
+
+    /// `/tickets/{id}/restore` → the id.
+    fn restore_id(path: &str) -> Option<&str> {
+        path.strip_prefix("/tickets/")?.strip_suffix("/restore")
+    }
+
+    fn provider_restore_id(path: &str) -> Option<(&str, &str)> {
+        let rest = path.strip_prefix("/providers/")?;
+        let (connection, ticket) = rest.split_once("/tickets/")?;
+        let id = ticket.strip_suffix("/restore")?;
+        (!connection.is_empty() && !id.is_empty()).then_some((connection, id))
     }
 
     fn assign_id(path: &str) -> Option<&str> {
@@ -1695,6 +1748,7 @@ mod tests {
             "hotsheet_create",
             "hotsheet_update",
             "hotsheet_close",
+            "hotsheet_restore",
             "hotsheet_claim",
         ] {
             assert!(names.contains(&want), "missing {want}");
@@ -1965,6 +2019,11 @@ mod tests {
             "hotsheet_assign",
             json!({"checkout":"web","id":"HS-X","assignees":["dev@example.com"]}),
         );
+        call(
+            &backend,
+            "hotsheet_restore",
+            json!({"checkout":"web","id":"HS-X"}),
+        );
         let calls = backend.calls.borrow();
         assert!(calls[0].starts_with("GET /checkouts/web/tickets"));
         assert!(calls[1].starts_with("GET /checkouts/web/tickets/HS-X"));
@@ -1972,6 +2031,7 @@ mod tests {
         assert!(!calls[2].contains("\"checkout\""));
         assert!(calls[3].starts_with("PATCH /checkouts/web/tickets/HS-X"));
         assert!(calls[4].starts_with("POST /checkouts/web/tickets/HS-X/assign"));
+        assert!(calls[5].starts_with("POST /checkouts/web/tickets/HS-X/restore"));
     }
 
     #[test]
@@ -2003,6 +2063,57 @@ mod tests {
         assert!(calls[2].starts_with("POST /providers/github-main/tickets"));
         assert!(!calls[2].contains("connection"));
         assert!(calls[3].starts_with("POST /providers/github-main/tickets/42/close"));
+    }
+
+    #[test]
+    fn restore_rejects_provider_connections_without_a_git_trash_capability() {
+        let (_d, backend) = core();
+        let result = call(
+            &backend,
+            "hotsheet_restore",
+            json!({"connection":"github-main","id":"42"}),
+        );
+        assert!(
+            result["error"]
+                .as_str()
+                .unwrap()
+                .contains("does not support git-backed Hot Sheet Trash restore"),
+            "{result}"
+        );
+    }
+
+    #[test]
+    fn restore_tool_recovers_a_trashed_ticket_without_a_server() {
+        let (_d, backend) = core();
+        let providers = call(&backend, "hotsheet_providers", json!({}));
+        let connection = providers[0]["connection_id"].as_str().unwrap();
+        let created = call(&backend, "hotsheet_create", json!({"title":"Recover me"}));
+        let id = created["id"].as_str().unwrap();
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"status":"started"}),
+        );
+        call(
+            &backend,
+            "hotsheet_update",
+            json!({"id":id,"status":"deleted"}),
+        );
+
+        let restored = call(
+            &backend,
+            "hotsheet_restore",
+            json!({"connection":connection,"id":id}),
+        );
+        assert_eq!(restored["status"], "started", "{restored}");
+        let again = call(&backend, "hotsheet_restore", json!({"id":id}));
+        assert!(
+            again["error"]
+                .as_str()
+                .unwrap()
+                .contains("only a ticket in Trash can be restored"),
+            "{again}"
+        );
     }
 
     #[test]

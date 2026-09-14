@@ -1385,6 +1385,10 @@ pub fn app(state: AppState) -> Router {
             post(close_provider_ticket),
         )
         .route(
+            "/providers/{connection_id}/tickets/{id}/restore",
+            post(restore_provider_ticket),
+        )
+        .route(
             "/providers/{connection_id}/tickets/{id}/assign",
             post(assign_provider_ticket),
         )
@@ -2458,6 +2462,27 @@ async fn get_provider_ticket(
         .get(&id)
         .map(Json)
         .map_err(provider_transfer_error)
+}
+
+async fn restore_provider_ticket(
+    State(state): State<AppState>,
+    Path((connection_id, id)): Path<(String, String)>,
+) -> Result<Json<ApiTicket>, ApiError> {
+    let Some(entry) = state.host.get(&connection_id) else {
+        // Preserve not-found diagnostics for unknown connections, then report the
+        // capability boundary for every configured non-git provider.
+        let _ = provider_for(&state, &connection_id)?;
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!(
+                "provider connection '{connection_id}' does not support git-backed Hot Sheet Trash restore"
+            ),
+        ));
+    };
+    let ticket = ops::resolve(&entry.store, &id)?.ok_or_else(|| ApiError::not_found(&id))?;
+    let restored = ops::restore(&entry.store, &ticket.id, now())?;
+    state.changed_in(&entry, "updated", &restored);
+    Ok(Json(api_ticket(&entry, &restored)?))
 }
 
 async fn create_provider_ticket(

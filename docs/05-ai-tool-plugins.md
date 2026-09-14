@@ -402,7 +402,8 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 
 > **Status: MCP shim built (v1, HS2-7/43); serverless mode added (HS2-96).**
 > `crates/hotsheet-mcp` → the `hotsheet-mcp` binary: a stdio JSON-RPC 2.0 server
-> exposing ticket CRUD plus `hotsheet_claim`, `hotsheet_claim_next`,
+> exposing ticket CRUD plus git-backed Trash recovery through `hotsheet_restore`,
+> `hotsheet_claim`, `hotsheet_claim_next`,
 > `hotsheet_renew`, and `hotsheet_release`. It runs in
 > **two modes over one `Backend` trait**, so the tool surface is identical either
 > way — this is what lets a headless agent work **with or without a server**:
@@ -416,6 +417,9 @@ underpins the git-storage concurrency story ([02-ticket-storage.md](02-ticket-st
 > (the wire SSOT, §4.2) and shared by the server and both shim backends, so the JSON
 > an agent sees never drifts between modes. The plugin-config writing half (the `mcp`
 > capability that drops the entry into each tool's config) is HS2-98.
+> `hotsheet_restore` calls the same `ops::restore` lifecycle as the CLI and web client;
+> it accepts an optional checkout target, while explicit non-git provider connections
+> return a capability error because their deletion lifecycle is provider-owned (HS2-GTNZ2Q).
 
 
 AI tools reach tickets two ways, both over the one core:
