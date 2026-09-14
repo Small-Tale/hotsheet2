@@ -1356,7 +1356,9 @@ one mixed drawer strip by dragging across either kind. Project order is stored w
 open-project roots and restored without changing the remembered active project. Each
 project's mixed drawer order is stored device-locally and remains stable across refresh and
 drawer reopen. Holding Option/Alt when opening the menu changes the directional action to the
-left. Alt+Shift+Left/Right reorders the focused drawer tab without losing focus. Closing a
+left. Alt+Shift+Left/Right reorders the focused drawer tab without losing focus. Deferred
+post-reorder focus restoration yields when the user has already focused a different control,
+so a pointer reorder cannot steal the following keyboard shortcut. Closing a
 selected terminal or chat chooses the nearest remaining tab to its right, then left, across
 both kinds before falling back to the grid.
 Closeable tabs reserve the same trailing state slot even when it is empty, balancing the

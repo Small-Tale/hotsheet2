@@ -21,7 +21,7 @@ import { type AppRegionId, isAppRegionId, loadAppRegionSize, normalizeAppRegionS
 import {attachmentReferences,attachmentReferenceUrl,isGalleryMediaAttachment,isVideoAttachment,type AttachmentReferenceContext} from './attachment-references';
 import {attachmentRoundNumbers,attachmentUploadBatchId} from './attachment-grouping';
 import { loadWorkspacePreferences, saveWorkspacePreferences, sortableWorkspaceView,toggleCollapsedCommandGroup } from './workspace-preferences';
-import {drawerTabCloseIds,drawerTabSelectionAfterClose,type DrawerTabCloseAction,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
+import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabSelectionAfterClose,type DrawerTabCloseAction,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
 import {terminalProjectOwner} from './terminal-project-scope';
 import {customViewNameAvailable,uniqueCustomViewId} from './saved-views';
 import { loadLastTicketCategory, saveLastTicketCategory } from './ticket-category-preference';
@@ -378,7 +378,7 @@ function terminalKeysForVisibilityDialog(){const scope=terminalVisibilityDialogS
 function drawerTabOrder(projectId:string){return terminalDrawerOrderByProject.value[projectId]??loadDrawerTabOrder(localStorage,projectId)}
 function currentDrawerTabIds(projectId:string){const terminalIds=terminalGroups.value.find(group=>group.projectId===projectId)?.sessions.map(session=>session.id)??[],chatIds=(terminalDrawerChatsByProject.value[projectId]??[]).map(chat=>chat.id);return orderedDrawerTabIds(terminalIds,chatIds,drawerTabOrder(projectId))}
 function persistDrawerTabOrder(projectId:string,ids:readonly string[]){const order=saveDrawerTabOrder(localStorage,projectId,ids);terminalDrawerOrderByProject.value={...terminalDrawerOrderByProject.value,[projectId]:order};terminalGroups.value=terminalGroups.value.map(group=>group.projectId===projectId?{...group,sessions:applyRememberedTabOrder(group.sessions,item=>item.id,order)}:group)}
-function focusDrawerTab(projectId:string,id:string){requestAnimationFrame(()=>requestAnimationFrame(()=>{const drawer=[...document.querySelectorAll<HTMLElement>('[data-component="terminal-drawer"]')].find(item=>item.dataset.projectId===projectId),tab=id==='grid'?drawer?.querySelector<HTMLElement>('[data-item-id="grid"]'):[...(drawer?.querySelectorAll<HTMLElement>('[data-tab-id]')??[])].find(item=>item.dataset.tabId===id)?.querySelector<HTMLElement>('.kui-app-tab__select');tab?.focus()}))}
+function focusDrawerTab(projectId:string,id:string){const scheduled=document.activeElement;requestAnimationFrame(()=>requestAnimationFrame(()=>{if(!drawerTabFocusRequestStillOwned(scheduled,document.activeElement,document.body))return;const drawer=[...document.querySelectorAll<HTMLElement>('[data-component="terminal-drawer"]')].find(item=>item.dataset.projectId===projectId),tab=id==='grid'?drawer?.querySelector<HTMLElement>('[data-item-id="grid"]'):[...(drawer?.querySelectorAll<HTMLElement>('[data-tab-id]')??[])].find(item=>item.dataset.tabId===id)?.querySelector<HTMLElement>('.kui-app-tab__select');tab?.focus()}))}
 async function refreshTerminalDashboard(){
   const generation=++terminalDashboardGeneration,openProjects=[...projects.value];
   terminalDashboardLoading.value=true;terminalDashboardMessage.value='';

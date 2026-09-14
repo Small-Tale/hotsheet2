@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {drawerTabCloseIds,drawerTabOrderStorageKey,drawerTabSelectionAfterClose,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,parseDrawerTabOrder,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
+import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabOrderStorageKey,drawerTabSelectionAfterClose,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,parseDrawerTabOrder,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
 
 describe('drawer tab ordering',()=>{
   it('applies one remembered order across terminal and AI-chat tabs and appends new tabs',()=>{
@@ -12,6 +12,13 @@ describe('drawer tab ordering',()=>{
     expect(reorderDrawerTabIds(ids,'chat-a','terminal-a','before')).toEqual(['chat-a','terminal-a','terminal-b']);
     expect(keyboardReorderDrawerTabIds(ids,'chat-a','left')).toEqual(['terminal-a','chat-a','terminal-b']);
     expect(keyboardReorderDrawerTabIds(ids,'terminal-a','left')).toEqual(ids);
+  });
+
+  it('does not let deferred reorder focus steal a newer user focus',()=>{
+    const body={},scheduled={isConnected:true},newFocus={};
+    expect(drawerTabFocusRequestStillOwned(scheduled,scheduled,body)).toBe(true);
+    expect(drawerTabFocusRequestStillOwned(scheduled,body,body)).toBe(true);
+    expect(drawerTabFocusRequestStillOwned(scheduled,newFocus,body)).toBe(false);
   });
 
   it('selects the nearest live tab after a close, preferring the right neighbor',()=>{

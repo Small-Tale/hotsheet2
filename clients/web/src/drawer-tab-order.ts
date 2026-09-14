@@ -32,6 +32,10 @@ export function keyboardReorderDrawerTabIds(ids:readonly string[],sourceId:strin
   return reorderDrawerTabIds(ids,sourceId,ids[targetIndex],direction==='left'?'before':'after');
 }
 
+export function drawerTabFocusRequestStillOwned(scheduled: object|null, current: object|null, body: object): boolean {
+  return current===scheduled||current===body;
+}
+
 export type DrawerTabCloseAction='close'|'close-others'|'close-right'|'close-left'|'close-all';
 
 export function drawerTabCloseIds(ids:readonly string[],activeId:string,action:DrawerTabCloseAction):string[]{
