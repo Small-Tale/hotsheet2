@@ -20,7 +20,7 @@ export function TicketDuplicateTarget({target}:{target:DuplicateTargetSummary}){
 export function TicketDuplicateBacklinks({ backlinks, inaccessibleProjects = [] }: { backlinks: readonly DuplicateBacklink[]; inaccessibleProjects?: readonly string[] }) {
   if (backlinks.length === 0 && inaccessibleProjects.length === 0) return null;
   return <section class="ticket-duplicate-backlinks" data-component="ticket-duplicate-backlinks" aria-label="Duplicate backlinks">
-    <MenuHeader label={`Duplicates ${backlinks.length}`}/>
+    <MenuHeader label="Duplicates" count={backlinks.length} countLabel={`${backlinks.length} ${backlinks.length===1?'duplicate':'duplicates'}`}/>
     {backlinks.length > 0 && <div class="ticket-duplicate-backlinks__items">{backlinks.map(backlink => <DuplicateTicketItem id={backlink.reference} projectName={backlink.project_name} slug={backlink.slug} title={backlink.title} accessibleLabel={`Open duplicate ${backlink.slug} from ${backlink.project_name}`}/>)}</div>}
     {inaccessibleProjects.length > 0 && <p class="ticket-duplicate-backlinks__warning" role="status">Could not check {inaccessibleProjects.join(', ')} for additional duplicates.</p>}
   </section>;

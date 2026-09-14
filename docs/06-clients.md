@@ -840,7 +840,9 @@ and identity-less legacy entries remain conservatively blocking.
   inspector resolves the saved identity through an exact ticket lookup rather than
   exposing its internal ID. The forward “Duplicate of” relationship uses the same
   project-plus-slug, title, icon, and full-row action treatment as reverse “Duplicates”
-  backlinks, then switches projects to open the exact canonical target even when it is
+  backlinks. The reverse relationship passes its result count through the shared
+  `MenuHeader` count contract, matching the neutral count badge used by Notes and
+  Attachments, then switches projects to open the exact canonical target even when it is
   outside the current list filter or loaded page.
   Checkout-scoped self-reference
   rejection compares all three identity fields; compatibility provider/store routes lack
