@@ -133,7 +133,10 @@ so leading hyphens and other option-like text remain literal ticket content. Whe
 or git invocation fails, the adapter surfaces the failure with a *shell-quoted*,
 copy-paste-runnable command line (each argument POSIX-quoted) instead of Node's
 space-joined `Command failed:` message, so a maintainer can rerun the exact command from a
-terminal. The CLI
+terminal. The adapter's command boundary is injectable: unit tests validate the exact CLI
+argv, decoded attachment files, and surfaced failures with an in-process runner rather than
+creating fresh executable scripts whose launch can be delayed by host security scanning.
+The CLI
 mutations defer their individual autocommits so the complete
 ticket, captured images, and uploaded files receive one durable local commit; one best-effort remote push is
 launched asynchronously and does not hold the dialog open. Alternate paths can be supplied with:

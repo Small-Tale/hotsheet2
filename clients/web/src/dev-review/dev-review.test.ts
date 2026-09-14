@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
@@ -7,7 +7,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createDevApp } from '../dev-server';
 import { createFrameBatcher } from './frame-batcher';
 import { clampRectToViewport, intersectRectWithViewport, normalizeRect, resizeRect, translateAnchoredRect } from './geometry';
-import { createCliDevReviewSubmitter, validateDevReviewSubmission } from './server';
+import { createCliDevReviewSubmitter, type DevReviewCommandRunner, validateDevReviewSubmission } from './server';
+import { shellQuoteCommand } from './shell';
 
 const capture = { id: '1', filename: '../review.png', dataUrl: `data:image/png;base64,${Buffer.from('png').toString('base64')}`, width: 10, height: 10 };
 const attachment = { id: 'file-1', filename: '../notes.txt', dataUrl: `data:text/plain;base64,${Buffer.from('notes').toString('base64')}`, mimeType: 'text/plain', size: 5 };
@@ -76,20 +77,23 @@ describe('dev review tool', () => {
   it('creates through the CLI adapter and attaches every decoded PNG', async () => {
     const temp = await mkdtemp(resolve(tmpdir(), 'dev-review-test-'));
     const cli = resolve(temp, 'fake-hotsheet');
-    const log = resolve(temp, 'calls.log');
-    await writeFile(cli, `#!/bin/sh\nprintf '%s\\n' "$*" >> "${log}"\nif [ "$3" = "new" ]; then printf 'Created HS2-REVIEW (ticket.md)\\n'; fi\nif [ "$3" = "attach" ] && [ ! -f "$7" ]; then exit 9; fi\n`);
-    await chmod(cli, 0o755);
     try {
+      const calls: Array<{ file: string; args: string[] }> = [];
+      const commandRunner: DevReviewCommandRunner = vi.fn(async (file, args) => {
+        calls.push({ file, args });
+        if (args[2] === 'new') return { stdout: 'Created HS2-REVIEW (ticket.md)\n', stderr: '' };
+        if (args[2] === 'attach') await expect(readFile(args.at(-1))).resolves.toBeInstanceOf(Buffer);
+        return { stdout: '', stderr: '' };
+      });
       const finalize = vi.fn(async () => undefined);
-      const result = await createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'store'), cliPath: cli, finalize })({ ...submission, notes: '- Cancel is too close to the countdown.' });
+      const result = await createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'store'), cliPath: cli, finalize, commandRunner })({ ...submission, notes: '- Cancel is too close to the countdown.' });
       expect(result).toEqual({ slug: 'HS2-REVIEW' });
-      const calls = await readFile(log, 'utf8');
-      expect(calls).toContain('-C');
-      expect(calls).toContain('new --title=UX feedback: - Cancel is too close to the countdown.');
-      expect(calls).toContain('--details=- Cancel is too close to the countdown.');
-      expect(calls).toContain('attach HS2-REVIEW');
-      expect(calls.match(/--actor-role human/g)).toHaveLength(2);
-      expect(calls.match(/attach HS2-REVIEW/g)).toHaveLength(2);
+      expect(calls).toHaveLength(3);
+      expect(calls.every(call => call.file === cli)).toBe(true);
+      expect(calls[0].args).toEqual(expect.arrayContaining(['-C', resolve(temp, 'store'), 'new', '--title=UX feedback: - Cancel is too close to the countdown.']));
+      expect(calls[0].args.some(argument => argument.startsWith('--details=- Cancel is too close to the countdown.'))).toBe(true);
+      expect(calls.slice(1).every(call => call.args[2] === 'attach' && call.args[3] === 'HS2-REVIEW')).toBe(true);
+      expect(calls.slice(1).every(call => call.args[4] === '--actor-role' && call.args[5] === 'human')).toBe(true);
       expect(finalize).toHaveBeenCalledWith(resolve(temp, 'store'), 'HS2-REVIEW');
     } finally { await rm(temp, { recursive: true, force: true }); }
   });
@@ -97,11 +101,12 @@ describe('dev review tool', () => {
   it('surfaces a shell-quoted, copy-paste-runnable command when the CLI fails', async () => {
     const temp = await mkdtemp(resolve(tmpdir(), 'dev-review-fail-'));
     const cli = resolve(temp, 'fake-hotsheet');
-    await writeFile(cli, `#!/bin/sh\nprintf 'boom\\n' >&2\nexit 1\n`);
-    await chmod(cli, 0o755);
     try {
+      const commandRunner: DevReviewCommandRunner = vi.fn(async (file, args) => {
+        throw new Error(`Command failed: ${shellQuoteCommand(file, args)}\nboom`);
+      });
       const finalize = vi.fn(async () => undefined);
-      const run = createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'my store.hs2'), cliPath: cli, finalize });
+      const run = createCliDevReviewSubmitter({ repoRoot: temp, storePath: resolve(temp, 'my store.hs2'), cliPath: cli, finalize, commandRunner });
       await expect(run({ ...submission, notes: 'Cancel is too close to the countdown' })).rejects.toThrow(
         // The store path and the space-bearing --title value stay single-quoted so the
         // logged command re-parses to the same argv instead of splitting on spaces.

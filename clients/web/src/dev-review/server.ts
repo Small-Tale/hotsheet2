@@ -7,6 +7,7 @@ import type { DevReviewResult, DevReviewSubmission } from './index';
 import { runCommand } from './shell';
 
 export type DevReviewSubmitter = (submission: DevReviewSubmission) => Promise<DevReviewResult>;
+export type DevReviewCommandRunner = typeof runCommand;
 
 export function validateDevReviewSubmission(value: unknown): DevReviewSubmission {
   if (!value || typeof value !== 'object') throw new Error('Invalid feedback payload.');
@@ -29,14 +30,15 @@ export function validateDevReviewSubmission(value: unknown): DevReviewSubmission
   return { notes, captures, attachments, actorRole: input.actorRole, pageUrl: String(input.pageUrl ?? ''), viewport: { width: Number(input.viewport?.width ?? 0), height: Number(input.viewport?.height ?? 0) } };
 }
 
-export function createCliDevReviewSubmitter(options: { repoRoot: string; storePath?: string; cliPath?: string; finalize?: (storePath: string, slug: string) => Promise<void> }): DevReviewSubmitter {
+export function createCliDevReviewSubmitter(options: { repoRoot: string; storePath?: string; cliPath?: string; finalize?: (storePath: string, slug: string) => Promise<void>; commandRunner?: DevReviewCommandRunner }): DevReviewSubmitter {
   const repoRoot = resolve(options.repoRoot);
   const storePath = resolve(options.storePath ?? `${repoRoot}.hs2`);
   const cliPath = resolve(options.cliPath ?? resolve(repoRoot, 'target/debug/hotsheet-cli'));
-  const runCli = (args: string[]) => runCommand(cliPath, args, { env: { ...process.env, HOTSHEET_NO_AUTOCOMMIT: '1' } });
+  const commandRunner = options.commandRunner ?? runCommand;
+  const runCli = (args: string[]) => commandRunner(cliPath, args, { env: { ...process.env, HOTSHEET_NO_AUTOCOMMIT: '1' } });
   const finalize = options.finalize ?? (async (store, slug) => {
-    await runCommand('git', ['-C', store, 'add', '-A']);
-    await runCommand('git', ['-C', store, 'commit', '-q', '-m', `${slug}: create UX feedback with captures`]);
+    await commandRunner('git', ['-C', store, 'add', '-A']);
+    await commandRunner('git', ['-C', store, 'commit', '-q', '-m', `${slug}: create UX feedback with captures`]);
     const push = spawn('git', ['-C', store, 'push', '--quiet'], { detached: true, stdio: 'ignore' });
     push.on('error', () => {});
     push.unref();
