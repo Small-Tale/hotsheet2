@@ -7,6 +7,7 @@ import { QuickTicketComposer,QuickTicketLauncher,showQuickTicketComposer } from 
 describe('QuickTicketComposer', () => {
   it('gives the title the available width while keeping category compact', () => {
     const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8');
+    expect(css).toContain('.quick-ticket-dialog { --width:min(58rem, calc(100vw - 2rem)); }');
     expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem)');
     expect(css).toMatch(/@media \(max-width: 38rem\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
   });
@@ -21,6 +22,7 @@ describe('QuickTicketComposer', () => {
     expect(collapsedComposer).toContain('aria-hidden="true"');
     expect(collapsedComposer).toContain(' inert');
     expect(collapsedComposer).not.toContain(' open');
+    expect(collapsedComposer).not.toContain('data-action="create-ticket-form"');
     const expanded = String(QuickTicketComposer({ expanded: true, title: 'New work', details: 'Why this matters', category: 'bug', upNext: true, attachments: [{ id: 'proof', name: 'proof.png' }] }));
     expect(expanded).toContain('data-ticket-drop-action="duplicate"');
     expect(expanded).toContain('<wa-dialog');
