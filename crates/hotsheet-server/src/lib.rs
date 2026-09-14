@@ -4261,6 +4261,12 @@ async fn get_checkout_ticket_duplicate_backlinks(
     let mut backlinks = Vec::new();
     let mut inaccessible_projects = Vec::new();
     for checkout in checkouts {
+        // A remembered checkout may outlive a temporary or deleted working directory.
+        // It cannot contain a usable backlink while absent, and presenting it as a
+        // transient source failure makes every ticket show a permanent warning.
+        if !FsPath::new(&checkout.root).is_dir() {
+            continue;
+        }
         let mut inaccessible = false;
         for source in &checkout.sources {
             let tickets = if source.provider == "git" {

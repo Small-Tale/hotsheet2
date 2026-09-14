@@ -3916,6 +3916,30 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
             Some("missing-git".into()),
         )
         .unwrap();
+    let stale_checkout = tempfile::tempdir().unwrap();
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register_sources(
+            stale_checkout.path(),
+            Some("stale-project"),
+            None,
+            vec![hotsheet_ticketing::checkouts::TicketSource {
+                connection_id: "stale-git".into(),
+                provider: "git".into(),
+                locator: stale_checkout
+                    .path()
+                    .join("missing.hs2")
+                    .display()
+                    .to_string(),
+            }],
+            Some("stale-git".into()),
+        )
+        .unwrap();
+    let stale_checkout_path = stale_checkout.path().display().to_string();
+    stale_checkout.close().unwrap();
+    assert!(
+        !std::path::Path::new(&stale_checkout_path).exists(),
+        "stale checkout fixture must be absent before lookup"
+    );
     let backlinks = body_json(
         tokio::time::timeout(
             std::time::Duration::from_secs(5),
@@ -3960,6 +3984,13 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
             .unwrap()
             .iter()
             .any(|project| project["project_name"] == "offline-project")
+    );
+    assert!(
+        backlinks["inaccessible_projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|project| project["project_name"] != "stale-project")
     );
 }
 
