@@ -58,6 +58,7 @@ import { Select } from '../components/select';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
+import { showTicketReaderDialog } from '../components/ticket-reader';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
 import { nextWorkspaceSort } from '../components/workspace-header';
@@ -113,6 +114,7 @@ import {
   noteDemoNotes,
   noteDraft,
   readerAttachments,
+  readerDialogOpen,
   readerFeedbackChoiceSelections,
   readerLargeText,
   readerNotes,
@@ -713,6 +715,7 @@ function DemoApp() {
 
 const root = document.querySelector<HTMLElement>('#ux-demo')!;
 mount(root, DemoApp);
+if (selectedId.value === 'ticket-reader') queueMicrotask(() => showTicketReaderDialog(root, 'ux-demo-ticket-reader'));
 const terminalDemoMounts = new Map<HTMLElement, () => void>();
 const syncDemoTerminals = () => {
   syncTerminalDemoViewports(root, terminalDemoMounts);
@@ -1678,9 +1681,17 @@ delegate(root, 'click', '[data-action="save-note-edit"]', (_event, target) => {
   noteDraft.value = '';
   recordCollectionEvent('Note edit saved');
 });
+function openDemoTicketReader(): void {
+  readerDialogOpen.value = false;
+  selectDemo('ticket-reader');
+  requestAnimationFrame(() => {
+    showTicketReaderDialog(root, 'ux-demo-ticket-reader');
+    readerDialogOpen.value = true;
+  });
+}
 delegate(root, 'click', '[data-action="open-ticket-reader"], [data-action="respond-to-feedback"]', () => {
   recordCollectionEvent('Ticket reader requested');
-  selectDemo('ticket-reader');
+  openDemoTicketReader();
 });
 delegate(root, 'input', '[name="markdown-source"]', (_event, target) => {
   markdownValue.value = (target as FormControl).value;
@@ -1729,7 +1740,8 @@ delegate(root, 'click', '[data-action="toggle-markdown-expanded"]', () => {
     ? 'Expanded editor opened.'
     : 'Inline editor restored.';
 });
-delegate(root, 'click', '[data-action="close-ticket-reader"]', () => {
+delegateCapture(root, 'wa-after-hide', '[data-component="ticket-reader"]', () => {
+  readerDialogOpen.value = false;
   selectDemo('ticket-info-panel');
 });
 delegate(root, 'click', '[data-action="toggle-reader-text-size"]', () => {
@@ -2025,7 +2037,7 @@ delegate(
     recordCollectionEvent(
       `Ticket reader opened for ${(target as HTMLElement).dataset.ticketSlug}`,
     );
-    selectDemo('ticket-reader');
+    openDemoTicketReader();
   },
 );
 delegate(root, 'click', '[data-context-field]', (event, target) => {

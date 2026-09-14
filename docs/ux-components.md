@@ -759,10 +759,14 @@ projects that could not be searched without hiding results from accessible proje
   uses its full available width, and details/notes retain their normal direct editing
   affordances without a separate reader-wide Edit mode. In-progress inline details
   drafts carry into the larger surface without losing focus or content. Ticket-reference
-  links push exact project-qualified, read-only `TicketReader` layers without changing the
+  The persistent Web Awesome dialog is opened with `show()`, supplies native modality and
+  focus confinement, delegates nested-control Escape handling to the platform, and is not
+  light-dismissable. Its cancelable hide phase flushes pending edits before the completed
+  hide updates application state and restores focus. Ticket-reference links push exact
+  project-qualified, read-only `TicketReader` layers without changing the
   main project/ticket selection. Navigation may recurse; only the top layer is modal and
   interactive, and Close/Escape unwinds one frame before restoring focus to its originating
-  link. A compact project/depth header distinguishes stacked same-slug readers and remains
+  link (or the work area if that opener disappeared). A compact project/depth header distinguishes stacked same-slug readers and remains
   usable at narrow viewport widths.
 - `UnsavedChangesGuard`
 

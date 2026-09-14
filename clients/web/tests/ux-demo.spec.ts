@@ -635,6 +635,16 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await expect(editor).toHaveAttribute('data-expanded', 'false');
 });
 
+test('lets the TicketReader native dialog complete dismissal before leaving the demo', async ({ page }) => {
+  await page.goto('/ux-demo?component=ticket-reader');
+  const reader = page.getByRole('dialog', { name: 'Read and edit HS2-H892P1' });
+  await expect(reader).toBeVisible();
+  await expect(reader.locator('dialog:modal')).toHaveCount(1);
+  await reader.getByRole('button', { name: 'Close ticket reader' }).click();
+  await expect(page).toHaveURL('/ux-demo?component=ticket-info-panel');
+  await expect(reader).toHaveCount(0);
+});
+
 test('keeps feedback Markdown list spacing compact', async ({ page }) => {
   await page.goto('/ux-demo?component=note-card');
   const feedbackNote = page.locator('[data-component="note-card"][data-kind="feedback_needed"]');

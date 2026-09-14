@@ -13,7 +13,7 @@ type FixtureTicket = typeof source | typeof target | typeof deep;
 const rows: Record<string, FixtureTicket[]> = { 'source-project': [source], 'target-project': [target], 'third-project': [deep] };
 const projectByRoot = new Map<string, (typeof projects)[keyof typeof projects]>(Object.values(projects).map(project => [project.root, project]));
 
-async function mockLayeredProjects(page: Page, mutations: Array<{projectId:string;ticketId:string;patch:Record<string,unknown>}>=[]) {
+async function mockLayeredProjects(page: Page, mutations: Array<{projectId:string;ticketId:string;patch:Record<string,unknown>}>=[], rejectMutations=false) {
   const chooser = ['/work/target', '/work/deep'];
   await page.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url()), path = decodeURIComponent(url.pathname);
@@ -34,6 +34,7 @@ async function mockLayeredProjects(page: Page, mutations: Array<{projectId:strin
     }
     const ticketId = path.match(/\/tickets\/([^/]+)$/)?.[1];
     if (ticketId && request.method() === 'PATCH') {
+      if(rejectMutations)return route.fulfill({status:500,json:{error:'Draft persistence failed'}});
       const ticket = tickets.find(item => [item.id, item.native_id, item.qualified_id].some(identity => identity === ticketId));
       const patch=request.postDataJSON() as Record<string,unknown>;
       if(!ticket)return route.fulfill({status:404,json:{error:`No ${ticketId}`}});
@@ -48,6 +49,23 @@ async function mockLayeredProjects(page: Page, mutations: Array<{projectId:strin
     return route.fulfill({ status: 404, json: { error: `Unhandled ${request.method()} ${path}` } });
   });
 }
+
+test('uses native modality for focus, nested Escape, backdrop policy, and responsive containment',async({page})=>{
+  await mockLayeredProjects(page);await page.setViewportSize({width:1200,height:900});await openProjects(page);
+  const row=page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]');await row.dblclick();const reader=page.getByRole('dialog',{name:'Read and edit KF-ROOT01 in Kerf'}),close=reader.getByRole('button',{name:'Close ticket reader'});await expect(reader).toBeVisible();await expect(close).toBeFocused();
+  expect(await reader.evaluate(host=>(host.shadowRoot!.querySelector('dialog') as HTMLDialogElement).matches(':modal'))).toBe(true);
+  await page.getByRole('button',{name:'Add project'}).evaluate(node=>{(node as HTMLElement).focus()});expect(await reader.evaluate(host=>host.contains(document.activeElement))).toBe(true);
+  for(const key of ['Tab','Shift+Tab','Tab']){await page.keyboard.press(key);expect(await reader.evaluate(host=>host.contains(document.activeElement))).toBe(true)}
+  const status=reader.locator('wa-select[name="inspector-status"]');await status.click();await expect(status).toHaveJSProperty('open',true);await page.keyboard.press('Escape');await expect(status).toHaveJSProperty('open',false);await page.waitForTimeout(200);await expect(reader).toBeVisible();
+  await page.mouse.click(4,4);await expect(reader).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-x1wgx5-reader-modal-wide.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});let bounds=await reader.evaluate(host=>{const {x,y,width,height}=(host.shadowRoot!.querySelector('dialog') as HTMLDialogElement).getBoundingClientRect();return{x,y,width,height}});expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.y).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(390);expect(bounds.y+bounds.height).toBeLessThanOrEqual(844);await page.screenshot({path:'/private/tmp/hs2-x1wgx5-reader-modal-narrow.png',fullPage:true});
+  await page.setViewportSize({width:600,height:450});bounds=await reader.evaluate(host=>{const {x,y,width,height}=(host.shadowRoot!.querySelector('dialog') as HTMLDialogElement).getBoundingClientRect();return{x,y,width,height}});expect(bounds.x+bounds.width).toBeLessThanOrEqual(600);expect(bounds.y+bounds.height).toBeLessThanOrEqual(450);await page.screenshot({path:'/private/tmp/hs2-x1wgx5-reader-modal-200-percent.png',fullPage:true});
+  await page.keyboard.press('Escape');await expect(reader).toBeHidden();await expect(row).toBeFocused();
+});
+
+test('vetoes reader dismissal when an asynchronous draft flush fails',async({page})=>{
+  await mockLayeredProjects(page,[],true);await openProjects(page);await page.locator('[data-component="ticket-list-row"][data-ticket-slug="KF-ROOT01"]').dblclick();const reader=page.getByRole('dialog',{name:'Read and edit KF-ROOT01 in Kerf'});await reader.locator('[data-action="edit-markdown"]').dblclick();await reader.getByRole('textbox',{name:'Ticket details'}).fill('Unsaved reader draft');await page.keyboard.press('Escape');await expect(page.locator('.app-error')).toContainText('Draft persistence failed');await expect(reader).toBeVisible();await expect(reader).toHaveAttribute('open','');
+});
 
 async function openProjects(page: Page) {
   await page.goto('/?dev-review=false');

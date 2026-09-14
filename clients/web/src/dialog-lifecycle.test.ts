@@ -18,4 +18,10 @@ describe('dialog lifecycle event contracts', () => {
     expect(source).not.toMatch(/wa-request-close[^\n]*command-run-dialog/);
     expect(source).not.toContain("'wa-request-close'");
   });
+
+  it('lets Web Awesome own TicketReader dismissal and completes state changes after hide', () => {
+    expect(source).toMatch(/delegateCapture\(document\.body,'wa-hide','\[data-component="ticket-reader"\]'/);
+    expect(source).toMatch(/delegateCapture\(document\.body,'wa-after-hide','\[data-component="ticket-reader"\]'/);
+    expect(source).not.toMatch(/delegate(?:Capture)?\(document\.body,'keydown','\[data-component="ticket-reader"\]'/);
+  });
 });

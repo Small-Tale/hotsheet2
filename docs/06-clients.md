@@ -565,11 +565,15 @@ and identity-less legacy entries remain conservatively blocking.
   its separate scope, suggestions, result rows, and saved-view handoff were removed because
   they duplicated the ordinary inline search flow without a distinct navigation role. Exact
   cross-project ticket references continue through the compact link-resolution chooser.
+  Ticket readers are persistent Web Awesome dialogs opened through the native modal lifecycle,
+  so focus is trapped by the platform, Escape closes only the top reader after nested controls,
+  backdrop clicks do not dismiss it, and focus returns to the live opener or workspace fallback.
   Linked ticket readers keep their own qualified provider identity, provider capabilities,
   and text-edit sessions instead of borrowing the workspace selection. Details, note, and
   blocked-reason drafts autosave independently; refresh reconciliation preserves a dirty
   local draft, and closing a reader flushes its pending writes through the owning project's
-  checkout before the stack unwinds and focus returns to the originating link.
+  checkout before the dialog is allowed to hide and the stack unwinds. Failed flushes veto
+  dismissal and preserve the visible reader and its drafts.
 
   The MessageSquare action is available before Drive and opens the production
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.

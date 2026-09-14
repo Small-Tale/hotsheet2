@@ -127,18 +127,18 @@ describe('content components', () => {
     expect(markup).toContain('<h2>Notes<span class="kui-menu-header__count" aria-label="1 note">1</span></h2>');
     const menuHeaderCss=readFileSync(resolve(import.meta.dirname,'menu-header.css'),'utf8');
     expect(menuHeaderCss).toMatch(/\.kui-menu-header__count \{[^}]*background: var\(--wa-color-neutral-fill-quiet\);/);
-    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('<wa-dialog');
+    expect(markup).toContain('label="Read and edit HS2-TEST"');
     expect(markup).toContain('data-presentation="reader"');
     expect(markup).toContain('data-large-text="false"');
     expect(markup).toContain('data-inspector-tab="attachments"');
     const readerCss = readFileSync(resolve(import.meta.dirname, 'ticket-reader.css'), 'utf8');
-    expect(readerCss).toMatch(/\.ticket-reader \{[^}]*height: calc\(100vh - 3rem\);/);
+    expect(readerCss).toMatch(/\.ticket-reader-dialog::part\(dialog\) \{[^}]*height: calc\(100vh - 3rem\);/);
     expect(readerCss).toMatch(/\.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     expect(readerCss).toMatch(/\.note-card__feedback-prompt\) \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     expect(readerCss).toMatch(/\.note-card\[data-kind="activity"\] \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     expect(readerCss).toMatch(/\.markdown-preview blockquote :is\(p, li, h1, h2, h3, h4, h5, h6, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
-    const shellCss = readFileSync(resolve(import.meta.dirname, '..', 'style.css'), 'utf8');
-    expect(shellCss).toMatch(/\.ticket-reader-backdrop \{[^}]*padding: 1\.5rem;/);
+    expect(readerCss).toContain('.ticket-reader-dialog::part(body) { height: 100%; padding: 0; overflow: hidden; }');
   });
 
   it('forwards every shared code-review state through the reader inspector', () => {
@@ -154,14 +154,15 @@ describe('content components', () => {
     expect(String(TicketReader({ slug: 'HS2-TEST', title: 'Reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', activeTab: 'code-review', codeReviewLoading: true }))).toContain('Finding ticket commits');
   });
 
-  it('labels layered cross-project readers and keeps covered layers out of the modal tree', () => {
+  it('labels layered cross-project readers without reimplementing native dialog modality', () => {
     const markup = String(TicketReader({ slug: 'HS2-LINKED', title: 'Linked reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: 'More at HS2-DEEPER.', active: true, readOnly: true, projectName: 'Other project', stackPosition: 2, stackSize: 3 }));
-    expect(markup).toContain('aria-label="Read HS2-LINKED in Other project"');
+    expect(markup).toContain('label="Read HS2-LINKED in Other project"');
     expect(markup).toContain('data-reader-position="2" data-reader-count="3"');
     expect(markup).toContain('<span>Other project</span><small>Reader 2 of 3</small>');
     expect(markup).not.toContain('data-action="toggle-inspector-up-next"');
     const covered = String(TicketReader({ slug: 'HS2-COVERED', title: 'Covered reader', status: 'started', priority: 'default', category: 'bug', tags: [], details: '', active: false, projectName: 'First project', stackPosition: 1, stackSize: 2 }));
-    expect(covered).not.toContain('aria-modal="true"');
+    expect(covered).toContain('data-reader-active="false"');
+    expect(covered).not.toContain('aria-modal=');
   });
 
   it('keeps the feedback catchall at half the ordinary note-editor minimum height',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).toMatch(/textarea\[data-note-response="true"\] \{ min-height: 2\.5rem; \}/)});

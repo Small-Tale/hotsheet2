@@ -3,6 +3,7 @@ import type { InspectorTab } from './components/ticket-inspector';
 
 export interface TicketReaderFrame {
   id: string;
+  open: boolean;
   projectId: string;
   projectName: string;
   apiPath: string;
@@ -42,4 +43,10 @@ export function popTicketReaderFrame(stack: readonly TicketReaderFrame[]): { sta
 
 export function activeTicketReaderProject(stack: readonly TicketReaderFrame[], fallbackProjectId: string): string {
   return stack.at(-1)?.projectId ?? fallbackProjectId;
+}
+
+export function disposeTicketReaderFrames(stack: readonly TicketReaderFrame[], projectIds: ReadonlySet<string>): { retained: TicketReaderFrame[]; disposed: TicketReaderFrame[] } {
+  const retained:TicketReaderFrame[]=[],disposed:TicketReaderFrame[]=[];
+  for(const frame of stack)(projectIds.has(frame.projectId)?disposed:retained).push(frame);
+  return {retained,disposed};
 }

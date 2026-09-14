@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Capabilities, FullTicket } from './api';
-import { activeTicketReaderProject, popTicketReaderFrame, pushTicketReaderFrame, reconcileTicketReaderFrame, ticketReaderEditState, type TicketReaderFrame } from './ticket-reader-stack';
+import { activeTicketReaderProject, disposeTicketReaderFrames, popTicketReaderFrame, pushTicketReaderFrame, reconcileTicketReaderFrame, ticketReaderEditState, type TicketReaderFrame } from './ticket-reader-stack';
 
 const ticket = (id: string, slug: string): FullTicket => ({
   id,
@@ -28,6 +28,7 @@ const ticket = (id: string, slug: string): FullTicket => ({
 
 const frame = (id: string, projectId: string, slug: string): TicketReaderFrame => ({
   id,
+  open: true,
   projectId,
   projectName: projectId,
   apiPath: `/api/${projectId}`,
@@ -70,5 +71,12 @@ describe('layered ticket reader stack', () => {
     expect(original).toHaveLength(1);
     expect(pushed).toHaveLength(2);
     expect(popped.stack).not.toBe(pushed);
+  });
+
+  it('disposes every frame owned by a closing project without disturbing the others',()=>{
+    const alpha=frame('one','alpha','HS2-ONE01'),beta=frame('two','beta','HS2-TWO02'),again=frame('three','alpha','HS2-THREE3');
+    const result=disposeTicketReaderFrames([alpha,beta,again],new Set(['alpha']));
+    expect(result.retained).toEqual([beta]);
+    expect(result.disposed).toEqual([alpha,again]);
   });
 });

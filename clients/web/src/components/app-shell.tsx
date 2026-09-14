@@ -39,7 +39,7 @@ export interface AppShellProps {
 export function AppShell({ tabs, sidebar, header, headerActions, pageHeader, workspace, composer, inspector, inspectorVisible = true, banner, sidebarSize = 272, inspectorSize = 352, mode = 'project', sidebarVisible = true, workspacePresentation = 'inset',overlay,terminalDrawer,terminalDrawerVisible=false,terminalDrawerSize=320,terminalDrawerMax=520,terminalDrawerTransitioning=false }: AppShellProps) {
   return <section class="app-shell" data-component="app-shell" data-mode={mode} data-sidebar-visible={String(sidebarVisible)}>
     {mode !== 'stats' && <ResizableRegion id="app-sidebar" label={mode==='terminals'?'Operations sidebar':'Project sidebar'} size={sidebarSize} min={250} max={360} collapsed={!sidebarVisible}>{sidebar}</ResizableRegion>}
-    <main class="app-shell__main">
+    <main class="app-shell__main" data-work-area-focus-owner tabIndex={-1}>
       <Toolbar
         divider={false}
         leading={<>{mode !== 'stats' && !sidebarVisible && <ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label={mode==='terminals'?'Show operations sidebar':'Show project sidebar'} title={mode==='terminals'?'Show operations sidebar':'Show project sidebar'}><LucideIcon icon={PanelLeftOpen} name="panel-left-open" /></button></ToolbarControlGroup>}{header}</>}
