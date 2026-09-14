@@ -1603,6 +1603,48 @@ test('presents a legible, aligned AI chat without exposing its session id',async
   await page.setViewportSize({width:760,height:640});await expect.poll(contained).toBe(true);await expect(userCopy).toHaveCSS('color','rgb(255, 255, 255)');await dialog.screenshot({path:'/private/tmp/hs2-wj3yr2-ai-chat-polish-narrow.png'});
 });
 
+test('omits effort after selecting a model that does not support it',async({page})=>{
+  const turns:Array<Record<string,unknown>>=[];
+  await mockProject(page);
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/turns'))turns.push(request.postDataJSON())});
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto('/');
+  await page.getByRole('button',{name:'Open project'}).click();
+  await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByLabel('Settings view').click();
+  await page.getByRole('button',{name:/AI tools/}).click();
+  const settings=page.locator('[data-component="ai-tool-settings"]'),tool=settings.locator('wa-select[name="ai-default-tool"]');
+  await tool.click();
+  await tool.locator('wa-option[value="claude"]').click();
+  await expect(settings).toContainText('Saved locally.');
+  await page.getByLabel('List view').click();
+  await page.getByRole('button',{name:'Show terminal drawer'}).click();
+  const drawer=page.locator('[data-component="terminal-drawer"]');
+  await drawer.locator('[data-action="toggle-terminal-drawer-maximize"]').dblclick();
+  await expect(drawer).toHaveAttribute('data-maximized','true');
+  await drawer.getByRole('button',{name:'New drawer item'}).click();
+  await drawer.getByRole('menu',{name:'New drawer item'}).getByText('AI chat').click();
+  const host=drawer.locator('[data-component="ai-conversation"]'),model=host.locator('wa-select[name="conversation-model"]');
+  await expect(host).toBeVisible();
+  await expect(host.locator('wa-select[name="conversation-effort"]')).toHaveJSProperty('value','medium');
+  await model.click();
+  await model.locator('wa-option[value="haiku"]').click();
+  await expect(model).toHaveJSProperty('value','haiku');
+  await expect(host.locator('wa-select[name="conversation-effort"]')).toHaveCount(0);
+  await host.getByLabel('Message Claude').fill('What time is it in California?');
+  await host.getByLabel('Message Claude').press('Enter');
+  await expect.poll(()=>turns).toEqual([{content:'What time is it in California?',model:'haiku'}]);
+  await expect(host.getByText('I found the relevant client boundary. The event stream remains authoritative.',{exact:true})).toBeVisible();
+  await expect(host.getByRole('alert')).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/hs2-8xrcyx-haiku-without-effort-wide.png',fullPage:true});
+  await page.setViewportSize({width:760,height:800});
+  await expect(host).toBeVisible();
+  await expect(host.locator('wa-select[name="conversation-effort"]')).toHaveCount(0);
+  await host.locator('.ai-conversation__transcript').evaluate(element=>{element.scrollTop=0});
+  await expect(host.locator('.ai-conversation__message--user')).toBeVisible();
+  await page.screenshot({path:'/private/tmp/hs2-8xrcyx-haiku-without-effort-narrow.png',fullPage:true});
+});
+
 test('configures plugin-discovered machine-local AI defaults and exposes Claude Fable effort',async({page})=>{
   const saves:unknown[]=[];await mockProject(page);page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/ai-settings'))saves.push(request.postDataJSON())});await page.setViewportSize({width:1280,height:800});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:/AI tools/}).click();const settings=page.locator('[data-component="ai-tool-settings"]'),tool=settings.locator('wa-select[name="ai-default-tool"]'),model=settings.locator('wa-select[name="ai-default-model"]'),effort=settings.locator('wa-select[name="ai-default-effort"]'),modelOption=(id:string)=>model.locator(`wa-option[value="${id}"]`);await expect(settings).toBeVisible();await expect(tool).toHaveAttribute('value','codex');await expect(model).toHaveAttribute('value','gpt-6-astra');await model.click();for(const id of ['gpt-6-astra','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-5.5','gpt-5.3-codex-spark'])await expect(modelOption(id)).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-xeerc9-codex-models-wide.png',fullPage:true});await page.getByRole('heading',{name:'AI tools'}).click();await expect(model).not.toHaveAttribute('open',/.+/);await page.setViewportSize({width:1024,height:600});await page.waitForTimeout(250);await model.click();await expect(modelOption('gpt-5.3-codex-spark')).toBeVisible();await page.waitForTimeout(250);await page.screenshot({path:'/private/tmp/hs2-xeerc9-codex-models-narrow.png',fullPage:true});await page.getByRole('heading',{name:'AI tools'}).click();await expect(model).not.toHaveAttribute('open',/.+/);await tool.click();await tool.locator('wa-option[value="claude"]').click();await expect.poll(()=>saves).toEqual([{tool:'claude',model:'sonnet',effort:'medium'}]);await model.click();for(const id of ['fable','opus','sonnet','haiku'])await expect(modelOption(id)).toBeVisible();await modelOption('fable').click();await expect(effort).toBeEnabled();await effort.click();for(const level of ['low','medium','high','xhigh','max'])await expect(effort.locator(`wa-option[value="${level}"]`)).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-r9bss0-claude-fable-effort.png',fullPage:true});await expect(settings).toContainText('Saved locally.');
 });

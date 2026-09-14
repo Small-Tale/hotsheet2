@@ -29,6 +29,10 @@ export interface ProjectDriveControlState {
   disabledReason?: string;
 }
 
+export function compatibleAiEffort(levels:readonly string[],...candidates:readonly (string|undefined)[]):string|undefined{
+  return candidates.find((candidate):candidate is string=>Boolean(candidate&&levels.includes(candidate)))??levels[0];
+}
+
 export function sidebarDriveConnectionId(checkout: string, tool: ProjectDriveTool): string {
   return `${SIDEBAR_DRIVE_CONNECTION_ID}-${tool}-${checkout}`;
 }

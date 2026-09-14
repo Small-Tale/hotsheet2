@@ -237,7 +237,8 @@ does not introduce polling or another network request.
     rather than rendering an inert control
   - session controls: visibly labeled model and effort choices appear only for plugin-declared live-change
     capabilities and apply to subsequent turns without changing provider; popup hide events stay scoped to
-    the nested select and never dismiss the conversation surface
+    the nested select and never dismiss the conversation surface; selecting a model revalidates effort and
+    removes both the control and request field when that model declares no supported effort levels
   - transcript: ordered, high-contrast user messages and one progressively appended assistant response per
     submitted turn; output chunks update that response in place, unknown additive events do
     not break it, and completed/failed/interrupted terminal state remains attached to the turn;

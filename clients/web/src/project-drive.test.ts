@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ToolConnection } from './api';
-import { prepareProjectConversation,projectChatConnectionId,projectDriveConnection, projectDriveControlState,restoreDrawerAIChats,runProjectDrive, SIDEBAR_DRIVE_PROMPT, sidebarDriveConnectionId } from './project-drive';
+import {compatibleAiEffort, prepareProjectConversation,projectChatConnectionId,projectDriveConnection, projectDriveControlState,restoreDrawerAIChats,runProjectDrive, SIDEBAR_DRIVE_PROMPT, sidebarDriveConnectionId } from './project-drive';
 
 const checkout='checkout-1';
 const connection = (value: Partial<ToolConnection> = {}): ToolConnection => ({
@@ -11,6 +11,11 @@ const connection = (value: Partial<ToolConnection> = {}): ToolConnection => ({
 describe('production project drive control', () => {
   it('keeps project chat separate from the dedicated driven session',()=>{
     expect(projectChatConnectionId(checkout,'codex')).not.toBe(sidebarDriveConnectionId(checkout,'codex'));
+  });
+  it('drops effort for unsupported models and chooses only compatible fallbacks',()=>{
+    expect(compatibleAiEffort([], 'medium')).toBeUndefined();
+    expect(compatibleAiEffort(['low','high'],'medium','high')).toBe('high');
+    expect(compatibleAiEffort(['low','high'],'medium')).toBe('low');
   });
   it('restores eligible server-side chats with connection metadata and stable tab identities',()=>{
     const plain=connection({id:'hotsheet-drawer-chat-01',tool:'claude',session_id:'claude-thread',model:'opus',effort:'high'}),drive=connection({session_id:'codex-thread',model:'gpt-6-astra',effort:'medium'}),saved=connection({id:'hotsheet-saved-chat-01',session_id:'saved-thread'}),existing={id:'ai-chat:hotsheet-drawer-chat-01',connectionId:plain.id,tool:'claude',name:'Claude chat',model:'stale',savedSource:'/export'};
