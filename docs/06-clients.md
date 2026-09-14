@@ -600,6 +600,9 @@ and identity-less legacy entries remain conservatively blocking.
   actionable instead of collapsing to an unexplained exit status. Opening a populated transcript
   starts at its latest message; streamed growth remains pinned while the reader is already at the
   bottom, but never pulls them away from older messages they intentionally scrolled back to read.
+  Rerenders that do not add content — selecting, extending, or clearing a message range — keep the
+  reader's scroll position, so a range can be picked while scrolled back through history. Sending a
+  message is an explicit continuation, so it returns the transcript to its latest edge and pins it.
 
   Completed transcripts can be saved from either conversation presentation. Messages remain
   directly selectable in the live transcript: one pick anchors a range, a second includes every
