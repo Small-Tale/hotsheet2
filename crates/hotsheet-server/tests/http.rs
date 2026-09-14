@@ -2346,6 +2346,124 @@ async fn checkout_search_matches_slug_details_and_notes() {
 }
 
 #[tokio::test]
+async fn deleted_tickets_form_a_separate_trash_collection_and_count() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    let mut ids = Vec::new();
+    for (title, status) in [
+        ("Kept", "not_started"),
+        ("Archived", "archive"),
+        ("Trashed", "deleted"),
+    ] {
+        let created = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "POST",
+                    &format!("/checkouts/{checkout_id}/tickets"),
+                    Some(&serde_json::json!({"title":title}).to_string()),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        let id = created["id"].as_str().unwrap().to_string();
+        if status != "not_started" {
+            assert_eq!(
+                router
+                    .clone()
+                    .oneshot(authed(
+                        "PATCH",
+                        &format!("/checkouts/{checkout_id}/tickets/{id}"),
+                        Some(&serde_json::json!({"status":status}).to_string()),
+                    ))
+                    .await
+                    .unwrap()
+                    .status(),
+                StatusCode::OK
+            );
+        }
+        ids.push(id);
+    }
+    let page = |collection: &'static str| {
+        let router = router.clone();
+        let uri = format!("/checkouts/{checkout_id}/tickets?collection={collection}&page_size=50");
+        async move { body_json(router.oneshot(authed("GET", &uri, None)).await.unwrap()).await }
+    };
+    let trash = page("trash").await;
+    assert!(trash["items"].is_array(), "unexpected trash page: {trash}");
+    let trash_ids: Vec<_> = trash["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(trash_ids, vec![ids[2].clone()]);
+    assert_eq!(trash["counts"]["trash"], 1);
+    assert_eq!(trash["counts"]["archive"], 1);
+    assert_eq!(trash["counts"]["queued"], 1);
+    let archive = page("archive").await;
+    let archive_ids: Vec<_> = archive["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(archive_ids, vec![ids[1].clone()]);
+
+    let restored = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets/{}/restore", ids[2]),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(restored["status"], "not_started", "{restored}");
+    let after = page("trash").await;
+    assert_eq!(after["items"].as_array().unwrap().len(), 0);
+    assert_eq!(after["counts"]["trash"], 0);
+    assert_eq!(after["counts"]["queued"], 2);
+    // Restoring a ticket that is not in Trash is a state conflict, not a silent no-op.
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/tickets/{}/restore", ids[2]),
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+}
+
+#[tokio::test]
 async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

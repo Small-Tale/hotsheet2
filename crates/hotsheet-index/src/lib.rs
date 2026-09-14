@@ -88,6 +88,8 @@ pub struct TicketSummary {
     pub queued: u64,
     pub backlog: u64,
     pub archive: u64,
+    /// Soft-deleted tickets shown in the Trash view (HS2-MWDR19).
+    pub trash: u64,
     pub open: u64,
     pub up_next: u64,
     pub active: u64,
@@ -112,18 +114,19 @@ impl Index {
             .unwrap_or(now);
         let tomorrow = day_starts.last().map(String::as_str).unwrap_or(now);
         let mut statement = self.conn.prepare(
-            "SELECT COUNT(*),
+            "SELECT COALESCE(SUM(status IS NOT 'moved'),0),
              COALESCE(SUM(status <> 'backlog' AND status NOT IN ('archive','deleted','moved')),0),
              COALESCE(SUM(status = 'backlog'),0),
-             COALESCE(SUM(status IN ('archive','deleted','moved')),0),
+             COALESCE(SUM(status IN ('archive','moved')),0),
              COALESCE(SUM(status IN ('not_started','started')),0),
              COALESCE(SUM(up_next = 1 AND status IN ('not_started','started')),0),
              COALESCE(SUM(claimed_by IS NOT NULL AND claim_lease_expires_at > ?2
                           AND status IN ('not_started','started')),0),
              COALESCE(SUM(status = 'started'),0),
              COALESCE(SUM(status = 'verified'),0),
-             COALESCE(SUM(completed_at >= ?3 AND completed_at < ?4),0)
-             FROM tickets WHERE store_id = ?1 AND status IS NOT 'moved'",
+             COALESCE(SUM(status IS NOT 'moved' AND completed_at >= ?3 AND completed_at < ?4),0),
+             COALESCE(SUM(status = 'deleted'),0)
+             FROM tickets WHERE store_id = ?1",
         )?;
         let mut summary = statement
             .query_row(params![self.store_id, now, today, tomorrow], |row| {
@@ -132,6 +135,7 @@ impl Index {
                     queued: row.get(1)?,
                     backlog: row.get(2)?,
                     archive: row.get(3)?,
+                    trash: row.get(10)?,
                     open: row.get(4)?,
                     up_next: row.get(5)?,
                     active: row.get(6)?,
@@ -658,7 +662,8 @@ impl Index {
                 TicketCollection::Queue => {
                     "t.status <> 'backlog' AND t.status NOT IN ('archive','deleted','moved')".into()
                 }
-                TicketCollection::Archive => "t.status IN ('archive','deleted','moved')".into(),
+                TicketCollection::Archive => "t.status IN ('archive','moved')".into(),
+                TicketCollection::Trash => "t.status = 'deleted'".into(),
             });
         }
         if let Some(p) = q.priority {

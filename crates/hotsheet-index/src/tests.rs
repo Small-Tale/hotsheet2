@@ -117,6 +117,65 @@ fn summary_aggregates_navigation_counts_without_loading_rows() {
 }
 
 #[test]
+fn trash_is_counted_and_queried_separately_from_archive() {
+    let (_d, store, _) = seeded();
+    let now = Timestamp::new("2026-08-20T00:00:00Z");
+    for (id, status) in [
+        ("01ARZ3NDEKTSV4RRFFQ69G5FB0", Status::Archive),
+        ("01ARZ3NDEKTSV4RRFFQ69G5FB1", Status::Deleted),
+        ("01ARZ3NDEKTSV4RRFFQ69G5FB2", Status::Moved),
+    ] {
+        ops::update(
+            &store,
+            &ulid(id),
+            now.clone(),
+            TicketPatch {
+                status: Some(status),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    let ix = Index::open_in_memory("s1").unwrap();
+    ix.rebuild_from_store(&store).unwrap();
+
+    let summary = ix.summary(now.as_str(), &[]).unwrap();
+    assert_eq!(
+        (
+            summary.total,
+            summary.queued,
+            summary.archive,
+            summary.trash
+        ),
+        (2, 0, 2, 1)
+    );
+    for (collection, expected) in [
+        (
+            TicketCollection::Archive,
+            HashSet::from([
+                "01ARZ3NDEKTSV4RRFFQ69G5FB0".to_string(),
+                "01ARZ3NDEKTSV4RRFFQ69G5FB2".to_string(),
+            ]),
+        ),
+        (
+            TicketCollection::Trash,
+            HashSet::from(["01ARZ3NDEKTSV4RRFFQ69G5FB1".to_string()]),
+        ),
+    ] {
+        let q = TicketQuery {
+            collection: Some(collection),
+            ..Default::default()
+        };
+        assert_eq!(
+            index_ids(&ix.query(&q).unwrap()),
+            expected,
+            "{collection:?}"
+        );
+        assert_eq!(ops_ids(&store, &q), expected, "{collection:?}");
+    }
+}
+
+#[test]
 fn structured_filters_match_the_file_scan() {
     let (_d, store, ix) = seeded();
     for q in [
@@ -150,6 +209,10 @@ fn structured_filters_match_the_file_scan() {
         },
         TicketQuery {
             collection: Some(TicketCollection::Archive),
+            ..Default::default()
+        },
+        TicketQuery {
+            collection: Some(TicketCollection::Trash),
             ..Default::default()
         },
         // A cap must pick the same rows on both paths (both order by id, then cap).

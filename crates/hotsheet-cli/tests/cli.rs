@@ -30,6 +30,65 @@ fn new_ticket(dir: &Path, title: &str) -> String {
 }
 
 #[test]
+fn trash_restore_and_purge_have_headless_cli_parity() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+    let slug = new_ticket(p, "Recoverable");
+    hs(p)
+        .args(["edit", &slug, "--status", "started"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["edit", &slug, "--status", "deleted"])
+        .assert()
+        .success();
+
+    hs(p)
+        .args(["restore", &slug])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "Restored {slug} to started"
+        )));
+    hs(p)
+        .args(["restore", &slug])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "only a ticket in Trash can be restored",
+        ));
+
+    // Nothing is past the default 30-day retention yet.
+    hs(p)
+        .args(["edit", &slug, "--status", "deleted"])
+        .assert()
+        .success();
+    hs(p)
+        .args(["purge-trash"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Trash has no tickets deleted 30+ days ago",
+        ));
+    hs(p).args(["show", &slug]).assert().success();
+
+    hs(p)
+        .args(["purge-trash", "--older-than-days", "0"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "Purged {slug} Recoverable"
+        )));
+    hs(p).args(["show", &slug]).assert().failure();
+    hs(p)
+        .args(["purge-trash", "--older-than-days", "-1"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument '-1'"));
+}
+
+#[test]
 fn concurrent_checkout_register_processes_preserve_every_entry() {
     let root = tempfile::tempdir().unwrap();
     let home = root.path().join("home");

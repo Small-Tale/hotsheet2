@@ -28,6 +28,7 @@ export const sidebarViews: ViewNavigationItem[] = [
   { id: 'all', label: 'Queue', count: 12, icon: 'all' },
   { id: 'backlog', label: 'Backlog', count: 5, icon: 'backlog' },
   { id: 'archive', label: 'Archive', count: 241, icon: 'archive' },
+  { id: 'trash', label: 'Trash', count: 4, icon: 'trash' },
 ];
 export const sidebarCommands: CommandNavigationItem[] = [
   { id: 'verify', label: 'Verify project', color: '#14b8a6', icon: 'test',group:'Quality' },

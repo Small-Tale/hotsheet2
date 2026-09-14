@@ -291,6 +291,8 @@ pub struct ProviderTicketSummary {
     pub queued: u64,
     pub backlog: u64,
     pub archive: u64,
+    /// Soft-deleted tickets; clients show the Trash view only while this is non-zero.
+    pub trash: u64,
     pub open: u64,
     pub up_next: u64,
     pub active: u64,
@@ -303,6 +305,9 @@ pub struct ProviderTicketSummary {
 impl ProviderTicketSummary {
     pub fn add_ticket(&mut self, ticket: &ApiTicket, now: &str, day_starts: &[String]) {
         if ticket.status == Status::Moved {
+            // Moved tombstones remain excluded from the live-ticket total, but Archive
+            // surfaces them and its navigation count must match those visible rows.
+            self.archive += 1;
             return;
         }
         self.total += 1;
@@ -317,11 +322,11 @@ impl ProviderTicketSummary {
         if ticket.status == Status::Backlog {
             self.backlog += 1;
         }
-        if matches!(
-            ticket.status,
-            Status::Archive | Status::Deleted | Status::Moved
-        ) {
+        if ticket.status == Status::Archive {
             self.archive += 1;
+        }
+        if ticket.status == Status::Deleted {
+            self.trash += 1;
         }
         if matches!(ticket.status, Status::NotStarted | Status::Started) {
             self.open += 1;
@@ -385,11 +390,9 @@ pub fn filter_provider_ticket_page(
                     Status::Backlog | Status::Archive | Status::Deleted | Status::Moved
                 ),
                 crate::TicketCollection::Archive => {
-                    matches!(
-                        ticket.status,
-                        Status::Archive | Status::Deleted | Status::Moved
-                    )
+                    matches!(ticket.status, Status::Archive | Status::Moved)
                 }
+                crate::TicketCollection::Trash => ticket.status == Status::Deleted,
             })
             && query.priority.is_none_or(|value| ticket.priority == value)
             && query

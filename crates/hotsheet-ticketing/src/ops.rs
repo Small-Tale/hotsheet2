@@ -42,6 +42,8 @@ pub enum OpError {
     NotWorkingRequiresCompleted(Status),
     #[error("a Not Working report requires a note or at least one evidence attachment")]
     EmptyNotWorkingReport,
+    #[error("only a ticket in Trash can be restored (found {0:?})")]
+    NotInTrash(Status),
 }
 
 // ---- query -----------------------------------------------------------------------
@@ -78,7 +80,10 @@ impl FromStr for SortKey {
 #[serde(rename_all = "snake_case")]
 pub enum TicketCollection {
     Queue,
+    /// Archived tickets plus `moved` tombstones.
     Archive,
+    /// Soft-deleted (`deleted`) tickets awaiting restore or retention purge (HS2-MWDR19).
+    Trash,
 }
 
 impl FromStr for TicketCollection {
@@ -88,6 +93,7 @@ impl FromStr for TicketCollection {
         match s {
             "queue" => Ok(Self::Queue),
             "archive" => Ok(Self::Archive),
+            "trash" => Ok(Self::Trash),
             other => Err(format!("invalid collection '{other}'")),
         }
     }
@@ -172,9 +178,8 @@ pub fn query(store: &FsStore, q: &TicketQuery) -> Result<Vec<Ticket>, StoreError
                     t.status != Status::Backlog
                         && !matches!(t.status, Status::Archive | Status::Deleted | Status::Moved)
                 }
-                TicketCollection::Archive => {
-                    matches!(t.status, Status::Archive | Status::Deleted | Status::Moved)
-                }
+                TicketCollection::Archive => matches!(t.status, Status::Archive | Status::Moved),
+                TicketCollection::Trash => t.status == Status::Deleted,
             })
             && q.priority.is_none_or(|p| t.priority == p)
             && q.category.as_deref().is_none_or(|c| t.category == c)
@@ -710,6 +715,117 @@ fn status_label(status: Status) -> &'static str {
         Status::Deleted => "Deleted",
         Status::Moved => "Moved",
     }
+}
+
+fn status_from_label(label: &str) -> Option<Status> {
+    [
+        Status::NotStarted,
+        Status::Started,
+        Status::Completed,
+        Status::Verified,
+        Status::Backlog,
+        Status::Archive,
+        Status::Deleted,
+        Status::Moved,
+    ]
+    .into_iter()
+    .find(|status| status_label(*status) == label)
+}
+
+/// The most recent recorded move into Trash: when it happened and the status it left.
+/// Transition notes are timeline history, so this survives later edits to the ticket.
+fn latest_deletion(ticket: &Ticket) -> Option<(&Timestamp, Option<Status>)> {
+    ticket.notes.iter().rev().find_map(|note| {
+        if note.kind != NoteKind::Activity {
+            return None;
+        }
+        let from = note
+            .text
+            .strip_prefix("Status changed from ")?
+            .strip_suffix(" to Deleted")?;
+        Some((&note.created_at, status_from_label(from)))
+    })
+}
+
+/// When a Trash ticket was deleted: its latest recorded deletion, else its last update
+/// (legacy or hand-edited files without a transition note).
+pub fn deleted_since(ticket: &Ticket) -> &Timestamp {
+    latest_deletion(ticket).map_or(&ticket.updated_at, |(at, _)| at)
+}
+
+/// Restore a Trash ticket to the status it held before deletion (HS2-MWDR19). Tickets
+/// whose prior status is unknown, or was itself a hidden lifecycle state, return to
+/// `not_started`. The restore is an ordinary status transition, so it is recorded.
+pub fn restore(store: &FsStore, id: &Ulid, now: Timestamp) -> Result<Ticket, OpError> {
+    let ticket = store.read_ticket(id)?;
+    if ticket.status != Status::Deleted {
+        return Err(OpError::NotInTrash(ticket.status));
+    }
+    let previous = latest_deletion(&ticket)
+        .and_then(|(_, from)| from)
+        .filter(|status| !matches!(status, Status::Deleted | Status::Moved))
+        .unwrap_or(Status::NotStarted);
+    Ok(update(
+        store,
+        id,
+        now,
+        TicketPatch {
+            status: Some(previous),
+            ..Default::default()
+        },
+    )?)
+}
+
+/// Trash retention before automatic purge (HS2-MWDR19).
+pub const TRASH_RETENTION_DAYS: i64 = 30;
+
+/// Permanently remove Trash tickets deleted more than `retention_days` before `now`,
+/// with their attachments, in one bounded commit. Git history still holds every purged
+/// file. A ticket whose deletion time cannot be parsed is kept rather than guessed at.
+pub fn purge_trash(
+    store: &FsStore,
+    now: &Timestamp,
+    retention_days: i64,
+) -> Result<Vec<Ticket>, OpError> {
+    let Some(cutoff) = now.plus_minutes(-retention_days * 24 * 60).instant() else {
+        return Ok(Vec::new());
+    };
+    let mut purged = Vec::new();
+    let mut paths = Vec::new();
+    for ticket in store.list_tickets()? {
+        if ticket.status != Status::Deleted
+            || !deleted_since(&ticket)
+                .instant()
+                .is_some_and(|deleted| deleted <= cutoff)
+        {
+            continue;
+        }
+        let file = store.ticket_path(&ticket.id);
+        let attachments = store.attachment_dir(&ticket.id);
+        std::fs::remove_file(&file).map_err(StoreError::from)?;
+        paths.push(file);
+        // Only name an attachment directory that existed: git rejects an unknown pathspec.
+        if attachments.exists() {
+            std::fs::remove_dir_all(&attachments).map_err(StoreError::from)?;
+            paths.push(attachments);
+        }
+        purged.push(ticket);
+    }
+    if !purged.is_empty() {
+        let noun = if purged.len() == 1 {
+            "ticket"
+        } else {
+            "tickets"
+        };
+        store.autocommit_paths(
+            &format!(
+                "Purge {} {noun} from Trash after {retention_days} days",
+                purged.len()
+            ),
+            &paths,
+        )?;
+    }
+    Ok(purged)
 }
 
 /// Append a note to a ticket. The caller mints the note id (a timestamp-ordered
@@ -1508,6 +1624,144 @@ mod tests {
 
     fn ts(s: &str) -> Timestamp {
         Timestamp::new(s)
+    }
+
+    fn trashed(store: &FsStore, title: &str, prior: Status, deleted_at: &str) -> Ticket {
+        let ticket = create(
+            store,
+            Ulid::new(),
+            "HS",
+            ts("2026-07-01T00:00:00Z"),
+            NewTicket {
+                title: title.into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        for (status, at) in [
+            (prior, "2026-07-02T00:00:00Z"),
+            (Status::Deleted, deleted_at),
+        ] {
+            if status != Status::NotStarted {
+                update(
+                    store,
+                    &ticket.id,
+                    ts(at),
+                    TicketPatch {
+                        status: Some(status),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            }
+        }
+        store.read_ticket(&ticket.id).unwrap()
+    }
+
+    #[test]
+    fn restore_returns_a_trashed_ticket_to_its_recorded_prior_status() {
+        let (_d, store) = store();
+        let ticket = trashed(&store, "Oops", Status::Started, "2026-07-03T00:00:00Z");
+        assert_eq!(deleted_since(&ticket).as_str(), "2026-07-03T00:00:00Z");
+
+        let restored = restore(&store, &ticket.id, ts("2026-07-04T00:00:00Z")).unwrap();
+        assert_eq!(restored.status, Status::Started);
+        assert_eq!(
+            restored.notes.last().map(|note| note.text.as_str()),
+            Some("Status changed from Deleted to Started")
+        );
+        // Restoring is only meaningful from Trash, and a second restore is rejected.
+        assert!(matches!(
+            restore(&store, &ticket.id, ts("2026-07-05T00:00:00Z")),
+            Err(OpError::NotInTrash(Status::Started))
+        ));
+
+        // Deleted again from a different status: the most recent deletion wins.
+        update(
+            &store,
+            &ticket.id,
+            ts("2026-07-06T00:00:00Z"),
+            TicketPatch {
+                status: Some(Status::Backlog),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        update(
+            &store,
+            &ticket.id,
+            ts("2026-07-07T00:00:00Z"),
+            TicketPatch {
+                status: Some(Status::Deleted),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let again = restore(&store, &ticket.id, ts("2026-07-08T00:00:00Z")).unwrap();
+        assert_eq!(again.status, Status::Backlog);
+    }
+
+    #[test]
+    fn restore_without_a_recorded_prior_status_returns_to_not_started() {
+        let (_d, store) = store();
+        let mut legacy = trashed(&store, "Legacy", Status::Completed, "2026-07-03T00:00:00Z");
+        legacy.notes.clear();
+        store.write_ticket(&legacy).unwrap();
+        assert_eq!(deleted_since(&legacy), &legacy.updated_at);
+        let restored = restore(&store, &legacy.id, ts("2026-07-04T00:00:00Z")).unwrap();
+        assert_eq!(restored.status, Status::NotStarted);
+    }
+
+    #[test]
+    fn purge_trash_removes_only_tickets_past_retention() {
+        let (_d, store) = store();
+        let old = trashed(&store, "Old", Status::NotStarted, "2026-07-01T12:00:00Z");
+        let recent = trashed(&store, "Recent", Status::NotStarted, "2026-07-20T00:00:00Z");
+        let kept = create(
+            &store,
+            Ulid::new(),
+            "HS",
+            ts("2026-06-01T00:00:00Z"),
+            NewTicket {
+                title: "Active".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        store
+            .write_attachment(
+                &old.id,
+                Ulid::new(),
+                ts("2026-07-01T13:00:00Z"),
+                "evidence.txt",
+                b"proof",
+            )
+            .unwrap();
+        assert!(store.attachment_dir(&old.id).exists());
+
+        let now = ts("2026-08-01T00:00:00Z");
+        let purged = purge_trash(&store, &now, TRASH_RETENTION_DAYS).unwrap();
+        assert_eq!(
+            purged.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![old.id]
+        );
+        assert!(!store.ticket_path(&old.id).exists());
+        assert!(!store.attachment_dir(&old.id).exists());
+        assert!(store.read_ticket(&recent.id).is_ok());
+        assert!(store.read_ticket(&kept.id).is_ok());
+        // Idempotent: a second sweep has nothing left past retention.
+        assert!(
+            purge_trash(&store, &now, TRASH_RETENTION_DAYS)
+                .unwrap()
+                .is_empty()
+        );
+        // A zero-day sweep empties Trash but never touches active tickets.
+        let emptied = purge_trash(&store, &now, 0).unwrap();
+        assert_eq!(
+            emptied.iter().map(|t| t.id).collect::<Vec<_>>(),
+            vec![recent.id]
+        );
+        assert!(store.read_ticket(&kept.id).is_ok());
     }
 
     #[test]

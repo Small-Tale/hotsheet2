@@ -93,7 +93,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/format.rs          #   parse_file / to_file_string (YAML + bounded/escaped Markdown body + five note kinds + created/edited timestamps; legacy reader)
     hotsheet-ticketing/      # engine crate (sync API, injected ports)
       src/lib.rs             #   mint_ulid(clock, rng)
-      src/ops.rs             #   query/create/update/close/claim-next/exact-claim/renew/release/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
+      src/ops.rs             #   query/create/update/close/restore/purge_trash/claim-next/exact-claim/renew/release/copy_ticket/move_ticket/assign — the one op impl (CLI+server+MCP); TicketQuery.assignee filter + keyset page_after (HS2-20/HS2-TCDTCH)
       src/provider.rs        #   provider-neutral identity/capabilities/errors/CRUD+claim contract; registry + GitProvider; idempotent cross-provider copy/move coordinator and provenance (HS2-ZVZP80/HS2-A90JRH)
       src/identity.rs        #   current-user identity: current_user_email (git user.email) + resolve_me — the `me` sentinel for assignee/review filters (docs/10 §10.3, HS2-TCDTCH)
       src/activity.rs        #   cross-tool activity events (docs/15, HS2-KP31ZE/4C68Y8/26M48F): ActivityEvent/Kind/Importance + deterministic per-session volume admission/coalescing + bounded rolling store/timeline + mappers; server persists then broadcasts the same admitted payloads on WS/poll
@@ -118,7 +118,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/wire.rs            #   wire SSOT: ApiTicket/ApiNote incl. optional activity summary, ApiAttachment timestamps, and TicketRow provider identity + compact body-optional lists (shared by server + MCP)
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
-      src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
+      src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, Trash `restore`/`purge-trash`, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
       src/permission_hook.rs #   Claude permission-hook adapter (HS2-YMR9HE/N4R6F3): interactive PermissionRequest events and explicitly marked headless PreToolUse events map to bridge (tool,action) + their distinct Claude response schemas; unrelated interactive PreToolUse events remain native; the `permission-hook` cmd POSTs /permissions/ask when governed
       src/external_launch.rs #   capability-aware external-terminal launch preparation: per-store server-instance discovery + permission route-back data; Claude hook supported, native Codex rejected until adapted (HS2-C46G58)
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
@@ -144,7 +144,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/tts.rs             #   server-owned TTS provider boundary; no provider secrets on client wire (HS2-5PSQJQ)
       src/turn_stream.rs     #   stable tagged + bounded raw TurnEvent client projection (output/permission/usage/native/coalesced/done), including pathological-chunk cap (HS2-060HQJ)
       src/multistore.rs      #   StoreHost: registry of served stores (StoreEntry{store,index}) keyed by a short URL id + StoreInfo listing (HS2-87). Per-store fs-watcher via WatchTarget; cross-store resolve; configured_store_paths (stores.json startup discovery); file-backed index_path_for in persistent mode
-      src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up)
+      src/sync_loop.rs       #   background sync loop: sync_once per hosted store on interval + kick-on-write + exponential backoff (sync_all/next_delay pure + tested; docs/02 §2.12, HS2-19 follow-up) + ≤6-hourly purge_all_trash retention sweep (HS2-MWDR19)
       src/terminal_broker.rs #   server↔detached-broker integration (HS2-ERT00F/HS2-8GQNDQ): TerminalBroker::ensure (discover/spawn the default broker per project under ${HOTSHEET_HOME}/broker, using the dedicated sibling binary or the server's hidden self-host fallback), discover/kill_all for explicit cleanup, and per-request BrokerClient round trips; routes /terminals ops + live WS attach (bridged to a BrokerStream — broker_attach_loop in lib.rs) + the connect busy feed (polls the broker's Read) so terminals survive server stop/restart
       tests/http.rs          #   in-process HTTP E2E (tower::oneshot)
     hotsheet-mcp/            # `hotsheet-mcp` binary (MCP shim)
@@ -214,7 +214,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
   Global `-C/--path` selects the store dir. `init --standalone [--at/--remote]` creates a
   separate git store and links the current code project in one shot. Subcommands: `init`, `link`, `new`
   (incl. `--blocked-by`), `ls` (filters/sort/text/`--limit`), `show`, `edit`
-  (incl. `--blocked-by`/`--clear-blocked-by`), `attach`, `close`, `providers`, `setup` (AI-tool setup, headless),
+  (incl. `--blocked-by`/`--clear-blocked-by`), `attach`, `close`, `restore`, `purge-trash`, `providers`, `setup` (AI-tool setup, headless),
   `plugin` (list/install/remove external plugins), `settings` (get/set/list,
   global|shared|local), `key` (OS-keychain-backed set/get/list/delete),
   `import`, `doctor`, `claim`, `claim-next`, `release`, `renew`, `trigger` (the headless "play":

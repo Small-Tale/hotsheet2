@@ -1308,6 +1308,10 @@ pub fn app(state: AppState) -> Router {
             post(close_checkout_ticket),
         )
         .route(
+            "/checkouts/{reference}/tickets/{id}/restore",
+            post(restore_checkout_ticket),
+        )
+        .route(
             "/checkouts/{reference}/tickets/{id}/assign",
             post(assign_checkout_ticket),
         )
@@ -3498,6 +3502,7 @@ struct CheckoutTicketCounts {
     queued: u64,
     backlog: u64,
     archive: u64,
+    trash: u64,
     open: u64,
     up_next: u64,
     active: u64,
@@ -3513,6 +3518,7 @@ impl CheckoutTicketCounts {
         self.queued += summary.queued;
         self.backlog += summary.backlog;
         self.archive += summary.archive;
+        self.trash += summary.trash;
         self.open += summary.open;
         self.up_next += summary.up_next;
         self.active += summary.active;
@@ -3533,6 +3539,7 @@ impl CheckoutTicketCounts {
         self.queued += summary.queued;
         self.backlog += summary.backlog;
         self.archive += summary.archive;
+        self.trash += summary.trash;
         self.open += summary.open;
         self.up_next += summary.up_next;
         self.active += summary.active;
@@ -4389,6 +4396,37 @@ async fn close_checkout_ticket(
         )?,
     }))
 }
+/// Restore a Trash ticket to its pre-deletion status (HS2-MWDR19). Trash is the git
+/// provider's soft-delete lifecycle; other providers own deletion natively.
+async fn restore_checkout_ticket(
+    State(state): State<AppState>,
+    Path((reference, id)): Path<(String, String)>,
+) -> Result<Json<ResolvedTicket>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    let (source, _) = checkout_ticket_owner(&state, &reference, &id)?;
+    if source.provider != "git" {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            format!(
+                "the {} provider has no Hot Sheet Trash to restore from",
+                source.provider
+            ),
+        ));
+    }
+    let entry = checkout_entry_for_ticket(&state, &reference, &id)?;
+    Ok(Json(ResolvedTicket {
+        store: multistore::store_url_id(&entry.store),
+        ticket: contextualize_api_ticket(do_restore(&state, &entry, &id)?, &settings)?,
+    }))
+}
+
+fn do_restore(state: &AppState, entry: &StoreEntry, id: &str) -> Result<ApiTicket, ApiError> {
+    let ticket = ops::resolve(&entry.store, id)?.ok_or_else(|| ApiError::not_found(id))?;
+    let restored = ops::restore(&entry.store, &ticket.id, now())?;
+    state.changed_in(entry, "updated", &restored);
+    api_ticket(entry, &restored)
+}
+
 async fn assign_checkout_ticket(
     State(state): State<AppState>,
     Path((reference, id)): Path<(String, String)>,
@@ -7855,7 +7893,7 @@ async fn poll_events(
 #[derive(Debug, Clone, Default, Deserialize)]
 struct ListParams {
     status: Option<String>,
-    /// Built-in multi-status client collection (`queue` or `archive`).
+    /// Built-in multi-status client collection (`queue`, `archive`, or `trash`).
     collection: Option<String>,
     priority: Option<String>,
     category: Option<String>,
@@ -8218,9 +8256,8 @@ impl From<OpError> for ApiError {
             other @ (OpError::WrongWorker { .. }
             | OpError::NotClaimed(_)
             | OpError::ClaimUnavailable { .. }
-            | OpError::NotWorkingRequiresCompleted(_)) => {
-                ApiError::new(StatusCode::CONFLICT, other.to_string())
-            }
+            | OpError::NotWorkingRequiresCompleted(_)
+            | OpError::NotInTrash(_)) => ApiError::new(StatusCode::CONFLICT, other.to_string()),
             other @ (OpError::DuplicateNeedsTarget
             | OpError::SelfBlock(_)
             | OpError::EmptyNotWorkingReport) => {

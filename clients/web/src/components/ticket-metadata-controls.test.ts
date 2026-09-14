@@ -43,6 +43,11 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(info).not.toContain('<h2>Blocked reason</h2>');
     expect(info).toContain('ticket-inspector__block-action');
     expect(info).toContain('class="kui-menu-item ticket-inspector__block-action" data-component="menu-item"');
+    const deleted = String(TicketInfoPanel({ status: 'deleted', priority: 'default', category: 'issue', tags: [], details: '' }));
+    expect(deleted).toContain('data-status="deleted"');
+    expect(deleted).toContain('data-lucide="trash-2"');
+    expect(deleted).toContain('Deleted');
+    expect(deleted).not.toContain('name="inspector-status"');
     expect(info).toContain('<h2>Notes<span class="kui-menu-header__count" aria-label="0 notes">0</span></h2>');
     expect(info).toContain('class="kui-menu-item ticket-notes__add" data-component="menu-item"');
     const blocked = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: [], details: '', blockedReason: 'Waiting' }));

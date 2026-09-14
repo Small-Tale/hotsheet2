@@ -4,7 +4,7 @@ import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import './ticket-row-context-menu.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Archive, BadgeCheck, CircleDot, CircleX, Clock3, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Tags, Trash2, XCircle } from 'lucide';
+import { Archive, ArchiveRestore, BadgeCheck, CircleDot, CircleX, Clock3, Copy, Gauge, type IconNode,Shapes, SquareArrowOutUpRight, Star, Tag, Tags, Trash2, XCircle } from 'lucide';
 
 import { DEFAULT_TICKET_CATEGORIES } from './category-presentation';
 import type { TicketStatus } from './status-badge';
@@ -30,7 +30,9 @@ export const COMPLETED_TICKET_CONTEXT_ACTIONS = [
   { action: 'Report not working', label: 'Not Working…', icon: CircleX, iconName: 'circle-x' },
 ] as const;
 
-export const CLOSE_TICKET_CONTEXT_ACTION = { action: 'Close ticket', label: 'Close ticket…', icon: XCircle, iconName: 'x-circle' } as const;
+export const RESTORE_TICKET_CONTEXT_ACTION = { action: 'Restore ticket', label: 'Restore from Trash', icon: ArchiveRestore, iconName: 'archive-restore' } as const;
+
+export const CLOSE_TICKET_CONTEXT_ACTION ={ action: 'Close ticket', label: 'Close ticket…', icon: XCircle, iconName: 'x-circle' } as const;
 
 function ContextItem({ item, disabled = false, disabledTitle }: { item: { action: string; label?: string; icon: IconNode; iconName: string; danger?: boolean }; disabled?: boolean; disabledTitle?: string }) {
   return <wa-dropdown-item data-context-action={item.action} variant={item.danger ? 'danger' : undefined} disabled={disabled} title={disabled ? disabledTitle ?? 'One or more selected ticket providers do not support updates.' : undefined}>
@@ -47,7 +49,7 @@ function MetadataSubmenu({ field, label, icon, iconName, choices, selected, disa
   </wa-dropdown-item>;
 }
 
-export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; hideUpNext?: boolean; verifyAction?: boolean; notWorkingAction?: boolean; closeAction?: boolean; selectionCount?: number; canBulkUpdate?: boolean; allInBacklog?: boolean; allInArchive?: boolean }
+export interface TicketRowContextMenuProps { x: number; y: number; category?: string; priority?: TicketPriority; status?: TicketStatus; upNextEligible?: boolean; hideUpNext?: boolean; verifyAction?: boolean; notWorkingAction?: boolean; closeAction?: boolean; selectionCount?: number; canBulkUpdate?: boolean; allInBacklog?: boolean; allInArchive?: boolean; allInTrash?: boolean }
 
 /** Shadow-DOM-safe containment check for capture-phase context-menu dismissal. */
 export function eventTargetsContextMenu(event: { composedPath(): unknown[] }, selector = '.ticket-context-menu'): boolean {
@@ -57,12 +59,13 @@ export function eventTargetsContextMenu(event: { composedPath(): unknown[] }, se
   });
 }
 
-export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, hideUpNext = false, verifyAction = false, notWorkingAction = false, closeAction = false, selectionCount = 1, canBulkUpdate = true, allInBacklog = false, allInArchive = false }: TicketRowContextMenuProps) {
+export function TicketRowContextMenu({ x, y, category, priority, status, upNextEligible = true, hideUpNext = false, verifyAction = false, notWorkingAction = false, closeAction = false, selectionCount = 1, canBulkUpdate = true, allInBacklog = false, allInArchive = false, allInTrash = false }: TicketRowContextMenuProps) {
   const priorityChoices = PRIORITIES.map(choice => { const option = getPriorityPresentation(choice.value); return { ...choice, icon: option.icon, iconName: option.name, color: option.color }; });
   return <div class="ticket-context-menu" role="menu" aria-label="Ticket actions" style={`left:${x}px;top:${y}px`}>
     <wa-dropdown open placement="bottom-start" distance={0}>
       <span slot="trigger" class="ticket-context-menu__anchor" aria-hidden="true"></span>
-      {(verifyAction || notWorkingAction) && <>{verifyAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[0]} />}{notWorkingAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[1]} />}<wa-divider></wa-divider></>}
+      {allInTrash && <><ContextItem item={RESTORE_TICKET_CONTEXT_ACTION} disabled={!canBulkUpdate} /><wa-divider></wa-divider></>}
+      {(verifyAction || notWorkingAction) &&<>{verifyAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[0]} />}{notWorkingAction && <ContextItem item={COMPLETED_TICKET_CONTEXT_ACTIONS[1]} />}<wa-divider></wa-divider></>}
       {/* "Open ticket" opens a single ticket, so hide it when several are selected (HS2-XRENF2). */}
       {selectionCount <= 1 && <><ContextItem item={TICKET_CONTEXT_ACTIONS[0]} /><wa-divider></wa-divider></>}
       <MetadataSubmenu field="category" label="Change category" icon={Shapes} iconName="shapes" choices={DEFAULT_TICKET_CATEGORIES} selected={category} disabled={!canBulkUpdate} />

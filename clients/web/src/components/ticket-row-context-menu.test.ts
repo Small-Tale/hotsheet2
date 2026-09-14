@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CLOSE_TICKET_CONTEXT_ACTION, COMPLETED_TICKET_CONTEXT_ACTIONS, eventTargetsContextMenu, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
+import { CLOSE_TICKET_CONTEXT_ACTION, COMPLETED_TICKET_CONTEXT_ACTIONS, eventTargetsContextMenu, RESTORE_TICKET_CONTEXT_ACTION, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
 
 describe('TicketRowContextMenu', () => {
   it('uses the composed path so shadow-menu interactions are inside and rows are outside', () => {
@@ -31,6 +31,18 @@ describe('TicketRowContextMenu', () => {
     const archive = String(TicketRowContextMenu({ x: 0, y: 0, status: 'archive', allInArchive: true }));
     expect(archive).toContain('data-context-action="Archive ticket" disabled');
     expect(archive).not.toContain('data-context-action="Move to Backlog" disabled');
+  });
+
+  it('offers Restore from Trash first only when every selected ticket is in Trash (HS2-MWDR19)', () => {
+    const restore = `data-context-action="${RESTORE_TICKET_CONTEXT_ACTION.action}"`;
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, status: 'archive', allInArchive: true }))).not.toContain(restore);
+    const trash = String(TicketRowContextMenu({ x: 0, y: 0, allInTrash: true, selectionCount: 2 }));
+    expect(trash).toContain(restore);
+    expect(trash).toContain('Restore from Trash');
+    expect(trash).toContain('data-lucide="archive-restore"');
+    expect(trash.indexOf(restore)).toBeLessThan(trash.indexOf('data-context-field="category"'));
+    expect(trash).not.toContain(`${restore} disabled`);
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, allInTrash: true, canBulkUpdate: false }))).toContain(`${restore} disabled`);
   });
 
   it('renders checked metadata submenus with stable bulk mutation contracts', () => {

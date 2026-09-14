@@ -32,8 +32,9 @@ its composer and ticket surface. Pointer interaction outside it releases that ow
 including non-focusable inspector text; an ordinary non-collapsed text selection, native
 or Web Awesome editable control, or open dialog always retains native Cmd/Ctrl+C/X/V.
 Dragging an unselected ticket moves only it, while
-  dragging a selected ticket moves the selection; Queue, Backlog, and Archive sidebar
-  destinations apply the corresponding status and visibly highlight during dragover.
+  dragging a selected ticket moves the selection; Queue, Backlog, Archive, and (when shown)
+  Trash sidebar destinations apply the corresponding status — Trash soft-deletes — and
+  visibly highlight during dragover.
   Right-clicking either a list or board TicketRow preserves an existing multi-selection
   (or selects the clicked ticket when necessary) and opens the shared icon-bearing ticket
   menu. Pointer-opened ticket menus retain the raw viewport pointer anchor and delegate
@@ -64,9 +65,16 @@ Dragging an unselected ticket moves only it, while
   `not_working_report` capability hides the action for
   providers that cannot guarantee all-or-nothing behavior; the client never emulates it
   with uploads, patches, or compensating deletes. Completed/verified selections never
-  offer Up Next. Changing between Queue, Backlog, Archive, or ticket-error views clears
+  offer Up Next. Changing between Queue, Backlog, Archive, Trash, or ticket-error views clears
   the complete ticket selection and its editing state; changing only the list/column or
   other presentation mode preserves that selection.
+  A Trash view appears directly below Archive while the project has soft-deleted
+  (`deleted`) tickets, and stays while it is the selected view; Archive holds only archived
+  tickets and moved tombstones. When every selected ticket is in Trash, the ticket menu
+  offers Restore from Trash, which returns each ticket to the status recorded before it was
+  deleted (Not Started when that is unknown). The server purges Trash tickets 30 days after
+  deletion; git history still holds every purged file. `hotsheet-cli restore` and
+  `hotsheet-cli purge-trash` provide the same recovery and cleanup headlessly (HS2-MWDR19).
 
 This is the clean client/service split the rewrite is chartered to create, made
 **absolute**: the server is a standalone process even for local use, so the client

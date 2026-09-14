@@ -410,6 +410,23 @@ when a patch only tries to set Up Next, and queries/projectors defensively ignor
 legacy flags. Thus backlog, completed, verified, archive, deleted, and moved tickets can
 never participate in the Up Next queue.
 
+**Trash (`deleted`) lifecycle (HS2-MWDR19).** Deleting a ticket is a soft delete: the file
+stays in the store with `status: deleted` and forms the built-in `trash` collection,
+separate from `archive` (archived tickets and `moved` tombstones). Every status change
+already records a `Status changed from X to Y` activity note, so the most recent
+transition into Deleted supplies both *when* the ticket was trashed and *what it left*.
+Restoring (`ops::restore`, `POST /checkouts/{id}/tickets/{ticket}/restore`,
+`hotsheet-cli restore`) moves a Trash ticket back to that prior status through the normal
+update path, recording the transition; an unknown or hidden prior status restores to
+`not_started`, and restoring a ticket outside Trash is a conflict. Tickets deleted 30 or more
+days ago (`ops::TRASH_RETENTION_DAYS`; legacy files without a transition note fall back to
+`updated_at`) are permanently removed with their attachments in one bounded commit
+(`ops::purge_trash`). The server sweeps every hosted store from its background sync loop at
+most every six hours, and `hotsheet-cli purge-trash [--older-than-days N]` runs the same
+sweep headlessly. Purging only removes the working-tree files: git history retains them.
+Trash is the git provider's lifecycle; other providers own deletion natively and reject
+restore explicitly.
+
 Up Next and priority are ordering metadata rather than substantive ticket content. A patch
 whose only effective changes are `up_next` and/or `priority` preserves `updated_at`, so
 starring, unstarring, or reprioritizing a ticket cannot reorder a recently-updated view. A

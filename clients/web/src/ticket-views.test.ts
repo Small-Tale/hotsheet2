@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView, ticketViewQuery } from './ticket-views';
+import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isTrashedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView, ticketViewQuery } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -14,14 +14,20 @@ describe('ticket views', () => {
     expect(customTicketViewKey('custom:needs-docs')).toBe('needs-docs');
     expect(customTicketViewKey('all')).toBeUndefined();
   });
-  it('partitions active queue, backlog, and every archived status without overlap', () => {
+  it('partitions active queue, backlog, archive, and trash without overlap', () => {
     const tickets = ['not_started', 'started', 'backlog', 'completed', 'verified', 'archive', 'deleted', 'moved'].map(ticket);
     expect(tickets.filter(isQueuedTicket).map(item => item.status)).toEqual(['not_started', 'started', 'completed', 'verified']);
-    expect(tickets.filter(isArchivedTicket).map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
+    expect(tickets.filter(isArchivedTicket).map(item => item.status)).toEqual(['archive', 'moved']);
+    expect(tickets.filter(isTrashedTicket).map(item => item.status)).toEqual(['deleted']);
     expect(ticketsForView(tickets, 'all').map(item => item.status)).toEqual(['not_started', 'started', 'completed', 'verified']);
     expect(ticketsForView(tickets, 'backlog').map(item => item.status)).toEqual(['backlog']);
-    expect(ticketsForView(tickets, 'archive').map(item => item.status)).toEqual(['archive', 'deleted', 'moved']);
+    expect(ticketsForView(tickets, 'archive').map(item => item.status)).toEqual(['archive', 'moved']);
+    expect(ticketsForView(tickets, 'trash').map(item => item.status)).toEqual(['deleted']);
     expect(ticketsForView(tickets, 'errors')).toEqual([]);
+    const partitions = (['all', 'backlog', 'archive', 'trash'] as const).flatMap(view => ticketsForView(tickets, view));
+    expect(partitions).toHaveLength(tickets.length);
+    expect(new Set(partitions).size).toBe(tickets.length);
+    expect(canCreateTicketInView('trash')).toBe(false);
   });
 
   it('scopes each built-in collection before server pagination', () => {

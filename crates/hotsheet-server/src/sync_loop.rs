@@ -60,9 +60,43 @@ pub fn spawn_sync_loop(state: AppState, base: Duration) -> SyncHandle {
     SyncHandle { _kick_marker: () }
 }
 
+/// How often the loop sweeps Trash for tickets past retention. The sweep is local and
+/// bounded; a day-granularity retention does not need a tighter cadence.
+pub const TRASH_PURGE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
+
+/// Purge every hosted store's Trash of tickets deleted more than
+/// [`hotsheet_ticketing::ops::TRASH_RETENTION_DAYS`] ago (HS2-MWDR19). Returns how many
+/// tickets each store purged; a store that fails to open or purge is skipped and retried
+/// on the next sweep.
+pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
+    let Some(_lifecycle_guard) = state.begin_background_work() else {
+        return Vec::new();
+    };
+    let now = crate::now();
+    state
+        .hosted_store_roots()
+        .into_iter()
+        .filter_map(|(id, root)| {
+            let store = hotsheet_ticketing::FsStore::open(root).ok()?;
+            let purged = hotsheet_ticketing::ops::purge_trash(
+                &store,
+                &now,
+                hotsheet_ticketing::ops::TRASH_RETENTION_DAYS,
+            )
+            .ok()?;
+            Some((id, purged.len()))
+        })
+        .collect()
+}
+
 fn run(state: AppState, base: Duration, rx: Receiver<()>) {
     let mut delay = base;
+    let mut last_trash_purge: Option<std::time::Instant> = None;
     loop {
+        if last_trash_purge.is_none_or(|at| at.elapsed() >= TRASH_PURGE_INTERVAL) {
+            purge_all_trash(&state);
+            last_trash_purge = Some(std::time::Instant::now());
+        }
         let reports = sync_all(&state);
         delay = next_delay(base, delay, &reports);
         // Wait for the next tick OR a kick (a local write) — whichever comes first. A

@@ -271,6 +271,14 @@ enum Cmd {
         #[arg(long)]
         duplicate_of: Option<String>,
     },
+    /// Restore a ticket from Trash to the status it held before it was deleted.
+    Restore { id: String },
+    /// Permanently remove Trash tickets deleted at least this many days ago (the server
+    /// runs the same sweep automatically). Git history keeps every purged file.
+    PurgeTrash {
+        #[arg(long, default_value_t = hotsheet_ticketing::ops::TRASH_RETENTION_DAYS.unsigned_abs() as u32)]
+        older_than_days: u32,
+    },
     /// Set up an AI tool to work with this project, headless (writes its instruction
     /// section, worklist skill, and MCP config). No server or client required.
     Setup {
@@ -1106,6 +1114,8 @@ fn main() -> Result<()> {
             reason,
             duplicate_of,
         } => cmd_close(&cli.path, &id, &reason, duplicate_of),
+        Cmd::Restore { id } => cmd_restore(&cli.path, &id),
+        Cmd::PurgeTrash { older_than_days } => cmd_purge_trash(&cli.path, older_than_days),
         Cmd::Setup {
             tool,
             detect,
@@ -3672,6 +3682,30 @@ fn cmd_close(path: &PathBuf, id: &str, reason: &str, duplicate_of: Option<String
     };
     let closed = ops::close(&store, &ticket.id, now_ts(), reason_enum, dup)?;
     println!("Closed {} ({reason})", closed.slug);
+    Ok(())
+}
+
+fn cmd_restore(path: &PathBuf, id: &str) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let ticket = resolve(&store, id)?;
+    let restored = ops::restore(&store, &ticket.id, now_ts())?;
+    println!(
+        "Restored {} to {}",
+        restored.slug,
+        format!("{:?}", restored.status).to_lowercase()
+    );
+    Ok(())
+}
+
+fn cmd_purge_trash(path: &PathBuf, older_than_days: u32) -> Result<()> {
+    let store = FsStore::open(path)?;
+    let purged = ops::purge_trash(&store, &now_ts(), i64::from(older_than_days))?;
+    if purged.is_empty() {
+        println!("Trash has no tickets deleted {older_than_days}+ days ago");
+    }
+    for ticket in &purged {
+        println!("Purged {} {}", ticket.slug, ticket.title);
+    }
     Ok(())
 }
 

@@ -4,7 +4,7 @@
 .status-badge--completed { color: var(--wa-color-success-on-quiet); background: var(--wa-color-success-fill-quiet); }
 .status-badge--verified { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-normal); }
 .status-badge--backlog { color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); }
-.status-badge--archive { color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); }
+.status-badge--archive, .status-badge--deleted { color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-normal); }
 .status-badge--plain { padding: 0; border: 0; border-radius: 0; color: var(--wa-color-neutral-on-quiet); background: transparent; }
 .status-badge--compact { gap: .25rem; padding: .15rem .4rem; font-size: var(--wa-font-size-2xs); font-weight: 600; }
 .status-badge--plain.status-badge--compact { padding: 0; }

@@ -1,9 +1,9 @@
 import './status-badge.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Archive, BadgeCheck, Circle, CircleCheck, Clock, Clock3, type IconNode } from 'lucide';
+import { Archive, BadgeCheck, Circle, CircleCheck, Clock, Clock3, type IconNode, Trash2 } from 'lucide';
 
-export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive';
+export type TicketStatus = 'not_started' | 'started' | 'completed' | 'verified' | 'backlog' | 'archive' | 'deleted';
 export type StatusBadgeAppearance = 'filled' | 'plain';
 
 export interface StatusBadgeProps {
@@ -23,6 +23,7 @@ const presentation: Record<TicketStatus, { icon: IconNode; iconName: string; lab
   verified: { icon: BadgeCheck, iconName: 'badge-check', label: 'Verified' },
   backlog: { icon: Clock3, iconName: 'clock-3', label: 'Backlog' },
   archive: { icon: Archive, iconName: 'archive', label: 'Archive' },
+  deleted: { icon: Trash2, iconName: 'trash-2', label: 'Deleted' },
 };
 
 export function statusPresentation(status: TicketStatus) {
