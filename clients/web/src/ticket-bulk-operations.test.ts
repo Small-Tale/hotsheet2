@@ -22,6 +22,7 @@ describe('bulk ticket operations', () => {
 
   it('builds field and soft-delete patches', () => {
     expect(bulkTicketPatch(ticket('ONE'), { kind: 'field', field: 'priority', value: 'high' })).toEqual({ priority: 'high' });
+    expect(bulkTicketPatch(ticket('ONE'), { kind: 'reopen' })).toEqual({ status: 'not_started', up_next: true });
     expect(bulkTicketPatch(ticket('ONE'), { kind: 'delete' })).toEqual({ status: 'deleted' });
   });
 

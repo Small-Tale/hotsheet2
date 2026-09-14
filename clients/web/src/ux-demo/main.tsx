@@ -700,6 +700,7 @@ function DemoApp() {
           }
           verifyAction={menuTicket?.status === 'completed'}
           notWorkingAction={menuTicket?.status === 'completed'}
+          reopenAction={menuTicket?.status === 'verified' || menuTicket?.status === 'archive'}
           selectionCount={
             collectionTickets.value.filter((ticket) => ticket.selected)
               .length || 1

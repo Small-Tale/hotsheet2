@@ -64,7 +64,10 @@ Dragging an unselected ticket moves only it, while
   the timeline uses an unattributed `Reported as not working` label. The explicit
   `not_working_report` capability hides the action for
   providers that cannot guarantee all-or-nothing behavior; the client never emulates it
-  with uploads, patches, or compensating deletes. Completed/verified selections never
+  with uploads, patches, or compensating deletes. A single Verified or Archive ticket
+  instead exposes **Reopen Ticket** when its provider supports updates. Reopening is one
+  undoable update that returns the ticket to Not Started and places it in Up Next; its
+  terminal lifecycle timestamps are cleared by the service. Completed/verified selections never
   offer Up Next. Changing between Queue, Backlog, Archive, Trash, or ticket-error views clears
   the complete ticket selection and its editing state; changing only the list/column or
   other presentation mode preserves that selection.

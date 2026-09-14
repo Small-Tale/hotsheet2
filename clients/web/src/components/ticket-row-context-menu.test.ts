@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { CLOSE_TICKET_CONTEXT_ACTION, COMPLETED_TICKET_CONTEXT_ACTIONS, eventTargetsContextMenu, RESTORE_TICKET_CONTEXT_ACTION, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
+import { CLOSE_TICKET_CONTEXT_ACTION, COMPLETED_TICKET_CONTEXT_ACTIONS, eventTargetsContextMenu, REOPEN_TICKET_CONTEXT_ACTION, RESTORE_TICKET_CONTEXT_ACTION, TICKET_CONTEXT_ACTIONS, TicketRowContextMenu } from './ticket-row-context-menu';
 
 describe('TicketRowContextMenu', () => {
   it('uses the composed path so shadow-menu interactions are inside and rows are outside', () => {
@@ -94,6 +94,18 @@ describe('TicketRowContextMenu', () => {
     const verifyOnly = String(TicketRowContextMenu({ x: 0, y: 0, verifyAction: true }));
     expect(verifyOnly).toContain('data-context-action="Verify ticket"');
     expect(verifyOnly).not.toContain('data-context-action="Report not working"');
+  });
+
+  it('offers a capability-gated Reopen Ticket action for terminal rows', () => {
+    const action = `data-context-action="${REOPEN_TICKET_CONTEXT_ACTION.action}"`;
+    const verified = String(TicketRowContextMenu({ x: 0, y: 0, status: 'verified', upNextEligible: false, reopenAction: true }));
+    expect(verified).toContain(action);
+    expect(verified).toContain('Reopen Ticket');
+    expect(verified).toContain('data-lucide="rotate-ccw"');
+    expect(verified.indexOf(action)).toBeLessThan(verified.indexOf('data-context-action="Open ticket"'));
+    expect(verified).not.toContain(`${action} disabled`);
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, status: 'archive', reopenAction: true, canBulkUpdate: false }))).toContain(`${action} disabled`);
+    expect(String(TicketRowContextMenu({ x: 0, y: 0, status: 'completed' }))).not.toContain(action);
   });
 
   it('exposes structured close only when the owning provider supports it', () => {
