@@ -453,7 +453,8 @@ and identity-less legacy entries remain conservatively blocking.
   request cannot contain. Once the selected view's indexed search completes, bounded
   background searches update every other view count. Pending counts use a compact spinner;
   settled search-derived counts use a small magnifying-glass marker and remain inside the
-  selected item's blue bounds. Explicit lifecycle expressions and filter chips narrow the
+  selected item's blue bounds. Moving focus away from an unchanged search preserves those
+  settled results and counts without issuing another request. Explicit lifecycle expressions and filter chips narrow the
   selected collection. Boolean expressions that cannot be represented as one provider query
   walk every compact cursor page for that collection, retain only client-side matches, and
   cancel cleanly when the query changes, so matches after the first 200 rows remain discoverable.

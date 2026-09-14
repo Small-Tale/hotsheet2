@@ -12,6 +12,12 @@ type InlineSearchTokenValue=
 export type InlineSearchToken=InlineSearchTokenValue&{offset?:number};
 export type InlineSearchPart={kind:'text';value:string}|{kind:'token';token:InlineSearchToken};
 
+/** Compare the editor-owned search state without object-identity sensitivity. */
+export function sameInlineSearchState(leftText:string,leftTokens:readonly InlineSearchToken[],rightText:string,rightTokens:readonly InlineSearchToken[]):boolean{
+  if(leftText!==rightText||leftTokens.length!==rightTokens.length)return false;
+  return leftTokens.every((token,index)=>token.raw===rightTokens[index].raw&&(token.offset??leftText.length)===(rightTokens[index].offset??rightText.length));
+}
+
 const dateFields:readonly SearchDateField[]=['created','completed','started','verified','archived','updated'];
 const unquote=(value:string)=>value.startsWith('"')&&value.endsWith('"')?value.slice(1,-1).replaceAll('\\"','"'):value;
 const quoteIfNeeded=(value:string)=>/\s/.test(value)?`"${value.replaceAll('"','\\"')}"`:value;

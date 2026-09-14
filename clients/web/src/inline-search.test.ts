@@ -1,6 +1,6 @@
 import {describe,expect,it} from 'vitest';
 
-import {activeTagPrefix,consumeSearchToken,consumeSearchTokens,dateTokenFromInput,effectiveSearch,inlineSearchParts,orderedSearchText,parseSearchDate,tokenFromRaw,tokenQuery} from './inline-search';
+import {activeTagPrefix,consumeSearchToken,consumeSearchTokens,dateTokenFromInput,effectiveSearch,inlineSearchParts,orderedSearchText,parseSearchDate,sameInlineSearchState,tokenFromRaw,tokenQuery} from './inline-search';
 
 describe('inline advanced-search tokens',()=>{
   it('supports quoted tags and attachment wildcards',()=>{
@@ -48,6 +48,12 @@ describe('inline advanced-search tokens',()=>{
       {kind:'token',token:expect.objectContaining({raw:'tag:client',offset:0})},
       {kind:'text',value:''},
     ]);
+  });
+  it('recognizes unchanged editor state without relying on token identity',()=>{
+    const token={...tokenFromRaw('tag:client')!,offset:4};
+    expect(sameInlineSearchState('find',[token],'find',[{...token}])).toBe(true);
+    expect(sameInlineSearchState('find',[token],'find',[{...token,offset:3}])).toBe(false);
+    expect(sameInlineSearchState('find',[token],'other',[{...token}])).toBe(false);
   });
   it('normalizes machine-local and ISO dates and rejects impossible dates',()=>{
     expect(parseSearchDate('09/01/2026 11:05 AM','en-US')).toMatch(/^2026-09-01T/);
