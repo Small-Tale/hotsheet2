@@ -1629,7 +1629,8 @@ read-only when opened via the reader icon). In HS2 there is **one reader mode**,
   A compact, text-only secondary **No response needed** action appends that exact text
   as a regular note and closes the feedback exchange without mutating or deleting the
   ask. It uses an outlined button rather than an ambiguous acknowledgement icon. Clients
-  render the exact acknowledgement as a subtle ordinary note rather than another
+  keep it in the same action row, height, and centerline as the adjacent Respond action,
+  and render the exact acknowledgement as a subtle ordinary note rather than another
   warning surface.
 - **Feedback prompts may offer explicit choices.** An uppercase `CHOICE` or `CHOICE:`
   line immediately followed by a Markdown list becomes a set of rounded selection
