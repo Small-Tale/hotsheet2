@@ -299,6 +299,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
 
 | X | Where |
 |---|---|
+| Native reader/modal lifecycle | `clients/web/src/components/{ticket-reader,quick-ticket-composer,attachment-gallery}.*`, including focused repair coverage in `ticket-reader.test.ts`; orchestration and nested Escape ownership in `clients/web/src/main.tsx`, [06](06-clients.md) |
 | Ticket fields / enums | `hotsheet-model/src/{ticket,enums}.rs`, [17](17-ticket-file-format.md) |
 | Reading/writing a ticket file | `hotsheet-model/src/format.rs` |
 | Slug derivation | `hotsheet-model/src/ids.rs` |

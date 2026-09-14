@@ -24,7 +24,7 @@ export function showTicketReaderDialog(root: ParentNode, frameId: string): boole
   if(!dialog)return false;
   const nativeDialog=dialog.shadowRoot?.querySelector('dialog');
   if(nativeDialog)nativeDialog.setAttribute('role','presentation');
-  if(dialog.open)return false;
+  if(dialog.open&&(!nativeDialog||nativeDialog.open))return false;
   void dialog.show();
   return true;
 }

@@ -7,7 +7,7 @@ import { QuickTicketComposer,QuickTicketLauncher,showQuickTicketComposer } from 
 describe('QuickTicketComposer', () => {
   it('gives the title the available width while keeping category compact', () => {
     const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8');
-    expect(css).toContain('.quick-ticket-dialog { --width:min(58rem, calc(100vw - 2rem)); }');
+    expect(css).toMatch(/\.quick-ticket-dialog \{[^}]*--width:min\(58rem, calc\(100vw - 2rem\)\)/);
     expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem)');
     expect(css).toMatch(/@media \(max-width: 38rem\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
   });

@@ -574,6 +574,10 @@ and identity-less legacy entries remain conservatively blocking.
   Ticket readers are persistent Web Awesome dialogs opened through the native modal lifecycle,
   so focus is trapped by the platform, Escape closes only the top reader after nested controls,
   backdrop clicks do not dismiss it, and focus returns to the live opener or workspace fallback.
+  The client commits the complete reader state before presenting the native dialog, preventing an
+  empty modal frame during startup or open transitions; the same render-before-show rule applies to
+  the quick-ticket composer. The accessibility host mirrors the visible modal bounds while the
+  native shadow dialog alone owns pointer input, allowing a newer top-layer surface to receive it.
   Linked ticket readers keep their own qualified provider identity, provider capabilities,
   and text-edit sessions instead of borrowing the workspace selection. Details, note, and
   blocked-reason drafts autosave independently; refresh reconciliation preserves a dirty
@@ -755,8 +759,9 @@ and identity-less legacy entries remain conservatively blocking.
   valid single-range `206` response instead of loading the whole attachment into memory,
   so Safari and other media engines can discover duration and seek normally. The browser-native
   flow and server cache contract are identical on macOS, Linux, and Windows.
-  A preview or inline image opens the same full-screen
-  media gallery; videos remain paused initially, preload only metadata, and explicitly
+  A preview or inline image opens the same full-screen native modal media gallery. It occupies a
+  newer top-layer position when launched from a ticket reader, and Escape consumes only the gallery
+  before returning interaction to the still-open reader. Videos remain paused initially, preload only metadata, and explicitly
   prime the decoder with a brief, temporarily muted internal play that pauses on its first
   compositor-presented frame and restores the user's mute state, then present the decoded first frame rather than carrying the grid thumbnail poster
   into the full-screen player. If playback is blocked, priming falls back to a tiny seek.

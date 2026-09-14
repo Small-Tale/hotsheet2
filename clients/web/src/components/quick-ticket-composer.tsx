@@ -36,6 +36,10 @@ export function showQuickTicketComposer(root: ParentNode): boolean {
     '[data-component="quick-ticket-composer"]',
   );
   if (!dialog) return false;
+  if (dialog.childElementCount === 0) {
+    requestAnimationFrame(() => showQuickTicketComposer(root));
+    return false;
+  }
   const nativeDialog = dialog.shadowRoot?.querySelector('dialog');
   if (nativeDialog) nativeDialog.setAttribute('role', 'presentation');
   if (dialog.open && (!nativeDialog || nativeDialog.open)) return false;

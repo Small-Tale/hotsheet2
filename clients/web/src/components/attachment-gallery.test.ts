@@ -13,7 +13,7 @@ describe('AttachmentGallery',()=>{
   });
   it('shows the active image with accessible cyclic navigation controls',()=>{
     const markup=String(AttachmentGallery({images,activeUrl:'/b.svg'}));
-    expect(markup).toContain('role="dialog"');expect(markup).toContain('Image 2 of 2: b.svg');
+    expect(markup).toContain('<dialog');expect(markup).toContain('Image 2 of 2: b.svg');
     expect(markup).toContain('data-action="previous-gallery-image"');expect(markup).toContain('data-action="next-gallery-image"');expect(markup).toContain('src="/b.svg"');
     expect(markup).toContain('data-action="open-gallery-attachment-menu"');expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);expect(markup.match(/data-tone="dark"/g)).toHaveLength(4);
   });
