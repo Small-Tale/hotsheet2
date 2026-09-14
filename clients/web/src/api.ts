@@ -46,6 +46,7 @@ export interface ToolConnection {id:string;tool:string;project:string;source?:st
 export interface ToolSession {connection_id:string;tool:string;project:string;session_id:string;updated_at_ms:number}
 export interface TerminalInfo {id:string;alive:boolean;busy:boolean;cwd?:string;link?:string;progress?:number}
 export interface TerminalSettings {inherit_global_shell_history:boolean}
+export interface TrashSettings {trash_cleanup_days:number}
 export interface TerminalRead extends TerminalInfo {scrollback:string}
 export interface CommandDefinition {id:string;title:string;kind?:'program'|'shell'|'ai';program?:string;args?:string[];cwd?:string;group?:string;confirmation?:string;command?:string;prompt?:string;tool?:string;icon?:string;color?:string}
 export interface CustomView {id:string;name:string;query:string}
@@ -148,6 +149,8 @@ export class Api {
   terminals=()=>this.request<TerminalInfo[]>('/terminals');
   terminalSettings=()=>this.request<TerminalSettings>('/terminal-settings');
   saveTerminalSettings=(value:TerminalSettings)=>this.request<TerminalSettings>('/terminal-settings',{method:'PUT',body:JSON.stringify(value)});
+  trashSettings=()=>this.request<TrashSettings>('/trash-settings');
+  saveTrashSettings=(value:TrashSettings)=>this.request<TrashSettings>('/trash-settings',{method:'PUT',body:JSON.stringify(value)});
   terminal=(id:string)=>this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
   createTerminal=(value:{id?:string;command?:string;shell_command?:string;args?:string[];cwd?:string;connect?:string;model?:string;effort?:string}={})=>this.request<TerminalInfo>('/terminals',{method:'POST',body:JSON.stringify(value)});
   deleteTerminal=(id:string)=>this.request<void>(`/terminals/${encodeURIComponent(id)}`,{method:'DELETE'});

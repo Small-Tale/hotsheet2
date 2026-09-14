@@ -3,16 +3,17 @@ import './settings-navigation.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { Bot, Columns3, Database, PanelLeftClose, ShieldCheck, TerminalSquare } from 'lucide';
+import { ArchiveRestore, Bot, Columns3, Database, PanelLeftClose, ShieldCheck, TerminalSquare } from 'lucide';
 
 import { MenuItem } from './menu-item';
 
-export type SettingsCategory = 'sources' | 'ai' | 'commands' | 'terminals' | 'permissions' | 'columns';
+export type SettingsCategory = 'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns';
 
 const categories = [
   { id: 'sources', label: 'Ticket sources', icon: Database, iconName: 'database' },
   { id: 'ai', label: 'AI tools', icon: Bot, iconName: 'bot' },
   { id: 'commands', label: 'Commands', icon: TerminalSquare, iconName: 'terminal-square' },
+  { id: 'lifecycle', label: 'Lifecycle', icon: ArchiveRestore, iconName: 'archive-restore' },
   { id: 'terminals', label: 'Terminals', icon: TerminalSquare, iconName: 'terminal-square' },
   { id: 'permissions', label: 'Permissions', icon: ShieldCheck, iconName: 'shield-check' },
   { id: 'columns', label: 'Column view', icon: Columns3, iconName: 'columns-3' },

@@ -246,6 +246,15 @@ describe('checkout Trash transport',()=>{
     expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/trash/empty',expect.objectContaining({method:'POST'}));
     fetchMock.mockRestore();
   });
+  it('reads and writes the shared Trash retention setting',async()=>{
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockImplementation(async()=>new Response('{"trash_cleanup_days":14}',{status:200}));
+    const api=new Api('/api');
+    await expect(api.trashSettings()).resolves.toEqual({trash_cleanup_days:14});
+    await expect(api.saveTrashSettings({trash_cleanup_days:21})).resolves.toEqual({trash_cleanup_days:14});
+    expect(fetchMock).toHaveBeenNthCalledWith(1,'/api/trash-settings',expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(2,'/api/trash-settings',expect.objectContaining({method:'PUT',body:'{"trash_cleanup_days":21}'}));
+    fetchMock.mockRestore();
+  });
 });
 
 describe('structured ticket close transport',()=>{

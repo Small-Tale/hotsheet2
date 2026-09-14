@@ -528,6 +528,36 @@ impl AppState {
             .collect()
     }
 
+    /// Effective automatic Trash retention for a hosted store. A store may be shared by
+    /// several checkouts; the longest configured retention wins so one project cannot
+    /// permanently remove another project's recoverable tickets early.
+    pub(crate) fn trash_cleanup_days_for_store(&self, root: &FsPath) -> u32 {
+        let canonical_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+        let mut configured = None;
+        for checkout in self.checkout_registry.list().unwrap_or_default() {
+            let linked = checkout.sources.iter().any(|source| {
+                source.provider == "git"
+                    && FsPath::new(&source.locator)
+                        .canonicalize()
+                        .unwrap_or_else(|_| source.locator.clone().into())
+                        == canonical_root
+            });
+            if !linked {
+                continue;
+            }
+            match checkout.settings().trash_cleanup_days() {
+                Ok(days) => {
+                    configured = Some(configured.map_or(days, |current: u32| current.max(days)))
+                }
+                Err(error) => eprintln!(
+                    "Trash retention ignored for checkout {}: {error}",
+                    checkout.id
+                ),
+            }
+        }
+        configured.unwrap_or(hotsheet_ticketing::DEFAULT_TRASH_CLEANUP_DAYS)
+    }
+
     /// Register the background sync loop's kick channel (called by [`sync_loop::spawn_sync_loop`]).
     pub fn set_sync_kicker(&self, tx: std::sync::mpsc::Sender<()>) {
         if let Ok(mut k) = self.sync_kick.lock() {
@@ -1277,6 +1307,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/terminal-settings",
             get(get_checkout_terminal_settings).put(put_checkout_terminal_settings),
+        )
+        .route(
+            "/checkouts/{reference}/trash-settings",
+            get(get_checkout_trash_settings).put(put_checkout_trash_settings),
         )
         .route(
             "/checkouts/{reference}/sources/{connection_id}",
@@ -6528,6 +6562,11 @@ struct TerminalSettings {
     inherit_global_shell_history: bool,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+struct TrashSettings {
+    trash_cleanup_days: u32,
+}
+
 fn read_terminal_settings(state: &AppState) -> Result<TerminalSettings, ApiError> {
     read_terminal_settings_from(&Settings::new(state.store.root()))
 }
@@ -6585,6 +6624,33 @@ async fn put_checkout_terminal_settings(
             INHERIT_GLOBAL_SHELL_HISTORY_SETTING,
             serde_json::Value::Bool(value.inherit_global_shell_history),
             hotsheet_ticketing::Scope::Local,
+        )
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(value))
+}
+
+async fn get_checkout_trash_settings(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<TrashSettings>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    let trash_cleanup_days = settings
+        .trash_cleanup_days()
+        .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
+    Ok(Json(TrashSettings { trash_cleanup_days }))
+}
+
+async fn put_checkout_trash_settings(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+    Json(value): Json<TrashSettings>,
+) -> Result<Json<TrashSettings>, ApiError> {
+    let (_, settings) = checkout_settings(&state, &reference)?;
+    settings
+        .set(
+            hotsheet_ticketing::TRASH_CLEANUP_DAYS_SETTING,
+            serde_json::json!(value.trash_cleanup_days),
+            hotsheet_ticketing::Scope::Shared,
         )
         .map_err(|error| ApiError::new(StatusCode::BAD_REQUEST, error.to_string()))?;
     Ok(Json(value))

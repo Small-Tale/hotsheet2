@@ -418,12 +418,16 @@ transition into Deleted supplies both *when* the ticket was trashed and *what it
 Restoring (`ops::restore`, `POST /checkouts/{id}/tickets/{ticket}/restore`,
 `hotsheet-cli restore`) moves a Trash ticket back to that prior status through the normal
 update path, recording the transition; an unknown or hidden prior status restores to
-`not_started`, and restoring a ticket outside Trash is a conflict. Tickets deleted 30 or more
-days ago (`ops::TRASH_RETENTION_DAYS`; legacy files without a transition note fall back to
+`not_started`, and restoring a ticket outside Trash is a conflict. The positive whole-number
+shared project setting `trash_cleanup_days` controls automatic retention and defaults to 30;
+legacy files without a transition note fall back to
 `updated_at`) are permanently removed with their attachments in one bounded commit
 (`ops::purge_trash`). The server sweeps every hosted store from its background sync loop at
-most every six hours, and `hotsheet-cli purge-trash [--older-than-days N]` runs the same
-sweep headlessly. Purging only removes the working-tree files: git history retains them.
+most every six hours. If several projects share one store, the longest configured retention
+wins to prevent an earlier purge on behalf of another project. `hotsheet-cli purge-trash`
+uses the active project's setting by default; `--older-than-days N` explicitly overrides it
+for that run (including zero to empty Trash immediately). Purging only removes the
+working-tree files: git history retains them.
 Trash is the git provider's lifecycle; other providers own deletion natively and reject
 restore explicitly.
 

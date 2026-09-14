@@ -661,7 +661,7 @@ shared-vs-local on-disk model ([README](README.md); [02-ticket-storage.md](02-ti
 | Scope | Examples | On disk | Managed by |
 |---|---|---|---|
 | **Global** | cross-project personal defaults (default AI tool, editor) set once per machine | **`${HOTSHEET_HOME}/settings.json`** (machine-wide, not tied to a store) | core → **CLI + server** |
-| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, enabled-plugin set for the *project* | **`<project-root>/.hotsheet2/settings.json`**, committed with the code project and independent of its ticket sources | core → **CLI + server + client** |
+| **Shared** | auto-context guidance (HS2-25), categories, per-category instructions, custom views, `trash_cleanup_days` retention policy, enabled-plugin set for the *project* | **`<project-root>/.hotsheet2/settings.json`**, committed with the code project and independent of its ticket sources | core → **CLI + server + client** |
 | **Local** | which tools are enabled *on this machine*, index location, machine paths | **`<project-root>/.hotsheet2/settings.local.json`**, gitignored in the code project (machine-local, not device-app-local) | core → **CLI + server**; client via checkout-scoped API |
 | **Client / device-only** | window geometry, theme, per-viewer PTY size prefs (§6.7) | the client's own app storage | **client only — never enters core** |
 
@@ -677,6 +677,11 @@ one identity when it has several. Older `hotsheet-settings.json` and
 inputs (default source first) until the project file is written or setup migration copies
 them forward; legacy store-only/serverless APIs retain their old paths rather than creating
 `<ticket-store>/.hotsheet`. Global settings and ticket-source discovery are unchanged.
+
+`trash_cleanup_days` is a positive whole number stored in Shared scope. Its documented and
+runtime default is 30. The server validates checkout-scoped writes, the generic CLI settings
+writer rejects invalid values, and `hotsheet-cli purge-trash` reads the effective project
+value unless `--older-than-days` explicitly overrides the current run.
 
 The `commands` key is a machine-local array of typed definitions: `id`, `title`, exact
 `program` + `args`, optional `group`/`confirmation`, and optional `cwd`. Without `cwd`

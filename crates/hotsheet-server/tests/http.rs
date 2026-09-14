@@ -1785,6 +1785,45 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
         .await
         .unwrap();
     assert_eq!(terminals.status(), StatusCode::OK);
+    let trash_default = body_json(
+        application
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/trash-settings"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(trash_default["trash_cleanup_days"], 30);
+    let trash_saved = body_json(
+        application
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/checkouts/{checkout_id}/trash-settings"),
+                Some(r#"{"trash_cleanup_days":14}"#),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(trash_saved["trash_cleanup_days"], 14);
+    assert_eq!(
+        application
+            .clone()
+            .oneshot(authed(
+                "PUT",
+                &format!("/checkouts/{checkout_id}/trash-settings"),
+                Some(r#"{"trash_cleanup_days":0}"#),
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
     let commands = application
         .clone()
         .oneshot(authed(
@@ -1805,6 +1844,7 @@ async fn source_free_checkout_settings_round_trip_under_the_project_root() {
     )
     .unwrap();
     assert_eq!(shared["views"][0]["id"], "mine");
+    assert_eq!(shared["trash_cleanup_days"], 14);
     assert_eq!(local["commands"][0]["id"], "check");
     assert_eq!(local["terminal.inherit_global_shell_history"], true);
     assert!(

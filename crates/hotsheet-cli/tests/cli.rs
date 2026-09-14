@@ -74,6 +74,39 @@ fn trash_restore_and_purge_have_headless_cli_parity() {
     hs(p).args(["show", &slug]).assert().success();
 
     hs(p)
+        .args([
+            "settings",
+            "set",
+            "trash_cleanup_days",
+            "7",
+            "--scope",
+            "shared",
+        ])
+        .assert()
+        .success();
+    hs(p)
+        .args(["purge-trash"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Trash has no tickets deleted 7+ days ago",
+        ));
+    hs(p)
+        .args([
+            "settings",
+            "set",
+            "trash_cleanup_days",
+            "0",
+            "--scope",
+            "shared",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "must be a positive whole number of days",
+        ));
+
+    hs(p)
         .args(["purge-trash", "--older-than-days", "0"])
         .assert()
         .success()

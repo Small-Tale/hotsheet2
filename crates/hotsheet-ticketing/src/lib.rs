@@ -59,7 +59,10 @@ pub use roster::{Person, Roster};
 pub use secrets::{
     KeyMetadata, KeyRegistry, OsKeychain, SecretError, SecretStore, resolve_setting_secret,
 };
-pub use settings::{Scope, Settings, SettingsError};
+pub use settings::{
+    DEFAULT_TRASH_CLEANUP_DAYS, Scope, Settings, SettingsError, TRASH_CLEANUP_DAYS_SETTING,
+    parse_trash_cleanup_days,
+};
 pub use store::{
     AtomicAttachment, CorruptTicket, FsStore, STORE_METADATA_FILE, STORE_SCHEMA_VERSION,
     StoreError, StoreListing, StoreMetadata, recover_ticket_identity,

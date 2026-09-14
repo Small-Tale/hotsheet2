@@ -777,7 +777,7 @@ pub fn restore(store: &FsStore, id: &Ulid, now: Timestamp) -> Result<Ticket, OpE
 }
 
 /// Trash retention before automatic purge (HS2-MWDR19).
-pub const TRASH_RETENTION_DAYS: i64 = 30;
+pub const TRASH_RETENTION_DAYS: i64 = crate::DEFAULT_TRASH_CLEANUP_DAYS as i64;
 
 /// Permanently remove Trash tickets deleted more than `retention_days` before `now`,
 /// with their attachments, in one bounded commit. Git history still holds every purged

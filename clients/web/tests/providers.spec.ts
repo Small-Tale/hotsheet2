@@ -43,6 +43,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
   const patches: Record<string,unknown>[] = [];
   let commandDefinitions=[{id:'check',title:'Run checks',program:'/usr/bin/true',args:[],group:'Quality'}];
   let terminalSettings={inherit_global_shell_history:false};
+  let trashSettings={trash_cleanup_days:30};
   let aiSettings={tool:'codex',model:'gpt-6-astra',effort:'medium'};
   let commandRuns:Array<{id:string;command_id:string;state:'running'|'completed'|'failed'|'cancelled';exit_code?:number;output:Array<{seq:number;stream:string;text:string}>}>=[];
   type MockToolConnection={id:string;tool:string;project:string;role:'main';busy:boolean;actions:Array<'send_turn'|'interrupt'>;session_id?:string;model?:string;effort?:string};
@@ -96,6 +97,8 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
     if(path.endsWith('/commands')&&request.method()==='PUT'){commandDefinitions=request.postDataJSON();return route.fulfill({json:commandDefinitions})}
     if(path.endsWith('/terminal-settings')&&request.method()==='GET')return route.fulfill({json:terminalSettings});
     if(path.endsWith('/terminal-settings')&&request.method()==='PUT'){terminalSettings=request.postDataJSON();return route.fulfill({json:terminalSettings})}
+    if(path.endsWith('/trash-settings')&&request.method()==='GET')return route.fulfill({json:trashSettings});
+    if(path.endsWith('/trash-settings')&&request.method()==='PUT'){const next=request.postDataJSON();if(!Number.isSafeInteger(next.trash_cleanup_days)||next.trash_cleanup_days<1)return route.fulfill({status:400,json:{error:'must be a positive whole number of days'}});trashSettings=next;return route.fulfill({json:trashSettings})}
     if(path.endsWith('/command-runs')&&request.method()==='GET')return route.fulfill({json:commandRuns});
     if(path.endsWith('/terminals')&&request.method()==='POST'){createdTerminal=true;return route.fulfill({json:{id:'terminal-new',alive:true,busy:false,cwd:'/work/demo'}})}
     if(path.endsWith('/terminals')&&request.method()==='GET'){const terminals=Array.from({length:terminalCount},(_,index)=>index===0?{id:'codex-main',alive:true,busy:true,cwd:'/work/demo',progress:68}:index===1?{id:'tests',alive:true,busy:false,cwd:'/work/demo'}:{id:`worker-${String(index+1).padStart(2,'0')}`,alive:true,busy:index%3===0,cwd:'/work/demo'});return route.fulfill({json:[...terminals,...(createdTerminal?[{id:'terminal-new',alive:true,busy:false,cwd:'/work/demo'}]:[])].filter(item=>!closedTerminals.has(item.id))})}
@@ -2270,6 +2273,15 @@ test('persists and restores per-project permission automation settings',async({p
   const action=page.locator('wa-select[name="permission-automation-action"]'),delay=page.locator('wa-select[name="permission-automation-delay"]');await expect(action).toHaveJSProperty('value','off');await expect(delay).toHaveJSProperty('disabled',true);
   await action.evaluate((node:HTMLElement&{value:string})=>{node.value='deny';node.dispatchEvent(new Event('change',{bubbles:true}))});await expect(delay).toHaveJSProperty('disabled',false);await delay.evaluate((node:HTMLElement&{value:string})=>{node.value='120000';node.dispatchEvent(new Event('change',{bubbles:true}))});
   await expect.poll(()=>page.evaluate(()=>localStorage.getItem('hotsheet.project.demo-checkout.permission-automation'))).toBe('{"action":"deny","delayMs":120000}');await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Permissions'}).click();await expect(action).toHaveJSProperty('value','deny');await expect(delay).toHaveJSProperty('value','120000');
+});
+
+test('shows and persists the shared Trash retention period in Lifecycle settings',async({page})=>{
+  const writes:unknown[]=[];
+  await mockProject(page);page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/trash-settings'))writes.push(request.postDataJSON())});
+  await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Lifecycle'}).click();
+  const settings=page.locator('[data-component="trash-settings"]'),input=settings.locator('wa-input[name="trash-cleanup-days"]');await expect(settings).toContainText('Git history keeps every purged ticket file');await expect(input).toHaveJSProperty('value','30');
+  await input.evaluate((node:HTMLElement&{value:string})=>{node.value='14'});await settings.getByRole('button',{name:'Save retention'}).click();await expect(settings.getByRole('status')).toContainText('Saved for this project.');expect(writes).toEqual([{trash_cleanup_days:14}]);await expect(page.getByText('Trash retention saved.')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-0es3yj-trash-retention-wide.png',fullPage:true});
+  await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Lifecycle'}).click();await expect(input).toHaveJSProperty('value','14');await page.setViewportSize({width:760,height:720});await page.screenshot({path:'/private/tmp/hs2-0es3yj-trash-retention-narrow.png',fullPage:true});
 });
 
 test('keeps settings category and command drafts scoped to each project',async({page})=>{

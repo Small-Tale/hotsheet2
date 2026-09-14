@@ -64,8 +64,8 @@ pub fn spawn_sync_loop(state: AppState, base: Duration) -> SyncHandle {
 /// bounded; a day-granularity retention does not need a tighter cadence.
 pub const TRASH_PURGE_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
 
-/// Purge every hosted store's Trash of tickets deleted more than
-/// [`hotsheet_ticketing::ops::TRASH_RETENTION_DAYS`] ago (HS2-MWDR19). Returns how many
+/// Purge every hosted store's Trash of tickets deleted beyond its effective project
+/// `trash_cleanup_days` setting (30 days by default). Returns how many
 /// tickets each store purged; a store that fails to open or purge is skipped and retried
 /// on the next sweep.
 pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
@@ -77,13 +77,11 @@ pub fn purge_all_trash(state: &AppState) -> Vec<(String, usize)> {
         .hosted_store_roots()
         .into_iter()
         .filter_map(|(id, root)| {
+            let retention_days = state.trash_cleanup_days_for_store(std::path::Path::new(&root));
             let store = hotsheet_ticketing::FsStore::open(root).ok()?;
-            let purged = hotsheet_ticketing::ops::purge_trash(
-                &store,
-                &now,
-                hotsheet_ticketing::ops::TRASH_RETENTION_DAYS,
-            )
-            .ok()?;
+            let purged =
+                hotsheet_ticketing::ops::purge_trash(&store, &now, i64::from(retention_days))
+                    .ok()?;
             Some((id, purged.len()))
         })
         .collect()
@@ -132,5 +130,61 @@ mod tests {
         // A conflict is not transient → no backoff.
         let conflict = vec![("s".into(), SyncReport::Conflict)];
         assert_eq!(next_delay(base, base, &conflict), base);
+    }
+
+    #[test]
+    fn shared_project_retention_drives_a_hosted_store_sweep_policy() {
+        let store_root = tempfile::tempdir().unwrap();
+        let store = hotsheet_ticketing::FsStore::init(
+            store_root.path(),
+            &hotsheet_ticketing::StoreMetadata::new("HS"),
+        )
+        .unwrap();
+        let checkout_root = tempfile::tempdir().unwrap();
+        hotsheet_ticketing::Settings::for_project(checkout_root.path())
+            .set(
+                hotsheet_ticketing::TRASH_CLEANUP_DAYS_SETTING,
+                serde_json::json!(7),
+                hotsheet_ticketing::Scope::Shared,
+            )
+            .unwrap();
+        let registry_root = tempfile::tempdir().unwrap();
+        let registry_path = registry_root.path().join("checkouts.json");
+        hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+            .register(
+                checkout_root.path(),
+                None,
+                None,
+                vec![store_root.path().to_path_buf()],
+            )
+            .unwrap();
+        let state = AppState::new(store, "secret".into())
+            .unwrap()
+            .with_checkout_registry(registry_path);
+
+        assert_eq!(state.trash_cleanup_days_for_store(store_root.path()), 7);
+
+        let second_checkout = tempfile::tempdir().unwrap();
+        hotsheet_ticketing::Settings::for_project(second_checkout.path())
+            .set(
+                hotsheet_ticketing::TRASH_CLEANUP_DAYS_SETTING,
+                serde_json::json!(45),
+                hotsheet_ticketing::Scope::Shared,
+            )
+            .unwrap();
+        state
+            .checkout_registry
+            .register(
+                second_checkout.path(),
+                None,
+                None,
+                vec![store_root.path().to_path_buf()],
+            )
+            .unwrap();
+        assert_eq!(
+            state.trash_cleanup_days_for_store(store_root.path()),
+            45,
+            "a checkout with shorter retention cannot purge a shared store early"
+        );
     }
 }

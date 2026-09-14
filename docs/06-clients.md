@@ -76,7 +76,8 @@ Dragging an unselected ticket moves only it, while
   the checkout has a git-backed ticket source. Its confirmation states the number of tickets
   that will be permanently removed from the active store and that git history retains the
   files; success returns to Queue and removes the now-empty Trash destination. The server
-  purges Trash tickets 30 days after deletion; git history still holds every purged file. `hotsheet-cli restore` and
+  purges Trash tickets after the project's shared retention period (30 days by default);
+  git history still holds every purged file. `hotsheet-cli restore` and
   `hotsheet-cli purge-trash` provide the same recovery and cleanup headlessly (HS2-MWDR19).
 
 This is the clean client/service split the rewrite is chartered to create, made
@@ -292,7 +293,7 @@ and identity-less legacy entries remain conservatively blocking.
 
 - **Project settings navigation.** Entering Settings replaces the ticket-oriented
   project sidebar with a persistent category navigator, following the HS1 settings-tab
-  pattern. Ticket sources, Commands, Permissions, and Column view each render as a
+  pattern. Ticket sources, Commands, Lifecycle, Permissions, and Column view each render as a
   separate workspace so unrelated controls do not become one long settings page. The
   selected category names the shared page header; the workspace does not repeat that
   heading, and the right region uses the same divider-free empty inspector placeholder
@@ -303,6 +304,9 @@ and identity-less legacy entries remain conservatively blocking.
   sources, while returning to another project restores that project's category and draft.
   Project activation refreshes the visible settings data and ignores late provider responses
   from a project that is no longer selected.
+  Lifecycle exposes the shared Trash retention period as a positive whole-day field, shows
+  the 30-day default, explains that git history remains available after cleanup, and saves
+  through the checkout-scoped core settings API.
   Right-sidebar toolbars are divider-free in every state—ticket, loading, multi-selection,
   Settings, and Notifications—so content sections, not the shell toolbar, own separators.
   The ticket inspector uses an 8px horizontal content gutter. Details, Tags, Notes,

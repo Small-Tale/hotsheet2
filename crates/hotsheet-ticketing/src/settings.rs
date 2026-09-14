@@ -24,6 +24,34 @@ const LEGACY_PROJECT_SETTINGS_DIR: &str = ".hotsheet";
 const LEGACY_SHARED_FILE: &str = "hotsheet-settings.json";
 const LEGACY_LOCAL_FILE: &str = "hotsheet-settings.local.json";
 
+/// Shared project key controlling age-based permanent removal from Trash.
+pub const TRASH_CLEANUP_DAYS_SETTING: &str = "trash_cleanup_days";
+/// Retention used when a project does not override [`TRASH_CLEANUP_DAYS_SETTING`].
+pub const DEFAULT_TRASH_CLEANUP_DAYS: u32 = 30;
+
+fn invalid_value(key: &str, message: &str) -> SettingsError {
+    SettingsError::Invalid {
+        key: key.into(),
+        source: <serde_json::Error as serde::de::Error>::custom(message),
+    }
+}
+
+/// Validate and decode the Trash retention setting. Values are whole positive days;
+/// zero remains reserved for explicit "empty now" commands and is never persisted.
+pub fn parse_trash_cleanup_days(value: Value) -> Result<u32, SettingsError> {
+    let days = serde_json::from_value::<u32>(value).map_err(|source| SettingsError::Invalid {
+        key: TRASH_CLEANUP_DAYS_SETTING.into(),
+        source,
+    })?;
+    if days == 0 {
+        return Err(invalid_value(
+            TRASH_CLEANUP_DAYS_SETTING,
+            "must be a positive whole number of days",
+        ));
+    }
+    Ok(days)
+}
+
 /// A settings I/O or parse failure.
 #[derive(Debug, thiserror::Error)]
 pub enum SettingsError {
@@ -288,9 +316,20 @@ impl Settings {
     /// Set a key in a scope (read-modify-write). Writing a local key also ensures the
     /// local file is gitignored.
     pub fn set(&self, key: &str, value: Value, scope: Scope) -> Result<(), SettingsError> {
+        if key == TRASH_CLEANUP_DAYS_SETTING {
+            parse_trash_cleanup_days(value.clone())?;
+        }
         let mut map = self.map(scope)?;
         map.insert(key.to_string(), value);
         self.write(scope, &map)
+    }
+
+    /// Effective Trash retention, defaulting to 30 days when the project has no value.
+    pub fn trash_cleanup_days(&self) -> Result<u32, SettingsError> {
+        self.get_effective(TRASH_CLEANUP_DAYS_SETTING)?
+            .map(parse_trash_cleanup_days)
+            .transpose()
+            .map(|value| value.unwrap_or(DEFAULT_TRASH_CLEANUP_DAYS))
     }
 
     /// Remove a key from a scope; returns whether it was present.
@@ -523,6 +562,36 @@ mod tests {
         assert!(s.map(Scope::Shared).unwrap().is_empty());
         assert!(s.effective().unwrap().is_empty());
         assert_eq!(s.get_effective("x").unwrap(), None);
+    }
+
+    #[test]
+    fn trash_cleanup_days_defaults_to_thirty_and_validates_shared_values() {
+        let d = root();
+        let settings = Settings::for_project(d.path());
+        assert_eq!(settings.trash_cleanup_days().unwrap(), 30);
+
+        settings
+            .set(TRASH_CLEANUP_DAYS_SETTING, json!(14), Scope::Shared)
+            .unwrap();
+        assert_eq!(settings.trash_cleanup_days().unwrap(), 14);
+        assert_eq!(
+            settings
+                .get(TRASH_CLEANUP_DAYS_SETTING, Scope::Shared)
+                .unwrap(),
+            Some(json!(14))
+        );
+
+        for invalid in [json!(0), json!(-1), json!(2.5), json!("7")] {
+            let error = settings
+                .set(TRASH_CLEANUP_DAYS_SETTING, invalid, Scope::Shared)
+                .unwrap_err()
+                .to_string();
+            assert!(
+                error.contains("invalid setting trash_cleanup_days"),
+                "{error}"
+            );
+        }
+        assert_eq!(settings.trash_cleanup_days().unwrap(), 14);
     }
 
     #[test]
