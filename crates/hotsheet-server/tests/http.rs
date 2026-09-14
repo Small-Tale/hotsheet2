@@ -2492,6 +2492,136 @@ async fn deleted_tickets_form_a_separate_trash_collection_and_count() {
 }
 
 #[tokio::test]
+async fn empty_trash_purges_all_deleted_checkout_tickets_and_is_idempotent() {
+    let (_primary, st) = state();
+    let workspace = tempfile::tempdir().unwrap();
+    let checkout = workspace.path().join("app");
+    let ticket_store = workspace.path().join("app.hs2");
+    std::fs::create_dir(&checkout).unwrap();
+    FsStore::init(&ticket_store, &StoreMetadata::new("APP")).unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    for title in ["Trash one", "Trash two"] {
+        let created = body_json(
+            router
+                .clone()
+                .oneshot(authed(
+                    "POST",
+                    &format!("/checkouts/{checkout_id}/tickets"),
+                    Some(&serde_json::json!({"title":title}).to_string()),
+                ))
+                .await
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(authed(
+                    "PATCH",
+                    &format!(
+                        "/checkouts/{checkout_id}/tickets/{}",
+                        created["id"].as_str().unwrap()
+                    ),
+                    Some(r#"{"status":"deleted"}"#),
+                ))
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::OK
+        );
+    }
+
+    let emptied = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/trash/empty"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(emptied["purged"], 2, "{emptied}");
+    assert_eq!(emptied["tickets"].as_array().unwrap().len(), 2);
+    let trash = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "GET",
+                &format!("/checkouts/{checkout_id}/tickets?collection=trash&page_size=50"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(trash["items"].as_array().unwrap().len(), 0);
+    assert_eq!(trash["counts"]["trash"], 0);
+
+    let again = body_json(
+        router
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/trash/empty"),
+                None,
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(again["purged"], 0, "{again}");
+}
+
+#[tokio::test]
+async fn empty_trash_rejects_a_checkout_without_a_git_ticket_source() {
+    let (_primary, st) = state();
+    let checkout = tempfile::tempdir().unwrap();
+    let registry = tempfile::tempdir().unwrap();
+    let router = app(st.with_checkout_registry(registry.path().join("checkouts.json")));
+    let opened = body_json(
+        router
+            .clone()
+            .oneshot(authed(
+                "POST",
+                "/projects/open",
+                Some(&serde_json::json!({"root":checkout.path()}).to_string()),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    let checkout_id = opened["checkout"]["id"].as_str().unwrap();
+    assert_eq!(
+        router
+            .oneshot(authed(
+                "POST",
+                &format!("/checkouts/{checkout_id}/trash/empty"),
+                None,
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+}
+
+#[tokio::test]
 async fn checkout_ticket_pages_are_bounded_resumable_and_include_exact_counts() {
     let (_primary, st) = state();
     let workspace = tempfile::tempdir().unwrap();

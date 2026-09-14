@@ -5,10 +5,19 @@ import './bulk-ticket-dialog.css';
 
 export type BulkTicketDialogState =
   | { kind: 'tag'; mode: 'add' | 'remove'; count: number; choices: string[] }
-  | { kind: 'delete'; count: number };
+  | { kind: 'delete'; count: number }
+  | { kind: 'empty-trash'; count: number; busy?: boolean; error?: string };
 
 export function BulkTicketDialog({ state }: { state?: BulkTicketDialogState }) {
   if (!state) return <></>;
+  if (state.kind === 'empty-trash') return <wa-dialog open data-component="empty-trash-dialog" label="Empty Trash?">
+    <p>Permanently remove {state.count} ticket{state.count === 1 ? '' : 's'} from this project’s active store. Git history will still contain the removed files.</p>
+    {state.error && <p class="bulk-ticket-dialog__error" role="alert">{state.error}</p>}
+    <div slot="footer" class="bulk-ticket-dialog__actions">
+      <wa-button data-action="cancel-bulk-ticket-action" appearance="outlined" disabled={state.busy}>Cancel</wa-button>
+      <wa-button data-action="confirm-empty-trash" variant="danger" disabled={state.busy}>{state.busy ? 'Emptying…' : 'Empty Trash'}</wa-button>
+    </div>
+  </wa-dialog>;
   if (state.kind === 'delete') return <wa-dialog open data-component="bulk-delete-dialog" label={`Delete ${state.count} ticket${state.count === 1 ? '' : 's'}?`}>
     <p>Deleted tickets leave the active project views. This action can be undone with the standard Undo shortcut.</p>
     <div slot="footer" class="bulk-ticket-dialog__actions">

@@ -238,6 +238,16 @@ describe('checkout bulk update transport',()=>{
   });
 });
 
+describe('checkout Trash transport',()=>{
+  it('empties Trash through the checkout-scoped capability route',async()=>{
+    const payload={purged:2,tickets:['HS2-ONE','HS2-TWO']};
+    const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify(payload),{status:200}));
+    await expect(new Api('/api').emptyCheckoutTrash('folder with spaces')).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith('/api/checkouts/folder%20with%20spaces/trash/empty',expect.objectContaining({method:'POST'}));
+    fetchMock.mockRestore();
+  });
+});
+
 describe('structured ticket close transport',()=>{
   it('sends duplicate outcomes and canonical target identity through the checkout route',async()=>{
     const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response('{"store":"git","ticket":{}}',{status:200}));

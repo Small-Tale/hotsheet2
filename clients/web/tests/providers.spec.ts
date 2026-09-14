@@ -131,6 +131,7 @@ async function mockProject(page: import('@playwright/test').Page, canUpdate = tr
       const counts={total:rows.length,queued:rows.filter(queued).length,backlog:rows.filter(item=>item.status==='backlog').length,archive:rows.filter(archived).length,trash:rows.filter(trashed).length,open:rows.filter(item=>['not_started','started'].includes(item.status??'not_started')).length,up_next:rows.filter(item=>item.up_next&&['not_started','started'].includes(item.status??'not_started')).length,active:rows.filter(item=>item.claim_lease_expires_at&&Date.parse(item.claim_lease_expires_at)>now).length,started:rows.filter(item=>item.status==='started').length,completed_today:0};
       return route.fulfill({json:{items,counts,...next?{next_cursor:next}:{}}});
     }
+    if(path.endsWith('/trash/empty')&&request.method()==='POST'){const purged=rows.filter(item=>item.status==='deleted'),tickets=purged.map(item=>item.slug);rows=rows.filter(item=>item.status!=='deleted');return route.fulfill({json:{purged:purged.length,tickets}})}
     // Mirrors POST /checkouts/{reference}/tickets/{id}/restore: flattened ticket + store, 409 outside Trash.
     const restoreTicket=path.match(/\/tickets\/([^/]+)\/restore$/);if(restoreTicket&&request.method()==='POST'){const id=decodeURIComponent(restoreTicket[1]),current=rows.find(item=>item.id===id);if(!current)return route.fulfill({status:404,json:{error:`no ticket matching '${id}'`}});if(current.status!=='deleted')return route.fulfill({status:409,json:{error:`only a ticket in Trash can be restored (found ${current.status})`}});const restored={...current,status:'not_started',updated_at:'2026-08-30T03:00:00Z'};rows=rows.map(item=>item.id===id?restored:item);return route.fulfill({json:{...restored,details:'',notes:[],attachments:[],store:'/work/demo.hs2'}})}
     if(path.endsWith('/tickets')&&request.method()==='POST'){const body=request.postDataJSON(),normalized=normalizedCreatedTicket(body);const created={...row,id:'02',native_id:'02',slug:'HS2-NEW001',title:normalized.title,tags:normalized.tags,category:body.category,status:body.status??'not_started',up_next:Boolean(body.up_next),created_at:'2026-08-30T02:00:00Z',updated_at:'2026-08-30T02:00:00Z'};rows=[created,...rows];return route.fulfill({status:201,json:{...created,details:body.details??'',notes:[],attachments:[]}})}
@@ -1915,6 +1916,31 @@ test('does not announce an empty project while its initial ticket collection is 
 test('leaves individual empty board columns blank when another column has tickets',async({page})=>{
   await mockProject(page);await page.route('**/checkouts/demo-checkout/tickets*',route=>route.request().method()==='GET'?route.fulfill({json:[row]}):route.fallback());await page.setViewportSize({width:1920,height:1040});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Columns view').click();
   const verified=page.getByRole('region',{name:'Verified column'});await expect(verified.getByLabel('0 tickets')).toBeVisible();await expect(verified.locator('[data-component="empty-state"]')).toHaveCount(0);await expect(verified.getByText('No tickets in Verified')).toHaveCount(0);await page.waitForTimeout(500);await page.screenshot({path:'/private/tmp/hs2-m0frwd-empty-column-wide.png',fullPage:true});
+});
+
+test('requires confirmation before permanently emptying Trash',async({page})=>{
+  const emptyRequests:string[]=[];
+  await mockProject(page);
+  page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/trash/empty'))emptyRequests.push(request.url())});
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:/Trash/}).click();
+  await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
+  await page.getByRole('button',{name:'Empty Trash'}).click();
+  const dialog=page.locator('[data-component="empty-trash-dialog"]');
+  await expect(dialog).toContainText('Permanently remove 1 ticket');
+  await expect(dialog).toContainText('Git history will still contain the removed files');
+  await page.screenshot({path:'/private/tmp/hs2-rdvwzx-empty-trash-confirmation.png',fullPage:true});
+  await dialog.getByRole('button',{name:'Cancel'}).click();
+  await expect(dialog).toHaveCount(0);expect(emptyRequests).toEqual([]);
+  await page.getByRole('button',{name:'Empty Trash'}).click();
+  await page.locator('[data-component="empty-trash-dialog"]').getByRole('button',{name:'Empty Trash'}).click();
+  await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Trash/})).toHaveCount(0);
+  await expect(page.getByText('Emptied Trash — 1 ticket permanently removed.')).toBeVisible();
+  expect(emptyRequests).toHaveLength(1);
+  await page.setViewportSize({width:780,height:760});
+  await page.screenshot({path:'/private/tmp/hs2-rdvwzx-empty-trash-complete-narrow.png',fullPage:true});
 });
 
 test('derives board columns from the selected view and merges Verified by project setting',async({page})=>{

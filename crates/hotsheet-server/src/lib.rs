@@ -845,6 +845,45 @@ impl AppState {
         self.kick_sync();
     }
 
+    /// Remove a hard-purged ticket from the live index and publish one deletion event.
+    /// The empty hash marker suppresses the filesystem watcher's echo of this local write.
+    fn removed_in(&self, entry: &StoreEntry, ticket: &Ticket) {
+        let store_id = multistore::store_url_id(&entry.store);
+        if let Ok(mut writes) = self.local_write_hashes.lock() {
+            writes.insert(
+                (store_id.clone(), ticket.id.to_string(), String::new()),
+                std::time::Instant::now(),
+            );
+        }
+        if let Ok(index) = entry.index.lock() {
+            let _ = index.delete(&ticket.id);
+        }
+        self.emit(ChangeEvent {
+            cursor: None,
+            store: store_id,
+            kind: "deleted".into(),
+            id: ticket.id.to_string(),
+            slug: ticket.slug.clone(),
+            message: None,
+            activity: None,
+            assignment: None,
+            turn: None,
+        });
+        if let Ok(checkouts) = self.checkout_registry.list() {
+            for checkout in checkouts.into_iter().filter(|checkout| {
+                checkout
+                    .stores
+                    .iter()
+                    .any(|root| same_path(FsPath::new(root), entry.store.root()))
+            }) {
+                if let Err(error) = regenerate_checkout_worklist_indexed(&self.host, &checkout) {
+                    eprintln!("worklist regenerate failed for {}: {error}", checkout.root);
+                }
+            }
+        }
+        self.kick_sync();
+    }
+
     /// Broadcast an **ephemeral announcement** to live `/ws/sync` subscribers (HS2-HHDNTH):
     /// a store-level message that is **not** persisted — it rides the WS bus only, so it is
     /// NOT recorded in the long-poll ring and never replayed. A client not connected when it
@@ -1310,6 +1349,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/checkouts/{reference}/tickets/{id}/restore",
             post(restore_checkout_ticket),
+        )
+        .route(
+            "/checkouts/{reference}/trash/empty",
+            post(empty_checkout_trash),
         )
         .route(
             "/checkouts/{reference}/tickets/{id}/assign",
@@ -4450,6 +4493,30 @@ fn do_restore(state: &AppState, entry: &StoreEntry, id: &str) -> Result<ApiTicke
     let restored = ops::restore(&entry.store, &ticket.id, now())?;
     state.changed_in(entry, "updated", &restored);
     api_ticket(entry, &restored)
+}
+
+async fn empty_checkout_trash(
+    State(state): State<AppState>,
+    Path(reference): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let entries = checkout_entries(&state, &reference)?;
+    if entries.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "this checkout has no git-backed Hot Sheet Trash capability",
+        ));
+    }
+    let mut purged = Vec::new();
+    for (_, entry) in entries {
+        for ticket in ops::purge_trash(&entry.store, &now(), 0)? {
+            state.removed_in(&entry, &ticket);
+            purged.push(ticket.slug);
+        }
+    }
+    Ok(Json(serde_json::json!({
+        "purged": purged.len(),
+        "tickets": purged,
+    })))
 }
 
 async fn assign_checkout_ticket(
@@ -8684,8 +8751,17 @@ fn handle_path_change(target: &WatchTarget, path: &FsPath) -> bool {
     };
 
     if !path.exists() {
+        let local_echo = target.local_write_hashes.lock().is_ok_and(|mut writes| {
+            writes.retain(|_, at| at.elapsed() <= Duration::from_secs(5));
+            writes
+                .remove(&(target.store_id.clone(), id.to_string(), String::new()))
+                .is_some()
+        });
         if let Ok(index) = index.lock() {
             let _ = index.delete(&id);
+        }
+        if local_echo {
+            return false;
         }
         emit("deleted", id.to_string(), String::new());
         return true;

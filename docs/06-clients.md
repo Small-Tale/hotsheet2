@@ -72,8 +72,11 @@ Dragging an unselected ticket moves only it, while
   (`deleted`) tickets, and stays while it is the selected view; Archive holds only archived
   tickets and moved tombstones. When every selected ticket is in Trash, the ticket menu
   offers Restore from Trash, which returns each ticket to the status recorded before it was
-  deleted (Not Started when that is unknown). The server purges Trash tickets 30 days after
-  deletion; git history still holds every purged file. `hotsheet-cli restore` and
+  deleted (Not Started when that is unknown). The Trash header also offers Empty Trash when
+  the checkout has a git-backed ticket source. Its confirmation states the number of tickets
+  that will be permanently removed from the active store and that git history retains the
+  files; success returns to Queue and removes the now-empty Trash destination. The server
+  purges Trash tickets 30 days after deletion; git history still holds every purged file. `hotsheet-cli restore` and
   `hotsheet-cli purge-trash` provide the same recovery and cleanup headlessly (HS2-MWDR19).
 
 This is the clean client/service split the rewrite is chartered to create, made

@@ -18,4 +18,14 @@ describe('BulkTicketDialog', () => {
     expect(markup).toContain('data-action="confirm-bulk-delete"');
     expect(markup).toContain('Delete 2 tickets');
   });
+
+  it('warns that emptying Trash is permanent and exposes busy and error states', () => {
+    const markup = String(BulkTicketDialog({ state: { kind: 'empty-trash', count: 3, busy: true, error: 'Try again' } }));
+    expect(markup).toContain('label="Empty Trash?"');
+    expect(markup).toContain('Permanently remove 3 tickets');
+    expect(markup).toContain('Git history will still contain the removed files');
+    expect(markup).toContain('data-action="confirm-empty-trash"');
+    expect(markup).toContain('Emptying…');
+    expect(markup).toContain('Try again');
+  });
 });
