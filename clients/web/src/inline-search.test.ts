@@ -27,7 +27,8 @@ describe('inline advanced-search tokens',()=>{
     expect(effectiveSearch('',[tokenFromRaw('is:active')!])).toMatchObject({text:'is:active',tokens:[{kind:'is',value:'active'}]});
     expect(consumeSearchTokens('tag:h')).toMatchObject({text:'tag:h',tokens:[]});
     expect(consumeSearchTokens('tag:"hello ')).toMatchObject({text:'tag:"hello ',tokens:[]});
-    expect(consumeSearchTokens('tag:"hello world" ')).toMatchObject({text:' ',tokens:[{kind:'tag',value:'hello world'}]});
+    expect(consumeSearchTokens('tag:"hello world" ')).toMatchObject({text:'',tokens:[{kind:'tag',value:'hello world'}]});
+    expect(consumeSearchTokens('tag:hello ')).toMatchObject({text:'',tokens:[{kind:'tag',value:'hello'}]});
   });
   it('keeps committed tokens ordered inside ordinary boolean text',()=>{
     expect(consumeSearchTokens('NOT tag:client',true)).toMatchObject({text:'NOT ',tokens:[{raw:'tag:client',offset:4}]});

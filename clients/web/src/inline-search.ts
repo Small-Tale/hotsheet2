@@ -88,7 +88,9 @@ export function consumeSearchTokens(input:string,force=false):{text:string;token
   const pattern=/(?:^|[\s(])((?:is|tag|has|attachment):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*)|(?:created|completed|started|verified|archived|updated)-(?:before|after):(?:"(?:\\.|[^"])*"|[^"\s()][^\s()]*(?:\s+ago)?))(?=$|[\s)])/gi,result:InlineSearchToken[]=[],removed:Array<{start:number;end:number}>=[];
   let text='',cursor=0;
   for(const match of input.matchAll(pattern)){const raw=match[1],start=match.index+match[0].lastIndexOf(raw),end=start+raw.length;if(end===input.length&&!force&&!/\s$/.test(input))continue;const token=tokenFromRaw(raw);if(!token)continue;text+=input.slice(cursor,start);result.push({...token,offset:text.length});removed.push({start,end});cursor=end}
-  text+=input.slice(cursor);return{text,tokens:result,removed};
+  const suffix=input.slice(cursor);
+  text+=result.length&&/^\s+$/.test(suffix)?'':suffix;
+  return{text,tokens:result,removed};
 }
 
 export function activeTagPrefix(input:string):string|undefined{

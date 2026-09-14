@@ -1829,6 +1829,11 @@ test('deletes inline search tokens from either adjacent caret boundary',async({p
   await query.fill('before is:active after ');await expect(chip).toHaveAttribute('data-token-raw','is:active');await placeCaret('is:active','before');await query.press('Delete');await expect(chip).toHaveCount(0);await expect(query).toHaveText('before  after ');
 });
 
+test('deletes a trailing token immediately after Space commits it',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Search tickets'}).click();const query=page.getByRole('textbox',{name:'Search tickets'}),chip=page.locator('[data-component="filter-chip"]');
+  await query.pressSequentially('tag:hello');await query.press('Space');await expect(chip).toHaveAttribute('data-token-raw','tag:hello');await query.press('Backspace');await expect(chip).toHaveCount(0);await expect(query).toHaveText('');
+});
+
 test('edits inline filters and exposes attachment, lifecycle-date, and syntax helpers',async({page})=>{
   const structured:URL[]=[];await mockProject(page);await page.route('**/checkouts/demo-checkout/tickets*',route=>{const url=new URL(route.request().url());if(route.request().method()==='GET'&&([...url.searchParams].some(([key])=>key!=='text'))){structured.push(url);return route.fulfill({json:[row]})}return route.fallback()});await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByRole('button',{name:'Search tickets'}).click();const query=page.getByRole('textbox',{name:'Search tickets'});
   await query.fill('tag:cl');const suggestion=page.getByRole('option',{name:'tag:client'});await expect(suggestion).toBeVisible();await expect(suggestion).not.toHaveCSS('color','rgb(255, 255, 255)');await suggestion.click();const chip=page.locator('[data-component="filter-chip"]');await expect(chip).toContainText('tag:client');await chip.dblclick();await expect(query).toHaveText('tag:client');await query.press('Enter');await expect(chip).toContainText('tag:client');await page.getByRole('button',{name:'Clear search'}).click();

@@ -1168,6 +1168,8 @@ labels. This is the same advanced search surface and state as the main workspace
 tag completion, attachment/presence filters, relative or local dates, and syntax help. A
 well-formed structured value becomes a chip only after an explicit impossible continuation
 such as trailing whitespace or Enter; incidental focus loss never commits a partial value.
+Whitespace used only to commit a trailing chip is consumed with the token, so the caret is
+immediately adjacent and one Backspace removes that chip instead of an invisible separator.
 Quoted filters also remain editable until the closing quote and explicit commit delimiter.
 Committed chips stay at their exact positions inside the editable expression, with caret stops
 before, between, and after them; pressing Right Arrow from Chromium's before-chip, element-boundary,
