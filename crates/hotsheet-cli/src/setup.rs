@@ -130,7 +130,7 @@ mod tests {
         .unwrap();
         std::fs::write(
             d.path().join(".claude/settings.local.json"),
-            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-hook"}]}]}}"#,
+            r#"{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-hook"}]},{"matcher":"*","hooks":[{"type":"command","command":"old/hotsheet-cli permission-hook"}]}],"PermissionRequest":[{"matcher":"Bash","hooks":[{"type":"command","command":"my-own-request-hook"}]}]}}"#,
         )
         .unwrap();
 
@@ -144,7 +144,7 @@ mod tests {
         let s: serde_json::Value =
             serde_json::from_str(&read(d.path(), ".claude/settings.local.json")).unwrap();
         let pre = s["hooks"]["PreToolUse"].as_array().unwrap();
-        // The user's own hook survives; exactly one Hot Sheet hook is registered.
+        // The user's own hook survives; the headless fallback is registered once.
         assert!(
             pre.iter()
                 .any(|e| e["hooks"][0]["command"] == "my-own-hook"),
@@ -159,6 +159,23 @@ mod tests {
             })
             .collect();
         assert_eq!(ours.len(), 1, "exactly one Hot Sheet hook, no duplicates");
+        assert_eq!(ours[0]["matcher"], "*");
+        let permission_requests = s["hooks"]["PermissionRequest"].as_array().unwrap();
+        assert!(
+            permission_requests
+                .iter()
+                .any(|e| e["hooks"][0]["command"] == "my-own-request-hook"),
+            "user PermissionRequest hooks must survive setup"
+        );
+        let ours: Vec<_> = permission_requests
+            .iter()
+            .filter(|e| {
+                e["hooks"][0]["command"]
+                    .as_str()
+                    .is_some_and(|c| c.ends_with("permission-hook"))
+            })
+            .collect();
+        assert_eq!(ours.len(), 1, "one interactive permission hook");
         assert_eq!(ours[0]["matcher"], "*");
         // Codex declares no hook → its setup writes none.
         let d2 = project();

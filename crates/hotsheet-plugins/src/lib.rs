@@ -135,6 +135,10 @@ pub struct HooksSpec {
     pub machine_local: bool,
     /// The hook event to register on (e.g. `PreToolUse`).
     pub event: String,
+    /// Additional events routed through the same adapter. This supports tools whose
+    /// interactive and headless permission lifecycles expose different hook events.
+    #[serde(default)]
+    pub additional_events: Vec<String>,
     /// The command line to run (e.g. `hotsheet-cli permission-hook`); its first token is
     /// resolved to the absolute sibling binary at setup (no PATH reliance, HS2-103).
     pub command: String,

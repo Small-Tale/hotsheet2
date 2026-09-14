@@ -2483,17 +2483,30 @@ fn cmd_metrics(
     Ok(())
 }
 
-/// Claude PreToolUse permission hook (HS2-YMR9HE): stdin tool-use JSON → ask the running
-/// server → stdout decision. Always exits 0 (a hook failure must not wedge the tool); the
-/// decision word carries allow/deny/ask. Fail-safe: any error → `ask` (defer to Claude).
+/// Claude permission hook (HS2-YMR9HE/HS2-N4R6F3): stdin hook JSON → ask the running
+/// server → stdout decision. Interactive PermissionRequest and marked headless PreToolUse
+/// events use their respective response schemas. Any error emits nothing so Claude's native
+/// flow remains authoritative, and the command always exits 0 so a hook failure cannot wedge it.
 fn cmd_permission_hook() -> Result<()> {
     use hotsheet_cli::permission_hook::{
-        HookDecision, decision_from_server, hook_connection, hook_decision_json, hook_tool_action,
+        PermissionHookEvent, decision_from_server, hook_connection, hook_decision_json,
+        hook_tool_action, permission_hook_event, permission_request_decision_json,
+        should_bridge_permission,
     };
     let input: serde_json::Value =
         serde_json::from_reader(std::io::stdin()).unwrap_or(serde_json::Value::Null);
 
-    let decision = match (
+    let event = permission_hook_event(&input);
+    let headless_pre_tool = event == PermissionHookEvent::PreToolUse
+        && std::env::var("HOTSHEET_CLAUDE_PRETOOLUSE").as_deref() == Ok("1");
+    // In an interactive Claude terminal, PreToolUse observes every harmless operation
+    // before Claude evaluates its own rules. Leave those calls alone and wait for the
+    // PermissionRequest event that means Claude would actually show a dialog.
+    if !should_bridge_permission(event, headless_pre_tool) {
+        return Ok(());
+    }
+
+    let Some(decision) = (match (
         std::env::var("HOTSHEET_SERVER").ok(),
         std::env::var("HOTSHEET_SECRET").ok(),
     ) {
@@ -2503,15 +2516,24 @@ fn cmd_permission_hook() -> Result<()> {
             let connection = hook_connection(&input);
             let project = std::env::var("HOTSHEET_PROJECT").unwrap_or_default();
             match ask_server(&url, &secret, &project, &connection, &tool, &action) {
-                Ok(reply) => decision_from_server(&reply),
-                // Server unreachable / error → defer to Claude rather than block it.
-                Err(_) => HookDecision::Ask,
+                Ok(reply) => Some(decision_from_server(&reply)),
+                // Server unreachable / error → emit nothing and preserve Claude's native flow.
+                Err(_) => None,
             }
         }
-        // Not a Hot Sheet-governed run → defer to Claude's normal permission flow.
-        _ => HookDecision::Ask,
+        // Not a Hot Sheet-governed run → emit nothing and preserve Claude's native flow.
+        _ => None,
+    }) else {
+        return Ok(());
     };
-    println!("{}", hook_decision_json(decision));
+    let output = match event {
+        PermissionHookEvent::PermissionRequest => permission_request_decision_json(decision),
+        PermissionHookEvent::PreToolUse => Some(hook_decision_json(decision)),
+        PermissionHookEvent::Other => None,
+    };
+    if let Some(output) = output {
+        println!("{output}");
+    }
     Ok(())
 }
 

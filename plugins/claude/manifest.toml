@@ -65,11 +65,15 @@ effort_args = ["--effort", "{effort}"]
 source = "claude-usage"
 
 [hooks]
-# The PreToolUse permission hook (docs/05 §5.7, HS2-YMR9HE): Claude runs it before each
-# tool use; it asks the running Hot Sheet server for an allow/deny (else defers to Claude).
+# Claude permission hooks (docs/05 §5.7, HS2-YMR9HE/HS2-N4R6F3) ask the running Hot
+# Sheet server for an allow/deny and emit no decision when the native flow should continue.
 target = ".claude/settings.local.json"
 machine_local = true
-event = "PreToolUse"
+# Interactive Claude exposes only genuine native prompts through PermissionRequest.
+# Headless `-p` sessions still require PreToolUse; the launcher marks those sessions so
+# the shared adapter ignores ordinary PreToolUse events in an interactive terminal.
+event = "PermissionRequest"
+additional_events = ["PreToolUse"]
 command = "hotsheet-cli permission-hook"
 
 [activity]

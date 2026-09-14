@@ -410,6 +410,13 @@ pub struct ClaudeStreamSpawnOptions<'a> {
     pub env: &'a [(String, String)],
 }
 
+fn headless_claude_env(input: &[(String, String)]) -> Vec<(String, String)> {
+    let mut env = input.to_vec();
+    env.retain(|(key, _)| key != "HOTSHEET_CLAUDE_PRETOOLUSE");
+    env.push(("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into()));
+    env
+}
+
 impl ClaudeStreamTransport {
     /// Spawn `program` as a stream-json channel in `cwd`. `resume` continues a prior
     /// session (`--resume <id>`); `mcp_config`, when set, is the only MCP config used
@@ -455,11 +462,9 @@ impl ClaudeStreamTransport {
             args.push(effort.to_string());
         }
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        let env = headless_claude_env(options.env);
         Ok(Box::new(Self(StreamChild::spawn(
-            program,
-            &refs,
-            cwd,
-            options.env,
+            program, &refs, cwd, &env,
         )?)))
     }
 }
@@ -591,6 +596,22 @@ pub(crate) mod scripted {
 mod usage_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn headless_stream_marks_pre_tool_permission_bridging() {
+        let env = headless_claude_env(&[
+            ("KEEP".into(), "yes".into()),
+            ("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "stale".into()),
+        ]);
+        assert_eq!(
+            env.iter()
+                .filter(|(key, _)| key == "HOTSHEET_CLAUDE_PRETOOLUSE")
+                .count(),
+            1
+        );
+        assert!(env.contains(&("HOTSHEET_CLAUDE_PRETOOLUSE".into(), "1".into())));
+        assert!(env.contains(&("KEEP".into(), "yes".into())));
+    }
 
     #[test]
     fn claude_result_usage_sums_cached_input_and_reads_cost_and_model() {

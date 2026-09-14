@@ -20,6 +20,33 @@ pub enum HookDecision {
     Ask,
 }
 
+/// Claude permission lifecycle event carried by the hook input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PermissionHookEvent {
+    /// Fires before every tool use. Hot Sheet consumes this only for marked headless runs.
+    PreToolUse,
+    /// Fires only when interactive Claude is about to present a native permission dialog.
+    PermissionRequest,
+    /// Any unrelated or malformed invocation; the adapter must leave it alone.
+    Other,
+}
+
+/// Classify the lifecycle event so interactive prompts and headless tool calls can use
+/// their distinct Claude response schemas.
+pub fn permission_hook_event(input: &Value) -> PermissionHookEvent {
+    match input.get("hook_event_name").and_then(Value::as_str) {
+        Some("PreToolUse") => PermissionHookEvent::PreToolUse,
+        Some("PermissionRequest") => PermissionHookEvent::PermissionRequest,
+        _ => PermissionHookEvent::Other,
+    }
+}
+
+/// Whether Hot Sheet should replace Claude's permission handling for this event.
+pub fn should_bridge_permission(event: PermissionHookEvent, headless_pre_tool: bool) -> bool {
+    event == PermissionHookEvent::PermissionRequest
+        || event == PermissionHookEvent::PreToolUse && headless_pre_tool
+}
+
 /// Map a Claude PreToolUse hook **input** to the bridge's `(tool, action)` rule key. The
 /// action is the command (Bash), else a file path (Edit/Write/Read), else empty — the same
 /// coarse key codex uses, so an `Always` rule remembered on one transport matches the other.
@@ -68,6 +95,25 @@ pub fn hook_decision_json(decision: HookDecision) -> Value {
     })
 }
 
+/// Render a decision for Claude's interactive-only `PermissionRequest` hook. Unlike
+/// `PreToolUse`, this event uses a nested permission-result object.
+pub fn permission_request_decision_json(decision: HookDecision) -> Option<Value> {
+    let decision = match decision {
+        HookDecision::Allow => json!({"behavior":"allow"}),
+        HookDecision::Deny => json!({
+            "behavior":"deny",
+            "message":"denied via the Hot Sheet permission bridge",
+        }),
+        HookDecision::Ask => return None,
+    };
+    Some(json!({
+        "hookSpecificOutput": {
+            "hookEventName": "PermissionRequest",
+            "decision": decision,
+        }
+    }))
+}
+
 /// Parse the server's `POST /permissions/ask` reply (`{"decision":"allow"|"deny"}`) into a
 /// [`HookDecision`]. Anything unexpected is treated as `Deny` (the safe default).
 pub fn decision_from_server(reply: &Value) -> HookDecision {
@@ -98,6 +144,34 @@ mod tests {
     }
 
     #[test]
+    fn distinguishes_real_permission_requests_from_pre_tool_observation() {
+        assert_eq!(
+            permission_hook_event(&json!({"hook_event_name":"PermissionRequest"})),
+            PermissionHookEvent::PermissionRequest
+        );
+        assert_eq!(
+            permission_hook_event(&json!({"hook_event_name":"PreToolUse"})),
+            PermissionHookEvent::PreToolUse
+        );
+        assert_eq!(
+            permission_hook_event(&json!({})),
+            PermissionHookEvent::Other
+        );
+        assert!(should_bridge_permission(
+            PermissionHookEvent::PermissionRequest,
+            false
+        ));
+        assert!(!should_bridge_permission(
+            PermissionHookEvent::PreToolUse,
+            false
+        ));
+        assert!(should_bridge_permission(
+            PermissionHookEvent::PreToolUse,
+            true
+        ));
+    }
+
+    #[test]
     fn connection_defaults_when_absent() {
         assert_eq!(hook_connection(&json!({ "session_id": "s-1" })), "s-1");
         assert_eq!(hook_connection(&json!({})), "claude");
@@ -116,6 +190,20 @@ mod tests {
             hook_decision_json(HookDecision::Ask)["hookSpecificOutput"]["permissionDecision"],
             "ask"
         );
+    }
+
+    #[test]
+    fn permission_request_decision_uses_claudes_nested_result_shape() {
+        let allow = permission_request_decision_json(HookDecision::Allow).unwrap();
+        assert_eq!(
+            allow["hookSpecificOutput"]["hookEventName"],
+            "PermissionRequest"
+        );
+        assert_eq!(allow["hookSpecificOutput"]["decision"]["behavior"], "allow");
+        let deny = permission_request_decision_json(HookDecision::Deny).unwrap();
+        assert_eq!(deny["hookSpecificOutput"]["decision"]["behavior"], "deny");
+        assert!(deny["hookSpecificOutput"]["decision"]["message"].is_string());
+        assert_eq!(permission_request_decision_json(HookDecision::Ask), None);
     }
 
     #[test]

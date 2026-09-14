@@ -328,7 +328,7 @@ advances Not Started to Started in the same durable write; later status values a
 
 A **host-side permission bridge**: "ask the user, get a decision," with each
 plugin supplying only the transport-specific adapter (an ACP option-response, a
-PreToolUse hook CLI, a hooks.json entry). When a tool wants approval to run a
+permission hook CLI, a hooks.json entry). When a tool wants approval to run a
 command:
 1. The tool's adapter routes the request to the bridge.
 2. The bridge enqueues it (FIFO — concurrent requests preserved, not overwritten,
@@ -336,6 +336,14 @@ command:
 3. The UI shows a non-modal permission popup anchored to the owning project; the
    user allows/denies (with allow-once/always mapping onto persisted allow-rules).
 4. The answer routes back to the connection that raised it.
+
+Claude's interactive adapter listens to `PermissionRequest`, which fires only when
+Claude Code's own permission modes and rules would display a prompt. Its earlier broad
+`PreToolUse` integration ran before those native checks and incorrectly turned every
+otherwise-safe Read/Edit/tool call into a Hot Sheet prompt (HS2-N4R6F3). Headless `-p`
+sessions do not support that lifecycle event, so their launcher explicitly marks the
+same installed adapter to retain `PreToolUse` bridging. Unmarked interactive
+`PreToolUse` events emit no decision and preserve Claude's native permission flow.
 
 The client applies a user's decision optimistically: the popup and its clickable actions
 disappear in the same render that begins the network request, preventing latency from
@@ -366,7 +374,7 @@ interactive `[launch]` command in the caller's existing terminal after installin
 setup artifacts and injecting the running server's `HOTSHEET_SERVER`/`HOTSHEET_SECRET`
 route-back. From a linked code checkout, the ordinary `.hotsheet2/store` machine-local
 link resolves the ticket store, so no `-C` is needed. This path is capability-gated:
-currently Claude's `PreToolUse` hook supports it; native interactive Codex is rejected
+currently Claude's native `PermissionRequest` hook supports it; native interactive Codex is rejected
 until it has an adapter rather than being launched with misleading, unused environment.
 Codex permissions remain supported through Hot Sheet's app-server drive (`trigger`/`work`).
 

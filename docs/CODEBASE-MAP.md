@@ -119,7 +119,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
       src/worklist.rs        #   checkout-local .hotsheet2/worklist.md: aggregates configured git stores; active-only Up Next; refreshed by CLI/project-open and watcher-coalesced external changes
     hotsheet-cli/            # two binaries + a shared lib
       src/main.rs            #   `hotsheet-cli`: default git commands plus idempotent project/store/tool bootstrap, machine-readable compatibility/store-schema inspection, exact `claim <slug|ULID>`/claim-next/renew/release, providers/provider-ls/get/new/edit/close, provider-copy/move, setup/plugins/settings/server/workflows
-      src/permission_hook.rs #   Claude PreToolUse hook adapter (HS2-YMR9HE): pure map of Claude hook JSON → bridge (tool,action) + allow/deny/ask decision; the `permission-hook` cmd POSTs /permissions/ask ($HOTSHEET_SERVER/$HOTSHEET_SECRET), else `ask`
+      src/permission_hook.rs #   Claude permission-hook adapter (HS2-YMR9HE/N4R6F3): interactive PermissionRequest events and explicitly marked headless PreToolUse events map to bridge (tool,action) + their distinct Claude response schemas; unrelated interactive PreToolUse events remain native; the `permission-hook` cmd POSTs /permissions/ask when governed
       src/external_launch.rs #   capability-aware external-terminal launch preparation: per-store server-instance discovery + permission route-back data; Claude hook supported, native Codex rejected until adapted (HS2-C46G58)
       src/bin/hotsheet-migrate.rs #   `hotsheet-migrate`: standalone HS1 migrator (spawns Node exporter + imports)
       src/lib.rs             #   shared: run_import / run_migrate / git helpers (pglite-free); re-exports hotsheet_aitools::launch_safety

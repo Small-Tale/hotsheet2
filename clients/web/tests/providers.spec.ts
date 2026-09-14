@@ -903,12 +903,14 @@ type InstrumentedWindow=typeof window&{__hotsheetRenderMetrics?:{reset():void;sn
 const resetRenderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>{(window as InstrumentedWindow).__hotsheetRenderMetrics?.reset()});
 const renderMetrics=(page:import('@playwright/test').Page)=>page.evaluate(()=>(window as InstrumentedWindow).__hotsheetRenderMetrics?.snapshot());
 
-test('makes no repeated permission requests or renders while an open project is idle',async({page})=>{
+test('shows no spurious permission popup or repeated work while an open project is idle',async({page})=>{
   const permissionRequests:string[]=[];page.on('request',request=>{const path=new URL(request.url()).pathname;if(path.endsWith('/permissions')||path.endsWith('/connections'))permissionRequests.push(path)});
   await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await page.waitForTimeout(1_000);permissionRequests.length=0;await resetRenderMetrics(page);await page.waitForTimeout(1_700);
   expect(permissionRequests).toEqual([]);
   expect(await renderMetrics(page)).toEqual({passes:0,mutations:0});
+  await expect(page.locator('[data-component="permission-request-popup"]')).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/hs2-n4r6f3-no-spurious-permission-popup.png',fullPage:true});
 });
 
 test('keeps remembered-project startup atomic and does not report its intentional work',async({page})=>{

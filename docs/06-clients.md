@@ -1069,6 +1069,11 @@ empty-action generic requests such as `ToolSearch` follow the same lifecycle. Th
 authoritative resolution immediately removes the popup even while this client's Allow or
 Deny HTTP response is still in flight; a delayed response is idempotent and cannot
 resurrect or duplicate the resolved request.
+For an externally launched interactive Claude session, that event is emitted only from
+Claude Code's `PermissionRequest` hook after its native modes and allow/deny/ask rules
+determine that a dialog is actually required. Ordinary reads and other inherently or
+previously allowed operations therefore remain silent in Hot Sheet, matching the
+terminal session instead of presenting advisory-looking prompts (HS2-N4R6F3).
 The local Allow/Deny path has the same immediate behavior: it optimistically removes the
 request and records the presumed decision before awaiting transport. Only a communication
 failure rolls that history back and restores the popup with an inline error, so network

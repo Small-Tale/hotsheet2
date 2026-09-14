@@ -387,25 +387,35 @@ fn write_hooks(project: &Path, p: &Plugin) -> Result<Option<String>, SetupError>
     if !hooks.is_object() {
         *hooks = serde_json::json!({});
     }
-    let event = hooks
-        .as_object_mut()
-        .unwrap()
-        .entry(spec.event.clone())
-        .or_insert_with(|| serde_json::json!([]));
-    if !event.is_array() {
-        *event = serde_json::json!([]);
+    let hooks = hooks.as_object_mut().unwrap();
+    // Remove every prior Hot Sheet permission hook before rebuilding the declared event
+    // set. This also migrates projects when a plugin changes its primary hook event.
+    for entries in hooks.values_mut() {
+        if let Some(entries) = entries.as_array_mut() {
+            entries.retain(|entry| !is_hotsheet_hook(entry));
+        }
     }
-    let arr = event.as_array_mut().unwrap();
 
-    // Our hook entry (matcher "*" = every tool use).
+    // Our hook entry (matcher "*" = every relevant tool use/request).
     let entry = serde_json::json!({
         "matcher": "*",
         "hooks": [ { "type": "command", "command": command } ],
     });
-    // Idempotent: drop any prior Hot Sheet permission-hook entry before re-adding, so
-    // re-running setup doesn't stack duplicates. We recognize it by our command tail.
-    arr.retain(|e| !is_hotsheet_hook(e));
-    arr.push(entry);
+    let mut events = vec![spec.event.as_str()];
+    for event in &spec.additional_events {
+        if !events.contains(&event.as_str()) {
+            events.push(event);
+        }
+    }
+    for event_name in events {
+        let event = hooks
+            .entry(event_name.to_string())
+            .or_insert_with(|| serde_json::json!([]));
+        if !event.is_array() {
+            *event = serde_json::json!([]);
+        }
+        event.as_array_mut().unwrap().push(entry.clone());
+    }
 
     write_file(
         &target,
