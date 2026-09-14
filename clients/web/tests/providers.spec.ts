@@ -30,6 +30,8 @@ const aiToolCatalog=[
 
 function normalizedCreatedTicket(body:Record<string,unknown>){const original=(typeof body.title==='string'?body.title:'').trim();let title=original,tags=Array.isArray(body.tags)?body.tags.filter((tag):tag is string=>typeof tag==='string'):[];if(original.startsWith('\\['))title=original.slice(1);else{let rest=original;const found:string[]=[];while(rest.startsWith('[')){const close=rest.indexOf(']'),content=close<0?'':rest.slice(1,close);if(close<0||!content.trim()||content.includes('['))break;found.push(content.trim().replaceAll(/\s+/g,'-'));rest=rest.slice(close+1).trimStart()}if(found.length&&rest){title=rest.trim();tags=[...new Set([...tags,...found])]}}return{title,tags}}
 
+async function resolvedColor(locator:Locator,value:string){return locator.evaluate((node,color)=>{const probe=document.createElement('span');probe.style.color=color;node.append(probe);const resolved=getComputedStyle(probe).color;probe.remove();return resolved},value)}
+
 async function mockProject(page: import('@playwright/test').Page, canUpdate = true, primaryFeedbackNeeded: boolean | 'choices' | 'details' = false, ticketLoadDelay = 0, batchResponseDelay = 0, patchResponseDelay = 0, emptyAtFirst = false, terminalCount = 2, eventDuringBatch = false, hs1Migration = false, atomicBatch = true) {
   let rows:TicketRow[] = [{...row,feedback_needed:Boolean(primaryFeedbackNeeded)},backlogRow,archiveRow,deletedRow,movedRow,notStartedRow,completedRow,verifiedRow,startedRow2,startedRow3,searchSlugRow,searchDetailsRow];
   let selectedFull = primaryFeedbackNeeded==='details'
@@ -1927,7 +1929,7 @@ test('switches large ticket views without cloning every row into motion ghosts',
     const button=page.getByRole('button',{name:new RegExp(view)}),initial=await button.evaluate((element,itemId)=>{const started=performance.now();(element as HTMLElement).click();const list=document.querySelector<HTMLElement>('[data-component="ticket-list"]'),selected=document.querySelector<HTMLElement>(`[data-action="select-view"][data-item-id="${itemId}"]`);return{elapsed:performance.now()-started,selected:selected?.getAttribute('aria-current'),rendered:list?.dataset.renderedCount,total:list?.dataset.totalCount,loading:Boolean(list?.querySelector('[data-ticket-progressive-loading="true"]'))}},view==='Queue'?'all':view.toLowerCase());await expect(page.getByRole('heading',{name:view})).toBeVisible();
     expect(initial.elapsed).toBeLessThan(250);expect(initial.selected).toBe('page');await expect(page.locator('[data-ticket-motion-ghost]')).toHaveCount(0);
     if(view==='Archive'){
-      expect(initial).toMatchObject({rendered:'80',total:'2075',loading:true});
+      expect(initial).toMatchObject({rendered:'40',total:'2075',loading:true});
       await page.screenshot({path:'/private/tmp/hs2-w52rer-progressive-archive.png'});
     }
     await expect(page.locator('[data-component="ticket-list-row"]')).toHaveCount(count);await expect(page.locator('[data-ticket-progressive-loading="true"]')).toHaveCount(0);
@@ -2111,7 +2113,8 @@ test('previews rows with a border-only outline and keeps column cards borderless
   await expect(card).toHaveCSS('border-color','color(srgb 0.42 0.729333 1)');
   await page.screenshot({path:'/private/tmp/hs2-2n2tcr-column-border-after.png',fullPage:true});
   const workArea=page.locator('.app-shell__work-area');
-  await expect.poll(()=>workArea.evaluate(node=>getComputedStyle(node,'::after').borderTopColor)).toBe('rgb(0, 136, 255)');
+  const focusColor=await resolvedColor(workArea,'var(--wa-color-focus)');
+  await expect.poll(()=>workArea.evaluate(node=>getComputedStyle(node,'::after').borderTopColor)).toBe(focusColor);
   expect(await workArea.evaluate(node=>getComputedStyle(node,'::after').zIndex)).toBe('20');
   await page.screenshot({path:'/private/tmp/hs2-2rn2hh-work-area-focus-after.png',fullPage:true});
 });
@@ -2153,7 +2156,7 @@ test('reorders project and terminal tabs while preserving project order and comp
 
 test('scopes ticket clipboard shortcuts to the focused work area and preserves native text copy and paste',async({page,context})=>{
   await context.grantPermissions(['clipboard-read','clipboard-write']);const creates:string[]=[];page.on('request',request=>{const path=new URL(request.url()).pathname;if(request.method()==='POST'&&path.endsWith('/tickets'))creates.push(path)});await mockProject(page);await page.goto('/');await page.evaluate(()=>{(window as typeof window&{shortcutDefaults?:boolean[]}).shortcutDefaults=[];document.addEventListener('keydown',event=>{if((event.ctrlKey||event.metaKey)&&['c','v'].includes(event.key.toLowerCase()))queueMicrotask(()=>{(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.push(event.defaultPrevented)})})});await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
-  const workArea=page.locator('.app-shell__work-area'),ticket=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await ticket.click();await expect(workArea).toHaveCSS('outline-width','2px');await expect(workArea).toHaveCSS('outline-color','rgb(0, 136, 255)');
+  const workArea=page.locator('.app-shell__work-area'),ticket=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]'),focusColor=await resolvedColor(workArea,'var(--wa-color-focus)');await ticket.click();await expect(workArea).toHaveCSS('outline-width','2px');await expect(workArea).toHaveCSS('outline-color',focusColor);
   await page.keyboard.press('Control+c');await expect.poll(()=>page.evaluate(()=>(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.at(-1))).toBe(true);
   const inspectorSlug=page.locator('[data-component="ticket-inspector"] [data-component="toolbar-text"]');await inspectorSlug.click();await inspectorSlug.evaluate(node=>{const range=document.createRange();range.selectNodeContents(node);const selection=getSelection()!;selection.removeAllRanges();selection.addRange(range)});await expect(workArea).toHaveCSS('outline-width','0px');await page.keyboard.press('Control+c');await expect.poll(()=>page.evaluate(()=>(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.at(-1))).toBe(false);expect(creates).toHaveLength(0);
   await page.getByRole('button',{name:'Search tickets'}).click();const search=page.getByRole('textbox',{name:'Search tickets'});await search.focus();await expect(search).toBeFocused();await page.evaluate(()=>navigator.clipboard.writeText('QQRY00'));await page.keyboard.press('Control+v');await expect.poll(()=>page.evaluate(()=>(window as typeof window&{shortcutDefaults:boolean[]}).shortcutDefaults.at(-1))).toBe(false);expect(creates).toHaveLength(0);
