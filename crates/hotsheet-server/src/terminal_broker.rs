@@ -95,56 +95,6 @@ impl TerminalBroker {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use hotsheet_terminals::{
-        BrokerClient, BrokerRequest, BrokerResponse, TerminalManager, serve_broker,
-    };
-    use std::sync::Arc;
-
-    #[tokio::test]
-    async fn kill_all_uses_the_existing_broker_protocol_and_removes_every_terminal() {
-        let dir = tempfile::tempdir().unwrap();
-        let socket = dir.path().join("broker.sock");
-        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
-        tokio::spawn(serve_broker(
-            listener,
-            "proj".into(),
-            Arc::new(TerminalManager::new()),
-        ));
-        let mut client = BrokerClient::connect(&socket).await.unwrap();
-        for id in ["one", "two"] {
-            client
-                .request(&BrokerRequest::Open {
-                    id: id.into(),
-                    command: "cat".into(),
-                    args: vec![],
-                    cwd: None,
-                    env: vec![],
-                })
-                .await
-                .unwrap();
-        }
-        let broker = TerminalBroker::at(&socket, "proj");
-        assert_eq!(broker.kill_all().await.unwrap(), 2);
-        assert!(
-            matches!(broker.call(BrokerRequest::List).await.unwrap(),BrokerResponse::List { terminals } if terminals.is_empty())
-        );
-    }
-
-    #[test]
-    fn server_only_build_uses_the_server_as_its_broker_process_fallback() {
-        let dir = tempfile::tempdir().unwrap();
-        let server = dir.path().join("hotsheet-server");
-        std::fs::write(&server, "").unwrap();
-        assert_eq!(broker_launch(Some(server.clone())), (server.clone(), true));
-        let sibling = dir.path().join("hotsheet-terminal-broker");
-        std::fs::write(&sibling, "").unwrap();
-        assert_eq!(broker_launch(Some(server)), (sibling, false));
-    }
-}
-
 /// Whether a broker is accepting on `socket` right now (a blocking connect probe).
 fn is_live(socket: &Path) -> bool {
     use std::io::{BufRead, Write};
@@ -212,5 +162,55 @@ fn broker_launch(current: Option<PathBuf>) -> (PathBuf, bool) {
         (exe, true)
     } else {
         (PathBuf::from("hotsheet-terminal-broker"), false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hotsheet_terminals::{
+        BrokerClient, BrokerRequest, BrokerResponse, TerminalManager, serve_broker,
+    };
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn kill_all_uses_the_existing_broker_protocol_and_removes_every_terminal() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        tokio::spawn(serve_broker(
+            listener,
+            "proj".into(),
+            Arc::new(TerminalManager::new()),
+        ));
+        let mut client = BrokerClient::connect(&socket).await.unwrap();
+        for id in ["one", "two"] {
+            client
+                .request(&BrokerRequest::Open {
+                    id: id.into(),
+                    command: "cat".into(),
+                    args: vec![],
+                    cwd: None,
+                    env: vec![],
+                })
+                .await
+                .unwrap();
+        }
+        let broker = TerminalBroker::at(&socket, "proj");
+        assert_eq!(broker.kill_all().await.unwrap(), 2);
+        assert!(
+            matches!(broker.call(BrokerRequest::List).await.unwrap(),BrokerResponse::List { terminals } if terminals.is_empty())
+        );
+    }
+
+    #[test]
+    fn server_only_build_uses_the_server_as_its_broker_process_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = dir.path().join("hotsheet-server");
+        std::fs::write(&server, "").unwrap();
+        assert_eq!(broker_launch(Some(server.clone())), (server.clone(), true));
+        let sibling = dir.path().join("hotsheet-terminal-broker");
+        std::fs::write(&sibling, "").unwrap();
+        assert_eq!(broker_launch(Some(server)), (sibling, false));
     }
 }

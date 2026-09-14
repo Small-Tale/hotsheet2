@@ -371,6 +371,21 @@ fn git_email(path: &std::path::Path) -> Option<String> {
     (!email.is_empty()).then_some(email)
 }
 
+/// `${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.sqlite`, keyed by a hash of the store's path
+/// (machine-local, gitignored, disposable — `docs/03` §3.2).
+fn default_index_path(store: &FsStore) -> Result<PathBuf> {
+    let root = store
+        .root()
+        .canonicalize()
+        .unwrap_or_else(|_| store.root().to_path_buf());
+    let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
+    // HS2's own machine home (${HOTSHEET_HOME:-~/.hotsheet2}) — NOT ~/.hotsheet, which
+    // a separately installed Hot Sheet 1 owns (HS2-104).
+    let dir = hotsheet_plugins::hotsheet_home().join("index");
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir.join(format!("{id}.sqlite")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -392,19 +407,4 @@ mod tests {
             Cli::try_parse_from(["hotsheet-server", "--stop", "--kill-all-terminals"]).unwrap();
         assert!(stop.stop && stop.kill_all_terminals);
     }
-}
-
-/// `${HOTSHEET_HOME:-~/.hotsheet2}/index/<project-id>.sqlite`, keyed by a hash of the store's path
-/// (machine-local, gitignored, disposable — `docs/03` §3.2).
-fn default_index_path(store: &FsStore) -> Result<PathBuf> {
-    let root = store
-        .root()
-        .canonicalize()
-        .unwrap_or_else(|_| store.root().to_path_buf());
-    let id = &hotsheet_index::hash_bytes(root.to_string_lossy().as_bytes())[..16];
-    // HS2's own machine home (${HOTSHEET_HOME:-~/.hotsheet2}) — NOT ~/.hotsheet, which
-    // a separately installed Hot Sheet 1 owns (HS2-104).
-    let dir = hotsheet_plugins::hotsheet_home().join("index");
-    std::fs::create_dir_all(&dir)?;
-    Ok(dir.join(format!("{id}.sqlite")))
 }
