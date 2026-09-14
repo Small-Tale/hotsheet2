@@ -432,7 +432,8 @@ mod tests {
     #[test]
     fn set_get_and_effective_override() {
         let d = root();
-        let s = Settings::for_project(d.path());
+        let global_home = root();
+        let s = Settings::for_project_with_global_home(d.path(), global_home.path());
 
         s.set("categories", json!(["bug", "task"]), Scope::Shared)
             .unwrap();
@@ -517,10 +518,31 @@ mod tests {
     #[test]
     fn missing_files_read_as_empty() {
         let d = root();
-        let s = Settings::for_project(d.path());
+        let global_home = root();
+        let s = Settings::for_project_with_global_home(d.path(), global_home.path());
         assert!(s.map(Scope::Shared).unwrap().is_empty());
         assert!(s.effective().unwrap().is_empty());
         assert_eq!(s.get_effective("x").unwrap(), None);
+    }
+
+    #[test]
+    fn project_only_assertions_ignore_an_unrelated_machine_global_file() {
+        let project = root();
+        let unrelated_home = root();
+        let isolated_home = root();
+        std::fs::write(
+            unrelated_home.path().join("settings.json"),
+            r#"{"real_machine_setting":true}"#,
+        )
+        .unwrap();
+
+        let settings = Settings::for_project_with_global_home(project.path(), isolated_home.path());
+
+        assert!(settings.effective().unwrap().is_empty());
+        assert_eq!(
+            settings.get_effective("real_machine_setting").unwrap(),
+            None
+        );
     }
 
     #[test]
