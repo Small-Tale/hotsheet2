@@ -192,7 +192,9 @@ The **terminal/PTY manager** (in the core, hosted by the server) provides:
   `hotsheet serve --stop --kill-all-terminals` deliberately clears them. The broker
   answers a protocol-level Ping/Pong health probe and exits
   cleanly (removing its socket) after a five-minute grace with no terminals and no
-  connected clients; any activity resets the grace.
+  connected clients; any activity resets the grace. A server that outlives that idle
+  exit reconnects through one shared restart lock, launches a fresh broker when the
+  socket is gone, and retries the connection before serving the next terminal request.
 - Environment scrubbing (drop tool-marker vars like `TSX_*`/`npm_*` that leak into
   child shells — HS1 §22.13.1).
 - **Server-arbitrated PTY sizing.** A PTY has exactly one size, but many viewers

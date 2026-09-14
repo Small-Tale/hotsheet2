@@ -264,7 +264,9 @@ and identity-less legacy entries remain conservatively blocking.
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time.
   Running one creates a terminal named for the command, selects it, and opens the bottom
-  drawer so output and subsequent interaction remain visible. `ai` definitions store only
+  drawer so output and subsequent interaction remain visible. If the detached broker has
+  exited during its empty five-minute grace, the server relaunches it transparently before
+  opening that terminal. `ai` definitions store only
   the prompt and tool selection, never a hard-coded Hot Sheet executable or CLI argv.
   Clicking one creates an urgent Up Next task whose title is the command label and whose
   details are the configured prompt; it does not execute that prompt directly. When an

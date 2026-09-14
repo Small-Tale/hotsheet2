@@ -9,6 +9,7 @@
 //! so output, input, viewport-size arbitration, and the busy feed survive a server restart.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use hotsheet_terminals::{BrokerClient, BrokerRequest, BrokerResponse};
 
@@ -17,6 +18,7 @@ use hotsheet_terminals::{BrokerClient, BrokerRequest, BrokerResponse};
 pub struct TerminalBroker {
     pub socket: PathBuf,
     pub project: String,
+    restart: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl TerminalBroker {
@@ -36,7 +38,11 @@ impl TerminalBroker {
         let socket = Self::socket_for(&project);
 
         if is_live(&socket) {
-            return Ok(Self { socket, project });
+            return Ok(Self {
+                socket,
+                project,
+                restart: Arc::new(tokio::sync::Mutex::new(())),
+            });
         }
         if let Some(parent) = socket.parent() {
             std::fs::create_dir_all(parent)?;
@@ -46,7 +52,11 @@ impl TerminalBroker {
         // Wait (briefly) for the freshly-spawned broker to bind + accept.
         for _ in 0..40 {
             if is_live(&socket) {
-                return Ok(Self { socket, project });
+                return Ok(Self {
+                    socket,
+                    project,
+                    restart: Arc::new(tokio::sync::Mutex::new(())),
+                });
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
@@ -57,7 +67,11 @@ impl TerminalBroker {
     pub fn discover(store_path: &Path) -> Option<Self> {
         let project = hotsheet_tls::project_id(store_path);
         let socket = Self::socket_for(&project);
-        is_live(&socket).then_some(Self { socket, project })
+        is_live(&socket).then_some(Self {
+            socket,
+            project,
+            restart: Arc::new(tokio::sync::Mutex::new(())),
+        })
     }
 
     /// Explicitly kill every terminal retained by this project's detached broker.
@@ -84,14 +98,51 @@ impl TerminalBroker {
         Self {
             socket: socket.into(),
             project: project.into(),
+            restart: Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
     /// One request/response round-trip to the broker (a fresh connection — terminal ops are
     /// infrequent, so a pooled connection isn't worth the complexity yet).
     pub async fn call(&self, req: BrokerRequest) -> std::io::Result<BrokerResponse> {
-        let mut client = BrokerClient::connect(&self.socket).await?;
+        let mut client = self
+            .connect_or_restart(|| spawn_broker(&self.socket, &self.project))
+            .await?;
         client.request(&req).await
+    }
+
+    async fn connect_or_restart(
+        &self,
+        spawn: impl FnOnce() -> std::io::Result<()>,
+    ) -> std::io::Result<BrokerClient> {
+        if let Ok(client) = BrokerClient::connect(&self.socket).await {
+            return Ok(client);
+        }
+        let _restart = self.restart.lock().await;
+        if let Ok(client) = BrokerClient::connect(&self.socket).await {
+            return Ok(client);
+        }
+        if let Some(parent) = self.socket.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        spawn()?;
+        let mut last_error = None;
+        for _ in 0..40 {
+            match BrokerClient::connect(&self.socket).await {
+                Ok(client) => return Ok(client),
+                Err(error) => last_error = Some(error),
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+        Err(last_error.unwrap_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!(
+                    "terminal broker did not come up on {}",
+                    self.socket.display()
+                ),
+            )
+        }))
     }
 }
 
@@ -172,6 +223,37 @@ mod tests {
         BrokerClient, BrokerRequest, BrokerResponse, TerminalManager, serve_broker,
     };
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_call_connection_restarts_an_idle_broker_with_a_missing_socket() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("broker.sock");
+        let broker = TerminalBroker::at(&socket, "proj");
+        let launches = Arc::new(AtomicUsize::new(0));
+        let launched = launches.clone();
+        let launch_socket = socket.clone();
+
+        let mut client = broker
+            .connect_or_restart(move || {
+                launched.fetch_add(1, Ordering::SeqCst);
+                let listener = tokio::net::UnixListener::bind(&launch_socket)?;
+                tokio::spawn(serve_broker(
+                    listener,
+                    "proj".into(),
+                    Arc::new(TerminalManager::new()),
+                ));
+                Ok(())
+            })
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            client.request(&BrokerRequest::Ping).await.unwrap(),
+            BrokerResponse::Pong
+        ));
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+    }
 
     #[tokio::test]
     async fn kill_all_uses_the_existing_broker_protocol_and_removes_every_terminal() {
