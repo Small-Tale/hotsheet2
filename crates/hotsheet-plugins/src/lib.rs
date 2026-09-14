@@ -587,25 +587,26 @@ pub fn validate_ai_defaults(
         .iter()
         .find(|candidate| candidate.id == defaults.tool)
         .ok_or_else(|| format!("AI tool '{}' is not installed or drivable", defaults.tool))?;
-    let model = defaults
-        .model
-        .as_ref()
-        .and_then(|id| tool.models.iter().find(|candidate| &candidate.id == id));
-    if defaults.model.is_some() && model.is_none() {
-        return Err(format!(
-            "model '{}' is not declared by AI tool '{}'",
-            defaults.model.as_deref().unwrap_or_default(),
-            defaults.tool
-        ));
+    let model_id = defaults.model.as_deref();
+    if model_id.is_some_and(|id| id.trim().is_empty()) {
+        return Err("model must not be blank".into());
     }
+    let model = model_id.and_then(|id| tool.models.iter().find(|candidate| candidate.id == id));
     if let Some(effort) = defaults.effort.as_deref() {
-        let Some(model) = model else {
+        let Some(model_id) = model_id else {
             return Err("effort requires an explicit model".into());
         };
-        if !model.effort_levels.iter().any(|level| level == effort) {
+        let supported = model
+            .map(|known| known.effort_levels.iter().any(|level| level == effort))
+            .unwrap_or_else(|| {
+                tool.models
+                    .iter()
+                    .any(|known| known.effort_levels.iter().any(|level| level == effort))
+            });
+        if !supported {
             return Err(format!(
                 "effort '{effort}' is not supported by model '{}'",
-                model.id
+                model_id
             ));
         }
     }

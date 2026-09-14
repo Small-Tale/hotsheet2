@@ -542,7 +542,9 @@ and identity-less legacy entries remain conservatively blocking.
   on its next opening instead of presenting a transient failure as a confirmed empty installation.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
   effort choices use aligned semantic icons plus one highlighted current value with compact
-  submenu insets, including at the supported narrow width.
+  submenu insets, including at the supported narrow width. The catalog-backed model control is
+  editable in machine defaults, Drive overrides, and live conversations: its suggestions make
+  detected models convenient without preventing an older or otherwise undiscovered model id.
   Drive prepares a stable dedicated connection scoped to that checkout and tool, opens and
   selects its AI-chat tab in the bottom drawer, then sends the `$hotsheet` workflow turn; later
   activations reuse that tab, connection, and retained session. The server resolves the checkout id to its code
@@ -598,7 +600,8 @@ and identity-less legacy entries remain conservatively blocking.
   conversation applies to subsequent turns without changing provider. Closing a nested
   model or effort popup does not dismiss the owning conversation; only the conversation
   surface's own hide lifecycle closes it. The active effort is revalidated against every
-  selected model's declared levels; models with no effort support hide that control and
+  selected model's declared levels; unlisted models clear the inferred effort, and models with
+  no effort support hide that control and
   omit effort entirely from subsequent turn requests. Connection refresh and transcript updates share the existing
   replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
   While the dialog is closed, streamed transcript/activity state remains retained but the

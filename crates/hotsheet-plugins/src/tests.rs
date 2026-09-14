@@ -159,10 +159,16 @@ fn codex_is_a_second_first_party_plugin_with_no_skills() {
         claude.launch_args(Some("fable"), Some("high")).unwrap(),
         ["--model", "fable", "--effort", "high"]
     );
+    assert_eq!(
+        claude
+            .launch_args(Some("legacy model \"beta\"; $(touch nope)"), None)
+            .unwrap(),
+        ["--model", "legacy model \"beta\"; $(touch nope)"]
+    );
 }
 
 #[test]
-fn plugin_model_catalog_validates_defaults_without_client_provider_tables() {
+fn plugin_model_catalog_suggests_models_without_rejecting_manual_ids() {
     let plugin = find_in("codex", &[]).unwrap();
     let drive = plugin.manifest.drive.as_ref().unwrap();
     let tools = vec![AiToolDescriptor {
@@ -179,14 +185,23 @@ fn plugin_model_catalog_validates_defaults_without_client_provider_tables() {
     }];
     let defaults = default_ai_settings(&tools).unwrap();
     validate_ai_defaults(&tools, &defaults).unwrap();
+    validate_ai_defaults(
+        &tools,
+        &AiToolDefaults {
+            tool: "codex".into(),
+            model: Some("legacy model \"beta\"".into()),
+            effort: None,
+        },
+    )
+    .unwrap();
     assert!(
         validate_ai_defaults(
             &tools,
             &AiToolDefaults {
                 tool: "codex".into(),
-                model: Some("missing".into()),
-                effort: None
-            }
+                model: Some("   ".into()),
+                effort: None,
+            },
         )
         .is_err()
     );

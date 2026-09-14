@@ -583,9 +583,13 @@ invalidates the old result, while a transient version-probe failure retains the 
 catalog. `GET /ai-tools?refresh=true` explicitly retries same-version discovery, retaining
 the last good catalog if that refresh fails. The web client uses that refresh path when
 loading AI settings, and `hotsheet-cli ai-tools --json` uses the same capability/merge
-core. Neither client maintains provider/model tables. Machine-local defaults are validated
-and stored through `GET`/`PUT /ai-settings` (or `hotsheet-cli ai-settings get|set`) in the
-global Hot Sheet 2 settings file.
+core. Neither client maintains provider/model tables. Model catalogs are suggestions rather
+than allowlists: settings, Drive overrides, live conversations, and headless CLI settings may
+name a nonblank model id that discovery did not return. Known models retain their model-specific
+effort validation; an unlisted model may use an effort value already declared by that provider.
+Machine-local defaults still validate the installed provider and are stored through
+`GET`/`PUT /ai-settings` (or `hotsheet-cli ai-settings get|set`) in the global Hot Sheet 2
+settings file.
 
 The bundled Codex manifest therefore remains a useful offline fallback, while a reachable
 Codex app-server supplies its current paginated `model/list` catalog at runtime.
@@ -599,7 +603,9 @@ settings, Drive, conversations, and interactive terminal launches expose the sam
 even though the channel transport does not provide a live model-catalog endpoint.
 Connection creation accepts optional model/effort selections. A live turn may override
 them only when the descriptor advertises `change_model` and/or `change_effort`. Interactive
-AI terminals use the same plugin declarations to expand model/effort launch arguments.
+AI terminals use the same plugin declarations to expand model/effort launch arguments. Each
+expanded value remains one literal process argument, so spaces, quotes, dollar signs, and shell
+metacharacters in a manually entered model id are never reparsed as shell syntax.
 
 ## 5.12 Cross-references
 - Storage concurrency the claim primitive protects: [02-ticket-storage.md](02-ticket-storage.md) §2.7

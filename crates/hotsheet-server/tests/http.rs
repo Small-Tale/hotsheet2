@@ -316,7 +316,24 @@ async fn ai_tool_discovery_and_machine_defaults_are_authenticated_and_validated(
         .await
         .unwrap();
     assert_eq!(tools.status(), StatusCode::OK);
-    assert!(body_json(tools).await.is_array());
+    let tools = body_json(tools).await;
+    assert!(tools.is_array());
+    let tool = tools[0]["id"].as_str().unwrap();
+
+    let manual = router
+        .clone()
+        .oneshot(authed(
+            "PUT",
+            "/ai-settings",
+            Some(&format!(
+                r#"{{"tool":{},"model":"legacy model \"beta\""}}"#,
+                serde_json::to_string(tool).unwrap()
+            )),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(manual.status(), StatusCode::OK);
+    assert_eq!(body_json(manual).await["model"], "legacy model \"beta\"");
 
     let invalid = router
         .oneshot(authed(
