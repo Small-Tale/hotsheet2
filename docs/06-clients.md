@@ -494,7 +494,10 @@ and identity-less legacy entries remain conservatively blocking.
   but is not started until a task after that first browser paint, so request setup cannot
   delay the cached projection becoming visible. Project activation also resets the progressive
   ticket-row boundary, preventing a previously expanded large project from rebuilding every
-  cached row before its first paint. Ticket-detail presentation batches all related editor,
+  cached row before its first paint. Ticket motion is scoped to the project and view, and a
+  queued animation rechecks that live scope before running, so an outgoing project's card
+  clones cannot animate over the incoming board or temporarily change tag/card geometry.
+  Ticket-detail presentation batches all related editor,
   inspector, duplicate, and code-review state into one reactive transition rather than
   remounting the application once per field.
   Every open project's replay-safe live-update stream also refreshes its cached ticket rows,
