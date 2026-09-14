@@ -24,7 +24,7 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('<wa-option value="priority"');
     expect(markup).toContain('data-lucide="arrow-down"');
     expect(markup).toContain('class="kui-select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
-    expect(markup).not.toContain('type="checkbox"');
+    expect(markup).not.toContain('<input type="checkbox"');
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);
     expect(markup).not.toContain('workspace-header__search-tokens');
     expect(markup).toContain('aria-label="Search syntax help"');
@@ -39,10 +39,10 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('<strong>Combine filters</strong>');
     expect(markup).toContain('local, relative, and ISO 8601 dates work');
     expect(markup).toContain('updated-after:2026-09-01T11:05');
-    expect(markup).not.toContain('data-action="open-workspace-search"');
+    expect(markup).not.toContain('class="workspace-header__search-button"');
     expect(markup).not.toContain('data-action="open-global-search"');
     expect(markup.indexOf('workspace-header__utility-group')).toBeLessThan(markup.indexOf('workspace-header__search'));
-    expect(markup.match(/disabled/g)).toHaveLength(3);
+    expect(markup.slice(0,markup.indexOf('<wa-dropdown class="workspace-header__overflow"')).match(/disabled/g)).toHaveLength(3);
     const headerCss=readFileSync(resolve(import.meta.dirname,'workspace-header.css'),'utf8'),shellCss=readFileSync(resolve(import.meta.dirname,'app-shell.css'),'utf8');
     expect(headerCss).toContain('.workspace-header__search-group[data-expanded="true"] { width: min(48rem, 100%); max-width:100%; height:auto; overflow:visible;border-radius:1.5428125rem;');
     expect(headerCss).toContain('.workspace-header__search { min-width: 7rem; min-height: 1.5rem;');
@@ -117,13 +117,22 @@ describe('WorkspaceHeader', () => {
     expect(markup).not.toContain('Search tickets');
   });
 
-  it('progressively removes lower-priority actions when its owning toolbar narrows', () => {
+  it('relocates every progressively hidden command into the responsive overflow', () => {
+    const markup=String(WorkspaceHeader({projectName:'Hot Sheet 2',mode:'board',sort:'priority',sortDirection:'descending',notificationCount:7,selectedTicketCount:2,selectedTicketsUpNext:true,selectedTicketsUpNextEligible:true}));
+    expect(markup).toContain('aria-label="More workspace controls"');
+    expect(markup).toMatch(/workspace-header__overflow-utility" type="checkbox" checked data-workspace-overflow-action="toggle-selected-up-next"/);
+    expect(markup).toContain('workspace-header__overflow-utility" data-workspace-overflow-action="open-selected-ticket-actions"');
+    expect(markup).toContain('data-workspace-overflow-action="set-workspace-sort" data-workspace-sort="priority"');
+    expect(markup).not.toContain('data-workspace-sort="status"');
+    expect(markup).toContain('workspace-header__overflow-search" data-workspace-overflow-action="open-workspace-search"');
+    expect(markup).toContain('data-view-mode="notifications"');
+    expect(markup).toContain('Show Notifications (7 pending)');
     const headerCss = readFileSync(resolve(import.meta.dirname, 'workspace-header.css'), 'utf8');
     expect(headerCss).toContain('.workspace-header__sort { width: 2.75rem; }');
     expect(headerCss).toContain('.workspace-header__sort .kui-select__custom-selected { width: 1rem; height: 1rem; color: var(--kui-toolbar-control-color);');
-    expect(headerCss).toContain('@container kui-toolbar (max-width: 30rem) { .workspace-header__actions > .workspace-header__utility-group { display: none; } }');
-    expect(headerCss).toContain('@container kui-toolbar (max-width: 26rem) { .workspace-header__actions > .workspace-header__sort-group { display: none; } }');
-    expect(headerCss).toContain('@container kui-toolbar (max-width: 14rem) { .workspace-header__actions > .workspace-header__search-group { display: none; } }');
+    expect(headerCss).toMatch(/@container kui-toolbar \(max-width: 30rem\) \{[\s\S]*workspace-header__utility-group \{ display: none; \}[\s\S]*workspace-header__overflow \{ display: inline-flex; \}/);
+    expect(headerCss).toMatch(/@container kui-toolbar \(max-width: 26rem\) \{[\s\S]*workspace-header__sort-group \{ display: none; \}/);
+    expect(headerCss).toMatch(/@container kui-toolbar \(max-width: 14rem\) \{[\s\S]*workspace-header__search-group:not\(\[data-expanded="true"\]\) \{ display: none; \}/);
     expect(headerCss).toContain('@container kui-toolbar (max-width: 11rem) { .workspace-header__actions > .view-mode-switcher { display: none; } }');
     expect(headerCss).not.toContain('overflow: hidden; } .workspace-header__actions');
   });

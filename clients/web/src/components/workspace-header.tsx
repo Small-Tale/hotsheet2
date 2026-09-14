@@ -1,4 +1,7 @@
 import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/components/divider/divider.js';
+import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
+import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './workspace-header.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -72,6 +75,47 @@ export function workspaceSortTrigger(sort: WorkspaceSort, direction: WorkspaceSo
   return sortTriggerIcons[sort][direction];
 }
 
+export function wireWorkspaceOverflowKeyboard(root:Document|HTMLElement):()=>void{
+  const onKeydown=(event:Event)=>{
+    const keyboard=event as KeyboardEvent;
+    if(!['Enter',' ','ArrowDown'].includes(keyboard.key))return;
+    const origin=keyboard.target;
+    if(!(origin instanceof Element))return;
+    const trigger=origin.closest<HTMLElement>('.workspace-header__overflow > [slot="trigger"]');
+    if(!trigger)return;
+    const dropdown=trigger.closest<HTMLElement&{open:boolean}>('.workspace-header__overflow');
+    if(!dropdown||dropdown.open)return;
+    keyboard.preventDefault();keyboard.stopPropagation();dropdown.open=true;
+  };
+  const onAfterShow=(event:Event)=>{
+    const dropdown=event.target;
+    if(!(dropdown instanceof HTMLElement)||!dropdown.matches('.workspace-header__overflow'))return;
+    requestAnimationFrame(()=>{const first=dropdown.querySelector<HTMLElement&{active?:boolean}>('wa-dropdown-item:not([disabled])');if(!first)return;first.active=true;first.tabIndex=0;first.focus({preventScroll:true})});
+  };
+  root.addEventListener('keydown',onKeydown);root.addEventListener('wa-after-show',onAfterShow);
+  return()=>{root.removeEventListener('keydown',onKeydown);root.removeEventListener('wa-after-show',onAfterShow)};
+}
+
+function WorkspaceOverflowControls({mode,projectActionsDisabled,ticketActionsDisabled,searchOpen,sort,sortDirection,visibleSortOptions,notificationCount,selectedTicketsUpNext,selectedTicketsUpNextEligible}:{mode:WorkspaceViewMode;projectActionsDisabled:boolean;ticketActionsDisabled:boolean;searchOpen:boolean;sort:WorkspaceSort;sortDirection:WorkspaceSortDirection;visibleSortOptions:ReadonlyArray<{value:WorkspaceSort;label:string}>;notificationCount:number;selectedTicketsUpNext:boolean;selectedTicketsUpNextEligible:boolean}){
+  const modes:ReadonlyArray<{value:WorkspaceViewMode;label:string;icon:IconNode;iconName:string}>=[
+    {value:'list',label:'Show List View',icon:List,iconName:'list'},
+    {value:'board',label:'Show Columns View',icon:Columns3,iconName:'columns-3'},
+    {value:'notifications',label:`Show Notifications${notificationCount?` (${notificationCount} pending)`:''}`,icon:Bell,iconName:'bell'},
+    {value:'settings',label:'Show Settings',icon:Settings,iconName:'settings'},
+  ];
+  return <wa-dropdown class="workspace-header__overflow" placement="bottom-end" distance={4}>
+    <wa-button slot="trigger" appearance="plain" aria-label="More workspace controls" title="More workspace controls"><LucideIcon icon={MoreHorizontal} name="ellipsis"/></wa-button>
+    <wa-dropdown-item class="workspace-header__overflow-utility" type="checkbox" checked={selectedTicketsUpNext} disabled={ticketActionsDisabled||!selectedTicketsUpNextEligible} data-workspace-overflow-action="toggle-selected-up-next"><span slot="icon"><LucideIcon icon={Star} name="star"/></span>Toggle Up Next</wa-dropdown-item>
+    <wa-dropdown-item class="workspace-header__overflow-utility" disabled={ticketActionsDisabled} data-workspace-overflow-action="open-selected-ticket-actions"><span slot="icon"><LucideIcon icon={MoreHorizontal} name="ellipsis"/></span>Show Selected Ticket Actions…</wa-dropdown-item>
+    <wa-divider class="workspace-header__overflow-sort"/>
+    {visibleSortOptions.map(option=>{const direction=option.value===sort?sortDirection:defaultWorkspaceSortDirection(option.value),icon=workspaceSortTrigger(option.value,direction);return <wa-dropdown-item class="workspace-header__overflow-sort" type="checkbox" checked={option.value===sort} disabled={projectActionsDisabled} data-workspace-overflow-action="set-workspace-sort" data-workspace-sort={option.value}><span slot="icon"><LucideIcon icon={icon.icon} name={icon.iconName}/></span>{`Sort by ${option.label}${option.value===sort?`, ${direction}`:''}`}</wa-dropdown-item>})}
+    <wa-divider class="workspace-header__overflow-search"/>
+    <wa-dropdown-item class="workspace-header__overflow-search" disabled={projectActionsDisabled} data-workspace-overflow-action="open-workspace-search"><span slot="icon"><LucideIcon icon={Search} name="search"/></span>{searchOpen?'Focus Search':'Search Tickets'}</wa-dropdown-item>
+    <wa-divider class="workspace-header__overflow-view"/>
+    {modes.map(option=><wa-dropdown-item class="workspace-header__overflow-view" type="checkbox" checked={option.value===mode} data-workspace-overflow-action="set-view-mode" data-view-mode={option.value}><span slot="icon"><LucideIcon icon={option.icon} name={option.iconName}/></span>{option.label}</wa-dropdown-item>)}
+  </wa-dropdown>;
+}
+
 const localSearchDateExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short'}).format(new Date(2026,8,1));
 const localSearchDateTimeExample=new Intl.DateTimeFormat(undefined,{dateStyle:'short',timeStyle:'short'}).format(new Date(2026,8,1,11,5));
 
@@ -83,7 +127,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
   const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=visibleSortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
   const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
   const searchParts=inlineSearchParts(searchQuery,searchTokens);
-  return <div class="workspace-header__actions" data-component="workspace-controls">
+  return <div class="workspace-header__actions" data-component="workspace-controls" data-search-open={String(searchOpen)}>
       <ToolbarControlGroup className="view-mode-switcher" label="View mode">
         <ModeButton mode="list" current={mode} label="List" icon={List} iconName="list" />
         <ModeButton mode="board" current={mode} label="Columns" icon={Columns3} iconName="columns-3" />
@@ -116,6 +160,7 @@ export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', 
           </>
           : <wa-button class="workspace-header__search-button" appearance="plain" disabled={projectActionsDisabled} data-action="open-workspace-search" aria-label="Search tickets" title="Search tickets"><LucideIcon icon={Search} name="search" /></wa-button>}
       </ToolbarControlGroup>
+      <WorkspaceOverflowControls mode={mode} projectActionsDisabled={projectActionsDisabled} ticketActionsDisabled={ticketActionsDisabled} searchOpen={searchOpen} sort={sort} sortDirection={sortDirection} visibleSortOptions={visibleSortOptions} notificationCount={notificationCount} selectedTicketsUpNext={selectedTicketsUpNext} selectedTicketsUpNextEligible={selectedTicketsUpNextEligible}/>
     </div>;
 }
 

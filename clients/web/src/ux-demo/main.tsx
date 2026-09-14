@@ -61,7 +61,7 @@ import { TicketCloseDialog } from '../components/ticket-close-dialog';
 import { showTicketReaderDialog } from '../components/ticket-reader';
 import { eventTargetsContextMenu, TicketRowContextMenu } from '../components/ticket-row-context-menu';
 import { addTicketTag, removeTicketTag } from '../components/ticket-tag-editor';
-import { nextWorkspaceSort } from '../components/workspace-header';
+import { nextWorkspaceSort, wireWorkspaceOverflowKeyboard } from '../components/workspace-header';
 import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
@@ -1372,6 +1372,7 @@ delegate(
       statusBadgeSettings.compact.value = control.checked;
   },
 );
+wireWorkspaceOverflowKeyboard(root);
 delegate(root, 'click', '[data-action="set-view-mode"]', (_event, target) => {
   workspaceMode.value = (target as HTMLElement).dataset
     .viewMode as typeof workspaceMode.value;
@@ -1431,6 +1432,32 @@ delegate(root, 'click', 'wa-select[name="workspace-sort"] wa-option', (_event, t
   recordCollectionEvent(
     `Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`,
   );
+});
+delegate(root, 'wa-select', '.workspace-header__overflow', (event) => {
+  const item = (event as CustomEvent<{ item: HTMLElement }>).detail.item;
+  const action = item.dataset.workspaceOverflowAction;
+  if (action === 'open-workspace-search') {
+    workspaceSearchOpen.value = true;
+    queueMicrotask(() => focusWorkspaceSearch(root));
+    return;
+  }
+  if (action === 'set-view-mode') {
+    workspaceMode.value = item.dataset.viewMode as typeof workspaceMode.value;
+    if (workspaceMode.value === 'settings') {
+      workspaceSearchOpen.value = false;
+      workspaceSearchHelpOpen.value = false;
+      workspaceSearchQuery.value = '';
+    }
+    recordCollectionEvent(`${workspaceMode.value === 'list' ? 'List' : workspaceMode.value === 'board' ? 'Columns' : 'Settings'} view selected`);
+    return;
+  }
+  if (action !== 'set-workspace-sort') return;
+  const selected = item.dataset.workspaceSort as typeof workspaceSort.value | undefined;
+  if (!selected) return;
+  const next = nextWorkspaceSort(workspaceSort.value, workspaceSortDirection.value, selected);
+  workspaceSort.value = next.sort;
+  workspaceSortDirection.value = next.direction;
+  recordCollectionEvent(`Sorted by ${workspaceSort.value}, ${workspaceSortDirection.value}`);
 });
 delegate(root, 'click', '[data-action="toggle-favorite"]', () => {
   recordCollectionEvent('View favorite toggled');

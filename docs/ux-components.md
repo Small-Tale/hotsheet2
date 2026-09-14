@@ -299,8 +299,11 @@ does not introduce polling or another network request.
   priority runs from low through urgent, and list/column views remember independent sort
   settings. The demo connects those controls to its list/column/settings workspace. When its owning
   toolbar narrows, lower-priority utility and sort controls yield first; search and then the view
-  switcher yield only at otherwise unusable widths. Actions remain contained without clipping
-  downward-opening popovers. The star applies Up Next to the current selection and the
+  switcher yield only at otherwise unusable widths. Every yielded action is relocated into a
+  keyboard- and touch-operable overflow menu with the same selected and disabled state, including
+  constrained sidebar/inspector shells and 200%-zoom-equivalent widths. Opening Search at the
+  narrowest size temporarily gives the toolbar row to the focused field. Actions remain contained
+  without clipping downward-opening popovers. The star applies Up Next to the current selection and the
   ellipsis opens the shared TicketRow menu without a duplicate Up Next entry; both are
   capability-aware and disabled with no selection. Settings disables sort, ticket actions,
   and search; global shell modes omit project controls.
