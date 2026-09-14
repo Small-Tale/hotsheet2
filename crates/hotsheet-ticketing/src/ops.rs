@@ -2215,7 +2215,7 @@ mod tests {
             let id = Ulid::from_string(id).unwrap();
             create(
                 &store,
-                id.clone(),
+                id,
                 "HS",
                 ts("2026-08-19T00:00:00Z"),
                 NewTicket {
@@ -2257,7 +2257,7 @@ mod tests {
         let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
         let mut legacy = create(
             &store,
-            id.clone(),
+            id,
             "HS",
             ts("2026-08-19T00:00:00Z"),
             NewTicket {
