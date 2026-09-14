@@ -261,6 +261,61 @@ test('captures, reviews, cancels, and submits dev-review feedback', async ({ pag
   await expect(tool.getByRole('button', { name: 'New Ticket' })).toHaveCount(0);
 });
 
+test('captures before and after CSSOM snapshots through CSS Live Edit', async ({ page }) => {
+  let submitted: Record<string, unknown> | undefined;
+  await page.route('**/__hotsheet/dev-review/tickets', async route => {
+    submitted = route.request().postDataJSON();
+    await route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ slug: 'HS2-CSS' }) });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/ux-demo?component=ticket-row&dev-review=1');
+  const tool = page.locator('.hs-dev-review');
+  const utilities = tool.getByRole('button', { name: 'Additional review utilities' });
+  await utilities.click();
+  await expect(utilities).toHaveAttribute('aria-expanded', 'true');
+  await expect(tool.getByRole('menuitem', { name: 'CSS Live Edit' })).toBeVisible();
+  await page.screenshot({ path: '/private/tmp/hs2-x36s5n-css-live-edit-menu-wide.png', fullPage: true });
+  await tool.getByRole('menuitem', { name: 'CSS Live Edit' }).click();
+  await expect(tool.getByRole('button', { name: 'Feedback' })).toHaveCount(0);
+  await expect(tool.getByRole('button', { name: 'CSS Live Edit' })).toHaveAttribute('title', 'Cancel CSS Live Edit');
+  await expect(tool.locator('.hs-dev-review__hint')).toContainText('Live-edit CSS in browser developer tools');
+  await tool.getByRole('button', { name: 'CSS Live Edit' }).click();
+  await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
+  expect(submitted).toBeUndefined();
+  await utilities.click();
+  await tool.getByRole('menuitem', { name: 'CSS Live Edit' }).click();
+  await page.evaluate(() => {
+    const style = document.createElement('style');
+    style.id = 'playwright-css-live-edit';
+    style.textContent = '.demo-detail { outline: 6px solid rgb(12, 200, 34); }';
+    document.head.append(style);
+    document.querySelector<HTMLElement>('.demo-detail__header')!.style.paddingTop = '31px';
+  });
+  await expect(page.locator('.demo-detail')).toHaveCSS('outline-width', '6px');
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.screenshot({ path: '/private/tmp/hs2-x36s5n-css-live-edit-active-narrow.png', fullPage: true });
+  await tool.getByRole('button', { name: 'New Ticket' }).click();
+  await expect.poll(() => submitted).toBeTruthy();
+  expect(submitted).toMatchObject({
+    notes: expect.stringContaining('Compare the attached css-live-edit-before.css and css-live-edit-after.css snapshots'),
+    captures: [],
+    attachments: [
+      { filename: 'css-live-edit-before.css', mimeType: 'text/css' },
+      { filename: 'css-live-edit-after.css', mimeType: 'text/css' },
+    ],
+  });
+  const attachments = submitted!.attachments as Array<{ dataUrl: string }>;
+  const decode = (value: string) => Buffer.from(value.slice(value.indexOf(',') + 1), 'base64').toString('utf8');
+  const before = decode(attachments[0].dataUrl), after = decode(attachments[1].dataUrl);
+  expect(before).not.toContain('playwright-css-live-edit');
+  expect(after).toContain('stylesheet');
+  expect(after).toContain('.demo-detail { outline: rgb(12, 200, 34) solid 6px; }');
+  expect(after).toContain('padding-top: 31px');
+  expect(after).not.toBe(before);
+  await expect(tool.getByText('HS2-CSS created.')).toBeVisible();
+  await expect(tool.getByRole('button', { name: 'Feedback' })).toBeVisible();
+});
+
 test('keeps feedback rectangle input within its frame budget in the UX demo', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto('/ux-demo?component=ticket-row&dev-review=1');

@@ -1,6 +1,6 @@
 # Dev Review Ticket Capture Tool
 
-Status: **Shipped initial web implementation** (`HS2-ME9EB6`).
+Status: **Shipped web implementation** (`HS2-ME9EB6`, CSS Live Edit `HS2-X36S5N`).
 
 ## Purpose
 
@@ -16,6 +16,17 @@ published npm package without importing Kerf, Web Awesome, or Hot Sheet client s
   top-right top layer for every development build. It stays above application dialogs so
   those surfaces can be selected and reported. `?dev-review=false` is the sole explicit
   opt-out; production builds never include the tool.
+- A disclosure button beside `Feedback` opens additional review utilities. **CSS Live
+  Edit** captures the complete readable CSSOM immediately, replaces the ordinary launcher
+  with a cancellable mode button plus `New Ticket`, and briefly explains that the reviewer
+  can now edit styles in browser developer tools.
+- CSS Live Edit's `New Ticket` captures the CSSOM again and directly submits exactly two
+  `text/css` attachments: `css-live-edit-before.css` and
+  `css-live-edit-after.css`. The snapshots preserve stylesheet/rule order, constructed and
+  open-shadow-root stylesheets, and inline style declarations; inaccessible cross-origin
+  sheets remain named in a comment instead of aborting the capture. The generated ticket
+  instructs the AI to diff the evidence and reproduce the intended design in source CSS
+  and components rather than copying a generated snapshot wholesale.
 - Activating it shows `New Ticket` plus a concise Option/Alt-drag hint that fades
   after a few seconds.
 - `Feedback` is also the mode toggle. It exits immediately when there are no captures
@@ -84,7 +95,8 @@ review.destroy();
 ```
 
 The submission adapter receives notes, page URL, viewport dimensions, captured PNG
-data URLs, and base64 data URLs plus metadata for user-supplied attachments. It returns
+data URLs, and base64 data URLs plus metadata for user-supplied or CSS Live Edit
+attachments. It returns
 the created ticket slug and may optionally return a ticket URL. This
 keeps capture UX portable while allowing a host to use an authenticated Hot Sheet
 server, Tauri command, test fake, or another ticket-provider-aware bridge.

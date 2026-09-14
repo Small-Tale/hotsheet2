@@ -3,6 +3,7 @@ import './dev-review.css';
 import html2canvas from 'html2canvas';
 
 import { normalizeCaptureColors } from './capture-colors';
+import { captureCssSnapshot, CSS_LIVE_EDIT_TICKET_NOTES,cssSnapshotAttachment } from './css-live-edit';
 import { createFrameBatcher } from './frame-batcher';
 import { clampRectToViewport, intersectRectWithViewport, normalizeRect, type ResizeHandle, resizeRect, type ReviewRect,translateAnchoredRect } from './geometry';
 import { promoteDevReviewPopover } from './request';
@@ -33,6 +34,10 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   let sequence = 1;
   let selectedPreview = 0;
   let submitting = false;
+  let utilitiesOpen = false;
+  let cssLiveEditBefore: string | undefined;
+  let cssLiveEditSubmitting = false;
+  let cssLiveEditMessage = '';
   let hintTimer: number | undefined;
   let hintVisible = false;
   let modifierHeld = false;
@@ -113,19 +118,42 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   const leaveFeedback = () => {
     if (hintTimer) { view.clearTimeout(hintTimer); hintTimer = undefined; }
     hintVisible = false;
+    utilitiesOpen = false;
     setModifiers(false);
     enabled = false;
     selections.splice(0);
     render();
   };
 
+  const leaveCssLiveEdit = () => {
+    if (hintTimer) { view.clearTimeout(hintTimer); hintTimer = undefined; }
+    hintVisible = false;
+    utilitiesOpen = false;
+    cssLiveEditBefore = undefined;
+    cssLiveEditSubmitting = false;
+    cssLiveEditMessage = '';
+    render();
+  };
+
   const render = () => {
     geometryBatch.cancel();
     dirtySelectionIds.clear();
-    toolbar.innerHTML = enabled
-      ? '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>'
-      : '<button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button>';
+    if (cssLiveEditBefore !== undefined) {
+      toolbar.innerHTML = `<button class="hs-dev-review__css-live-edit" type="button" aria-pressed="true" title="Cancel CSS Live Edit"${cssLiveEditSubmitting ? ' disabled' : ''}>CSS Live Edit</button><button data-action="new-css-ticket" type="button"${cssLiveEditSubmitting ? ' disabled' : ''}>${cssLiveEditSubmitting ? 'Creating…' : 'New Ticket'}</button>`;
+    } else if (enabled) {
+      toolbar.innerHTML = '<button class="hs-dev-review__feedback" type="button" aria-pressed="true">Feedback</button><button data-action="new-ticket" type="button">New Ticket</button>';
+    } else {
+      toolbar.innerHTML = `<button class="hs-dev-review__feedback" type="button" aria-pressed="false">Feedback</button><button class="hs-dev-review__utilities" type="button" aria-label="Additional review utilities" aria-haspopup="menu" aria-expanded="${utilitiesOpen}"></button>${utilitiesOpen ? '<div class="hs-dev-review__utilities-menu" role="menu"><button type="button" role="menuitem" data-action="css-live-edit">CSS Live Edit</button></div>' : ''}`;
+    }
     root.querySelectorAll('.hs-dev-review__hint,.hs-dev-review__rect').forEach(node => { node.remove(); });
+    if (cssLiveEditBefore !== undefined) {
+      const hint = doc.createElement('div');
+      hint.className = hintVisible ? 'hs-dev-review__hint' : 'hs-dev-review__hint hs-dev-review__hint--hidden';
+      hint.setAttribute('role', 'status');
+      hint.textContent = cssLiveEditMessage || 'Live-edit CSS in browser developer tools, then click New Ticket';
+      root.append(hint);
+      return;
+    }
     if (!enabled) return;
     const hint = doc.createElement('div');
     hint.className = hintVisible ? 'hs-dev-review__hint' : 'hs-dev-review__hint hs-dev-review__hint--hidden';
@@ -274,18 +302,74 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
     catch (error) { status.textContent = error instanceof Error ? error.message : 'Capture failed.'; }
   };
 
+  const startCssLiveEdit = () => {
+    utilitiesOpen = false;
+    cssLiveEditBefore = captureCssSnapshot(doc);
+    cssLiveEditMessage = '';
+    hintVisible = true;
+    render();
+    scheduleHintFade();
+  };
+
+  const finishCssLiveEdit = async () => {
+    if (cssLiveEditBefore === undefined || cssLiveEditSubmitting) return;
+    const before = cssLiveEditBefore;
+    const after = captureCssSnapshot(doc);
+    cssLiveEditSubmitting = true;
+    hintVisible = true;
+    cssLiveEditMessage = 'Creating a ticket with both CSS snapshots…';
+    render();
+    try {
+      const attachments = [
+        cssSnapshotAttachment(view, 'css-live-edit-before.css', before),
+        cssSnapshotAttachment(view, 'css-live-edit-after.css', after),
+      ];
+      const result = await options.submit({ notes: CSS_LIVE_EDIT_TICKET_NOTES, captures: [], attachments, actorRole: 'human', pageUrl: view.location.href, viewport: { width: view.innerWidth, height: view.innerHeight } });
+      cssLiveEditMessage = `${result.slug} created.`;
+      render();
+      view.setTimeout(leaveCssLiveEdit, 800);
+    } catch (error) {
+      cssLiveEditSubmitting = false;
+      cssLiveEditMessage = error instanceof Error ? error.message : 'Ticket creation failed.';
+      render();
+    }
+  };
+
   const onRootClick = (event: Event) => {
     const target = event.target as HTMLElement;
+    if (target.closest('.hs-dev-review__utilities')) {
+      utilitiesOpen = !utilitiesOpen;
+      render();
+      return;
+    }
+    if (target.closest('[data-action="css-live-edit"]')) {
+      startCssLiveEdit();
+      return;
+    }
+    if (target.closest('.hs-dev-review__css-live-edit')) {
+      leaveCssLiveEdit();
+      return;
+    }
+    if (target.closest('[data-action="new-css-ticket"]')) {
+      void finishCssLiveEdit();
+      return;
+    }
     if (target.closest('.hs-dev-review__feedback')) {
       if (enabled) {
         if (selections.length > 0 && !view.confirm('Discard the captured feedback regions?')) return;
         leaveFeedback();
-      } else { enabled = true; hintVisible = true; render(); scheduleHintFade(); }
+      } else { utilitiesOpen = false; enabled = true; hintVisible = true; render(); scheduleHintFade(); }
       return;
     }
     if (target.closest('[data-action="new-ticket"]')) void openDialog();
   };
   toolbar.addEventListener('click', onRootClick);
+  const closeUtilities = (event: Event) => {
+    if (!utilitiesOpen || toolbar.contains(event.target as Node)) return;
+    utilitiesOpen = false;
+    render();
+  };
+  doc.addEventListener('pointerdown', closeUtilities, true);
 
   const onPointerDown = (event: PointerEvent) => {
     if (!enabled || event.button !== 0) return;
@@ -354,5 +438,5 @@ export function installDevReview(options: DevReviewOptions): { destroy(): void }
   view.addEventListener('resize', onScroll);
   render();
 
-  return { destroy() { if (hintTimer) view.clearTimeout(hintTimer); if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame); if(toolbarFrame!==undefined)view.cancelAnimationFrame(toolbarFrame); dialogObserver.disconnect(); geometryBatch.cancel(); setModifiers(false); toolbar.removeEventListener('click', onRootClick); doc.removeEventListener('wa-show', promoteToolbarAfterDialog, true); doc.removeEventListener('wa-hide', promoteToolbarAfterDialog, true); doc.removeEventListener('pointerdown', onPointerDown, true); doc.removeEventListener('keydown', onKeyChange, true); doc.removeEventListener('keyup', onKeyChange, true); doc.removeEventListener('scroll', onScroll, true); view.removeEventListener('resize', onScroll); view.removeEventListener('blur', onWindowBlur); view.removeEventListener('pointermove', onPointerMove, true); view.removeEventListener('pointerup', onPointerUp, true); toolbar.remove(); root.remove(); } };
+  return { destroy() { if (hintTimer) view.clearTimeout(hintTimer); if (scrollFrame !== undefined) view.cancelAnimationFrame(scrollFrame); if(toolbarFrame!==undefined)view.cancelAnimationFrame(toolbarFrame); dialogObserver.disconnect(); geometryBatch.cancel(); setModifiers(false); toolbar.removeEventListener('click', onRootClick); doc.removeEventListener('wa-show', promoteToolbarAfterDialog, true); doc.removeEventListener('wa-hide', promoteToolbarAfterDialog, true); doc.removeEventListener('pointerdown', closeUtilities, true); doc.removeEventListener('pointerdown', onPointerDown, true); doc.removeEventListener('keydown', onKeyChange, true); doc.removeEventListener('keyup', onKeyChange, true); doc.removeEventListener('scroll', onScroll, true); view.removeEventListener('resize', onScroll); view.removeEventListener('blur', onWindowBlur); view.removeEventListener('pointermove', onPointerMove, true); view.removeEventListener('pointerup', onPointerUp, true); toolbar.remove(); root.remove(); } };
 }

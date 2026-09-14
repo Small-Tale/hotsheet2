@@ -195,7 +195,10 @@ and identity-less legacy entries remain conservatively blocking.
   default in development (`?dev-review=false` is the sole opt-out for both the overlay
   and automatic stability-ticket reporting), and its ticket
   dialog offers a checked diagnostic-log attachment so a manually reported transient
-  failure carries the same context. Automatic render-storm reporting remains suppressed while
+  failure carries the same context. Its adjacent utilities disclosure also offers CSS Live
+  Edit: two complete in-memory CSSOM snapshots bracket DevTools styling changes and are
+  attached to a directly created implementation ticket (HS2-X36S5N). Automatic
+  render-storm reporting remains suppressed while
   remembered projects are restoring, a foreground operation owns the app's loading
   state, the ticket collection is appending a scheduled progressive chunk, or a
   multi-step UI transition is still within five seconds of its initiating pointer or

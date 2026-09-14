@@ -95,7 +95,7 @@ and don't imply reading order — read by group.
 | [ui-design-philosophy.md](ui-design-philosophy.md) | Portable Kerf UI philosophy: continuity, hierarchy, semantic systems, platform fluency, component contracts, and review gates distilled from HIG and HS2 feedback | Decided (HS2-DSXDBP) |
 | [ux-components.md](ux-components.md) | Cross-client component architecture and real-component `/ux-demo` catalog | Initial inventory |
 | [design-guidelines.md](design-guidelines.md) | Apple macOS HIG (Tahoe / Liquid Glass) distilled for the native macOS app and the web/Tauri client: applicability matrix, rules per foundation/pattern/component/input/technology, shortcut register, menu-bar spec, AI-content rules, checklists | Decided (HS2-ZC24BS) |
-| [18-dev-review-tool.md](18-dev-review-tool.md) | Embeddable Option/Alt-drag screenshot annotation and Hot Sheet ticket submission tool | Shipped initial web implementation |
+| [18-dev-review-tool.md](18-dev-review-tool.md) | Embeddable screenshot annotation, CSS Live Edit capture, and Hot Sheet ticket submission tool | Shipped web implementation |
 
 **E · AI-tool integration**
 | Doc | Topic | Status |
