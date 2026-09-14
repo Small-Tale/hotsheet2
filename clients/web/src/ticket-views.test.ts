@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TicketRow } from './api';
-import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isTrashedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketsForView, ticketViewQuery } from './ticket-views';
+import { canCreateTicketInView, customTicketViewId, customTicketViewKey, isArchivedTicket, isOpenTicket, isQueuedTicket, isTrashedTicket, isUpNextTicket, newTicketCreationPlacement, newTicketStatusForView, selectionAfterTicketViewChange, selectionVisibleInView, ticketSearchCountViews, ticketsForView, ticketViewQuery } from './ticket-views';
 
 const ticket = (status: string): TicketRow => ({
   connection_id: 'git', native_id: status, qualified_id: `git:${status}`, id: status,
@@ -34,6 +34,11 @@ describe('ticket views', () => {
     expect(ticketViewQuery('all')).toEqual({collection:'queue'});
     expect(ticketViewQuery('backlog')).toEqual({status:'backlog'});
     expect(ticketViewQuery('archive')).toEqual({collection:'archive'});
+  });
+
+  it('derives live search counts for active collections and custom views, not Trash', () => {
+    expect(ticketSearchCountViews(['needs-docs'])).toEqual(['all', 'backlog', 'archive', 'custom:needs-docs']);
+    expect(ticketSearchCountViews()).not.toContain('trash');
   });
 
   it('creates into the visible active destination and disables creation for Archive', () => {

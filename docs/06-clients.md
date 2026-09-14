@@ -451,7 +451,9 @@ and identity-less legacy entries remain conservatively blocking.
   not bleed into one another. Column mode retains only that selected view's normal columns:
   a Queue search does not append Backlog or Archive columns for results that its scoped
   request cannot contain. Once the selected view's indexed search completes, bounded
-  background searches update every other view count. Pending counts use a compact spinner;
+  background searches update the other active collections and shared custom-view counts.
+  Trash remains outside this live-search fan-out and keeps its canonical collection count.
+  Pending searchable-view counts use a compact spinner;
   settled search-derived counts use a small magnifying-glass marker and remain inside the
   selected item's blue bounds. Moving focus away from an unchanged search preserves those
   settled results and counts without issuing another request. Explicit lifecycle expressions and filter chips narrow the

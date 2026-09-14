@@ -5,6 +5,7 @@ export type TicketView = BuiltInTicketView | `custom:${string}`;
 
 export const customTicketViewId = (id: string): TicketView => `custom:${id}`;
 export const customTicketViewKey = (view: TicketView): string | undefined => view.startsWith('custom:') ? view.slice('custom:'.length) : undefined;
+export const ticketSearchCountViews = (customViewIds: readonly string[] = []): TicketView[] => ['all', 'backlog', 'archive', ...customViewIds.map(customTicketViewId)];
 
 export const canCreateTicketInView = (view: TicketView): boolean => !['archive', 'trash', 'errors'].includes(view);
 export const newTicketStatusForView = (view: TicketView): 'not_started' | 'backlog' => view === 'backlog' ? 'backlog' : 'not_started';
