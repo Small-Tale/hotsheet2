@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { loadTicketEditorSizes, saveTicketEditorSize, ticketEditorKind, ticketEditorSizeStorageKey, ticketEditorSizeVariable } from './ticket-editor-size';
+import { loadTicketEditorSizes, manuallyResizedTicketEditorHeight, saveTicketEditorSize, ticketEditorKind, ticketEditorSizeStorageKey, ticketEditorSizeVariable } from './ticket-editor-size';
 
 describe('ticket editor size preferences', () => {
   it('keeps separate global keys and variables for every field and presentation', () => {
@@ -25,5 +25,12 @@ describe('ticket editor size preferences', () => {
     saveTicketEditorSize(storage, { setProperty }, 'new-ticket-details', 'sidebar', 156.6);
     expect(values.get(ticketEditorSizeStorageKey('new-ticket-details', 'sidebar'))).toBe('157');
     expect(setProperty).toHaveBeenCalledWith('--hs-new-ticket-details-sidebar-height', '157px');
+  });
+
+  it('recognizes only the explicit pixel height written by a browser resize gesture', () => {
+    expect(manuallyResizedTicketEditorHeight('157px')).toBe(157);
+    expect(manuallyResizedTicketEditorHeight('157.4px')).toBe(157.4);
+    expect(manuallyResizedTicketEditorHeight('')).toBeUndefined();
+    expect(manuallyResizedTicketEditorHeight('auto')).toBeUndefined();
   });
 });

@@ -35,7 +35,7 @@ describe('QuickTicketComposer', () => {
     expect(expanded).toContain('data-action="create-ticket-form"');
     expect(expanded).toContain('value="New work"');
     expect(expanded).toContain('data-lucide="bug"');
-    expect(expanded).toContain('name="new-ticket-details" rows="1">Why this matters</textarea>');
+    expect(expanded).toContain('name="new-ticket-details" rows="1" data-morph-skip>Why this matters</textarea>');
     expect(expanded).toContain('data-action="toggle-new-ticket-up-next"');
     expect(expanded).toContain('aria-pressed="true"');
     expect(expanded).toContain('data-lucide="star"');
@@ -68,6 +68,7 @@ describe('QuickTicketComposer', () => {
   it('keeps one-line details vertically resizable and places Up Next after category',()=>{
     const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8'),markup=String(QuickTicketComposer({expanded:true}));
     expect(markup).toMatch(/new-ticket-category[\s\S]*toggle-new-ticket-up-next[\s\S]*new-ticket-details/);
+    expect(markup).toMatch(/name="new-ticket-details"[^>]*data-morph-skip/);
     expect(css).toMatch(/__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, 2\.5rem\);[^}]*resize: vertical/);
   });
 

@@ -27,6 +27,12 @@ export function saveTicketEditorSize(storage: Pick<Storage, 'setItem'>, style: P
   style.setProperty(ticketEditorSizeVariable(kind, presentation), `${value}px`);
 }
 
+export function manuallyResizedTicketEditorHeight(inlineHeight: string): number | undefined {
+  if (!/^\d+(?:\.\d+)?px$/.test(inlineHeight)) return undefined;
+  const height = Number.parseFloat(inlineHeight);
+  return Number.isFinite(height) && height > 0 ? height : undefined;
+}
+
 export function ticketEditorKind(name: string): TicketEditorKind | undefined {
   if (name === 'markdown-source') return 'details';
   if (name === 'blocked-reason') return 'blocked-reason';

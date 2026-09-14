@@ -963,8 +963,9 @@ and identity-less legacy entries remain conservatively blocking.
   category and an immediately trailing star toggle; the star creates directly in Up Next
   (and therefore overrides a Backlog-view default to active Not Started). A full-width
   Details textarea follows on its own row, starts one text line tall, and resizes vertically.
-  Its chosen height is a device-local preference that survives controlled-value rerenders,
-  cancellation/reopening, and later new-ticket sessions.
+  Its chosen height is a device-local preference. The live textarea is morph-protected so a
+  controlled-value rerender cannot replace the browser-resized element, while
+  cancellation/reopening and later new-ticket sessions restore the persisted height.
   Switching among Queue, Backlog, and Archive requests a bounded compact page scoped to that
   collection before pagination; it never fetches full ticket bodies or filters an arbitrary
   mixed-status page in the browser. The selected sidebar item commits immediately while the
