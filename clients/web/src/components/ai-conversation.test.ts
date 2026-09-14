@@ -29,6 +29,12 @@ describe('AIConversation',()=>{
     expect(markup).not.toContain('Session session-1');
   });
 
+  it('renders permission-paused activity before its later assistant result',()=>{
+    const markup=String(AIConversation({open:true,tool:'Claude',messages:[{id:'question',role:'user',content:'What time is it?',sequence:0},{id:'answer',role:'assistant',content:'It is 3:23 PM.',status:'completed',sequence:2}],activity:[{id:'date',tool:'Claude',kind:'command',summary:'claude ran `date`',importance:'normal',sequence:1}],draft:'',busy:false,interruptible:false}));
+    expect(markup.indexOf('What time is it?')).toBeLessThan(markup.indexOf('claude ran'));
+    expect(markup.indexOf('claude ran')).toBeLessThan(markup.indexOf('It is 3:23 PM.'));
+  });
+
   it('hides stop when interruption is unavailable and exposes terminal failures',()=>{
     const markup=String(AIConversation({open:true,tool:'Codex',messages:[{id:'one',role:'assistant',content:'The turn ended.',status:'failed'}],draft:'',busy:true,progress:'Working…',interruptible:false,error:'The tool turn failed.'}));
     expect(markup).not.toContain('data-action="stop-conversation"');

@@ -580,9 +580,14 @@ and identity-less legacy entries remain conservatively blocking.
   `AIConversation` dialog after preparing the default tool without sending a workflow turn.
   Project Chat and Drive use different stable connection ids: Chat is a general project
   conversation, while Drive is the explicit `$hotsheet` automation shortcut in the drawer.
-  Kerf retains an ordered transcript and composer draft
+  Kerf retains one receipt-ordered transcript and composer draft
   per connection; each submit appends a user message and one assistant message whose Markdown
-  content grows in place from attributed `turn_event` output. Native activity and permission
+  content grows in place from attributed `turn_event` output. The assistant result receives its
+  transcript position when output first arrives, so activity emitted before a permission pause
+  remains above the result that resumes afterward; output already shown before later activity
+  keeps its earlier position. Replayed events are deduplicated without changing that order, and
+  legacy saved conversations normalize to their previous messages-then-activity presentation
+  before a new turn is appended. Native activity and permission
   events provide specific progress text, and connection-matched permission requests reuse the
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
   turn. Stop appears only for a busy connection advertising `interrupt`; Enter sends and
@@ -597,8 +602,9 @@ and identity-less legacy entries remain conservatively blocking.
   tool output cannot cause a root-render storm or disturb unrelated controls.
   Usage events attach token/cost metadata to the active assistant turn and derive a
   conversation total without a second counter; unknown cost is labeled unavailable. The same
-  stream's normalized activity events are session/connection matched into a bounded activity
-  sequence with persistent AI/tool attribution and an accessible may-contain-errors cue. The
+  stream's normalized activity events are session/connection matched into the shared bounded
+  transcript sequence, grouping adjacent activity while preserving their position between
+  messages, with persistent AI/tool attribution and an accessible may-contain-errors cue. The
   dialog uses the shared compact dialog header instead of stacking a second application header
   beneath the platform dialog title. Its secondary line reports useful ready/working/message-count
   state instead of continuously exposing the opaque session id. Plugin-provided model and effort

@@ -32,7 +32,7 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/api.ts               #   Typed server client for providers, checkout-scoped ticket/repository operations, client-owned AI drive, and terminal discovery/snapshots
     src/main.tsx             #   Real AppShell: project tabs, tickets/views, cross-project permission/drive updates, and mixed terminal/AI Workspace grid state
     src/project-drive.ts     #   ProjectSidebar Codex connection selection plus stable $hotsheet start/resume and capability-present interrupt behavior
-    src/ai-conversation.ts   #   Per-connection multi-turn transcript transitions for streamed output, activity, permissions, and terminal outcomes
+    src/ai-conversation.ts   #   Per-connection receipt-ordered multi-turn message/activity transitions across streamed output, permission pauses, replay, and terminal outcomes
     src/conversation-scroll.ts # Bottom-aware transcript pinning that preserves intentional scrollback
     src/conversation-export.ts # Portable .hotsheet-chat range, manifest, transcript, summary, selected structured assets, collision-lineage, and resume contract
     src/conversation-export-bridge.ts # Trusted host folder chooser plus validated bundle filesystem read/write boundary

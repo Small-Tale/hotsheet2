@@ -1,6 +1,6 @@
 import { describe,expect,it } from 'vitest';
 
-import {applyConversationActivity,applyConversationEvent,beginConversationTurn,conversationUsage,EMPTY_CONVERSATION,formatConversationCost,formatConversationTokens} from './ai-conversation';
+import {applyConversationActivity,applyConversationEvent,beginConversationTurn,conversationTimeline,conversationUsage,EMPTY_CONVERSATION,formatConversationCost,formatConversationTokens} from './ai-conversation';
 
 describe('AI conversation transcript',()=>{
   it('walks a turn through output, permission, activity, and completion',()=>{
@@ -17,11 +17,31 @@ describe('AI conversation transcript',()=>{
     expect(conversationUsage(state)).toEqual({tokensIn:12_000,tokensOut:800,costUsd:.0412});
   });
 
+  it('keeps activity before the result that resumes after a permission pause',()=>{
+    let state=beginConversationTurn(EMPTY_CONVERSATION,'turn-paused','What time is it?');
+    state=applyConversationActivity(state,{id:'command',ts:'2026-09-14T07:23:40Z',tool:'Claude',kind:'command',summary:'claude ran `date`',importance:'normal'});
+    state=applyConversationEvent(state,{type:'permission_asked',tool:'Bash',summary:'Run date'});
+    state=applyConversationEvent(state,{type:'output',content:'It is 3:23 PM.',truncated:false});
+    state=applyConversationEvent(state,{type:'done',reason:'completed'});
+    expect(conversationTimeline(state.messages,state.activity).map(group=>group.kind==='message'?group.message.id:group.activity.map(item=>item.id).join(','))).toEqual(['turn-paused','command','turn-paused-assistant']);
+  });
+
+  it('preserves output-before-activity order and groups adjacent activity without reordering duplicates',()=>{
+    let state=beginConversationTurn(EMPTY_CONVERSATION,'turn-streaming','Inspect this.');
+    state=applyConversationEvent(state,{type:'output',content:'Starting.',truncated:false});
+    state=applyConversationActivity(state,{id:'read',ts:'2026-09-14T07:23:40Z',tool:'Codex',kind:'read',summary:'Read the file',importance:'normal'});
+    state=applyConversationActivity(state,{id:'test',ts:'2026-09-14T07:23:41Z',tool:'Codex',kind:'command',summary:'Ran the test',importance:'normal'});
+    const duplicate=applyConversationActivity(state,{id:'read',ts:'2026-09-14T07:23:42Z',tool:'Codex',kind:'read',summary:'Duplicate replay',importance:'normal'});
+    expect(duplicate).toBe(state);
+    expect(conversationTimeline(state.messages,state.activity).map(group=>group.kind==='message'?group.message.id:group.activity.map(item=>item.id).join(','))).toEqual(['turn-streaming','turn-streaming-assistant','read,test']);
+  });
+
   it('preserves prior transcript activity and clears a stale error when retrying',()=>{
     const prior={messages:[{id:'old',role:'assistant' as const,content:'Earlier answer.',status:'failed' as const}],activity:[{id:'activity-1',tool:'Codex',kind:'command',summary:'Inspected the project',importance:'normal' as const}],error:'The prior turn failed.'};
     const retried=beginConversationTurn(prior,'turn-retry','Try again.');
     expect(retried.messages.map(message=>message.id)).toEqual(['old','turn-retry','turn-retry-assistant']);
-    expect(retried.activity).toBe(prior.activity);
+    expect(retried.activity).toEqual([expect.objectContaining(prior.activity[0])]);
+    expect(conversationTimeline(retried.messages,retried.activity).map(group=>group.kind==='message'?group.message.id:group.activity[0].id)).toEqual(['old','activity-1','turn-retry','turn-retry-assistant']);
     expect(retried.error).toBeUndefined();
   });
 
