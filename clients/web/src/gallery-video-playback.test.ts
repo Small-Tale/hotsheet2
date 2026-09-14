@@ -5,7 +5,12 @@ import {type GalleryVideoFrameMetadata,GalleryVideoPlaybackController,type Galle
 class FakeVideo implements GalleryVideoPlaybackResource {
   #currentTime=0;
   duration=10;
+  muted=false;
+  paused=true;
   readyState=1;
+  playCalls=0;
+  pauseCalls=0;
+  playResult:Promise<void>=Promise.resolve();
   assignments:number[]=[];
   listeners=new Set<()=>void>();
   frames=new Map<number,(now:number,metadata:GalleryVideoFrameMetadata)=>void>();
@@ -16,6 +21,8 @@ class FakeVideo implements GalleryVideoPlaybackResource {
   removeEventListener(_type:'seeked',listener:()=>void){this.listeners.delete(listener)}
   requestVideoFrameCallback(callback:(now:number,metadata:GalleryVideoFrameMetadata)=>void){const id=this.nextFrame++;this.frames.set(id,callback);return id}
   cancelVideoFrameCallback(id:number){this.frames.delete(id)}
+  play(){this.playCalls+=1;this.paused=false;return this.playResult}
+  pause(){this.pauseCalls+=1;this.paused=true}
   seeked(){for(const listener of this.listeners)listener()}
   frame(){const entry=this.frames.entries().next().value;if(!entry)return;this.frames.delete(entry[0]);entry[1](0,{mediaTime:this.currentTime})}
 }
@@ -53,13 +60,27 @@ describe('GalleryVideoPlaybackController',()=>{
     video.seeked();video.frame();expect(present).toHaveBeenCalledWith(7000);
   });
 
-  it('primes a paused first frame and cancels stale callbacks on disposal',()=>{
+  it('briefly plays while decoding the first frame, then pauses and restores mute',()=>{
     const video=controlledVideo(),present=vi.fn(),controller=new GalleryVideoPlaybackController(video,present);
-    controller.primeFirstFrame();expect(video.assignments).toEqual([.001]);video.seeked();expect(video.frames.size).toBe(1);
+    video.readyState=2;controller.primeFirstFrame();expect(video.playCalls).toBe(1);expect(video.muted).toBe(true);expect(video.assignments).toEqual([.001]);expect(controller.busy).toBe(true);
+    video.frame();video.seeked();expect(video.pauseCalls).toBe(1);expect(video.muted).toBe(false);expect(present).toHaveBeenCalledWith(0);expect(controller.busy).toBe(false);
+  });
+
+  it('issues the newest scrub target after decoder priming and cancels priming on disposal',()=>{
+    const video=controlledVideo(),present=vi.fn(),controller=new GalleryVideoPlaybackController(video,present);
+    video.muted=true;controller.primeFirstFrame();controller.seek(3000);controller.seek(7000);expect(video.assignments).toEqual([.001]);video.frame();expect(video.pauseCalls).toBe(0);expect(video.muted).toBe(true);expect(video.assignments).toEqual([.001,7]);
+    video.seeked();video.frame();expect(present).toHaveBeenCalledWith(7000);expect(video.pauseCalls).toBe(1);
+    controller.primeFirstFrame();expect(video.playCalls).toBe(2);controller.dispose();expect(video.frames.size).toBe(0);expect(video.listeners.size).toBe(0);video.frame();expect(present).toHaveBeenCalledOnce();controller.seek(3000);expect(video.assignments).toEqual([.001,7,.001]);
+  });
+
+  it('retains paused seeking when internal playback is blocked',async()=>{
+    const video=controlledVideo(),present=vi.fn(),controller=new GalleryVideoPlaybackController(video,present);video.playResult=Promise.reject(new Error('blocked'));
+    controller.primeFirstFrame();await video.playResult.catch(()=>undefined);await Promise.resolve();expect(video.assignments).toEqual([.001]);expect(video.frames.size).toBe(1);
     controller.dispose();expect(video.frames.size).toBe(0);expect(video.listeners.size).toBe(0);video.frame();expect(present).not.toHaveBeenCalled();controller.seek(3000);expect(video.assignments).toEqual([.001]);
   });
 
-  it('does not prime when the browser already has a decoded frame',()=>{
-    const video=controlledVideo();video.readyState=2;const controller=new GalleryVideoPlaybackController(video,vi.fn());controller.primeFirstFrame();expect(video.assignments).toEqual([]);expect(controller.busy).toBe(false);
+  it('hands internal decoder playback to an immediate user play action',()=>{
+    const video=controlledVideo(),controller=new GalleryVideoPlaybackController(video,vi.fn());controller.seek(4000);expect(controller.internalPlayback).toBe(true);expect(video.paused).toBe(false);expect(video.muted).toBe(true);
+    controller.prepareUserPlayback();expect(controller.internalPlayback).toBe(false);expect(video.paused).toBe(true);expect(video.muted).toBe(false);
   });
 });

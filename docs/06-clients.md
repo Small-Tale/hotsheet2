@@ -713,11 +713,13 @@ and identity-less legacy entries remain conservatively blocking.
   flow and server cache contract are identical on macOS, Linux, and Windows.
   A preview or inline image opens the same full-screen
   media gallery; videos remain paused initially, preload only metadata, and explicitly
-  prime and present their decoded
-  first frame rather than carrying the grid thumbnail poster into the full-screen player.
-  A paused scrub coalesces rapid pointer updates behind the active seek, retains only the
-  latest target, and presents that decoded frame before accepting another expensive seek;
-  it does not require a play/pause cycle. They expose only Hot Sheet's custom play/pause, scrubber, time, and
+  prime the decoder with a brief, temporarily muted internal play that pauses on its first
+  compositor-presented frame and restores the user's mute state, then present the decoded first frame rather than carrying the grid thumbnail poster
+  into the full-screen player. If playback is blocked, priming falls back to a tiny seek.
+  Each paused scrub chain likewise keeps that muted internal playback active while it
+  coalesces rapid pointer updates behind the active seek, retains only the latest target,
+  and pauses on that decoded frame before accepting another expensive seek;
+  it does not require a user-visible play/pause cycle. They expose only Hot Sheet's custom play/pause, scrubber, time, and
   volume controls, never a second native browser control strip. The volume icon opens
   a click-persistent popup containing both the slider and mute action; only clicking
   outside that popup dismisses it. Playback ticks and scrub input update the live gallery
