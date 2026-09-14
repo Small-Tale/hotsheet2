@@ -418,7 +418,7 @@ and identity-less legacy entries remain conservatively blocking.
   browser JavaScript.
 
   Workspace collection refreshes retain one bounded compact page and expose a visible
-  **Load more tickets** cursor continuation below lists and pinned inside column boards instead of
+  **Load more tickets** cursor continuation below lists and after the final loaded row in its column instead of
   downloading every ticket. Continuation pages append without duplicating overlapping
   provider rows, and the action disappears when the cursor is exhausted. SQL aggregate counts keep the
   sidebar and background project tabs authoritative even when most rows are not resident.

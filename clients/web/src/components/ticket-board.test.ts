@@ -72,10 +72,10 @@ describe('TicketBoard', () => {
     expect(markup).toContain('1 of 300 loaded');
   });
 
-  it('keeps a continuation action inside the board workspace',()=>{
-    const markup=String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[ticket],totalCount:201}],continuation:{loading:false}}));
-    expect(markup).toContain('ticket-board__more');expect(markup).toContain('data-action="load-next-ticket-page"');expect(markup).toContain('Load more tickets');
-    expect(String(TicketBoard({columns:[],continuation:{loading:true}}))).toContain('Loading…');
+  it('places the continuation after the final loaded row in its owning column',()=>{
+    const markup=String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[ticket],totalCount:201}],continuation:{loading:false,columnId:'active'}}));
+    expect(markup).toContain('ticket-board-column__more');expect(markup).toContain('data-action="load-next-ticket-page"');expect(markup).toContain('Load more tickets');expect(markup.indexOf('data-key="ticket:HS2-BOARD"')).toBeLessThan(markup.indexOf('ticket-board-column__more'));
+    expect(String(TicketBoard({columns:[{id:'active',title:'Active',tickets:[]}],continuation:{loading:true,columnId:'active'}}))).toContain('Loading…');
   });
 
   it('maps the Not Started column id to the wire status used by ticket drops', () => {
