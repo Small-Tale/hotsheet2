@@ -1,5 +1,5 @@
 import type { CheckoutTicketCounts,TicketRow } from './api';
-import type { TicketView } from './ticket-views';
+import { isArchivedTicket,type TicketView } from './ticket-views';
 
 export interface TicketBoardGroup {
   id: string;
@@ -26,7 +26,7 @@ export function ticketBoardGroups(
   hideVerified: boolean,
 ): TicketBoardGroup[] {
   if (view === 'backlog') return [{ id: 'backlog', title: 'Backlog', tickets: [...tickets] }];
-  if (view === 'archive') return [{ id: 'archive', title: 'Archive', tickets: [...tickets] }];
+  if (view === 'archive') return [{ id: 'archive', title: 'Archive', tickets: tickets.filter(isArchivedTicket) }];
   if (view === 'trash') return [{ id: 'trash', title: 'Trash', tickets: [...tickets] }];
 
   const completedStatuses = hideVerified ? ['completed', 'verified'] : ['completed'];

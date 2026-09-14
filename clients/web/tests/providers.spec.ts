@@ -2074,7 +2074,7 @@ test('derives board columns from the selected view and merges Verified by projec
   await page.getByRole('button',{name:/Archive/}).click();
   await expect(board.locator('.ticket-board-column__title')).toHaveText(['Archive']);
   await expect(board.locator('[data-column-id="archive"]')).toContainText('Archived ticket');
-  const archiveCards=board.locator('[data-column-id="archive"] [data-component="ticket-list-row"]');await expect(archiveCards).toHaveCount(3);const archiveCard=archiveCards.first();expect(await archiveCard.evaluate(node=>parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);await expect(archiveCard).toHaveCSS('border-style','solid');await page.screenshot({path:'/private/tmp/hs2-rzd9d4-archive-column.png',fullPage:true});
+  const archiveCards=board.locator('[data-column-id="archive"] [data-component="ticket-list-row"]');await expect(archiveCards).toHaveCount(2);await expect(board.locator('[data-ticket-slug="HS2-MOVED1"]')).toBeVisible();await expect(board.locator('[data-ticket-slug="HS2-VERIFY01"]')).toHaveCount(0);await expect(board.locator('[data-ticket-slug="HS2-DEL001"]')).toHaveCount(0);const archiveCard=archiveCards.first();expect(await archiveCard.evaluate(node=>parseFloat(getComputedStyle(node).borderRadius))).toBeGreaterThan(0);await expect(archiveCard).toHaveCSS('border-style','solid');await page.screenshot({path:'/private/tmp/hs2-v20ewj-archive-column.png',fullPage:true});
 });
 
 test('switches large ticket views without cloning every row into motion ghosts',async({page})=>{

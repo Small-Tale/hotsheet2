@@ -73,7 +73,8 @@ Dragging an unselected ticket moves only it, while
   other presentation mode preserves that selection.
   A Trash view appears directly below Archive while the project has soft-deleted
   (`deleted`) tickets, and stays while it is the selected view; Archive holds only archived
-  tickets and moved tombstones. When every selected ticket is in Trash, the ticket menu
+  tickets and moved tombstones, never Queue-owned Verified tickets. The board projection
+  enforces that boundary even if a provider returns a mixed-status page. When every selected ticket is in Trash, the ticket menu
   offers Restore from Trash, which returns each ticket to the status recorded before it was
   deleted (Not Started when that is unknown). The Trash header also offers Empty Trash when
   the checkout has a git-backed ticket source. Its confirmation states the number of tickets

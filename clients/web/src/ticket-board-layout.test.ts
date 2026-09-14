@@ -25,12 +25,12 @@ describe('ticketBoardGroups', () => {
     expect(groups.at(-1)?.tickets.map(item => item.status)).toEqual(['completed', 'verified']);
   });
 
-  it('uses one column for Backlog and Archive views', () => {
+  it('uses one column for Backlog and keeps Archive disjoint from Verified and Trash', () => {
     expect(ticketBoardGroups([ticket('backlog')], 'backlog', false)).toMatchObject([
       { id: 'backlog', title: 'Backlog', tickets: [{ status: 'backlog' }] },
     ]);
-    expect(ticketBoardGroups([ticket('archive'), ticket('deleted')], 'archive', false)).toMatchObject([
-      { id: 'archive', title: 'Archive', tickets: [{ status: 'archive' }, { status: 'deleted' }] },
+    expect(ticketBoardGroups([ticket('archive'), ticket('moved'), ticket('verified'), ticket('deleted')], 'archive', false)).toMatchObject([
+      { id: 'archive', title: 'Archive', tickets: [{ status: 'archive' }, { status: 'moved' }] },
     ]);
   });
 
