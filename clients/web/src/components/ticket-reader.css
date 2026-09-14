@@ -1,4 +1,4 @@
-.ticket-reader-dialog { position: fixed; display: block; inset: 1.5rem; width: var(--width); height: calc(100vh - 3rem); margin: auto; --width: min(64rem, calc(100vw - 3rem)); }
+.ticket-reader-dialog { --width: min(64rem, calc(100vw - 3rem)); }
 .ticket-reader-dialog:not([open]) { pointer-events: none; }
 .ticket-reader-dialog::part(dialog) { height: calc(100vh - 3rem); max-height: calc(100vh - 3rem); overflow: hidden; transform: translateY(var(--ticket-reader-offset, 0)); transition: transform 140ms ease; }
 .ticket-reader-dialog::part(body) { height: 100%; padding: 0; overflow: hidden; }
@@ -19,4 +19,4 @@
 .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview :is(h2, h3, h4, h5, h6) { font-size: var(--hs-reader-font-size-m); }
 .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview code { font-size: var(--hs-reader-font-size-s); }
 .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview blockquote, .ticket-reader[data-large-text="true"] :is(.ticket-inspector__details-surface, .note-card__body, .note-card__feedback-prompt) .markdown-preview blockquote :is(p, li, h1, h2, h3, h4, h5, h6, th, td) { font-size: var(--hs-reader-font-size-s); }
-@media (max-width: 48rem) { .ticket-reader-dialog { inset: 1rem; height: calc(100vh - 2rem); --width: calc(100vw - 2rem); } .ticket-reader-dialog::part(dialog) { height: calc(100vh - 2rem); max-height: calc(100vh - 2rem); transform: none; } .ticket-reader .ticket-inspector--reader .ticket-inspector__content { padding-inline: 1rem; } .ticket-reader__layer-context { padding-inline: 1rem; } }
+@media (max-width: 48rem) { .ticket-reader-dialog { --width: calc(100vw - 2rem); } .ticket-reader-dialog::part(dialog) { height: calc(100vh - 2rem); max-height: calc(100vh - 2rem); transform: none; } .ticket-reader .ticket-inspector--reader .ticket-inspector__content { padding-inline: 1rem; } .ticket-reader__layer-context { padding-inline: 1rem; } }

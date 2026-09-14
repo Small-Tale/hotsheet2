@@ -1695,7 +1695,10 @@ disposable index must therefore recompute the compact flag for unchanged ticket 
 **Reader mode is a directly editable focus surface.** Opening reader mode shows the
 ticket's details + notes on one large scrollable surface with no separate top-level edit
 mode. The reader uses the available browser height with exactly 24px of backdrop above
-and below; it has no desktop-height cap that leaves unnecessary vertical space. Details
+and below; it has no desktop-height cap that leaves unnecessary vertical space. The Web
+Awesome dialog owns the overlay geometry; a mounted but closed reader host has no fixed
+viewport box, so ordinary ticket selection cannot paint an inert reader surface over the
+workspace. Details
 and ordinary notes expose their normal edit interactions immediately.
 The workspace reader remains the editable surface for its selected ticket. Ticket links
 open read-only reader layers above it (or above the sidebar inspector) so each frame can
