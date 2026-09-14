@@ -207,7 +207,7 @@ test('offers explicit identity-guarded recovery for an unresponsive local server
 test('always confirms before closing a project without running resources',async({page})=>{
   await page.setViewportSize({width:1280,height:800});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   const projectTab=page.locator('[data-component="project-tab"]');await projectTab.hover();await page.getByRole('button',{name:'Close demo'}).click();const dialog=page.locator('[data-component="project-close-dialog"]');await expect(dialog).toHaveJSProperty('open',true);await expect(dialog).not.toContainText('No terminals or AI chats are currently running');await expect(dialog.locator('.project-close-dialog__intro')).toHaveCount(0);await expect(dialog.getByRole('button',{name:'Close Project'})).toBeVisible();await expect(dialog.getByRole('button',{name:'Stop & Close'})).toHaveCount(0);await expect.poll(()=>dialog.evaluate(element=>element.shadowRoot?.querySelector('dialog')?.getAnimations().filter(animation=>animation.playState==='running').length??-1)).toBe(0);await page.screenshot({path:'/private/tmp/hs2-d7haq1-project-close-wide.png',fullPage:true});
-  await dialog.getByRole('button',{name:'Cancel'}).click();await expect(projectTab).toHaveCount(1);await projectTab.hover();await page.getByRole('button',{name:'Close demo'}).click();await page.setViewportSize({width:390,height:844});await expect(dialog).toHaveJSProperty('open',true);await expect.poll(()=>dialog.evaluate(element=>{const box=element.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth&&box.bottom<=innerHeight})).toBe(true);await expect.poll(()=>dialog.evaluate(element=>element.shadowRoot?.querySelector('dialog')?.getAnimations().filter(animation=>animation.playState==='running').length??-1)).toBe(0);await page.screenshot({path:'/private/tmp/hs2-d7haq1-project-close-narrow.png',fullPage:true});await dialog.getByRole('button',{name:'Close Project'}).click();await expect(projectTab).toHaveCount(0);
+  await dialog.getByRole('button',{name:'Cancel'}).click();await expect(projectTab).toHaveCount(1);await projectTab.hover();await page.getByRole('button',{name:'Close demo'}).click();await page.setViewportSize({width:390,height:844});await expect(dialog).toHaveJSProperty('open',true);await expect.poll(()=>dialog.evaluate(element=>{const box=element.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth&&box.bottom<=innerHeight})).toBe(true);await expect.poll(()=>dialog.evaluate(element=>element.shadowRoot?.querySelector('dialog')?.getAnimations().filter(animation=>animation.playState==='running').length??-1)).toBe(0);await page.screenshot({path:'/private/tmp/hs2-d7haq1-project-close-narrow.png',fullPage:true});await dialog.getByRole('button',{name:'Close Project'}).click();await expect(projectTab).toHaveCount(0);await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual([]);
 });
 
 test('falls back to the project dialog when the direct native chooser fails',async({page})=>{
@@ -936,7 +936,28 @@ test('keeps remembered-project startup atomic and does not report its intentiona
   expect(submissions).toEqual([]);
 });
 
-test('prunes a failed hidden remembered project without obscuring a successful one',async({page})=>{
+test('retries a temporarily failed remembered project and restores every project',async({page})=>{
+  await mockProject(page);
+  const restoredRoot='/work/restarting-server';let attempts=0;
+  await page.route('**/__hotsheet/projects/open',route=>{
+    if(route.request().postDataJSON().root!==restoredRoot)return route.fallback();
+    attempts+=1;
+    return attempts===1
+      ?route.fulfill({status:409,json:{error:'The server is still restarting.'}})
+      :route.fulfill({status:201,json:{...project,id:'restored-checkout',root:restoredRoot,name:'restored',apiPath:'/__hotsheet/project-api/restored-checkout'}});
+  });
+  await page.addInitScript(({good,restarting})=>{localStorage.setItem('hotsheet.open-projects',JSON.stringify([good,restarting]))},{good:project.root,restarting:restoredRoot});
+  await page.goto('/');
+  await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+  await expect(page.getByRole('tab',{name:'restored'})).toBeVisible();
+  expect(attempts).toBe(2);
+  await expect(page.locator('.app-error')).toHaveCount(0);
+  await expect(page.locator('.app-toast')).toHaveCount(0);
+  await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual([project.root,restoredRoot]);
+  await page.screenshot({path:'/private/tmp/hs2-hes004-restored-projects.png',fullPage:true});
+});
+
+test('keeps a persistently failed project remembered without obscuring a successful one',async({page})=>{
   await mockProject(page);
   const failedRoot='/work/older-server';
   await page.route('**/__hotsheet/projects/open',route=>route.request().postDataJSON().root===failedRoot
@@ -946,9 +967,8 @@ test('prunes a failed hidden remembered project without obscuring a successful o
   await page.goto('/');
   await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
   await expect(page.locator('.app-error')).toHaveCount(0);
-  await expect(page.locator('.app-toast')).toContainText(failedRoot);
-  await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual([project.root]);
-  await page.screenshot({path:'/private/tmp/hs2-nzffdh-hidden-restore-recovery.png',fullPage:true});
+  await expect(page.locator('.app-toast')).toContainText('remains remembered');
+  await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual([project.root,failedRoot]);
 });
 
 test('suppresses interaction-bound render bursts but reports a storm that persists afterward',async({page})=>{

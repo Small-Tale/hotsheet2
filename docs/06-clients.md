@@ -319,9 +319,11 @@ and identity-less legacy entries remain conservatively blocking.
   server conservatively discovers a valid sibling `<checkout>.hs2` git ticket store,
   hosts it, and records the many-to-many checkout/store link.
   Retrying a failed project open clears the prior failure immediately. During startup,
-  one failed hidden remembered project is pruned from the remembered set and reported
-  non-modally; it must never leave stale compatibility or connection diagnostics over a
-  different project that reopened successfully.
+  failed remembered projects receive one bounded retry after the initial restore pass.
+  A project that remains unavailable is reported non-modally but stays remembered for the
+  next launch; only an explicit project close removes it from the remembered set. Restore
+  failures must never leave stale compatibility or connection diagnostics over a different
+  project that reopened successfully.
   A checkout with existing sources opens directly. Source-less project setup uses a
   bounded dialog with shared multiline menu items whose title and explanation remain
   inside one selectable row at compact sizes. When opening from the initial dialog it
