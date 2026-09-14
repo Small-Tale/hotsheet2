@@ -8,6 +8,7 @@
 
 # --- Claude Code / AI-tool local + harness files ---
 /.claude/settings.local.json
+/.claude/worktrees/
 /.codex/config.local.toml
 .cc-writes/
 /.agents/**/settings.local.json
