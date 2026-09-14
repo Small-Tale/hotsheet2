@@ -38,7 +38,7 @@ import {AppError} from './components/app-error';
 import {ATTACHMENT_CONTEXT_MENU_HEIGHT,AttachmentContextMenu,type AttachmentContextMenuKind} from './components/attachment-context-menu';
 import {AttachmentGallery,attachmentGalleryAnnotationVisible,attachmentGalleryDefaultRange,attachmentGalleryImageIndex,attachmentGalleryKeyboardAction,attachmentGallerySelectionUrl,attachmentGalleryShiftUrl,attachmentGallerySwipeDirection,attachmentGallerySwipeGesture,attachmentGalleryZoomModel,releaseAttachmentGalleryVideo,type AttachmentGalleryGeometry,type AttachmentGalleryImage,type AttachmentGallerySwipeGesture} from './components/attachment-gallery';
 import { BulkTicketDialog, type BulkTicketDialogState } from './components/bulk-ticket-dialog';
-import {AIConversation} from './components/ai-conversation';
+import {AIConversation,isConversationSurfaceLifecycleEvent} from './components/ai-conversation';
 import {AiToolSettings} from './components/ai-tool-settings';
 import {ConversationExportDialog,type ConversationExportDialogState} from './components/conversation-export-dialog';
 import { ConnectionDetailsDialog } from './components/connection-details-dialog';
@@ -1225,7 +1225,7 @@ delegate(document.body,'click','[data-action="select-drive-model"]',(_event,targ
 delegate(document.body,'click','[data-action="select-drive-effort"]',(_event,target)=>{const current=project(),effort=data(target).value;if(!current||!effort)return;driveOverridesByProject.value={...driveOverridesByProject.value,[current.id]:{...effectiveDriveSelection(current.id),effort}};driveOptionsOpen.value=false});
 document.addEventListener('pointerdown',event=>{if(driveOptionsOpen.value&&!(event.target as Element).closest('.project-sidebar__drive-row'))driveOptionsOpen.value=false},{capture:true});
 delegate(document.body,'click','[data-action="open-conversation"]',()=>{void openSidebarConversation()});
-delegateCapture(document.body,'wa-hide','[data-component="ai-conversation"]',()=>{conversationOpen.value=false});
+delegateCapture(document.body,'wa-hide','[data-component="ai-conversation"]',(event,target)=>{if(isConversationSurfaceLifecycleEvent(event,target))conversationOpen.value=false});
 delegate(document.body,'click','[data-action="save-conversation"]',()=>{openConversationExport()});
 delegate(document.body,'click','[data-action="pick-conversation-message"]',(event,target)=>{if((event.target as Element).closest('a,button,input,select,textarea')||window.getSelection()?.toString())return;const connectionId=target.closest<HTMLElement>('[data-selection-id]')?.dataset.selectionId,messageId=data(target).messageId;if(connectionId&&messageId)pickConversationMessage(connectionId,messageId)});
 delegate(document.body,'keydown','[data-action="pick-conversation-message"]',(event,target)=>{const keyboard=event as KeyboardEvent;if(keyboard.key!=='Enter'&&keyboard.key!==' ')return;keyboard.preventDefault();(target as HTMLElement).click()});

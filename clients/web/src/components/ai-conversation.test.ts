@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {describe,expect,it} from 'vitest';
 
 import type {PermissionItem} from '../permission-notifications';
-import {AIConversation} from './ai-conversation';
+import {AIConversation,isConversationSurfaceLifecycleEvent} from './ai-conversation';
 import {PermissionRequestPopup} from './permission-request-card';
 
 const permission:PermissionItem={id:1,connection:'connection-1',tool:'Bash',action:'npm test',key:'project:1',projectId:'project',projectName:'Project',agent:'Codex',role:'main worker',receivedAt:1,ignored:false,always_allow_supported:true};
@@ -62,5 +62,6 @@ describe('AIConversation',()=>{
   it('renders live read-only previews without saved-transcript or mutation affordances',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[{id:'answer',role:'assistant',content:'Previewed result.',status:'completed'}],draft:'',busy:false,interruptible:false,readOnly:true,readOnlyContext:'preview'}));expect(markup).toContain('data-read-only="true"');expect(markup).toContain('Read-only preview');expect(markup).toContain('Return to the AI chat to continue this conversation.');expect(markup).toContain('Previewed result.');expect(markup).not.toContain('Saved transcript');expect(markup).not.toContain('save-conversation');expect(markup).not.toContain('send-conversation-turn')});
   it('promotes a permission popup into the dialog top layer without duplicating its inline card',()=>{const markup=String(AIConversation({open:true,tool:'Codex',messages:[],draft:'',busy:true,interruptible:true,permissions:[permission],foreground:PermissionRequestPopup({item:permission})}));expect(markup).toContain('ai-conversation__foreground');expect(markup.match(/data-component="permission-request-card"/g)).toHaveLength(1)});
   it('offers labeled model and effort changes only when the plugin declares support',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,model:'gpt',effort:'high',models:[{id:'gpt',label:'GPT'}],efforts:['medium','high'],canChangeModel:true,canChangeEffort:true}));expect(markup).toContain('name="conversation-model" label="Model"');expect(markup).toContain('name="conversation-effort" label="Effort"');expect(markup).not.toContain('data-action="stop-conversation"')});
+  it('distinguishes the conversation lifecycle from a nested model popup closing',()=>{const surface={} as Element,select={} as Element;expect(isConversationSurfaceLifecycleEvent({target:select},surface)).toBe(false);expect(isConversationSurfaceLifecycleEvent({target:surface},surface)).toBe(true)});
   it('keeps nested Markdown and usage legible on the loud user bubble',()=>{expect(css).toMatch(/\.ai-conversation__message--user>\.markdown-preview[^}]*color: var\(--wa-color-neutral-on-loud\)/);expect(css).toMatch(/\.ai-conversation__message--user \.ai-conversation__usage[^}]*color: color-mix/)});
 });

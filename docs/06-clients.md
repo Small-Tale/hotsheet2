@@ -586,7 +586,9 @@ and identity-less legacy entries remain conservatively blocking.
   standard decision card inline. Completed, failed, and interrupted outcomes remain on their
   turn. Stop appears only for a busy connection advertising `interrupt`; Enter sends and
   Shift+Enter adds a line. Plugins may advertise live model and effort changes, which the
-  conversation applies to subsequent turns without changing provider. Connection refresh and transcript updates share the existing
+  conversation applies to subsequent turns without changing provider. Closing a nested
+  model or effort popup does not dismiss the owning conversation; only the conversation
+  surface's own hide lifecycle closes it. Connection refresh and transcript updates share the existing
   replay-safe WebSocket/long-poll stream—this surface adds no timer or simple polling.
   While the dialog is closed, streamed transcript/activity state remains retained but the
   conversation surface is not mounted and does not subscribe the application root to those
