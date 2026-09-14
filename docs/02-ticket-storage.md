@@ -453,6 +453,10 @@ qualified references preserve the exact owning project/source identity.
 **Reopening** clears `close_reason` / `closed_at` / `duplicate_of` and the prior work
 cycle's `completed_at` / `verified_at` timestamps when it returns the ticket to an open
 status. Completing or verifying the reopened ticket stamps fresh lifecycle timestamps.
+For a ticket reopened by an older client that still carries terminal timestamps, explicitly
+setting its current active status is an idempotent repair: `hotsheet edit <slug> --status
+started` (or `not_started`) clears the stale terminal-only metadata without changing its
+active state.
 
 ## 2.7 Concurrency & automatic conflict resolution
 

@@ -91,6 +91,33 @@ fn rebuild_indexes_every_ticket() {
 }
 
 #[test]
+fn reopened_ticket_projects_cleared_lifecycle_timestamps() {
+    let (_d, store, ix) = seeded();
+    let id = ulid("01ARZ3NDEKTSV4RRFFQ69G5FB2");
+    let reopened = ops::update(
+        &store,
+        &id,
+        Timestamp::new("2026-08-19T02:00:00Z"),
+        TicketPatch {
+            status: Some(Status::NotStarted),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    ix.upsert(&reopened, "reopened.md", "reopened").unwrap();
+
+    let rows = ix
+        .query(&TicketQuery {
+            status: Some(Status::NotStarted),
+            ..Default::default()
+        })
+        .unwrap();
+    let row = rows.iter().find(|row| row.id == id.to_string()).unwrap();
+    assert_eq!(row.completed_at, None);
+    assert_eq!(row.verified_at, None);
+}
+
+#[test]
 fn summary_aggregates_navigation_counts_without_loading_rows() {
     let (_d, _s, ix) = seeded();
     let summary = ix

@@ -405,6 +405,39 @@ fn reopening_verified_ticket_starts_a_fresh_completion_cycle() {
 }
 
 #[test]
+fn edit_reopens_completed_tickets_to_each_active_status_without_stale_metadata() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    hs(p).args(["init", "--prefix", "HS"]).assert().success();
+
+    for active_status in ["started", "not_started"] {
+        let slug = new_ticket(p, &format!("Reopen to {active_status}"));
+        hs(p)
+            .args(["edit", &slug, "--status", "completed"])
+            .assert()
+            .success();
+        hs(p)
+            .args(["edit", &slug, "--status", active_status])
+            .assert()
+            .success();
+
+        let store = hotsheet_ticketing::FsStore::open(p).unwrap();
+        let reopened = hotsheet_ticketing::ops::resolve(&store, &slug)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            format!("{:?}", reopened.status).to_lowercase(),
+            active_status.replace('_', "")
+        );
+        assert_eq!(reopened.completed_at, None);
+        assert_eq!(reopened.verified_at, None);
+        let serialized = std::fs::read_to_string(store.ticket_path(&reopened.id)).unwrap();
+        assert!(!serialized.contains("completed_at:"), "{serialized}");
+        assert!(!serialized.contains("verified_at:"), "{serialized}");
+    }
+}
+
+#[test]
 fn providers_reports_default_git_connection_and_capabilities() {
     let dir = tempfile::tempdir().unwrap();
     hs(dir.path())

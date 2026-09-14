@@ -546,10 +546,11 @@ pub fn update(
     }
     if let Some(s) = patch.status {
         t.status = s;
-        if s.is_active() && !previous_status.is_active() {
-            // Reopening begins a new work cycle. Completion/verification timestamps
-            // describe the current cycle, so stale terminal-state dates must not leak
-            // into the reopened ticket or suppress a later completion stamp.
+        if s.is_active() {
+            // An explicit active status begins (or repairs) the current work cycle.
+            // Clear terminal-only timestamps even when the ticket is already active so
+            // repeating `edit --status started|not_started` safely normalizes legacy
+            // tickets that were reopened before this invariant was enforced.
             t.completed_at = None;
             t.verified_at = None;
         }
@@ -2202,6 +2203,86 @@ mod tests {
         assert_eq!(recompleted.verified_at, None);
         assert_ne!(recompleted.completed_at, Some(completed_at));
         assert_ne!(recompleted.verified_at, Some(verified_at));
+    }
+
+    #[test]
+    fn reopening_completed_ticket_clears_lifecycle_timestamps_for_each_active_status() {
+        for (id, active_status) in [
+            ("01ARZ3NDEKTSV4RRFFQ69G5FB0", Status::Started),
+            ("01ARZ3NDEKTSV4RRFFQ69G5FB1", Status::NotStarted),
+        ] {
+            let (_d, store) = store();
+            let id = Ulid::from_string(id).unwrap();
+            create(
+                &store,
+                id.clone(),
+                "HS",
+                ts("2026-08-19T00:00:00Z"),
+                NewTicket {
+                    title: "Reopen completed ticket".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            update(
+                &store,
+                &id,
+                ts("2026-08-19T01:00:00Z"),
+                TicketPatch {
+                    status: Some(Status::Completed),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+            let reopened = update(
+                &store,
+                &id,
+                ts("2026-08-19T02:00:00Z"),
+                TicketPatch {
+                    status: Some(active_status),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(reopened.status, active_status);
+            assert_eq!(reopened.completed_at, None);
+            assert_eq!(reopened.verified_at, None);
+        }
+    }
+
+    #[test]
+    fn explicit_active_status_repairs_legacy_terminal_timestamps() {
+        let (_d, store) = store();
+        let id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FB0").unwrap();
+        let mut legacy = create(
+            &store,
+            id.clone(),
+            "HS",
+            ts("2026-08-19T00:00:00Z"),
+            NewTicket {
+                title: "Legacy reopened ticket".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        legacy.status = Status::Started;
+        legacy.completed_at = Some(ts("2026-08-19T01:00:00Z"));
+        legacy.verified_at = Some(ts("2026-08-19T02:00:00Z"));
+        store.write_ticket(&legacy).unwrap();
+
+        let repaired = update(
+            &store,
+            &id,
+            ts("2026-08-19T03:00:00Z"),
+            TicketPatch {
+                status: Some(Status::Started),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(repaired.completed_at, None);
+        assert_eq!(repaired.verified_at, None);
     }
 
     #[test]
