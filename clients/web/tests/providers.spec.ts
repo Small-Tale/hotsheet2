@@ -2574,3 +2574,18 @@ test('moves a media thumbnail between batches and removes active media from its 
   const thumbnail=page.getByRole('button',{name:'Open proof.png in media gallery'}),attachments=page.locator('[data-component="ticket-attachments"]');await expect(thumbnail).toHaveAttribute('draggable','true');await thumbnail.evaluate((node,target)=>{const transfer=new DataTransfer();node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:transfer}));document.querySelector<HTMLElement>(target)!.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}))},'[data-attachment-batch="after"]');await expect.poll(()=>metadataWrites).toHaveLength(1);expect(metadataWrites[0]).toMatchObject({attachment_ids:['A1'],batch_id:'after',batch_label:'After'});expect(uploads).toHaveLength(0);await attachments.screenshot({path:'/private/tmp/hs2-9pa2kd-media-move-wide.png'});await page.setViewportSize({width:760,height:640});await attachments.screenshot({path:'/private/tmp/hs2-9pa2kd-media-move-narrow.png'});await page.setViewportSize({width:1280,height:720});
   await thumbnail.click();const gallery=page.getByRole('dialog',{name:/proof.png/});await gallery.getByRole('button',{name:'More image actions'}).click();const menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu.getByRole('menuitem',{name:'Remove'})).toBeVisible();await gallery.screenshot({path:'/private/tmp/hs2-edx5j3-gallery-remove-wide.png'});await page.setViewportSize({width:760,height:640});await gallery.getByRole('button',{name:'More image actions'}).click();await expect(menu.getByRole('menuitem',{name:'Remove'})).toBeVisible();await gallery.screenshot({path:'/private/tmp/hs2-edx5j3-gallery-remove-narrow.png'});await menu.getByRole('menuitem',{name:'Remove'}).click();await expect(gallery).toHaveCount(0);await expect(page.locator('.app-toast')).toContainText('Attachment removed.');await expect(page.getByRole('button',{name:'Open proof.png in media gallery'})).toHaveCount(0);
 });
+
+test('shows the decorative server-busy bars while a server request is in flight (HS2-MW1V3M)',async({page})=>{
+  await page.setViewportSize({width:1280,height:800});await mockProject(page,true,false,0,0,450);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const bars=page.locator('[data-component="server-busy-bars"]');await expect(bars).toBeAttached();await expect(bars).toHaveAttribute('aria-hidden','true');
+  const expected=await page.evaluate(()=>Math.floor((window.innerWidth+2)/5));
+  await expect(bars.locator('.server-busy-bars__bar')).toHaveCount(expected);
+  const starYellow=await bars.evaluate(node=>{const probe=document.createElement('span');probe.style.color='var(--hs-ticket-state-up-next)';node.append(probe);const resolved=getComputedStyle(probe).color;probe.remove();return resolved});
+  await expect(bars.locator('.server-busy-bars__bar').first()).toHaveCSS('background-color',starYellow);
+  await expect(bars).toHaveAttribute('data-visible','false');
+  const row=page.locator('[data-component="ticket-list-row"][data-ticket-slug="HS2-DEMO01"]');await row.click();
+  const statusSelect=page.locator('wa-select[name="inspector-status"]');await statusSelect.click();await statusSelect.locator('wa-option[value="completed"]').click();
+  await expect(bars).toHaveAttribute('data-visible','true');
+  await page.screenshot({path:'/private/tmp/hs2-mw1v3m-busy-bars-wide.png'});
+  await expect(bars).toHaveAttribute('data-visible','false');
+});

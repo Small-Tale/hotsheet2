@@ -24,6 +24,7 @@ import { loadWorkspacePreferences, saveWorkspacePreferences, sortableWorkspaceVi
 import {drawerTabCloseIds,drawerTabFocusRequestStillOwned,drawerTabSelectionAfterClose,type DrawerTabCloseAction,keyboardReorderDrawerTabIds,loadDrawerTabOrder,orderedDrawerTabIds,reorderDrawerTabIds,saveDrawerTabOrder} from './drawer-tab-order';
 import {terminalProjectOwner} from './terminal-project-scope';
 import {customViewNameAvailable,uniqueCustomViewId} from './saved-views';
+import {computeServerBusyBarCount,serverBusy} from './server-busy';
 import { loadLastTicketCategory, saveLastTicketCategory } from './ticket-category-preference';
 import { compareWorkspaceTickets } from './workspace-ticket-sort';
 import {updateRepositoryFileSelection} from './repository-file-selection';
@@ -69,6 +70,7 @@ import { ChangeEvidenceDialog, type ChangeEvidenceView, repositoryAbsolutePath, 
 import type { RepositorySetupStep } from './components/repository-setup';
 import { resizeRegionFromPointer, type ResizableRegionAxis, type ResizableRegionEdge } from '@kerfjs/ui/resizable-region';
 import {SavedViewDeleteDialog,SavedViewDialog} from './components/saved-view-dialog';
+import { ServerBusyBars } from './components/server-busy-bars';
 import { SettingsNavigation, type SettingsCategory, settingsCategoryTitle } from './components/settings-navigation';
 import { focusQuickTicketComposerTitle,QuickTicketComposer,QuickTicketLauncher,showQuickTicketComposer } from './components/quick-ticket-composer';
 import type { TicketStatus } from './components/status-badge';
@@ -1062,6 +1064,15 @@ mount(appRoot,()=>{pendingTicketScrollState??=captureTicketScrollState();const t
 const savedViewMenuRoot=document.createElement('div');
 document.body.append(savedViewMenuRoot);
 mount(savedViewMenuRoot,()=>savedViewMenu.value?<SavedViewContextMenu {...savedViewMenu.value}/>:<></>);
+
+// Decorative top-of-app "server busy" bars (HS2-MW1V3M). Bar count fills the viewport width and
+// is only recomputed on an actual (debounced) window resize; the strip itself is a fixed overlay.
+const serverBusyBarCount=signal(computeServerBusyBarCount(window.innerWidth));
+let serverBusyResizeTimer:number|undefined;
+window.addEventListener('resize',()=>{if(serverBusyResizeTimer!==undefined)window.clearTimeout(serverBusyResizeTimer);serverBusyResizeTimer=window.setTimeout(()=>{serverBusyResizeTimer=undefined;serverBusyBarCount.value=computeServerBusyBarCount(window.innerWidth)},150)});
+const serverBusyRoot=document.createElement('div');
+document.body.append(serverBusyRoot);
+mount(serverBusyRoot,()=><ServerBusyBars count={serverBusyBarCount.value} busy={serverBusy.value}/>);
 document.addEventListener('pointerdown',event=>{if(savedViewMenu.value&&!(event.target as Element).closest('[data-component="saved-view-context-menu"], [data-action="open-saved-view-menu"]'))savedViewMenu.value=undefined},{capture:true});
 document.addEventListener('keydown',event=>{if(event.key==='Escape')savedViewMenu.value=undefined});
 

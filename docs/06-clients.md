@@ -231,6 +231,16 @@ and identity-less legacy entries remain conservatively blocking.
   Web Awesome select is open, including the new-ticket composer, so a background
   ticket column move cannot replace the control or dismiss its popup.
 
+- **Server-busy indicator.** A decorative full-width strip pinned to the very top of the app
+  ripples a row of yellow (the Up Next star color) bars while the server is busy, so activity
+  is apparent without hunting for a spinner (HS2-MW1V3M). It is a `position:fixed` overlay that
+  allocates no layout space, is inert to the pointer and assistive technology, and is driven by
+  the count of in-flight authenticated server requests — **idle long-poll event streams are
+  excluded** so a quiet app reads as idle, and a short linger after the last request settles
+  keeps rapid bursts from flickering. Each bar is 3px wide with a 2px gap and scales from 1px to
+  4px on a staggered cycle; the bar count fills the viewport width and is recomputed only on an
+  actual (debounced) window resize. Animation honors `prefers-reduced-motion`.
+
 - **Ticket collection motion.** A status change lifts the moving ticket into a
   fixed, workspace-level overlay so it can cross column scroll and clipping
   boundaries while the source and destination siblings close and open their space

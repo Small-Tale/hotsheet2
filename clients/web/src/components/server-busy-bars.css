@@ -1,0 +1,37 @@
+/* Decorative server-busy indicator: a full-width 4px strip of yellow bars pinned to the very
+   top of the app. It never allocates layout space and never intercepts input (HS2-MW1V3M). */
+.server-busy-bars {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: flex-start;
+  height: 4px;
+  gap: 2px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.server-busy-bars[data-visible="true"] { opacity: 1; }
+.server-busy-bars__bar {
+  flex: 0 0 3px;
+  width: 3px;
+  height: 4px;
+  border-radius: .5px;
+  background: var(--hs-ticket-state-up-next);
+  transform: scaleY(.25);
+  transform-origin: top center;
+  animation: server-busy-bars-scale 1s ease-in-out infinite;
+  /* Neighboring bars are slightly out of phase so a wave travels across the strip. */
+  animation-delay: calc(var(--bar-index, 0) * -25ms);
+}
+/* Pause the animation while hidden so the strip costs nothing when the server is idle. */
+.server-busy-bars:not([data-visible="true"]) .server-busy-bars__bar { animation-play-state: paused; }
+@keyframes server-busy-bars-scale {
+  0%, 100% { transform: scaleY(.25); }
+  50% { transform: scaleY(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .server-busy-bars__bar { animation: none; transform: scaleY(1); }
+  .server-busy-bars { transition: none; }
+}
