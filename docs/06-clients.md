@@ -769,20 +769,20 @@ and identity-less legacy entries remain conservatively blocking.
   flow and server cache contract are identical on macOS, Linux, and Windows.
   A preview or inline image opens the same full-screen native modal media gallery. It occupies a
   newer top-layer position when launched from a ticket reader, and Escape consumes only the gallery
-  before returning interaction to the still-open reader. Videos remain paused initially, preload only metadata, and explicitly
-  prime the decoder with a brief, temporarily muted internal play that pauses on its first
-  compositor-presented frame and restores the user's mute state, then present the decoded first frame rather than carrying the grid thumbnail poster
-  into the full-screen player. If playback is blocked, priming falls back to a tiny seek.
-  Each paused scrub chain likewise keeps that muted internal playback active while it
-  coalesces rapid pointer updates behind the active seek, retains only the latest target,
-  and pauses on that decoded frame before accepting another expensive seek;
-  it does not require a user-visible play/pause cycle. They expose only Hot Sheet's custom play/pause, scrubber, time, and
+  before returning interaction to the still-open reader. Videos remain paused initially and
+  use native `preload="auto"` so the browser presents the decoded first frame rather than
+  carrying the grid thumbnail poster into the full-screen player. Scrubber input assigns the
+  requested precise time directly to `HTMLMediaElement.currentTime`; the browser owns seek
+  coalescing and frame decoding exactly as it does for an ordinary native media control. Hot
+  Sheet does not start hidden playback, serialize seeks, gate input on frame callbacks, or
+  require a user-visible play/pause cycle. They expose only Hot Sheet's custom play/pause, scrubber, time, and
   volume controls, never a second native browser control strip. The volume icon opens
   a click-persistent popup containing both the slider and mute action; only clicking
   outside that popup dismisses it. Playback ticks and scrub input update the live gallery
   imperatively and commit state only at interaction boundaries, avoiding application-wide
-  Kerf renders for every media event without allowing an intervening render to reset an
-  in-progress scrub to `00:00`. When the video canvas has focus, Space or K toggles playback,
+  Kerf renders for every media event. While a paused scrubber owns focus, delayed `timeupdate`
+  events cannot overwrite its live value or reset an in-progress scrub to `00:00`; playback
+  updates resume normally as soon as the video plays. When the video canvas has focus, Space or K toggles playback,
   Left/Right step one 30-fps frame, Shift+Left/Right and J/L jog one second, and Home/End seek
   to the media boundaries; video jogging never activates the image-gallery navigation path.
   Closing or changing gallery media explicitly pauses the prior video, removes its URL,
