@@ -54,6 +54,8 @@ describe('WorkspaceHeader', () => {
     expect(headerCss).toContain('height:1.25rem;min-height:1.25rem;');
     expect(headerCss).toContain('.workspace-header__search-suggestions{display:flex;box-sizing:border-box;width:min(26rem,100%);align-items:stretch;flex-direction:column;text-align:left}');
     expect(headerCss).toContain('.workspace-header__search-suggestions button{display:block;box-sizing:border-box;width:100%;');
+    expect(headerCss).toContain('wa-button.workspace-header__text-action::part(base) { width: auto;');
+    expect(headerCss).toContain('.workspace-header__text-action-label { display: inline-flex; align-items: center;');
     expect(shellCss).toContain('.app-shell__main > .kui-toolbar:has(.workspace-header__search-group[data-expanded="true"]) { height:auto; align-items:start; }');
   });
 

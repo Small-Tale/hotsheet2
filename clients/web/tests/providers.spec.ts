@@ -2037,12 +2037,19 @@ test('leaves individual empty board columns blank when another column has ticket
 test('requires confirmation before permanently emptying Trash',async({page})=>{
   const emptyRequests:string[]=[];
   await mockProject(page);
+  let releaseEmptyTrash!:()=>void;const emptyTrashGate=new Promise<void>(resolve=>{releaseEmptyTrash=resolve});
+  await page.route('**/trash/empty',async route=>{await emptyTrashGate;await route.fallback()});
   page.on('request',request=>{if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/trash/empty'))emptyRequests.push(request.url())});
   await page.setViewportSize({width:1440,height:900});
   await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
   await page.getByRole('button',{name:/Trash/}).click();
   await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
-  await page.getByRole('button',{name:'Empty Trash'}).click();
+  const emptyButton=page.getByRole('button',{name:'Empty Trash'}),emptyHost=page.locator('[data-action="open-empty-trash"]'),emptyLabel=emptyHost.locator('.workspace-header__text-action-label'),emptyIcon=emptyLabel.locator('svg'),emptyText=emptyLabel.locator(':scope > span');
+  const [iconBox,textBox]=await Promise.all([emptyIcon.boundingBox(),emptyText.boundingBox()]);
+  expect(iconBox).not.toBeNull();expect(textBox).not.toBeNull();
+  expect(Math.abs(iconBox!.y+iconBox!.height/2-(textBox!.y+textBox!.height/2))).toBeLessThan(2);
+  await emptyHost.screenshot({path:'/private/tmp/hs2-rdvwzx-empty-trash-action.png'});
+  await emptyButton.click();
   const dialog=page.locator('[data-component="empty-trash-dialog"]');
   await expect(dialog).toContainText('Permanently remove 1 ticket');
   await expect(dialog).toContainText('Git history will still contain the removed files');
@@ -2051,12 +2058,32 @@ test('requires confirmation before permanently emptying Trash',async({page})=>{
   await expect(dialog).toHaveCount(0);expect(emptyRequests).toEqual([]);
   await page.getByRole('button',{name:'Empty Trash'}).click();
   await page.locator('[data-component="empty-trash-dialog"]').getByRole('button',{name:'Empty Trash'}).click();
+  await expect(page.locator('[data-component="empty-trash-dialog"]')).toHaveCount(0);
   await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
   await expect(page.getByRole('button',{name:/Trash/})).toHaveCount(0);
-  await expect(page.getByText('Emptied Trash — 1 ticket permanently removed.')).toBeVisible();
+  await expect(page.locator('[data-component="not-working-dialog"]')).toHaveCount(0);
+  await expect(page.getByText('Loading Queue')).toBeVisible();
   expect(emptyRequests).toHaveLength(1);
+  await page.screenshot({path:'/private/tmp/hs2-rdvwzx-empty-trash-optimistic.png',fullPage:true});
+  releaseEmptyTrash();
+  await expect(page.getByText('Emptied Trash — 1 ticket permanently removed.')).toBeVisible();
   await page.setViewportSize({width:780,height:760});
   await page.screenshot({path:'/private/tmp/hs2-rdvwzx-empty-trash-complete-narrow.png',fullPage:true});
+});
+
+test('restores Trash and surfaces a persistent error when emptying fails',async({page})=>{
+  await mockProject(page);
+  await page.route('**/trash/empty',route=>route.fulfill({status:500,json:{error:'Could not update the ticket store'}}));
+  await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  await page.getByRole('button',{name:/Trash/}).click();
+  await page.getByRole('button',{name:'Empty Trash'}).click();
+  await page.locator('[data-component="empty-trash-dialog"]').getByRole('button',{name:'Empty Trash'}).click();
+  await expect(page.locator('[data-component="empty-trash-dialog"]')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('Empty Trash failed: Could not update the ticket store');
+  await expect(page.getByRole('heading',{name:'Trash'})).toBeVisible();
+  await expect(page.locator('[data-ticket-slug="HS2-DEL001"]')).toBeVisible();
+  await page.waitForTimeout(350);
+  await page.screenshot({path:'/private/tmp/hs2-rdvwzx-empty-trash-error.png',fullPage:true});
 });
 
 test('derives board columns from the selected view and merges Verified by project setting',async({page})=>{

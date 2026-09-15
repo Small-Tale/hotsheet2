@@ -79,7 +79,11 @@ Dragging an unselected ticket moves only it, while
   deleted (Not Started when that is unknown). The Trash header also offers Empty Trash when
   the checkout has a git-backed ticket source. Its confirmation states the number of tickets
   that will be permanently removed from the active store and that git history retains the
-  files; success returns to Queue and removes the now-empty Trash destination. The server
+  files. Confirming closes the dialog immediately, projects an empty Trash, and returns to a
+  loading Queue while the request runs; success reconciles that Queue and removes the now-empty
+  Trash destination, while failure restores Trash and presents a persistent server error. The
+  header action keeps its icon and label on one line at every supported size.
+  The server
   purges Trash tickets after the project's shared retention period (30 days by default);
   git history still holds every purged file. `hotsheet-cli restore` and
   `hotsheet-cli purge-trash` provide the same recovery and cleanup headlessly (HS2-MWDR19).

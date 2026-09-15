@@ -33,4 +33,8 @@ describe('dialog lifecycle event contracts', () => {
     expect(source).toMatch(/function closeProjectIds\([^\n]*resetTicketComposer\(\)/);
     expect(source).toMatch(/function activateOpenProject\([^\n]*resetTicketComposer\(false\)/);
   });
+
+  it('does not mount a dormant Not Working dialog host without a ticket target', () => {
+    expect(source).toContain('{target.slug&&<NotWorkingSurface');
+  });
 });
