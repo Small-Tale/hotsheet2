@@ -2442,12 +2442,12 @@ test('persists and restores per-project permission automation settings',async({p
 });
 
 test('shows and persists the shared Trash retention period in Lifecycle settings',async({page})=>{
-  const writes:unknown[]=[];
-  await mockProject(page);page.on('request',request=>{if(request.method()==='PUT'&&new URL(request.url()).pathname.endsWith('/trash-settings'))writes.push(request.postDataJSON())});
+  const writes:unknown[]=[],requests:string[]=[];
+  await mockProject(page);page.on('request',request=>{const path=new URL(request.url()).pathname;if(path.endsWith('/trash-settings'))requests.push(`${request.method()} ${path}`);if(request.method()==='PUT'&&path.endsWith('/trash-settings'))writes.push(request.postDataJSON())});
   await page.setViewportSize({width:1440,height:900});await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Lifecycle'}).click();
   const settings=page.locator('[data-component="trash-settings"]'),input=settings.locator('wa-input[name="trash-cleanup-days"]');await expect(settings).toContainText('Git history keeps every purged ticket file');await expect(input).toHaveJSProperty('value','30');
-  await input.evaluate((node:HTMLElement&{value:string})=>{node.value='14'});await settings.getByRole('button',{name:'Save retention'}).click();await expect(settings.getByRole('status')).toContainText('Saved for this project.');expect(writes).toEqual([{trash_cleanup_days:14}]);await expect(page.getByText('Trash retention saved.')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-0es3yj-trash-retention-wide.png',fullPage:true});
-  await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Lifecycle'}).click();await expect(input).toHaveJSProperty('value','14');await page.setViewportSize({width:760,height:720});await page.screenshot({path:'/private/tmp/hs2-0es3yj-trash-retention-narrow.png',fullPage:true});
+  await input.evaluate((node:HTMLElement&{value:string})=>{node.value='14'});await settings.getByRole('button',{name:'Save retention'}).click();await expect(settings.getByRole('status')).toContainText('Saved for this project.');expect(writes).toEqual([{trash_cleanup_days:14}]);expect(requests).toEqual(['GET /__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/trash-settings','PUT /__hotsheet/project-api/demo-checkout/checkouts/demo-checkout/trash-settings']);await expect(page.getByText('Trash retention saved.')).toBeVisible();await page.screenshot({path:'/private/tmp/hs2-ew2wxa-trash-retention-wide.png',fullPage:true});
+  await page.getByLabel('List view').click();await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Lifecycle'}).click();await expect(input).toHaveJSProperty('value','14');await page.setViewportSize({width:760,height:720});await page.screenshot({path:'/private/tmp/hs2-ew2wxa-trash-retention-narrow.png',fullPage:true});
 });
 
 test('keeps settings category and command drafts scoped to each project',async({page})=>{

@@ -149,8 +149,8 @@ export class Api {
   terminals=()=>this.request<TerminalInfo[]>('/terminals');
   terminalSettings=()=>this.request<TerminalSettings>('/terminal-settings');
   saveTerminalSettings=(value:TerminalSettings)=>this.request<TerminalSettings>('/terminal-settings',{method:'PUT',body:JSON.stringify(value)});
-  trashSettings=()=>this.request<TrashSettings>('/trash-settings');
-  saveTrashSettings=(value:TrashSettings)=>this.request<TrashSettings>('/trash-settings',{method:'PUT',body:JSON.stringify(value)});
+  trashSettings=(checkoutId:string)=>this.request<TrashSettings>(`/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`);
+  saveTrashSettings=(checkoutId:string,value:TrashSettings)=>this.request<TrashSettings>(`/checkouts/${encodeURIComponent(checkoutId)}/trash-settings`,{method:'PUT',body:JSON.stringify(value)});
   terminal=(id:string)=>this.request<TerminalRead>(`/terminals/${encodeURIComponent(id)}`);
   createTerminal=(value:{id?:string;command?:string;shell_command?:string;args?:string[];cwd?:string;connect?:string;model?:string;effort?:string}={})=>this.request<TerminalInfo>('/terminals',{method:'POST',body:JSON.stringify(value)});
   deleteTerminal=(id:string)=>this.request<void>(`/terminals/${encodeURIComponent(id)}`,{method:'DELETE'});
