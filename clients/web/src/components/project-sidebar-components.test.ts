@@ -72,6 +72,18 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-zero="false"');
   });
 
+  it('aligns an aggregate background behind the project bars and describes both series', () => {
+    const markup = String(ProjectSummary({ completedToday: 4, inProgress: 1, trend: [2, 4], backgroundTrend: [1, 3, 5], chartMaximum: 5 }));
+    expect(markup).toContain('data-chart-background="true"');
+    expect(markup).toContain('Tickets completed over the last 3 days: 0, 2, 4. All projects: 1, 3, 5');
+    expect(markup.match(/data-background-bar=/g)).toHaveLength(3);
+    expect(markup.match(/data-bar=/g)).toHaveLength(3);
+    expect(markup).toContain('data-background-bar="2" data-background-zero="false"');
+    expect(markup).toContain('--bar-height:100%');
+    const css = readFileSync(new URL('./project-summary.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/project-summary__bar-slot \{[^}]*min-width: \.3rem;[^}]*max-width: \.9rem;[^}]*flex: 1 1 \.9rem/);
+  });
+
   it('renders repository status as one discoverable action', () => {
     const markup = String(RepositorySummary({ branch: 'main', unpushed: 3, behind: 2, uncommitted: 1 }));
     expect(markup).toContain('Repository status for main: 3 ahead, 2 behind, 1 uncommitted, 0 conflicted');

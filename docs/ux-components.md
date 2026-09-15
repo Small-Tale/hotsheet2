@@ -159,7 +159,9 @@ does not introduce polling or another network request.
   derives each bar from ticket completion timestamps in the corresponding local calendar
   day. Its optional explicit chart maximum lets a comparison owner place several instances
   on one shared numeric domain while retaining safe local scaling elsewhere. Brand and success
-  chart-tone variants let an aggregate read separately from its constituent projects, and both
+  chart-tone variants let an aggregate read separately from its constituent projects. An optional
+  aligned background trend draws a slightly wider neutral bar behind each foreground bar, so a
+  project can show its contribution against an aggregate without adding another chart. Both tones
   variants appear in the catalog. The whole summary is an accessible action that opens the selected project's
   statistics surface; HS2-38RJMK owns the full charts behind the current placeholder.
   - `ProgressSparkline` / compact status histogram
@@ -169,8 +171,9 @@ does not introduce polling or another network request.
   projects are open, an `All projects` group precedes them and sums aligned trend days,
   completed-today counts, and in-progress counts. The maximum summed daily value becomes the
   shared scale for the aggregate and every constituent chart, making cross-project bar heights
-  directly comparable; its success-green chart distinguishes the aggregate from brand-blue
-  project charts. Each summary opens statistics for
+  directly comparable. The aggregate remains a standalone success-green chart; every brand-blue
+  project chart repeats the aggregate trend as a neutral-gray background silhouette, keeping the
+  absolute scale visible at each day and project. Each summary opens statistics for
   that project; the aggregate opens cross-project statistics. The component consumes
   the already-loaded ticket rows and does not introduce polling or network requests.
 - `RepositorySummary` — **production built**: one accessible branch/status action with
@@ -1066,6 +1069,8 @@ initial replay; normal `%` content and project-drawer streams remain byte-for-by
 
 The operations sidebar separates its aggregate `All projects` summary from individual projects
 with an inset divider and normalizes all displayed completion trends to the aggregate maximum.
+Each individual project layers the aligned aggregate trend as wider neutral-gray bars behind its
+brand-blue bars; the aggregate row itself remains the only green chart and has no redundant layer.
 The aligned-series aggregation and explicit chart-domain contract are reusable for future
 cross-project statistics. During remembered-project startup, the AppShell and terminal drawer remain
 unmounted behind one stable restoration status until tickets, terminals, and the bounded retry pass

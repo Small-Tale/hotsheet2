@@ -1223,7 +1223,10 @@ projects, a leading `All projects` group sums each aligned trend day plus the co
 and in-progress counts. Every chart in that cross-project list uses the maximum of the summed
 `All projects` trend as its shared scale, so equal bar heights mean equal activity across the
 aggregate and each project; a single-project summary continues to use its own maximum. An inset
-divider below that aggregate keeps it distinct from the individual project list. The project summaries open project statistics and the aggregate opens
+divider below that aggregate keeps it distinct from the individual project list. Each constituent
+chart also draws the aligned aggregate values as slightly wider neutral-gray bars behind its blue
+project values, so the total scale remains visible in-place; the aggregate row and single-project
+case do not add that comparison layer. The project summaries open project statistics and the aggregate opens
 cross-project statistics. The same bounded ticket-page response carries an exact seven-day
 completion summary using browser-local calendar boundaries, so archived completions and rows
 beyond the retained page remain represented without another request or polling. It remains usable beside

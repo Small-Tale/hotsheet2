@@ -21,11 +21,17 @@ describe('TerminalOperationsSidebar',()=>{
     expect(multiple.match(/data-chart-tone="brand"/g)).toHaveLength(2);
     expect(multiple.match(/data-component="project-summary"/g)).toHaveLength(3);
     expect(multiple.match(/data-chart-maximum="6"/g)).toHaveLength(3);
+    expect(multiple.match(/data-chart-background="true"/g)).toHaveLength(2);
+    expect(multiple.match(/data-chart-background="false"/g)).toHaveLength(1);
+    expect(multiple.match(/data-background-bar=/g)).toHaveLength(6);
+    expect(multiple).toContain('All projects: 1, 3, 6');
     expect(multiple).toContain('data-project-id="one"');
     expect(multiple).toContain('--bar-height:33%');
     expect(single).not.toContain('All projects');
     expect(single.match(/data-component="project-summary"/g)).toHaveLength(1);
     expect(single).toContain('data-chart-maximum="2"');
+    expect(single).toContain('data-chart-background="false"');
+    expect(single).not.toContain('data-background-bar=');
   });
 
   it('separates the multi-project aggregate from individual projects',()=>{
