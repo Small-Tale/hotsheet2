@@ -50,3 +50,11 @@
 .ticket-code-review__message { color: var(--wa-color-neutral-on-quiet) !important; font-size: var(--wa-font-size-xs) !important; }
 @container (max-width: 22rem) { .ticket-code-review__compare-banner { grid-template-columns: minmax(0,1fr) auto; } .ticket-code-review__compare-open { grid-column: 1 / -1; } }
 @container (max-width: 22rem) { .ticket-code-review__heading { align-items: flex-start; flex-direction: column; } .ticket-code-review__heading span { white-space: normal; } .ticket-code-review__evidence-grid { grid-template-columns: 1fr; } }
+.ticket-code-review__refs { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .05rem; }
+.ticket-code-review__ref { display: inline-flex; max-width: 100%; padding: .05rem .4rem; border-radius: var(--wa-border-radius-pill); align-items: center; gap: .2rem; font-size: var(--wa-font-size-2xs); font-weight: 650; line-height: 1.5; }
+.ticket-code-review__ref > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ticket-code-review__ref svg { width: .7rem; height: .7rem; flex: none; }
+.ticket-code-review__ref[data-ref-kind="head"] { color: var(--wa-color-success-on-quiet); background: var(--wa-color-success-fill-quiet); }
+.ticket-code-review__ref[data-ref-kind="branch"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
+.ticket-code-review__ref[data-ref-kind="remote"] { color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); }
+.ticket-code-review__ref[data-ref-kind="tag"] { color: var(--wa-color-warning-on-quiet); background: var(--wa-color-warning-fill-quiet); }

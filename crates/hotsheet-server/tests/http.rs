@@ -4269,6 +4269,7 @@ async fn repository_status_endpoint_reports_real_git_state() {
         "-m",
         "Detailed **Markdown** message",
     ]);
+    run(&["tag", "v1.0"]);
     std::fs::write(checkout.path().join("tracked.txt"), "two\n").unwrap();
     std::fs::write(checkout.path().join("new.txt"), "new\n").unwrap();
     let registry_home = tempfile::tempdir().unwrap();
@@ -4347,6 +4348,18 @@ async fn repository_status_endpoint_reports_real_git_state() {
     assert_eq!(
         commit_page["items"][0]["body"],
         "Detailed **Markdown** message"
+    );
+    // The tip commit carries its git ref decorations: the tag v1.0 and the current HEAD (HS2-SFJ5TE).
+    let refs = commit_page["items"][0]["refs"].as_array().unwrap();
+    assert!(
+        refs.iter()
+            .any(|r| r["kind"] == "tag" && r["label"] == "v1.0"),
+        "expected a tag ref, got {refs:?}"
+    );
+    assert!(
+        refs.iter()
+            .any(|r| r["kind"] == "head" && r["label"].as_str().unwrap().starts_with("HEAD")),
+        "expected a HEAD ref, got {refs:?}"
     );
     assert_eq!(commit_page["next_cursor"], 1);
     let resp = app

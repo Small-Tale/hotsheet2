@@ -892,7 +892,10 @@ and identity-less legacy entries remain conservatively blocking.
   `hotsheet-cli settings set code_review_file_classes '{"docs":["docs/**"],"tests":["**/*.test.*"],"source":["src/**"]}'`
   commits a shared project override; local overrides use `--scope local`.
   The segment lists each matching commit subject, up to two lines of its Markdown-formatted message
-  body, abbreviated SHA, and date even when no review tool is configured. Clicking the
+  body, abbreviated SHA, and date even when no review tool is configured. A commit that a Git ref
+  points at also shows those ref decorations as small labels beside its subject, classified and
+  color-coded by kind — the current `HEAD → branch`, other local branches, remote-tracking
+  branches, and tags — mirroring `git log --decorate` (HS2-SFJ5TE). Clicking the
   commit summary toggles its complete Markdown body. When the checkout has a Git
   `diff.tool`, each commit has an Open action
   and each adjacent multi-commit run has its own bundle action with explicit oldest/newest

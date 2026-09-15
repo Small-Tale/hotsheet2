@@ -3,9 +3,9 @@ import './ticket-code-review.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
-import { CircleHelp, ExternalLink, FileCode2, FileText, FlaskConical, GitCommitHorizontal, GitCompare, GitCompareArrows } from 'lucide';
+import { CircleHelp, ExternalLink, FileCode2, FileText, FlaskConical, GitBranch, GitCommitHorizontal, GitCompare, GitCompareArrows, Tag } from 'lucide';
 
-import type { CodeReview, CodeReviewTarget } from '../api';
+import type { CodeReview, CodeReviewTarget, CommitRef } from '../api';
 import { MarkdownPreview } from './markdown-preview';
 
 export interface CodeReviewComparison {
@@ -52,7 +52,7 @@ export function TicketCodeReview({ review, loading = false, message = '', title 
         </div>}
         <ol class="ticket-code-review__commits">{review.commits.flatMap(commit => {const expanded=expandedCommits.includes(commit.sha),body=commit.body?.trim()??'',labels=[comparison?.a===commit.sha?'A':'',comparison?.b===commit.sha?'B':''].filter(Boolean),ranges=review.ranges.filter(range=>range.count>1&&range.to===commit.sha);return [...ranges.map(range=><li class="ticket-code-review__range-item"><button type="button" class="ticket-code-review__range" data-action={action} data-review-mode="range" data-review-from={range.from} data-review-to={range.to} disabled={!enabled} aria-label={`Open ${range.count} commit bundle ${shortSha(range.from)} through ${shortSha(range.to)} in ${review.difftool ?? 'configured diff tool'}`}><LucideIcon icon={GitCompareArrows} name="git-compare-arrows" /><span>Open {range.count}-commit bundle<small>{shortSha(range.from)} → {shortSha(range.to)}</small></span><LucideIcon icon={ExternalLink} name="external-link" /></button></li>),<li class="ticket-code-review__commit" data-commit-sha={commit.sha} data-expanded={String(expanded)} data-compared={labels.length?labels.join('').toLowerCase():undefined}>
           <span class="ticket-code-review__graph" aria-hidden="true"><LucideIcon icon={GitCommitHorizontal} name="git-commit-horizontal" /></span>
-          <div class="ticket-code-review__commit-summary" data-action={comparison?.active?'select-repository-comparison-commit':'toggle-code-review-commit'} data-commit-sha={commit.sha} role="button" tabIndex={0} aria-expanded={body?String(expanded):undefined}><strong>{commit.subject}</strong>{body&&<div class="ticket-code-review__commit-body"><MarkdownPreview source={expanded?body:commitBodyPreview(body)}/></div>}<span><code>{commit.short_sha}</code><time dateTime={commit.committed_at}>{formatCommitDate(commit.committed_at)}</time>{labels.map(label=><b class="ticket-code-review__compare-label">{label}</b>)}</span></div>
+          <div class="ticket-code-review__commit-summary" data-action={comparison?.active?'select-repository-comparison-commit':'toggle-code-review-commit'} data-commit-sha={commit.sha} role="button" tabIndex={0} aria-expanded={body?String(expanded):undefined}><strong>{commit.subject}</strong>{commitRefs(commit.refs)}{body&&<div class="ticket-code-review__commit-body"><MarkdownPreview source={expanded?body:commitBodyPreview(body)}/></div>}<span><code>{commit.short_sha}</code><time dateTime={commit.committed_at}>{formatCommitDate(commit.committed_at)}</time>{labels.map(label=><b class="ticket-code-review__compare-label">{label}</b>)}</span></div>
           <button type="button" data-action={action} data-review-mode="commit" data-review-commit={commit.sha} disabled={!enabled} aria-label={`Open commit ${commit.short_sha} in ${review.difftool ?? 'configured diff tool'}`}><LucideIcon icon={ExternalLink} name="external-link" /></button>
         </li>]})}</ol>
         {review.truncated && <p class="ticket-code-review__notice">Showing matches from the newest 2,000 commits.</p>}
@@ -83,4 +83,11 @@ function formatCommitDate(value: string): string {
 
 function shortSha(value: string): string {
   return value.slice(0, 7);
+}
+
+/** Git ref decorations (HEAD/branches/remotes/tags) for a commit, styled by kind (HS2-SFJ5TE). */
+function commitRefs(refs: readonly CommitRef[] | undefined) {
+  if (!refs?.length) return undefined;
+  return <span class="ticket-code-review__refs">{refs.map(ref =>
+    <span class="ticket-code-review__ref" data-ref-kind={ref.kind} title={`${ref.kind === 'tag' ? 'Tag' : ref.kind === 'remote' ? 'Remote branch' : ref.kind === 'head' ? 'Current HEAD' : 'Branch'}: ${ref.label}`}><LucideIcon icon={ref.kind === 'tag' ? Tag : GitBranch} name={ref.kind === 'tag' ? 'tag' : 'git-branch'} /><span>{ref.label}</span></span>)}</span>;
 }

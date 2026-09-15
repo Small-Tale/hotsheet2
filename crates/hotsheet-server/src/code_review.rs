@@ -24,8 +24,69 @@ pub struct CodeReviewCommit {
     pub subject: String,
     pub body: String,
     pub committed_at: String,
+    /// Git ref decorations pointing at this commit (HEAD, branches, remotes, tags), newest-first
+    /// as `git log --decorate` reports them. Empty for commits with no refs.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refs: Vec<CommitRef>,
     #[serde(skip_serializing)]
     parents: Vec<String>,
+}
+
+/// One git ref pointing at a commit, classified so clients can style each kind (HS2-SFJ5TE).
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CommitRef {
+    /// Human label, e.g. `HEAD → main`, `origin/main`, or `v1.2.0`.
+    pub label: String,
+    pub kind: CommitRefKind,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CommitRefKind {
+    /// `HEAD` itself, or the `HEAD → branch` pointer.
+    Head,
+    /// A local branch.
+    Branch,
+    /// A remote-tracking branch (contains a `/`).
+    Remote,
+    /// An annotated or lightweight tag.
+    Tag,
+}
+
+/// Parse a `%D` decoration string (`HEAD -> main, origin/main, tag: v1.2`) into typed refs.
+fn parse_decorations(raw: &str) -> Vec<CommitRef> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(|token| {
+            if let Some(tag) = token.strip_prefix("tag: ") {
+                CommitRef {
+                    label: tag.to_owned(),
+                    kind: CommitRefKind::Tag,
+                }
+            } else if let Some((_, branch)) = token.split_once(" -> ") {
+                CommitRef {
+                    label: format!("HEAD → {branch}"),
+                    kind: CommitRefKind::Head,
+                }
+            } else if token == "HEAD" {
+                CommitRef {
+                    label: "HEAD".to_owned(),
+                    kind: CommitRefKind::Head,
+                }
+            } else if token.contains('/') {
+                CommitRef {
+                    label: token.to_owned(),
+                    kind: CommitRefKind::Remote,
+                }
+            } else {
+                CommitRef {
+                    label: token.to_owned(),
+                    kind: CommitRefKind::Branch,
+                }
+            }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -435,7 +496,14 @@ fn discover_commits(
         .filter(|value| !value.is_empty());
     let output = match git_output(
         root,
-        &["log", "-n", &LOG_LIMIT.to_string(), &log_format(), "HEAD"],
+        &[
+            "log",
+            "-n",
+            &LOG_LIMIT.to_string(),
+            "--decorate=short",
+            &log_format(),
+            "HEAD",
+        ],
     ) {
         Ok(output) => output,
         Err(_) if !git_success(root, &["rev-parse", "--verify", "HEAD"]) => String::new(),
@@ -448,7 +516,7 @@ fn discover_commits(
 
 fn log_format() -> String {
     format!(
-        "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{RECORD_SEPARATOR}"
+        "--format=%H{FIELD_SEPARATOR}%h{FIELD_SEPARATOR}%P{FIELD_SEPARATOR}%cI{FIELD_SEPARATOR}%s{FIELD_SEPARATOR}%b{FIELD_SEPARATOR}%D{RECORD_SEPARATOR}"
     )
 }
 
@@ -699,7 +767,7 @@ fn parse_log(output: &str) -> Vec<CodeReviewCommit> {
             if record.is_empty() {
                 return None;
             }
-            let mut fields = record.splitn(6, FIELD_SEPARATOR);
+            let mut fields = record.splitn(7, FIELD_SEPARATOR);
             Some(CodeReviewCommit {
                 sha: fields.next()?.to_owned(),
                 short_sha: fields.next()?.to_owned(),
@@ -711,6 +779,7 @@ fn parse_log(output: &str) -> Vec<CodeReviewCommit> {
                 committed_at: fields.next()?.to_owned(),
                 subject: fields.next()?.to_owned(),
                 body: fields.next()?.trim_end_matches(['\r', '\n']).to_owned(),
+                refs: parse_decorations(fields.next().unwrap_or("").trim_matches(['\r', '\n'])),
             })
         })
         .collect()
@@ -799,6 +868,7 @@ mod tests {
             subject: subject.into(),
             body: String::new(),
             committed_at: "2026-09-02T00:00:00Z".into(),
+            refs: Vec::new(),
             parents: (!parent.is_empty())
                 .then(|| parent.into())
                 .into_iter()
@@ -935,6 +1005,69 @@ mod tests {
         assert_eq!(commits.len(), 2);
         assert_eq!(commits[0].body, "First line\n\n**Markdown** line");
         assert_eq!(commits[1].subject, "Root");
+    }
+
+    #[test]
+    fn classifies_git_ref_decorations_by_kind() {
+        let refs =
+            parse_decorations("HEAD -> main, origin/main, origin/HEAD, tag: v1.2.0, release");
+        assert_eq!(
+            refs,
+            vec![
+                CommitRef {
+                    label: "HEAD → main".into(),
+                    kind: CommitRefKind::Head
+                },
+                CommitRef {
+                    label: "origin/main".into(),
+                    kind: CommitRefKind::Remote
+                },
+                CommitRef {
+                    label: "origin/HEAD".into(),
+                    kind: CommitRefKind::Remote
+                },
+                CommitRef {
+                    label: "v1.2.0".into(),
+                    kind: CommitRefKind::Tag
+                },
+                CommitRef {
+                    label: "release".into(),
+                    kind: CommitRefKind::Branch
+                },
+            ]
+        );
+        assert!(parse_decorations("").is_empty());
+        assert_eq!(
+            parse_decorations("HEAD"),
+            vec![CommitRef {
+                label: "HEAD".into(),
+                kind: CommitRefKind::Head
+            }]
+        );
+    }
+
+    #[test]
+    fn parses_the_decoration_field_into_commit_refs() {
+        let output = format!(
+            "aaa{FIELD_SEPARATOR}aaa{FIELD_SEPARATOR}parent{FIELD_SEPARATOR}2026-09-02T00:00:00Z{FIELD_SEPARATOR}Subject{FIELD_SEPARATOR}Body{FIELD_SEPARATOR}HEAD -> main, tag: v2{RECORD_SEPARATOR}\nbbb{FIELD_SEPARATOR}bbb{FIELD_SEPARATOR}{FIELD_SEPARATOR}2026-09-01T00:00:00Z{FIELD_SEPARATOR}Root{FIELD_SEPARATOR}{FIELD_SEPARATOR}{RECORD_SEPARATOR}\n"
+        );
+        let commits = parse_log(&output);
+        assert_eq!(commits.len(), 2);
+        assert_eq!(commits[0].body, "Body");
+        assert_eq!(
+            commits[0].refs,
+            vec![
+                CommitRef {
+                    label: "HEAD → main".into(),
+                    kind: CommitRefKind::Head
+                },
+                CommitRef {
+                    label: "v2".into(),
+                    kind: CommitRefKind::Tag
+                },
+            ]
+        );
+        assert!(commits[1].refs.is_empty());
     }
 
     #[test]

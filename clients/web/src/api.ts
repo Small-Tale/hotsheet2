@@ -33,7 +33,9 @@ export interface RepositoryFile {path:string;original_path?:string;staged?:Repos
 export type RepositoryPlatform='macos'|'windows'|'linux';
 export interface RepositoryStatus {initialized?:boolean;branch?:string;upstream?:string;ahead:number;behind:number;staged:number;unstaged:number;untracked:number;conflicted:number;clean?:boolean;files?:RepositoryFile[];root?:string;platform?:RepositoryPlatform;commit_count?:number;commits?:CodeReviewCommit[];ranges?:CodeReviewRange[];difftool?:string;truncated?:boolean}
 export interface RepositoryPage<T> {items:T[];next_cursor?:number|null}
-export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;body?:string;committed_at:string}
+export type CommitRefKind='head'|'branch'|'remote'|'tag';
+export interface CommitRef {label:string;kind:CommitRefKind}
+export interface CodeReviewCommit {sha:string;short_sha:string;subject:string;body?:string;committed_at:string;refs?:CommitRef[]}
 export interface CodeReviewRange {from:string;to:string;count:number}
 export interface CodeReviewSummary {files:{total:number;docs:number;tests:number;source:number;other:number};tests_added:number;tests_modified:number}
 export interface CodeReviewFile {path:string;original_path?:string;change:Exclude<RepositoryFileChange,'unmerged'|'untracked'>;category:'docs'|'tests'|'source'|'other'}

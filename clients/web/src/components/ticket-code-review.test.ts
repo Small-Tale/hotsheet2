@@ -44,6 +44,35 @@ describe('TicketCodeReview', () => {
     expect(earlierRange).toBeLessThan(earlierCommit);
   });
 
+  it('decorates commits with their git refs classified by kind (HS2-SFJ5TE)', () => {
+    const decorated: CodeReview = {
+      ...review,
+      commits: [
+        { sha: 'ddd4444', short_sha: 'ddd4444', subject: 'Tip commit', committed_at: '2026-09-02T10:00:00Z', refs: [
+          { label: 'HEAD → main', kind: 'head' },
+          { label: 'origin/main', kind: 'remote' },
+          { label: 'v1.2.0', kind: 'tag' },
+          { label: 'release', kind: 'branch' },
+        ] },
+        { sha: 'aaa1111', short_sha: 'aaa1111', subject: 'Older commit', committed_at: '2026-09-01T08:00:00Z' },
+      ],
+    };
+    const markup = String(TicketCodeReview({ review: decorated }));
+    expect(markup).toContain('data-ref-kind="head"');
+    expect(markup).toContain('data-ref-kind="remote"');
+    expect(markup).toContain('data-ref-kind="tag"');
+    expect(markup).toContain('data-ref-kind="branch"');
+    expect(markup).toContain('HEAD → main');
+    expect(markup).toContain('v1.2.0');
+    expect(markup).toContain('data-lucide="tag"');
+    expect(markup).toContain('data-lucide="git-branch"');
+    expect(markup).toContain('title="Current HEAD: HEAD → main"');
+    expect(markup).toContain('title="Tag: v1.2.0"');
+    // Only the tip commit is decorated; the older commit has no ref chips.
+    expect(markup.match(/ticket-code-review__ref"/g)).toHaveLength(4);
+    expect(markup.match(/ticket-code-review__refs"/g)).toHaveLength(1);
+  });
+
   it('summarizes classified changes and calls out modified existing tests',()=>{
     const markup=String(TicketCodeReview({review:{...review,summary:{files:{total:8,docs:2,tests:3,source:2,other:1},tests_added:2,tests_modified:1}}}));
     expect(markup).toContain('aria-label="Open change evidence"');
