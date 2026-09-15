@@ -644,8 +644,15 @@ async function refreshTrashSettings(current=project()){if(!current)return;trashS
 async function refreshCodeReview(){const current=project(),ticket=selectedTicket.value;if(!current||!ticket)return;codeReviewLoading.value=true;codeReviewMessage.value='';try{const review=await new Api(current.apiPath).codeReview(current.id,ticket.id);if(project()?.id===current.id&&selectedTicket.value?.id===ticket.id)codeReview.value=review}catch(reason){if(project()?.id===current.id&&selectedTicket.value?.id===ticket.id){codeReview.value=undefined;codeReviewMessage.value=reason instanceof Error?reason.message:String(reason)}}finally{if(project()?.id===current.id&&selectedTicket.value?.id===ticket.id)codeReviewLoading.value=false}}
 const openSelect=()=>[...document.querySelectorAll<Control>('wa-select')].find(node=>node.open);
 const localTicketMutationBarrier=createRefreshBarrier();
+function beginLocalTicketMutation(){
+  // A refresh may already have passed the barrier and be waiting on an older
+  // ticket snapshot. Invalidate that active-project response before applying
+  // optimistic rows; later refreshes still wait for the mutation to settle.
+  projectRefreshGeneration+=1;
+  return localTicketMutationBarrier.begin();
+}
 function beginLocalTicketCreation(){
-  const release=localTicketMutationBarrier.begin();
+  const release=beginLocalTicketMutation();
   return async()=>{
     await new Promise<void>(next=>requestAnimationFrame(()=>{next()}));
     await waitForTicketMotionSettled();
@@ -661,7 +668,7 @@ function updatePermissionTimer(){const item=visiblePermission();if(!item){permis
 async function applyTicketPatch(slug:string,patch:TicketPatch){
   const current=project(),ticket=tickets.value.find(item=>item.slug===slug);
   if(!current||!ticket)return false;
-  const interaction=Object.hasOwn(patch,'up_next')?'ticket-up-next-change':Object.hasOwn(patch,'status')?'ticket-status-change':'ticket-change',finishTiming=beginInteractionTiming(interaction,{slug}),releaseRefresh=localTicketMutationBarrier.begin();
+  const interaction=Object.hasOwn(patch,'up_next')?'ticket-up-next-change':Object.hasOwn(patch,'status')?'ticket-status-change':'ticket-change',finishTiming=beginInteractionTiming(interaction,{slug}),releaseRefresh=beginLocalTicketMutation();
   const selectedBefore=selectedTicket.value?.slug===slug?selectedTicket.value:null,started=performance.now(),generation=(mutationGenerations.get(slug)??0)+1;
   let rollbackRow=ticket,rollbackSelected=selectedBefore;
   mutationGenerations.set(slug,generation);
@@ -735,7 +742,7 @@ function setProjectTicketRows(projectId:string,rows:WireTicketRow[]){if(!project
 function reportBulkFailure(current:Project,message:string){if(project()?.id===current.id)error.value=message;else showToast(`${current.name}: ${message}`)}
 async function applyBulkOperations(current:Project,operations:BulkOperation[]):Promise<BulkApplyResult>{
   if(operations.length===0)return {complete:false,succeeded:new Set<string>()};
-  const finishTiming=beginInteractionTiming('bulk-ticket-change',{count:operations.length,project:current.id}),releaseRefresh=localTicketMutationBarrier.begin(),slugs=new Set(operations.map(item=>item.slug)),before=projectTabTicketRows(current.id).filter(ticket=>slugs.has(ticket.slug)),selectedBefore=project()?.id===current.id?selectedTicket.value:null;
+  const finishTiming=beginInteractionTiming('bulk-ticket-change',{count:operations.length,project:current.id}),releaseRefresh=beginLocalTicketMutation(),slugs=new Set(operations.map(item=>item.slug)),before=projectTabTicketRows(current.id).filter(ticket=>slugs.has(ticket.slug)),selectedBefore=project()?.id===current.id?selectedTicket.value:null;
   setProjectTicketRows(current.id,projectTabTicketRows(current.id).map(ticket=>{const operation=operations.find(item=>item.slug===ticket.slug);return operation?projectTicketPatch(ticket,operation.patch):ticket}));
   if(project()?.id===current.id&&selectedTicket.value){const operation=operations.find(item=>item.slug===selectedTicket.value?.slug);if(operation)selectedTicket.value=projectTicketPatch(selectedTicket.value,operation.patch)}
   finishTiming();

@@ -12,6 +12,8 @@ async function mockBulkProject(page:Page,{conflictFirst=false}:{conflictFirst?:b
   const batches:Array<Array<{id:string;status:string;expected_token?:string}>>=[];
   let releaseVerified!:()=>void;
   const verifiedResponse=new Promise<void>(resolve=>{releaseVerified=resolve});
+  let pollCursor=0,emitTicketChange=false,holdTicketRefresh=false,staleRefreshStarted=false,staleRows=rows.map(row=>({...row})),releaseStaleRefresh!:()=>void;
+  const staleRefreshResponse=new Promise<void>(resolve=>{releaseStaleRefresh=resolve});
   await page.addInitScript(()=>{
     if(!new URLSearchParams(location.search).has('dev-review')){
       const url=new URL(location.href);url.searchParams.set('dev-review','false');history.replaceState(null,'',url);
@@ -23,7 +25,10 @@ async function mockBulkProject(page:Page,{conflictFirst=false}:{conflictFirst?:b
     if(path==='/__hotsheet/projects/open')return route.fulfill({status:201,json:request.postDataJSON().root===otherProject.root?otherProject:project});
     if(path==='/__hotsheet/folders/choose')return route.fulfill({json:{path:otherProject.root}});
     if(path.endsWith('/providers'))return route.fulfill({json:[{connection_id:'git-local',provider:'git',display_name:'Hot Sheet git',locator:'/work/demo.hs2',default:true,capabilities:{create:true,update:true,close:true,notes:true,attachments:true,up_next:true,atomic_batch:true,watch:true,query_fields:[]}}]});
-    if(path.endsWith('/tickets')&&request.method()==='GET')return route.fulfill({json:path.includes('/other-checkout/')?[{...base,native_id:'other',qualified_id:'git-local:other',id:'other',slug:'HS2-OTHER1',title:'Other project ticket',status:'not_started'}]:rows});
+    if(path.endsWith('/tickets')&&request.method()==='GET'){
+      if(holdTicketRefresh&&path.includes('/demo-checkout/')){holdTicketRefresh=false;staleRefreshStarted=true;await staleRefreshResponse;return route.fulfill({json:staleRows})}
+      return route.fulfill({json:path.includes('/other-checkout/')?[{...base,native_id:'other',qualified_id:'git-local:other',id:'other',slug:'HS2-OTHER1',title:'Other project ticket',status:'not_started'}]:rows});
+    }
     if(path.endsWith('/batch')&&request.method()==='POST'){
       const updates=request.postDataJSON().updates as Array<{id:string;status:string;expected_token?:string}>;
       batches.push(updates);
@@ -43,10 +48,13 @@ async function mockBulkProject(page:Page,{conflictFirst=false}:{conflictFirst?:b
     if(path.endsWith('/permissions')||path.endsWith('/connections')||path.endsWith('/commands')||path.endsWith('/terminals')||path.endsWith('/corrupt-tickets'))return route.fulfill({json:[]});
     if(path.endsWith('/repository/status'))return route.fulfill({json:{branch:'main',ahead:0,behind:0,staged:0,unstaged:0,untracked:0,conflicted:0,clean:true}});
     if(path.endsWith('/terminal-settings'))return route.fulfill({json:{inherit_global_shell_history:false}});
-    if(path.endsWith('/ws/poll'))return route.fulfill({json:{cursor:0,events:[],overflow:false}});
+    if(path.endsWith('/ws/poll')){
+      if(emitTicketChange){emitTicketChange=false;pollCursor+=1;return route.fulfill({json:{cursor:pollCursor,events:[{store:'git-local',kind:'updated',id:'external',slug:'HS2-EXTERNAL'}],overflow:false}})}
+      return route.fulfill({json:{cursor:pollCursor,events:[],overflow:false}});
+    }
     return route.fulfill({status:404,json:{error:'not mocked'}});
   });
-  return {batches,releaseVerified,getRows:()=>rows};
+  return {batches,releaseVerified,getRows:()=>rows,beginStaleRefresh:()=>{staleRows=rows.map(row=>({...row}));holdTicketRefresh=true;emitTicketChange=true;},staleRefreshStarted:()=>staleRefreshStarted,releaseStaleRefresh:()=>{releaseStaleRefresh()}};
 }
 
 async function openBulkProject(page:Page) {
@@ -98,4 +106,26 @@ test('rolls a genuine external atomic conflict back to the prior status',async({
   await expect(page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-FAST01"]')).toBeVisible();
   await expect(page.locator('[data-column-id="completed"] [data-ticket-slug="HS2-FAST02"]')).toBeVisible();
   await expect(page.locator('[data-column-id="verified"] [data-ticket-slug^="HS2-FAST"]')).toHaveCount(0);
+});
+
+test('keeps archived tickets hidden when a refresh was already in flight (HS2-913HFN)',async({page})=>{
+  const mock=await mockBulkProject(page);
+  mock.releaseVerified();
+  await page.setViewportSize({width:1600,height:900});
+  await openBulkProject(page);
+  const menu=page.getByRole('menu',{name:'Ticket actions'}),completed=page.locator('[data-column-id="completed"]'),first=completed.locator('[data-ticket-slug="HS2-FAST01"]'),second=completed.locator('[data-ticket-slug="HS2-FAST02"]');
+  await first.click();await second.click({modifiers:['Meta']});await first.click({button:'right'});await menu.locator('[data-context-action="Verify ticket"]').click();
+  const verified=page.locator('[data-column-id="verified"]'),verifiedFirst=verified.locator('[data-ticket-slug="HS2-FAST01"]'),verifiedSecond=verified.locator('[data-ticket-slug="HS2-FAST02"]');
+  await expect(verifiedFirst).toBeVisible();await expect(verifiedSecond).toBeVisible();
+
+  mock.beginStaleRefresh();
+  await expect.poll(()=>mock.staleRefreshStarted()).toBe(true);
+
+  await verifiedFirst.click();await verifiedSecond.click({modifiers:['Meta']});await verifiedFirst.click({button:'right'});await menu.locator('[data-context-action="Archive ticket"]').click();
+  await expect.poll(()=>mock.getRows().map(row=>row.status)).toEqual(['archive','archive']);
+  await expect(verifiedFirst).toHaveCount(0);await expect(verifiedSecond).toHaveCount(0);
+  mock.releaseStaleRefresh();
+  await page.waitForTimeout(300);
+  await expect(verifiedFirst).toHaveCount(0);await expect(verifiedSecond).toHaveCount(0);
+  await page.screenshot({path:'/private/tmp/hs2-913hfn-archive-stable-after-stale-refresh.png',fullPage:true});
 });
