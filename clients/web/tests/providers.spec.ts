@@ -2590,3 +2590,38 @@ test('shows the decorative server-busy bars while a server request is in flight 
   await page.screenshot({path:'/private/tmp/hs2-mw1v3m-busy-bars-wide.png'});
   await expect(bars).toHaveAttribute('data-visible','false');
 });
+
+test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)',async({page})=>{
+  await page.setViewportSize({width:1280,height:900});await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const apple=await page.evaluate(()=>/macintosh|mac os|iphone|ipad|ipod/i.test(navigator.userAgent));const mod=apple?'Meta':'Control';
+  await page.getByLabel('Settings view').click();
+  const nav=page.locator('[data-component="settings-navigation"]');await expect(nav).toContainText('Project Settings');await expect(nav).toContainText('App Settings');
+  await nav.locator('[data-item-id="keyboard"]').click();
+  const screen=page.locator('[data-component="keyboard-settings"]');await expect(screen).toBeVisible();
+  await expect(page.locator('.kui-page-header h1').first()).toContainText('Keyboard shortcuts');
+  await expect(screen.locator('[data-shortcut-id="open-search"] .keyboard-settings__chord')).toHaveText(apple?'⌘K':'Ctrl+K');
+  await expect(screen.locator('[data-shortcut-id="copy-tickets"] .keyboard-settings__fixed')).toHaveText('System');
+  await expect(screen.locator('[data-shortcut-id="copy-tickets"] [data-action="edit-shortcut"]')).toHaveCount(0);
+  // Rebind Open search to mod+G and confirm it persists device-locally.
+  await screen.locator('[data-shortcut-id="open-search"] [data-action="edit-shortcut"]').click();
+  await expect(screen.locator('[data-shortcut-capture="open-search"]')).toBeFocused();
+  await page.keyboard.press(`${mod}+g`);
+  await expect(screen.locator('[data-shortcut-id="open-search"] .keyboard-settings__chord')).toHaveText(apple?'⌘G':'Ctrl+G');
+  await expect(screen.locator('li.keyboard-settings__row[data-shortcut-id="open-search"]')).toHaveAttribute('data-overridden','true');
+  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.keyboard-shortcuts')||'{}'))).toMatchObject({'open-search':{key:'g',mod:true}});
+  await screen.screenshot({path:'/private/tmp/hs2-qt6pgr-keyboard-settings.png'});
+  // Conflict: rebinding Undo onto the same chord flags both shortcuts (still on the screen).
+  await screen.locator('[data-shortcut-id="undo"] [data-action="edit-shortcut"]').click();
+  await expect(screen.locator('[data-shortcut-capture="undo"]')).toBeFocused();
+  await page.keyboard.press(`${mod}+g`);
+  await expect(screen.locator('[data-shortcut-id="undo"] .keyboard-settings__conflict')).toContainText('Open search');
+  await expect(screen.locator('[data-shortcut-id="open-search"] .keyboard-settings__conflict')).toContainText('Undo');
+  // Reset just Undo: its default returns and the conflict clears while Open search stays rebound.
+  await screen.locator('[data-shortcut-id="undo"] [data-action="reset-shortcut"]').click();
+  await expect(screen.locator('[data-shortcut-id="undo"] .keyboard-settings__chord')).toHaveText(apple?'⌘Z':'Ctrl+Z');
+  await expect(screen.locator('.keyboard-settings__conflict')).toHaveCount(0);
+  // The rebinding takes effect: mod+K no longer opens search, mod+G does.
+  await page.getByRole('button',{name:/List view/}).click();await page.locator('.app-shell__work-area').focus();
+  await page.keyboard.press(`${mod}+k`);await expect(page.getByRole('textbox',{name:'Search tickets'})).toHaveCount(0);
+  await page.keyboard.press(`${mod}+g`);await expect(page.getByRole('textbox',{name:'Search tickets'})).toBeVisible();
+});

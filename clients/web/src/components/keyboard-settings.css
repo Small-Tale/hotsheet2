@@ -1,0 +1,31 @@
+.keyboard-settings { display: grid; gap: var(--wa-space-l); padding: var(--wa-space-m); }
+.keyboard-settings__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--wa-space-m); flex-wrap: wrap; }
+.keyboard-settings__intro { max-width: 42rem; margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); line-height: 1.5; }
+.keyboard-settings__reset-all { display: inline-flex; align-items: center; gap: var(--wa-space-2xs); min-height: 2.25rem; padding: 0 .75rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-text-normal); cursor: pointer; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 600; white-space: nowrap; }
+.keyboard-settings__reset-all:hover:not(:disabled) { background: var(--wa-color-neutral-fill-quiet); }
+.keyboard-settings__reset-all:disabled { opacity: .5; cursor: not-allowed; }
+.keyboard-settings__reset-all svg { width: .9rem; height: .9rem; }
+.keyboard-settings__group { display: grid; gap: var(--wa-space-2xs); }
+.keyboard-settings__group-title { margin: 0 0 var(--wa-space-2xs); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.keyboard-settings__list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: var(--wa-border-radius-l); overflow: hidden; }
+.keyboard-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--wa-space-m); min-height: 3.25rem; padding: var(--wa-space-xs) var(--wa-space-s); border-top: 1px solid var(--wa-color-neutral-border-quiet); background: var(--wa-color-surface-default); }
+.keyboard-settings__row:first-child { border-top: 0; }
+.keyboard-settings__row[data-capturing="true"] { background: var(--wa-color-brand-fill-quiet); }
+.keyboard-settings__meta { display: grid; gap: .1rem; min-width: 0; }
+.keyboard-settings__label { color: var(--wa-color-text-normal); font-size: var(--wa-font-size-s); font-weight: 600; }
+.keyboard-settings__description { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.keyboard-settings__conflict { display: inline-flex; align-items: center; gap: var(--wa-space-3xs); margin-top: .1rem; color: var(--wa-color-warning-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 600; }
+.keyboard-settings__conflict svg { width: .8rem; height: .8rem; }
+.keyboard-settings__controls { display: flex; align-items: center; gap: var(--wa-space-2xs); flex: none; }
+.keyboard-settings__chord { display: inline-flex; align-items: center; justify-content: center; min-width: 3.25rem; min-height: 1.9rem; padding: 0 .5rem; border: 1px solid var(--wa-color-neutral-border-normal); border-bottom-width: 2px; border-radius: var(--wa-border-radius-m); background: var(--wa-color-neutral-fill-quiet); color: var(--wa-color-text-normal); font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-xs); font-weight: 600; white-space: nowrap; }
+.keyboard-settings__capture { min-width: 8rem; min-height: 1.9rem; padding: 0 .6rem; border: 1px solid var(--wa-color-focus); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-brand-on-quiet); cursor: text; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 600; }
+.keyboard-settings__capture:focus-visible { outline: 2px solid var(--wa-color-focus); outline-offset: 1px; }
+.keyboard-settings__action { display: inline-grid; place-items: center; width: 1.9rem; height: 1.9rem; padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); background: var(--wa-color-surface-default); color: var(--wa-color-neutral-on-quiet); cursor: pointer; }
+.keyboard-settings__action:hover:not(:disabled) { background: var(--wa-color-neutral-fill-quiet); color: var(--wa-color-text-normal); }
+.keyboard-settings__action:disabled { opacity: .4; cursor: not-allowed; }
+.keyboard-settings__action svg { width: .9rem; height: .9rem; }
+.keyboard-settings__fixed { display: inline-flex; align-items: center; min-height: 1.9rem; padding: 0 .5rem; border-radius: var(--wa-border-radius-pill); background: var(--wa-color-neutral-fill-quiet); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); font-weight: 600; }
+@media (max-width: 34rem) {
+  .keyboard-settings__row { align-items: flex-start; flex-direction: column; gap: var(--wa-space-2xs); }
+  .keyboard-settings__controls { align-self: stretch; justify-content: flex-end; }
+}

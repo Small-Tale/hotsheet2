@@ -55,6 +55,8 @@ hot-sheet2/                  # this repo = CODE only; tickets are a SEPARATE sto
     src/local-ticket-changes.ts # Counted exact acknowledgements that consume only the stream echo already projected by a local ticket mutation
     src/server-busy.ts       #   Global "server busy" state from the in-flight authenticated-request count (idle long-polls excluded), with a short idle linger; plus the viewport-fill bar-count math
     src/components/server-busy-bars.tsx # Decorative fixed top-of-app 4px yellow bar strip that ripples while the server is busy (HS2-MW1V3M)
+    src/keyboard-shortcuts.ts #  Complete keyboard-shortcut registry (editable global chords + fixed system shortcuts), device-local override persistence, and chord match/format/capture/conflict helpers (HS2-QT6PGR)
+    src/components/keyboard-settings.tsx # App Settings → Keyboard screen: grouped shortcut reference with per-chord rebinding, reset, and conflict warnings
     src/trailing-task.ts     # Generic trailing-edge scheduler used to collapse rapid view intent before collection I/O starts
     src/project-tab-refresh.ts # Select-safe, per-project-coalesced authoritative tab-cache refresh routing with activation supersession and active-project promotion
     src/permission-notifications.ts # Machine-local permission inbox/history plus visible-presentation-only automation timers
