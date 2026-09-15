@@ -57,7 +57,7 @@ export function ticketRowIndicator(props: Pick<TicketRowProps, 'feedbackNeeded' 
 
 function ActiveClaimIndicator({ agentName = 'AI' }: { agentName?: string }) {
   const label = `${agentName} is actively working on this ticket`;
-  return <span class="ticket-list-row__claim" title={`${label} while its claim lease remains live`}>
+  return <span class="ticket-list-row__claim" title={`${label} while it stays active`}>
     <LoadingSpinner label={label} />
   </span>;
 }
