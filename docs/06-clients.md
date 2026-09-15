@@ -341,10 +341,12 @@ and identity-less legacy entries remain conservatively blocking.
   hosts it, and records the many-to-many checkout/store link.
   Retrying a failed project open clears the prior failure immediately. During startup,
   failed remembered projects receive one bounded retry after the initial restore pass.
-  A project that remains unavailable is reported non-modally but stays remembered for the
-  next launch; only an explicit project close removes it from the remembered set. Restore
-  failures must never leave stale compatibility or connection diagnostics over a different
-  project that reopened successfully.
+  A project that remains unavailable stays in the tab bar with a red title and error icon;
+  selecting it presents the exact failure, known stale-server context, its remembered root,
+  likely recovery steps, and an in-place retry action. Failed tabs are not draggable or
+  closable as live projects, and every tab-persistence path retains their roots for the next
+  launch. Restore failures must never leave stale compatibility or connection diagnostics
+  over a different project that reopened successfully.
   A checkout with existing sources opens directly. Source-less project setup uses a
   bounded dialog with shared multiline menu items whose title and explanation remain
   inside one selectable row at compact sizes. When opening from the initial dialog it
@@ -1321,8 +1323,9 @@ viewports over the existing terminal attach WebSocket. HS2-586BVQ ships the proj
 bottom drawer over that same viewport boundary.
 
 When a launch restores remembered projects, the client holds a single project-restoration
-surface until every remembered project's tickets and terminals, plus the remembered active
-project, have settled. The complete shell is then revealed in one render boundary. A refresh
+surface until every available project's tickets and terminals have settled and every failed
+project has completed its bounded retry. It then reveals the complete healthy and error-tab
+set in one render boundary and restores the remembered active healthy or failed tab. A refresh
 therefore never exposes a partially restored board beside terminal content from a different
 stage of startup.
 

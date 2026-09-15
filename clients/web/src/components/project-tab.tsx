@@ -16,7 +16,9 @@ export interface ProjectTabProps {
   busy?: boolean;
   disconnected?: boolean;
   attention?: boolean;
+  restoreFailure?: boolean;
   closable?: boolean;
+  draggable?: boolean;
   notificationCount?: number;
   upNextCount?: number;
   activeTicketCount?: number;
@@ -35,12 +37,12 @@ function ProjectTabActivityRing({count}:{count:number}) {
   return <svg class="project-tab__activity-ring" data-segments={String(count)} viewBox="0 0 24 24" aria-hidden="true"><circle class="project-tab__activity-track" cx="12" cy="12" r="9"/><circle class="project-tab__activity-segments" cx="12" cy="12" r="9" stroke-dasharray={projectTabActivityDash(count)}/></svg>;
 }
 
-export function ProjectTab({ id, name, location, selected = false, busy = false, disconnected = false, attention = false, closable = true,notificationCount=0,upNextCount=0,activeTicketCount=0 }: ProjectTabProps) {
+export function ProjectTab({ id, name, location, selected = false, busy = false, disconnected = false, attention = false, restoreFailure = false, closable = true,draggable=true,notificationCount=0,upNextCount=0,activeTicketCount=0 }: ProjectTabProps) {
   const normalizedUpNextCount=Math.max(0,Math.trunc(upNextCount)),normalizedActiveTicketCount=Math.max(0,Math.trunc(activeTicketCount));
   const workLabel=[normalizedUpNextCount>0?`${normalizedUpNextCount} Up Next ticket${normalizedUpNextCount===1?'':'s'}`:'',normalizedActiveTicketCount>0?`${normalizedActiveTicketCount} active ticket${normalizedActiveTicketCount===1?'':'s'}`:''].filter(Boolean).join(', ');
   const visibleCount=normalizedActiveTicketCount||normalizedUpNextCount;
   const work=workLabel?<span class="project-tab__work" data-active={String(normalizedActiveTicketCount>0)} data-active-count={String(normalizedActiveTicketCount)} data-up-next-count={String(normalizedUpNextCount)} aria-label={workLabel} title={workLabel}>{normalizedActiveTicketCount>0&&<ProjectTabActivityRing count={normalizedActiveTicketCount}/>}<span class="project-tab__work-count" aria-hidden="true">{projectTabUpNextLabel(visibleCount)}</span></span>:undefined;
   const notification=notificationCount>0?<span class="project-tab__notification" aria-label={`${notificationCount} pending notification${notificationCount===1?'':'s'}`} title={`${notificationCount} pending notification${notificationCount===1?'':'s'}`}><LucideIcon icon={Bell} name="bell"/><span aria-hidden="true">{notificationCount}</span></span>:undefined;
   const trailing=work||notification?<span class="project-tab__indicators">{notification}{work}</span>:busy?<span class="project-tab__busy"><LoadingSpinner label="Project busy" /></span>:disconnected?<LucideIcon icon={WifiOff} name="wifi-off" className="project-tab__state" />:attention?<LucideIcon icon={CircleAlert} name="circle-alert" className="project-tab__state project-tab__state--attention" />:undefined;
-  return <AppTab kind="project" id={id} name={name} selected={selected} closable={closable} leading={location==='remote'?<LucideIcon icon={Cloud} name="cloud"/>:undefined} trailing={trailing} rootAttributes={{'data-ticket-drop-project':id,'data-location':location,'data-busy':String(busy),'data-disconnected':String(disconnected),'data-attention':String(attention)}}/>;
+  return <AppTab kind="project" id={id} name={name} selected={selected} closable={closable} draggable={draggable} leading={location==='remote'?<LucideIcon icon={Cloud} name="cloud"/>:undefined} trailing={trailing} rootAttributes={{'data-ticket-drop-project':id,'data-location':location,'data-busy':String(busy),'data-disconnected':String(disconnected),'data-attention':String(attention),'data-restore-failure':String(restoreFailure)}}/>;
 }

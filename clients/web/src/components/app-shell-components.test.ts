@@ -46,8 +46,11 @@ describe('application shell components', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     const withComposer=String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, composer: 'compose' as never, workspace: 'work' as never }));
     const withoutComposer=String(AppShell({ tabs: [], sidebar: 'side' as never, header: 'head' as never, workspace: 'work' as never }));
+    const withoutSidebar=String(AppShell({tabs:[],header:'head' as never,workspace:'work' as never,sidebarVisible:false}));
     expect(withComposer).toContain('data-has-composer="true"');
     expect(withoutComposer).toContain('data-has-composer="false"');
+    expect(withoutSidebar).not.toContain('data-region-id="app-sidebar"');
+    expect(withoutSidebar).not.toContain('aria-label="Show project sidebar"');
     expect(css).toMatch(/\.app-shell__composer \{[^}]*padding: \.75rem 1rem;/);
     expect(css).toMatch(/data-has-composer="true"[^}]*app-shell__workspace \{[^}]*padding-top: 0;/);
     expect(css).toMatch(/@media \(max-width: 42rem\)[\s\S]*\.app-shell__composer \{ padding: \.7rem; \}/);
@@ -69,6 +72,11 @@ describe('application shell components', () => {
     expect(markup).not.toContain('data-lucide="loader-circle"');
     expect(markup).not.toContain('data-lucide="wifi-off"');
     expect(markup.indexOf('</button><button')).toBeGreaterThan(0);
+    const restoreFailure=String(ProjectTab({id:'failed',name:'Failed',location:'local',attention:true,restoreFailure:true,closable:false,draggable:false}));
+    expect(restoreFailure).toContain('data-restore-failure="true"');
+    expect(restoreFailure).toContain('draggable="false"');
+    expect(restoreFailure).toContain('data-lucide="circle-alert"');
+    expect(restoreFailure).not.toContain('data-action="close-project-tab"');
     const notificationMarkup = String(ProjectTab({ id: 'one', name: 'One', location: 'local', notificationCount: 2 }));
     expect(notificationMarkup).not.toContain('data-lucide="folder-git-2"');
     expect(notificationMarkup).toContain('aria-label="2 pending notifications"');
@@ -89,6 +97,7 @@ describe('application shell components', () => {
     expect(activeOnlyMarkup).toContain('aria-label="1 active ticket"');
     expect(activeOnlyMarkup).toContain('project-tab__activity-ring');
     const projectTabCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8');
+    expect(projectTabCss).toContain('[data-attention="true"] .project-tab__name { color: var(--wa-color-danger-on-quiet); }');
     expect(projectTabCss).toContain('animation:project-tab-activity-rotate 1.7s linear infinite');
     expect(projectTabCss).toContain('@media (prefers-reduced-motion:reduce)');
     expect(activeOnlyMarkup).toContain('data-segments="1"');

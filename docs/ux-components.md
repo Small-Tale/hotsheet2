@@ -1068,8 +1068,10 @@ The operations sidebar separates its aggregate `All projects` summary from indiv
 with an inset divider and normalizes all displayed completion trends to the aggregate maximum.
 The aligned-series aggregation and explicit chart-domain contract are reusable for future
 cross-project statistics. During remembered-project startup, the AppShell and terminal drawer remain
-unmounted behind one stable restoration status until tickets, terminals, and the active-project
-selection are all ready, then appear together without a mixed intermediate layout.
+unmounted behind one stable restoration status until tickets, terminals, and the bounded retry pass
+are ready, then healthy tabs and red error tabs appear together without a mixed intermediate layout.
+Selecting an error tab uses the shared `EmptyState` primitive for exact failure context, recovery
+guidance, and retry without pretending the unavailable checkout has live sidebar or inspector data.
 
 `FixedAspectTerminalCard` is also a first-class UX catalog entry. Its catalog page renders
 both supported public variants with the real xterm frontend, a deterministic ANSI fixture whose

@@ -984,16 +984,41 @@ test('retries a temporarily failed remembered project and restores every project
 
 test('keeps a persistently failed project remembered without obscuring a successful one',async({page})=>{
   await mockProject(page);
-  const failedRoot='/work/older-server';
-  await page.route('**/__hotsheet/projects/open',route=>route.request().postDataJSON().root===failedRoot
-    ?route.fulfill({status:409,json:{error:'The older server only supports schema 2.'}})
-    :route.fallback());
+  const failedRoot='/work/older-server';let available=false;
+  await page.route('**/__hotsheet/projects/open',route=>{
+    if(route.request().postDataJSON().root!==failedRoot)return route.fallback();
+    return available
+      ?route.fulfill({status:201,json:{...project,id:'older-checkout',root:failedRoot,name:'older-server',apiPath:'/__hotsheet/project-api/older-checkout'}})
+      :route.fulfill({status:409,json:{error:'The older server only supports schema 2.',recovery:{store:'/work/older-server.hs2',expected:{pid:4242,url:'http://127.0.0.1:8787',started_at:'2026-09-12T01:00:00Z'}}}});
+  });
   await page.addInitScript(({good,bad})=>{localStorage.setItem('hotsheet.open-projects',JSON.stringify([good,bad]))},{good:project.root,bad:failedRoot});
   await page.goto('/');
   await expect(page.getByRole('tab',{name:/demo/})).toBeVisible();
+  const failedTab=page.getByRole('tab',{name:'older-server'}),failedTabRoot=failedTab.locator('xpath=..');
+  await expect(failedTab).toBeVisible();
+  await expect(failedTabRoot).toHaveAttribute('data-attention','true');
+  await expect(failedTabRoot).toHaveAttribute('draggable','false');
+  await expect(failedTabRoot.locator('[data-lucide="circle-alert"]')).toBeVisible();
+  await failedTab.click();
+  const failure=page.locator('.project-restore-error');
+  await expect(failure).toContainText('older-server could not be reopened');
+  await expect(failure).toContainText('The older server only supports schema 2.');
+  await expect(failure).toContainText('process (4242) is not responding');
+  await expect(failure).toContainText('Project: /work/older-server');
+  await page.screenshot({path:'/private/tmp/hs2-cygqfn-project-restore-error-wide.png',fullPage:true});
+  await page.setViewportSize({width:1024,height:600});
+  await page.screenshot({path:'/private/tmp/hs2-cygqfn-project-restore-error-narrow.png',fullPage:true});
   await expect(page.locator('.app-error')).toHaveCount(0);
-  await expect(page.locator('.app-toast')).toContainText('remains remembered');
   await expect(page.evaluate(()=>JSON.parse(localStorage.getItem('hotsheet.open-projects')??'[]'))).resolves.toEqual([project.root,failedRoot]);
+  await expect(page.evaluate(()=>localStorage.getItem('hotsheet.workspace.active-project-root.v1'))).resolves.toBe(failedRoot);
+  await page.reload();
+  await expect(page.getByRole('tab',{name:'older-server'})).toHaveAttribute('aria-selected','true');
+  await expect(failure).toContainText('The older server only supports schema 2.');
+  available=true;
+  await failure.getByRole('button',{name:'Retry project'}).click();
+  await expect(failure).toHaveCount(0);
+  await expect(page.getByRole('tab',{name:'older-server'}).locator('xpath=..')).toHaveAttribute('data-attention','false');
+  await expect(page.getByRole('heading',{name:'Queue'})).toBeVisible();
 });
 
 test('suppresses interaction-bound render bursts but reports a storm that persists afterward',async({page})=>{
