@@ -27,13 +27,20 @@ export function projectTabUpNextLabel(count: number): string {
   return Math.max(0, Math.trunc(count)) > 99 ? '99+' : String(Math.max(0, Math.trunc(count)));
 }
 
+/** The activity ring caps its drawn segments here to stay legible; beyond this the count grows but the ring does not. */
+export const PROJECT_TAB_MAX_ACTIVITY_SEGMENTS=8;
+
+export function projectTabActivitySegments(count:number):number {
+  return Math.min(PROJECT_TAB_MAX_ACTIVITY_SEGMENTS,Math.max(1,Math.trunc(count)));
+}
+
 export function projectTabActivityDash(count:number):string {
-  const segments=Math.max(1,Math.trunc(count)),round=(value:number)=>Number(value.toFixed(4)),circumference=2*Math.PI*9;
+  const segments=projectTabActivitySegments(count),round=(value:number)=>Number(value.toFixed(4)),circumference=2*Math.PI*9;
   return `${round(circumference*.75/segments)} ${round(circumference*.25/segments)}`;
 }
 
 function ProjectTabActivityRing({count}:{count:number}) {
-  return <svg class="project-tab__activity-ring" data-segments={String(count)} viewBox="0 0 24 24" aria-hidden="true"><circle class="project-tab__activity-track" cx="12" cy="12" r="9"/><circle class="project-tab__activity-segments" cx="12" cy="12" r="9" stroke-dasharray={projectTabActivityDash(count)}/></svg>;
+  return <svg class="project-tab__activity-ring" data-segments={String(projectTabActivitySegments(count))} viewBox="0 0 24 24" aria-hidden="true"><circle class="project-tab__activity-track" cx="12" cy="12" r="9"/><circle class="project-tab__activity-segments" cx="12" cy="12" r="9" stroke-dasharray={projectTabActivityDash(count)}/></svg>;
 }
 
 export function ProjectTab({ id, name, location, selected = false, busy = false, disconnected = false, attention = false, restoreFailure = false, closable = true,draggable=true,notificationCount=0,upNextCount=0,activeTicketCount=0 }: ProjectTabProps) {

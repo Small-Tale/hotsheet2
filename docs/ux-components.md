@@ -375,7 +375,8 @@ it does not carry local renderer wrappers for the package primitives.
   Ticket-work state derives from each open project's already-cached ticket rows without
   adding requests: a yellow circle is absent at zero, shows 1–99, caps visible overflow
   at `99+`, and changes to a rotating yellow half-speed activity ring for any live claim.
-  It has one yellow segment per simultaneous active claim while its center label always
+  It has one yellow segment per simultaneous active claim, capped at 8 drawn segments for
+  legibility (HS2-7XHZY1), while its center label always
   shows the Up Next count (reading `0` when work is active but nothing is queued); the
   ring segments are the only active-count axis (HS2-3TGYER). The accessible label continues
   reporting both uncapped axes.

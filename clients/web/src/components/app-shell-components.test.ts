@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resizeDemoWidth, selectProjectTab, setRegionSize, shellMode, shellStatsProjectName } from '../ux-demo/app-shell-demo';
 import { AppShell } from './app-shell';
 import { ConnectionStateBanner } from './connection-state-banner';
-import { ProjectTab,projectTabActivityDash } from './project-tab';
+import { ProjectTab,projectTabActivityDash,projectTabActivitySegments } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
 
@@ -106,6 +106,18 @@ describe('application shell components', () => {
     expect(activeOnlyMarkup).toContain('>0</span>');
     expect(projectTabActivityDash(1)).toBe('42.4115 14.1372');
     expect(projectTabActivityDash(3)).toBe('14.1372 4.7124');
+    // The ring caps its drawn segments at 8 so a large active count stays legible (HS2-7XHZY1).
+    expect(projectTabActivitySegments(1)).toBe(1);
+    expect(projectTabActivitySegments(8)).toBe(8);
+    expect(projectTabActivitySegments(12)).toBe(8);
+    expect(projectTabActivityDash(8)).toBe('5.3014 1.7671');
+    expect(projectTabActivityDash(12)).toBe(projectTabActivityDash(8));
+    const cappedRingMarkup=String(ProjectTab({id:'capped',name:'Capped',location:'local',upNextCount:7,activeTicketCount:12}));
+    // Segments cap at 8 while the accessible label still reports the true active count and the center shows Up Next.
+    expect(cappedRingMarkup).toContain('data-segments="8"');
+    expect(cappedRingMarkup).toContain('stroke-dasharray="5.3014 1.7671"');
+    expect(cappedRingMarkup).toContain('aria-label="7 Up Next tickets, 12 active tickets"');
+    expect(cappedRingMarkup).toContain('>7</span>');
   });
 
   it('draws tab-selection focus around the complete compound pill', () => {

@@ -115,6 +115,7 @@ export function ProjectTabDemo() {
       <ProjectTab id="working" name="Active work" location="local" activeTicketCount={1} />
       <ProjectTab id="three" name="Three active" location="local" activeTicketCount={3} />
       <ProjectTab id="four" name="Four active" location="local" activeTicketCount={4} />
+      <ProjectTab id="capped" name="Capped active" location="local" upNextCount={7} activeTicketCount={12} />
       <ProjectTab id="attention" name="Needs attention" location="remote" attention />
       <ProjectTab id="offline" name="Disconnected" location="remote" disconnected />
       <ProjectTab id="fixed" name="Not closable" location="local" closable={false} upNextCount={100} />

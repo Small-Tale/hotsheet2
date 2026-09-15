@@ -1654,7 +1654,7 @@ test('exercises the application-shell component slice and responsive composition
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tab');
   const tabStates = page.locator('[data-tab-kind="project"]');
-  await expect(tabStates).toHaveCount(10);
+  await expect(tabStates).toHaveCount(11);
   const selectedLocal = tabStates.filter({ hasText: 'Selected local' });
   await expect(selectedLocal).toHaveAttribute('data-selected', 'true');
   const standaloneLabelCenterOffset=async()=>selectedLocal.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.kui-app-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(standaloneLabelCenterOffset).toBeLessThanOrEqual(4);
@@ -1664,7 +1664,8 @@ test('exercises the application-shell component slice and responsive composition
   const activeQueue=tabStates.filter({hasText:'Active queue'});await expect(activeQueue.locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 2 active tickets');await expect(activeQueue.locator('.project-tab__activity-ring')).toBeVisible();await expect(activeQueue.locator('.project-tab__work-count')).toHaveText('3');
   const activeQueueCenters=await activeQueue.locator('.project-tab__work').evaluate(node=>{const outer=node.getBoundingClientRect(),count=node.querySelector('.project-tab__work-count')!.getBoundingClientRect(),ring=node.querySelector('svg')!.getBoundingClientRect();return{countX:Math.abs(outer.x+outer.width/2-count.x-count.width/2),countY:Math.abs(outer.y+outer.height/2-count.y-count.height/2),ringX:Math.abs(outer.x+outer.width/2-ring.x-ring.width/2),ringY:Math.abs(outer.y+outer.height/2-ring.y-ring.height/2)}});expect(Math.max(...Object.values(activeQueueCenters))).toBeLessThan(1);
   const activeWork=tabStates.filter({hasText:'Active work'});await expect(activeWork.locator('.project-tab__work')).toHaveAttribute('aria-label','1 active ticket');await expect(activeWork.locator('.project-tab__work-count')).toHaveText('0');
-  for(const [label,segments,dash] of [['Active work','1','42.4115 14.1372'],['Active queue','2','21.2058 7.0686'],['Three active','3','14.1372 4.7124'],['Four active','4','10.6029 3.5343']] as const){const ring=tabStates.filter({hasText:label}).locator('.project-tab__activity-ring');await expect(ring).toHaveAttribute('data-segments',segments);await expect(ring.locator('.project-tab__activity-segments')).toHaveAttribute('stroke-dasharray',dash)}
+  for(const [label,segments,dash] of [['Active work','1','42.4115 14.1372'],['Active queue','2','21.2058 7.0686'],['Three active','3','14.1372 4.7124'],['Four active','4','10.6029 3.5343'],['Capped active','8','5.3014 1.7671']] as const){const ring=tabStates.filter({hasText:label}).locator('.project-tab__activity-ring');await expect(ring).toHaveAttribute('data-segments',segments);await expect(ring.locator('.project-tab__activity-segments')).toHaveAttribute('stroke-dasharray',dash)}
+  const cappedActive=tabStates.filter({hasText:'Capped active'});await expect(cappedActive.locator('.project-tab__work')).toHaveAttribute('aria-label','7 Up Next tickets, 12 active tickets');await expect(cappedActive.locator('.project-tab__work-count')).toHaveText('7');
   await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-name','project-tab-activity-rotate');
   await expect(activeWork.locator('.project-tab__activity-segments')).toHaveCSS('animation-duration','1.7s');
   await expect(tabStates.filter({ hasText: 'Needs attention' }).locator('[data-lucide="circle-alert"]')).toHaveCount(1);

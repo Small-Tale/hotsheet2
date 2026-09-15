@@ -1119,7 +1119,8 @@ view layer is new work.
   is omitted at zero, shows its exact value through 99, and renders `99+` above that
   while retaining the full count for assistive technology. Any live ticket claim turns
   the yellow count circle into a half-speed rotating activity ring split into one segment per
-  simultaneous active claim, while the center label always projects the Up Next count
+  simultaneous active claim (capped at 8 drawn segments for legibility; the accessible
+  label still reports the true active count), while the center label always projects the Up Next count
   (so it can read `0` while work is active); the ring's segment count is the only axis that
   tracks active claims (HS2-3TGYER). Each open project's existing long-poll stream reconciles
   those cached rows after ticket, claim, renew, and release events even when the project is
