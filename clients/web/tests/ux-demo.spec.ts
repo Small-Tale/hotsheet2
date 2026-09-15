@@ -1867,9 +1867,11 @@ test('exercises the application-shell component slice and responsive composition
   });
   expect(composerControlHeights.input).toBeCloseTo(composerControlHeights.select, 0);
   await shellComposer.getByRole('button', { name: 'Cancel' }).click();
+  await expect(shellComposer).toBeHidden();
   await shell.getByRole('button', { name: /New ticket/ }).click();
   await expect(shellComposer.getByRole('textbox', { name: 'Ticket title' })).toBeFocused();
   await shellComposer.getByRole('button', { name: 'Cancel' }).click();
+  await expect(shellComposer).toBeHidden();
   const inspectorToolbarAlignment = await shell.locator('.ticket-inspector__header > [data-component="toolbar"]').evaluate(node => {
     const slug = node.querySelector('[data-component="toolbar-text"]')!.getBoundingClientRect();
     const controls = node.querySelector('[data-component="toolbar-control-group"]')!.getBoundingClientRect();
@@ -1883,12 +1885,15 @@ test('exercises the application-shell component slice and responsive composition
   await expect(sidebarHandle).toHaveAttribute('aria-valuemin', '250');
   await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '272');
   await sidebarHandle.focus();
+  await expect(sidebarHandle).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(sidebarHandle).toHaveAttribute('aria-valuenow', '288');
   const inspectorHandle = shell.getByRole('separator', { name: 'Resize Ticket inspector' });
   await inspectorHandle.focus();
+  await expect(inspectorHandle).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await expect(inspectorHandle).toHaveAttribute('aria-valuenow', '368');
+  await shell.screenshot({ path: '/private/tmp/hs2-ptm2rt-app-shell-keyboard-resize.png' });
   await page.keyboard.press('ArrowRight');
   await expect(inspectorHandle).toHaveAttribute('aria-valuenow', '352');
   const inspectorHandleBox = await inspectorHandle.boundingBox();

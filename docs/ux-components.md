@@ -456,7 +456,9 @@ always retain native clipboard behavior.
   focus, and let native modality confine Tab/Shift-Tab, order nested-control Escape, inert
   the background, and restore the trigger after completed hide. The backdrop is not a
   dismissal action; application state owns validation, drafts, create-in-flight veto,
-  disposal, and the successful create destination.
+  disposal, and the successful create destination. The catalog schedules `show()` only
+  after expanded content has committed, and keyboard interactions outside the composer
+  begin only after its native hide lifecycle completes.
   - compact “New ticket…” entry
   - expands to the minimum useful creation fields
   - respects the selected ticket provider and its capabilities

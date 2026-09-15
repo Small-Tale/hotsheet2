@@ -1467,9 +1467,8 @@ delegate(root, 'click', '[data-action="more-workspace-actions"]', () => {
 });
 delegate(root, 'click', '[data-action="expand-ticket-composer"]', (_event, target) => {
   if (document.activeElement !== target) (target as HTMLElement).focus({ preventScroll: true });
-  showQuickTicketComposer(root);
   composerExpanded.value = true;
-  requestAnimationFrame(() => showQuickTicketComposer(root));
+  requestAnimationFrame(() => requestAnimationFrame(() => showQuickTicketComposer(root)));
 });
 delegateCapture(root, 'wa-after-hide', '[data-component="quick-ticket-composer"]', (event, target) => {
   if (event.target !== target || !composerExpanded.value) return;
