@@ -6838,7 +6838,11 @@ async fn terminal_surfaces_osc7_cwd_in_its_state() {
             .await
             .unwrap();
         let v = body_json(resp).await;
-        if let Some(c) = v.get("cwd").and_then(|c| c.as_str()) {
+        if let Some(c) = v
+            .get("cwd")
+            .and_then(|c| c.as_str())
+            .filter(|c| *c == "/tmp/osc-e2e")
+        {
             cwd = Some(c.to_string());
             break;
         }
@@ -6849,6 +6853,36 @@ async fn terminal_surfaces_osc7_cwd_in_its_state() {
         Some("/tmp/osc-e2e"),
         "OSC 7 cwd should surface"
     );
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn shell_command_runs_in_and_immediately_reports_its_requested_cwd() {
+    let (_d, st) = state();
+    let app = app(st);
+    let cwd = tempfile::tempdir().unwrap();
+    let body = serde_json::json!({
+        "shell_command": "printf command-ran > \"$PWD/command-ran.txt\"; sleep 1",
+        "cwd": cwd.path(),
+    })
+    .to_string();
+
+    let response = app
+        .oneshot(authed("POST", "/terminals", Some(&body)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let opened = body_json(response).await;
+    assert_eq!(opened["cwd"], cwd.path().to_string_lossy().as_ref());
+
+    let marker = cwd.path().join("command-ran.txt");
+    for _ in 0..60 {
+        if marker.exists() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    assert_eq!(std::fs::read_to_string(marker).unwrap(), "command-ran");
 }
 
 #[tokio::test]

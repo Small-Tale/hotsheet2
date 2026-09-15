@@ -280,7 +280,9 @@ and identity-less legacy entries remain conservatively blocking.
   `program` definitions execute an exact program plus argument array; portable `shell`
   definitions store command text and resolve the current machine's shell only at run time.
   Running one creates a terminal named for the command, selects it, and opens the bottom
-  drawer so output and subsequent interaction remain visible. If the detached broker has
+  drawer so output and subsequent interaction remain visible. A terminal-list refresh never
+  disables or discards that launch action; only a create already in flight suppresses a
+  duplicate click. If the detached broker has
   exited during its empty five-minute grace, the server relaunches it transparently before
   opening that terminal. `ai` definitions store only
   the prompt and tool selection, never a hard-coded Hot Sheet executable or CLI argv.
@@ -1337,7 +1339,10 @@ The terminal service is host-wide, while drawers are project-specific. The clien
 each terminal to the most-specific open project root containing its reported working
 directory before it builds drawer tabs or the workspace grid. A terminal therefore appears
 once in the global grid and only in its owning project's drawer, including when several open
-projects share the same server process.
+projects share the same server process. The terminal service reports the launch request's
+working directory immediately, before a shell emits OSC 7, and replaces it when a later OSC 7
+update arrives. Short-lived configured commands and shells without OSC integration therefore
+remain attributable to the correct project from their first response.
 
 The project terminal drawer occupies only the center AppShell column, leaving the project
 sidebar and ticket inspector at full height. Its compact rail switches between the decorated

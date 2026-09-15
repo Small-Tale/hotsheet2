@@ -45,6 +45,15 @@ impl OscScanner {
         Self::default()
     }
 
+    /// Start with the working directory requested by the terminal launcher. Shells may emit
+    /// OSC 7 later, but callers need a usable cwd before the first prompt (and commands that
+    /// exit without a prompt may never emit OSC 7 at all).
+    pub fn with_initial_cwd(cwd: Option<String>) -> Self {
+        let mut scanner = Self::new();
+        scanner.term.cwd = cwd;
+        scanner
+    }
+
     /// A snapshot of the parsed terminal state.
     pub fn state(&self) -> TermState {
         self.term.clone()
@@ -190,6 +199,15 @@ mod tests {
         );
         // A bare path (no scheme).
         assert_eq!(scan(&[b"\x1b]7;/tmp/x\x07"]).cwd.as_deref(), Some("/tmp/x"));
+    }
+
+    #[test]
+    fn requested_cwd_is_available_immediately_and_osc7_can_replace_it() {
+        let mut scanner = OscScanner::with_initial_cwd(Some("/requested/project".into()));
+        assert_eq!(scanner.state().cwd.as_deref(), Some("/requested/project"));
+
+        scanner.feed(b"\x1b]7;file:///reported/project\x07");
+        assert_eq!(scanner.state().cwd.as_deref(), Some("/reported/project"));
     }
 
     #[test]

@@ -113,6 +113,10 @@ pub struct Terminal {
 impl Terminal {
     /// Spawn `spec` in a fresh PTY, scrubbing the environment and starting the drain thread.
     pub fn spawn(spec: TermSpec) -> Result<Terminal, TermError> {
+        let initial_cwd = spec
+            .cwd
+            .as_ref()
+            .map(|cwd| cwd.to_string_lossy().into_owned());
         let pty = native_pty_system();
         let pair = pty
             .openpty(PtySize {
@@ -148,7 +152,7 @@ impl Terminal {
 
         let scrollback = Arc::new(Mutex::new(Ring::new(SCROLLBACK_BYTES)));
         let busy = Arc::new(Mutex::new(BusyDetector::new()));
-        let osc = Arc::new(Mutex::new(OscScanner::new()));
+        let osc = Arc::new(Mutex::new(OscScanner::with_initial_cwd(initial_cwd)));
         let (output_tx, _) = broadcast::channel(OUTPUT_CHANNEL_CAP);
         let (sb, bz, oc, tx) = (
             scrollback.clone(),
