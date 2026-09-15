@@ -122,7 +122,11 @@ Supporting components:
   popover light-dismiss behavior rather than a redundant Close action.
 - `DialogHeader` / `ValueTable` — **demo built**: shared divider-free dialog
   icon/title/subtitle/action geometry and borderless static metadata cells with inset
-  separators.
+  separators. `DialogHeader` renders a real top `Toolbar` whose leading control group is the
+  icon+title identity and whose trailing group auto-wraps the caller's direct action children
+  under a localized `actionsLabel`, with the optional summary as a sibling below the toolbar.
+  Consumers pass direct action children plus `actionsLabel`; the framework-neutral Dev Review
+  overlay copies this exact anatomy since it cannot import the component (HS2-M4X0WS).
 - `GlobalDropTarget` — routes supported ticket, attachment, and cross-store drops
   (HS2-R6P8MZ).
 - `FocusCoordinator` — predictable keyboard traversal and restoration after overlays.

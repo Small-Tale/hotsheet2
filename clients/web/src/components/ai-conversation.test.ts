@@ -23,6 +23,8 @@ describe('AIConversation',()=>{
     expect(markup).toContain('light-dismiss');
     expect(markup).not.toContain('data-action="close-conversation"');
     expect(markup).toContain('data-component="dialog-header"');
+    // The DialogHeader groups the conversation actions under a localized label (HS2-M4X0WS).
+    expect(markup).toMatch(/kui-dialog-header__actions[^>]*aria-label="Codex conversation actions"/);
     expect(markup).toContain('Enter to send · Shift+Enter for a new line');
     expect(markup).toContain('appearance="accent"');
     expect(markup).toContain('Codex is working');
