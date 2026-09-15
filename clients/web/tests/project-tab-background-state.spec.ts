@@ -113,7 +113,8 @@ test('refreshes non-active project tab counts and live-work state while preservi
   await page.screenshot({ path: '/private/tmp/hs2-qbnrzy-background-project-tab-wide.png', fullPage: true });
 
   await page.setViewportSize({ width: 1024, height: 700 });
-  await expect(betaTab.locator('.project-tab__work-count')).toHaveText('1');
+  // The label projects the Up Next count (2 here); the ring's segment count projects the 1 active ticket.
+  await expect(betaTab.locator('.project-tab__work-count')).toHaveText('2');
   await page.screenshot({ path: '/private/tmp/hs2-qbnrzy-background-project-tab-narrow.png', fullPage: true });
 
   fixture.holdNextBetaRefresh();

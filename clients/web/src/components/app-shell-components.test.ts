@@ -88,7 +88,8 @@ describe('application shell components', () => {
     expect(queuedMarkup).not.toContain('project-tab__activity-ring');
     const cappedActiveMarkup=String(ProjectTab({ id: 'active', name: 'Active', location: 'local', notificationCount: 1, upNextCount: 125, activeTicketCount: 2 }));
     expect(cappedActiveMarkup).toContain('aria-label="125 Up Next tickets, 2 active tickets"');
-    expect(cappedActiveMarkup).toContain('>2</span>');
+    // The label always projects the Up Next count (segments project the active count); 125 clamps to 99+.
+    expect(cappedActiveMarkup).toContain('>99+</span>');
     expect(cappedActiveMarkup).toContain('project-tab__activity-ring');
     expect(cappedActiveMarkup).toContain('data-segments="2"');
     expect(cappedActiveMarkup).toContain('stroke-dasharray="21.2058 7.0686"');
@@ -101,7 +102,8 @@ describe('application shell components', () => {
     expect(projectTabCss).toContain('animation:project-tab-activity-rotate 1.7s linear infinite');
     expect(projectTabCss).toContain('@media (prefers-reduced-motion:reduce)');
     expect(activeOnlyMarkup).toContain('data-segments="1"');
-    expect(activeOnlyMarkup).toContain('>1</span>');
+    // Up Next is 0 here, so the label reads 0 even though one ticket is active.
+    expect(activeOnlyMarkup).toContain('>0</span>');
     expect(projectTabActivityDash(1)).toBe('42.4115 14.1372');
     expect(projectTabActivityDash(3)).toBe('14.1372 4.7124');
   });
