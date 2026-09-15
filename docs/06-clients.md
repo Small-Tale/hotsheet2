@@ -533,7 +533,10 @@ and identity-less legacy entries remain conservatively blocking.
   therefore remain authoritative without activating each tab. Repeated invalidations for one
   project coalesce, distinct projects are retained, open metadata controls defer the batch
   until their popup closes, and a project that becomes active mid-refresh is promoted to the
-  complete active-project reconciliation path. Closing a tab invalidates its pending work.
+  complete active-project reconciliation path. Activating a project supersedes every older
+  background snapshot for that project, even if the user switches away again before the old
+  request settles; this keeps its newly refreshed cached rows, exact navigation counts, and
+  completion trend atomic. Closing a tab also invalidates its pending work.
   Project-activation and request generations reject late A→B→A responses, including delayed
   workspace-session draft restoration, so cached immediacy cannot introduce cross-project
   state or stale network writes. Opening a different project crosses this same activation

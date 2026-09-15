@@ -100,4 +100,27 @@ describe('project tab refresh coordination', () => {
     await closedRefresh;
     expect(publishBackground).not.toHaveBeenCalled();
   });
+
+  it('rejects an obsolete background response even when the activated project is no longer active when it settles', async () => {
+    let active = 'alpha';
+    const pending = deferred<TicketRow[] | undefined>();
+    const publishBackground = vi.fn();
+    const coordinator = createProjectTabRefreshCoordinator({
+      waitUntilSafe: async () => undefined,
+      activeProjectId: () => active,
+      isOpen: () => true,
+      refreshActive: vi.fn().mockResolvedValue(undefined),
+      loadBackground: () => pending.promise,
+      publishBackground,
+    });
+
+    const refresh = coordinator.request({ id: 'beta' });
+    active = 'beta';
+    coordinator.activate('beta');
+    active = 'alpha';
+    pending.resolve([ticket('stale')]);
+    await refresh;
+
+    expect(publishBackground).not.toHaveBeenCalled();
+  });
 });

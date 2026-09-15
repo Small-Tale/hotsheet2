@@ -13,6 +13,7 @@ export interface ProjectTabRefreshCoordinatorOptions<Target extends ProjectTabRe
 
 export interface ProjectTabRefreshCoordinator<Target extends ProjectTabRefreshTarget> {
   request(target: Target): Promise<void>;
+  activate(projectId: string): void;
   cancel(projectId: string): void;
 }
 
@@ -53,6 +54,13 @@ export function createProjectTabRefreshCoordinator<Target extends ProjectTabRefr
       pending.set(target.id, target);
       running ??= drain().finally(() => { running = undefined; });
       return running;
+    },
+    activate(projectId) {
+      // An activation performs its own authoritative refresh. Invalidate any
+      // older background load so it cannot publish after the user switches
+      // away again and make that freshly cached projection stale.
+      revisions.set(projectId, revision(projectId) + 1);
+      pending.delete(projectId);
     },
     cancel(projectId) {
       revisions.set(projectId, revision(projectId) + 1);
