@@ -2183,7 +2183,7 @@ mod tests {
     }
 
     #[test]
-    fn not_working_validation_failure_leaves_completed_ticket_and_files_unchanged() {
+    fn not_working_validation_failure_leaves_active_ticket_and_files_unchanged() {
         let (_dir, provider) = git_provider();
         let id = Ulid::new();
         provider
@@ -2216,7 +2216,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("only be reported for a completed ticket")
+                .contains("only be reported for a completed, verified, or archived ticket")
         );
         let unchanged = provider.get(&id.to_string()).unwrap();
         assert_eq!(unchanged.status, Status::NotStarted);

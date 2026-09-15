@@ -38,7 +38,9 @@ pub enum OpError {
     UnknownTicket(String),
     #[error("a ticket cannot block itself ({0})")]
     SelfBlock(String),
-    #[error("Not Working can only be reported for a completed ticket (found {0:?})")]
+    #[error(
+        "Not Working can only be reported for a completed, verified, or archived ticket (found {0:?})"
+    )]
     NotWorkingRequiresCompleted(Status),
     #[error("a Not Working report requires a note or at least one evidence attachment")]
     EmptyNotWorkingReport,
@@ -640,7 +642,10 @@ pub fn prepare_not_working(
     has_evidence: bool,
     reporter: Option<&str>,
 ) -> Result<(), OpError> {
-    if ticket.status != Status::Completed {
+    if !matches!(
+        ticket.status,
+        Status::Completed | Status::Verified | Status::Archive
+    ) {
         return Err(OpError::NotWorkingRequiresCompleted(ticket.status));
     }
     let note = note.and_then(|(id, text)| {
@@ -686,6 +691,8 @@ pub fn prepare_not_working(
     }
     ticket.status = Status::NotStarted;
     ticket.up_next = true;
+    ticket.completed_at = None;
+    ticket.verified_at = None;
     clear_claim_fields(ticket);
     ticket.close_reason = None;
     ticket.closed_at = None;
@@ -1657,6 +1664,52 @@ mod tests {
             }
         }
         store.read_ticket(&ticket.id).unwrap()
+    }
+
+    #[test]
+    fn not_working_reopens_every_finished_lifecycle_status_with_context() {
+        for status in [Status::Completed, Status::Verified, Status::Archive] {
+            let (_dir, store) = store();
+            let created = create(
+                &store,
+                Ulid::new(),
+                "HS",
+                ts("2026-09-15T00:00:00Z"),
+                NewTicket {
+                    title: "Needs another attempt".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let mut ticket = update(
+                &store,
+                &created.id,
+                ts("2026-09-15T01:00:00Z"),
+                TicketPatch {
+                    status: Some(status),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            prepare_not_working(
+                &mut ticket,
+                ts("2026-09-15T02:00:00Z"),
+                Some((Ulid::new(), "regressed".into())),
+                false,
+                Some("Brian"),
+            )
+            .unwrap();
+            assert_eq!(ticket.status, Status::NotStarted);
+            assert!(ticket.up_next);
+            assert!(ticket.completed_at.is_none());
+            assert!(ticket.verified_at.is_none());
+            assert!(
+                ticket
+                    .notes
+                    .iter()
+                    .any(|note| note.text == "Not working: regressed")
+            );
+        }
     }
 
     #[test]

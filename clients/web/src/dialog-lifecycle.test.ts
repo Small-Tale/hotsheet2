@@ -10,7 +10,7 @@ describe('dialog lifecycle event contracts', () => {
       expect(source).toContain(`'wa-hide'`);
       expect(source).not.toMatch(new RegExp(`wa-request-close[^\\n]*${selector}`));
     }
-    expect(source).toMatch(/'wa-hide','\[data-component="not-working-dialog"\]'.*notWorkingSubmitting\.value.*event\.preventDefault\(\).*closeNotWorking\(\)/);
+    expect(source).toMatch(/'wa-hide','\[data-component="not-working-dialog"\]'.*activeLabel.*!notWorkingSubmitting\.value.*dialog\.getAttribute\('aria-label'\)===activeLabel.*closeNotWorking\(\)/);
   });
 
   it('uses captured native close for the remaining HTML command dialogs', () => {

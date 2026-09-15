@@ -8,6 +8,7 @@ import {
 
 export interface NotWorkingDialogProps {
   slug: string;
+  mode?: 'not-working' | 'reopen';
   open?: boolean;
   note: string;
   attachments: readonly PendingAttachment[];
@@ -17,15 +18,16 @@ export interface NotWorkingDialogProps {
   error?: string;
 }
 
-export function NotWorkingDialog({ slug, open = true, note, attachments, notesEnabled = true, attachmentsEnabled = true, submitting = false, error = '' }: NotWorkingDialogProps) {
+export function NotWorkingDialog({ slug, mode = 'not-working', open, note, attachments, notesEnabled = true, attachmentsEnabled = true, submitting = false, error = '' }: NotWorkingDialogProps) {
   const empty = (!notesEnabled || note.trim().length === 0) && attachments.length === 0;
-  return <wa-dialog class="not-working-dialog" data-component="not-working-dialog" role="dialog" label={`Not Working — ${slug}`} aria-label={`Not Working — ${slug}`} open={open}>
+  const reopening=mode==='reopen',title=reopening?`Reopen Ticket — ${slug}`:`Not Working — ${slug}`,prompt=reopening?'What needs another attempt?':'What’s wrong?',submitLabel=reopening?'Reopen Ticket':'Report Not Working';
+  return <wa-dialog class="not-working-dialog" data-component="not-working-dialog" role="dialog" label={title} aria-label={title} open={open}>
     <form data-action="submit-not-working" class="not-working-dialog__form">
-      {notesEnabled ? <label class="not-working-dialog__note"><span>What’s wrong?</span><textarea name="not-working-note" rows={5} disabled={submitting} placeholder="Describe what failed or what needs another attempt…" autofocus>{note}</textarea></label> : <p class="not-working-dialog__hint">This ticket provider does not support notes. Add an attachment to report the problem.</p>}
+      {notesEnabled ? <label class="not-working-dialog__note"><span>{prompt}</span><textarea name="not-working-note" rows={5} disabled={submitting} placeholder="Describe what failed or what needs another attempt…" autofocus>{note}</textarea></label> : <p class="not-working-dialog__hint">This ticket provider does not support notes. Add an attachment to report the problem.</p>}
       <PendingAttachmentPicker attachments={attachments} enabled={attachmentsEnabled && !submitting} />
       {!attachmentsEnabled && <p class="not-working-dialog__hint">This ticket provider does not support attachments.</p>}
       <p class="not-working-dialog__error" role="alert">{error}</p>
-      <footer><button type="button" data-action="cancel-not-working" disabled={submitting}>Cancel</button><button type="submit" class="not-working-dialog__submit" disabled={submitting || empty}>{submitting ? 'Submitting…' : 'Report Not Working'}</button></footer>
+      <footer><button type="button" data-action="cancel-not-working" disabled={submitting}>Cancel</button><button type="submit" class="not-working-dialog__submit" disabled={submitting || empty}>{submitting ? 'Submitting…' : submitLabel}</button></footer>
     </form>
   </wa-dialog>;
 }

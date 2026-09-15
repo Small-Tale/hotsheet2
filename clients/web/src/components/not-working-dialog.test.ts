@@ -31,6 +31,13 @@ describe('NotWorkingDialog', () => {
     expect(submitting).toContain('role="alert">Upload failed');
   });
 
+  it('relabels the shared evidence flow when reopening a verified or archived ticket',()=>{
+    const markup=String(NotWorkingDialog({slug:'HS2-REOPEN',mode:'reopen',note:'Regression',attachments:[]}));
+    expect(markup).toContain('Reopen Ticket — HS2-REOPEN');
+    expect(markup).toContain('What needs another attempt?');
+    expect(markup).toContain('>Reopen Ticket</button>');
+  });
+
   it('keeps long filenames shrinkable and uses pointer/not-allowed cursor semantics', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'pending-attachment-picker.css'), 'utf8');
     expect(css).toContain('min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis');

@@ -17,7 +17,7 @@ export interface ProjectWorkspaceSession {
   feedbackSelections:Record<string,string[]>;
   feedbackNoteId?:string;
   feedbackDraft:string;
-  notWorking?:{ticketId:string;slug:string;connectionId:string;note:string;attachments:StoredPendingAttachment[]};
+  notWorking?:{ticketId:string;slug:string;connectionId:string;mode?:'not-working'|'reopen';note:string;attachments:StoredPendingAttachment[]};
 }
 
 const PREFIX='hotsheet.workspace.project-session.v1.';
@@ -49,7 +49,7 @@ export function loadProjectWorkspaceSession(storage:Pick<Storage,'getItem'>,proj
       composingNote:booleanValue(value.composingNote),newNoteDraft:stringValue(value.newNoteDraft),
       feedbackReplies:validRecord(value.feedbackReplies),feedbackSelections:validSelections(value.feedbackSelections),
       feedbackNoteId:typeof value.feedbackNoteId==='string'?value.feedbackNoteId:undefined,feedbackDraft:stringValue(value.feedbackDraft),
-      notWorking:Object.keys(notWorking).length?{ticketId:stringValue(notWorking.ticketId),slug:stringValue(notWorking.slug),connectionId:stringValue(notWorking.connectionId),note:stringValue(notWorking.note),attachments:validAttachments(notWorking.attachments)}:undefined,
+      notWorking:Object.keys(notWorking).length?{ticketId:stringValue(notWorking.ticketId),slug:stringValue(notWorking.slug),connectionId:stringValue(notWorking.connectionId),mode:notWorking.mode==='reopen'?'reopen':'not-working',note:stringValue(notWorking.note),attachments:validAttachments(notWorking.attachments)}:undefined,
     };
   }catch{return undefined}
 }
