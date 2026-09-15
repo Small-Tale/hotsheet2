@@ -46,9 +46,9 @@ use hotsheet_ticketing::wire::ApiAttachment;
 use hotsheet_ticketing::{
     FsStore, GitProvider, KeyRegistry, MutationContext, NewTicket, NotWorkingReport, OpError,
     OsKeychain, ProjectTicketRef, ProviderConfigRegistry, ProviderConnection, ProviderDraft,
-    ProviderEvidence, ProviderPatch, ProviderRegistry, Settings, SortKey, StoreError,
-    StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between, move_between,
-    ops,
+    ProviderEvidence, ProviderPatch, ProviderRegistry, STORE_METADATA_FILE, Settings, SortKey,
+    StoreError, StoreRegistry, TicketPatch, TicketQuery, TicketRef, auto_context, copy_between,
+    move_between, ops,
 };
 // Wire DTOs are defined once in the engine crate (wire SSOT); re-export for callers.
 pub use hotsheet_ticketing::{ApiNote, ApiTicket};
@@ -4270,9 +4270,20 @@ async fn get_checkout_ticket_duplicate_backlinks(
         let mut inaccessible = false;
         for source in &checkout.sources {
             let tickets = if source.provider == "git" {
-                match FsStore::open(&source.locator)
-                    .and_then(|store| store.list_tickets_resilient())
+                // A directory can be recreated after a remembered temporary checkout is
+                // deleted (for example by an old setup tool) without recreating its HS2
+                // ticket store. A locator without HS2 metadata is no longer a searchable
+                // source, not a transient lookup failure that should warn on every ticket.
+                if !FsPath::new(&source.locator)
+                    .join(STORE_METADATA_FILE)
+                    .is_file()
                 {
+                    continue;
+                }
+                match FsStore::open(&source.locator).and_then(|store| {
+                    store.metadata()?;
+                    store.list_tickets_resilient()
+                }) {
                     Ok(listing) => listing
                         .tickets
                         .iter()

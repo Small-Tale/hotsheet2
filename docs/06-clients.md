@@ -910,9 +910,10 @@ and identity-less legacy entries remain conservatively blocking.
   distinct, and opens the exact project/connection/native reference. Legacy bare-ULID
   relationships remain discoverable. An inaccessible registered project does not suppress
   healthy backlinks; the inspector names a still-present project whose additional results
-  could not be checked. Remembered registrations for deleted checkout roots are ignored:
-  they cannot contain a usable backlink and must not create a permanent warning on every
-  ticket.
+  could not be checked. Remembered registrations for deleted checkout roots, and git-source
+  directories recreated without an HS2 `hotsheet-store.json`, are ignored: neither can contain
+  a usable backlink, and neither may create a permanent warning on every ticket. A recognizable
+  HS2 store that fails during enumeration remains a transparent partial-result warning.
 
   Attachment references in ticket details use the same owning-ticket context as notes:
   same-ticket references prefer immutable attachment IDs, while

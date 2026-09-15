@@ -644,7 +644,9 @@ Closed tickets retain a visible outcome in the inspector, and duplicate outcomes
 the canonical ticket instead of relying on a freeform explanatory note. Canonical tickets
 render reverse duplicate backlinks as shared menu rows labeled with both project and slug;
 same-slug sources remain unambiguous, and a compact status message names registered
-projects that could not be searched without hiding results from accessible projects.
+projects with recognizable sources that could not be searched without hiding results from
+accessible projects. Deleted checkouts and recreated directories whose former git source no
+longer contains HS2 store metadata are stale registrations, not user-facing partial failures.
 
 - `InspectorHeader`
   - ticket identifier

@@ -3899,6 +3899,9 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
     )
     .unwrap();
     let inaccessible_checkout = tempfile::tempdir().unwrap();
+    let inaccessible_store = inaccessible_checkout.path().join("broken.hs2");
+    FsStore::init(&inaccessible_store, &StoreMetadata::new("OFF")).unwrap();
+    std::fs::write(inaccessible_store.join("hotsheet-store.json"), "{").unwrap();
     hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
         .register_sources(
             inaccessible_checkout.path(),
@@ -3907,13 +3910,27 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
             vec![hotsheet_ticketing::checkouts::TicketSource {
                 connection_id: "missing-git".into(),
                 provider: "git".into(),
-                locator: inaccessible_checkout
+                locator: inaccessible_store.display().to_string(),
+            }],
+            Some("missing-git".into()),
+        )
+        .unwrap();
+    let hollow_checkout = tempfile::tempdir().unwrap();
+    hotsheet_ticketing::checkouts::CheckoutRegistry::new(&registry_path)
+        .register_sources(
+            hollow_checkout.path(),
+            Some("hollow-project"),
+            None,
+            vec![hotsheet_ticketing::checkouts::TicketSource {
+                connection_id: "hollow-git".into(),
+                provider: "git".into(),
+                locator: hollow_checkout
                     .path()
-                    .join("missing.hs2")
+                    .join("recreated-without-hs2-metadata.hs2")
                     .display()
                     .to_string(),
             }],
-            Some("missing-git".into()),
+            Some("hollow-git".into()),
         )
         .unwrap();
     let stale_checkout = tempfile::tempdir().unwrap();
@@ -3991,6 +4008,13 @@ async fn duplicate_close_resolves_and_persists_an_exact_cross_project_target() {
             .unwrap()
             .iter()
             .all(|project| project["project_name"] != "stale-project")
+    );
+    assert!(
+        backlinks["inaccessible_projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|project| project["project_name"] != "hollow-project")
     );
 }
 
