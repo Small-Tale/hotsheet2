@@ -10,6 +10,13 @@ describe('QuickTicketComposer', () => {
     expect(css).toMatch(/\.quick-ticket-dialog \{[^}]*--width:min\(58rem, calc\(100vw - 2rem\)\)/);
     expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem)');
     expect(css).toMatch(/@media \(max-width: 38rem\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
+    // HS2-Q7WJ6T: the form sits inside the dialog panel, so its base rule must not draw its own
+    // border or box-shadow (that redundant brand-colored rounded border read as a stray outline
+    // below the dialog title). The drag drop-target highlight keeps its own box-shadow ring.
+    const baseRule=css.match(/\n\.quick-ticket-composer \{([^}]*)\}/)![1];
+    expect(baseRule).not.toMatch(/(^|;|\s)border:/);
+    expect(baseRule).not.toContain('box-shadow:');
+    expect(css).toMatch(/\.quick-ticket-composer:is\(\[data-dragging="true"\], \[data-dragging-ticket="true"\]\) \{[^}]*box-shadow:/);
   });
   it('has distinct collapsed, editable, and provider-disabled presentations', () => {
     const collapsed = String(QuickTicketLauncher());

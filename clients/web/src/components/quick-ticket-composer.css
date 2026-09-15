@@ -6,7 +6,11 @@
 .quick-ticket-dialog { position:fixed; inset:0; pointer-events:none; --width:min(58rem, calc(100vw - 2rem)); }
 .quick-ticket-dialog::part(dialog) { max-height:calc(100vh - 2rem); pointer-events:auto; }
 .quick-ticket-dialog::part(body) { padding:0; }
-.quick-ticket-composer { box-sizing:border-box; display: grid; width: 100%; padding: 1rem; border: 1px solid var(--wa-color-brand-border-quiet); border-radius: .7rem; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem); gap: var(--wa-space-s); }
+/* The form always renders inside the wa-dialog panel, which already provides the container
+   chrome, so it carries no border/shadow of its own (that inner brand-colored rounded border
+   read as a stray "focus outline" below the dialog title — HS2-Q7WJ6T). The radius is kept so
+   the drag drop-target highlight below stays rounded. */
+.quick-ticket-composer { box-sizing:border-box; display: grid; width: 100%; padding: 1rem; border-radius: .7rem; background: var(--wa-color-surface-default); grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem); gap: var(--wa-space-s); }
 .quick-ticket-composer wa-input::part(base) { height: 2.75rem; min-height: 2.75rem; }
 .quick-ticket-composer__metadata { display: grid; min-width: 0; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: var(--wa-space-xs); }
 .quick-ticket-composer__up-next { display: grid; width: 2.75rem; height: 2.75rem; padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-surface-default); cursor: pointer; place-items: center; }
