@@ -587,6 +587,9 @@ core. Neither client maintains provider/model tables. Model catalogs are suggest
 than allowlists: settings, Drive overrides, live conversations, and headless CLI settings may
 name a nonblank model id that discovery did not return. Known models retain their model-specific
 effort validation; an unlisted model may use an effort value already declared by that provider.
+In the web client's Settings and Drive menus, `Other…` opens a focused exact-id dialog instead of
+permanently occupying the main layout with a second model field. The selected custom id appears as
+an ephemeral choice and is removed as soon as a catalog model is selected.
 Machine-local defaults still validate the installed provider and are stored through
 `GET`/`PUT /ai-settings` (or `hotsheet-cli ai-settings get|set`) in the global Hot Sheet 2
 settings file.

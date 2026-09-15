@@ -557,9 +557,12 @@ and identity-less legacy entries remain conservatively blocking.
   on its next opening instead of presenting a transient failure as a confirmed empty installation.
   Parent rows rely on the shared menu's single disclosure marker; child provider, model, and
   effort choices use aligned semantic icons plus one highlighted current value with compact
-  submenu insets, including at the supported narrow width. The catalog-backed model control is
-  editable in machine defaults, Drive overrides, and live conversations: its suggestions make
-  detected models convenient without preventing an older or otherwise undiscovered model id.
+  submenu insets, including at the supported narrow width. Machine defaults and Drive overrides
+  keep the catalog as the primary model chooser and place manual entry behind an `Other…` action;
+  the focused entry dialog accepts an exact nonblank id, shows that custom id in the chooser only
+  while it remains selected, and forgets it after a catalog selection. Live conversations retain
+  their compact editable catalog-backed control. These paths keep detected models convenient
+  without preventing an older or otherwise undiscovered model id.
   Drive prepares a stable dedicated connection scoped to that checkout and tool, opens and
   selects its AI-chat tab in the bottom drawer, then sends the `$hotsheet` workflow turn; later
   activations reuse that tab, connection, and retained session. The server resolves the checkout id to its code

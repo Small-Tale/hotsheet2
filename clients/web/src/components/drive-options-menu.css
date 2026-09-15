@@ -6,5 +6,4 @@
 .drive-options-menu wa-dropdown-item[slot="submenu"] [slot="icon"] { display:inline-flex; width:1rem; justify-content:center; }
 .drive-options-menu wa-dropdown-item[slot="submenu"] [slot="icon"] svg { width:.9rem; height:.9rem; }
 .drive-options-menu wa-dropdown-item[slot="submenu"][aria-current="true"] { color:var(--wa-color-brand-on-quiet); background:var(--wa-color-brand-fill-normal); font-weight:650; }
-.drive-options-menu__model-input { padding:var(--wa-space-xs) var(--wa-space-s); border-top:1px solid var(--wa-color-neutral-border-quiet); background:var(--wa-color-surface-default); }
-.drive-options-menu__model-input .model-input__label { font-size:var(--wa-font-size-xs); }
+.drive-options-menu wa-divider[slot="submenu"] { margin-block:var(--wa-space-2xs); }

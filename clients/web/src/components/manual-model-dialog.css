@@ -1,0 +1,4 @@
+.manual-model-dialog { --width:min(28rem,calc(100vw - 2rem)); }
+.manual-model-dialog__form { display:grid; gap:var(--wa-space-l); }
+.manual-model-dialog__form > p { margin:0; color:var(--wa-color-neutral-on-quiet); line-height:1.45; }
+.manual-model-dialog__form footer { display:flex; justify-content:flex-end; gap:var(--wa-space-xs); }
