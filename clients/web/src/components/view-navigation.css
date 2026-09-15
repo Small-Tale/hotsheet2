@@ -2,7 +2,9 @@
 .view-navigation ul { display: grid; margin: 0; padding: 0; gap: .15rem; list-style: none; }
 .view-navigation li { margin: 0; }
 .view-navigation__item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; }
-.view-navigation .kui-menu-item { width: 100%; }
+.view-navigation .kui-menu-item[data-dragging-ticket="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-normal); outline: 2px solid var(--wa-color-brand-border-normal); outline-offset: -2px; }
+.view-navigation .kui-menu-item__count { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-variant-numeric: tabular-nums; }
+.view-navigation .kui-menu-item__count[data-attention="true"] { color: var(--hs-ticket-state-needs-review); font-weight: 700; }
 .view-navigation__meta { display:inline-flex; padding-inline-start:var(--wa-space-3xs); align-items:center; gap:var(--wa-space-3xs); }
 .view-navigation__meta:empty { display:none; }
 .view-navigation__more { display:grid; width:1.75rem; height:1.75rem; padding:0; border:0; border-radius:var(--wa-border-radius-s); color:var(--wa-color-neutral-on-quiet); background:transparent; cursor:pointer; place-items:center; }

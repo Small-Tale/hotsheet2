@@ -3,6 +3,7 @@ import './native-popover-dialog.css';
 
 import {DialogHeader} from '@kerfjs/ui/dialog-header';
 import {LucideIcon} from '@kerfjs/ui/lucide-icon';
+import {Select} from '@kerfjs/ui/select';
 import type {SafeHtml} from 'kerfjs/jsx-runtime';
 import {Activity,Bot,CircleAlert,Copy,Download,Image,MessageSquare,Paperclip,Send,Square,X} from 'lucide';
 
@@ -12,7 +13,6 @@ import {AIContentLabel} from './ai-content-label';
 import {MarkdownPreview} from './markdown-preview';
 import {ModelInput} from './model-input';
 import {PermissionRequestCard} from './permission-request-card';
-import {Select} from './select';
 
 export interface AIConversationProps {open:boolean;tool:string;sessionId?:string;selectionId?:string;selectedMessageIds?:readonly string[];messages:ConversationMessage[];draft:string;busy:boolean;progress?:string;interruptible:boolean;permissions?:PermissionItem[];activity?:ConversationActivity[];totalUsage?:ConversationUsage;error?:string;feedbackAvailable?:boolean;presentation?:'dialog'|'embedded';foreground?:SafeHtml;model?:string;effort?:string;models?:readonly {id:string;label:string}[];efforts?:readonly string[];canChangeModel?:boolean;canChangeEffort?:boolean;readOnly?:boolean;readOnlyContext?:'saved'|'preview';savedSource?:string}
 

@@ -5,13 +5,13 @@ import '@awesome.me/webawesome/dist/components/dropdown-item/dropdown-item.js';
 import './workspace-header.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import type { IconNode } from 'lucide';
-import { ArrowDown, ArrowDownAZ, ArrowDownWideNarrow, ArrowUp, ArrowUpAZ, ArrowUpNarrowWide, Bell, CircleHelp, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
+import { ArrowDownAZ, ArrowDownWideNarrow, ArrowUpAZ, ArrowUpNarrowWide, Bell, CircleHelp, ClockArrowDown, ClockArrowUp, Columns3, List, ListSortAscending, ListSortDescending, MoreHorizontal, Search, Settings, Star, X } from 'lucide';
 
 import {inlineSearchParts,type InlineSearchToken} from '../inline-search';
-import { Select, type SelectChoice } from './select';
 
 export type WorkspaceViewMode = 'list' | 'board' | 'notifications' | 'settings';
 export type WorkspaceSort = 'updated' | 'priority' | 'title' | 'status';
@@ -122,9 +122,8 @@ const localSearchDateTimeExample=new Intl.DateTimeFormat(undefined,{dateStyle:'s
 export function WorkspaceControls({ mode, searchOpen = false, searchQuery = '', searchTokens=[],searchTagSuggestions=[],searchDatePrefix,searchHelpOpen=false,sort = 'updated', sortDirection = defaultWorkspaceSortDirection(sort),notificationCount=0,selectedTicketCount=0,selectedTicketsUpNext=false,selectedTicketsUpNextEligible=false,selectedTicketsMutable=true }: Omit<WorkspaceHeaderProps, 'projectName' | 'controlsVisible'>) {
   const projectActionsDisabled = mode === 'settings'||mode==='notifications';
   const ticketActionsDisabled=projectActionsDisabled||selectedTicketCount===0||!selectedTicketsMutable;
-  const directionIcon=sortDirection==='ascending'?ArrowUp:ArrowDown,directionName=sortDirection==='ascending'?'arrow-up':'arrow-down';
   const visibleSortOptions=mode==='board'?sortOptions.filter(option=>option.value!=='status'):sortOptions;
-  const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=visibleSortOptions.map(option=>({...option,...(option.value===sort?{icon:directionIcon,iconName:directionName}:{})}));
+  const sortChoices:ReadonlyArray<SelectChoice<WorkspaceSort>>=visibleSortOptions.map(option=>{const choiceIcon=workspaceSortTrigger(option.value,option.value===sort?sortDirection:defaultWorkspaceSortDirection(option.value));return {...option,icon:choiceIcon.icon,iconName:choiceIcon.iconName}});
   const sortLabel=sortOptions.find(option=>option.value===sort)!.label,trigger=workspaceSortTrigger(sort,sortDirection);
   const searchParts=inlineSearchParts(searchQuery,searchTokens);
   return <div class="workspace-header__actions" data-component="workspace-controls" data-search-open={String(searchOpen)}>

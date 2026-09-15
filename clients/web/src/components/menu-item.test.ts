@@ -1,6 +1,5 @@
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { describe,expect,it } from 'vitest';
-
-import { MenuItem } from './menu-item';
 
 describe('MenuItem',()=>{
   it('makes multiline rows intrinsically tall enough for wrapped content',()=>{

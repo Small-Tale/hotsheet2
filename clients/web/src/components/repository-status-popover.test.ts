@@ -101,7 +101,7 @@ describe('RepositoryStatusPopover',()=>{
     expect(markup).toContain('data-action="toggle-repository-comparison"');
     expect(markup).toMatch(/data-button-appearance="push"[^>]*data-single="true"[^>]*><button[^>]*toggle-repository-comparison/);
     expect(markup).toMatch(/kui-dialog-header__actions[\s\S]*data-appearance="contained"[\s\S]*toggle-repository-comparison[\s\S]*refresh-repository-status/);
-    expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(2);
+    expect(markup.match(/data-component="toolbar-control-group"/g)).toHaveLength(4);
     const popoverCss=readFileSync(resolve(import.meta.dirname,'repository-status-popover.css'),'utf8');
     expect(popoverCss).not.toMatch(/repository-status-popover__refresh[^}]*color:/);
   });

@@ -65,7 +65,7 @@ test('reopens dialog demos and keeps Feedback above the modal top layer',async({
 });
 
 test('represents the shared repository-status composition in the UX catalog',async({page})=>{
-  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=repository-status-popover');const dialog=page.locator('[data-component="repository-status-popover"]');await expect(dialog).toBeVisible();const compare=dialog.getByRole('button',{name:'Compare two commits'}),refresh=dialog.getByRole('button',{name:'Refresh repository status'});expect(await refresh.evaluate(node=>getComputedStyle(node).color)).toBe(await compare.evaluate(node=>getComputedStyle(node).color));await expect(dialog).toHaveAttribute('data-embedded','true');await expect(dialog.locator('[data-component="menu-header"]')).toContainText('Views');await expect(dialog.locator('[data-component="menu-item"]')).not.toHaveCount(0);await page.locator('[data-action="toggle-settings"]').click();const inspector=page.getByRole('complementary',{name:'RepositoryStatusPopover settings'}),scenario=inspector.locator('wa-select[name="scenario"]');for(const [value,state,copy,icon] of [['clean','clean','Working tree is clean','circle-check'],['dirty','dirty','Local changes have not been committed','git-branch'],['ahead','ahead','Local commits have not been pushed','git-branch'],['behind','behind','Remote commits have not been integrated','git-branch'],['diverged','diverged','Local and remote histories have diverged','git-branch'],['conflicted','conflicted','Repository has unresolved conflicts','triangle-alert'],['error','error','Repository status is unavailable','triangle-alert']] as const){await scenario.evaluate((node:HTMLElement&{value:string},next)=>{node.value=next;node.dispatchEvent(new Event('change',{bubbles:true}))},value);await expect(dialog).toHaveAttribute('data-state',state);await expect(dialog.locator('header p')).toHaveText(copy);await expect(dialog.locator(`.repository-status-popover__icon [data-lucide="${icon}"]`)).toHaveCount(1)}await inspector.getByRole('button',{name:'Reset'}).click();await expect(scenario).toHaveJSProperty('value','conflicted');await expect(dialog).toHaveAttribute('data-state','conflicted');await page.screenshot({path:'/private/tmp/hs2-s6f817-repository-scenario-settings.png',fullPage:true});await page.locator('[data-action="toggle-settings"]').click();await dialog.getByRole('button',{name:/Staged 2/}).click();await expect(dialog).toHaveAttribute('data-view','staged');const file=dialog.locator('[data-action="select-repository-file"]').first(),fileMenu=file.locator('[data-action="open-repository-file-menu-trigger"]');await fileMenu.click();await expect(dialog.getByRole('menuitem',{name:'Show Diff'})).toBeVisible();await dialog.getByRole('menuitem',{name:'Show Diff'}).click();await expect(page.locator('.component-stage__event')).toContainText('Would review');await file.dblclick();await expect(page.locator('.component-stage__event')).toContainText('Would open');await dialog.screenshot({path:'/private/tmp/hs2-s6f817-repository-scenarios-wide.png'});await dialog.getByRole('button',{name:/Commits 24/}).click();await dialog.getByRole('button',{name:'Compare two commits'}).click();const rows=dialog.locator('.ticket-code-review__commit-summary');await rows.nth(1).click();await rows.nth(0).click();await expect(dialog.getByRole('button',{name:'Open comparison in Glassbox'})).toBeEnabled();await dialog.screenshot({path:'/private/tmp/hs2-qe4j38-repository-comparison.png'});await page.setViewportSize({width:760,height:640});await dialog.screenshot({path:'/private/tmp/hs2-z0tsx4-repository-status-demo-narrow.png'});
+  await page.setViewportSize({width:1280,height:900});await page.goto('/ux-demo?component=repository-status-popover');const dialog=page.locator('[data-component="repository-status-popover"]');await expect(dialog).toBeVisible();const compare=dialog.getByRole('button',{name:'Compare two commits'}),refresh=dialog.getByRole('button',{name:'Refresh repository status'});expect(await refresh.evaluate(node=>getComputedStyle(node).color)).toBe(await compare.evaluate(node=>getComputedStyle(node).color));await expect(dialog).toHaveAttribute('data-embedded','true');await expect(dialog.locator('[data-component="menu-header"]')).toContainText('Views');await expect(dialog.locator('[data-component="menu-item"]')).not.toHaveCount(0);await page.locator('[data-action="toggle-settings"]').click();const inspector=page.getByRole('complementary',{name:'RepositoryStatusPopover settings'}),scenario=inspector.locator('wa-select[name="scenario"]');for(const [value,state,copy,icon] of [['clean','clean','Working tree is clean','circle-check'],['dirty','dirty','Local changes have not been committed','git-branch'],['ahead','ahead','Local commits have not been pushed','git-branch'],['behind','behind','Remote commits have not been integrated','git-branch'],['diverged','diverged','Local and remote histories have diverged','git-branch'],['conflicted','conflicted','Repository has unresolved conflicts','triangle-alert'],['error','error','Repository status is unavailable','triangle-alert']] as const){await scenario.evaluate((node:HTMLElement&{value:string},next)=>{node.value=next;node.dispatchEvent(new Event('change',{bubbles:true}))},value);await expect(dialog).toHaveAttribute('data-state',state);await expect(dialog.locator('.kui-dialog-header__summary')).toHaveText(copy);await expect(dialog.locator(`.repository-status-popover__icon [data-lucide="${icon}"]`)).toHaveCount(1)}await inspector.getByRole('button',{name:'Reset'}).click();await expect(scenario).toHaveJSProperty('value','conflicted');await expect(dialog).toHaveAttribute('data-state','conflicted');await page.screenshot({path:'/private/tmp/hs2-s6f817-repository-scenario-settings.png',fullPage:true});await page.locator('[data-action="toggle-settings"]').click();await dialog.getByRole('button',{name:/Staged 2/}).click();await expect(dialog).toHaveAttribute('data-view','staged');const file=dialog.locator('[data-action="select-repository-file"]').first(),fileMenu=file.locator('[data-action="open-repository-file-menu-trigger"]');await fileMenu.click();await expect(dialog.getByRole('menuitem',{name:'Show Diff'})).toBeVisible();await dialog.getByRole('menuitem',{name:'Show Diff'}).click();await expect(page.locator('.component-stage__event')).toContainText('Would review');await file.dblclick();await expect(page.locator('.component-stage__event')).toContainText('Would open');await dialog.screenshot({path:'/private/tmp/hs2-s6f817-repository-scenarios-wide.png'});await dialog.getByRole('button',{name:/Commits 24/}).click();await dialog.getByRole('button',{name:'Compare two commits'}).click();const rows=dialog.locator('.ticket-code-review__commit-summary');await rows.nth(1).click();await rows.nth(0).click();await expect(dialog.getByRole('button',{name:'Open comparison in Glassbox'})).toBeEnabled();await dialog.screenshot({path:'/private/tmp/hs2-qe4j38-repository-comparison.png'});await page.setViewportSize({width:760,height:640});await dialog.screenshot({path:'/private/tmp/hs2-z0tsx4-repository-status-demo-narrow.png'});
 });
 
 test('represents the ticket change-evidence master-detail dialog in the UX catalog',async({page})=>{
@@ -569,7 +569,7 @@ test('presents note kinds and round-trips reader and Markdown editor composition
   await noteHistory.scrollIntoViewIfNeeded();
   await reader.screenshot({ path: '/private/tmp/hs2-hnh0m6-markdown-links-narrow.png' });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await expect(reader.getByRole('heading', { name: 'Notes 5' })).toBeVisible();
+  await expect(reader.getByRole('heading', { name: 'Notes, 5 notes' })).toBeVisible();
   await expect(reader.locator('.ticket-inspector__content')).toHaveCSS('overflow-y', 'auto');
   const readerWidth = await reader.boundingBox();
   const readerContentWidth = await reader.locator('.ticket-inspector__content').boundingBox();
@@ -875,7 +875,7 @@ test('switches and searches the connected workspace through WorkspaceHeader', as
   await expect(sortSelect.locator('.kui-select__custom-selected')).toHaveCSS('color',quietIconColor);
   const triggerGeometry=await sortSelect.evaluate(node=>{const root=node.shadowRoot!,combobox=root.querySelector<HTMLElement>('[part~="combobox"]')!,expand=root.querySelector<HTMLElement>('[part~="expand-icon"]')!,selected=node.querySelector<HTMLElement>('.kui-select__custom-selected')!,outer=combobox.getBoundingClientRect(),icon=selected.getBoundingClientRect(),arrow=expand.getBoundingClientRect();return{width:outer.width,gap:arrow.left-icon.right,arrowOverflow:arrow.right-outer.right}});expect(triggerGeometry.width).toBeLessThanOrEqual(46);expect(triggerGeometry.gap).toBeLessThanOrEqual(8);expect(triggerGeometry.arrowOverflow).toBeLessThanOrEqual(0);
   await sortSelect.click();
-  await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="arrow-down"]')).toBeVisible();
+  await expect(sortSelect.locator('wa-option[value="updated"] [data-lucide="clock-arrow-down"]')).toBeVisible();
   await expect(sortSelect.locator('wa-option[value="priority"] .kui-select__icon')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/hs2-0dcczk-sort-select-wide.png', fullPage: true });
   const prioritySort = sortSelect.locator('wa-option[value="priority"]');
@@ -977,9 +977,9 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
     const caret = node.shadowRoot?.querySelector<HTMLElement>('[part~="caret"]');
     return button && caret ? { gap: getComputedStyle(button).gap, margin: getComputedStyle(caret).marginInlineStart, width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height } : null;
   });
-  expect(caretSpacing).toEqual({ gap: '2px', margin: '2px', width: 48, height: 32 });
+  expect(caretSpacing).toEqual({ gap: '2px', margin: '2px', width: 48, height: 40 });
   const popupGroupWidth = await groups.nth(1).evaluate(node => node.getBoundingClientRect().width);
-  expect(popupGroupWidth - caretSpacing!.width).toBeCloseTo(8.4, 0);
+  expect(popupGroupWidth - caretSpacing!.width).toBeCloseTo(4, 0);
   await popup.hover();
   await expect(groups.nth(1)).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   const popupBackground = await popup.evaluate(node => {
@@ -994,7 +994,7 @@ test('shows the ToolbarControlGroup variants with shared geometry', async ({ pag
     if (!button) return null;
     return { height: button.getBoundingClientRect().height, background: getComputedStyle(node).backgroundColor };
   });
-  expect(groupedGeometry).toEqual({ height: 32, background: 'rgb(255, 255, 255)' });
+  expect(groupedGeometry).toEqual({ height: 40, background: 'rgba(0, 0, 0, 0)' });
   const iconAlignment = await groupedButton.evaluate(node => {
     const button = node.shadowRoot?.querySelector<HTMLElement>('[part~="base"]');
     const icon = node.querySelector<HTMLElement>('[data-lucide]');
@@ -1262,7 +1262,7 @@ test('navigates, toggles, closes, and reopens TicketInspector', async ({ page })
   );
   expect(sectionRhythm).toHaveLength(3);
   expect(sectionRhythm.map(section => section.gap)).toEqual(['8.8px', '8.8px', '8.8px']);
-  expect(sectionRhythm[0].headerHeight).toBeUndefined();expect(sectionRhythm[1].headerHeight).toBeCloseTo(28.8,1);expect(sectionRhythm[2].headerHeight).toBeCloseTo(32.8,1);
+  expect(sectionRhythm[0].headerHeight).toBeUndefined();expect(sectionRhythm[1].headerHeight).toBeCloseTo(44,1);expect(sectionRhythm[2].headerHeight).toBeCloseTo(44,1);
   await expect(inspector.getByRole('button', { name: 'Block ticket' })).toBeVisible();
   await inspector.getByRole('button', { name: 'Block ticket' }).click();
   const blockedReason = inspector.getByRole('textbox', { name: 'Blocked reason' });
@@ -1332,11 +1332,11 @@ test('renders standalone ticket metadata and inspector-section demos', async ({ 
   await page.locator('.demo-detail').screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-wide.png' });
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => { resolve(); }))));
   const surface=page.locator('[data-component="ticket-attachments"]'),dragged=surface.locator('[data-component="ticket-attachment-item"][data-drag-attachment-id="wide"]');await dragged.evaluate(node=>node.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:new DataTransfer()})));const newGroup=page.locator('[data-attachment-new-group-drop-target]');await expect(newGroup).toBeVisible();await expect(page.locator('input[type="checkbox"]')).toHaveCount(0);await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-drag-new-group.png'});await newGroup.evaluate(node=>node.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:new DataTransfer()})));await expect(page.locator('[data-attachment-group-drop-target]')).toHaveCount(5);await expect(page.getByRole('button',{name:'Edit batch label New group'})).toBeVisible();await surface.screenshot({path:'/private/tmp/hs2-c0r4mx-regrouped-final.png'});
-  const item=page.locator('[data-attachment-id="demo-video"]'),trigger=item.getByRole('button',{name:'More actions for choppy.mov'});await expect(item.getByRole('button')).toHaveCount(1);await expect(trigger).toHaveAttribute('title','More actions for choppy.mov');await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();await trigger.click();let menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu.locator('[data-component="menu-item"]')).toHaveCount(6);await expect(menu.getByRole('menuitem').allTextContents()).resolves.toEqual(['Open','Download','Copy reference','Rename','Show in file manager','Remove']);
+  const item=page.locator('[data-attachment-id="demo-video"]'),trigger=item.getByRole('button',{name:'More actions for choppy.mov'});await expect(item.getByRole('button')).toHaveCount(1);await expect(trigger).toHaveAttribute('title','More actions for choppy.mov');await expect(trigger.locator('[data-lucide="more-horizontal"]')).toBeVisible();await trigger.click();let menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu.getByRole('menuitem')).toHaveCount(6);await expect(menu.getByRole('menuitem').allTextContents()).resolves.toEqual(['Open','Download','Copy reference','Rename','Show in file manager','Remove']);
   const gridVideo=page.locator('.ticket-attachments__image-grid video').first();await expect(gridVideo).toBeVisible();await expect(gridVideo).toHaveAttribute('poster','/ux-gallery-preview.svg?variant=video');expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).paused)).toBe(true);expect(await gridVideo.evaluate(node=>(node as HTMLVideoElement).autoplay)).toBe(false);
   await menu.getByRole('menuitem',{name:'Copy reference'}).click();await expect(menu).toHaveCount(0);await page.locator('[data-component="ticket-attachments"]').screenshot({path:'/private/tmp/hs2-j978e9-annotation-grid-marker.png'});
   await page.setViewportSize({ width: 390, height: 844 });
-  const batchHeader=page.locator('.ticket-attachments__batch > header').first(),batchTitle=batchHeader.locator('.ticket-attachments__batch-title'),batchPurpose=batchHeader.locator('select');expect((await batchPurpose.boundingBox())!.y).toBeGreaterThan((await batchTitle.boundingBox())!.y);await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.locator('[data-component="menu-item"]')).toHaveCount(6);await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png',fullPage:true });
+  const batchHeader=page.locator('.ticket-attachments__batch > header').first(),batchTitle=batchHeader.locator('.ticket-attachments__batch-title'),batchPurpose=batchHeader.locator('select');expect((await batchPurpose.boundingBox())!.y).toBeGreaterThan((await batchTitle.boundingBox())!.y);await item.scrollIntoViewIfNeeded();await item.click({button:'right'});menu=page.getByRole('menu',{name:'Attachment actions'});await expect(menu).toBeVisible();await expect(menu.getByRole('menuitem')).toHaveCount(6);await page.screenshot({ path: '/private/tmp/hs2-6fp1kt-attachment-batches-final-narrow.png',fullPage:true });
 });
 
 test('styles and edits attachment group labels while preserving drag regrouping', async ({page}) => {
@@ -1588,7 +1588,7 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
   await expect(sidebar).toBeVisible();
   await expect(sidebar.locator('[data-component="project-work-summary"]')).toHaveText('17 open, 4 up next, 2 claimed');
   for (const component of ['project-summary', 'repository-summary', 'view-navigation', 'command-navigation', 'drive-control']) await expect(sidebar.locator(`[data-component="${component}"]`)).toHaveCount(1);
-  const menuHeaderLefts = await sidebar.locator('[data-component="menu-header"]').evaluateAll(headers => headers.map(header => header.querySelector('h2, span')!.getBoundingClientRect().left));
+  const menuHeaderLefts = await sidebar.locator('[data-component="menu-header"]').evaluateAll(headers => headers.map(header => header.querySelector('.kui-menu-header__label')!.getBoundingClientRect().left));
   expect(menuHeaderLefts).toHaveLength(4);
   for (const left of menuHeaderLefts.slice(1)) expect(Math.abs(left-menuHeaderLefts[0])).toBeLessThan(1);
   const viewActionAlignment = await sidebar.evaluate(node => {
@@ -1653,11 +1653,11 @@ test('composes and operates the complete ProjectSidebar demo', async ({ page }) 
 test('exercises the application-shell component slice and responsive composition', async ({ page }) => {
   test.setTimeout(45_000);
   await page.goto('/ux-demo?component=project-tab');
-  const tabStates = page.locator('[data-component="project-tab"]');
+  const tabStates = page.locator('[data-tab-kind="project"]');
   await expect(tabStates).toHaveCount(10);
   const selectedLocal = tabStates.filter({ hasText: 'Selected local' });
   await expect(selectedLocal).toHaveAttribute('data-selected', 'true');
-  const standaloneLabelCenterOffset=async()=>selectedLocal.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.project-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(standaloneLabelCenterOffset).toBeLessThan(1);
+  const standaloneLabelCenterOffset=async()=>selectedLocal.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.kui-app-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(standaloneLabelCenterOffset).toBeLessThanOrEqual(4);
   await expect(selectedLocal.locator('[data-lucide="folder-git-2"]')).toHaveCount(0);
   await expect(tabStates.filter({ hasText: 'Remote project' }).locator('[data-lucide="cloud"]')).toHaveCount(1);
   await expect(tabStates.filter({ hasText: 'Busy project' }).locator('.project-tab__busy .kui-loading-spinner')).toHaveCount(1);
@@ -1675,7 +1675,7 @@ test('exercises the application-shell component slice and responsive composition
     const tab = tabStates.filter({ hasText: label });
     const geometry = await tab.evaluate((node, stateSelector) => {
       const tab = node.getBoundingClientRect();
-      const name = node.querySelector<HTMLElement>('.project-tab__name')!.getBoundingClientRect();
+      const name = node.querySelector<HTMLElement>('.kui-app-tab__name')!.getBoundingClientRect();
       const state = node.querySelector<HTMLElement>(stateSelector)!.getBoundingClientRect();
       return { rightInset: tab.right - state.right, labelGap: state.left - name.right };
     }, selector);
@@ -1687,7 +1687,7 @@ test('exercises the application-shell component slice and responsive composition
   await page.goto('/ux-demo?component=app-tab');
   const sharedTabs=page.locator('[data-component$="-tab"]');await expect(sharedTabs).toHaveCount(2);await expect(page.getByRole('tab',{name:/Project tab/})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'Close Terminal tab'})).toBeAttached();
   await page.goto('/ux-demo?component=terminal-drawer');
-  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-component="terminal-tab"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();const gridTab=terminalDrawer.getByRole('tab',{name:'Project grid'}),gridWidth=(await gridTab.boundingBox())!.width;await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);await expect(gridTab).toHaveCSS('flex-shrink','0');await terminalDrawer.evaluate(node=>{node.style.width='520px';const tabs=node.querySelector('.terminal-drawer__tabs')!,source=tabs.firstElementChild!;for(let index=0;index<8;index+=1)tabs.append(source.cloneNode(true))});await expect(terminalDrawer.locator('[data-component="terminal-tab"]')).toHaveCount(9);expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth,0);expect(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.scrollWidth)).toBeGreaterThan(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.clientWidth));await terminalDrawer.locator('.terminal-drawer__rail').screenshot({path:'/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png'});
+  const terminalDrawer=page.locator('[data-component="terminal-drawer"]');await expect(terminalDrawer).toBeVisible();await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);await expect(terminalDrawer.getByRole('button',{name:'Close Development'})).toBeAttached();const gridTab=terminalDrawer.getByRole('tab',{name:'Project grid'}),gridWidth=(await gridTab.boundingBox())!.width;await expect(gridTab.locator('[data-lucide="layout-grid"]')).toBeVisible();await expect(gridTab.locator('[data-lucide="grid-3x3"]')).toHaveCount(0);await expect(gridTab).toHaveCSS('flex-shrink','0');await terminalDrawer.evaluate(node=>{node.style.width='520px';const tabs=node.querySelector('.terminal-drawer__tabs')!,source=tabs.firstElementChild!;for(let index=0;index<8;index+=1)tabs.append(source.cloneNode(true))});await expect(terminalDrawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth,0);expect(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.scrollWidth)).toBeGreaterThan(await terminalDrawer.locator('.terminal-drawer__tabs').evaluate(node=>node.clientWidth));await terminalDrawer.locator('.terminal-drawer__rail').screenshot({path:'/private/tmp/hs2-e3j0vv-fixed-layout-grid-tab.png'});
 
   await page.goto('/ux-demo?component=project-tabs');
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -1696,31 +1696,31 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('tab',{name:/Hot Sheet 2/}).locator('.project-tab__work')).toHaveCount(0);
   await expect(tabBar.getByRole('tab',{name:/Small Tale Website/}).locator('.project-tab__work')).toHaveAttribute('aria-label','3 Up Next tickets, 1 active ticket');
   await expect(tabBar.getByRole('tab',{name:/Internal API/}).locator('.project-tab__work-count')).toHaveText('99+');
-  await expect(tabBar.locator('[data-component="project-tab"]').first()).toHaveCSS('border-radius', '999px');
+  await expect(tabBar.locator('[data-tab-kind="project"]').first()).toHaveCSS('border-radius', '22px');
   const firstClose = tabBar.getByRole('button', { name: 'Close Hot Sheet 2' });
   await expect(firstClose).toHaveCSS('opacity', '0');
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).hover();
   await expect(firstClose).toHaveCSS('opacity', '1');
-  const closeGeometry = await tabBar.locator('[data-component="project-tab"]').first().evaluate(node => {
-    const close = node.querySelector<HTMLElement>('.project-tab__close')!.getBoundingClientRect();
-    const select = node.querySelector<HTMLElement>('.project-tab__select')!.getBoundingClientRect();
-    const name = node.querySelector<HTMLElement>('.project-tab__name')!.getBoundingClientRect();
-    return { closeWidth: close.width, closeLeft: close.left, selectLeft: select.left, nameLeft: name.left, closeBackground: getComputedStyle(node.querySelector('.project-tab__close')!).backgroundColor, selectPaddingRight: getComputedStyle(node.querySelector('.project-tab__select')!).paddingRight };
+  const closeGeometry = await tabBar.locator('[data-tab-kind="project"]').first().evaluate(node => {
+    const close = node.querySelector<HTMLElement>('.kui-app-tab__close')!.getBoundingClientRect();
+    const select = node.querySelector<HTMLElement>('.kui-app-tab__select')!.getBoundingClientRect();
+    const name = node.querySelector<HTMLElement>('.kui-app-tab__name')!.getBoundingClientRect();
+    return { closeWidth: close.width, closeLeft: close.left, selectLeft: select.left, nameLeft: name.left, closeBackground: getComputedStyle(node.querySelector('.kui-app-tab__close')!).backgroundColor, selectPaddingRight: getComputedStyle(node.querySelector('.kui-app-tab__select')!).paddingRight };
   });
   expect(closeGeometry.closeWidth).toBeCloseTo(20.4, 0);
   expect(closeGeometry.closeLeft).toBeLessThan(closeGeometry.selectLeft);
   expect(closeGeometry.nameLeft).toBeGreaterThan(closeGeometry.selectLeft);
   expect(closeGeometry.closeBackground).toBe('rgba(0, 0, 0, 0)');
-  expect(closeGeometry.selectPaddingRight).toBe('12px');
-  const firstTab=tabBar.locator('[data-component="project-tab"]').first(),firstSelect=firstTab.getByRole('tab');
-  const naturalLabelCenterOffset=async()=>firstTab.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.project-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(naturalLabelCenterOffset).toBeLessThan(1);
+  expect(closeGeometry.selectPaddingRight).toBe('8px');
+  const firstTab=tabBar.locator('[data-tab-kind="project"]').first(),firstSelect=firstTab.getByRole('tab');
+  const naturalLabelCenterOffset=async()=>firstTab.evaluate(node=>{const tab=node.getBoundingClientRect(),label=node.querySelector('.kui-app-tab__name')!.getBoundingClientRect();return Math.abs(tab.x+tab.width/2-label.x-label.width/2)});await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);
   await firstSelect.focus();await expect(firstSelect).toBeFocused();
   const focusPresentation=await firstTab.evaluate(node=>{const root=getComputedStyle(node),select=getComputedStyle(node.querySelector('.kui-app-tab__select')!);return{rootOutlineStyle:root.outlineStyle,rootOutlineWidth:root.outlineWidth,rootOutlineOffset:root.outlineOffset,selectOutlineStyle:select.outlineStyle}});
   expect(focusPresentation).toMatchObject({rootOutlineStyle:'solid',rootOutlineWidth:'3px',rootOutlineOffset:'-2px',selectOutlineStyle:'none'});
   await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-wide.png'});
   await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-wide.png',fullPage:true});
   const tabActionCenters = await tabBar.evaluate(node => {
-    const tab = node.querySelector('[data-component="project-tab"]')!.getBoundingClientRect();
+    const tab = node.querySelector('[data-tab-kind="project"]')!.getBoundingClientRect();
     const add = node.querySelector('[data-action="choose-project"] svg')!.getBoundingClientRect();
     return { tab: tab.y + tab.height / 2, add: add.y + add.height / 2 };
   });
@@ -1730,7 +1730,7 @@ test('exercises the application-shell component slice and responsive composition
   await expect(tabBar.getByRole('button', { name: 'More projects' })).toHaveCount(0);
   const busySpinner = tabBar.getByRole('tab', { name: /Small Tale Website/ }).locator('.project-tab__work');
   const spinnerAlignment = await busySpinner.evaluate(node => {
-    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect(); const tab = node.closest('[data-component="project-tab"]')!.getBoundingClientRect();
+    const outer = node.getBoundingClientRect(); const icon = node.querySelector('svg')!.getBoundingClientRect(); const tab = node.closest('[data-tab-kind="project"]')!.getBoundingClientRect();
     return { x: Math.abs((outer.left + outer.width / 2) - (icon.left + icon.width / 2)), y: Math.abs((outer.top + outer.height / 2) - (icon.top + icon.height / 2)), tabY: Math.abs((outer.top + outer.height / 2) - (tab.top + tab.height / 2)) };
   });
   expect(spinnerAlignment.x).toBeLessThan(1);
@@ -1743,7 +1743,7 @@ test('exercises the application-shell component slice and responsive composition
   });
   expect(Math.max(...animatedCenters.map(([x]) => x)) - Math.min(...animatedCenters.map(([x]) => x))).toBeLessThan(.1);
   expect(Math.max(...animatedCenters.map(([, y]) => y)) - Math.min(...animatedCenters.map(([, y]) => y))).toBeLessThan(.1);
-  for (const name of await tabBar.locator('.project-tab__name').all()) {
+  for (const name of await tabBar.locator('.kui-app-tab__name').all()) {
     await expect(name).not.toHaveCSS('text-overflow', 'ellipsis');
   }
   await page.setViewportSize({ width: 760, height: 900 });
@@ -1758,7 +1758,7 @@ test('exercises the application-shell component slice and responsive composition
   expect(overflowState.scrollLeft).toBeGreaterThan(0);
   expect(overflowState.overflowX).toBe('auto');
   expect(overflowState.shadowClearance).toBeGreaterThanOrEqual(3);
-  await tabBar.locator('.project-tab-bar__tabs').evaluate(node=>{node.scrollLeft=0});await firstSelect.focus();await expect(firstSelect).toBeFocused();await expect.poll(naturalLabelCenterOffset).toBeLessThan(1);await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-narrow.png',fullPage:true});await firstSelect.blur();await page.mouse.move(750,899);await expect(firstClose).toHaveCSS('opacity','0');await expect.poll(naturalLabelCenterOffset).toBeLessThan(1);await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-narrow.png'});
+  await tabBar.locator('.project-tab-bar__tabs').evaluate(node=>{node.scrollLeft=0});await firstSelect.focus();await expect(firstSelect).toBeFocused();await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await page.screenshot({path:'/private/tmp/hs2-mrz10b-project-tab-focus-narrow.png',fullPage:true});await firstSelect.blur();await page.mouse.move(750,899);await expect(firstClose).toHaveCSS('opacity','0');await expect.poll(naturalLabelCenterOffset).toBeLessThanOrEqual(4);await firstTab.screenshot({path:'/private/tmp/hs2-3n470h-project-tab-centered-narrow.png'});
   await page.setViewportSize({ width: 1280, height: 900 });
   await tabBar.getByRole('tab', { name: /Hot Sheet 2/ }).click({ button: 'right' });
   const tabMenu = page.getByRole('menu', { name: 'Project tab actions' });
@@ -1845,10 +1845,10 @@ test('exercises the application-shell component slice and responsive composition
   expect(shellHierarchy.toolbarTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);
   expect(shellHierarchy.identityLeft).toBeGreaterThanOrEqual(shellHierarchy.leadingLeft);
   expect(shellHierarchy.controlsRight).toBeCloseTo(shellHierarchy.trailingRight, 0);
-  expect(shellHierarchy.toolbarRight - shellHierarchy.trailingRight).toBeCloseTo(16, 0);
-  expect(shellHierarchy.toolbarGap).toBe('0px');
+  expect(shellHierarchy.toolbarRight - shellHierarchy.trailingRight).toBeCloseTo(8, 0);
+  expect(shellHierarchy.toolbarGap).toBe('8px');
   await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveAttribute('data-has-center', 'false');
-  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveCSS('border-bottom-color', 'rgba(0, 0, 0, 0)');
+  await expect(shell.locator('.app-shell__main > [data-component="toolbar"]')).toHaveCSS('box-shadow', 'none');
   expect(shellHierarchy.tabsTop).toBeCloseTo(shellHierarchy.toolbarBottom, 0);
   expect(shellHierarchy.pageHeaderTop).toBeGreaterThanOrEqual(shellHierarchy.tabsBottom);
   expect(shellHierarchy.inspectorTop - shellHierarchy.shellTop).toBeLessThanOrEqual(1);

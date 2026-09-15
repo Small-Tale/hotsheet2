@@ -1,6 +1,6 @@
+import { Select } from '@kerfjs/ui/select';
 import { ChevronDown, ChevronsUp, ChevronUp, type IconNode,Minus } from 'lucide';
 
-import { Select } from './select';
 import type { TicketPriority } from './ticket-row';
 
 const PRIORITIES: readonly { value: TicketPriority; label: string; color: string; icon: IconNode; iconName: string }[] = [

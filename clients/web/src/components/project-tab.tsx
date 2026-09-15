@@ -1,10 +1,9 @@
 import './project-tab.css';
 
+import { AppTab } from '@kerfjs/ui/app-tab';
 import { LoadingSpinner } from '@kerfjs/ui/loading-spinner';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
-import { Bell, CircleAlert, Cloud, WifiOff } from 'lucide';
-
-import { AppTab } from './app-tab';
+import { Bell, CircleAlert, Cloud, WifiOff, X } from 'lucide';
 
 export type ProjectTabLocation = 'local' | 'remote';
 
@@ -44,5 +43,5 @@ export function ProjectTab({ id, name, location, selected = false, busy = false,
   const work=workLabel?<span class="project-tab__work" data-active={String(normalizedActiveTicketCount>0)} data-active-count={String(normalizedActiveTicketCount)} data-up-next-count={String(normalizedUpNextCount)} aria-label={workLabel} title={workLabel}>{normalizedActiveTicketCount>0&&<ProjectTabActivityRing count={normalizedActiveTicketCount}/>}<span class="project-tab__work-count" aria-hidden="true">{projectTabUpNextLabel(visibleCount)}</span></span>:undefined;
   const notification=notificationCount>0?<span class="project-tab__notification" aria-label={`${notificationCount} pending notification${notificationCount===1?'':'s'}`} title={`${notificationCount} pending notification${notificationCount===1?'':'s'}`}><LucideIcon icon={Bell} name="bell"/><span aria-hidden="true">{notificationCount}</span></span>:undefined;
   const trailing=work||notification?<span class="project-tab__indicators">{notification}{work}</span>:busy?<span class="project-tab__busy"><LoadingSpinner label="Project busy" /></span>:disconnected?<LucideIcon icon={WifiOff} name="wifi-off" className="project-tab__state" />:attention?<LucideIcon icon={CircleAlert} name="circle-alert" className="project-tab__state project-tab__state--attention" />:undefined;
-  return <AppTab kind="project" id={id} name={name} selected={selected} closable={closable} draggable={draggable} leading={location==='remote'?<LucideIcon icon={Cloud} name="cloud"/>:undefined} trailing={trailing} rootAttributes={{'data-ticket-drop-project':id,'data-location':location,'data-busy':String(busy),'data-disconnected':String(disconnected),'data-attention':String(attention),'data-restore-failure':String(restoreFailure)}}/>;
+  return <AppTab id={id} name={name} selected={selected} closable={closable} draggable={draggable} className="project-tab" selectAction="select-project-tab" closeAction="close-project-tab" closeIcon={<LucideIcon icon={X} name="x"/>} leading={location==='remote'?<LucideIcon icon={Cloud} name="cloud"/>:undefined} trailing={trailing} rootAttributes={{'data-tab-kind':'project','data-project-id':id,'data-ticket-drop-project':id,'data-location':location,'data-busy':String(busy),'data-disconnected':String(disconnected),'data-attention':String(attention),'data-restore-failure':String(restoreFailure)}}/>;
 }

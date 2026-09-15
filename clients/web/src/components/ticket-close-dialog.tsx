@@ -4,11 +4,11 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './ticket-close-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuItem } from '@kerfjs/ui/menu-item';
+import { Select } from '@kerfjs/ui/select';
 import { CheckCircle2, CopyX, Search } from 'lucide';
 
 import { type DuplicateTarget, duplicateTargetKey, TICKET_CLOSE_REASON_CHOICES, type TicketCloseReason, validateTicketClose } from '../ticket-close';
-import { MenuItem } from './menu-item';
-import { Select } from './select';
 
 export interface TicketCloseDialogState {
   source: DuplicateTarget;

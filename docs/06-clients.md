@@ -489,10 +489,9 @@ and identity-less legacy entries remain conservatively blocking.
   copy or duplicates the corner activity indicator.
 
   Reusable web-client presentation primitives come from the published `@kerfjs/ui`
-  package through explicit subpath imports. Hot Sheet owns only domain adapters and
+  package through explicit subpath imports. Hot Sheet owns only domain compositions and
   product behavior: connection-state mapping, ticket-specific empty-state copy,
-  menu action metadata, resize action wiring, tab identity, and the temporary Select
-  adapter tracked by KF-1JAT9F. The shared package owns their generic anatomy and CSS,
+  menu action metadata, resize action wiring, and tab identity. The shared package owns their generic anatomy and CSS,
   along with toolbars, toolbar text/control groups, page headers, loading indicators,
   and Lucide rendering; the client does not carry local copies of those primitives.
 

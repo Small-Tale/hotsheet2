@@ -7,7 +7,7 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
   const drawer = page.locator('[data-component="terminal-drawer"]');
   const gridTab = drawer.getByRole('tab', { name: 'Project grid' });
   const tabs = drawer.locator('.terminal-drawer__tabs');
-  await expect(drawer.locator('[data-component="terminal-tab"]')).toHaveCount(1);
+  await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(1);
 
   const shadowGutter = await tabs.evaluate(node => {
     const scroller = node.getBoundingClientRect();
@@ -25,7 +25,7 @@ test('keeps selected terminal-tab shadows inside the horizontal scrollport', asy
     const source = tabs.firstElementChild!;
     for (let index = 0; index < 8; index += 1) tabs.append(source.cloneNode(true));
   });
-  await expect(drawer.locator('[data-component="terminal-tab"]')).toHaveCount(9);
+  await expect(drawer.locator('[data-tab-kind="terminal"]')).toHaveCount(9);
   expect((await gridTab.boundingBox())!.width).toBeCloseTo(gridWidth, 0);
   expect(await tabs.evaluate(node => node.scrollWidth)).toBeGreaterThan(await tabs.evaluate(node => node.clientWidth));
 });

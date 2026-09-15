@@ -1,4 +1,4 @@
-.ticket-inspector__content { display: grid; width: 100%; min-width: 0; min-height: 0; padding: 0 .85rem .85rem; overflow-x: hidden; overflow-y: auto; flex: 1; align-content: start; gap: 1.2rem; }
+.ticket-inspector__content { --kui-layout-inline-margin: 0; display: grid; width: 100%; min-width: 0; min-height: 0; padding: 0 .85rem .85rem; overflow-x: hidden; overflow-y: auto; flex: 1; align-content: start; gap: 1.2rem; }
 .ticket-inspector__content section { display: grid; min-width: 0; gap: .55rem; }
 .ticket-inspector__section { display: grid; min-width: 0; gap: .55rem; }
 .ticket-inspector__section-header { display: flex; min-height: 2rem; align-items: center; justify-content: space-between; }

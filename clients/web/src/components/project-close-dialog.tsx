@@ -3,12 +3,12 @@ import '@awesome.me/webawesome/dist/components/dialog/dialog.js';
 import './project-close-dialog.css';
 
 import {LucideIcon} from '@kerfjs/ui/lucide-icon';
+import {MenuHeader} from '@kerfjs/ui/menu-header';
+import {MenuItem} from '@kerfjs/ui/menu-item';
 import {CircleAlert,MessageSquare,SquareTerminal} from 'lucide';
 
 import {type ConversationActivity,type ConversationMessage,type ConversationUsage} from '../ai-conversation';
 import {AIConversation} from './ai-conversation';
-import {MenuHeader} from './menu-header';
-import {MenuItem} from './menu-item';
 
 interface ProjectCloseResourceBase {
   id:string;

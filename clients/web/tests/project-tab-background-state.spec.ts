@@ -96,8 +96,8 @@ test('refreshes non-active project tab counts and live-work state while preservi
   await page.setViewportSize({ width: 1200, height: 800 });
   const fixture = await installProjects(page);
   await openBothProjects(page);
-  const alphaTab = page.locator('[data-component="project-tab"][data-project-id="alpha-project"]');
-  const betaTab = page.locator('[data-component="project-tab"][data-project-id="beta-project"]');
+  const alphaTab = page.locator('[data-tab-kind="project"][data-project-id="alpha-project"]');
+  const betaTab = page.locator('[data-tab-kind="project"][data-project-id="beta-project"]');
   await expect(betaTab.locator('.project-tab__work')).toHaveAttribute('aria-label', '1 Up Next ticket');
 
   fixture.rows[projects.beta.id] = [

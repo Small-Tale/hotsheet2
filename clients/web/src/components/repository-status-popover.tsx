@@ -3,13 +3,13 @@ import './native-popover-dialog.css';
 
 import { DialogHeader } from '@kerfjs/ui/dialog-header';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuHeader } from '@kerfjs/ui/menu-header';
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ValueTable } from '@kerfjs/ui/value-table';
 import { ArrowDown, ArrowUp, CircleCheck, CircleHelp, Clipboard, Copy, Ellipsis, ExternalLink, FileCode2, FileText, FlaskConical, FolderOpen, GitBranch, GitCommitHorizontal, GitCompare, RefreshCw, SquareMinus, SquarePen, SquarePlus, SquareX, TriangleAlert } from 'lucide';
 
 import type { CodeReview, CodeReviewFile, RepositoryFile, RepositoryFileChange, RepositoryStatus } from '../api';
-import { MenuHeader } from './menu-header';
-import { MenuItem } from './menu-item';
 import { RepositorySetup, type RepositorySetupStep } from './repository-setup';
 import { type CodeReviewComparison, TicketCodeReview } from './ticket-code-review';
 

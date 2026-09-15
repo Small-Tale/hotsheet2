@@ -1,4 +1,4 @@
-import { clampRegionSize } from './components/resizable-region';
+import { clampRegionSize } from '@kerfjs/ui/resizable-region';
 
 export type AppRegionId = 'app-sidebar' | 'app-inspector' | 'app-terminal-drawer';
 export const TERMINAL_DRAWER_MIN_SIZE=228;

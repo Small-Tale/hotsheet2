@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import { PageHeader } from '@kerfjs/ui/page-header';
+import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from '@kerfjs/ui/resizable-region';
 import { describe, expect, it } from 'vitest';
 
 import { addDemoProject, closeProjectTab, projectTabs, resizeDemoCollapsed, resizeDemoWidth, selectProjectTab, setRegionSize, shellMode, shellStatsProjectName } from '../ux-demo/app-shell-demo';
@@ -9,7 +10,6 @@ import { ConnectionStateBanner } from './connection-state-banner';
 import { ProjectTab,projectTabActivityDash } from './project-tab';
 import { ProjectTabBar } from './project-tab-bar';
 import { AppTabContextMenu } from './project-tab-context-menu';
-import { clampRegionSize, ResizableRegion,resizeRegionFromPointer } from './resizable-region';
 
 describe('application shell components', () => {
   it('defines the supported application floor as 1024 by 600 CSS pixels', () => {
@@ -65,7 +65,7 @@ describe('application shell components', () => {
     expect(markup).toContain('data-tab-id="one"');
     expect(markup).toContain('draggable="true"');
     expect(markup).toContain('tabindex="0"');
-    expect(markup).toContain('aria-keyshortcuts="Delete Backspace"');
+    expect(markup).toContain('aria-keyshortcuts="Delete Backspace Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"');
     expect(markup).toMatch(/app-tab__close[^>]*tabindex="-1"|tabindex="-1"[^>]*app-tab__close/);
     expect(markup).toContain('data-lucide="cloud"');
     expect(markup).toContain('aria-label="Project busy"');
@@ -97,7 +97,7 @@ describe('application shell components', () => {
     expect(activeOnlyMarkup).toContain('aria-label="1 active ticket"');
     expect(activeOnlyMarkup).toContain('project-tab__activity-ring');
     const projectTabCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8');
-    expect(projectTabCss).toContain('[data-attention="true"] .project-tab__name { color: var(--wa-color-danger-on-quiet); }');
+    expect(projectTabCss).toContain('[data-attention="true"] .kui-app-tab__name { color: var(--wa-color-danger-on-quiet); }');
     expect(projectTabCss).toContain('animation:project-tab-activity-rotate 1.7s linear infinite');
     expect(projectTabCss).toContain('@media (prefers-reduced-motion:reduce)');
     expect(activeOnlyMarkup).toContain('data-segments="1"');
@@ -109,7 +109,7 @@ describe('application shell components', () => {
   it('draws tab-selection focus around the complete compound pill', () => {
     const projectCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8'),barCss=readFileSync(new URL('./project-tab-bar.css',import.meta.url),'utf8');
     expect(String(ProjectTab({id:'focus',name:'Focus',location:'local'}))).toContain('class="kui-app-tab project-tab"');
-    expect(projectCss).toContain('.project-tab:has(.project-tab__close) .project-tab__trailing:empty { min-width: calc(1.275rem - var(--wa-space-xs)); }');
+    expect(projectCss).not.toContain('.project-tab:has(.kui-app-tab__close)');
     expect(barCss).toMatch(/\.project-tab-bar__tabs \{[^}]*margin: calc\(var\(--wa-space-2xs\) \* -1\);[^}]*padding: var\(--wa-space-2xs\);/);
   });
 
@@ -148,7 +148,7 @@ describe('application shell components', () => {
     const markup = String(ResizableRegion({ id: 'left', label: 'Sidebar', size: 240, min: 180, max: 420, children: 'content' as never }));
     expect(markup).toContain('aria-orientation="vertical"');
     expect(markup).toContain('aria-valuenow="240"');
-    expect(markup).toContain('data-lucide="grip-vertical"');
+    expect(markup).toContain('data-kui-resize-handle');
   });
 
   it('composes the terminal drawer as a center-only vertical region with collapsed recovery',()=>{

@@ -4,11 +4,11 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import './terminal-visibility-dialog.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuHeader } from '@kerfjs/ui/menu-header';
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Eye,EyeOff,Pencil,Plus,Trash2 } from 'lucide';
 
 import { DEFAULT_TERMINAL_VISIBILITY_GROUP_ID,type TerminalVisibilityState } from '../terminal-visibility';
-import { MenuHeader } from './menu-header';
-import { MenuItem } from './menu-item';
 import type { TerminalDashboardGroup } from './terminal-dashboard';
 
 export interface TerminalVisibilityDialogProps {

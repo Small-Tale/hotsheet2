@@ -1,13 +1,13 @@
 import {readFileSync} from 'node:fs';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuHeader } from '@kerfjs/ui/menu-header';
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Archive, Plus  } from 'lucide';
 import { describe, expect, it } from 'vitest';
 
 import { CommandNavigation, isCommandNavigationIcon } from './command-navigation';
 import { DriveControl } from './drive-control';
-import { MenuHeader } from './menu-header';
-import { MenuItem } from './menu-item';
 import { ProjectSidebar } from './project-sidebar';
 import { aggregateAlignedChartValues, chartDomainMaximum, ProjectSummary } from './project-summary';
 import { RepositorySummary } from './repository-summary';
@@ -25,14 +25,17 @@ describe('ProjectSidebar component slice', () => {
   });
 
   it('shares one menu-header contract for action and toggle groups', () => {
-    const action = String(MenuHeader({ label: 'Views', action: 'add', actionLabel: 'Add view', actionIcon: Plus, actionIconName: 'plus' }));
-    const toggle = String(MenuHeader({ label: 'Commands', action: 'toggle', actionIcon: Plus, actionIconName: 'plus', expanded: false, toggle: true }));
+    const icon=LucideIcon({icon:Plus,name:'plus'});
+    const action = String(MenuHeader({ label: 'Views', action: 'add', actionLabel: 'Add view', actionIcon: icon }));
+    const toggle = String(MenuHeader({ label: 'Commands', action: 'toggle', actionIcon: icon, expanded: false, toggle: true }));
     expect(action).toContain('data-component="menu-header"');
     expect(action).toContain('aria-label="Add view"');
-    const popoverAction = String(MenuHeader({ label: 'Tags', action: 'add', actionLabel: 'Add tag', actionIcon: Plus, actionIconName: 'plus', actionPopoverTarget: 'tag-popover' }));
-    expect(popoverAction).toContain('popoverTarget="tag-popover" aria-haspopup="dialog" aria-controls="tag-popover"');
+    const popoverAction = String(MenuHeader({ label: 'Tags', action: 'add', actionLabel: 'Add tag', actionIcon: icon, triggerAttributes:{popoverTarget:'tag-popover','aria-haspopup':'dialog','aria-controls':'tag-popover'} }));
+    expect(popoverAction).toContain('popoverTarget="tag-popover"');
+    expect(popoverAction).toContain('aria-haspopup="dialog"');
+    expect(popoverAction).toContain('aria-controls="tag-popover"');
     expect(toggle).toContain('aria-expanded="false"');
-    const disabled = String(MenuHeader({ label: 'Views', action: 'add', actionLabel: 'Add view', actionIcon: Plus, actionIconName: 'plus', actionDisabled: true, disabledReason: 'Not available yet.' }));
+    const disabled = String(MenuHeader({ label: 'Views', action: 'add', actionLabel: 'Add view', actionIcon: icon, actionDisabled: true, disabledReason: 'Not available yet.' }));
     expect(disabled).toContain('disabled');
     expect(disabled).toContain('title="Not available yet."');
   });
@@ -199,7 +202,7 @@ describe('ProjectSidebar component slice', () => {
     expect(css).toContain('--project-sidebar-content-inset: .625rem');
     expect(css).toMatch(/\.project-sidebar \.kui-menu-item \{[^}]*min-height: 2\.75rem;[^}]*padding: var\(--project-sidebar-content-inset\);[^}]*grid-template-columns: 1\.5rem minmax\(0, 1fr\) auto;[^}]*column-gap: var\(--project-sidebar-content-inset\)/);
     expect(css).toMatch(/\.project-sidebar > \.kui-toolbar \.kui-toolbar-control-group \{[^}]*width: 2\.75rem;[^}]*height: 2\.75rem/);
-    expect(css).toMatch(/\.project-sidebar \.kui-menu-header:not\(\.kui-menu-header--toggle\) > button,.project-sidebar \.kui-menu-header__action-layer \{[^}]*width: 2\.75rem;[^}]*height: 2\.75rem/);
+    expect(css).toMatch(/\.project-sidebar \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: var\(--project-sidebar-content-inset\);[^}]*--kui-layout-item-gap: var\(--project-sidebar-content-inset\)/);
   });
 
   it('omits the command section when the project has no commands', () => {

@@ -1,7 +1,7 @@
 ---
 name: kerf-app
-description: Build UIs in the kerf reactive framework (https://github.com/brianwestphal/kerf). Use this skill whenever the user is writing or modifying code that imports `kerfjs`, asks to add a feature to a kerf app, or asks "how do I do X in kerf?". Use it proactively the moment you spot a kerf import in the file you're editing.
-kerf-skill-version: 1.14.2
+description: Build UIs in the kerf reactive framework and its @kerfjs/ui component package (https://github.com/brianwestphal/kerf). Use this skill whenever the user is writing or modifying code that imports `kerfjs` or `@kerfjs/ui`, asks to add a feature to a kerf app, or asks "how do I do X in kerf?". Use it proactively the moment you spot a kerf import in the file you're editing.
+kerf-skill-version: 1.21.0
 ---
 
 # Building apps with kerf
@@ -21,6 +21,57 @@ kerf is a ~12 KB reactive UI framework (~13 KB with `arraySignal`): signals + DO
   - **Switch individual warnings on with `enableWarnings()`**, which is the only switch that works in a browser (no `process` object there, and a bundler `define` cannot reach the read): `const dev = await import('kerfjs/dev'); dev.enableWarnings({ staleBinding: true, narrowSet: true, invariants: 'throw' });`. The `KERF_DEV_WARN_*` env vars do the same for Node/SSR/CI; an explicit call wins either way.
   - **A component package must NEVER import `kerfjs/dev`.** The hooks are process-global, so installing them is the consuming app's decision — a library that does it forces the diagnostics (and the chunk) on every consumer. Put the import in your demo page or test harness instead.
 - Recommended companion: `npm install --save-dev eslint-plugin-kerfjs` and add `kerfjs.configs.recommended` to the project's eslint config. Enforces five of the hard rules below (no inline JSX event handlers, require `data-key` in `each()`, capture `delegate()` disposers, no nested `mount()`, prefer module JSX augmentation) at edit time — useful as a self-correction signal when authoring kerf code.
+
+## Optional first-party UI
+
+Install `@kerfjs/ui` when the app needs shared toolbars, menu rows, controlled tab bars,
+headers/value tables, resizable regions, selects, banners, empty states, or
+loading indicators. Import visual components from explicit subpaths so a
+CSS-aware browser bundler includes only their reachable styles. The root barrel
+and `@kerfjs/ui/unstyled` are CSS-free; pair the barrel with `styles.css` only
+when the complete layer is intentional. Prefer a component before inventing a
+parallel local primitive, but keep domain state, routing, commands, and tab/menu
+policy in the app.
+
+Use MenuItem/MenuActionRow/MenuHeader/AppTab `rootAttributes` only for application
+`data-*` metadata. MenuActionRow `trailingActionAttributes` and MenuHeader
+`triggerAttributes` additionally support native popover target/action and
+`aria-controls`/`aria-haspopup`. Do not use these slots to override action,
+item identity, selection, disclosure, naming, disabled, icon, or role
+semantics; one `role="menuitem"` does not make a complete menu widget.
+`MenuItem.trailing` is dormant. Use `MenuActionRow` for sibling primary and
+trailing native buttons, and keep its `label`, `icon`, and
+`trailingActionIcon` SafeHtml slots free of controls.
+AppTab protects its component/action/identity/selection and transient drag/drop
+attributes at runtime. Keep `AppTab.closeIcon` and
+`ResizableRegion.handleIcon` decorative and free of controls; the existing
+named controls and wiring retain interaction and disposal ownership.
+
+Components emit stable `data-action` hooks; wire them at the mount root and
+retain every disposer. `wireResizableRegions()` and `wireTabBars()` are the
+explicit behavioral helpers and return disposers. Compose `AppTab` inside a
+controlled `TabBar`; `wireTabBars()` supplies horizontal edge autoscroll during
+dragging. Apply reorder reports with `reorderTabs()`, and keep order,
+selection, close policy, routing, panels, and persistence in the host.
+Icons and spinners are decorative unless labeled; use assertive banners only
+for urgent interruption.
+
+The opinionated semantic ramps match Hot Sheet 2 and Web Awesome. Override
+`--kui-color-*` globally or component properties such as
+`--kui-state-banner-background` at a tone or instance boundary; do not replace
+private descendant selectors.
+
+For Web Awesome's broader free component set, import the CSS-only
+`@kerfjs/ui/webawesome.css` theme once, then import only each Web Awesome
+component module the app renders. The theme registers no component JavaScript
+and remains overridable through later or scoped `--wa-*` values.
+
+`Select` renders pure Web Awesome markup. Import
+`@kerfjs/ui/select/register` once in an application entry that uses it; never
+hide that registration inside another component. Web Awesome is an optional
+peer and must remain absent from bundles that use neither Select nor the Web
+Awesome theme. The package's
+full AI contract is at `node_modules/@kerfjs/ui/ai/skill.md`.
 
 ## Public API — one import path
 

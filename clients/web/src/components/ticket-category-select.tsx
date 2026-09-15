@@ -1,5 +1,6 @@
+import { Select } from '@kerfjs/ui/select';
+
 import { DEFAULT_TICKET_CATEGORIES, type TicketCategoryPresentation } from './category-presentation';
-import { Select } from './select';
 
 export type TicketCategoryChoice = TicketCategoryPresentation;
 export { DEFAULT_TICKET_CATEGORIES } from './category-presentation';

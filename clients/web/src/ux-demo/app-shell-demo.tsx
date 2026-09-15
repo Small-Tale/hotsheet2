@@ -1,5 +1,6 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PageHeader } from '@kerfjs/ui/page-header';
+import { clampRegionSize,ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { signal } from 'kerfjs';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide';
 
@@ -9,7 +10,6 @@ import { ProjectSidebar } from '../components/project-sidebar';
 import { ProjectTab, type ProjectTabProps } from '../components/project-tab';
 import { ProjectTabBar, type ProjectTabBarMode } from '../components/project-tab-bar';
 import { QuickTicketComposer,QuickTicketLauncher } from '../components/quick-ticket-composer';
-import { clampRegionSize,ResizableRegion } from '../components/resizable-region';
 import { TerminalOperationsSidebar } from '../components/terminal-operations-sidebar';
 import { TicketBoard } from '../components/ticket-board';
 import { TicketInspector } from '../components/ticket-inspector';

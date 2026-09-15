@@ -1,6 +1,7 @@
 import './ticket-status-menu.css';
 
-import { Select, type SelectChoice } from './select';
+import { Select, type SelectChoice } from '@kerfjs/ui/select';
+
 import { StatusBadge, statusPresentation, type TicketStatus } from './status-badge';
 
 export const TICKET_STATUS_CHOICES: readonly SelectChoice<TicketStatus>[] = (['not_started', 'started', 'completed', 'verified', 'backlog', 'archive'] as const)

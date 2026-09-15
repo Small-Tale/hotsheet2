@@ -1,11 +1,10 @@
 import './settings-navigation.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ArchiveRestore, Bot, Columns3, Database, PanelLeftClose, ShieldCheck, TerminalSquare } from 'lucide';
-
-import { MenuItem } from './menu-item';
 
 export type SettingsCategory = 'sources' | 'ai' | 'commands' | 'lifecycle' | 'terminals' | 'permissions' | 'columns';
 

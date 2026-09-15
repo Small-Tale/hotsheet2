@@ -1,4 +1,4 @@
-.repository-status-popover { width: min(64rem, calc(100vw - 2 * var(--wa-space-l))); height: min(37.5rem, calc(100vh - 2 * var(--wa-space-l))); }
+.repository-status-popover { width: min(64rem, calc(100vw - 2 * var(--wa-space-l))); height: min(40rem, calc(100vh - 2 * var(--wa-space-l))); }
 .repository-status-popover[data-state="clean"] .repository-status-popover__icon { color: var(--wa-color-success-on-quiet); background: var(--wa-color-success-fill-quiet); }
 .repository-status-popover:is([data-state="error"],[data-state="conflicted"]) .repository-status-popover__icon { color: var(--wa-color-danger-on-quiet); background: var(--wa-color-danger-fill-quiet); }
 .repository-status-popover__refresh:disabled { opacity: .5; cursor: wait; }

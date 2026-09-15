@@ -1,7 +1,7 @@
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { Archive, Layers3 } from 'lucide';
 
-import { MenuItem } from '../components/menu-item';
 import {ProviderIcon} from '../components/provider-icon';
 
 export function MenuItemDemo() {

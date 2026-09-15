@@ -22,7 +22,6 @@ describe('WorkspaceHeader', () => {
     expect(markup).toContain('name="workspace-sort"');
     expect(markup).toContain('aria-label="Sort tickets: Priority, descending"');
     expect(markup).toContain('<wa-option value="priority"');
-    expect(markup).toContain('data-lucide="arrow-down"');
     expect(markup).toContain('class="kui-select__custom-selected"><svg data-lucide="arrow-down-wide-narrow"');
     expect(markup).not.toContain('<input type="checkbox"');
     expect(markup).toMatch(/workspace-header__search-group"[^>]*data-expanded="true"/);

@@ -10,7 +10,7 @@ describe('dialog layout primitives',()=>{
     const header=String(DialogHeader({title:'Details',titleId:'details-title',summary:'Current state',summaryId:'details-summary',icon:'icon' as never,actions:'actions' as never}));
     expect(header).toContain('data-component="dialog-header"');
     expect(header).toContain('<h2 id="details-title">Details</h2>');
-    expect(header).toContain('<p id="details-summary">Current state</p>');
+    expect(header).toContain('<p class="kui-dialog-header__summary" id="details-summary">Current state</p>');
     expect(header).toContain('kui-dialog-header__icon');
     expect(header).toContain('kui-dialog-header__actions');
     const table=String(ValueTable({label:'Build metadata',children:'<div><dt>Version</dt><dd>1</dd></div>' as never}));

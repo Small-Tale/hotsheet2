@@ -11,7 +11,7 @@ describe('SettingsNavigation', () => {
     expect(markup).toContain('data-item-id="commands"');
     expect(markup).toContain('data-item-id="lifecycle"');
     expect(markup).toContain('data-item-id="terminals"');
-    expect(markup).toContain('data-item-id="permissions" aria-current="page"');
+    expect(markup).toMatch(/data-item-id="permissions"[^>]*aria-current="page"/);
     expect(markup).toContain('data-item-id="columns"');
     expect(markup).toContain('aria-label="Hide settings sidebar"');
     for (const icon of ['database', 'bot', 'terminal-square', 'archive-restore', 'shield-check', 'columns-3']) expect(markup).toContain(`data-lucide="${icon}"`);

@@ -1,9 +1,8 @@
 import './repository-summary.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { ArrowDown, ArrowUp, CircleAlert, GitBranch } from 'lucide';
-
-import { MenuItem } from './menu-item';
 
 export interface RepositorySummaryProps { branch: string; unpushed: number; behind?:number; uncommitted: number; conflicted?:number; error?:boolean }
 export function RepositorySummary({ branch, unpushed, behind=0, uncommitted, conflicted=0, error=false }: RepositorySummaryProps) {

@@ -6,7 +6,16 @@ import '@awesome.me/webawesome/dist/components/input/input.js';
 import '../hot-sheet-tokens.css';
 import './style.css';
 
+import { AppTab } from '@kerfjs/ui/app-tab';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuHeader } from '@kerfjs/ui/menu-header';
+import { MenuItem } from '@kerfjs/ui/menu-item';
+import {
+  clampRegionSize,
+  type ResizableRegionEdge,
+  resizeRegionFromPointer,
+} from '@kerfjs/ui/resizable-region';
+import { Select } from '@kerfjs/ui/select';
 import { delegate, delegateCapture, mount, signal } from 'kerfjs';
 import {
   Activity,
@@ -43,18 +52,9 @@ import {
   Wrench,
 } from 'lucide';
 
-import { AppTab } from '../components/app-tab';
 import { attachmentGalleryKeyboardAction } from '../components/attachment-gallery';
-import { MenuHeader } from '../components/menu-header';
-import { MenuItem } from '../components/menu-item';
 import { ProjectTabContextMenu } from '../components/project-tab-context-menu';
 import { showQuickTicketComposer } from '../components/quick-ticket-composer';
-import {
-  clampRegionSize,
-  type ResizableRegionEdge,
-  resizeRegionFromPointer,
-} from '../components/resizable-region';
-import { Select } from '../components/select';
 import { FixedAspectTerminalCard, TerminalDashboard } from '../components/terminal-dashboard';
 import { TerminalDrawer } from '../components/terminal-drawer';
 import { TicketCloseDialog } from '../components/ticket-close-dialog';
@@ -502,7 +502,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'ai-conversation') return <AIConversationDemo />;
   if (item.id === 'project-tab') return <ProjectTabDemo />;
   if (item.id === 'project-tabs') return <ProjectTabBarDemo />;
-  if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab kind="project" id="project" name="Project tab" selected leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab kind="terminal" id="terminal" name="Terminal tab" leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy"><LucideIcon icon={Activity} name="activity"/></span>}/></section>;
+  if (item.id === 'app-tab') return <section class="app-tab-demo" role="tablist" aria-label="Shared application tab demo"><AppTab id="project" name="Project tab" selected className="project-tab" rootAttributes={{ 'data-tab-kind': 'project', 'data-project-id': 'project' }} leading={<LucideIcon icon={FolderGit2} name="folder-git-2"/>}/><AppTab id="terminal" name="Terminal tab" className="terminal-tab" rootAttributes={{ 'data-tab-kind': 'terminal', 'data-terminal-id': 'terminal' }} leading={<LucideIcon icon={Terminal} name="terminal"/>} trailing={<span aria-label="Busy"><LucideIcon icon={Activity} name="activity"/></span>}/></section>;
   if (item.id === 'terminal-drawer') return <section class="terminal-drawer-demo"><TerminalDrawer projectId="demo" projectName="Demo project" sessions={[{ id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, scrollback: 'npm run dev\nready on http://127.0.0.1' }]} width={900} height={320} fitAcross={2} fitHigh={2} selectedId="shell"/></section>;
   if (item.id === 'terminal-dashboard') return <section class="terminal-dashboard-demo"><TerminalDashboard groups={[{ projectId: 'demo', projectName: 'Demo project', sessions: [
     { id: 'shell', projectId: 'demo', projectName: 'Demo project', title: 'Development', alive: true, busy: true, cwd: '/work/demo', progress: 68, scrollback: 'npm run dev\nready on http://127.0.0.1' },
@@ -990,7 +990,7 @@ delegate(
   'click',
   '[data-action="select-project-tab"]',
   (_event, target) => {
-    selectProjectTab((target as HTMLElement).dataset.projectId!);
+    selectProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
   },
 );
 delegate(
@@ -999,13 +999,13 @@ delegate(
   '[data-action="close-project-tab"]',
   (event, target) => {
     event.stopPropagation();
-    closeProjectTab((target as HTMLElement).dataset.projectId!);
+    closeProjectTab(target.closest<HTMLElement>('[data-tab-kind="project"]')!.dataset.projectId!);
   },
 );
 delegate(
   root,
   'contextmenu',
-  '[data-component="project-tab"]',
+  '[data-tab-kind="project"]',
   (event, target) => {
     event.preventDefault();
     const pointer = event as MouseEvent;
@@ -1080,7 +1080,7 @@ delegate(root, 'click', '[data-action="authenticate-connection"]', () => {
 delegate(
   root,
   'pointerdown',
-  '[data-action="resize-region"]',
+  '[data-kui-resize-handle]',
   (event, target) => {
     event.preventDefault();
     const handle = target as HTMLElement;
@@ -1106,7 +1106,7 @@ delegate(
     document.body.dataset.resizingRegion = axis;
   },
 );
-delegate(root, 'keydown', '[data-action="resize-region"]', (event, target) => {
+delegate(root, 'keydown', '[data-kui-resize-handle]', (event, target) => {
   const handle = target as HTMLElement;
   const region = handle.closest<HTMLElement>(
     '[data-component="resizable-region"]',
@@ -1141,7 +1141,7 @@ delegate(
     event.preventDefault();
     const tabs = projectTabs.value;
     const current = tabs.findIndex(
-      (tab) => tab.id === (target as HTMLElement).dataset.projectId,
+      (tab) => tab.id === target.closest<HTMLElement>('[data-tab-kind="project"]')?.dataset.projectId,
     );
     const next =
       key === 'Home'
@@ -1155,7 +1155,7 @@ delegate(
     selectProjectTab(id);
     queueMicrotask(() =>
       root
-        .querySelector<HTMLElement>(`[role="tab"][data-project-id="${id}"]`)
+        .querySelector<HTMLElement>(`[data-tab-kind="project"][data-project-id="${id}"] [role="tab"]`)
         ?.focus(),
     );
   },
@@ -2323,12 +2323,11 @@ delegate(root, 'keydown', '[name="attachment-batch-label"]', (event, target) => 
   const input = target as HTMLInputElement;
   const key = (event as KeyboardEvent).key;
   if (key !== 'Escape' && key !== 'Enter') return;
-  const surface = input.closest<HTMLElement>('[data-component="ticket-attachments"]');
   const ids = input.closest<HTMLElement>('[data-attachment-ids]')?.dataset.attachmentIds;
   if (key === 'Escape') input.value = input.dataset.originalValue ?? input.value;
   input.blur();
   requestAnimationFrame(() => {
-    if (ids) surface?.querySelector<HTMLElement>(`[data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`)?.focus();
+    if (ids) root.querySelector<HTMLElement>(`[data-component="ticket-attachments"] [data-attachment-ids="${CSS.escape(ids)}"] [data-action="edit-attachment-batch-label"]`)?.focus();
   });
 });
 delegate(root, 'change', '[name="attachment-batch-label"]', (_event, target) => {

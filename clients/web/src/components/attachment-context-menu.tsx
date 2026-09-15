@@ -3,8 +3,6 @@ import './attachment-context-menu.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { Clipboard, Copy, Download, ExternalLink, FolderOpen, Pencil, Trash2 } from 'lucide';
 
-import { MenuItem } from './menu-item';
-
 export type AttachmentContextMenuKind = 'item' | 'host';
 
 export const ATTACHMENT_CONTEXT_MENU_HEIGHT = 274;
@@ -17,7 +15,7 @@ export interface AttachmentContextMenuProps {
 }
 
 const action = (id:string,label:string,icon:Parameters<typeof LucideIcon>[0]['icon'],iconName:string,className?:string) =>
-  <MenuItem role="menuitem" action="attachment-menu-action" itemId={id} label={label} icon={<LucideIcon icon={icon} name={iconName}/>} className={className}/>;
+  <wa-dropdown-item data-action="attachment-menu-action" data-item-id={id} class={className}><span slot="icon"><LucideIcon icon={icon} name={iconName}/></span>{label}</wa-dropdown-item>;
 
 /** Shared attachment actions opened from item ellipses, item right-click, and gallery media. */
 export function AttachmentContextMenu({x,y,kind='item',revealLabel='Show in file manager'}:AttachmentContextMenuProps){

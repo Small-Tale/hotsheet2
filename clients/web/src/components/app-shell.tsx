@@ -1,6 +1,7 @@
 import './app-shell.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { ResizableRegion } from '@kerfjs/ui/resizable-region';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
@@ -10,7 +11,6 @@ import { TERMINAL_DRAWER_MIN_SIZE } from '../app-region-resize';
 import type { ProjectTabProps } from './project-tab';
 import type { ProjectTabBarMode } from './project-tab-bar';
 import { ProjectTabBar } from './project-tab-bar';
-import { ResizableRegion } from './resizable-region';
 
 export interface AppShellProps {
   tabs: ProjectTabProps[];

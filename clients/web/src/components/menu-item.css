@@ -1,3 +1,0 @@
-.kui-menu-item[data-dragging-ticket="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-normal); outline: 2px solid var(--wa-color-brand-border-normal); outline-offset: -2px; }
-.kui-menu-item__count { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-variant-numeric: tabular-nums; }
-.kui-menu-item__count[data-attention="true"] { color: var(--hs-ticket-state-needs-review); font-weight: 700; }

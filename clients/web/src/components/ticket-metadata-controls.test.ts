@@ -35,9 +35,9 @@ describe('ticket metadata controls and inspector panels', () => {
     const info = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: ['ux'], details: 'Details' }));
     expect(info).toContain('data-component="ticket-info-panel"');
     expect(info.match(/data-component="menu-header"/g)).toHaveLength(3);
-    expect(info).toContain('<header class="kui-menu-header" data-component="menu-header"><h2>Details</h2>');
-    expect(info).toContain('<header class="kui-menu-header" data-component="menu-header"><h2>Tags</h2>');
-    expect(info).toContain('data-action="open-ticket-tag-popover" popoverTarget="ticket-tag-popover" aria-haspopup="dialog" aria-controls="ticket-tag-popover" aria-label="Add tag"');
+    expect(info).toContain('<h2 class="kui-menu-header__label">Details</h2>');
+    expect(info).toContain('<h2 class="kui-menu-header__label">Tags</h2>');
+    expect(info).toMatch(/popoverTarget="ticket-tag-popover"[^>]*aria-controls="ticket-tag-popover"[^>]*aria-haspopup="dialog"[^>]*data-action="open-ticket-tag-popover"[^>]*aria-label="Add tag"/);
     expect(info).toContain('data-action="edit-blocked-reason"');
     expect(info).toContain('Block ticket');
     expect(info).not.toContain('<h2>Blocked reason</h2>');
@@ -48,10 +48,10 @@ describe('ticket metadata controls and inspector panels', () => {
     expect(deleted).toContain('data-lucide="trash-2"');
     expect(deleted).toContain('Deleted');
     expect(deleted).not.toContain('name="inspector-status"');
-    expect(info).toContain('<h2>Notes<span class="kui-menu-header__count" aria-label="0 notes">0</span></h2>');
+    expect(info).toContain('<h2 class="kui-menu-header__label" aria-label="Notes, 0 notes">Notes</h2><span class="kui-menu-header__count" aria-hidden="true">0</span>');
     expect(info).toContain('class="kui-menu-item ticket-notes__add" data-component="menu-item"');
     const blocked = String(TicketInfoPanel({ status: 'started', priority: 'high', category: 'feature', tags: [], details: '', blockedReason: 'Waiting' }));
-    expect(blocked).toContain('<header class="kui-menu-header" data-component="menu-header"><h2>Blocked reason</h2>');
+    expect(blocked).toContain('<h2 class="kui-menu-header__label">Blocked reason</h2>');
     expect(blocked).toContain('data-edit-blocked-reason="true"');
     expect(blocked).toContain('aria-label="Edit blocked reason"');
     expect(blocked).not.toContain('ticket-inspector__text-action');

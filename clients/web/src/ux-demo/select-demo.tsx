@@ -1,6 +1,5 @@
+import { Select } from '@kerfjs/ui/select';
 import { Bug, ListChecks, Sparkles } from 'lucide';
-
-import { Select } from '../components/select';
 
 const choices = [
   { value: 'task', label: 'Task', icon: ListChecks, iconName: 'list-checks', color: '#14b8a6' },

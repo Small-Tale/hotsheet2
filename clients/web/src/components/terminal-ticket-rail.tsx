@@ -2,13 +2,13 @@ import './terminal-ticket-rail.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { PageHeader } from '@kerfjs/ui/page-header';
+import { Select } from '@kerfjs/ui/select';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import type { SafeHtml } from 'kerfjs/jsx-runtime';
 import { PanelRightClose } from 'lucide';
 
 import { ContentTransition, type ContentTransitionDirection } from './content-transition';
-import { Select } from './select';
 
 export interface TerminalTicketRailProps {
   projects: readonly { id:string;name:string }[];

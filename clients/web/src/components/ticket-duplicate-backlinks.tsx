@@ -1,11 +1,11 @@
 import './ticket-duplicate-backlinks.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
+import { MenuHeader } from '@kerfjs/ui/menu-header';
+import { MenuItem } from '@kerfjs/ui/menu-item';
 import { CopyX } from 'lucide';
 
 import type { DuplicateBacklink } from '../api';
-import { MenuHeader } from './menu-header';
-import { MenuItem } from './menu-item';
 
 export interface DuplicateTargetSummary { id:string; projectName:string; slug:string; title:string }
 
