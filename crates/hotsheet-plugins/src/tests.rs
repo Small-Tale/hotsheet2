@@ -49,6 +49,30 @@ fn every_builtin_teaches_portable_durable_references() {
 }
 
 #[test]
+fn every_builtin_carries_the_full_default_guidance() {
+    // A brand-new project's default guidance must ticket direct-terminal work and cover
+    // testing, requirements/docs, and commit hygiene while leaving pushing to each repo
+    // (HS2-3JMMAZ). These phrases apply to every first-party tool block.
+    for plugin in all_plugins(&[]) {
+        let body = plugin.instructions_body();
+        for phrase in [
+            "Create tickets by default for real work",
+            "Create every follow-up immediately, without asking",
+            "Double coverage",
+            "update them **in the same change as the code**",
+            "commit per ticket",
+            "Pushing is up to this repository",
+        ] {
+            assert!(
+                body.contains(phrase),
+                "{} default guidance is missing: {phrase}",
+                plugin.id()
+            );
+        }
+    }
+}
+
+#[test]
 fn codex_is_a_second_first_party_plugin_with_no_skills() {
     let p = find_in("codex", &[]).expect("codex plugin present");
     assert_eq!(p.manifest.product_name, "Codex CLI");

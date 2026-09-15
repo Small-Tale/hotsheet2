@@ -78,6 +78,16 @@ such as `<repo-root>/path`; a developer's home directory, username, or absolute 
 location is not presented as shared project structure. An exact local path is retained only
 when the path itself is indispensable evidence for a machine-local diagnostic.
 
+Beyond the ticket-command reference, each bundled instruction block (`plugins/<tool>/
+instructions.md`) carries a compact, **project-neutral** default policy so a brand-new
+project that never customizes its `CLAUDE.md`/`AGENTS.md` still gets strong defaults
+(HS2-3JMMAZ): ticket direct-terminal work by default (not only queue-driven work), create
+every follow-up immediately, double (unit + E2E) test coverage with transition-matrix/
+adversarial tests for stateful code, keeping requirements/docs in sync in the same change,
+and per-ticket commit hygiene — while explicitly **leaving the push/PR decision to each
+repository** rather than mandating it. The four first-party blocks share one body; the
+`every_builtin_carries_the_full_default_guidance` test pins that content.
+
 **Which set of artifacts** to write is determined by **which plugins are active** —
 so "core-owned setup" and "external loadable plugins" (§5.12) are the same
 capability seen from two sides: the loader decides *what* tools exist, the setup

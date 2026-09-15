@@ -91,6 +91,13 @@ mod tests {
         assert!(claude_md.contains("Create every follow-up immediately, without asking"));
         assert!(claude_md.contains("Write portable durable references"));
         assert!(claude_md.contains("`FEEDBACK NEEDED` is only"));
+        // The default guidance must ticket direct-terminal work and carry testing, docs, and
+        // commit-hygiene sections while leaving the push decision to each repo (HS2-3JMMAZ).
+        assert!(claude_md.contains("Create tickets by default for real work"));
+        assert!(claude_md.contains("Double coverage"));
+        assert!(claude_md.contains("update them **in the same change as the code**"));
+        assert!(claude_md.contains("commit per ticket"));
+        assert!(claude_md.contains("Pushing is up to this repository"));
 
         let skill = read(d.path(), ".claude/skills/hotsheet/SKILL.md");
         assert!(skill.contains("name: hotsheet"));
@@ -200,6 +207,10 @@ mod tests {
         assert!(agents.contains("Create every follow-up immediately, without asking"));
         assert!(agents.contains("Write portable durable references"));
         assert!(agents.contains("`FEEDBACK NEEDED` is only"));
+        // Same expanded default guidance reaches Codex's AGENTS.md block (HS2-3JMMAZ).
+        assert!(agents.contains("Create tickets by default for real work"));
+        assert!(agents.contains("Double coverage"));
+        assert!(agents.contains("Pushing is up to this repository"));
         assert!(!d.path().join(".claude").exists());
         assert!(reports[0].wrote.iter().all(|w| !w.contains("SKILL")));
 
