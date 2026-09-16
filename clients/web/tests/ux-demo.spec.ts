@@ -2322,9 +2322,15 @@ test('shows the chat model/effort as a label with a popup to change them',async(
   await expect(control.locator('.ai-conversation__model-name')).toContainText('GPT-5.6');
   await expect(control.locator('.ai-conversation__model-effort')).toContainText('high');
   await control.locator('.ai-conversation__model-trigger').click();
+  await expect(page.getByRole('menuitem',{name:/Provider/})).toBeVisible();
   await expect(page.getByRole('menuitem',{name:/Model/})).toBeVisible();
   await expect(page.getByRole('menuitem',{name:/Effort/})).toBeVisible();
   await page.screenshot({path:'/private/tmp/hs2-r5f7a5-chat-model-popup.png'});
+  // Selecting a different provider from the submenu switches the chat (HS2-PRBGRB). The nested
+  // Web Awesome submenu reveal is the library's; our contract is the data-action item + handler, so
+  // fire a real bubbling click on it rather than depending on hover-to-expand timing.
+  await page.locator('[data-action="select-conversation-provider"][data-value="claude"]').dispatchEvent('click');
+  await expect(page.locator('[data-component="ai-conversation"]')).toContainText('Claude conversation');
 });
 
 test('exposes a General app-settings entry in the settings navigator',async({page})=>{

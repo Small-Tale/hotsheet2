@@ -81,6 +81,17 @@ describe('AIConversation',()=>{
     expect(markup).toContain('data-action="select-conversation-effort" data-value="high"');
     expect(markup).not.toContain('data-action="stop-conversation"')});
   it('omits the model popup when the plugin declares no model/effort support',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,model:'gpt',models:[{id:'gpt',label:'GPT'}]}));expect(markup).not.toContain('data-component="conversation-model-control"')});
+  it('offers a provider submenu that lists other providers when more than one is configured (HS2-PRBGRB)',()=>{const markup=String(AIConversation({open:true,presentation:'embedded',selectionId:'chat-one',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,providerId:'codex',providers:[{id:'codex',label:'Codex'},{id:'claude',label:'Claude'}],canChangeProvider:true}));
+    // The popup renders even with no model/effort support because provider change is available.
+    expect(markup).toContain('data-component="conversation-model-control"');
+    expect(markup).toContain('data-action="select-conversation-provider" data-value="claude"');
+    // The current provider is marked selected.
+    expect(markup).toMatch(/aria-current="true" data-action="select-conversation-provider" data-value="codex"/);
+  });
+  it('hides the provider submenu for read-only chats or a single configured provider (HS2-PRBGRB)',()=>{
+    expect(String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[],draft:'',busy:false,interruptible:false,providerId:'codex',providers:[{id:'codex',label:'Codex'}],canChangeProvider:true}))).not.toContain('data-action="select-conversation-provider"');
+    expect(String(AIConversation({open:true,presentation:'embedded',tool:'Codex',messages:[{id:'m',role:'user',content:'hi'}],draft:'',busy:false,interruptible:false,readOnly:true,providerId:'codex',providers:[{id:'codex',label:'Codex'},{id:'claude',label:'Claude'}],canChangeProvider:true}))).not.toContain('data-action="select-conversation-provider"');
+  });
   it('distinguishes the conversation lifecycle from a nested model popup closing',()=>{const surface={} as Element,select={} as Element;expect(isConversationSurfaceLifecycleEvent({target:select},surface)).toBe(false);expect(isConversationSurfaceLifecycleEvent({target:surface},surface)).toBe(true)});
   it('keeps nested Markdown and usage legible on the loud user bubble',()=>{expect(css).toMatch(/\.ai-conversation__message--user>\.markdown-preview[^}]*color: var\(--wa-color-neutral-on-loud\)/);expect(css).toMatch(/\.ai-conversation__message--user \.ai-conversation__usage[^}]*color: color-mix/)});
 });

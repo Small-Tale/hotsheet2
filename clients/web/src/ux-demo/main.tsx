@@ -67,7 +67,7 @@ import { viewportSafeContextMenuPosition } from '../context-menu-position';
 import { createDebouncedAutosave } from '../debounced-autosave';
 import { devReviewRequested } from '../dev-review/request';
 import { parseFeedbackChoices, updateFeedbackChoiceSelection } from '../feedback-choices';
-import { AIConversationDemo, aiConversationDemoOpen, aiConversationDraft, aiConversationScenario, AIConversationSettings } from './ai-conversation-demo';
+import { AIConversationDemo, aiConversationDemoOpen, aiConversationDraft, aiConversationProvider, aiConversationProviderLabel, aiConversationScenario, AIConversationSettings } from './ai-conversation-demo';
 import {
   addDemoProject,
   AppShellDemo,
@@ -1321,6 +1321,13 @@ delegate(root, 'submit', '[data-action="send-conversation-turn"]', (event) => {
 });
 delegate(root, 'click', '[data-action="stop-conversation"]', () => {
   aiConversationScenario.value = 'interrupted';
+});
+delegate(root, 'click', '[data-action="select-conversation-provider"]', (_event, target) => {
+  const id = target.closest<HTMLElement>('[data-value]')?.dataset.value;
+  if (id) {
+    aiConversationProvider.value = id;
+    sidebarEvent.value = `Switched conversation provider to ${aiConversationProviderLabel(id)}.`;
+  }
 });
 delegate(root, 'change', '[data-settings="repository-status-popover"] [name="scenario"]', (_event, target) => {
   repositoryDemoScenario.value = (target as FormControl).value as typeof repositoryDemoScenario.value;

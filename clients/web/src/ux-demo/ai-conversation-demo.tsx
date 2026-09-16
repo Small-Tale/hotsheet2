@@ -8,6 +8,9 @@ export type AIConversationScenario='empty'|'streaming'|'permission'|'completed'|
 export const aiConversationScenario=signal<AIConversationScenario>('streaming');
 export const aiConversationDemoOpen=signal(true);
 export const aiConversationDraft=signal('Can you also explain the compatibility boundary?');
+export const aiConversationProvider=signal('codex');
+export const AI_CONVERSATION_PROVIDERS=[{id:'codex',label:'Codex'},{id:'claude',label:'Claude'}] as const;
+export function aiConversationProviderLabel(id=aiConversationProvider.value){return AI_CONVERSATION_PROVIDERS.find(item=>item.id===id)?.label??id}
 
 const completed:ConversationMessage[]=[
   {id:'question-1',role:'user',content:'Review the client connection flow.'},
@@ -27,6 +30,6 @@ function scenarioState(){
   return{messages,busy:true,interruptible:true,progress:scenario==='permission'?'Waiting for permission…':'Running the focused browser test…',permissions:scenario==='permission'?[permission]:undefined};
 }
 
-export function AIConversationDemo(){const state=scenarioState();return <section aria-label="AIConversation demo"><wa-button appearance="accent" data-action="open-ai-conversation-demo">Open conversation</wa-button><AIConversation open={aiConversationDemoOpen.value} tool="Codex" sessionId="019-demo-session" messages={state.messages} draft={aiConversationDraft.value} busy={state.busy} progress={state.progress} interruptible={state.interruptible} permissions={state.permissions} activity={state.activity} totalUsage={conversationUsage({messages:state.messages})} error={state.error} feedbackAvailable model="gpt-5.6" effort="high" models={[{id:'gpt-5.6',label:'GPT-5.6'},{id:'gpt-5.6-codex',label:'GPT-5.6 Codex'}]} efforts={['medium','high','xhigh']} canChangeModel canChangeEffort/></section>}
+export function AIConversationDemo(){const state=scenarioState();return <section aria-label="AIConversation demo"><wa-button appearance="accent" data-action="open-ai-conversation-demo">Open conversation</wa-button><AIConversation open={aiConversationDemoOpen.value} tool={aiConversationProviderLabel()} sessionId="019-demo-session" messages={state.messages} draft={aiConversationDraft.value} busy={state.busy} progress={state.progress} interruptible={state.interruptible} permissions={state.permissions} activity={state.activity} totalUsage={conversationUsage({messages:state.messages})} error={state.error} feedbackAvailable providerId={aiConversationProvider.value} providers={AI_CONVERSATION_PROVIDERS} canChangeProvider model="gpt-5.6" effort="high" models={[{id:'gpt-5.6',label:'GPT-5.6'},{id:'gpt-5.6-codex',label:'GPT-5.6 Codex'}]} efforts={['medium','high','xhigh']} canChangeModel canChangeEffort/></section>}
 
 export function AIConversationSettings(){return <form class="settings-form" data-settings="ai-conversation"><wa-select name="scenario" label="Public state" value={aiConversationScenario.value}><wa-option value="empty">Empty</wa-option><wa-option value="streaming">Streaming</wa-option><wa-option value="permission">Permission requested</wa-option><wa-option value="completed">Completed with priced usage</wa-option><wa-option value="usage-unpriced">Completed with unpriced usage</wa-option><wa-option value="failed">Failed</wa-option><wa-option value="interrupted">Interrupted</wa-option></wa-select><wa-button type="button" data-action="open-ai-conversation-demo">Open conversation</wa-button></form>}

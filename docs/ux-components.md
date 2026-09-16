@@ -245,9 +245,15 @@ does not introduce polling or another network request.
     action only while the active connection advertises `interrupt`; absence hides Stop
     rather than rendering an inert control
   - session controls: visibly labeled model and effort choices appear only for plugin-declared live-change
-    capabilities and apply to subsequent turns without changing provider; popup hide events stay scoped to
+    capabilities and apply to subsequent turns; popup hide events stay scoped to
     the nested select and never dismiss the conversation surface; selecting a model revalidates effort and
     removes both the control and request field when that model declares no supported effort levels
+  - provider change (HS2-PRBGRB): when more than one provider is configured and the chat is writable, the
+    same popup adds a Provider submenu listing the configured tools. Selecting a different provider opens a
+    fresh session for it (providers keep separate opaque sessions) and re-seeds it with the prior transcript
+    as one framed, read-only context turn ("…do not take any actions based on it yet — wait for my next
+    message"), then continues live. No earlier turn is re-executed against the new provider; an empty chat
+    switches provider without seeding
   - transcript: ordered, high-contrast user messages and one progressively appended assistant response per
     submitted turn; output chunks update that response in place, unknown additive events do
     not break it, and completed/failed/interrupted terminal state remains attached to the turn;
