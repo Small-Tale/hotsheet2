@@ -24,6 +24,8 @@ const icons = {
 
 export type CommandNavigationIcon = keyof typeof icons;
 export function isCommandNavigationIcon(value: string): value is CommandNavigationIcon { return Object.hasOwn(icons, value); }
+/** The selectable command icons (key + Lucide node + name), for the command editor's icon picker. */
+export const COMMAND_ICONS = (Object.entries(icons) as [CommandNavigationIcon, readonly [IconNode, string]][]).map(([key, [icon, name]]) => ({ key, icon, name }));
 export interface CommandNavigationItem { id: string; label: string; color: string; icon: CommandNavigationIcon; kind?:'program'|'shell'|'ai'; group?: string; running?: boolean; lastRun?: string }
 export interface CommandNavigationProps { label: string; commands: CommandNavigationItem[]; expanded: boolean; collapsedGroups?:readonly string[] }
 export function CommandNavigation({ label, commands, expanded,collapsedGroups=[] }: CommandNavigationProps) {

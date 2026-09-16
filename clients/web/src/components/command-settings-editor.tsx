@@ -4,6 +4,8 @@ import {LucideIcon} from '@kerfjs/ui/lucide-icon';
 import {ChevronDown,ChevronUp,Plus,Trash2} from 'lucide';
 
 import type {CommandDefinition} from '../api';
+import {COMMAND_ICONS} from './command-navigation';
+import {CUSTOMIZATION_COLORS,resolveCustomizationColor} from './customization-palette';
 
 export interface CommandSettingsEditorProps{
   commands:CommandDefinition[];
@@ -31,6 +33,8 @@ export function CommandSettingsEditor({commands,selectedId,message=''}:CommandSe
           {type==='ai'&&<><label class="command-settings-editor__wide">Prompt<textarea name="prompt" data-command-field required placeholder="Review the current changes">{selected.prompt??''}</textarea></label><label>AI tool<input name="tool" data-command-field value={selected.tool??''} placeholder="Project default"/></label></>}
           <label class="command-settings-editor__wide">Working directory<input name="cwd" data-command-field value={selected.cwd??''} placeholder="Project root"/></label>
           <label class="command-settings-editor__wide">Confirmation message<input name="confirmation" data-command-field value={selected.confirmation??''} placeholder="Optional confirmation before running"/></label>
+          <fieldset class="command-settings-editor__wide command-settings-editor__swatches"><legend>Button color</legend>{CUSTOMIZATION_COLORS.map(option=><label class="command-settings-editor__swatch" style={`--swatch:${option.value}`} title={option.label}><input type="radio" name="color" data-command-field value={option.value} checked={resolveCustomizationColor(selected.color)===option.value}/><span aria-hidden="true"></span><span class="command-settings-editor__swatch-label">{option.label}</span></label>)}</fieldset>
+          <fieldset class="command-settings-editor__wide command-settings-editor__icons"><legend>Button icon</legend>{COMMAND_ICONS.map(option=><label class="command-settings-editor__icon" title={option.key}><input type="radio" name="icon" data-command-field value={option.key} checked={selected.icon===option.key}/><LucideIcon icon={option.icon} name={option.name}/></label>)}</fieldset>
         </div>
       </section>:<section class="command-settings-editor__blank"><p>Add a command to configure its label and action.</p></section>}
     </div>

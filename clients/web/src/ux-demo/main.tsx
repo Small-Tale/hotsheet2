@@ -149,6 +149,7 @@ import {
   collapsedCommandGroups,
   commandGroupExpanded,
   CommandNavigationDemo,
+  CommandSettingsEditorDemo,
   DriveControlDemo,
   DriveOptionsMenuDemo,
   driveRunning,
@@ -401,6 +402,7 @@ function catalogIcon(id: string): { icon: IconNode; name: string } {
     'notification-navigation': { icon: Bell, name: 'bell' },
     'view-navigation': { icon: ListTree, name: 'list-tree' },
     'command-navigation': { icon: Command, name: 'command' },
+    'command-settings-editor': { icon: Command, name: 'command' },
     'drive-control': { icon: Play, name: 'play' },
     'workspace-header': { icon: LayoutDashboard, name: 'layout-dashboard' },
     'page-header': { icon: Text, name: 'text' },
@@ -505,6 +507,7 @@ function demoContent(item: DemoDefinition) {
   if (item.id === 'notification-navigation') return <NotificationNavigationDemo />;
   if (item.id === 'view-navigation') return <ViewNavigationDemo />;
   if (item.id === 'command-navigation') return <CommandNavigationDemo />;
+  if (item.id === 'command-settings-editor') return <CommandSettingsEditorDemo />;
   if (item.id === 'drive-control') return <DriveControlDemo />;
   if (item.id === 'drive-options-menu') return <DriveOptionsMenuDemo />;
   if (item.id === 'ai-tool-settings') return <AiToolSettingsDemo />;

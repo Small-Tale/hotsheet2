@@ -4,6 +4,7 @@ import { GripHorizontal } from 'lucide';
 
 import { AiToolSettings } from '../components/ai-tool-settings';
 import { CommandNavigation, type CommandNavigationItem } from '../components/command-navigation';
+import { CommandSettingsEditor } from '../components/command-settings-editor';
 import { DriveControl } from '../components/drive-control';
 import { type AiToolDescriptor,DriveOptionsMenu } from '../components/drive-options-menu';
 import { NotificationNavigation } from '../components/notification-navigation';
@@ -50,6 +51,7 @@ export function ProjectSummaryDemo() { return <DemoFrame><div class="project-sum
 export function RepositorySummaryDemo() { return <DemoFrame><RepositorySummary branch="feature/client-sidebar" unpushed={6} uncommitted={2} /></DemoFrame>; }
 export function ViewNavigationDemo() { return <DemoFrame><ViewNavigation items={sidebarViews} selectedId={selectedViewId.value} /></DemoFrame>; }
 export function CommandNavigationDemo() { return <DemoFrame><CommandNavigation label="Project commands" expanded={commandGroupExpanded.value} collapsedGroups={collapsedCommandGroups.value} commands={sidebarCommands.map(command => ({ ...command, running: command.id === runningCommandId.value }))} /></DemoFrame>; }
+export function CommandSettingsEditorDemo() { return <section class="command-settings-editor-demo" aria-label="CommandSettingsEditor demo"><CommandSettingsEditor commands={[{ id: 'verify', title: 'Verify project', kind: 'shell', command: 'npm test', group: 'Quality', color: '#22c55e', icon: 'circle-check-big' }, { id: 'build', title: 'Build clients', kind: 'program', program: 'npm', args: ['run', 'build'], group: 'Quality', color: '#f97316', icon: 'hammer' }, { id: 'publish', title: 'Publish preview', kind: 'ai', prompt: 'Publish a preview', color: '#8b5cf6', icon: 'send' }]} selectedId="verify" /></section>; }
 export function DriveControlDemo() { return <DemoFrame><DriveControl running={driveRunning.value} tool="Codex" /></DemoFrame>; }
 export function DriveOptionsMenuDemo(){return <DemoFrame><div style="position:relative;margin-top:14rem"><DriveOptionsMenu tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} defaultSelection={{tool:'codex',model:'gpt-5.6',effort:'high'}}/></div></DemoFrame>}
 export function AiToolSettingsDemo(){return <AiToolSettings tools={demoAiTools} selection={{tool:'codex',model:'gpt-5.6',effort:'high'}} message="Saved locally."/>}

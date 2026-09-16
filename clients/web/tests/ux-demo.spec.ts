@@ -2324,3 +2324,14 @@ test('exposes a General app-settings entry in the settings navigator',async({pag
   await expect(general).toContainText('General');
   await expect(page.getByText('App Settings',{exact:true})).toBeVisible();
 });
+
+test('edits custom command color and icon in the command settings editor',async({page})=>{
+  await page.setViewportSize({width:1000,height:900});await page.goto('/ux-demo?component=command-settings-editor');
+  const editor=page.locator('[data-component="command-settings-editor"]');
+  await expect(editor).toBeVisible();
+  await expect(editor.locator('.command-settings-editor__swatch')).toHaveCount(9);
+  await expect(editor.locator('.command-settings-editor__icon')).toHaveCount(12);
+  await expect(editor.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#22c55e');
+  await expect(editor.locator('.command-settings-editor__icon input:checked')).toHaveValue('circle-check-big');
+  await page.screenshot({path:'/private/tmp/hs2-656xj2-command-editor-color-icon.png'});
+});

@@ -15,6 +15,7 @@ export const demoCatalog: DemoCategory[] = [
     demo('change-evidence-dialog', 'ChangeEvidenceDialog', 'Ticket commit-range files grouped by evidence type.', 'feature-floor', true, ['dialog-header','menu-item','menu-header']),
     demo('view-navigation', 'ViewNavigation', 'Selectable built-in and custom ticket views.', 'feature-floor', true),
     demo('command-navigation', 'CommandNavigation', 'Grouped colored project command actions.', 'feature-floor', true),
+    demo('command-settings-editor', 'CommandSettingsEditor', 'Master-detail editor for custom command buttons, incl. color and icon pickers.', 'feature-floor', true, ['command-navigation']),
     demo('drive-control', 'DriveControl', 'Split AI workflow action and provider override trigger.', 'feature-floor', true),
     demo('drive-options-menu', 'DriveOptionsMenu', 'Provider, model, and effort overrides for a driven session.', 'feature-floor', true),
     demo('workspace-header', 'WorkspaceHeader', 'Project identity, display modes, sorting, settings, and search.', 'feature-floor', true, ['toolbar-text', 'toolbar-control-group', 'page-header', 'ticket-list', 'ticket-board']),
