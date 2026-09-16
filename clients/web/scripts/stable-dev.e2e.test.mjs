@@ -104,3 +104,51 @@ it('does not reload when a later route first imports another dependency', async 
     await rm(runtimeTemp, { recursive: true, force: true });
   }
 }, 30_000);
+
+it('does not reload when the terminal runtime first lazy-loads its xterm dependencies', async () => {
+  // HS2-8JV12R ("client randomly restarts") investigation: a common cause of a dev-server full reload is
+  // Vite discovering a new dependency at runtime and re-optimizing when a route first lazy-loads it. The
+  // terminal viewport dynamically imports terminal-viewport-runtime, which pulls in @xterm/*. This pins
+  // that stable-dev does NOT reload when that lazy import first happens, ruling the class out as the cause.
+  const runtimeTemp = await mkdtemp(resolve(tmpdir(), 'hotsheet-stable-runtime-'));
+  const port = await availablePort();
+  let output = '';
+  const child = spawn(process.execPath, [resolve(webRoot, 'scripts/stable-dev.mjs'), '--port', String(port), '--strictPort'], {
+    env: {
+      ...process.env,
+      HOTSHEET_WEB_STABLE_SOURCE_ROOT: webRoot,
+      HOTSHEET_WEB_STABLE_TEMP_ROOT: runtimeTemp,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  child.stdout.on('data', chunk => { output += chunk; });
+  child.stderr.on('data', chunk => { output += chunk; });
+  const browser = await chromium.launch();
+  try {
+    await waitForSource(`http://127.0.0.1:${port}/`);
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      const key = 'hotsheet-stable-document-loads';
+      sessionStorage.setItem(key, String(Number(sessionStorage.getItem(key) ?? 0) + 1));
+    });
+    await page.goto(`http://127.0.0.1:${port}/`);
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+    // Trigger the same dynamic import the terminal viewport uses, pulling in the xterm dependencies.
+    // Passed as a string so Vitest's SSR transform can't rewrite the browser-side import() call.
+    const runtimeExports = await page.evaluate(
+      "import('/src/terminal-viewport-runtime.ts').then(module => Object.keys(module).sort())");
+    expect(runtimeExports).toContain('mountTerminalViewportRuntime');
+    await page.waitForTimeout(1_000);
+    // A re-optimize would have full-reloaded the document, resetting/incrementing this counter.
+    expect(await page.evaluate(() => sessionStorage.getItem('hotsheet-stable-document-loads'))).toBe('1');
+    expect(output).not.toContain('new dependencies optimized');
+    expect(output).not.toContain('optimized dependencies changed. reloading');
+  } finally {
+    await browser.close();
+    child.kill('SIGTERM');
+    await new Promise(resolveExit => child.once('exit', resolveExit));
+    expect(await readdir(runtimeTemp)).toEqual([]);
+    await rm(runtimeTemp, { recursive: true, force: true });
+  }
+}, 30_000);

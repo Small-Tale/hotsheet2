@@ -152,6 +152,11 @@ const turnStreamEvents=(response:PollResponse)=>turnStreamReplayGuard.events(res
 let backgroundProjectRefresh=false;
 if(import.meta.env.DEV){
   const dev=await import('kerfjs/dev');dev.enableWarnings({valueOnlyRerender:true,listRebind:true,invariants:'throw'});
+  const hot=import.meta.hot;
+  if(hot){
+    const {installDevReloadDiagnostics}=await import('./dev-reload-diagnostics');
+    installDevReloadDiagnostics({hot:{on:(event,callback)=>{hot.on(event as 'vite:beforeFullReload',callback)}},storage:sessionStorage});
+  }
   if(devReviewRequested(location.href,true)){
     const [{installUiStabilityDiagnostics},devReview]=await Promise.all([import('./ui-stability-diagnostics'),import('./dev-review')]);
     uiStabilityDiagnostics=installUiStabilityDiagnostics({onThrash:async diagnostic=>{await submitDevReview({notes:'UI stability diagnostics detected repeated unexpected control dismissal or render thrashing.',captures:[],attachments:[diagnostic],actorRole:'system',pageUrl:location.href,viewport:{width:innerWidth,height:innerHeight}})}});
