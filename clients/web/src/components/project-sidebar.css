@@ -1,16 +1,16 @@
-.project-sidebar { --project-sidebar-highlight-gutter: .625rem; --project-sidebar-content-inset: .625rem; --kui-layout-inline-margin: 0; --kui-layout-item-padding: var(--project-sidebar-content-inset); --kui-layout-item-gap: var(--project-sidebar-content-inset); display: flex; width: min(17rem, 100%); min-width: 250px; height: 100%; min-height: 0; padding: var(--project-sidebar-highlight-gutter); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .9rem; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); flex-direction: column; gap: var(--project-sidebar-highlight-gutter); }
-.project-sidebar__content { display: grid; min-height: 0; overflow: auto; padding: 0 0 .5rem; align-content: start; flex: 1; gap: var(--project-sidebar-highlight-gutter); scrollbar-gutter: stable; }
-.project-sidebar .kui-menu-item { min-height: 2.75rem; padding: var(--project-sidebar-content-inset); grid-template-columns: 1.5rem minmax(0, 1fr) auto; column-gap: var(--project-sidebar-content-inset); }
-.project-sidebar .kui-menu-item__icon { width: 1.5rem; height: 1.5rem; }
-.project-sidebar__footer { display: grid; flex: none; gap: .45rem; }
+.project-sidebar { --project-sidebar-highlight-gutter: remify(8px); --project-sidebar-content-inset: remify(8px); --kui-layout-inline-margin: 0; --kui-layout-item-padding: var(--project-sidebar-content-inset); --kui-layout-item-gap: var(--project-sidebar-content-inset); display: flex; width: min(17rem, 100%); min-width: 250px; height: 100%; min-height: 0; padding: var(--project-sidebar-highlight-gutter); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(14px); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); flex-direction: column; gap: var(--project-sidebar-highlight-gutter); }
+.project-sidebar__content { display: grid; min-height: 0; overflow: auto; padding: 0 0 remify(8px); align-content: start; flex: 1; gap: var(--project-sidebar-highlight-gutter); scrollbar-gutter: stable; }
+.project-sidebar .kui-menu-item { min-height: remify(44px); padding: var(--project-sidebar-content-inset); grid-template-columns: remify(24px) minmax(0, 1fr) auto; column-gap: var(--project-sidebar-content-inset); }
+.project-sidebar .kui-menu-item__icon { width: remify(24px); height: remify(24px); }
+.project-sidebar__footer { display: grid; flex: none; gap: remify(8px); }
 .project-sidebar__work-summary { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); line-height: 1.25; text-align: center; }
-.project-sidebar__drive-row { display: flex; min-width: 0; gap: .4rem; }
-.project-sidebar__drive-row > .kui-select { width: 5.5rem; flex: none; }
+.project-sidebar__drive-row { display: flex; min-width: 0; gap: remify(8px); }
+.project-sidebar__drive-row > .kui-select { width: remify(88px); flex: none; }
 .project-sidebar__drive-row .drive-control { min-width: 0; flex: 1; }
-.project-sidebar__conversation { display: grid; width: 2.75rem; min-width: 2.75rem; min-height: 2.75rem; padding: 0; border: 0; border-radius: .65rem; color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); cursor: pointer; place-items: center; }
+.project-sidebar__conversation { display: grid; width: remify(44px); min-width: remify(44px); min-height: remify(44px); padding: 0; border: 0; border-radius: remify(10px); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); cursor: pointer; place-items: center; }
 .project-sidebar__conversation:hover,.project-sidebar__conversation[aria-pressed="true"] { background: var(--wa-color-brand-fill-quiet); color: var(--wa-color-brand-on-quiet); }
 .project-sidebar__conversation:disabled { cursor: not-allowed; opacity: .45; }
-.project-sidebar__conversation svg { width: 1rem; height: 1rem; }
+.project-sidebar__conversation svg { width: remify(16px); height: remify(16px); }
 .project-sidebar > .kui-toolbar { width: calc(100% + 2 * var(--project-sidebar-highlight-gutter)); padding-inline: var(--project-sidebar-highlight-gutter); margin: calc(-1 * var(--project-sidebar-highlight-gutter)) calc(-1 * var(--project-sidebar-highlight-gutter)) 0; flex: none; }
-.project-sidebar > .kui-toolbar .kui-toolbar-control-group { width: 2.75rem; height: 2.75rem; padding: 0; }
-.project-sidebar > .kui-toolbar .kui-toolbar-control-group > button { width: 2.75rem; height: 2.75rem; }
+.project-sidebar > .kui-toolbar .kui-toolbar-control-group { width: remify(44px); height: remify(44px); padding: 0; }
+.project-sidebar > .kui-toolbar .kui-toolbar-control-group > button { width: remify(44px); height: remify(44px); }

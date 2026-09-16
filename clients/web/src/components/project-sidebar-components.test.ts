@@ -198,10 +198,10 @@ describe('ProjectSidebar component slice', () => {
 
   it('defines one highlight gutter and one nested content rail for every sidebar row',()=>{
     const css=readFileSync(new URL('./project-sidebar.css',import.meta.url),'utf8');
-    expect(css).toContain('--project-sidebar-highlight-gutter: .625rem');
-    expect(css).toContain('--project-sidebar-content-inset: .625rem');
-    expect(css).toMatch(/\.project-sidebar \.kui-menu-item \{[^}]*min-height: 2\.75rem;[^}]*padding: var\(--project-sidebar-content-inset\);[^}]*grid-template-columns: 1\.5rem minmax\(0, 1fr\) auto;[^}]*column-gap: var\(--project-sidebar-content-inset\)/);
-    expect(css).toMatch(/\.project-sidebar > \.kui-toolbar \.kui-toolbar-control-group \{[^}]*width: 2\.75rem;[^}]*height: 2\.75rem/);
+    expect(css).toContain('--project-sidebar-highlight-gutter: remify(8px)');
+    expect(css).toContain('--project-sidebar-content-inset: remify(8px)');
+    expect(css).toMatch(/\.project-sidebar \.kui-menu-item \{[^}]*min-height: remify\(44px\);[^}]*padding: var\(--project-sidebar-content-inset\);[^}]*grid-template-columns: remify\(24px\) minmax\(0, 1fr\) auto;[^}]*column-gap: var\(--project-sidebar-content-inset\)/);
+    expect(css).toMatch(/\.project-sidebar > \.kui-toolbar \.kui-toolbar-control-group \{[^}]*width: remify\(44px\);[^}]*height: remify\(44px\)/);
     expect(css).toMatch(/\.project-sidebar \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: var\(--project-sidebar-content-inset\);[^}]*--kui-layout-item-gap: var\(--project-sidebar-content-inset\)/);
   });
 

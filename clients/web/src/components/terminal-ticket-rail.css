@@ -36,7 +36,7 @@
 .terminal-ticket-rail__inspector .ticket-inspector__header > .kui-toolbar .kui-toolbar__leading { grid-column:1; }
 .terminal-ticket-rail__inspector .ticket-inspector__header > .kui-toolbar .kui-toolbar__center { grid-column:2; justify-self:center; }
 .terminal-ticket-rail__inspector .ticket-inspector__header > .kui-toolbar .kui-toolbar__trailing { grid-column:3; justify-self:end; }
-.terminal-ticket-rail__back { position:absolute; z-index:3; top:.75rem; left:.625rem; display:grid; width:2.25rem; height:2.25rem; padding:0; border:0; border-radius:var(--wa-border-radius-m); color:var(--wa-color-brand-on-quiet); background:var(--wa-color-surface-default); cursor:pointer; place-items:center; }
+.terminal-ticket-rail__back { position:absolute; z-index:3; top:remify(12px); left:remify(8px); display:grid; width:2.25rem; height:2.25rem; padding:0; border:0; border-radius:var(--wa-border-radius-m); color:var(--wa-color-brand-on-quiet); background:var(--wa-color-surface-default); cursor:pointer; place-items:center; }
 .terminal-ticket-rail__back:hover { background:var(--wa-color-neutral-fill-quiet); }
 .terminal-ticket-rail__back:focus-visible { outline:var(--wa-focus-ring); outline-offset:1px; }
 .terminal-ticket-rail__back svg { width:1.5rem; height:1.5rem; }
