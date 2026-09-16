@@ -31,6 +31,8 @@
 .command-settings-editor__row-grip { display:inline-flex; flex:0 0 auto; color:var(--wa-color-neutral-on-quiet); cursor:grab; opacity:.55; }
 .command-settings-editor__row-grip svg { width:remify(16px); height:remify(16px); }
 .command-settings-editor__row-icon { display:grid; width:remify(32px); height:remify(32px); flex:0 0 auto; border-radius:var(--wa-border-radius-m); color:var(--command-text-color); background:var(--command-color); place-items:center; }
+.command-settings-editor__row-icon[data-transparent="true"],.command-settings-editor__dialog-icon[data-transparent="true"] { color:var(--wa-color-neutral-on-normal); background:var(--wa-color-neutral-fill-normal); }
+.command-settings-editor__swatch[data-transparent="true"] span[aria-hidden="true"] { background:var(--wa-color-surface-default); background-image:linear-gradient(45deg,transparent 46%,var(--wa-color-danger-border-loud) 46% 54%,transparent 54%); }
 .command-settings-editor__row-icon svg { width:remify(18px); height:remify(18px); }
 .command-settings-editor__row-text { display:grid; min-width:0; flex:1 1 auto; }
 .command-settings-editor__row-text strong { overflow:hidden; color:var(--wa-color-text-normal); font-weight:600; text-overflow:ellipsis; white-space:nowrap; }

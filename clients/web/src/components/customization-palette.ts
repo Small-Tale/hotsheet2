@@ -15,6 +15,27 @@ export function resolveCustomizationColor(color?: string): string {
   return CUSTOMIZATION_COLORS.some(option => option.value === color) ? color! : CUSTOMIZATION_COLORS[0].value;
 }
 
+/** The command-button palette: like {@link CUSTOMIZATION_COLORS} but the neutral slot is "Transparent" (no fill). */
+export const TRANSPARENT_CUSTOMIZATION_COLOR = 'transparent';
+export const COMMAND_CUSTOMIZATION_COLORS = [
+  { value: TRANSPARENT_CUSTOMIZATION_COLOR, label: 'Transparent' },
+  ...CUSTOMIZATION_COLORS.slice(1),
+] as const;
+
+/** True when a command color renders with no background fill (its icon/text keep the default styling). */
+export function isTransparentCommandColor(color?: string): boolean {
+  return !color || color === TRANSPARENT_CUSTOMIZATION_COLOR || color === CUSTOMIZATION_COLORS[0].value;
+}
+
+/**
+ * Resolve a command's saved color to a command-palette value. Missing, legacy neutral, and explicit
+ * transparent all map to `transparent`; any other recognized palette color is kept.
+ */
+export function resolveCommandColor(color?: string): string {
+  if (isTransparentCommandColor(color)) return TRANSPARENT_CUSTOMIZATION_COLOR;
+  return CUSTOMIZATION_COLORS.some(option => option.value === color) ? color! : TRANSPARENT_CUSTOMIZATION_COLOR;
+}
+
 export function customizationContrastColor(color: string): '#1a1a1a' | '#ffffff' {
   const resolved = resolveCustomizationColor(color);
   const red = Number.parseInt(resolved.slice(1, 3), 16);

@@ -170,10 +170,10 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-item-id="status"');
   });
 
-  it('falls back to the HS1 neutral command color with dark contrast', () => {
+  it('renders a neutral or unrecognized command color as a transparent, unstyled button (HS2-ZQWQCM)', () => {
     const markup = String(CommandNavigation({ label: 'Commands', expanded: true, commands: [{ id: 'custom', label: 'Custom', color: '#123456', icon: 'build' }] }));
-    expect(markup).toContain('data-command-color="#e5e7eb"');
-    expect(markup).toContain('--command-text-color:#1a1a1a');
+    expect(markup).toContain('data-command-color="transparent"');
+    expect(markup).not.toContain('--command-color:'); // no color overrides are applied, so the default styling shows
   });
 
   it('changes drive action semantics with running state', () => {

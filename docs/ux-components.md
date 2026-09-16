@@ -971,8 +971,13 @@ capability-aware sections when their underlying features and data contracts land
   "…" menu — also opened by right-click — with Edit and Delete, and double-clicking a row
   edits it. An "Add group" button appends an empty group (droppable, with a delete button
   while empty). Editing — or adding — a command opens a native "Edit command" popover
-  dialog holding the typed detail form (Program `{program,args}` / Shell / AI-prompt fields,
-  color-swatch and Lucide-icon pickers) with Done in the dialog toolbar. Field edits,
+  dialog holding the typed detail form — Button label, Type, the Program `{program,args}` /
+  Shell / AI-prompt fields, an optional confirmation message, and the color-swatch and
+  Lucide-icon pickers — with Done in the dialog toolbar. The identifier (auto-generated),
+  group (set by drag-and-drop), and working directory (always the project root; users `cd`
+  within shell commands) are intentionally not shown. The color palette's neutral slot is
+  "Transparent": a command with that color (or none) renders with no background fill and the
+  default button styling, in the editor list and the sidebar alike. Field edits,
   reorders, and deletes autosave to a project-scoped draft on a debounce (no explicit Save
   button), surfacing a status line and validation errors. The popover dialog only takes its
   flex layout while open (`:popover-open`) so a closed, empty dialog stays UA-hidden rather

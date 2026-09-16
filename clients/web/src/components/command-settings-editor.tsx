@@ -10,7 +10,7 @@ import {FolderPlus,GripVertical,MoreHorizontal,Pencil,Plus,Trash2} from 'lucide'
 import type {CommandDefinition} from '../api';
 import {commandGroupSections} from '../command-order';
 import {COMMAND_ICONS,isCommandNavigationIcon} from './command-navigation';
-import {CUSTOMIZATION_COLORS,customizationContrastColor,resolveCustomizationColor} from './customization-palette';
+import {COMMAND_CUSTOMIZATION_COLORS,customizationContrastColor,resolveCommandColor,TRANSPARENT_CUSTOMIZATION_COLOR} from './customization-palette';
 
 /** DOM id of the native "Edit command" popover dialog, opened imperatively from a row's edit action. */
 export const COMMAND_EDITOR_DIALOG_ID='command-editor-dialog';
@@ -32,12 +32,14 @@ function commandIcon(command:CommandDefinition){
   return COMMAND_ICONS.find(option=>option.key===key)??COMMAND_ICONS[0];
 }
 
-/** One WYSIWYG list row: drag handle, colored icon, name, type, and an actions overflow menu. */
+/** The inline style setting a command row/dialog icon tile to its color; undefined when transparent. */
+function commandIconStyle(command:CommandDefinition){const color=resolveCommandColor(command.color);if(color===TRANSPARENT_CUSTOMIZATION_COLOR)return undefined;return `--command-color:${color};--command-text-color:${customizationContrastColor(color)}`}
+
 function CommandRow({command,editing}:{command:CommandDefinition;editing:boolean}){
-  const icon=commandIcon(command),color=resolveCustomizationColor(command.color),textColor=customizationContrastColor(color),label=command.title||'Untitled command';
+  const icon=commandIcon(command),transparent=resolveCommandColor(command.color)===TRANSPARENT_CUSTOMIZATION_COLOR,label=command.title||'Untitled command';
   return <li class="command-settings-editor__row" data-command-id={command.id} data-editing={editing?'true':undefined} draggable="true">
     <span class="command-settings-editor__row-grip" aria-hidden="true"><LucideIcon icon={GripVertical} name="grip-vertical"/></span>
-    <span class="command-settings-editor__row-icon" style={`--command-color:${color};--command-text-color:${textColor}`} aria-hidden="true"><LucideIcon icon={icon.icon} name={icon.name}/></span>
+    <span class="command-settings-editor__row-icon" data-transparent={transparent?'true':undefined} style={commandIconStyle(command)} aria-hidden="true"><LucideIcon icon={icon.icon} name={icon.name}/></span>
     <span class="command-settings-editor__row-text"><strong>{label}</strong><small>{TYPE_LABELS[kind(command)]}</small></span>
     <wa-dropdown class="command-settings-editor__row-menu" distance={4}>
       <button slot="trigger" type="button" class="command-settings-editor__row-menu-trigger" aria-label={`Actions for ${label}`} aria-haspopup="menu"><LucideIcon icon={MoreHorizontal} name="more-horizontal"/></button>
@@ -52,15 +54,12 @@ function CommandDetailFields({command}:{command:CommandDefinition}){
   const type=kind(command);
   return <div class="command-settings-editor__grid" data-command-id={command.id}>
     <label>Button label<input name="title" data-command-field required value={command.title}/></label>
-    <label>Identifier<input name="id" data-command-field required value={command.id}/><small>Stable key used by command history.</small></label>
     <label>Type<select name="kind" data-command-field><option value="program" selected={type==='program'}>Program</option><option value="shell" selected={type==='shell'}>Shell</option><option value="ai" selected={type==='ai'}>AI</option></select></label>
-    <label>Group<input name="group" data-command-field value={command.group??''} placeholder="Optional sidebar group"/></label>
     {type==='program'&&<><label class="command-settings-editor__wide">Program<input name="program" data-command-field required value={command.program??''} placeholder="npm"/></label><label class="command-settings-editor__wide">Arguments<textarea name="args" data-command-field spellcheck="false" placeholder={'run\ntest'}>{command.args?.join('\n')??''}</textarea><small>One exact argument per line.</small></label></>}
-    {type==='shell'&&<label class="command-settings-editor__wide">Shell command<textarea name="command" data-command-field required spellcheck="false" placeholder="npm run test">{command.command??''}</textarea></label>}
-    {type==='ai'&&<><label class="command-settings-editor__wide">Prompt<textarea name="prompt" data-command-field required placeholder="Review the current changes">{command.prompt??''}</textarea></label><label>AI tool<input name="tool" data-command-field value={command.tool??''} placeholder="Project default"/></label></>}
-    <label class="command-settings-editor__wide">Working directory<input name="cwd" data-command-field value={command.cwd??''} placeholder="Project root"/></label>
+    {type==='shell'&&<label class="command-settings-editor__wide">Shell command<textarea name="command" data-command-field required spellcheck="false" placeholder="npm run test">{command.command??''}</textarea><small>Runs in the project root; use cd within the command if needed.</small></label>}
+    {type==='ai'&&<><label class="command-settings-editor__wide">Prompt<textarea name="prompt" data-command-field required placeholder="Review the current changes">{command.prompt??''}</textarea></label><label class="command-settings-editor__wide">AI tool<input name="tool" data-command-field value={command.tool??''} placeholder="Project default"/></label></>}
     <label class="command-settings-editor__wide">Confirmation message<input name="confirmation" data-command-field value={command.confirmation??''} placeholder="Optional confirmation before running"/></label>
-    <fieldset class="command-settings-editor__wide command-settings-editor__swatches"><legend>Button color</legend>{CUSTOMIZATION_COLORS.map(option=><label class="command-settings-editor__swatch" style={`--swatch:${option.value}`} title={option.label}><input type="radio" name="color" data-command-field value={option.value} checked={resolveCustomizationColor(command.color)===option.value}/><span aria-hidden="true"></span><span class="command-settings-editor__swatch-label">{option.label}</span></label>)}</fieldset>
+    <fieldset class="command-settings-editor__wide command-settings-editor__swatches"><legend>Button color</legend>{COMMAND_CUSTOMIZATION_COLORS.map(option=><label class="command-settings-editor__swatch" data-transparent={option.value==='transparent'?'true':undefined} style={`--swatch:${option.value}`} title={option.label}><input type="radio" name="color" data-command-field value={option.value} checked={resolveCommandColor(command.color)===option.value}/><span aria-hidden="true"></span><span class="command-settings-editor__swatch-label">{option.label}</span></label>)}</fieldset>
     <fieldset class="command-settings-editor__wide command-settings-editor__icons"><legend>Button icon</legend>{COMMAND_ICONS.map(option=><label class="command-settings-editor__icon" title={option.key}><input type="radio" name="icon" data-command-field value={option.key} checked={command.icon===option.key}/><LucideIcon icon={option.icon} name={option.name}/></label>)}</fieldset>
   </div>;
 }
@@ -89,7 +88,7 @@ export function CommandSettingsEditor({commands,extraGroups=[],editingId,message
     <footer><span role="status">{message}</span></footer>
     <section popover="auto" id={COMMAND_EDITOR_DIALOG_ID} class="dialog-surface command-settings-editor__dialog" data-component="command-editor-dialog" role="dialog" aria-label="Edit command">
       {editing&&editingIcon?<>
-        <PanelHeader title="Edit command" titleId="command-editor-title" summary="Changes save automatically." icon={<span class="command-settings-editor__dialog-icon" style={`--command-color:${resolveCustomizationColor(editing.color)};--command-text-color:${customizationContrastColor(resolveCustomizationColor(editing.color))}`}><LucideIcon icon={editingIcon.icon} name={editingIcon.name}/></span>} actions={<button type="button" class="command-settings-editor__dialog-done" data-action="close-command-editor">Done</button>}/>
+        <PanelHeader title="Edit command" titleId="command-editor-title" summary="Changes save automatically." icon={<span class="command-settings-editor__dialog-icon" data-transparent={resolveCommandColor(editing.color)===TRANSPARENT_CUSTOMIZATION_COLOR?'true':undefined} style={commandIconStyle(editing)}><LucideIcon icon={editingIcon.icon} name={editingIcon.name}/></span>} actions={<button type="button" class="command-settings-editor__dialog-done" data-action="close-command-editor">Done</button>}/>
         <div class="command-settings-editor__dialog-body"><CommandDetailFields command={editing}/></div>
       </>:null}
     </section>

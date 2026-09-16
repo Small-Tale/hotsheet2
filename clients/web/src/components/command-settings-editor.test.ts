@@ -61,6 +61,16 @@ describe('CommandSettingsEditor',()=>{
     expect(markup).toContain('value="build"');
   });
 
+  it('drops the identifier/group/working-directory fields and offers a Transparent color (HS2-ZQWQCM)',()=>{
+    const markup=String(CommandSettingsEditor({commands:[{id:'c',title:'Verify',kind:'shell',command:'npm test'}],editingId:'c'}));
+    expect(markup).not.toContain('name="id"');
+    expect(markup).not.toContain('name="group"');
+    expect(markup).not.toContain('name="cwd"');
+    expect(markup).toMatch(/name="color"[^>]*value="transparent"/);
+    expect(markup).toContain('Transparent');
+    // An uncolored command selects Transparent by default.
+    expect(markup).toMatch(/name="color"[^>]*value="transparent"[^>]*checked/);
+  });
   it('shows type-specific shell and AI fields in the dialog',()=>{
     expect(String(CommandSettingsEditor({commands:[{id:'shell',title:'Shell',kind:'shell',command:'npm test'}],editingId:'shell'}))).toContain('name="command"');
     const ai=String(CommandSettingsEditor({commands:[{id:'review',title:'Review',kind:'ai',prompt:'Review this',tool:'claude'}],editingId:'review'}));
