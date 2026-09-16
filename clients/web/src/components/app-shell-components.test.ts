@@ -98,6 +98,11 @@ describe('application shell components', () => {
     expect(activeOnlyMarkup).toContain('aria-label="1 active ticket"');
     expect(activeOnlyMarkup).toContain('project-tab__activity-ring');
     const projectTabCss=readFileSync(new URL('./project-tab.css',import.meta.url),'utf8');
+    // Dark ink keeps the up-next count legible on the filled yellow badge in dark mode; the active
+    // (transparent, activity-ring) state uses the up-next accent instead (HS2-SXXK5Q).
+    expect(projectTabCss).toMatch(/\.project-tab__work-count\s*\{[^}]*color:\s*var\(--hs-ticket-state-up-next-on\)/);
+    expect(projectTabCss).not.toMatch(/\.project-tab__work-count\s*\{[^}]*color:\s*var\(--wa-color-warning-on-normal\)/);
+    expect(projectTabCss).toMatch(/\.project-tab__work\[data-active="true"\]\s+\.project-tab__work-count\s*\{[^}]*color:\s*var\(--hs-ticket-state-up-next\)/);
     expect(projectTabCss).toContain('[data-attention="true"] .kui-app-tab__name { color: var(--wa-color-danger-on-quiet); }');
     expect(projectTabCss).toContain('animation:project-tab-activity-rotate 1.7s linear infinite');
     expect(projectTabCss).toContain('@media (prefers-reduced-motion:reduce)');
