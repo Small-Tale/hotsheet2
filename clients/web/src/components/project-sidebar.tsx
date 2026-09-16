@@ -1,3 +1,4 @@
+import '@kerfjs/ui/layout.css';
 import './project-sidebar.css';
 
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
@@ -49,15 +50,15 @@ export interface ProjectSidebarProps {
 
 export function ProjectSidebar(props: ProjectSidebarProps) {
   const driveToolLabel=props.driveToolLabel??props.driveTools?.find(tool=>tool.id===props.driveTool)?.display_name??`${props.driveTool.slice(0,1).toUpperCase()}${props.driveTool.slice(1)}`;
-  return <aside class="project-sidebar" data-component="project-sidebar" aria-label="Project sidebar">
+  return <aside class="project-sidebar kui-pane" data-component="project-sidebar" aria-label="Project sidebar">
     {props.collapseControl && <Toolbar divider={false} trailing={<ToolbarControlGroup appearance="borderless" single><button type="button" data-action="toggle-project-sidebar" aria-label="Hide project sidebar" title="Hide project sidebar"><LucideIcon icon={PanelLeftClose} name="panel-left-close" /></button></ToolbarControlGroup>} />}
-    <div class="project-sidebar__content">
+    <div class="project-sidebar__content kui-pane__content">
       <ProjectSummary completedToday={props.completedToday} inProgress={props.inProgress} trend={props.completionTrend} />
       <RepositorySummary branch={props.branch} unpushed={props.unpushed} behind={props.behind} uncommitted={props.uncommitted} conflicted={props.conflicted} error={props.repositoryError} />
       <ViewNavigation items={props.views} selectedId={props.selectedViewId} />
       {props.commands.length > 0 && <CommandNavigation label={props.commandGroupLabel} commands={props.commands} expanded={props.commandGroupExpanded} collapsedGroups={props.collapsedCommandGroups} />}
     </div>
-    <footer class="project-sidebar__footer">
+    <footer class="project-sidebar__footer kui-pane__footer">
       <p class="project-sidebar__work-summary" data-component="project-work-summary">{props.openCount} open, {props.upNextCount} up next, {props.activeCount} active</p>
       <div class="project-sidebar__drive-row">
         <DriveControl running={props.driveRunning} tool={driveToolLabel} disabled={props.driveDisabled} disabledReason={props.driveDisabledReason} optionsOpen={props.driveOptionsOpen} />

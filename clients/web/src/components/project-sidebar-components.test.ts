@@ -196,13 +196,22 @@ describe('ProjectSidebar component slice', () => {
     expect(markup.indexOf('project-work-summary')).toBeLessThan(markup.indexOf('data-component="drive-control"'));
   });
 
-  it('defines one highlight gutter and one nested content rail for every sidebar row',()=>{
+  it('builds the sidebar on the unpadded kui-pane so children own their inset',()=>{
+    const markup=String(ProjectSidebar({ completedToday: 1, inProgress: 2, completionTrend: [0, 1], branch: 'main', unpushed: 0, uncommitted: 1, views: [{ id: 'all', label: 'All Tickets', icon: 'all' }], selectedViewId: 'all', commandGroupLabel: 'Commands', commands: [], commandGroupExpanded: true, driveRunning: false, driveTool: 'codex', openCount: 7, upNextCount: 3, activeCount: 2, collapseControl: true }));
+    expect(markup).toContain('class="project-sidebar kui-pane"');
+    expect(markup).toContain('class="project-sidebar__content kui-pane__content"');
+    expect(markup).toContain('class="project-sidebar__footer kui-pane__footer"');
     const css=readFileSync(new URL('./project-sidebar.css',import.meta.url),'utf8');
-    expect(css).toContain('--project-sidebar-highlight-gutter: remify(8px)');
-    expect(css).toContain('--project-sidebar-content-inset: remify(8px)');
-    expect(css).toMatch(/\.project-sidebar \.kui-menu-item \{[^}]*min-height: remify\(44px\);[^}]*padding: var\(--project-sidebar-content-inset\);[^}]*grid-template-columns: remify\(24px\) minmax\(0, 1fr\) auto;[^}]*column-gap: var\(--project-sidebar-content-inset\)/);
-    expect(css).toMatch(/\.project-sidebar > \.kui-toolbar \.kui-toolbar-control-group \{[^}]*width: remify\(44px\);[^}]*height: remify\(44px\)/);
-    expect(css).toMatch(/\.project-sidebar \{[^}]*--kui-layout-inline-margin: 0;[^}]*--kui-layout-item-padding: var\(--project-sidebar-content-inset\);[^}]*--kui-layout-item-gap: var\(--project-sidebar-content-inset\)/);
+    // The pane shell owns only card chrome — no padding and no zeroed inline margin.
+    const shell=css.match(/\.project-sidebar \{([^}]*)\}/)?.[1]??'';
+    expect(shell).not.toMatch(/(^|;|\{)\s*padding:/);
+    expect(shell).not.toContain('--kui-layout-inline-margin');
+    expect(shell).not.toContain('--kui-layout-item-padding');
+    // Non-menu content children self-inset instead of leaning on the shell.
+    expect(css).toMatch(/\.project-sidebar__content > \.project-summary \{[^}]*margin-inline: remify\(8px\)/);
+    expect(css).toMatch(/\.project-sidebar__footer \{[^}]*padding: remify\(8px\)/);
+    // No negative-margin toolbar hack survives.
+    expect(css).not.toContain('.project-sidebar > .kui-toolbar');
   });
 
   it('omits the command section when the project has no commands', () => {
