@@ -102,12 +102,12 @@ describe('override persistence (transition + adversarial)', () => {
   });
 
   it('drops overrides for unknown or non-editable ids, and tolerates corrupt storage', () => {
-    // A non-editable id (copy-tickets) and an unknown id must not be honored.
-    const storage = fakeStorage({ [KEYBOARD_SHORTCUT_STORAGE_KEY]: JSON.stringify({ 'copy-tickets': { key: 'q', mod: true }, 'not-a-shortcut': { key: 'w' }, 'open-search': { key: 'p', mod: true } }) });
+    // A non-editable id (move-selection-up, a fixed ARIA affordance) and an unknown id must not be honored.
+    const storage = fakeStorage({ [KEYBOARD_SHORTCUT_STORAGE_KEY]: JSON.stringify({ 'move-selection-up': { key: 'q', mod: true }, 'not-a-shortcut': { key: 'w' }, 'open-search': { key: 'p', mod: true } }) });
     const loaded = loadShortcutOverrides(storage);
     expect(loaded).toEqual({ 'open-search': { key: 'p', mod: true, shift: false, alt: false } });
-    // copy-tickets keeps its fixed default despite the stored override.
-    expect(resolveChord('copy-tickets', loaded)).toEqual({ key: 'c', mod: true });
+    // move-selection-up keeps its fixed default despite the stored override.
+    expect(resolveChord('move-selection-up', loaded)).toEqual({ key: 'ArrowUp' });
     // Corrupt JSON and missing storage both yield no overrides.
     expect(loadShortcutOverrides(fakeStorage({ [KEYBOARD_SHORTCUT_STORAGE_KEY]: '{not json' }))).toEqual({});
     expect(loadShortcutOverrides(fakeStorage())).toEqual({});

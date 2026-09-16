@@ -12,10 +12,15 @@ describe('KeyboardSettings', () => {
     // Editable global chords expose an edit control and render their chord (⌘ on Apple).
     expect(markup).toMatch(/data-shortcut-id="open-search"[\s\S]*?data-action="edit-shortcut"/);
     expect(markup).toContain('⌘K');
-    // Fixed shortcuts are labeled System and have no edit control.
-    expect(markup).toMatch(/data-shortcut-id="copy-tickets"[^]*?>System</);
+    // Fixed ARIA shortcuts are labeled System and have no edit control.
+    expect(markup).toMatch(/data-shortcut-id="move-selection-up"[^]*?>System</);
+    const fixedRow = markup.slice(markup.indexOf('data-shortcut-id="move-selection-up"'), markup.indexOf('data-shortcut-id="move-selection-down"'));
+    expect(fixedRow).not.toContain('data-action="edit-shortcut"');
+    // The ticket clipboard and select-all chords are now editable (HS2-9PR10F).
     const copyRow = markup.slice(markup.indexOf('data-shortcut-id="copy-tickets"'), markup.indexOf('data-shortcut-id="cut-tickets"'));
-    expect(copyRow).not.toContain('data-action="edit-shortcut"');
+    expect(copyRow).toContain('data-action="edit-shortcut"');
+    const selectAllRow = markup.slice(markup.indexOf('data-shortcut-id="select-all-tickets"'), markup.indexOf('data-shortcut-id="copy-tickets"'));
+    expect(selectAllRow).toContain('data-action="edit-shortcut"');
     // Reset-all is disabled when there are no overrides.
     expect(markup).toMatch(/data-action="reset-all-shortcuts"[^>]*disabled/);
   });

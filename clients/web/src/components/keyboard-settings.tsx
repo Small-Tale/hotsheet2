@@ -17,13 +17,13 @@ export interface KeyboardSettingsProps {
 /**
  * The App Settings → Keyboard screen: a complete, grouped reference of every documented keyboard
  * shortcut. Editable global chords can be rebound (record a new chord, reset to default), with
- * conflict warnings; fixed structural/accessibility shortcuts are shown for reference (HS2-QT6PGR).
+ * conflict warnings; fixed ARIA structural shortcuts are shown for reference (HS2-QT6PGR, HS2-9PR10F).
  */
 export function KeyboardSettings({ overrides, capturingId, apple }: KeyboardSettingsProps) {
   const hasOverrides = Object.keys(overrides).length > 0;
   return <section class="keyboard-settings" data-component="keyboard-settings" aria-label="Keyboard shortcuts">
     <header class="keyboard-settings__header">
-      <p class="keyboard-settings__intro">Rebind the global command shortcuts below. Structural navigation, activation, dismissal, and clipboard shortcuts are shown for reference and use platform conventions. Changes are saved on this device.</p>
+      <p class="keyboard-settings__intro">Rebind the command shortcuts below, including the ticket clipboard and select-all. Fixed ARIA navigation shortcuts (list arrows, tab and gallery navigation, activation, and dismissal) are shown for reference and use platform conventions. Changes are saved on this device.</p>
       <button type="button" class="keyboard-settings__reset-all" data-action="reset-all-shortcuts" disabled={!hasOverrides}><LucideIcon icon={RotateCcw} name="rotate-ccw" />Reset all to defaults</button>
     </header>
     {KEYBOARD_SHORTCUT_GROUPS.map(group => {

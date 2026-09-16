@@ -3,11 +3,13 @@
  * keyboard interaction the client documents, plus the device-local override store and the
  * chord helpers the editor and the runtime handlers share (HS2-QT6PGR).
  *
- * `editable` shortcuts are global command chords the user can rebind; they are resolved through
- * {@link matchesShortcut} at the app's central keydown dispatcher. `editable: false` shortcuts are
- * fixed structural/accessibility affordances (list navigation, control activation, dismissal,
- * clipboard) — they are listed for reference but not rebindable, since rebinding ARIA navigation
- * or the platform clipboard chords would break expectations.
+ * `editable` shortcuts are command chords the user can rebind; they are resolved through
+ * {@link matchesShortcut} at the runtime handlers (the central keydown dispatcher, the ticket
+ * clipboard policy, and ticket-row selection). Editable ones include the global chords plus the
+ * app-level ticket clipboard (copy/cut/paste) and select-all (HS2-9PR10F). `editable: false`
+ * shortcuts are fixed ARIA structural/accessibility affordances (list arrows, tab navigation,
+ * gallery, control activation, dismissal) — listed for reference but not rebindable, since
+ * rebinding ARIA navigation would break screen-reader and platform expectations.
  */
 
 export interface ShortcutChord {
@@ -43,11 +45,11 @@ export const KEYBOARD_SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'open-search', label: 'Open search', description: 'Focus the workspace ticket search.', group: 'Global', defaultChord: { key: 'k', mod: true }, editable: true },
   { id: 'undo', label: 'Undo', description: 'Undo the last ticket change.', group: 'Global', defaultChord: { key: 'z', mod: true }, editable: true },
   { id: 'redo', label: 'Redo', description: 'Redo the last undone ticket change.', group: 'Global', defaultChord: { key: 'z', mod: true, shift: true }, editable: true },
-  // Ticket selection & clipboard — fixed platform conventions.
-  { id: 'select-all-tickets', label: 'Select all tickets', description: 'Select every ticket in the current view.', group: 'Tickets', defaultChord: { key: 'a', mod: true }, editable: false },
-  { id: 'copy-tickets', label: 'Copy tickets', description: 'Copy the selected tickets.', group: 'Tickets', defaultChord: { key: 'c', mod: true }, editable: false },
-  { id: 'cut-tickets', label: 'Cut tickets', description: 'Cut the selected tickets.', group: 'Tickets', defaultChord: { key: 'x', mod: true }, editable: false },
-  { id: 'paste-tickets', label: 'Paste tickets', description: 'Paste tickets from the clipboard.', group: 'Tickets', defaultChord: { key: 'v', mod: true }, editable: false },
+  // Ticket clipboard & select-all — app-level chords, rebindable (resolved via matchesShortcut).
+  { id: 'select-all-tickets', label: 'Select all tickets', description: 'Select every ticket in the current view.', group: 'Tickets', defaultChord: { key: 'a', mod: true }, editable: true },
+  { id: 'copy-tickets', label: 'Copy tickets', description: 'Copy the selected tickets.', group: 'Tickets', defaultChord: { key: 'c', mod: true }, editable: true },
+  { id: 'cut-tickets', label: 'Cut tickets', description: 'Cut the selected tickets.', group: 'Tickets', defaultChord: { key: 'x', mod: true }, editable: true },
+  { id: 'paste-tickets', label: 'Paste tickets', description: 'Paste tickets from the clipboard.', group: 'Tickets', defaultChord: { key: 'v', mod: true }, editable: true },
   { id: 'move-selection-up', label: 'Move selection up', description: 'Focus and select the previous ticket.', group: 'Tickets', defaultChord: { key: 'ArrowUp' }, editable: false },
   { id: 'move-selection-down', label: 'Move selection down', description: 'Focus and select the next ticket.', group: 'Tickets', defaultChord: { key: 'ArrowDown' }, editable: false },
   { id: 'activate', label: 'Activate control', description: 'Activate the focused row, control, or menu item.', group: 'Navigation & tabs', defaultChord: { key: 'Enter' }, editable: false },

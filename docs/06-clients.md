@@ -320,14 +320,15 @@ and identity-less legacy entries remain conservatively blocking.
 
 - **Keyboard shortcuts (App Settings).** The App Settings → Keyboard category is a complete,
   grouped reference of every documented client keyboard shortcut (HS2-QT6PGR). The global
-  command chords (open search, undo, redo) are rebindable: record a new chord, reset one to its
-  default, or reset all, with conflict warnings when two editable shortcuts collide. Overrides
-  are stored device-locally and resolved at the app's central keydown dispatcher, so a rebinding
-  takes effect immediately. Structural navigation, control activation, dismissal, and the
-  platform clipboard/selection shortcuts are listed for reference as fixed **System** shortcuts
-  (rebinding ARIA navigation or the platform clipboard would break expectations); extending
-  rebindability to those is tracked separately (HS2-9PR10F). Chords display platform-correctly
-  (⌘ on Apple, Ctrl elsewhere). The
+  command chords (open search, undo, redo) plus the app-level ticket clipboard (copy, cut,
+  paste) and select-all are rebindable: record a new chord, reset one to its default, or reset
+  all, with conflict warnings when two editable shortcuts collide. Overrides are stored
+  device-locally and resolved through the shared registry (`matchesShortcut`) at the central
+  keydown dispatcher, the ticket clipboard policy, and ticket-row selection, so a rebinding takes
+  effect immediately (HS2-9PR10F). Fixed ARIA structural affordances — list-arrow navigation, tab
+  navigation, media-gallery keys, control activation, and dismissal — remain non-rebindable
+  **System** entries, since rebinding ARIA navigation would break screen-reader and platform
+  expectations. Chords display platform-correctly (⌘ on Apple, Ctrl elsewhere). The
   selected category names the shared page header; the workspace does not repeat that
   heading, and the right region uses the same divider-free empty inspector placeholder
   as Notifications. Entering Settings preserves the ticket selection for returning to

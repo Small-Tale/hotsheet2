@@ -2600,8 +2600,10 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)',asy
   const screen=page.locator('[data-component="keyboard-settings"]');await expect(screen).toBeVisible();
   await expect(page.locator('.kui-page-header h1').first()).toContainText('Keyboard shortcuts');
   await expect(screen.locator('[data-shortcut-id="open-search"] .keyboard-settings__chord')).toHaveText(apple?'⌘K':'Ctrl+K');
-  await expect(screen.locator('[data-shortcut-id="copy-tickets"] .keyboard-settings__fixed')).toHaveText('System');
-  await expect(screen.locator('[data-shortcut-id="copy-tickets"] [data-action="edit-shortcut"]')).toHaveCount(0);
+  // Fixed ARIA navigation stays System; the ticket clipboard chords are now editable (HS2-9PR10F).
+  await expect(screen.locator('[data-shortcut-id="move-selection-up"] .keyboard-settings__fixed')).toHaveText('System');
+  await expect(screen.locator('[data-shortcut-id="move-selection-up"] [data-action="edit-shortcut"]')).toHaveCount(0);
+  await expect(screen.locator('[data-shortcut-id="copy-tickets"] [data-action="edit-shortcut"]')).toHaveCount(1);
   // Rebind Open search to mod+G and confirm it persists device-locally.
   await screen.locator('[data-shortcut-id="open-search"] [data-action="edit-shortcut"]').click();
   await expect(screen.locator('[data-shortcut-capture="open-search"]')).toBeFocused();
