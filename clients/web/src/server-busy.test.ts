@@ -133,4 +133,11 @@ describe('serverBusyMessage', () => {
     expect(String(ServerBusyMessage({ message: 'Loading tickets', visible: false }))).toContain('data-visible="false"');
     expect(String(ServerBusyMessage({ message: '', visible: true }))).toContain('data-visible="false"');
   });
+  it('keeps the label text dark on the always-yellow pill in every theme (HS2-TF43Y0)', () => {
+    const css = readFileSync(new URL('./components/server-busy-bars.css', import.meta.url), 'utf8');
+    // The pill background is the up-next yellow; the text uses the theme-stable dark companion token, not
+    // the theme-flipping warning-on-normal color that was unreadable in dark mode.
+    expect(css).toMatch(/\.server-busy-message \{[^}]*color: var\(--hs-ticket-state-up-next-on\);[^}]*background: var\(--hs-ticket-state-up-next\);/);
+    expect(css).not.toContain('--wa-color-warning-on-normal');
+  });
 });

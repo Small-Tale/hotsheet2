@@ -43,7 +43,7 @@
   z-index: 2147483000;
   padding: remify(1.6px) remify(9.6px);
   border-radius: 0 0 remify(6.4px) remify(6.4px);
-  color: var(--wa-color-warning-on-normal);
+  color: var(--hs-ticket-state-up-next-on);
   background: var(--hs-ticket-state-up-next);
   font-size: var(--wa-font-size-2xs); /* 11px */
   line-height: 1.4;
