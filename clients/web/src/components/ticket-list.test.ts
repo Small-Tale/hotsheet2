@@ -60,8 +60,8 @@ describe('TicketList', () => {
     const rowCss = readFileSync(resolve(import.meta.dirname, 'ticket-row.css'), 'utf8');
     const narrowListRule = rowCss.match(/\.ticket-list-row--list \{([^}]*)\}/)?.[1] ?? '';
     expect(narrowListRule).not.toContain('border-radius');
-    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row { border-radius: .65rem .65rem 0 0; }');
-    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 .65rem .65rem; }');
+    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:first-child .ticket-list-row { border-radius: remify(10.4px) remify(10.4px) 0 0; }');
+    expect(listCss).toContain('.ticket-list__tickets > .ticket-list-row-container:last-child .ticket-list-row { border-radius: 0 0 remify(10.4px) remify(10.4px); }');
   });
 
   it('fills the width supplied by its host instead of imposing an internal cap', () => {

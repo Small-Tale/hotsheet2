@@ -1,6 +1,6 @@
-.project-tab-context-menu { position: fixed; z-index: 60; display: grid; width: 16rem; padding: .35rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .6rem; background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
-.project-tab-context-menu wa-divider { --spacing: .25rem; }
+.project-tab-context-menu { position: fixed; z-index: 60; display: grid; width: remify(256px); padding: remify(5.6px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(9.6px); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-l); }
+.project-tab-context-menu wa-divider { --spacing: remify(4px); }
 .project-tab-context-menu wa-dropdown-item { cursor: pointer; }
 .project-tab-context-menu [slot="icon"] { display: inline-flex; color: var(--wa-color-neutral-on-quiet); }
-.project-tab-context-menu [slot="icon"] svg { width: 1rem; height: 1rem; }
+.project-tab-context-menu [slot="icon"] svg { width: remify(16px); height: remify(16px); }
 .project-tab-context-menu wa-dropdown-item[variant="danger"] [slot="icon"] { color: var(--wa-color-danger-on-quiet); }

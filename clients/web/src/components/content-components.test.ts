@@ -54,8 +54,8 @@ describe('content components', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'markdown-editor.css'), 'utf8');
     expect(css).toMatch(/markdown-editor--embedded \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*gap: 0;/);
     expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface \{[^}]*display: grid;[^}]*padding: 0;[^}]*overflow: visible;/);
-    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__preview \{[^}]*padding: \.75rem;/);
-    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface textarea \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: auto;[^}]*padding: \.75rem;[^}]*resize: vertical/);
+    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__preview \{[^}]*padding: remify\(12px\);/);
+    expect(css).toMatch(/markdown-editor--embedded \.markdown-editor__surface textarea \{[^}]*display: block;[^}]*box-sizing: border-box;[^}]*height: auto;[^}]*padding: remify\(12px\);[^}]*resize: vertical/);
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(panelCss).toMatch(/ticket-inspector__details-surface \{[^}]*padding: 0;/);
     expect(embedded).not.toContain('Saving changes');
@@ -132,9 +132,9 @@ describe('content components', () => {
     expect(markup).toContain('data-large-text="false"');
     expect(markup).toContain('data-inspector-tab="attachments"');
     const readerCss = readFileSync(resolve(import.meta.dirname, 'ticket-reader.css'), 'utf8');
-    expect(readerCss).toMatch(/\.ticket-reader-dialog \{[^}]*--width: min\(64rem, calc\(100vw - 3rem\)\)/);
+    expect(readerCss).toMatch(/\.ticket-reader-dialog \{[^}]*--width: min\(remify\(1024px\), calc\(100vw - remify\(48px\)\)\)/);
     expect(readerCss).not.toMatch(/\.ticket-reader-dialog \{[^}]*\b(?:display|height):/);
-    expect(readerCss).toMatch(/\.ticket-reader-dialog::part\(dialog\) \{[^}]*height: calc\(100vh - 3rem\);/);
+    expect(readerCss).toMatch(/\.ticket-reader-dialog::part\(dialog\) \{[^}]*height: calc\(100vh - remify\(48px\)\);/);
     expect(readerCss).toMatch(/\.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     expect(readerCss).toMatch(/\.note-card__feedback-prompt\) \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
     expect(readerCss).toMatch(/\.note-card\[data-kind="activity"\] \.markdown-preview :is\(p, li, th, td\) \{ font-size: var\(--hs-reader-font-size-s\); \}/);
@@ -166,5 +166,5 @@ describe('content components', () => {
     expect(covered).not.toContain('aria-modal=');
   });
 
-  it('keeps the feedback catchall at half the ordinary note-editor minimum height',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).toMatch(/textarea\[data-note-response="true"\] \{ min-height: 2\.5rem; \}/)});
+  it('keeps the feedback catchall at half the ordinary note-editor minimum height',()=>{const css=readFileSync(resolve(import.meta.dirname,'note-card.css'),'utf8');expect(css).toMatch(/textarea\[data-note-response="true"\] \{ min-height: remify\(40px\); \}/)});
 });

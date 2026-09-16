@@ -9,7 +9,7 @@ describe('TagChip', () => {
   it('keeps the removable control compact inside inspector-sized chips', () => {
     const tagChipCss = readFileSync(resolve(import.meta.dirname, 'tag-chip.css'), 'utf8');
     expect(tagChipCss).toContain('::part(remove-button__base)');
-    expect(tagChipCss).toContain('width: 1rem');
+    expect(tagChipCss).toContain('width: remify(16px)');
     expect(tagChipCss).toContain('font-size: var(--wa-font-size-2xs)');
   });
   it('provides stable compact defaults', () => {

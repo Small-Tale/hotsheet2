@@ -33,7 +33,7 @@ describe('TicketLinkChoiceDialog', () => {
   it('stays absent without an ambiguous resolution and has a narrow layout', () => {
     expect(String(TicketLinkChoiceDialog({}))).toBe('');
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-link-choice-dialog.css'), 'utf8');
-    expect(css).toContain('@media (max-width: 32rem)');
+    expect(css).toContain('@media (max-width: remify(512px))');
     expect(css).toContain('grid-template-areas: "status ticket arrow" ". source ."');
   });
 });

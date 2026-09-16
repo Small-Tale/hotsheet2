@@ -7,9 +7,9 @@ import { QuickTicketComposer,QuickTicketLauncher,showQuickTicketComposer } from 
 describe('QuickTicketComposer', () => {
   it('gives the title the available width while keeping category compact', () => {
     const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8');
-    expect(css).toMatch(/\.quick-ticket-dialog \{[^}]*--width:min\(58rem, calc\(100vw - 2rem\)\)/);
-    expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem)');
-    expect(css).toMatch(/@media \(max-width: 38rem\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
+    expect(css).toMatch(/\.quick-ticket-dialog \{[^}]*--width:min\(remify\(928px\), calc\(100vw - remify\(32px\)\)\)/);
+    expect(css).toContain('grid-template-columns: minmax(0, 1fr) minmax(remify(192px), remify(240px))');
+    expect(css).toMatch(/@media \(max-width: remify\(608px\)\)[^{]*\{[^}]*\.quick-ticket-composer \{ grid-template-columns: 1fr/);
     // HS2-Q7WJ6T: the form sits inside the dialog panel, so its base rule must not draw its own
     // border or box-shadow (that redundant brand-colored rounded border read as a stray outline
     // below the dialog title). The drag drop-target highlight keeps its own box-shadow ring.
@@ -76,7 +76,7 @@ describe('QuickTicketComposer', () => {
     const css=readFileSync(new URL('./quick-ticket-composer.css',import.meta.url),'utf8'),markup=String(QuickTicketComposer({expanded:true}));
     expect(markup).toMatch(/new-ticket-category[\s\S]*toggle-new-ticket-up-next[\s\S]*new-ticket-details/);
     expect(markup).toMatch(/name="new-ticket-details"[^>]*data-morph-skip/);
-    expect(css).toMatch(/__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, 2\.5rem\);[^}]*resize: vertical/);
+    expect(css).toMatch(/__details textarea \{[^}]*min-height: var\(--hs-new-ticket-details-sidebar-height, remify\(40px\)\);[^}]*resize: vertical/);
   });
 
   it('shows creation progress and attachment errors accessibly', () => {

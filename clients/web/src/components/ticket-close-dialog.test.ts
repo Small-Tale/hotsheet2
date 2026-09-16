@@ -33,7 +33,7 @@ describe('TicketCloseDialog', () => {
 
   it('contains long result lists within a scrollable dialog surface', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-close-dialog.css'), 'utf8');
-    expect(css).toMatch(/ticket-close-dialog__results \{[^}]*min-height: 4\.25rem;[^}]*max-height: 14rem;[^}]*overflow-y: auto/);
-    expect(css).toContain('width: min(34rem, calc(100vw - 2 * var(--wa-space-m)))');
+    expect(css).toMatch(/ticket-close-dialog__results \{[^}]*min-height: remify\(68px\);[^}]*max-height: remify\(224px\);[^}]*overflow-y: auto/);
+    expect(css).toContain('width: min(remify(544px), calc(100vw - 2 * var(--wa-space-m)))');
   });
 });

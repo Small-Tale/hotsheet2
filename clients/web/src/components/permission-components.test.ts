@@ -89,7 +89,7 @@ describe('permission presentation components', () => {
     expect(markup).toContain('data-resolved="true"');
     expect(markup).not.toContain('permission-request-card__details');
     expect(markup).not.toContain('permission-request-card__footer');
-    expect(css).toMatch(/permission-request-card--list\[data-resolved="true"\][^{]*\{[^}]*padding-bottom: 1rem/);
+    expect(css).toMatch(/permission-request-card--list\[data-resolved="true"\][^{]*\{[^}]*padding-bottom: remify\(16px\)/);
   });
 
   it('renders explicit empty states', () => {

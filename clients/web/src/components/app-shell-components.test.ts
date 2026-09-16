@@ -15,18 +15,18 @@ describe('application shell components', () => {
   it('defines the supported application floor as 1024 by 600 CSS pixels', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
     const productionCss=readFileSync(new URL('../style.css',import.meta.url),'utf8');
-    expect(css).toMatch(/\.app-shell \{[^}]*min-width: 64rem/);
-    expect(css).toMatch(/\.app-shell \{[^}]*min-height: 37\.5rem/);
+    expect(css).toMatch(/\.app-shell \{[^}]*min-width: remify\(1024px\)/);
+    expect(css).toMatch(/\.app-shell \{[^}]*min-height: remify\(600px\)/);
     expect(productionCss).not.toMatch(/\.app-shell\[data-component="app-shell"\] \{[^}]*(?:min-width|min-height):/);
     expect(css).not.toMatch(/@media[^{}]*max-width[^{}]*\{[^{}]*\.app-shell > \.kui-resizable-region[^{}]*display: none/);
   });
 
   it('gives an expanded narrow search its own row below the project identity', () => {
     const css=readFileSync(new URL('./app-shell.css',import.meta.url),'utf8');
-    expect(css).toMatch(/@media \(max-width: 48rem\) \{[\s\S]*toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) \{ grid-template-columns: minmax\(0, 1fr\); row-gap: \.4rem;/);
-    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__leading \{ padding-inline: \.5rem 0;/);
-    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: \.75rem 0; justify-content: stretch;/);
-    expect(css).toMatch(/\.workspace-header__search-group \{ width: auto; min-width: 11rem; flex: 1 1 auto;/);
+    expect(css).toMatch(/@media \(max-width: remify\(768px\)\) \{[\s\S]*toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) \{ grid-template-columns: minmax\(0, 1fr\); row-gap: remify\(6\.4px\);/);
+    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__leading \{ padding-inline: remify\(8px\) 0;/);
+    expect(css).toMatch(/toolbar:has\(\.workspace-header__search-group\[data-expanded="true"\]\) > \.kui-toolbar__trailing \{ grid-column: 1; width: 100%; padding-inline: remify\(12px\) 0; justify-content: stretch;/);
+    expect(css).toMatch(/\.workspace-header__search-group \{ width: auto; min-width: remify\(176px\); flex: 1 1 auto;/);
   });
 
   it('separates the terminal header from its lowered dashboard surface', () => {
@@ -51,9 +51,9 @@ describe('application shell components', () => {
     expect(withoutComposer).toContain('data-has-composer="false"');
     expect(withoutSidebar).not.toContain('data-region-id="app-sidebar"');
     expect(withoutSidebar).not.toContain('aria-label="Show project sidebar"');
-    expect(css).toMatch(/\.app-shell__composer \{[^}]*padding: \.75rem 1rem;/);
+    expect(css).toMatch(/\.app-shell__composer \{[^}]*padding: remify\(12px\) remify\(16px\);/);
     expect(css).toMatch(/data-has-composer="true"[^}]*app-shell__workspace \{[^}]*padding-top: 0;/);
-    expect(css).toMatch(/@media \(max-width: 42rem\)[\s\S]*\.app-shell__composer \{ padding: \.7rem; \}/);
+    expect(css).toMatch(/@media \(max-width: remify\(672px\)\)[\s\S]*\.app-shell__composer \{ padding: remify\(11\.2px\); \}/);
   });
   it('projects every ProjectTab state without nesting actions', () => {
     const markup = String(ProjectTab({ id: 'one', name: 'One', location: 'remote', selected: true, busy: true, disconnected: true, attention: true }));

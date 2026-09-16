@@ -1,7 +1,7 @@
-.trash-settings { display: grid; max-width: 34rem; gap: var(--wa-space-l); }
+.trash-settings { display: grid; max-width: remify(544px); gap: var(--wa-space-l); }
 .trash-settings header, .trash-settings footer { display: grid; gap: var(--wa-space-xs); }
 .trash-settings h2, .trash-settings p { margin: 0; }
 .trash-settings header p { color: var(--wa-color-neutral-on-quiet); line-height: 1.5; }
-.trash-settings wa-input { max-width: 16rem; }
+.trash-settings wa-input { max-width: remify(256px); }
 .trash-settings footer { grid-template-columns: max-content minmax(0,1fr); align-items: center; }
 .trash-settings footer [role="status"] { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-s); }

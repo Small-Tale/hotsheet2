@@ -30,8 +30,8 @@ describe('RepositorySetup',()=>{
     expect(String(RepositorySetup({busy:true}))).toContain('Initializing…');
     expect(String(RepositorySetup({step:'remote',busy:true}))).toContain('Adding origin…');
     const css=readFileSync(resolve(import.meta.dirname,'repository-setup.css'),'utf8');
-    expect(css).toMatch(/@media \(max-width: 32rem\)/);
-    expect(css).toMatch(/width: min\(30rem, 100%\)/);
+    expect(css).toMatch(/@media \(max-width: remify\(512px\)\)/);
+    expect(css).toMatch(/width: min\(remify\(480px\), 100%\)/);
     expect(css).toMatch(/data-step="initialize"[^}]*footer \{[^}]*align-items: center;[^}]*justify-content: center;/);
   });
 });

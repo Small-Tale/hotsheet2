@@ -1,4 +1,4 @@
-.ticket-notes { display: grid; min-width: 0; gap: .6rem; }
-.ticket-notes__list { display: grid; min-width: 0; gap: .55rem; }
-.ticket-notes .note-card { padding: .7rem .55rem; border-radius: .6rem; }
+.ticket-notes { display: grid; min-width: 0; gap: remify(9.6px); }
+.ticket-notes__list { display: grid; min-width: 0; gap: remify(8.8px); }
+.ticket-notes .note-card { padding: remify(11.2px) remify(8.8px); border-radius: remify(9.6px); }
 .ticket-notes__empty { color: var(--wa-color-neutral-on-quiet) !important; font-style: italic; }

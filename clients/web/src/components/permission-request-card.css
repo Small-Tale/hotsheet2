@@ -1,20 +1,20 @@
-.permission-request-card { --permission-accent: var(--wa-color-brand-fill-loud); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: 1rem; color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); container-type: inline-size; }
-.permission-request-card__header { display: grid; min-width: 0; padding: .8rem 1rem .3rem; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .65rem; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
-.permission-request-card__identity { display: flex; min-width: 0; align-items: center; gap: .3rem; color: var(--wa-color-neutral-on-quiet); }
+.permission-request-card { --permission-accent: var(--wa-color-brand-fill-loud); overflow: hidden; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(16px); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); container-type: inline-size; }
+.permission-request-card__header { display: grid; min-width: 0; padding: remify(12.8px) remify(16px) remify(4.8px); grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: remify(10.4px); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
+.permission-request-card__identity { display: flex; min-width: 0; align-items: center; gap: remify(4.8px); color: var(--wa-color-neutral-on-quiet); }
 .permission-request-card__identity strong { overflow: hidden; color: var(--wa-color-neutral-on-normal); text-overflow: ellipsis; white-space: nowrap; }
-.permission-request-card__identity svg { width: 1rem; height: 1rem; color: var(--wa-color-success-fill-loud); }
-.permission-request-card__project { overflow: hidden; max-width: 14rem; padding: .18rem .55rem; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); text-overflow: ellipsis; white-space: nowrap; }
-.permission-request-card__summary { display: grid; padding: .75rem 1rem .55rem; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: .55rem; }
+.permission-request-card__identity svg { width: remify(16px); height: remify(16px); color: var(--wa-color-success-fill-loud); }
+.permission-request-card__project { overflow: hidden; max-width: remify(224px); padding: remify(2.88px) remify(8.8px); border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); text-overflow: ellipsis; white-space: nowrap; }
+.permission-request-card__summary { display: grid; padding: remify(12px) remify(16px) remify(8.8px); grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: remify(8.8px); }
 .permission-request-card__summary strong { min-width: 0; overflow-wrap: anywhere; }
-.permission-request-card__summary svg { width: 1.1rem; height: 1.1rem; color: var(--permission-accent); }
+.permission-request-card__summary svg { width: remify(17.6px); height: remify(17.6px); color: var(--permission-accent); }
 .permission-request-card[data-state="deny"] .permission-request-card__summary svg, .permission-request-card[data-state="failed"] .permission-request-card__summary svg, .permission-request-card[data-state="disconnected"] .permission-request-card__summary svg { color: var(--wa-color-danger-on-quiet); }
 .permission-request-card[data-state="external"] .permission-request-card__summary svg { color: var(--wa-color-neutral-on-quiet); }
-.permission-request-card__details { overflow: auto; max-height: 12rem; margin: 0 1rem; padding: .7rem .8rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .65rem; color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-lowered); white-space: pre-wrap; overflow-wrap: anywhere; font: var(--wa-font-size-xs)/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-.permission-request-card__explanation, .permission-request-card__error { margin: .65rem 1rem 0; font-size: var(--wa-font-size-xs); line-height: 1.45; }
+.permission-request-card__details { overflow: auto; max-height: remify(192px); margin: 0 remify(16px); padding: remify(11.2px) remify(12.8px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(10.4px); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-lowered); white-space: pre-wrap; overflow-wrap: anywhere; font: var(--wa-font-size-xs)/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.permission-request-card__explanation, .permission-request-card__error { margin: remify(10.4px) remify(16px) 0; font-size: var(--wa-font-size-xs); line-height: 1.45; }
 .permission-request-card__explanation { color: var(--wa-color-neutral-on-quiet); }
 .permission-request-card__error { color: var(--wa-color-danger-on-quiet); }
-.permission-request-card__footer { display: flex; padding: .8rem 1rem 1rem; align-items: center; justify-content: space-between; gap: 1rem; }
-.permission-request-card button { min-height: 2rem; padding: 0 .8rem; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: .65rem; color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); cursor: pointer; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 600; }
+.permission-request-card__footer { display: flex; padding: remify(12.8px) remify(16px) remify(16px); align-items: center; justify-content: space-between; gap: remify(16px); }
+.permission-request-card button { min-height: remify(32px); padding: 0 remify(12.8px); border: 1px solid var(--wa-color-neutral-border-normal); border-radius: remify(10.4px); color: var(--wa-color-neutral-on-normal); background: var(--wa-color-surface-default); cursor: pointer; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 600; }
 .permission-request-card button:hover { background: var(--wa-color-neutral-fill-quiet); }
 .permission-request-card button:focus-visible { outline: 2px solid var(--wa-color-text-link); outline-offset: 2px; }
 .permission-request-card button:disabled { opacity: .55; cursor: not-allowed; }
@@ -22,19 +22,19 @@
 .permission-request-card .permission-request-card__quiet-action:hover { color: var(--wa-color-neutral-on-normal); background: transparent; text-decoration: underline; }
 .permission-request-card .permission-request-card__primary { border-color: var(--wa-color-brand-border-loud); color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); }
 .permission-request-card .permission-request-card__primary:hover { background: var(--wa-color-brand-on-quiet); }
-.permission-request-card__decision-area { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: .8rem; }
-.permission-request-card__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
-.permission-request-card__countdown { display: flex; min-width: 0; align-items: center; gap: .2rem; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); }
-.permission-request-card__timer { display: inline-flex; min-height: 2rem; align-items: center; white-space: nowrap; }
+.permission-request-card__decision-area { display: flex; min-width: 0; flex: 1; align-items: center; justify-content: flex-end; gap: remify(12.8px); }
+.permission-request-card__buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: remify(7.2px); }
+.permission-request-card__countdown { display: flex; min-width: 0; align-items: center; gap: remify(3.2px); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); }
+.permission-request-card__timer { display: inline-flex; min-height: remify(32px); align-items: center; white-space: nowrap; }
 .permission-request-card__timer strong { margin-left: .3em; }
-.permission-request-card .permission-request-card__stop-automation { display: inline-grid; width: 2rem; min-width: 2rem; min-height: 2rem; padding: 0; border-color: transparent; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; place-items: center; }
+.permission-request-card .permission-request-card__stop-automation { display: inline-grid; width: remify(32px); min-width: remify(32px); min-height: remify(32px); padding: 0; border-color: transparent; border-radius: var(--wa-border-radius-pill); color: var(--wa-color-neutral-on-quiet); background: transparent; place-items: center; }
 .permission-request-card .permission-request-card__stop-automation:hover { color: var(--wa-color-neutral-on-normal); background: var(--wa-color-neutral-fill-normal); }
-.permission-request-card__stop-automation svg { width: .9rem; height: .9rem; }
-.permission-request-card--list[data-resolved="true"] { padding-bottom: 1rem; box-shadow: none; }
+.permission-request-card__stop-automation svg { width: remify(14.4px); height: remify(14.4px); }
+.permission-request-card--list[data-resolved="true"] { padding-bottom: remify(16px); box-shadow: none; }
 .permission-request-card--list[data-state="allow"] { --permission-accent: var(--wa-color-success-fill-loud); }
-.permission-request-popup { position: absolute; z-index: 80; top: 3.5rem; right: 1rem; width: min(44rem, calc(100% - 2rem)); }
+.permission-request-popup { position: absolute; z-index: 80; top: remify(56px); right: remify(16px); width: min(remify(704px), calc(100% - remify(32px))); }
 .permission-request-popup .permission-request-card { border-color: var(--wa-color-neutral-border-loud); box-shadow: var(--wa-shadow-l); }
-@container (max-width: 34rem) {
+@container (max-width: remify(544px)) {
   .permission-request-card__header { grid-template-columns: minmax(0, 1fr) auto; }
   .permission-request-card__project { grid-row: 2; max-width: 100%; justify-self: start; }
   .permission-request-card__header time { grid-column: 2; grid-row: 1; }
@@ -44,4 +44,4 @@
   .permission-request-card__buttons > button:last-child:nth-child(3) { grid-column: 1 / -1; }
   .permission-request-card__countdown { width: fit-content; max-width: 100%; justify-content: flex-start; }
 }
-@media (max-width: 42rem) { .permission-request-popup { right: .55rem; width: calc(100% - 1.1rem); } }
+@media (max-width: remify(672px)) { .permission-request-popup { right: remify(8.8px); width: calc(100% - remify(17.6px)); } }

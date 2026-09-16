@@ -1,46 +1,46 @@
-.quick-ticket-composer__launcher { display: inline-flex; min-height: 2.5rem; padding: .5rem .9rem; border: 1px solid var(--wa-color-brand-border-loud); border-radius: 999px; color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); box-shadow:var(--wa-shadow-xs); cursor: pointer; font: inherit; font-weight:650; align-items: center; gap: .45rem; white-space:nowrap; }
+.quick-ticket-composer__launcher { display: inline-flex; min-height: remify(40px); padding: remify(8px) remify(14.4px); border: 1px solid var(--wa-color-brand-border-loud); border-radius: 999px; color: var(--wa-color-neutral-on-loud); background: var(--wa-color-brand-fill-loud); box-shadow:var(--wa-shadow-xs); cursor: pointer; font: inherit; font-weight:650; align-items: center; gap: remify(7.2px); white-space:nowrap; }
 .quick-ticket-composer__launcher:hover { filter:brightness(.96); box-shadow:var(--wa-shadow-s); }
 .quick-ticket-composer__launcher:is([data-dragging="true"], [data-dragging-ticket="true"]) { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
 .quick-ticket-composer__launcher:focus-visible { outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 24%, transparent); }
-.quick-ticket-composer__launcher svg { width: 1rem; height: 1rem; }
-.quick-ticket-dialog { position:fixed; inset:0; pointer-events:none; --width:min(58rem, calc(100vw - 2rem)); }
-.quick-ticket-dialog::part(dialog) { max-height:calc(100vh - 2rem); pointer-events:auto; }
+.quick-ticket-composer__launcher svg { width: remify(16px); height: remify(16px); }
+.quick-ticket-dialog { position:fixed; inset:0; pointer-events:none; --width:min(remify(928px), calc(100vw - remify(32px))); }
+.quick-ticket-dialog::part(dialog) { max-height:calc(100vh - remify(32px)); pointer-events:auto; }
 .quick-ticket-dialog::part(body) { padding:0; }
 /* The form always renders inside the wa-dialog panel, which already provides the container
    chrome, so it carries no border/shadow of its own (that inner brand-colored rounded border
    read as a stray "focus outline" below the dialog title — HS2-Q7WJ6T). The radius is kept so
    the drag drop-target highlight below stays rounded. */
-.quick-ticket-composer { box-sizing:border-box; display: grid; width: 100%; padding: 1rem; border-radius: .7rem; background: var(--wa-color-surface-default); grid-template-columns: minmax(0, 1fr) minmax(12rem, 15rem); gap: var(--wa-space-s); }
-.quick-ticket-composer wa-input::part(base) { height: 2.75rem; min-height: 2.75rem; }
+.quick-ticket-composer { box-sizing:border-box; display: grid; width: 100%; padding: remify(16px); border-radius: remify(11.2px); background: var(--wa-color-surface-default); grid-template-columns: minmax(0, 1fr) minmax(remify(192px), remify(240px)); gap: var(--wa-space-s); }
+.quick-ticket-composer wa-input::part(base) { height: remify(44px); min-height: remify(44px); }
 .quick-ticket-composer__metadata { display: grid; min-width: 0; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: var(--wa-space-xs); }
-.quick-ticket-composer__up-next { display: grid; width: 2.75rem; height: 2.75rem; padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-surface-default); cursor: pointer; place-items: center; }
+.quick-ticket-composer__up-next { display: grid; width: remify(44px); height: remify(44px); padding: 0; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-surface-default); cursor: pointer; place-items: center; }
 .quick-ticket-composer__up-next:hover { color: var(--hs-ticket-state-up-next); background: var(--wa-color-neutral-fill-quiet); }
 .quick-ticket-composer__up-next[aria-pressed="true"] { color: var(--hs-ticket-state-up-next); border-color: var(--hs-ticket-state-up-next); }
 .quick-ticket-composer__up-next[aria-pressed="true"] svg { fill: currentColor; }
 .quick-ticket-composer__up-next:focus-visible { outline: var(--wa-focus-ring); outline-offset: 1px; }
-.quick-ticket-composer__up-next svg { width: 1rem; height: 1rem; }
+.quick-ticket-composer__up-next svg { width: remify(16px); height: remify(16px); }
 .quick-ticket-composer__details { display: grid; min-width: 0; grid-column: 1 / -1; color: var(--wa-color-text-normal); gap: var(--wa-space-2xs); font-size: var(--wa-font-size-s); }
-.quick-ticket-composer__details textarea { box-sizing: border-box; width: 100%; min-width: 0; height: var(--hs-new-ticket-details-sidebar-height, auto); min-height: var(--hs-new-ticket-details-sidebar-height, 2.5rem); padding: var(--wa-space-xs) var(--wa-space-s); resize: vertical; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.4; }
+.quick-ticket-composer__details textarea { box-sizing: border-box; width: 100%; min-width: 0; height: var(--hs-new-ticket-details-sidebar-height, auto); min-height: var(--hs-new-ticket-details-sidebar-height, remify(40px)); padding: var(--wa-space-xs) var(--wa-space-s); resize: vertical; border: 1px solid var(--wa-color-neutral-border-normal); border-radius: var(--wa-border-radius-m); color: inherit; background: var(--wa-color-surface-default); font: inherit; line-height: 1.4; }
 .quick-ticket-composer:is([data-dragging="true"], [data-dragging-ticket="true"]) { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wa-color-focus) 22%, transparent); }
-.quick-ticket-composer__attachments { display: grid; grid-column: 1 / -1; gap: .45rem; }
+.quick-ticket-composer__attachments { display: grid; grid-column: 1 / -1; gap: remify(7.2px); }
 .quick-ticket-composer__attachments header { display: flex; align-items: center; justify-content: space-between; }
-.quick-ticket-composer__attachments header > span, .quick-ticket-composer__attachments header label { display: inline-flex; align-items: center; gap: .35rem; font-size: var(--wa-font-size-xs); font-weight: 650; }
-.quick-ticket-composer__attachments header label { min-height: 1.9rem; padding: 0 .5rem; border-radius: .4rem; color: var(--wa-color-text-link); cursor: pointer; }
+.quick-ticket-composer__attachments header > span, .quick-ticket-composer__attachments header label { display: inline-flex; align-items: center; gap: remify(5.6px); font-size: var(--wa-font-size-xs); font-weight: 650; }
+.quick-ticket-composer__attachments header label { min-height: remify(30.4px); padding: 0 remify(8px); border-radius: remify(6.4px); color: var(--wa-color-text-link); cursor: pointer; }
 .quick-ticket-composer__attachments header label:hover { background: var(--wa-color-brand-fill-quiet); }
 .quick-ticket-composer__attachments input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.quick-ticket-composer__attachments svg { width: .9rem; height: .9rem; }
-.quick-ticket-composer__attachment-list { display: grid; gap: .3rem; }
-.quick-ticket-composer__attachment { display: flex; min-width: 0; min-height: 2.15rem; padding: .35rem .45rem; border-radius: .45rem; background: var(--wa-color-neutral-fill-quiet); align-items: center; gap: .4rem; font-size: var(--wa-font-size-xs); }
+.quick-ticket-composer__attachments svg { width: remify(14.4px); height: remify(14.4px); }
+.quick-ticket-composer__attachment-list { display: grid; gap: remify(4.8px); }
+.quick-ticket-composer__attachment { display: flex; min-width: 0; min-height: remify(34.4px); padding: remify(5.6px) remify(7.2px); border-radius: remify(7.2px); background: var(--wa-color-neutral-fill-quiet); align-items: center; gap: remify(6.4px); font-size: var(--wa-font-size-xs); }
 .quick-ticket-composer__attachment > span { min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
-.quick-ticket-composer__attachment button { display: inline-grid; width: 1.7rem; height: 1.7rem; padding: 0; border: 0; border-radius: .35rem; background: transparent; color: var(--wa-color-neutral-on-quiet); cursor: pointer; place-items: center; }
+.quick-ticket-composer__attachment button { display: inline-grid; width: remify(27.2px); height: remify(27.2px); padding: 0; border: 0; border-radius: remify(5.6px); background: transparent; color: var(--wa-color-neutral-on-quiet); cursor: pointer; place-items: center; }
 .quick-ticket-composer__attachment button:hover, .quick-ticket-composer__attachment button:focus-visible { background: var(--wa-color-danger-fill-quiet); color: var(--wa-color-danger-on-quiet); }
-.quick-ticket-composer__drop { display: flex; min-height: 2.7rem; padding: .55rem .7rem; border: 1px dashed var(--wa-color-neutral-border-loud); border-radius: .5rem; color: var(--wa-color-neutral-on-quiet); cursor: pointer; align-items: center; justify-content: center; gap: .4rem; font-size: var(--wa-font-size-xs); }
+.quick-ticket-composer__drop { display: flex; min-height: remify(43.2px); padding: remify(8.8px) remify(11.2px); border: 1px dashed var(--wa-color-neutral-border-loud); border-radius: remify(8px); color: var(--wa-color-neutral-on-quiet); cursor: pointer; align-items: center; justify-content: center; gap: remify(6.4px); font-size: var(--wa-font-size-xs); }
 .quick-ticket-composer__drop:hover { border-color: var(--wa-color-focus); background: var(--wa-color-brand-fill-quiet); }
 .quick-ticket-composer__message { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 .quick-ticket-composer__message--error { color: var(--wa-color-danger-on-quiet); }
-.quick-ticket-composer__footer { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+.quick-ticket-composer__footer { display: flex; grid-column: 1 / -1; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: remify(16px); }
 .quick-ticket-composer__footer > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 .quick-ticket-composer__footer > div { display: flex; margin-left: auto; gap: var(--wa-space-xs); }
-.quick-ticket-composer__footer wa-button svg { width: .9rem; height: .9rem; margin-right: .3rem; }
+.quick-ticket-composer__footer wa-button svg { width: remify(14.4px); height: remify(14.4px); margin-right: remify(4.8px); }
 .quick-ticket-composer__notice { grid-column: 1 / -1; margin: 0; color: var(--wa-color-warning-on-quiet); font-size: var(--wa-font-size-xs); }
-@media (max-width: 38rem) { .quick-ticket-composer { grid-template-columns: 1fr; } .quick-ticket-composer__footer { align-items: stretch; flex-direction: column; } }
+@media (max-width: remify(608px)) { .quick-ticket-composer { grid-template-columns: 1fr; } .quick-ticket-composer__footer { align-items: stretch; flex-direction: column; } }

@@ -38,18 +38,18 @@ describe('TicketBoard', () => {
     const rule = css.match(/\.ticket-board-column \{([^}]*)\}/)?.[1] ?? '';
     expect(rule).not.toMatch(/background|border|padding|border-radius/);
     expect(css).toMatch(/ticket-board-column > header h2[^}]*font: inherit/);
-    expect(css).toMatch(/ticket-board-column__header[^}]*height: 2rem/);
-    expect(css).toMatch(/ticket-board-column__tickets[^}]*padding: \.1rem \.5rem 1rem/);
+    expect(css).toMatch(/ticket-board-column__header[^}]*height: remify\(32px\)/);
+    expect(css).toMatch(/ticket-board-column__tickets[^}]*padding: remify\(1\.6px\) remify\(8px\) remify\(16px\)/);
   });
 
   it('matches the outer margin and inter-column spacing (HS2-VX9E4Z)', () => {
-    // Outer margin before the first column = board padding-inline (.5rem) + column padding (.5rem).
-    // With a 0 column-grid gap, inter-column spacing = column padding (.5rem) + 0 + column padding (.5rem),
+    // Outer margin before the first column = board padding-inline (remify(8px)) + column padding (remify(8px)).
+    // With a 0 column-grid gap, inter-column spacing = column padding (remify(8px)) + 0 + column padding (remify(8px)),
     // so the space between columns matches the space before the first / after the last column.
     const markup = String(TicketBoard({ columns: [{ id: 'one', title: 'One', tickets: [] }, { id: 'two', title: 'Two', tickets: [] }] }));
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-board.css'), 'utf8');
     expect(markup).toContain('--ticket-board-min-width:500px');
-    expect(css).toMatch(/ticket-board[^}]*padding-inline: \.5rem/);
+    expect(css).toMatch(/ticket-board[^}]*padding-inline: remify\(8px\)/);
     expect(css).toMatch(/ticket-board__columns[^}]*gap: 0/);
   });
 

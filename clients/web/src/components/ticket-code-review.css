@@ -1,4 +1,4 @@
-.ticket-code-review__header { height: auto; min-height: 2.525rem; padding: 0; }
+.ticket-code-review__header { height: auto; min-height: remify(40.4px); padding: 0; }
 .ticket-code-review__heading { display: flex; min-width: 0; align-items: baseline; gap: var(--wa-space-xs); }
 .ticket-code-review__heading h2 { margin: 0; }
 .ticket-code-review__heading span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-2xs); white-space: nowrap; }
@@ -8,52 +8,52 @@
 .ticket-code-review__evidence h3 { margin: 0 0 var(--wa-space-xs); font-size: var(--wa-font-size-s); }
 .ticket-code-review__evidence-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--wa-space-xs); }
 .ticket-code-review__evidence-grid span { display: flex; min-width: 0; overflow-wrap: anywhere; align-items: center; flex-wrap: wrap; gap: var(--wa-space-xs); color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
-.ticket-code-review__evidence-grid svg { width: 1rem; height: 1rem; flex: none; }
+.ticket-code-review__evidence-grid svg { width: remify(16px); height: remify(16px); flex: none; }
 .ticket-code-review__evidence-grid strong { color: var(--wa-color-text-normal); }
 .ticket-code-review__evidence p { margin: var(--wa-space-xs) 0 0; color: var(--wa-color-success-on-quiet); font-size: var(--wa-font-size-xs); }
 .ticket-code-review__evidence p[data-tests-modified="true"] { color: var(--wa-color-warning-on-quiet); }
 .ticket-code-review__compare-banner { display: grid; min-width: 0; margin-bottom: var(--wa-space-m); padding: var(--wa-space-s); border: 1px solid color-mix(in srgb, var(--hs-ticket-state-needs-review) 42%, transparent); border-radius: var(--wa-border-radius-m); color: var(--wa-color-text-normal); background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 10%, var(--wa-color-surface-default)); grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: var(--wa-space-s); font-size: var(--wa-font-size-xs); }
 .ticket-code-review__compare-banner > div:first-child { display: flex; min-width: 0; grid-column: 1 / -1; align-items: center; gap: var(--wa-space-xs); }
-.ticket-code-review__compare-banner > div:first-child svg { width: 1rem; height: 1rem; flex: none; color: var(--hs-ticket-state-needs-review); }
-.ticket-code-review__compare-banner > button { display: inline-flex; min-height: 2rem; padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-pill); align-items: center; justify-content: center; gap: var(--wa-space-2xs); font: inherit; font-weight: var(--wa-font-weight-semibold); cursor: pointer; }
-.ticket-code-review__compare-banner > button svg { width: .9rem; height: .9rem; }
+.ticket-code-review__compare-banner > div:first-child svg { width: remify(16px); height: remify(16px); flex: none; color: var(--hs-ticket-state-needs-review); }
+.ticket-code-review__compare-banner > button { display: inline-flex; min-height: remify(32px); padding: 0 var(--wa-space-s); border: 0; border-radius: var(--wa-border-radius-pill); align-items: center; justify-content: center; gap: var(--wa-space-2xs); font: inherit; font-weight: var(--wa-font-weight-semibold); cursor: pointer; }
+.ticket-code-review__compare-banner > button svg { width: remify(14.4px); height: remify(14.4px); }
 .ticket-code-review__compare-open { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); grid-column: 3; }
 .ticket-code-review__compare-open:disabled { opacity: .45; cursor: not-allowed; }
-.ticket-code-review__compare-banner .kui-toolbar-control-group { width: max-content; height: 2.2rem; justify-self: start; }
-.ticket-code-review__compare-banner .kui-toolbar-control-group > button { height: 1.7rem; }
+.ticket-code-review__compare-banner .kui-toolbar-control-group { width: max-content; height: remify(35.2px); justify-self: start; }
+.ticket-code-review__compare-banner .kui-toolbar-control-group > button { height: remify(27.2px); }
 .ticket-code-review__compare-banner .kui-toolbar-control-group > button[data-selected="true"] { color: var(--wa-color-brand-on-normal); background: var(--wa-color-brand-fill-normal); }
-.ticket-code-review__range { display: flex; width: 100%; min-height: 2.4rem; padding: .5rem .65rem; border: 1px solid var(--wa-color-brand-border-normal); border-radius: .5rem; color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); cursor: pointer; align-items: center; gap: .45rem; font: inherit; font-size: var(--wa-font-size-xs); font-weight: 650; }
+.ticket-code-review__range { display: flex; width: 100%; min-height: remify(38.4px); padding: remify(8px) remify(10.4px); border: 1px solid var(--wa-color-brand-border-normal); border-radius: remify(8px); color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); cursor: pointer; align-items: center; gap: remify(7.2px); font: inherit; font-size: var(--wa-font-size-xs); font-weight: 650; }
 .ticket-code-review__range-item { display: block; min-width: 0; margin: var(--wa-space-xs) 0 var(--wa-space-2xs); padding: 0; list-style: none; }
 .ticket-code-review__range span { min-width: 0; flex: 1; text-align: left; }
-.ticket-code-review__range small { display: block; margin-top: .1rem; opacity: .72; font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-2xs); font-weight: 500; }
-.ticket-code-review__range svg, .ticket-code-review__commit > button svg { width: .9rem; height: .9rem; flex: none; }
+.ticket-code-review__range small { display: block; margin-top: remify(1.6px); opacity: .72; font-family: var(--wa-font-family-mono); font-size: var(--wa-font-size-2xs); font-weight: 500; }
+.ticket-code-review__range svg, .ticket-code-review__commit > button svg { width: remify(14.4px); height: remify(14.4px); flex: none; }
 .ticket-code-review__range:disabled, .ticket-code-review__commits button:disabled { opacity: .55; cursor: not-allowed; }
 .ticket-code-review__commits { display: grid; min-width: 0; margin: 0; padding: 0; list-style: none; }
-.ticket-code-review__commit { display: grid; min-width: 0; min-height: 4.25rem; margin-inline-start: 0; padding: .7rem 0; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); grid-template-columns: 1.3rem minmax(0, 1fr) 2rem; align-items: start; gap: var(--wa-space-xs); }
-.ticket-code-review__graph { display: grid; width: 1.25rem; height: 1.25rem; margin-top: .05rem; color: var(--wa-color-neutral-on-quiet); place-items: center; }
-.ticket-code-review__graph svg { width: 1rem; height: 1rem; }
-.ticket-code-review__commit-summary { display: grid; min-width: 0; gap: .35rem; cursor: pointer; }
+.ticket-code-review__commit { display: grid; min-width: 0; min-height: remify(68px); margin-inline-start: 0; padding: remify(11.2px) 0; border-bottom: 1px solid var(--wa-color-neutral-border-quiet); grid-template-columns: remify(20.8px) minmax(0, 1fr) remify(32px); align-items: start; gap: var(--wa-space-xs); }
+.ticket-code-review__graph { display: grid; width: remify(20px); height: remify(20px); margin-top: remify(0.8px); color: var(--wa-color-neutral-on-quiet); place-items: center; }
+.ticket-code-review__graph svg { width: remify(16px); height: remify(16px); }
+.ticket-code-review__commit-summary { display: grid; min-width: 0; gap: remify(5.6px); cursor: pointer; }
 .ticket-code-review__commit-summary:focus-visible { border-radius: var(--wa-border-radius-s); outline: var(--wa-focus-ring); outline-offset: 3px; }
 .ticket-code-review__commits strong { color: var(--wa-color-text-normal); font-size: var(--wa-font-size-xs); line-height: 1.35; overflow-wrap: anywhere; }
 .ticket-code-review__commit-summary > span { display: flex; min-width: 0; color: var(--wa-color-neutral-on-quiet); align-items: center; flex-wrap: wrap; gap: var(--wa-space-xs); font-size: var(--wa-font-size-2xs); }
 .ticket-code-review__commit-body { min-width: 0; color: var(--wa-color-text-quiet); }
 .ticket-code-review__commit-body .markdown-preview { color: inherit; font-size: var(--wa-font-size-xs); line-height: 1.4; }
 .ticket-code-review__commit-body .markdown-preview :is(p,ul,ol,blockquote,pre,table) { margin: var(--wa-space-2xs) 0; }
-.ticket-code-review__compare-label { display: inline-grid; min-width: 1.25rem; height: 1.25rem; padding: 0 var(--wa-space-2xs); border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-normal); background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 18%, var(--wa-color-surface-default)); font-size: var(--wa-font-size-2xs); place-items: center; }
+.ticket-code-review__compare-label { display: inline-grid; min-width: remify(20px); height: remify(20px); padding: 0 var(--wa-space-2xs); border-radius: var(--wa-border-radius-s); color: var(--wa-color-neutral-on-normal); background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 18%, var(--wa-color-surface-default)); font-size: var(--wa-font-size-2xs); place-items: center; }
 .ticket-code-review__commits li[data-compared] { background: color-mix(in srgb, var(--hs-ticket-state-needs-review) 5%, transparent); }
-.ticket-code-review__commits code { padding: .08rem .25rem; border-radius: .25rem; background: var(--wa-color-neutral-fill-normal); font-size: var(--wa-font-size-2xs); }
-.ticket-code-review__commit > button { display: grid; width: 2rem; height: 2rem; padding: 0; border: 0; border-radius: .4rem; color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
+.ticket-code-review__commits code { padding: remify(1.28px) remify(4px); border-radius: remify(4px); background: var(--wa-color-neutral-fill-normal); font-size: var(--wa-font-size-2xs); }
+.ticket-code-review__commit > button { display: grid; width: remify(32px); height: remify(32px); padding: 0; border: 0; border-radius: remify(6.4px); color: var(--wa-color-neutral-on-quiet); background: transparent; cursor: pointer; place-items: center; }
 .ticket-code-review__commit > button:not(:disabled):hover { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
-.ticket-code-review__notice { padding: .65rem; border-radius: .5rem; background: var(--wa-color-neutral-fill-normal); color: var(--wa-color-neutral-on-quiet) !important; font-size: var(--wa-font-size-xs) !important; }
-.ticket-code-review__empty { display: grid; min-height: 8rem; padding: 1rem; border: 1px dashed var(--wa-color-neutral-border-loud); border-radius: .6rem; color: var(--wa-color-neutral-on-quiet); place-items: center; align-content: center; gap: var(--wa-space-xs); text-align: center; }
-.ticket-code-review__empty svg { width: 1.2rem; height: 1.2rem; }
+.ticket-code-review__notice { padding: remify(10.4px); border-radius: remify(8px); background: var(--wa-color-neutral-fill-normal); color: var(--wa-color-neutral-on-quiet) !important; font-size: var(--wa-font-size-xs) !important; }
+.ticket-code-review__empty { display: grid; min-height: remify(128px); padding: remify(16px); border: 1px dashed var(--wa-color-neutral-border-loud); border-radius: remify(9.6px); color: var(--wa-color-neutral-on-quiet); place-items: center; align-content: center; gap: var(--wa-space-xs); text-align: center; }
+.ticket-code-review__empty svg { width: remify(19.2px); height: remify(19.2px); }
 .ticket-code-review__message { color: var(--wa-color-neutral-on-quiet) !important; font-size: var(--wa-font-size-xs) !important; }
-@container (max-width: 22rem) { .ticket-code-review__compare-banner { grid-template-columns: minmax(0,1fr) auto; } .ticket-code-review__compare-open { grid-column: 1 / -1; } }
-@container (max-width: 22rem) { .ticket-code-review__heading { align-items: flex-start; flex-direction: column; } .ticket-code-review__heading span { white-space: normal; } .ticket-code-review__evidence-grid { grid-template-columns: 1fr; } }
-.ticket-code-review__refs { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .05rem; }
-.ticket-code-review__ref { display: inline-flex; max-width: 100%; padding: .05rem .4rem; border-radius: var(--wa-border-radius-pill); align-items: center; gap: .2rem; font-size: var(--wa-font-size-2xs); font-weight: 650; line-height: 1.5; }
+@container (max-width: remify(352px)) { .ticket-code-review__compare-banner { grid-template-columns: minmax(0,1fr) auto; } .ticket-code-review__compare-open { grid-column: 1 / -1; } }
+@container (max-width: remify(352px)) { .ticket-code-review__heading { align-items: flex-start; flex-direction: column; } .ticket-code-review__heading span { white-space: normal; } .ticket-code-review__evidence-grid { grid-template-columns: 1fr; } }
+.ticket-code-review__refs { display: flex; flex-wrap: wrap; gap: remify(4.8px); margin-top: remify(0.8px); }
+.ticket-code-review__ref { display: inline-flex; max-width: 100%; padding: remify(0.8px) remify(6.4px); border-radius: var(--wa-border-radius-pill); align-items: center; gap: remify(3.2px); font-size: var(--wa-font-size-2xs); font-weight: 650; line-height: 1.5; }
 .ticket-code-review__ref > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ticket-code-review__ref svg { width: .7rem; height: .7rem; flex: none; }
+.ticket-code-review__ref svg { width: remify(11.2px); height: remify(11.2px); flex: none; }
 .ticket-code-review__ref[data-ref-kind="head"] { color: var(--wa-color-success-on-quiet); background: var(--wa-color-success-fill-quiet); }
 .ticket-code-review__ref[data-ref-kind="branch"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-brand-fill-quiet); }
 .ticket-code-review__ref[data-ref-kind="remote"] { color: var(--wa-color-neutral-on-quiet); background: var(--wa-color-neutral-fill-quiet); }

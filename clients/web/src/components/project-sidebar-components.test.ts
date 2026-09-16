@@ -84,7 +84,7 @@ describe('ProjectSidebar component slice', () => {
     expect(markup).toContain('data-background-bar="2" data-background-zero="false"');
     expect(markup).toContain('--bar-height:100%');
     const css = readFileSync(new URL('./project-summary.css', import.meta.url), 'utf8');
-    expect(css).toMatch(/project-summary__bar-slot \{[^}]*min-width: \.3rem;[^}]*max-width: \.9rem;[^}]*flex: 1 1 \.9rem/);
+    expect(css).toMatch(/project-summary__bar-slot \{[^}]*min-width: remify\(4\.8px\);[^}]*max-width: remify\(14\.4px\);[^}]*flex: 1 1 remify\(14\.4px\)/);
   });
 
   it('renders repository status as one discoverable action', () => {

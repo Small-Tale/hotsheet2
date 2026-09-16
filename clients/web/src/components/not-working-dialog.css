@@ -1,13 +1,13 @@
-.not-working-dialog::part(panel) { width: min(32rem, calc(100vw - 2rem)); }
-.not-working-dialog__form { display: grid; gap: 1rem; }
-.not-working-dialog__note { display: grid; gap: .45rem; font-size: var(--wa-font-size-s); font-weight: 650; }
-.not-working-dialog__note textarea { width: 100%; min-height: 7rem; padding: .7rem .75rem; border: 1px solid var(--wa-color-neutral-border-loud); border-radius: .55rem; resize: vertical; color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); font: inherit; line-height: 1.45; }
+.not-working-dialog::part(panel) { width: min(remify(512px), calc(100vw - remify(32px))); }
+.not-working-dialog__form { display: grid; gap: remify(16px); }
+.not-working-dialog__note { display: grid; gap: remify(7.2px); font-size: var(--wa-font-size-s); font-weight: 650; }
+.not-working-dialog__note textarea { width: 100%; min-height: remify(112px); padding: remify(11.2px) remify(12px); border: 1px solid var(--wa-color-neutral-border-loud); border-radius: remify(8.8px); resize: vertical; color: var(--wa-color-text-normal); background: var(--wa-color-surface-default); font: inherit; line-height: 1.45; }
 .not-working-dialog__note textarea:focus { border-color: var(--wa-color-focus); outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 20%, transparent); }
 .not-working-dialog__hint, .not-working-dialog__error { margin: 0; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 .not-working-dialog__error { min-height: 1.15em; color: var(--wa-color-danger-on-quiet); }
 .not-working-dialog__error:empty { visibility: hidden; }
 .not-working-dialog footer { display: flex; justify-content: flex-end; gap: var(--wa-space-xs); }
-.not-working-dialog footer button { min-height: 2.35rem; padding: 0 .85rem; border: 0; border-radius: .5rem; cursor: pointer; font-weight: 650; }
+.not-working-dialog footer button { min-height: remify(37.6px); padding: 0 remify(13.6px); border: 0; border-radius: remify(8px); cursor: pointer; font-weight: 650; }
 .not-working-dialog footer button:disabled { cursor: not-allowed; opacity: .55; }
 .not-working-dialog footer button:not(.not-working-dialog__submit) { background: transparent; color: var(--wa-color-neutral-on-quiet); }
 .not-working-dialog footer button:not(.not-working-dialog__submit):hover { background: var(--wa-color-neutral-fill-quiet); }

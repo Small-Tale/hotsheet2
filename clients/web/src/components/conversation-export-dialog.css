@@ -1,4 +1,4 @@
-.conversation-export-dialog::part(dialog) { width: min(39rem, calc(100vw - 2rem)); max-height: min(44rem, calc(100vh - 2rem)); }
+.conversation-export-dialog::part(dialog) { width: min(remify(624px), calc(100vw - remify(32px))); max-height: min(remify(704px), calc(100vh - remify(32px))); }
 .conversation-export-dialog::part(body) { padding-block: var(--wa-space-m); }
 .conversation-export-dialog [data-transition-region="footer"] { width:100%; }
 .conversation-export-dialog [data-transition-region="footer"] .content-transition__side { display:flex; width:100%; justify-content:flex-end; align-items:center; gap:var(--wa-space-xs); }
@@ -12,7 +12,7 @@
 .conversation-export-dialog__choice { display: grid; padding: var(--wa-space-xs); border: 1px solid transparent; border-radius: var(--wa-border-radius-m); grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--wa-space-xs); cursor: pointer; }
 .conversation-export-dialog__choice:has(input:checked) { border-color: var(--wa-color-brand-border-normal); background: var(--wa-color-brand-fill-quiet); }
 .conversation-export-dialog__choice:has(input:disabled) { cursor: default; opacity: .68; }
-.conversation-export-dialog__choice input { margin: .2rem 0 0; }
+.conversation-export-dialog__choice input { margin: remify(3.2px) 0 0; }
 .conversation-export-dialog__choice span { display: grid; min-width: 0; gap: var(--wa-space-3xs); }
 .conversation-export-dialog__choice small { color: var(--wa-color-neutral-on-quiet); line-height: 1.35; }
 .conversation-export-dialog__choice--danger:has(input:checked) { border-color: var(--wa-color-danger-border-normal); background: var(--wa-color-danger-fill-quiet); }
@@ -22,6 +22,6 @@
 .conversation-export-dialog__options { display: grid; grid-template-columns:minmax(0,1fr); gap: var(--wa-space-2xs); }
 .conversation-export-dialog__error { min-height: 1.2em; margin: 0; color: var(--wa-color-danger-on-quiet); font-size: var(--wa-font-size-s); }
 .conversation-export-dialog__error:empty { visibility: hidden; }
-@media (max-width: 36rem) {
-  .conversation-export-dialog::part(dialog) { width: calc(100vw - 1rem); max-height: calc(100vh - 1rem); }
+@media (max-width: remify(576px)) {
+  .conversation-export-dialog::part(dialog) { width: calc(100vw - remify(16px)); max-height: calc(100vh - remify(16px)); }
 }

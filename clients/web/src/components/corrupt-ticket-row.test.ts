@@ -53,7 +53,7 @@ describe('CorruptTicketRow', () => {
     const markup=String(CorruptTicketRow({ticket:corrupt,selected:true}));
     const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
     expect(markup).toContain('ticket-list-row ticket-list-row--list corrupt-ticket-row ticket-list-row--selected');
-    expect(css).toMatch(/corrupt-ticket-row::before[^}]*width: \.25rem[^}]*background: var\(--wa-color-danger-fill-loud\)/);
+    expect(css).toMatch(/corrupt-ticket-row::before[^}]*width: remify\(4px\)[^}]*background: var\(--wa-color-danger-fill-loud\)/);
     expect(css).not.toContain('border-left-width');
     expect(css).toContain('cursor: pointer');
     expect(revealFileLabel('MacIntel')).toBe('Reveal in Finder');
@@ -64,7 +64,7 @@ describe('CorruptTicketRow', () => {
   it('wiggles newly selected corrupt content and honors reduced motion', () => {
     const css = readFileSync(new URL('./corrupt-ticket-row.css', import.meta.url), 'utf8');
     expect(css).toContain('.corrupt-ticket-row.ticket-list-row--selected { animation:corrupt-ticket-selected-wiggle 150ms ease-out; }');
-    expect(css).toContain('45% { transform:translateX(.35rem); }');
+    expect(css).toContain('45% { transform:translateX(remify(5.6px)); }');
     expect(css).toContain('@media (prefers-reduced-motion: reduce) { .corrupt-ticket-row.ticket-list-row--selected { animation:none; } }');
   });
 

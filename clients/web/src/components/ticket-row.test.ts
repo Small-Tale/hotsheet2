@@ -87,12 +87,12 @@ describe('TicketRow', () => {
     expect(css).toMatch(/ticket-list-row__identity[^}]*max-height: 2\.6em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__identity[^}]*max-height: 5\.2em/);
     expect(css).toMatch(/ticket-list-row--column \.ticket-list-row__body[^}]*grid-template-columns: minmax\(0, 1fr\)/);
-    expect(css).toMatch(/\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: \.65rem/);
+    expect(css).toMatch(/\.ticket-list-row--column \{[^}]*border-color: transparent;[^}]*border-radius: remify\(10\.4px\)/);
     expect(css).toMatch(/\.ticket-list-row:hover \{ border-color: var\(--wa-color-brand-border-normal\); \}/);
     expect(css).not.toMatch(/\.ticket-list-row:hover \{[^}]*box-shadow:/);
     expect(css).not.toMatch(/\.ticket-list-row:hover \{[^}]*background:/);
     // Rows carry no drop shadow in any presentation (HS2-VX9E4Z); only selection/focus insets/outlines remain.
-    expect(css).not.toContain('box-shadow: 0 .3rem .9rem');
+    expect(css).not.toContain('box-shadow: 0 remify(4.8px) remify(14.4px)');
   });
 
   it('floats the updated time first in the identity flow so long titles can wrap beneath it', () => {

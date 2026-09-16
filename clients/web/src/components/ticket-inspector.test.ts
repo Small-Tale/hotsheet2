@@ -113,7 +113,7 @@ describe('TicketInspector', () => {
     expect(reader).toContain('aria-label="Feedback response"');
     expect(reader).not.toContain('CHOICE:');
     const css=readFileSync(resolve(import.meta.dirname,'ticket-inspector-panel.css'),'utf8');
-    expect(css).toMatch(/details-surface\[data-feedback-needed="true"\] \{[^}]*padding: \.85rem 1rem;[^}]*warning-border-normal[^}]*warning-fill-quiet/);
+    expect(css).toMatch(/details-surface\[data-feedback-needed="true"\] \{[^}]*padding: remify\(13\.6px\) remify\(16px\);[^}]*warning-border-normal[^}]*warning-fill-quiet/);
   });
 
   it('shows a derived attachment count on the attachments segment', () => {
@@ -128,7 +128,7 @@ describe('TicketInspector', () => {
     const css = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
     expect(css).toContain('.ticket-inspector__attachment { display: flex; width: 100%; min-width: 0;');
     expect(css).toContain('.ticket-inspector__attachment > span { min-width: 0; overflow: hidden; flex: 1;');
-    expect(css).toContain('.ticket-inspector__attachment-menu { display: inline-grid; width: 1.75rem; height: 1.75rem; margin-left: auto;');
+    expect(css).toContain('.ticket-inspector__attachment-menu { display: inline-grid; width: remify(28px); height: remify(28px); margin-left: auto;');
   });
 
   it('contains metadata and ticket content within narrow inspector bounds', () => {
@@ -143,14 +143,14 @@ describe('TicketInspector', () => {
     expect(noteCss).toMatch(/\.note-card__body \{[^}]*overflow-wrap: anywhere/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \{[^}]*background: transparent/);
     expect(noteCss).toMatch(/\.note-card\[data-kind="activity"\] \.note-card__body \{[^}]*font-size: var\(--wa-font-size-xs\)/);
-    expect(inspectorCss).toContain('@container (max-width: 52rem) { .ticket-inspector__tab-label { display: none; } }');
+    expect(inspectorCss).toContain('@container (max-width: remify(832px)) { .ticket-inspector__tab-label { display: none; } }');
   });
 
   it('uses the compact eight pixel inspector gutter without duplicating its tab gap', () => {
     const inspectorCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector.css'), 'utf8');
     const panelCss = readFileSync(resolve(import.meta.dirname, 'ticket-inspector-panel.css'), 'utf8');
-    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 \.85rem 1rem;/);
-    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 \.85rem \.85rem;/);
+    expect(inspectorCss).toMatch(/\.ticket-inspector__tabs \{[^}]*margin: 0 remify\(13\.6px\) remify\(16px\);/);
+    expect(panelCss).toMatch(/\.ticket-inspector__content \{[^}]*padding: 0 remify\(13\.6px\) remify\(13\.6px\);/);
   });
 
   it('hides the Up Next action for ineligible lifecycle states', () => {
