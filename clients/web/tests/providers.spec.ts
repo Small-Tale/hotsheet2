@@ -2635,3 +2635,23 @@ test('rebinds and applies keyboard shortcuts from App Settings (HS2-QT6PGR)',asy
   await page.keyboard.press(`${mod}+k`);await expect(page.getByRole('textbox',{name:'Search tickets'})).toHaveCount(0);
   await page.keyboard.press(`${mod}+g`);await expect(page.getByRole('textbox',{name:'Search tickets'})).toBeVisible();
 });
+
+test('applies a saved command color and icon to the sidebar command button (HS2-656XJ2)',async({page})=>{
+  await mockProject(page);await page.goto('/');await page.getByRole('button',{name:'Open project'}).click();await page.getByRole('button',{name:'Open project',exact:true}).last().click();
+  const command=page.locator('[data-action="run-command"][data-item-id="check"]');
+  await expect(command).toBeVisible();
+  await page.getByLabel('Settings view').click();await page.getByRole('button',{name:'Commands',exact:true}).click();
+  const editor=page.locator('[data-component="command-settings-editor"]');await expect(editor).toBeVisible();
+  await editor.getByRole('button',{name:/Run checks/}).click();
+  await editor.getByTitle('Green',{exact:true}).click();
+  await editor.getByTitle('circle-check-big',{exact:true}).click();
+  await expect(editor.locator('.command-settings-editor__swatch input:checked')).toHaveValue('#22c55e');
+  await expect(editor.locator('.command-settings-editor__icon input:checked')).toHaveValue('circle-check-big');
+  await page.getByRole('button',{name:'Save commands'}).click();
+  await expect(page.locator('.app-toast')).toContainText('Saved locally.');
+  await page.getByLabel('List view').click();
+  await expect(command).toBeVisible();
+  await expect(command).toHaveAttribute('data-command-color','#22c55e');
+  await expect(command.locator('[data-lucide="circle-check-big"]')).toHaveCount(1);
+  await page.locator('[data-component="project-sidebar"]').screenshot({path:'/private/tmp/hs2-656xj2-sidebar-command-color-icon.png'});
+});
