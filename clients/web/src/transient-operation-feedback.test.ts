@@ -8,14 +8,16 @@ describe('transient operation feedback', () => {
     for (const pattern of [
       /showToast\(`Opened in \$\{codeReview\.value\?\.difftool/,
       /showToast\('Attachment removed\.'\)/,
-      /showToast\('Saved locally\.'\)/,
       /showToast\('Opened the file location\.'\)/,
       /showToast\(`Queued \$\{created\.slug\} for AI repair\.`\)/,
     ]) expect(source).toMatch(pattern);
 
     expect(source).not.toMatch(/codeReviewMessage\.value=`Opened in/);
     expect(source).not.toContain("attachmentMessage.value='Attachment removed.'");
-    expect(source).not.toContain("commandSettingsMessage.value='Saved locally.'");
     expect(source).not.toMatch(/setCorruptRecovery\([^)]*,\{message:.*(?:Opened|Queued)/);
+    // The command settings editor's old "Saved locally." Save-button toast was removed with the
+    // Save button itself: the HS2-656XJ2/D9JBXT redesign autosaves on a debounce and surfaces a
+    // "Saved." status line (asserted by the command-editor E2E), not a transient toast.
+    expect(source).not.toContain("commandSettingsMessage.value='Saved locally.'");
   });
 });
