@@ -9,6 +9,10 @@
 .view-mode-switcher__button[aria-pressed="true"] { color: var(--wa-color-brand-on-quiet); background: var(--wa-color-surface-default); box-shadow: var(--wa-shadow-s); }
 .view-mode-switcher__button:focus-visible { outline: 3px solid color-mix(in srgb, var(--wa-color-focus) 25%, transparent); }
 .workspace-header__actions wa-button::part(base) { width: remify(32px); height: remify(32px); min-height: remify(32px); padding: 0; border-radius: var(--wa-border-radius-pill); }
+/* A selected wa-button must paint its 32px pill base, like hover does; kerf's aria-pressed rule
+   targets the larger square host, which overflows the control group's pill border (HS2-0D1HYG). */
+.workspace-header__actions .kui-toolbar-control-group[data-single="false"] > wa-button[aria-pressed="true"] { border-color: transparent; background: transparent; box-shadow: none; }
+.workspace-header__actions wa-button[aria-pressed="true"]::part(base) { border-color: var(--kui-toolbar-control-selected-border); color: var(--kui-toolbar-control-selected-color); background: var(--kui-toolbar-control-selected-background); box-shadow: var(--kui-toolbar-control-selected-shadow); }
 .workspace-header__actions wa-button.workspace-header__text-action::part(base),wa-button.workspace-header__text-action::part(base) { width: auto; padding-inline: var(--wa-space-s); white-space: nowrap; }
 .workspace-header__text-action-label { display: inline-flex; align-items: center; gap: var(--wa-space-2xs); white-space: nowrap; }
 .workspace-header__sort { width: remify(44px); }
