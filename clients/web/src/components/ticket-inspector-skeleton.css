@@ -1,48 +1,26 @@
-/* Loading placeholder for the ticket inspector (HS2-REG3A2). The component reuses the real
-   inspector chrome (.ticket-inspector, its header, tab bar, sections, and section headers), so
-   this file only styles the value slots that are unknown while the next ticket loads: subtle,
-   static (no animation) placeholder blocks that preserve the real controls' shapes and sizes. */
+/* Loading placeholder for the ticket inspector (HS2-REG3A2, HS2-KWWSWY). The component reuses the real
+   inspector chrome (.ticket-inspector, its header, tab bar, metadata section, and section headers) plus
+   the @kerfjs/ui native component `placeholder` mode (metadata Selects) and `Skeleton` block (title,
+   details, note bodies, provenance). This file only styles the remaining layout of the placeholder note
+   entries and the title/provenance rows; the value blocks size themselves via the Skeleton/native chrome. */
 
 /* The chrome is shown for continuity only; nothing in it is interactive while loading. */
 .ticket-inspector--placeholder .ticket-inspector__tabs button,
 .ticket-inspector--placeholder .kui-menu-header__action,
 .ticket-inspector--placeholder .ticket-inspector__block-action { pointer-events: none; }
 
-/* A subtle, unanimated stand-in for an unknown value. */
-.ticket-inspector__ph { display: block; background: var(--wa-color-neutral-fill-normal); border-radius: remify(4px); }
-
-.ticket-inspector__ph-slug { width: remify(88px); height: remify(16px); }
 .ticket-inspector__ph-title { display: grid; margin: remify(6.4px) remify(16px) 0; gap: remify(6.4px); }
-.ticket-inspector__ph-title > .ticket-inspector__ph { height: remify(20px); border-radius: remify(6.4px); }
-.ticket-inspector__ph-title > .ticket-inspector__ph:last-child { width: 62%; }
 
-/* Category | Priority sit side by side above a full-width Status, matching the metadata grid. */
-.ticket-inspector__ph-metadata { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: remify(8.8px) remify(12px); }
-.ticket-inspector__ph-field { display: grid; min-width: 0; gap: remify(5.6px); }
-.ticket-inspector__ph-field--status { grid-column: 1 / -1; }
-.ticket-inspector__ph-field > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 650; }
-.ticket-inspector__ph-control { height: remify(40px); border-radius: remify(8px); }
-.ticket-inspector__ph-status { width: remify(96px); height: remify(24px); border-radius: var(--wa-border-radius-pill); }
-
-/* Placeholder body lines inside the real Details surface. */
+/* Skeleton details lines sit inside the real Details surface with its own padding. */
 .ticket-inspector__ph-lines { display: grid; padding: remify(13.6px) remify(16px); gap: remify(9.6px); }
-.ticket-inspector__ph-line { height: remify(12px); }
-.ticket-inspector__ph-line:nth-child(2) { width: 92%; }
-.ticket-inspector__ph-line:last-child { width: 58%; }
 
-/* Placeholder note entries mirror the note-card header (kind + time) with placeholder bodies. */
+/* Placeholder note entries mirror the note-card header (kind + time) with skeleton bodies. */
 .ticket-inspector__ph-notes { display: grid; gap: remify(16px); }
 .ticket-inspector__ph-note { display: grid; gap: remify(8px); }
 .ticket-inspector__ph-note--card { padding: remify(12px); border: 1px solid var(--wa-color-neutral-border-quiet); border-radius: remify(10.4px); }
 .ticket-inspector__ph-note-header { display: flex; align-items: center; justify-content: space-between; color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); }
 .ticket-inspector__ph-note-kind { display: inline-flex; align-items: center; gap: remify(6.4px); font-weight: 650; }
 .ticket-inspector__ph-note-kind svg { width: remify(14.4px); height: remify(14.4px); }
-.ticket-inspector__ph-note-time { width: remify(40px); height: remify(11px); }
 .ticket-inspector__ph-note-body { display: grid; gap: remify(6.4px); }
-.ticket-inspector__ph-note-body > .ticket-inspector__ph { height: remify(12px); }
-.ticket-inspector__ph-note-body > .ticket-inspector__ph:last-child { width: 45%; }
 
 .ticket-inspector__ph-provenance { display: flex; padding-top: remify(3.2px); justify-content: space-between; gap: var(--wa-space-s); }
-.ticket-inspector__ph-provenance > .ticket-inspector__ph { height: remify(11px); }
-.ticket-inspector__ph-prov-a { width: remify(96px); }
-.ticket-inspector__ph-prov-b { width: remify(64px); }

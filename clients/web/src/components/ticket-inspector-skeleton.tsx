@@ -6,10 +6,15 @@ import './ticket-inspector-skeleton.css';
 import { LucideIcon } from '@kerfjs/ui/lucide-icon';
 import { MenuHeader } from '@kerfjs/ui/menu-header';
 import { MenuItem } from '@kerfjs/ui/menu-item';
+import { Skeleton } from '@kerfjs/ui/skeleton';
 import { Toolbar } from '@kerfjs/ui/toolbar';
 import { ToolbarControlGroup } from '@kerfjs/ui/toolbar-control-group';
 import { ToolbarText } from '@kerfjs/ui/toolbar-text';
 import { Activity, BookOpen, Info, ListTree, MessageSquareCode, MessageSquareText, PanelRightClose, Paperclip, Plus } from 'lucide';
+
+import { TicketCategorySelect } from './ticket-category-select';
+import { TicketPrioritySelect } from './ticket-priority-select';
+import { TicketStatusMenu } from './ticket-status-menu';
 
 const TABS = [
   { id: 'info', label: 'Info', icon: Info, iconName: 'info' },
@@ -18,25 +23,25 @@ const TABS = [
   { id: 'attachments', label: 'Attachments', icon: Paperclip, iconName: 'paperclip' },
 ] as const;
 
-/** One placeholder note entry mirroring a note card's header (kind + time) with a placeholder body. */
+/** One placeholder note entry mirroring a note card's header (kind + time) with a skeleton body. */
 function PlaceholderNote({ kind, card = false }: { kind: 'activity' | 'regular'; card?: boolean }) {
   const presentation = kind === 'activity' ? { label: 'Activity', icon: Activity, iconName: 'activity' } : { label: 'Note', icon: MessageSquareText, iconName: 'message-square-text' };
   return <div class={`ticket-inspector__ph-note${card ? ' ticket-inspector__ph-note--card' : ''}`}>
     <div class="ticket-inspector__ph-note-header">
       <span class="ticket-inspector__ph-note-kind"><LucideIcon icon={presentation.icon} name={presentation.iconName} />{presentation.label}</span>
-      <span class="ticket-inspector__ph ticket-inspector__ph-note-time"></span>
+      <Skeleton width="2.5rem" height="0.6875rem" />
     </div>
-    <div class="ticket-inspector__ph-note-body"><span class="ticket-inspector__ph"></span><span class="ticket-inspector__ph"></span></div>
+    <div class="ticket-inspector__ph-note-body"><Skeleton /><Skeleton width="45%" /></div>
   </div>;
 }
 
 /**
  * Loading placeholder for the ticket inspector (HS2-REG3A2): it renders the REAL inspector
- * chrome — header, segmented tab bar, metadata controls, and section headers — with the
- * unknown ticket values shown as subtle, unanimated placeholder blocks. The inspector still
- * looks like the inspector; only the specific per-ticket values are absent while the next
- * ticket loads. (A general component-level `placeholder` mode is tracked upstream in kerf; see
- * the completing note.)
+ * chrome — header, segmented tab bar, metadata controls, and section headers — with the unknown
+ * ticket values shown as subtle, unanimated placeholder blocks. Since kerf-ui 5.0.0-beta.7 the
+ * value slots use the framework's native component `placeholder` mode and `Skeleton` block, so the
+ * metadata controls track the real Select sizes automatically instead of hand-maintained CSS
+ * (HS2-KWWSWY). The inspector still looks like the inspector; only the per-ticket values are absent.
  */
 export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
   const actions = <ToolbarControlGroup appearance="borderless" label="Ticket actions">
@@ -45,21 +50,21 @@ export function TicketInspectorSkeleton({ slug }: { slug?: string } = {}) {
   </ToolbarControlGroup>;
   return <aside class="ticket-inspector ticket-inspector--placeholder" data-component="ticket-inspector-skeleton" aria-busy="true" aria-label="Loading ticket">
     <header class="ticket-inspector__header">
-      <Toolbar divider={false} center={slug ? <ToolbarText text={slug} size="small" /> : <span class="ticket-inspector__ph ticket-inspector__ph-slug" aria-hidden="true"></span>} trailing={actions} />
-      <div class="ticket-inspector__ph-title" aria-hidden="true"><span class="ticket-inspector__ph"></span><span class="ticket-inspector__ph"></span></div>
+      <Toolbar divider={false} center={slug ? <ToolbarText text={slug} size="small" /> : <Skeleton width="5.5rem" height="1rem" />} trailing={actions} />
+      <div class="ticket-inspector__ph-title" aria-hidden="true"><Skeleton height="1.25rem" /><Skeleton width="62%" height="1.25rem" /></div>
     </header>
     <nav class="ticket-inspector__tabs" aria-label="Ticket inspector sections" aria-hidden="true">{TABS.map(tab => <button type="button" tabIndex={-1} aria-current={tab.id === 'info' ? 'page' : undefined} data-key={tab.id}><LucideIcon icon={tab.icon} name={tab.iconName} /><span class="ticket-inspector__tab-label">{tab.label}</span></button>)}</nav>
     <div class="ticket-inspector__content" aria-hidden="true">
-      <section class="ticket-inspector__ph-metadata" aria-label="Ticket metadata">
-        <div class="ticket-inspector__ph-field"><span>Category</span><div class="ticket-inspector__ph ticket-inspector__ph-control"></div></div>
-        <div class="ticket-inspector__ph-field"><span>Priority</span><div class="ticket-inspector__ph ticket-inspector__ph-control"></div></div>
-        <div class="ticket-inspector__ph-field ticket-inspector__ph-field--status"><span>Status</span><div class="ticket-inspector__ph ticket-inspector__ph-status"></div></div>
+      <section class="ticket-inspector__metadata" aria-label="Ticket metadata">
+        <TicketCategorySelect name="inspector-category" value="" placeholder />
+        <TicketPrioritySelect name="inspector-priority" value="default" placeholder />
+        <div class="ticket-inspector__status-field"><span>Status</span><span class="ticket-inspector__status-line"><TicketStatusMenu value="not_started" placeholder /></span></div>
       </section>
       <section class="ticket-inspector__section"><MenuItem className="ticket-inspector__block-action" action="block-ticket" icon={<LucideIcon icon={Plus} name="plus" />} label="Block ticket" tabIndex={-1} /></section>
-      <section class="ticket-inspector__section"><MenuHeader label="Details" /><div class="ticket-inspector__details-surface"><div class="ticket-inspector__ph-lines"><span class="ticket-inspector__ph ticket-inspector__ph-line"></span><span class="ticket-inspector__ph ticket-inspector__ph-line"></span><span class="ticket-inspector__ph ticket-inspector__ph-line"></span></div></div></section>
+      <section class="ticket-inspector__section"><MenuHeader label="Details" /><div class="ticket-inspector__details-surface"><div class="ticket-inspector__ph-lines"><Skeleton lines={3} /></div></div></section>
       <section class="ticket-inspector__section"><MenuHeader label="Tags" action="add-tag" actionLabel="Add tag" actionIcon={<LucideIcon icon={Plus} name="plus" />} /></section>
       <section class="ticket-inspector__section"><MenuHeader label="Notes" action="add-note" actionLabel="Add note" actionIcon={<LucideIcon icon={Plus} name="plus" />} /><div class="ticket-inspector__ph-notes"><PlaceholderNote kind="activity" /><PlaceholderNote kind="activity" /><PlaceholderNote kind="regular" card /></div></section>
-      <footer class="ticket-inspector__ph-provenance"><span class="ticket-inspector__ph ticket-inspector__ph-prov-a"></span><span class="ticket-inspector__ph ticket-inspector__ph-prov-b"></span></footer>
+      <footer class="ticket-inspector__ph-provenance"><Skeleton width="6rem" height="0.6875rem" /><Skeleton width="4rem" height="0.6875rem" /></footer>
     </div>
   </aside>;
 }

@@ -17,17 +17,18 @@ describe('TicketInspectorSkeleton', () => {
     for (const label of ['Category', 'Priority', 'Status', 'Block ticket', 'Details', 'Tags', 'Notes']) {
       expect(markup).toContain(label);
     }
-    // Placeholder value slots stand in for the unknown values, and there is no ticket text.
-    expect(markup).toContain('ticket-inspector__ph-control');
-    expect(markup).toContain('ticket-inspector__ph-status');
-    expect(markup.match(/ticket-inspector__ph-line\b/g)).toHaveLength(3);
+    // The metadata controls use the @kerfjs/ui native Select placeholder mode (real chrome, skeleton value).
+    expect(markup.match(/kui-select--placeholder/g)).toHaveLength(3);
+    // Unknown value slots (title, details, note bodies, provenance) use the native Skeleton block.
+    expect(markup).toContain('kui-skeleton');
     // The collapse control still works while loading; nothing else is interactive.
     expect(markup).toContain('data-action="close-ticket-inspector"');
     expect(markup).not.toMatch(/HS2-/);
   });
 
-  it('shows the known slug while its ticket loads, and a placeholder slug otherwise', () => {
+  it('shows the known slug while its ticket loads, and a skeleton slug otherwise', () => {
     expect(String(TicketInspectorSkeleton({ slug: 'HS2-4J50K3' }))).toContain('HS2-4J50K3');
-    expect(String(TicketInspectorSkeleton())).toContain('ticket-inspector__ph-slug');
+    // Without a known slug the header slug is a Skeleton block, not ticket text.
+    expect(String(TicketInspectorSkeleton())).not.toMatch(/HS2-/);
   });
 });

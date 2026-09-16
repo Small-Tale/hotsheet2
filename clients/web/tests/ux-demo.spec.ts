@@ -2304,7 +2304,11 @@ test('renders the real inspector chrome as a value-free loading placeholder',asy
   await expect(skeleton.locator('.ticket-inspector__tabs .ticket-inspector__tab-label')).toHaveCount(4);
   // Real controls/section headers are drawn; only the per-ticket values are placeholders.
   for(const label of ['Category','Priority','Status','Block ticket','Details','Tags','Notes','Activity']){await expect(skeleton.getByText(label,{exact:true}).first()).toBeVisible();}
-  await expect(skeleton.locator('.ticket-inspector__ph')).not.toHaveCount(0);
+  // Metadata controls use the native Select placeholder mode (side by side) and value slots use Skeleton.
+  await expect(skeleton.locator('.kui-select--placeholder')).toHaveCount(3);
+  await expect(skeleton.locator('.kui-skeleton')).not.toHaveCount(0);
+  const [category,priority]=await skeleton.locator('.ticket-inspector__metadata > .kui-select').evaluateAll(nodes=>nodes.map(node=>Math.round(node.getBoundingClientRect().y)));
+  expect(category).toBe(priority); // Category and Priority render side by side, not stacked (HS2-KWWSWY).
   // No stale prior-ticket values; the known slug of the loading ticket is shown as chrome.
   await expect(skeleton.locator('.ticket-inspector__details-surface')).not.toContainText(/\w/);
   await expect(skeleton).toContainText('HS2-4J50K3');

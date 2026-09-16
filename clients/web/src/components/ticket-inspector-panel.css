@@ -21,8 +21,8 @@
 .ticket-inspector__provenance { display: flex; padding-top: remify(3.2px); color: var(--wa-color-neutral-on-quiet); justify-content: space-between; gap: var(--wa-space-s); font-size: var(--wa-font-size-2xs); }
 .ticket-inspector__metadata { min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ticket-inspector__metadata > .kui-select { width: 100%; min-width: 0; }
-.ticket-inspector__metadata > div { display: grid; grid-column: 1 / -1; justify-items: start; gap: remify(5.6px); }
-.ticket-inspector__metadata > div > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 650; }
+.ticket-inspector__metadata > .ticket-inspector__status-field { display: grid; grid-column: 1 / -1; justify-items: start; gap: remify(5.6px); }
+.ticket-inspector__metadata > .ticket-inspector__status-field > span { color: var(--wa-color-neutral-on-quiet); font-size: var(--wa-font-size-xs); font-weight: 650; }
 .ticket-inspector__status-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: remify(6.4px); }
 .ticket-inspector__tags { display: flex; flex-wrap: wrap; gap: remify(6.4px); }
 .ticket-inspector__timeline { display: grid; margin: 0; padding: 0; list-style: none; }
